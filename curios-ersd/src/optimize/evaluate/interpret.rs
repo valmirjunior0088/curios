@@ -10,7 +10,7 @@ use {
         value::{Bail, Closure, Value},
     },
     crate::{
-        Analysis, Atom, BlockId, Constant, FoldNatStep, FoldOutcome, FoldSequenceStep, ForeignId,
+        Atom, BlockId, Constant, FoldNatStep, FoldOutcome, FoldSequenceStep, ForeignId, FreeValues,
         FunctionId, Intrinsic, Module, Operation, Rhs, Semantics, SequenceGrain, SequenceOp,
         Statement, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
@@ -73,10 +73,11 @@ enum CafSource<'m> {
     Block(BlockId),
 }
 
-/// The interpreter over a borrowed module and its analysis snapshot.
+/// The interpreter over a borrowed module.
 pub(super) struct Evaluator<'m> {
     module: &'m Module,
-    analysis: &'m Analysis,
+    /// What a function closes over, derived the first time it is closed. A snapshot of the whole module answered the same question for every function at once, and was retaken every round while the module grew under reification; the handful actually closed are what this walks.
+    free_values: FreeValues<'m>,
     /// Every `Let`-defined value, module-wide, forced on demand. Forcing from an empty frame naturally declines anything not transitively closed (a parameter or binder leaks as an unknown), so this is exactly the "local CAF" generalization that lets curried chains rooted in entry-block locals fold.
     definitions: BTreeMap<ValueId, &'m Rhs>,
     rec_caf: BTreeMap<ValueId, BlockId>,
@@ -90,8 +91,8 @@ pub(super) struct Evaluator<'m> {
 }
 
 impl<'m> Evaluator<'m> {
-    /// Build an interpreter over a module and its analysis. The top-level value bindings are the module's item chain.
-    pub(super) fn new(module: &'m Module, analysis: &'m Analysis) -> Self {
+    /// Build an interpreter over a module. The top-level value bindings are the module's item chain.
+    pub(super) fn new(module: &'m Module) -> Self {
         let mut definitions = BTreeMap::new();
         let mut rec_caf = BTreeMap::new();
         let mut item_functions = BTreeSet::new();
@@ -118,7 +119,7 @@ impl<'m> Evaluator<'m> {
         }
         Self {
             module,
-            analysis,
+            free_values: FreeValues::new(module),
             definitions,
             rec_caf,
             item_functions,
@@ -162,7 +163,7 @@ impl<'m> Evaluator<'m> {
     /// Close a function over its free values against the current frame. A free value that is a top-level CAF resolves on demand at use; one that is neither in scope nor top-level declines the fold.
     fn close(&self, function: FunctionId, frame: &Frame) -> Result<Value, Bail> {
         let mut captured = Vec::new();
-        for &free in self.analysis.free_values(function) {
+        for &free in self.free_values.of(function).iter() {
             match frame.lookup(free) {
                 Some(held) => captured.push((free, held)),
                 None if self.definitions.contains_key(&free)

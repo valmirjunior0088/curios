@@ -24,6 +24,10 @@ pub fn optimize(module: &mut Module) {
             break;
         }
     }
+    // Verified once for the loop rather than once per round. Every round installs only what `apply` proved closed and in scope, so a violation is a defect of that proof either way; naming the round it happened in was worth a walk over a module that grows tenfold under reification — a hello-world compile spent a sixth of its time on those eight walks.
+    module
+        .verify()
+        .expect("closed-term evaluation preserves a verifiable module");
     evaluate::specialize_literal_spines(module);
     rebase::rebase_monoid_recursion(module);
     let analysis = Analysis::analyze(module);

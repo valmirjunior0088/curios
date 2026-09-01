@@ -13,8 +13,8 @@ use {
         value::Value,
     },
     crate::{
-        Analysis, Atom, BlockId, ForeignId, FunctionId, Module, Rhs, Statement, StatementId,
-        ValueId, walk::control_blocks,
+        Atom, BlockId, ForeignId, FunctionId, Module, Rhs, Statement, StatementId, ValueId,
+        walk::control_blocks,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -45,19 +45,14 @@ enum Kind {
 /// Fold every closed call the interpreter can finish, module-wide. Returns whether anything was installed — a curried chain folds one application per round, so the driver iterates until quiescent.
 pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
     curios_profile::profile!("evaluate_closed_terms");
-    let analysis = Analysis::analyze(module);
     let owners = index_owners(module);
-    let planned = plan(module, &analysis, &owners);
+    let planned = plan(module, &owners);
     apply(module, planned)
 }
 
-fn plan(
-    module: &Module,
-    analysis: &Analysis,
-    owners: &BTreeMap<StatementId, Owner>,
-) -> Vec<Planned> {
+fn plan(module: &Module, owners: &BTreeMap<StatementId, Owner>) -> Vec<Planned> {
     // Every top-level function a reified closure names was bound — by dominance-order erasure — before the statement that first uses the folded call, so it stays in lexical scope even for a candidate nested in a match arm.
-    let mut evaluator = Evaluator::new(module, analysis);
+    let mut evaluator = Evaluator::new(module);
     let mut planned = Vec::new();
     for (index, slot) in module.statements().iter().enumerate() {
         let Some(Statement::Let {
@@ -253,9 +248,6 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
         }
     }
 
-    module
-        .verify()
-        .expect("closed-term evaluation preserves a verifiable module");
     installed
 }
 

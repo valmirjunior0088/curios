@@ -77,6 +77,7 @@ fn one_copy_serves_two_block_candidates() {
     let before = live_functions(&module);
 
     assert!(evaluate_closed_terms(&mut module), "both candidates fold");
+    module.verify().expect("the folded module verifies");
 
     assert_eq!(
         live_functions(&module) - before,
@@ -94,6 +95,7 @@ fn a_block_candidates_copy_is_bound_at_item_level() {
     let items_before = module.items().len();
 
     assert!(evaluate_closed_terms(&mut module), "both candidates fold");
+    module.verify().expect("the folded module verifies");
 
     assert_eq!(
         module.items().len() - items_before,
@@ -192,6 +194,7 @@ fn a_knots_function_is_not_copied_out_of_its_initializer() {
         !evaluate_closed_terms(&mut module),
         "the candidate must stay a call:\n{module}"
     );
+    module.verify().expect("the untouched module verifies");
     assert_eq!(
         live_functions(&module),
         before,
@@ -239,6 +242,7 @@ fn a_knots_function_still_folds_within_its_initializer() {
         evaluate_closed_terms(&mut module),
         "the candidate inside the initializer folds:\n{module}"
     );
+    module.verify().expect("the folded module verifies");
     assert_eq!(
         live_functions(&module) - before,
         1,

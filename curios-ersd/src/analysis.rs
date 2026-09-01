@@ -9,7 +9,11 @@ mod tests;
 
 use {
     super::{Atom, BlockId, FunctionId, Module, Statement, StatementId, ValueId},
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
 
 /// An immutable analysis snapshot of one module state.
@@ -151,6 +155,53 @@ impl Analysis {
             || members
                 .iter()
                 .any(|&member| self.references(member).contains(&member))
+    }
+}
+
+/// Per-function free values on demand — [`Analysis::free_values`]'s derivation for one function at a time, for a consumer that closes over a handful of functions and has no other question to put to a snapshot.
+///
+/// The closed-term evaluator is that consumer. Closing a function was the one thing it read from a snapshot, and it took a fresh snapshot every round of a module that grows tenfold under its own reification, so a hello-world compile spent a second of its six re-deriving use counts and a reference graph nobody read. The memo derives exactly what the snapshot would — the same region walk, the same children, the same set — so a closure records its captures in the same order, and a function the module does not hold answers empty as the snapshot's lookup does.
+pub struct FreeValues<'m> {
+    module: &'m Module,
+    memo: RefCell<BTreeMap<FunctionId, Rc<BTreeSet<ValueId>>>>,
+}
+
+impl<'m> FreeValues<'m> {
+    pub fn new(module: &'m Module) -> Self {
+        Self {
+            module,
+            memo: RefCell::new(BTreeMap::new()),
+        }
+    }
+
+    /// The values `function` references but does not bind — its derived captures, including values reached only through functions bound inside its body.
+    pub fn of(&self, function: FunctionId) -> Rc<BTreeSet<ValueId>> {
+        if let Some(free) = self.memo.borrow().get(&function) {
+            return Rc::clone(free);
+        }
+        let free = Rc::new(self.derive(function));
+        self.memo.borrow_mut().insert(function, Rc::clone(&free));
+        free
+    }
+
+    /// [`Analysis::analyze`]'s free-value step for one function: what its region uses and what the functions bound inside it free, minus what its region and parameter list bind. Nesting is a tree, so the recursion through children terminates.
+    fn derive(&self, function: FunctionId) -> BTreeSet<ValueId> {
+        let Some(definition) = self.module.function(function) else {
+            return BTreeSet::new();
+        };
+        let mut region = walk_region(
+            self.module,
+            std::iter::empty(),
+            vec![definition.body],
+            &mut [],
+        );
+        region.bound.extend(definition.params.iter().copied());
+        let mut free = region.used;
+        for &child in &region.children {
+            free.extend(self.of(child).iter().copied());
+        }
+        free.retain(|value| !region.bound.contains(value));
+        free
     }
 }
 
