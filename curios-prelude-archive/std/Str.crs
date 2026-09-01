@@ -17,6 +17,10 @@ pub let of_bytes(b: Bytes) -> Option(Str) =
     | none() => Option/none()
     end;
 
+-- The one-scalar string. `Char/to_utf8` encodes exactly the sequences `check` accepts, so the fallback is unreachable; the four bytes are re-checked rather than certified because no lemma relates the encoder to the scan.
+pub let of_char(c: Char) -> Str =
+    Option/unwrap_or(of_bytes(Char/to_utf8(c)), "");
+
 -- Storage decides identity: the scan witness is proof-irrelevant, so two strings over the same bytes are the same string. The `BigNat/eq` and `Char/eq_of_code` construction at a third carrier — transport the field equality under a motive abstracting the dependent field, then apply the result to the right-hand witness.
 pub let eq_of_bytes(a: Str, b: Str, p: Eq(a.bytes, b.bytes)) -> Eq(a, b) =
     Eq/subst(
@@ -105,6 +109,9 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
             end
         end;
     go(Scan/lead(), s.bytes, s.valid, (init, 0)).0;
+
+pub let to_list(s: Str) -> List(Char) =
+    fold(s, [], (c, acc) => [..acc, c]);
 
 pub let len(s: Str) -> Nat =
     count_scalars(Scan/lead(), s.bytes);
@@ -208,6 +215,72 @@ let trim_bounds(s: Str) -> {Nat, Nat} =
 pub let trim(s: Str) -> Str =
     let (lo, hi) = trim_bounds(s);
     match lo < hi | true => slice(s, lo, hi - lo) | false => "" end;
+
+pub let trim_start(s: Str) -> Str =
+    drop_n(trim_bounds(s).0, s);
+
+pub let trim_end(s: Str) -> Str =
+    take_n(trim_bounds(s).1, s);
+
+-- Decomposition. Everything below works over scalar windows through `take_n` and `drop_n`, so each result carries the proof `slice` threads and nothing re-validates. Two windows are compared by `eql`, bytewise: UTF-8 is self-synchronizing, so encoded bytes agree exactly when the scalars they encode agree, and nothing is decoded. The searches recurse on a strictly shorter suffix, which is general recursion, so a type may not mention them.
+pub let starts_with(s: Str, prefix: Str) -> Bool =
+    eql(take_n(len(prefix), s), prefix);
+
+-- Truncating subtraction settles the short case: when `suffix` is longer than `s` nothing is dropped, and the comparison is of two strings of different lengths.
+pub let ends_with(s: Str, suffix: Str) -> Bool =
+    eql(drop_n(len(s) - len(suffix), s), suffix);
+
+-- The text before the first occurrence of `sep` and the text after it; `none` when it does not occur. An empty separator occurs at once, before the first scalar.
+pub let split_once(s: Str, sep: Str) -> Option({Str, Str}) =
+    let m = len(sep);
+    let go(i: Nat, rest: Str) -> Option({Str, Str}) =
+        choose
+        | starts_with(rest, sep) => Option/some((take_n(i, s), drop_n(m, rest)))
+        | is_empty(rest) => Option/none()
+        | _ => go(i + 1, drop_n(1, rest))
+        end;
+    go(0, s);
+
+pub let contains(s: Str, needle: Str) -> Bool =
+    Option/is_some(split_once(s, needle));
+
+-- The pieces between occurrences of `sep`, the separators dropped; an empty separator splits into scalars.
+pub let split(s: Str, sep: Str) -> List(Str) =
+    match is_empty(sep)
+    | true => List/map(to_list(s), of_char)
+    | false =>
+        match split_once(s, sep)
+        | some((before, after)) => [before, ..split(after, sep)]
+        | none() => [s]
+        end
+    end;
+
+-- Every occurrence of `from` replaced by `to`, left to right and without rescanning what `to` inserted. An empty `from` occurs nowhere, so `s` comes back unchanged.
+pub let replace(s: Str, from: Str, to: Str) -> Str =
+    match is_empty(from)
+    | true => s
+    | false =>
+        match split_once(s, from)
+        | some((before, after)) => concat(concat(before, to), replace(after, from, to))
+        | none() => s
+        end
+    end;
+
+-- The lines of `s`: split on `'\n'`, one trailing `'\r'` dropped from each, and a final terminator closes the last line rather than opening an empty one, so `"a\nb\n"` has two lines and `""` none.
+pub let lines(s: Str) -> List(Str) =
+    let strip(line: Str) -> Str =
+        match ends_with(line, "\r") | true => take_n(len(line) - 1, line) | false => line end;
+    match split_once(s, "\n")
+    | some((line, rest)) => [strip(line), ..lines(rest)]
+    | none() => match is_empty(s) | true => [] | false => [strip(s)] end
+    end;
+
+-- `s` widened to `n` scalars with copies of `c` at the front; a string already that wide comes back as it is.
+pub let pad_start(s: Str, n: Nat, c: Char) -> Str =
+    concat(repeat(of_char(c), n - len(s)), s);
+
+pub let pad_end(s: Str, n: Nat, c: Char) -> Str =
+    concat(s, repeat(of_char(c), n - len(s)));
 
 satisfy Eql(Str) {
     eql = eql,
