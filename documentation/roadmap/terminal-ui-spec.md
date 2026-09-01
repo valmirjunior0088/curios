@@ -33,9 +33,7 @@ Ratatui and cursive (Rust), Bubble Tea (Go), brick and vty (Haskell), Notty (OCa
 
 Read from source, and probed where it says so.
 
-- **The ABI has no terminal row.** `curios-abi/src/host/ops.rs` lists read, write, open, the socket family, poll, close, the clocks, random, args and env. Nothing sets a terminal mode or reads a window size, so raw mode and the terminal's dimensions are unreachable from Curios by any spelling.
-- **`poll` accepts stdin, and `set_nonblocking` on stdin is a recorded no-op.** `curios-runtime/src/os_host.rs` builds a `PollFd` for `Handle::Stdin`, and the setter answers `Ok` without touching fd 0 because the flag would change every other user of the descriptor. A fiber can wait for stdin to become readable; it cannot make a read on it non-blocking.
-- **A read on stdin goes through Rust's buffered stdin handle.** `read` is `stdin().lock().read(&mut buffer)`, and `/std/read` asks it for one byte at a time. Rust's stdin is a shared buffered reader: a request smaller than what arrived leaves the remainder in a buffer `poll` cannot see, so a loop that waits on fd 0 and then reads a small count can stall with input already inside the process. This is a finding for the runtime, unprobed; the library's answer is to read a chunk at least as large as that buffer, and the runtime's is to serve handle reads on stdin unbuffered.
+- **The host rows are item 10 of [the indispensable tier](standard-library-indispensable-tier-spec.md), and so is every host fact beneath them.** That the ABI has no terminal row, that `poll` accepts stdin while `set_nonblocking` on it is a no-op, that stdin is served through a buffer `poll` cannot see, that termios is the whole of raw mode on the two release targets, and that the browser harness holds stdin at EOF are recorded there once; this file writes over `/sys/tty` and states nothing about the host.
 - **`Async/read` reads before it waits.** Its first step is `/sys/Handle/read`, and only a `would_block` status sends it to `wait`; on stdin that first read blocks the whole scheduler until a byte arrives. A terminal loop spells `Async/wait(stdin, /sys/poll/read)` and then the raw read, and does not use `Async/read`.
 - **The scheduler already has every piece the loop needs.** `wait`, `sleep`, `select`, `timeout`, `go`, `spawn`/`join`, `park` with a `Waker`, and `using` with release on both exits, all in `curios-prelude-archive/std/Async.crs`. Nothing about the loop is new scheduling.
 - **`Str` counts scalars and measures nothing.** `Str/len` is a scalar count; there is no width, no `split`, no `lines`, no `pad`, no `of_char` — those are item 3 of [the indispensable tier](standard-library-indispensable-tier-spec.md). `Char` has no width table and no general category.
@@ -45,24 +43,15 @@ Read from source, and probed where it says so.
 - **One elaborator wart sits on the natural spelling** (probed). `let t = text(title); fit(t.img, w, 1)` is refused with a type mismatch whose inferred side has unfolded `t` into `text`'s whole fold, so the implicit width is never solved from `t.0`; the same term passes when the pair arrives as a parameter, as a lambda argument, or with `@t.w` written explicitly. A finding for `curios-elab`, worked around in the library by taking the pair as a parameter.
 - **`Fmt` is the precedent for a type computed from a runtime value, and `Vec` for a size in an index.** Nothing in `/std` yet indexes a two-dimensional structure.
 - **A test is a declaration and a property draws its arguments.** A `view` that is a pure function of a model and a size is asserted by `Test/equal` on the image, and an input decoder that is a pure function of bytes is a property over drawn `Bytes`.
-- **The release targets are Linux and macOS.** `.github/workflows/release.yml` builds two; there is no Windows console to serve, so termios is the whole of raw mode.
-- **The browser harness holds stdin at EOF** (`curios-js/src/harness.js`), so a terminal program cannot run there, and the two rows below answer `permission_denied` in it as the filesystem rows do.
 - **The roadmap's "Terminal" under IO is the byte stream, and the indispensable tier deliberately leaves out a `Draw` derivation slot.** No item names a screen.
 
 ## The design
 
 Six layers, pure except the lowest and the highest. Names are proposals.
 
-### 1. Two host rows
+### 1. The host floor
 
-```
-raw as tty/raw [h: Handle, on: Bool] [status: Status];
-size as tty/size [h: Handle] [status: Status, cols: Nat, rows: Nat];
-```
-
-`raw(h, true)` records the descriptor's termios on first use and applies the raw settings — no canonical mode, no echo, no signal keys, no output post-processing, `VMIN` 1, `VTIME` 0; `raw(h, false)` restores the record. The native host also restores the record when it is dropped, so a trap or an `exit` leaves the terminal usable; a status of `other(ENOTTY)` is how a program learns it has no terminal. `size` is `TIOCGWINSZ`. Both are `Status`-bearing rows over the existing slot vocabulary, so the change is the table, `/sys`'s mirror, `OsHost`, `MockHost` and the JavaScript harness — the four-place obligation the ABI invariant states — and nothing more.
-
-Rejected: learning the size by writing `CSI 18 t` and parsing the reply from stdin, which needs no row but leaks the reply to the inner shell under tmux and ssh and puts a parser in the path of every keystroke. Rejected: a resize signal row, which would be the first signal in the ABI and carries the race that in-band resize reports were introduced to remove. The library polls `size` instead; see the loop.
+`/sys/tty/raw` and `/sys/tty/size` are item 10 of [the indispensable tier](standard-library-indispensable-tier-spec.md), with the rows' semantics, the four-place obligation, and the rejected alternatives to a size row and to a resize signal. Nothing in this design touches the host except through them, and `Term` below is where they are wrapped.
 
 ### 2. Values
 
@@ -113,7 +102,7 @@ pub let render(@w, @h, previous: Option(Image(w, h)), next: Image(w, h), cursor:
 
 ### 5. The session and the loop
 
-`Term` is the effectful floor: `enter` puts stdin in raw mode, enters the alternate screen (`CSI ? 1049 h`), hides the cursor, enables bracketed paste (`CSI ? 2004 h`) and pushes the kitty flag `1` (`CSI > 1 u`); `leave` undoes each in reverse, and it is what `using` releases on both scheduler exits. `Term/size`, `Term/draw` and `Term/read` wrap the rows, the decoder and the renderer, so a program that wants its own loop has one.
+`Term` is the effectful floor: `enter` puts stdin in raw mode, enters the alternate screen (`CSI ? 1049 h`), hides the cursor, enables bracketed paste (`CSI ? 2004 h`) and pushes the kitty flag `1` (`CSI > 1 u`); `leave` undoes each in reverse, and it is what `using` releases on both scheduler exits. `Term/size`, `Term/draw` and `Term/read` wrap `/sys/tty`, the decoder and the renderer, so a program that wants its own loop has one.
 
 `App` is the framework on top — brick's record in Curios's types:
 
@@ -130,7 +119,7 @@ end
 pub let run(@M: Type, @E: Type, app: App(M, E)) -> Async(M);
 ```
 
-`run` holds one queue of events in a `Cell` and one `Waker`. Three kinds of fiber feed it: the reader, which waits on stdin, reads a chunk, decodes, and pushes; the ticker, which sleeps a fixed interval, reads `tty/size`, and pushes a `resize` only when it changed; and one fiber per `perform`, which runs its `Async` and pushes the result as `custom`. The loop parks until the queue is non-empty, drains it through `update`, and if anything arrived draws `view` at the current size once — so a burst of keys costs one frame. `quit` returns the model. `view` is typed at the size it is given, so a frame that does not fill the terminal is a type error, and `run` never crops.
+`run` holds one queue of events in a `Cell` and one `Waker`. Three kinds of fiber feed it: the reader, which waits on stdin, reads a chunk, decodes, and pushes; the ticker, which sleeps a fixed interval, reads `/sys/tty/size`, and pushes a `resize` only when it changed; and one fiber per `perform`, which runs its `Async` and pushes the result as `custom`. The loop parks until the queue is non-empty, drains it through `update`, and if anything arrived draws `view` at the current size once — so a burst of keys costs one frame. `quit` returns the model. `view` is typed at the size it is given, so a frame that does not fill the terminal is a type error, and `run` never crops.
 
 ### 6. Widgets
 
@@ -159,21 +148,19 @@ Each names the alternatives and what the recommendation rests on.
 
 1. **Sized images, or Notty's implicit padding.** Recommended: sized. It is `Vec`'s idiom, it is the one place the type system pays for itself in this library, the probe shows the composition costs no proof, and the escape hatch is one function.
 2. **Which loop is public.** Recommended: both `Term` and `App`, as ratatui exposes the terminal and tui-realm the framework, so a program with its own loop is not refused.
-3. **Rows, or an escape query for the size.** Recommended: rows, for the tmux and ssh reason above.
-4. **Resize by polling on a tick, or a signal row.** Recommended: the tick, at 100 ms — one `ioctl`, and what every library does on the platform without signals.
-5. **Kitty keyboard protocol in the MVP.** Recommended: yes, the disambiguation flag alone, since the legacy decoder must exist regardless and the protocol's form is one extra arm.
-6. **Mouse.** Recommended: out. It is the one capability the survey splits on, and it brings hit-testing, which the image algebra has no rectangles for.
-7. **Width by a small table, or every scalar at one.** Recommended: the table, under twenty ranges, with the approximation stated; `Str` decomposition (item 3 of the indispensable tier) lands first.
-8. **Cell symbol as `Str` or `Char`.** Recommended: `Str`, for combining marks.
-9. **The widget five.** Recommended: border, paragraph, listing, input, viewport; table, tabs and gauge wait for a consumer.
-10. **The name.** `/std/Tui` is proposed; `/std/Term` reads as the byte stream `/std/Handle` already is.
+3. **The resize tick.** Recommended: 100 ms — one `ioctl`, and what every library does on the platform without signals. That the size is a row and resize is not a signal is decided in the indispensable tier, not here.
+4. **Kitty keyboard protocol in the MVP.** Recommended: yes, the disambiguation flag alone, since the legacy decoder must exist regardless and the protocol's form is one extra arm.
+5. **Mouse.** Recommended: out. It is the one capability the survey splits on, and it brings hit-testing, which the image algebra has no rectangles for.
+6. **Width by a small table, or every scalar at one.** Recommended: the table, under twenty ranges, with the approximation stated; `Str` decomposition (item 3 of the indispensable tier) lands first.
+7. **Cell symbol as `Str` or `Char`.** Recommended: `Str`, for combining marks.
+8. **The widget five.** Recommended: border, paragraph, listing, input, viewport; table, tabs and gauge wait for a consumer.
+9. **The name.** `/std/Tui` is proposed; `/std/Term` reads as the byte stream `/std/Handle` already is.
 
 ## Findings that are not this specification's
 
-- Stdin's buffered handle can hide input from `poll` (above); a runtime change, verified by a probe that pastes more than one read's worth.
 - An implicit whose solution is the projection of a transparent local binding to a fold is not solved (above); an elaborator finding, worked around here.
-- The native host restores nothing at a trap today; the termios record in `tty/raw` would be the first host state with an exit obligation, and where `OsHost` is dropped relative to `instantiate`'s trap path is unread.
 - `Async/read` on stdin blocks the scheduler on its first read; a comment in `Async.crs` could say so.
+- The two host findings this survey turned up — stdin's buffered handle hiding input from `poll`, and the native host restoring nothing at a trap — are recorded with the rows in the indispensable tier.
 
 ## Deliberately not specified
 
