@@ -15,7 +15,10 @@ fn strings_compare_by_code_point_and_bytes_and_booleans_bytewise() {
         ]))
         "#;
 
-    assert_eq!(run(source), b"true,false,true,true,true,false,true,true,true,false");
+    assert_eq!(
+        run(source),
+        b"true,false,true,true,true,false,true,true,true,false"
+    );
 }
 
 // `List` is lexicographic with the shorter prefix first, `none` sits below `some`, and `failure` below `success`; each is stated once in its module and read here through `Ord/cmp`.
