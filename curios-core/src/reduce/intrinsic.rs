@@ -388,7 +388,6 @@ pub fn reduce_intrinsic(
             |left, right| left.checked_shr(right).map(Intrinsic::Int),
             Intrinsic::IntShr,
         ),
-        // 32-bit-carrier rotations and bit counts over the i32 view; a literal outside it stays neutral.
         Intrinsic::FltType => Ok(Subterm::Intrinsic(Intrinsic::FltType)),
         Intrinsic::Flt(flt) => Ok(Subterm::Intrinsic(Intrinsic::Flt(*flt))),
         Intrinsic::FltAdd(left, right) => reduce_flt_binary(
