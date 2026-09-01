@@ -233,18 +233,26 @@ pub(crate) fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
     }
 }
 
+/// Which settle tier is asking [`settle_against`]. The force tier runs per-apply, directly after the turnaround; the drain's no-progress sweep runs once nothing in the whole item can move. A tuple settles at both: its non-dependent product is the only thing it could be once its own apply is done. A lambda settles only at the drain — the apply's result still flows onward, so an outer pin arriving later can deliver the full expected function type, whose hidden binders and canonical marks the check walk inserts and a committed written shape would forfeit; the drain is where that stops being possible.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SettleTier {
+    Force,
+    Drain,
+}
+
 /// Synthesize a checked-only form whose expectation never gained structure, and pin the expectation to what it inferred.
 ///
-/// `None` when the form cannot be synthesized, or when the expectation *does* have structure, in which case ordinary checking owns it.
+/// `None` when the form cannot be synthesized at `tier` ([`SettleTier`] states which form settles where), or when the expectation *does* have structure, in which case ordinary checking owns it.
 ///
-/// Parking a non-empty tuple literal or a lambda against a bare metavariable is right while structure could still arrive from that expectation, since only an expectation can supply a dependent telescope or a hidden binder. This serves the two places where nothing is left to send one: an apply's force tier — after the turnaround when the apply is checked, and directly when it is inferred — with no later slot opening through this one, and the drain's no-progress sweep. `()` and a list literal reach the same conclusion at their own arms and `elaborate_num_lit` reaches it for a numeral. A tuple settles to its non-dependent product; a lambda settles to the type its annotations and body state ([`elaborate_func_settle`](super::elaborate_func_settle)), an unannotated domain standing as a named metavariable for the body — or whatever the settled type later unifies with — to pin.
+/// Parking a non-empty tuple literal or a lambda against a bare metavariable is right while structure could still arrive from that expectation, since only an expectation can supply a dependent telescope or a hidden binder. This serves the two places where nothing is left to send one. `()` and a list literal reach the same conclusion at their own arms and `elaborate_num_lit` reaches it for a numeral. A tuple settles to its non-dependent product; a lambda settles to the type its annotations and body state ([`elaborate_func_settle`](super::elaborate_func_settle)), an unannotated domain standing as a named metavariable for the body — or whatever the settled type later unifies with — to pin.
 pub(crate) fn settle_against(
     context: &mut Context,
     term: &Term,
     expected: &Term,
+    tier: SettleTier,
 ) -> Result<Option<Term>, Error> {
     let settleable = matches!(&**term, Subterm::Tuple(tuple) if !tuple.fields.is_empty())
-        || matches!(&**term, Subterm::Func(_));
+        || (tier == SettleTier::Drain && matches!(&**term, Subterm::Func(_)));
     if !settleable {
         return Ok(None);
     }
@@ -378,7 +386,7 @@ impl Context {
             let (term, expected, placeholder) = (term.clone(), expected.clone(), *placeholder);
             let settled_term = self.with_frame(|context| {
                 context.restore_frame(&frame);
-                settle_against(context, &term, &expected)
+                settle_against(context, &term, &expected, SettleTier::Drain)
             });
             let rebuilt = match settled_term {
                 Ok(None) => {

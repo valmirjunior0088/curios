@@ -1,4 +1,7 @@
-use {super::*, crate::exhausted_bound};
+use {
+    super::*,
+    crate::{SettleTier, exhausted_bound},
+};
 
 pub(super) fn elaborate_func_type(
     context: &mut Context,
@@ -343,10 +346,11 @@ pub(super) fn elaborate_apply(
                     .nth(*slot, |k| elaborated[k].clone())
                     .expect("pending slot is within the telescope");
                 // A form that can be synthesized takes its product *here* rather than at the item's drain, so the rest of the item sees a real type — a projection off the result would otherwise check against a metavariable that only settles after every expression around it.
-                let checked = match crate::settle_against(context, written, &slot_ty)? {
-                    Some(settled) => settled,
-                    None => check(context, written, slot_ty)?,
-                };
+                let checked =
+                    match crate::settle_against(context, written, &slot_ty, SettleTier::Force)? {
+                        Some(settled) => settled,
+                        None => check(context, written, slot_ty)?,
+                    };
                 context.solve_metavar(*placeholder, checked.clone());
                 elaborated[*slot] = checked;
             }
