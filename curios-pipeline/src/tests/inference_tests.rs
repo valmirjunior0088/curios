@@ -38,13 +38,13 @@ fn an_entrypoint_type_may_apply_a_type_former() {
 
 #[test]
 fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
-    // `f`'s implicit domain meets `Option(?X)` with `?X` never pinned: the goal parks and survives the drain. The report must say the conversion was postponed — not that the types rigidly mismatched — and name the blockers it watched.
+    // `f`'s implicit domain meets `(Nat) -> Option(?X)` with `?X` never pinned — and minted under the lambda's own binder, so the embedded-metavariable guard's containment exemption cannot commit the candidate and it postpones. The goal parks and survives the drain. The report must say the conversion was postponed — not that the types rigidly mismatched — and name the blockers it watched. (A bare `f(Option/none())` no longer serves: `?X` is then contained in the implicit's own scope, the forced solution commits, and the honest residue is the uninferred implicit itself.)
     let source = r#"
-        use /std/{Option, Io};
+        use /std/{Nat, Option, Io};
 
         let f(@A: Type, a: A) -> {} = ();
 
-        let stuck: {} = f(Option/none());
+        let stuck: {} = f((n: Nat) => Option/none());
 
         Io/pure(())
     "#;
@@ -181,11 +181,11 @@ fn a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade() {
 
 #[test]
 fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
-    // The diversion above applies only when written goals are *all* that holds a conversion up. Here `f`'s implicit `A` meets `Eq(?f(k), ?f(7))` and can never be pinned — an embedded-metavariable candidate postpones — so the survivor watches the goal and the implicit both, and reports as a postponement naming each by what it is: never by an id, which is elaboration state the reader cannot decode. The sides show every solved metavariable beside the open one — `?(k)`, not `?(?)` — because display materializes tolerantly.
+    // The diversion above applies only when written goals are *all* that holds a conversion up. Here the goal's congruence equation rides under a lambda binder — `f`'s implicit meets `(n: Nat) -> Eq(?f(k), ?f(7))` whose metavariables were minted under that binder, so the containment exemption cannot commit the candidate and it postpones — and the survivor watches the goal and the implicit both, reporting as a postponement naming each by what it is: never by an id, which is elaboration state the reader cannot decode. The sides show every solved metavariable beside the open one — `?(k)`, not `?(?)` — because display materializes tolerantly.
     let source = r#"
         use /std/{Nat, Eq};
         let f(@A : Type, a : A) -> {} = ();
-        let stuck(k : Nat, h : Eq(k, 7)) -> {} = f(Eq/cong(?, h));
+        let stuck(k : Nat, h : Eq(k, 7)) -> {} = f((n : Nat) => Eq/cong(?, h));
         0
     "#;
 
@@ -196,7 +196,7 @@ fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
         "unexpected error: {error}"
     );
     assert!(
-        error.contains("between: Eq(@?, ?(k), ?(7))"),
+        error.contains("Eq(@?, ?(k), ?(7))"),
         "unexpected error: {error}"
     );
     assert!(
