@@ -10,7 +10,7 @@ use {
         compile_entrypoint, compile_unit_as_tests, compile_units, declared_test_paths, recheck,
     },
     curios_prelude::{SYNTAX, with_prelude},
-    curios_unit::Prefix,
+    curios_unit::{Prefix, Unit},
     std::slice::from_ref,
 };
 
@@ -101,26 +101,12 @@ pub fn check_units_with_prelude<P>(
     budget: u64,
     units: &[curios_text::RootSource],
     cache: Option<&dyn Cache>,
-    mut progress: P,
+    progress: P,
 ) -> Result<(), CompileError>
 where
     P: FnMut(Progress<'_>),
 {
-    with_prelude(|prelude| {
-        let sources = units
-            .iter()
-            .map(curios_text::UnitSource::mounted)
-            .collect::<Vec<_>>();
-        compile_units(
-            budget,
-            Prefix::over(from_ref(&prelude)),
-            &SYNTAX,
-            &sources,
-            cache,
-            &mut progress,
-        )
-        .map(|_produced| ())
-    })
+    with_standard_units(budget, units, cache, progress, |_, _, _| Ok(()))
 }
 
 /// The declaration-ordered test paths of the last of `units` — what `wonder tests` answers for a library. The same fold [`check_units_with_prelude`] runs, read for its `Module::tests` instead of its verdicts; nothing executes.
@@ -128,30 +114,16 @@ pub fn unit_test_paths<P>(
     budget: u64,
     units: &[curios_text::RootSource],
     cache: Option<&dyn Cache>,
-    mut progress: P,
+    progress: P,
 ) -> Result<Vec<String>, CompileError>
 where
     P: FnMut(Progress<'_>),
 {
-    with_prelude(|prelude| {
-        let sources = units
-            .iter()
-            .map(curios_text::UnitSource::mounted)
-            .collect::<Vec<_>>();
-        compile_units(
-            budget,
-            Prefix::over(from_ref(&prelude)),
-            &SYNTAX,
-            &sources,
-            cache,
-            &mut progress,
-        )
-        .map(|produced| {
-            produced
-                .last()
-                .map(|unit| declared_test_paths(unit.core()))
-                .unwrap_or_default()
-        })
+    with_standard_units(budget, units, cache, progress, |_, produced, _| {
+        Ok(produced
+            .last()
+            .map(|unit| declared_test_paths(unit.core()))
+            .unwrap_or_default())
     })
 }
 
@@ -160,12 +132,43 @@ fn fold_with_units<P, E, T>(
     budget: u64,
     units: &[curios_text::RootSource],
     cache: Option<&dyn Cache>,
-    mut progress: P,
+    progress: P,
     entry: E,
 ) -> Result<T, CompileError>
 where
     P: FnMut(Progress<'_>),
     E: FnOnce(Prefix<'_>) -> Result<T, CompileError>,
+{
+    with_standard_units(
+        budget,
+        units,
+        cache,
+        progress,
+        |prelude, produced, progress| {
+            let scope = std::iter::once(prelude)
+                .chain(produced.iter())
+                .collect::<Vec<_>>();
+
+            // The entry is announced here rather than inside `compile_entrypoint`, which stays free of the concern: it is the last step of this fold, and bracketing it costs one event where threading a second callback down would cost a signature.
+            progress(Progress::Entry);
+            let compiled = entry(Prefix::over(&scope))?;
+            progress(Progress::Compiled);
+
+            Ok(compiled)
+        },
+    )
+}
+
+/// The standard scope, assembled once: the fixed prelude, then `units` compiled in the order given against it — what every entry point in this module compiles against — handed to `then` as the prelude, the units produced, and the progress reporter for whatever follows. The one spelling of the scope this module exists to write once; the three callers differ only in what they do with it.
+fn with_standard_units<P, T>(
+    budget: u64,
+    units: &[curios_text::RootSource],
+    cache: Option<&dyn Cache>,
+    mut progress: P,
+    then: impl FnOnce(&Unit, Vec<Unit>, &mut P) -> Result<T, CompileError>,
+) -> Result<T, CompileError>
+where
+    P: FnMut(Progress<'_>),
 {
     with_prelude(|prelude| {
         let sources = units
@@ -180,16 +183,8 @@ where
             cache,
             &mut progress,
         )?;
-        let scope = std::iter::once(prelude)
-            .chain(produced.iter())
-            .collect::<Vec<_>>();
 
-        // The entry is announced here rather than inside `compile_entrypoint`, which stays free of the concern: it is the last step of this fold, and bracketing it costs one event where threading a second callback down would cost a signature.
-        progress(Progress::Entry);
-        let compiled = entry(Prefix::over(&scope))?;
-        progress(Progress::Compiled);
-
-        Ok(compiled)
+        then(prelude, produced, &mut progress)
     })
 }
 
