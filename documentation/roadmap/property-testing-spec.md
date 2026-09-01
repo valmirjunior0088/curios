@@ -2,7 +2,7 @@
 
 ## Status
 
-Nothing is built. This specification depends on two others: the [test-harness specification](test-harness-spec.md) through its step 4 — the `test name() = body;` form whose empty parentheses it reserves as this specification's seam, the synthesized tail, `Test`/`Verdict` and the combinators — and the [function-key specification](func-witness-keys-spec.md), because every goal below keys on a function type. The machinery it composes was probed on 2026-08-31 against the tuple landing: premise regularity, superclass projection, per-shape witness rosters, and deferral all behave as cited.
+Nothing is built. This specification depends on two grounds: the landed test harness (see [the decision](../design/toolchain/a-test-is-a-declared-description-run-by-a-synthesized-tail.md)) — the `test name() = body;` form whose empty parentheses it opens as its seam, the synthesized tail, `Test`/`Verdict` and the combinators — and the [function-key specification](func-witness-keys-spec.md), because every goal below keys on a function type. The machinery it composes was probed on 2026-08-31 against the tuple landing: premise regularity, superclass projection, per-shape witness rosters, and deferral all behave as cited.
 
 ## Mission
 

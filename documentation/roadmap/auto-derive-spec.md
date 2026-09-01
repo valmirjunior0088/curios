@@ -2,7 +2,7 @@
 
 ## Status
 
-The elaborator ground is prepared and pinned by tests in the tree; nothing of the mechanism is built. This specification is the build plan alone: each step carries its own contract, and a landed step is replaced by one checked line, its contracts moved to their owners. The `Spell` concept and its written witnesses land with the [test-harness specification](test-harness-spec.md); the steps below build on them and change no signature.
+The elaborator ground is prepared and pinned by tests in the tree; nothing of the mechanism is built. This specification is the build plan alone: each step carries its own contract, and a landed step is replaced by one checked line, its contracts moved to their owners. The `Spell` concept and its written witnesses are landed — the test harness shipped them (see [the decision](../design/toolchain/a-test-is-a-declared-description-run-by-a-synthesized-tail.md)); the steps below build on them and change no signature.
 
 ## Mission
 
