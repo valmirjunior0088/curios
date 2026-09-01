@@ -10,7 +10,7 @@ use {
         budget::{DESCRIPTION_COPY_NODE_LIMIT, PASS_REIFY_BUDGET, ReifyBudget},
         interpret::{Evaluator, Outcome, Residual},
         reify::{ReifyScope, free_references, reify, reify_all, reify_check, reify_check_all},
-        value::Value,
+        value::{Bail, Value},
     },
     crate::{
         Atom, BlockId, ForeignId, FunctionId, Module, Rhs, Statement, StatementId, ValueId,
@@ -43,14 +43,42 @@ enum Kind {
 }
 
 /// Fold every closed call the interpreter can finish, module-wide. Returns whether anything was installed — a curried chain folds one application per round, so the driver iterates until quiescent.
+///
+/// Under the `profile` feature each round samples its ledger — the closed candidates found, the bails by reason, the replacements installed and the residual calls among them — so a round's cost reads beside its yield. A residual call is the one replacement that leaves an `Apply` behind for the next round to find again, which is why it is counted apart.
 pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
     curios_profile::profile!("evaluate_closed_terms");
     let owners = index_owners(module);
-    let planned = plan(module, &owners);
-    apply(module, planned)
+    let plans = plan(module, &owners);
+    curios_profile::sample!("evaluate::candidates", plans.len());
+    curios_profile::sample!("evaluate::bail::effect", bailed(&plans, Bail::Effect));
+    curios_profile::sample!("evaluate::bail::fuel", bailed(&plans, Bail::Fuel));
+    curios_profile::sample!("evaluate::bail::depth", bailed(&plans, Bail::Depth));
+    curios_profile::sample!("evaluate::bail::trap", bailed(&plans, Bail::Trap));
+    curios_profile::sample!("evaluate::bail::unknown", bailed(&plans, Bail::Unknown));
+    curios_profile::sample!("evaluate::bail::arity", bailed(&plans, Bail::Arity));
+    curios_profile::sample!("evaluate::bail::too_big", bailed(&plans, Bail::TooBig));
+    curios_profile::sample!("evaluate::bail::cycle", bailed(&plans, Bail::Cycle));
+    curios_profile::sample!(
+        "evaluate::bail::unsupported",
+        bailed(&plans, Bail::Unsupported)
+    );
+    let installed = apply(module, plans);
+    curios_profile::sample!("evaluate::installed", installed.0);
+    curios_profile::sample!("evaluate::residual_calls", installed.1);
+    installed.0 > 0
 }
 
-fn plan(module: &Module, owners: &BTreeMap<StatementId, Owner>) -> Vec<Planned> {
+/// How many plans bailed for `reason`.
+#[cfg(feature = "profile")]
+fn bailed(plans: &[Result<Planned, Bail>], reason: Bail) -> usize {
+    plans
+        .iter()
+        .filter(|plan| matches!(plan, Err(bail) if *bail == reason))
+        .count()
+}
+
+/// Every closed candidate's plan: its replacement, or the reason it has none.
+fn plan(module: &Module, owners: &BTreeMap<StatementId, Owner>) -> Vec<Result<Planned, Bail>> {
     // Every top-level function a reified closure names was bound — by dominance-order erasure — before the statement that first uses the folded call, so it stays in lexical scope even for a candidate nested in a match arm.
     let mut evaluator = Evaluator::new(module);
     let mut planned = Vec::new();
@@ -77,22 +105,27 @@ fn plan(module: &Module, owners: &BTreeMap<StatementId, Owner>) -> Vec<Planned> 
                 Kind::Foreign(foreign, operands)
             }
             Outcome::Stuck(Residual::Call(function, operands)) => Kind::Call(function, operands),
-            Outcome::Bail(_) => continue,
+            Outcome::Bail(bail) => {
+                planned.push(Err(bail));
+                continue;
+            }
         };
-        planned.push(Planned {
+        planned.push(Ok(Planned {
             statement,
             result: *result,
             owner,
             kind,
-        });
+        }));
     }
     planned
 }
 
 /// Reification runs first, over every plan, and only *appends* to the arena; only once every plan is reified are the candidates rewritten and the materialized statements spliced in. The order matters: a reified closure deep-copies a source function and must read the original module, not one where an earlier plan's rewrite left an alias whose definition is not yet spliced into its block.
-fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
+/// Install the plans that reify, answering how many replacements landed and how many of them are residual calls.
+fn apply(module: &mut Module, plans: Vec<Result<Planned, Bail>>) -> (usize, usize) {
+    let planned: Vec<Planned> = plans.into_iter().flatten().collect();
     if planned.is_empty() {
-        return false;
+        return (0, 0);
     }
 
     let mut rewrites = Vec::<(StatementId, ValueId, Rhs)>::new();
@@ -222,7 +255,11 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
         }
     }
 
-    let installed = !rewrites.is_empty();
+    let installed = rewrites.len();
+    let residual_calls = rewrites
+        .iter()
+        .filter(|(_, _, rhs)| matches!(rhs, Rhs::Apply { .. }))
+        .count();
     for (statement, result, rhs) in rewrites {
         module.set_statement(statement, Statement::Let { result, rhs });
     }
@@ -248,7 +285,7 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
         }
     }
 
-    installed
+    (installed, residual_calls)
 }
 
 fn is_same_call(module: &Module, statement: StatementId, callee: Atom, arguments: &[Atom]) -> bool {
