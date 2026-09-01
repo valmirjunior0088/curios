@@ -1,6 +1,6 @@
 //! The module: crate-private arenas, checked accessors, and the low-level construction and removal intrinsics the checked builder drives.
 //!
-//! Arena slots never move and identities are never reused: removal writes `None` (a tombstone) and compaction, when its consumer lands, is an explicit deterministic pass. Constants are interned by their exact bitwise identity, so equal constants share one identity; the interning index is a derived lookup structure, never iterated, and identity order is insertion order — construction is deterministic, so identities are too.
+//! Between compactions, arena slots never move and identities are never reused: removal writes `None` (a tombstone). [`Module::compact`] is the one explicit, deterministic pass that renumbers, and it reports where every identity a caller may hold went. Constants are interned by their exact bitwise identity, so equal constants share one identity; the interning index is a derived lookup structure, never iterated, and identity order is insertion order — construction is deterministic, so identities are too.
 //!
 //! The module's top level is an ordered item list plus an entry block: items are ordinary statements at module scope, evaluated eagerly in order (the record pruning's granularity and the effect contract depend on), and the entry block computes the program's result after them.
 

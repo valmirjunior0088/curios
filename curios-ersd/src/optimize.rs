@@ -11,6 +11,8 @@ mod rebase;
 use super::{Analysis, Module};
 
 /// Run the Ersd transformations in place: prune, evaluate, specialize, and prune again (evaluation and specialization strand the code they collapse). The module must verify on entry; the final prune re-verifies on exit. Taking a match arm during specialization orphans the untaken arms' values until that final prune tombstones them, so no intermediate verify runs after specialization.
+///
+/// Each prune is followed by a compaction whose [`Compaction`](super::Compaction) is dropped, so this must run on a module nothing else indexes into: the pipeline hands it the module `ErasedArena::into_module` released, after the erased environment — the one outside holder of its identities — is gone.
 pub fn optimize(module: &mut Module) {
     module
         .verify()
