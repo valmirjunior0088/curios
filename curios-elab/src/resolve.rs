@@ -32,9 +32,9 @@ enum Resolution {
     NoMatch,
 }
 
-/// Best-effort display form of a goal for diagnostics: substitute the solutions that have landed, keeping the raw spelling if any hole survives.
-fn display_goal(context: &Context, goal: &Term) -> Term {
-    super::zonk(context, goal).unwrap_or_else(|_| goal.clone())
+/// Best-effort display form of a goal for diagnostics — the renderer every mismatch report uses (`resolved_for_display`), so a goal is spelled as the rest of the reports spell a type. A bare strict zonk stood here before, and it rendered a nominal type through its recursive-group projection — `no witness of Spell(rec #0: Type = Opaque; #0) found` — because a zonked solution spells a stuck recursive call as the `Rec` node itself until the refold gives it back its name.
+fn display_goal(context: &mut Context, goal: &Term) -> Term {
+    super::resolved_for_display(context, goal)
 }
 
 fn no_witness_error(context: &mut Context, goal: &Term, provenance: &WitnessOrigin) -> Error {

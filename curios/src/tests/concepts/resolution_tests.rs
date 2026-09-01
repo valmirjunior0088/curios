@@ -493,3 +493,20 @@ fn a_later_premise_is_named_by_its_own_position() {
         "expected the second premise named as the second:\n{report}"
     );
 }
+
+#[test]
+fn a_missing_witness_over_a_nominal_type_spells_its_name() {
+    // A goal is rendered as every report renders a type. A nominal declaration is a recursive group of one, and a zonked solution spells it as the `Rec` node itself until the refold gives the name back — the deferred-goal report once skipped that refold and wrote `Spell(rec #0: Type = Opaque; #0)`.
+    let report = error(
+        r#"
+        use /std/{Str, Spell};
+        induct Opaque: pub Type | o() end
+        let spelled: Str = Spell/spell(Opaque/o());
+        /std/print(spelled)
+        "#,
+    );
+    assert!(
+        report.contains("no witness of Spell(Opaque) found"),
+        "{report}"
+    );
+}

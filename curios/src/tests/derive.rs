@@ -368,11 +368,12 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
         satisfy Spell(Holder);
         /std/print("")
         "#;
-    // The goal's spelling is the deferred-goal report's, which today renders a nominal type through its recursive-group projection (a written `Spell/spell(i)` reports identically); the derivation's contribution is the provenance line, located at the declaration.
+    // The goal's spelling is the deferred-goal report's, rendered as every report renders a type — the nominal name, not its recursive-group projection; the derivation's contribution is the provenance line, located at the declaration.
     let report = error(unwitnessed);
-    assert!(report.contains("no witness of Spell("), "{report}");
     assert!(
-        report.contains("needed by '/Holder/holds' for payload 'inner'\n"),
+        report.contains(
+            "no witness of Spell(Opaque) found\n  needed by '/Holder/holds' for payload 'inner'\n"
+        ),
         "{report}"
     );
     assert!(report.contains("satisfy Spell(Holder);"), "{report}");
