@@ -1,5 +1,5 @@
 use {
-    super::Status,
+    super::{Status, status_from_error},
     std::{
         net::ToSocketAddrs,
         os::fd::OwnedFd,
@@ -180,8 +180,7 @@ impl OsResolver {
 
     /// Start an asynchronous lookup of `address`. `Ok(Some)` queued the work — poll the returned `ready` fd and drain `slot` once it fires. `Ok(None)` means the pool is saturated, so the caller sheds the load. `Err(status)` means the wakeup pipe could not be created.
     pub(crate) fn start(&self, address: String) -> Result<Option<Pending>, Status> {
-        let (job, pending) = Job::new(address)
-            .map_err(|err| Status::Other(err.raw_os_error().unwrap_or(0) as u32))?;
+        let (job, pending) = Job::new(address).map_err(status_from_error)?;
 
         match self.sender.try_send(job) {
             Ok(()) => Ok(Some(pending)),
