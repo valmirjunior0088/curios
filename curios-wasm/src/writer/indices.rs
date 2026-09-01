@@ -1,12 +1,12 @@
 use {
     crate::{
-        DataName, ElemName, FieldName, FuncName, GlobalName, LocalName, MemName, Module, TableName,
-        TypeName,
+        DataName, ElemName, FieldName, FuncName, GlobalName, LocalName, MemName, Module, SubType,
+        TableName, TypeName,
     },
     std::collections::HashMap,
 };
 
-/// Every index space the binary format is defined over, derived once from the module's declaration order with imports leading — the only place a numeric index exists. A name absent from it is a dangling cross-reference, which every resolver reports by panicking with the name rather than encoding a wrong number — and a name declared twice is the same failure from the other side, refused at construction rather than silently resolving every reference to whichever declaration came second.
+/// Every index space the binary format is defined over, derived once from the module's declaration order with imports leading — the only place a numeric index exists. A name absent from it is a dangling cross-reference, which every resolver reports by panicking with the name rather than encoding a wrong number — and a name declared twice is the same failure from the other side, refused at construction rather than silently resolving every reference to whichever declaration came second. A function's local index space is likewise the format's — its type's inputs followed by its locals — so a param list of any other length is refused here too: numbering from the list instead would put every local of that function in the wrong slot while the module still validates.
 #[derive(Debug, Clone)]
 pub(super) struct Indices<'a> {
     types: HashMap<&'a TypeName, usize>,
@@ -65,6 +65,24 @@ impl<'a> Indices<'a> {
             assert!(
                 funcs.insert(func_name, index).is_none(),
                 "func `{func_name}` is declared twice"
+            );
+
+            let inputs = module
+                .get_type(&func.type_name)
+                .and_then(SubType::func_type)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "func `{func_name}` is declared at `{}`, which is not a declared function type",
+                        func.type_name
+                    )
+                })
+                .inputs()
+                .len();
+
+            assert!(
+                func.params.len() == inputs,
+                "func `{func_name}` names {} params for a type of {inputs} inputs",
+                func.params.len()
             );
 
             for (index, local_name) in func.local_names().enumerate() {

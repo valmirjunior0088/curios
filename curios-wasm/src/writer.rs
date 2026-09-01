@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 mod buffer;
 use buffer::*;
 
