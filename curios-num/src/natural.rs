@@ -54,11 +54,6 @@ impl Natural {
         self.value.to_u32()
     }
 
-    /// The nearest `f32`, saturating to infinity on a magnitude too large to represent — which is how the `Flt` literal path detects a numeral no float can spell, since no literal may name an infinity.
-    pub fn to_f32(&self) -> Option<f32> {
-        self.value.to_f32()
-    }
-
     /// The magnitude as a `u64`, when it fits.
     ///
     /// Beside [`Natural::to_usize`] rather than instead of it, and the difference is not cosmetic: `usize` is 32 bits on wasm32 and 64 natively, so a question answered through it can be answered differently on the two targets. A reduction *charge* may not be, so a charge computed from a magnitude reads it through this.

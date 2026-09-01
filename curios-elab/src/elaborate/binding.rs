@@ -262,15 +262,15 @@ pub(super) fn elaborate_num_lit(
                 (Intrinsic::Int(value), int_type)
             }
             Subterm::Intrinsic(Intrinsic::FltType) => {
-                // `to_f32` saturates an overflowing magnitude to infinity, a value no literal can spell — refused like the `Byte` range above, never minted.
-                let value = magnitude.to_f32().unwrap_or(f32::INFINITY);
+                // Rounded by the model, as the decimal literal in `curios-text` is, so what a numeral means as a binary32 is stated once in this repository. A magnitude past the largest finite value rounds to infinity, a value no literal can spell — refused like the `Byte` range above, never minted.
+                let value = Floating::of_natural(magnitude);
                 if !value.is_finite() {
                     return Err(Error::FltLiteralOutOfRange {
                         value: magnitude.to_string(),
                     });
                 }
                 let value = if sign.is_negative() { -value } else { value };
-                (Intrinsic::Flt(Floating::from_f32(value)), flt_type)
+                (Intrinsic::Flt(value), flt_type)
             }
             // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape.
             _ => {
