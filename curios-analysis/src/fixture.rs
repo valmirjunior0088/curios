@@ -6,7 +6,7 @@
 
 use curios_utilities::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax,
-    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    SpellSyntax, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 const fn name(segments: &'static [&'static str]) -> SyntaxName {
@@ -66,5 +66,10 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     test: TestSyntax {
         test_type: name(&["syn", "Test", "Test"]),
         main: name(&["syn", "Test", "main"]),
+    },
+    spell: SpellSyntax {
+        spell: field(&["syn", "Spell", "Spell"], "spell"),
+        call: name(&["syn", "Spell", "call"]),
+        record: name(&["syn", "Spell", "record"]),
     },
 };

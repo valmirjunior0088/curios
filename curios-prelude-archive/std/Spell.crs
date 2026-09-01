@@ -1,9 +1,6 @@
--- The tooling-facing rendering concept: `spell(v)` is Curios source text that denotes `v` at its type — a literal or an absolute constructor path that re-parses wherever the names in it are visible. `Show` stays the human-facing display; the two coincide only where a value's display already is its literal.
+-- The carrier witnesses of `/syn/Spell`, and the facade programs import the concept through. The concept lives in `/syn` because a derived witness body names it, and a compiler-emitted name lives there; its renderers stay there too, compiler vocabulary with no row here.
 use /std/{Nat, Int, Byte, Bool, Flt, Char, Str, Bits, Bytes, List, Option, Result, Order, Eql};
-
-pub concept Spell(A: Type): pub Type {
-    spell(A) -> Str,
-}
+pub use /syn/Spell/{Spell, spell};
 
 satisfy Spell(Nat) {
     spell(n) = Nat/to_str(n),
@@ -125,5 +122,3 @@ satisfy Spell(Order) {
         | gt() => "/std/Order/gt()"
         end,
 }
-
-pub use Spell/*;

@@ -1,6 +1,46 @@
 //! Derived witnesses: the body-less `satisfy C(T);` form, the transient it lowers to, and what the compiler writes — or refuses — in its place.
 
-use crate::tests::{core, error};
+use crate::tests::{core, error, run};
+
+// The renderers spell the two shapes a derived body is built from, pinned as the text a re-parse reads: a derivation's output is only ever their output over spelled pieces. An empty label is the positional field of a newtype-like struct.
+#[test]
+fn the_renderers_spell_a_call_and_a_record() {
+    let source = r#"
+        use /std/{Str, print};
+        use /syn/Spell/{call, record};
+        let _ = print(call("/Tree/leaf", []))!;
+        let _ = print("\n")!;
+        let _ = print(call("/Tree/node", ["1", "/Tree/leaf()"]))!;
+        let _ = print("\n")!;
+        let _ = print(record("/Point", [("x", "1"), ("y", "2")]))!;
+        let _ = print("\n")!;
+        let _ = print(record("/Meters", [("", "5")]))!;
+        let _ = print("\n")!;
+        print(record("/Unit", []))
+        "#;
+
+    assert_eq!(
+        run(source),
+        b"/Tree/leaf()\n/Tree/node(1, /Tree/leaf())\n/Point { x = 1, y = 2 }\n/Meters { 5 }\n/Unit {}"
+    );
+}
+
+// A tuple spells as its literal — the one-field form keeping the comma that separates it from a parenthesized term — through the positional-shape witnesses `/std/Tuple` writes up to three fields.
+#[test]
+fn a_tuple_spells_as_its_literal() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, Spell, print};
+        let _ = print(Spell/spell(()))!;
+        let _ = print("\n")!;
+        let _ = print(Spell/spell((1,)))!;
+        let _ = print("\n")!;
+        let _ = print(Spell/spell((1, true)))!;
+        let _ = print("\n")!;
+        print(Spell/spell((1, true, "s")))
+        "#;
+
+    assert_eq!(run(source), b"()\n(1,)\n(1, true)\n(1, true, \"s\")");
+}
 
 // The lowered module carries the declaration as the same anonymous definition a written witness produces, with the `derive` transient in body position — under the telescope where it has one, so the premises are in scope when the body is checked.
 #[test]

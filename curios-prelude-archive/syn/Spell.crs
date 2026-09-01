@@ -1,0 +1,26 @@
+-- The tooling-facing rendering concept: `spell(v)` is Curios source text that denotes `v` at its type — a literal or an absolute constructor path that re-parses wherever the names in it are visible. `Show` stays the human-facing display; the two coincide only where a value's display already is its literal. Declared here rather than in `/std` because a derived witness body names `spell` and the two renderers below, and a compiler-emitted name lives in `/syn`; `/std/Spell` is the facade programs import, beside the carrier witnesses.
+use /std/{Str, List};
+
+pub concept Spell(A: Type): pub Type {
+    spell(A) -> Str,
+}
+
+pub use Spell/*;
+
+-- The two shapes a derived spelling is built from, spelled once here so the re-parse grammar — parentheses, commas, ` = `, braces — lives in Curios, where the kernel re-certifies it on every prelude build. `call` renders a constructor applied to its spelled explicit payloads, `head()` when it has none; `record` renders a struct literal over its spelled fields, `label = value` for a labeled field and the bare value for the positional field of a newtype-like struct, whose label is written empty. Compiler vocabulary rather than user API: `pub` so an emitted body can name them, with no row in the facade.
+pub let call(head: Str, args: List(Str)) -> Str =
+    Str/concat(head, Str/concat("(", Str/concat(Str/join(", ", args), ")")));
+
+pub let record(head: Str, fields: List({Str, Str})) -> Str =
+    let entries =
+        List/map(
+            fields,
+            ((label, value)) =>
+                match Str/len(label)
+                | 0 => value
+                | _ => Str/concat(label, Str/concat(" = ", value))
+                end);
+    match entries
+    | [] => Str/concat(head, " {}")
+    | _ => Str/concat(head, Str/concat(" { ", Str/concat(Str/join(", ", entries), " }")))
+    end;

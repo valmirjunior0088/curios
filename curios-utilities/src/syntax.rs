@@ -56,6 +56,7 @@ pub struct SyntaxRegistry {
     pub string: StringSyntax,
     pub proof: ProofSyntax,
     pub test: TestSyntax,
+    pub spell: SpellSyntax,
 }
 
 impl SyntaxRegistry {
@@ -71,6 +72,7 @@ impl SyntaxRegistry {
             string,
             proof,
             test,
+            spell,
         } = self;
 
         monad
@@ -81,11 +83,12 @@ impl SyntaxRegistry {
             .chain(string.targets())
             .chain(proof.targets())
             .chain(test.targets())
+            .chain(spell.targets())
     }
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
     ///
-    /// Only two groups hold concept methods; the other four are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
+    /// Only three groups hold concept methods; the other five are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         let Self {
             monad: _,
@@ -95,9 +98,13 @@ impl SyntaxRegistry {
             string: _,
             proof: _,
             test: _,
+            spell,
         } = self;
 
-        operator.concept_fields().chain(std::iter::once(lift.lift))
+        operator
+            .concept_fields()
+            .chain(std::iter::once(lift.lift))
+            .chain(std::iter::once(spell.spell))
     }
 }
 
@@ -303,5 +310,25 @@ impl TestSyntax {
         let Self { test_type, main } = self;
 
         [test_type, main].into_iter()
+    }
+}
+
+/// The names a derived `Spell` witness body is written with: the concept's `spell` method, applied to each payload and resolved like any written call, and the two renderers the body applies over the spelled pieces — `call` for a constructor over its explicit payloads, `record` for a struct over its labeled fields. The re-parse grammar is spelled once, in `/syn/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
+#[derive(Debug, Clone, Copy)]
+pub struct SpellSyntax {
+    pub spell: ConceptField,
+    pub call: SyntaxName,
+    pub record: SyntaxName,
+}
+
+impl SpellSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self {
+            spell,
+            call,
+            record,
+        } = self;
+
+        [spell.concept, call, record].into_iter()
     }
 }

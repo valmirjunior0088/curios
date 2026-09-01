@@ -6,7 +6,7 @@ use crate::{Entrypoint, RootSource, sys_module};
 use curios_abi::host_ops;
 use curios_utilities::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier,
-    RootKind, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    RootKind, SpellSyntax, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 use std::{
     fs,
@@ -74,6 +74,11 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     test: TestSyntax {
         test_type: syn_name(&["syn", "Test", "Test"]),
         main: syn_name(&["syn", "Test", "main"]),
+    },
+    spell: SpellSyntax {
+        spell: syn_field(&["syn", "Spell", "Spell"], "spell"),
+        call: syn_name(&["syn", "Spell", "call"]),
+        record: syn_name(&["syn", "Spell", "record"]),
     },
 };
 
