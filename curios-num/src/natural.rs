@@ -70,10 +70,6 @@ impl Natural {
         self.value.to_usize()
     }
 
-    pub fn to_i32(&self) -> Option<i32> {
-        self.value.to_i32()
-    }
-
     /// How many bits the magnitude occupies — zero for zero, `floor(log2(n)) + 1` otherwise.
     ///
     /// The size a reduction charges for a result *before* building it. Bits rather than limbs because a limb is a property of this target's `num-bigint` build and a bit is a property of the number, and the budget has to price a program the same on wasm32 as it does natively.

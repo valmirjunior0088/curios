@@ -1,7 +1,7 @@
 use {
     crate::Natural,
     num_bigint::BigInt,
-    num_traits::{FromPrimitive, ToPrimitive, Zero},
+    num_traits::{ToPrimitive, Zero},
     std::{
         fmt,
         ops::{Add, BitAnd, BitOr, BitXor, Mul, Neg, Sub},
@@ -46,11 +46,6 @@ impl Integer {
 
     pub fn is_zero(&self) -> bool {
         self.value.is_zero()
-    }
-
-    /// The integer part of `value`, exactly — `None` when there is none (NaN, ±inf). No finite float is out of range at the type level.
-    pub fn from_f32_trunc(value: f32) -> Option<Self> {
-        BigInt::from_f64(value.trunc() as f64).map(|value| Self { value })
     }
 
     /// `None` on a zero divisor — the reducer reports that case before folding. Truncates toward zero, like the runtime's `i32.div_s`.
