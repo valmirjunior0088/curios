@@ -237,6 +237,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Stage 2: the flip — `/std` retyped and the certifier's purity analysis deleted
 - [x] HTTP client (`std/http`, built on `tcp` + `Async`)
 - [x] Host-service modules (`std/time`, `std/proc`, `std/rand`)
+- [ ] [Command-line interfaces (`/std/Cli`)](roadmap/command-line-interface-spec.md) (nothing above `/std/proc/args` exists, so an executable walks its `List(Bytes)` by hand as `/syn/Test/main` does)
 - [x] Arbitrary-precision naturals (`std/BigNat`, canonical and packed over `Bits`)
   - [x] Machine-checked additive, multiplicative, cancellation and order laws
 - [x] Certified strictly-positive arbitrary-precision naturals (`std/BigPos`)
