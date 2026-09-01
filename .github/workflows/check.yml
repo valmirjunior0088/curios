@@ -88,8 +88,6 @@ jobs:
     name: Documentation
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    env:
-      RUSTDOCFLAGS: -Dwarnings
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable

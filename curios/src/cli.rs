@@ -11,7 +11,7 @@ static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Mode {
-    /// Four forms, dispatched lexically: no argument is the governing package's default executable, an identifier is one it declares by name, `-` is the program on standard input, and anything ending in `.crs` or holding a path separator is a bare file — the last two standalone everywhere, captured by no manifest.
+    /// What the four forms mean is `documentation/usage.md`'s Running and compiling. The dispatch is lexical and probes no disk: the four spaces cannot overlap, so nothing here needs to look before deciding.
     #[command(about = "Execute an executable, a .crs file, or standard input")]
     Run {
         #[arg(
@@ -29,7 +29,7 @@ pub(crate) enum Mode {
         args: Vec<String>,
     },
 
-    /// The same four forms `run` dispatches, for the same reason: what a bare invocation means inside a package should not depend on which subcommand asked.
+    /// The same four forms `run` dispatches, through the same code, so the two cannot drift apart.
     #[command(
         about = "Compile an executable, a .crs file, or standard input, to a native executable"
     )]
@@ -49,7 +49,7 @@ pub(crate) enum Mode {
         output_path: Option<PathBuf>,
     },
 
-    /// Always the governing package entire — its library, then each executable — because a test's identity is its path, and a path means the same thing whichever subcommand asks. The optional argument is a filter, not a target.
+    /// Always the governing package entire, and the optional argument is a filter rather than a target — the reasoning is `documentation/usage.md`'s Testing.
     #[command(about = "Run the governing package's declared tests")]
     Test {
         #[arg(
@@ -105,7 +105,7 @@ pub(crate) enum Mode {
     },
 }
 
-/// One question each, of fixed arity. A target takes the four forms `run` takes, dispatched lexically — but a file is placed in the unit that declares it rather than compiled alone, since nothing here executes and what is at stake is only whether the answer is true (see `curios_package::Membership`).
+/// One question each, of fixed arity. A target takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Membership`.
 #[derive(Debug, Subcommand)]
 pub(crate) enum Query {
     #[command(
@@ -175,7 +175,7 @@ pub(crate) struct Cli {
     )]
     pub(crate) units: Vec<PathBuf>,
 
-    /// The explicit override for scripting. It overrides exactly which manifest is the package's: which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.
+    /// The explicit override for scripting. It reaches only the governing package's manifest, never the umbrella question — see `documentation/usage.md`'s Which manifest governs.
     #[arg(
         long = "manifest",
         value_name = "PATH",

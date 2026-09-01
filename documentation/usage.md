@@ -2,6 +2,23 @@
 
 The complete command-line and package reference. The [README](../README.md) covers the happy path; this covers the rest.
 
+- [Running and compiling](#running-and-compiling)
+- [Testing](#testing)
+- [Programs on standard input](#programs-on-standard-input)
+- [What a package is made of](#what-a-package-is-made-of)
+- [Starting one](#starting-one)
+- [Asking about a program](#asking-about-a-program)
+- [Exit codes](#exit-codes)
+- [Formatting](#formatting)
+- [Dependencies](#dependencies)
+- [Fetching](#fetching)
+- [Umbrellas](#umbrellas)
+- [Which manifest governs](#which-manifest-governs)
+- [Where things go](#where-things-go)
+- [Reusing what was already built](#reusing-what-was-already-built)
+- [Profiling builds](#profiling-builds)
+- [Global flags](#global-flags)
+
 ## Running and compiling
 
 `run` and `compile` take the same four forms, so what a bare invocation means never depends on which one you asked.
@@ -228,6 +245,16 @@ Neither `run` nor `compile` recompiles a declared executable nothing has changed
 An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again. A question about a program (`wonder`) reads the store and never writes it. A bare `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-bare split as everywhere else.
 
 Payloads are native code for the machine that built them, so an entry is found only by an engine that can run it; two machines share one only when their engines agree. Nothing has to be cleaned up by hand as sources change: each executable occupies one slot per dependency chain, overwritten in place.
+
+## Profiling builds
+
+`profile` exists only in a compiler built with the `profile` feature: there is nothing to report without the instrumentation the feature compiles in, so the subcommand is absent rather than empty. `cargo x profile <PATH>` builds such a compiler and runs it:
+
+```sh
+cargo x profile programs/hello_world.crs
+```
+
+It takes one path to a `.crs` entrypoint — not the four forms, since there is no project question to answer — compiles it once, and prints per-span aggregate timings sorted by total time. The instrumentation mechanics belong to `curios-profile`'s rustdoc.
 
 ## Global flags
 

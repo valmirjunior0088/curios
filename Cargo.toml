@@ -42,6 +42,9 @@ unreachable_pub = "warn"
 [workspace.lints.clippy]
 unused_self = "warn"
 
+[workspace.lints.rustdoc]
+all = "deny"
+
 [workspace.dependencies]
 curios-abi = { path = "curios-abi" }
 curios-archive = { path = "curios-archive" }
