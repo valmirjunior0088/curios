@@ -92,6 +92,18 @@ export async function run(config) {
 
   const denied = () => config.status.PERMISSION_DENIED;
 
+  // The standard streams take the socket setters like a file — recording nothing and answering OK, as OsHost and MockHost do — so `Async/read`/`write`, whose first step is `set_nonblocking`, serve them; no other handle exists in the browser, so anything else stays denied.
+  const settable = (handle) => {
+    switch (tokenOf(handle)) {
+      case config.stdio.STDIN:
+      case config.stdio.STDOUT:
+      case config.stdio.STDERR:
+        return config.status.OK;
+      default:
+        return config.status.PERMISSION_DENIED;
+    }
+  };
+
   const unsupported = (name) => () => {
     throw new Error(`${name} is not supported in the browser playground`);
   };
@@ -111,10 +123,10 @@ export async function run(config) {
     start_tls: denied,
     tls_server_config: deniedHandle,
     start_tls_server: denied,
-    set_nonblocking: denied,
-    set_recv_timeout: denied,
-    set_send_timeout: denied,
-    set_reuseaddr: denied,
+    set_nonblocking: settable,
+    set_recv_timeout: settable,
+    set_send_timeout: settable,
+    set_reuseaddr: settable,
     poll: unsupported("poll"),
     close: () => {},
     clock_wall: () => {
