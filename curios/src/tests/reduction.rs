@@ -885,14 +885,18 @@ fn an_oversized_construction_is_refused_before_it_is_allocated() {
 
 /// Repeated concatenation is bounded by *cumulative* charges even though every individual result fits: the budget is never refunded, so a loop that builds a growing value pays for each of them and runs out on the total.
 ///
-/// The two arms differ only in how many iterations they run, and the small one establishes that the shape itself is affordable — so the large one's refusal is about the accumulation rather than about the program. The refusing count moved once, deliberately: a hundred thousand iterations refused under the recursive strategy and fits under the closed machine, so the arm that must refuse now runs two million — the property held is that a count exists past which cumulative construction refuses, not where it sits.
+/// The two arms differ only in how many iterations they run, and the small one establishes that the shape itself is affordable — so the large one's refusal is about the accumulation rather than about the program. The refusing count moved once, deliberately: a hundred thousand iterations refused under the recursive strategy and fits under the closed machine, so the arm that must refuse ran two million against the default budget — the property held is that a count exists past which cumulative construction refuses, not where it sits.
+///
+/// The budget is stated, at a thirtieth of the default, because the refusing arm's cost is the budget it spends before refusing: two million iterations against thirty million steps was the suite's second-slowest test, all of it the wait for exhaustion. The measured floors above put two thousand iterations under `2^19`, so `2^20` affords the fitting arm with the same headroom the default gave it, and a hundred times the iterations exhausts it as surely as a thousand times exhausted the default.
 #[test]
 fn a_growing_accumulation_is_bounded_by_what_it_has_already_built() {
-    typecheck_within(DEFAULT_STEP_BUDGET, &bytes_growing(2_000))
-        .expect("an accumulation this size fits the ordinary budget");
+    const BUDGET: u64 = 1 << 20;
 
-    let refusal = typecheck_within(DEFAULT_STEP_BUDGET, &bytes_growing(2_000_000))
-        .expect_err("a thousand times the iterations does not");
+    typecheck_within(BUDGET, &bytes_growing(2_000))
+        .expect("an accumulation this size fits the stated budget");
+
+    let refusal = typecheck_within(BUDGET, &bytes_growing(200_000))
+        .expect_err("a hundred times the iterations does not");
     assert!(
         refusal.contains("ran out"),
         "expected a spent-budget refusal, got: {refusal}"

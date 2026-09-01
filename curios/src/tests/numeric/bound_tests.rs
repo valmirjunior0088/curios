@@ -111,9 +111,12 @@ fn a_difference_over_a_folded_recursion_converts_with_its_unfolding() {
 }
 
 // A bound whose subject genuinely diverges used to spend the whole budget and report exhaustion, where the same subject in a declared type was refused by name before anything ran. The check still runs — a subject that terminates discharges, whatever the analysis classified it — and only an exhausted one is re-read for the partial definition it names. `spin` recurses on `p + 1`, which no size-change order accepts.
+//
+// The budget is stated rather than defaulted because `spin` exhausts whatever it is given: the default's thirty million steps bought nothing but the wait, and made this the slowest test in the suite. A hundred thousand is far more than the rest of the program elaborates in and still exhausts in well under a second.
 #[test]
 fn a_bound_over_a_diverging_subject_is_refused_by_name() {
-    let error = typecheck(
+    let error = typecheck_within(
+        100_000,
         r#"
         use /std/{Nat, Int};
         let spin(n : Nat) -> Int = match n | 0 => +0 | p + 1; _ => spin(p + 1) end;
