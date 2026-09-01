@@ -1,0 +1,163 @@
+//! What `curios test` does at the command line: the governing package compiled as test programs, one instantiation per test, the guest's outcome lines joined by what only the runner knows — the failing body, the count line, the exit code — plus the filter, the store round trip, and `run`'s indifference to it all.
+
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process::{self, Command, Output},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+/// A directory of its own, shared with no other test.
+fn temporary(name: &str) -> PathBuf {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+
+    env::temp_dir().join(format!("curios-cli-test-{name}-{}-{millis}", process::id()))
+}
+
+fn write(root: &Path, path: &str, contents: &str) {
+    let path = root.join(path);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, contents).unwrap();
+}
+
+/// The six-outcome package: every rung the report can print, declared in the library, beside an executable with no tests of its own.
+fn project(name: &str) -> PathBuf {
+    let root = temporary(name);
+    write(
+        &root,
+        "curios.toml",
+        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+    );
+    write(
+        &root,
+        "lib.crs",
+        r#"use /std/{Nat, Str, Bool, Io, Eq, Test};
+
+pub let double(n: Nat) -> Nat = n * 2;
+
+test doubling_proves() =
+    Test/refl(double(21), 42, Eq/refl());
+
+test addition_passes() =
+    Test/check(1 + 1 == 2);
+
+test equality_fails() =
+    Test/equal(double(2), 5);
+
+test overflow_traps() =
+    Test/check(Nat/shl(1, 40) == 0);
+
+test exits_seven() =
+    Test/perform(() => let _ = /std/proc/exit(7)!; Io/pure(Test/check(true)));
+
+test effect_passes() =
+    Test/perform(() => let s = Io/pure("x")!; Io/pure(Test/equal(s, "x")));
+"#,
+    );
+    write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
+
+    root
+}
+
+fn curios(root: &Path, arguments: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_curios"))
+        .current_dir(root)
+        .args(arguments)
+        .output()
+        .unwrap()
+}
+
+fn stdout(output: &Output) -> String {
+    String::from_utf8(output.stdout.clone()).unwrap()
+}
+
+fn stderr(output: &Output) -> String {
+    String::from_utf8(output.stderr.clone()).unwrap()
+}
+
+/// Each needle's first occurrence sits after the previous one's — the report keeps declaration order.
+fn in_order(haystack: &str, needles: &[&str]) {
+    let mut from = 0;
+    for needle in needles {
+        match haystack[from..].find(needle) {
+            Some(at) => from += at + needle.len(),
+            None => panic!("missing {needle:?} (after byte {from}) in:\n{haystack}"),
+        }
+    }
+}
+
+#[test]
+fn the_six_outcomes_report_in_declaration_order_and_exit_one() {
+    let root = project("outcomes");
+    let output = curios(&root, &["test"]);
+
+    in_order(
+        &stdout(&output),
+        &[
+            "/app/doubling_proves: proved\n",
+            "/app/addition_passes: passed\n",
+            "/app/equality_fails: failed\n  expected 5 but got 4\n    Test/equal(double(2), 5)\n",
+            "/app/overflow_traps: trapped\n",
+            "    Test/check(Nat/shl(1, 40) == 0)\n",
+            "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/proc/exit(7)!; Io/pure(Test/check(true)))\n",
+            "/app/effect_passes: passed\n",
+            "3 passed, 1 failed, 1 trapped, 1 exited\n",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(1));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
+    let root = project("filter");
+
+    let cold = curios(&root, &["test", "/app/addition"]);
+    assert_eq!(
+        stdout(&cold),
+        "/app/addition_passes: passed\n1 passed\n",
+        "stderr: {}",
+        stderr(&cold)
+    );
+    assert_eq!(cold.status.code(), Some(0));
+
+    let warm = curios(&root, &["test", "/app/addition"]);
+    assert_eq!(stdout(&warm), stdout(&cold));
+    assert!(
+        stderr(&warm).contains("reused"),
+        "expected a reused payload, stderr: {}",
+        stderr(&warm)
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_filter_matching_nothing_exits_one_naming_it() {
+    let root = project("nomatch");
+    let output = curios(&root, &["test", "/nope"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).contains("no test matches '/nope'"),
+        "stderr: {}",
+        stderr(&output)
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn run_neither_runs_nor_reports_a_test() {
+    let root = project("run");
+    let output = curios(&root, &["run"]);
+
+    assert_eq!(stdout(&output), "ran\n", "stderr: {}", stderr(&output));
+    assert_eq!(output.status.code(), Some(0));
+
+    fs::remove_dir_all(root).unwrap();
+}

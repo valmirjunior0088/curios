@@ -49,6 +49,16 @@ pub(crate) enum Mode {
         output_path: Option<PathBuf>,
     },
 
+    /// Always the governing package entire — its library, then each executable — because a test's identity is its path, and a path means the same thing whichever subcommand asks. The optional argument is a filter, not a target.
+    #[command(about = "Run the governing package's declared tests")]
+    Test {
+        #[arg(
+            value_name = "FILTER",
+            help = "A path prefix selecting which tests run, e.g. /app/Map (default: every test)"
+        )]
+        filter: Option<String>,
+    },
+
     /// The store's tool, and the only thing in this toolchain that reaches the network. Acceptance is by hash, so what transport delivered the bytes does not matter — which is exactly why fetching can live in one place rather than being a capability the compiler carries.
     #[command(about = "Materialize what the manifests reference")]
     Curate,

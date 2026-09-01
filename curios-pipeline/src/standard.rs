@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Cache, CompileError, Progress, Stage, check_entrypoint, compile_entrypoint,
-        compile_unit_as_tests, compile_units, recheck,
+        Cache, CompileError, EntryTail, Progress, Stage, TestRecord, check_entrypoint,
+        compile_entrypoint, compile_unit_as_tests, compile_units, recheck,
     },
     curios_prelude::{SYNTAX, with_prelude},
     curios_unit::Prefix,
@@ -50,22 +50,32 @@ where
     })
 }
 
-/// [`compile_with_units`] with the entry compiled as its own test program — the synthesized `Test/main([...])` tail over the unit's registered tests in place of the authored one; see [`compile_unit_as_tests`].
+/// [`compile_with_units`] with the entry compiled as a test program — the synthesized `Test/main([...])` tail over the registered tests `tail` selects, in place of the authored one; see [`compile_unit_as_tests`].
+// One over the lint's line, and each argument is one of [`compile_with_units`]'s or the tail policy itself — a builder here would be ceremony around a signature the sibling already fixes.
+#[allow(clippy::too_many_arguments)]
 pub fn compile_tests_with_units<O, P>(
     budget: u64,
     units: &[curios_text::RootSource],
     entrypoint: &curios_text::Entrypoint,
     loader: &curios_text::RootSource,
     cache: Option<&dyn Cache>,
+    tail: EntryTail,
     observe: O,
     progress: P,
-) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), CompileError>
+) -> Result<
+    (
+        curios_wasm::Module,
+        curios_abi::ForeignStore,
+        Vec<TestRecord>,
+    ),
+    CompileError,
+>
 where
     O: FnMut(Stage<'_>),
     P: FnMut(Progress<'_>),
 {
     fold_with_units(budget, units, cache, progress, |scope| {
-        compile_unit_as_tests(budget, scope, &SYNTAX, entrypoint, loader, observe)
+        compile_unit_as_tests(budget, scope, &SYNTAX, entrypoint, loader, tail, observe)
     })
 }
 

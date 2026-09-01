@@ -189,7 +189,12 @@ pub(crate) fn compile_file(
 /// Fold one [`Progress`] event onto the open status line, opening and closing lines as subjects begin and end.
 ///
 /// The line outlives each event, which is why it is threaded rather than owned here: `↳ Processing /hello` and the `; compiling... done 1.4s` that completes it are three separate writes to one line.
-fn report(line: &mut Option<Line>, target: &Subject, grouped: bool, progress: Progress<'_>) {
+pub(crate) fn report(
+    line: &mut Option<Line>,
+    target: &Subject,
+    grouped: bool,
+    progress: Progress<'_>,
+) {
     match progress {
         Progress::Compiling(prefix) => {
             *line = Some(opened(Line::nested(

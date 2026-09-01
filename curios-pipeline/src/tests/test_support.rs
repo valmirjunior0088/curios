@@ -90,7 +90,7 @@ pub(super) fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String>
 /// It used to erase *fresh*, passing the whole module to `erase_module`, which worked only because a compiled module carried the prelude spliced into its items. It no longer does, and a from-scratch erasure of the entry alone leaves every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
 pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     let entrypoint = with_entrypoint_type(source, type_);
-    let (module, core_type, _foreigns) = with_prelude(|prelude| {
+    let (module, core_type, _foreigns, _records) = with_prelude(|prelude| {
         crate::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
             Prefix::over(from_ref(&prelude)),

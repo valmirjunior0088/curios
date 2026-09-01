@@ -177,13 +177,52 @@ pub fn typecheck_measured(
 /// The type-checking prologue of [`compile_entrypoint`] (and the tests' typecheck-only path): lower to core, elaborate (checking against the entrypoint's type when it carries one, else synthesizing), then zonk metavariable solutions in so the module is meta-free — the `elaborate → zonk` half of the `elaborate → zonk → erase` data flow. Elaboration is authoritative: it returns a rebuilt module (lambda domains solved, binders re-closed), and it is *that* module — not the lowered one — that zonk makes meta-free. `zonk` is also where an unsolved hole is rejected, so a program that merely *type-checks* is fully validated by the time this returns. Elaboration and zonking share one context (the solutions live in its `MetaStore`); the returned module is self-contained, so the caller's `erase` runs over a fresh one.
 ///
 /// The `sys`/`syn`/`std` prelude is neither lowered nor elaborated per call: prepared Text state is merged with the user graph, then the archived Core prelude is replayed into the elaboration context and only the entry's own items are type-checked.
-/// Which final term a compilation checks: the one the author wrote, or the test tail synthesized from the unit's registered tests. A policy rather than a boolean at each call site, so the two program shapes a unit can compile to are named where they diverge.
+/// Which final term a compilation checks: the one the author wrote, or the test tail synthesized from a unit's registered tests. A policy rather than a boolean at each call site, so the program shapes a unit can compile to are named where they diverge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryTail {
     /// The authored entrypoint, exactly as parsed — the ordinary program.
     Authored,
-    /// The synthesized `Test/main([...])` over the unit's registered tests, replacing an executable's authored tail and giving a module the tail it never had. A unit with no tests gets `Test/main([])`, which runs nothing and exits 0.
+    /// The synthesized `Test/main([...])` over the entry unit's own registered tests, replacing an executable's authored tail. A unit with no tests gets `Test/main([])`, which runs nothing and exits 0.
     Tests,
+    /// The same synthesized tail over the last mounted unit's registered tests — the library-under-test case, where the entry is an empty program and the subject is the scope's final unit.
+    LastUnitTests,
+}
+
+/// One registered test, as the runner reports it: the path that names it, and its body as written — sliced from the span the authored body carries, empty when no span survives (a unit restored from a store may carry none).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestRecord {
+    pub path: String,
+    pub body: String,
+}
+
+/// The report metadata of each registered test, read off the definitions that carry them. A test's body is the nullary lambda's interior, which is where the authored span lives — the wrapper node is synthesized and spans nothing.
+fn test_records(tests: &[curios_core::Global], items: &[curios_core::Item]) -> Vec<TestRecord> {
+    tests
+        .iter()
+        .map(|test| {
+            let path = test
+                .qualifier()
+                .map(|qualifier| qualifier.join())
+                .unwrap_or_default();
+            let body = items
+                .iter()
+                .find_map(|item| match item {
+                    curios_core::Item::Let(def) if def.name == *test => Some(def),
+                    _ => None,
+                })
+                .and_then(|def| match &*def.body {
+                    curios_core::Subterm::Func(func) => match &func.telescope {
+                        curios_core::Telescope::Done(inner) => inner.span(),
+                        curios_core::Telescope::Cons(..) => None,
+                    },
+                    _ => None,
+                })
+                .map(|span| span.source.text[span.start..span.end].to_string())
+                .unwrap_or_default();
+
+            TestRecord { path, body }
+        })
+        .collect()
 }
 
 pub(crate) fn elaborate_and_zonk<O>(
@@ -194,7 +233,7 @@ pub(crate) fn elaborate_and_zonk<O>(
     loader: &RootSource,
     tail: EntryTail,
     observe: &mut O,
-) -> Result<(curios_core::Module, Term, ForeignStore), CompileError>
+) -> Result<(curios_core::Module, Term, ForeignStore, Vec<TestRecord>), CompileError>
 where
     O: FnMut(Stage<'_>),
 {
@@ -213,9 +252,24 @@ where
     } = into_core_with_prelude(entrypoint, loader, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
-    // The test tail is synthesized in Core, on the lowered module, and checked exactly as an authored one is: `type_: None` routes it into the `Io({})` expectation below, and the tail's single list-element hole is minted at the module's metavariable floor so elaboration solves it bidirectionally from `Test/main`'s parameter like any written literal's.
-    if tail == EntryTail::Tests {
-        let body = curios_elab::test_program_tail(syntax, &lowered.tests, metavars);
+    // The test tail is synthesized in Core, on the lowered module, and checked exactly as an authored one is: `type_: None` routes it into the `Io({})` expectation below, and the tail's single list-element hole is minted at the module's metavariable floor so elaboration solves it bidirectionally from `Test/main`'s parameter like any written literal's. The records for the runner are read off the same definitions the tail schedules, so the two cannot disagree about what the tests are.
+    let records = match tail {
+        EntryTail::Authored => Vec::new(),
+        EntryTail::Tests => test_records(&lowered.tests, &lowered.items),
+        EntryTail::LastUnitTests => match cores.last() {
+            Some(core) => test_records(&core.tests, &core.items),
+            None => Vec::new(),
+        },
+    };
+    if tail != EntryTail::Authored {
+        let tests: Vec<curios_core::Global> = match tail {
+            EntryTail::Tests => lowered.tests.clone(),
+            _ => cores
+                .last()
+                .map(|core| core.tests.clone())
+                .unwrap_or_default(),
+        };
+        let body = curios_elab::test_program_tail(syntax, &tests, metavars);
         metavars += 1;
         lowered.entry = Some(curios_core::Entrypoint { body, type_: None });
     }
@@ -256,7 +310,7 @@ where
     // The entry is the unit with an entrypoint, and `elaborate_and_zonk` is only ever asked for one.
     let core_type = core_type.expect("the entrypoint's type comes back with its body");
 
-    Ok((module, core_type, user_foreigns))
+    Ok((module, core_type, user_foreigns, records))
 }
 
 /// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, and judged by the kernel, with a refusal from either checker reported as the compile path reports it. What a question about a program's correctness is answered by — the stages below this one produce the program, and change no verdict.
@@ -276,7 +330,7 @@ pub fn check_entrypoint(
         EntryTail::Authored,
         &mut |_| {},
     )
-    .map(|(module, _core_type, _foreigns)| module.into_module())
+    .map(|(module, _core_type, _foreigns, _records)| module.into_module())
 }
 
 /// [`check_entrypoint`] with the stages it passes observed, and the entry's type and foreign rows kept for the lowering that follows it.
@@ -288,11 +342,19 @@ fn check_observed<O>(
     loader: &RootSource,
     tail: EntryTail,
     observe: &mut O,
-) -> Result<(curios_core::Zonked<curios_core::Module>, Term, ForeignStore), CompileError>
+) -> Result<
+    (
+        curios_core::Zonked<curios_core::Module>,
+        Term,
+        ForeignStore,
+        Vec<TestRecord>,
+    ),
+    CompileError,
+>
 where
     O: FnMut(Stage<'_>),
 {
-    let (module, core_type, foreigns) =
+    let (module, core_type, foreigns, records) =
         elaborate_and_zonk(budget, scope, syntax, entrypoint, loader, tail, observe)?;
 
     // The zonk evidence the kernel and erasure consume, established where the module is final. A refusal here is a compiler invariant — `zonk_module` just enforced the same claim — surfacing as a failure rather than a panic.
@@ -313,7 +375,7 @@ where
         }
     }
 
-    Ok((module, core_type, foreigns))
+    Ok((module, core_type, foreigns, records))
 }
 
 /// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into Cont, Cont optimization, and wasm emission, observing every stage in order.
@@ -505,29 +567,23 @@ where
         EntryTail::Authored,
         observe,
     )
+    .map(|(module, foreigns, _records)| (module, foreigns))
 }
 
-/// [`compile_entrypoint`] with the unit compiled as its own test program: the authored tail — or a module's absence of one — is replaced by the synthesized `Test/main([...])` over the unit's registered tests, and everything else is the ordinary pipeline, kernel judgment included. No file is written and nothing about the surface changes; which tail a unit compiles under is the caller's question alone.
+/// [`compile_entrypoint`] with the unit compiled as a test program: the authored tail — or a module's absence of one — is replaced by the synthesized `Test/main([...])` over the registered tests `tail` selects, and everything else is the ordinary pipeline, kernel judgment included. No file is written and nothing about the surface changes; which tail a unit compiles under is the caller's question alone. Beside the program, the caller gets one [`TestRecord`] per scheduled test, in schedule order — the report metadata execution alone cannot recover.
 pub fn compile_unit_as_tests<O>(
     budget: u64,
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
+    tail: EntryTail,
     observe: O,
-) -> Result<(curios_wasm::Module, ForeignStore), CompileError>
+) -> Result<(curios_wasm::Module, ForeignStore, Vec<TestRecord>), CompileError>
 where
     O: FnMut(Stage<'_>),
 {
-    compile_with_tail(
-        budget,
-        scope,
-        syntax,
-        entrypoint,
-        loader,
-        EntryTail::Tests,
-        observe,
-    )
+    compile_with_tail(budget, scope, syntax, entrypoint, loader, tail, observe)
 }
 
 fn compile_with_tail<O>(
@@ -538,12 +594,12 @@ fn compile_with_tail<O>(
     loader: &RootSource,
     tail: EntryTail,
     mut observe: O,
-) -> Result<(curios_wasm::Module, ForeignStore), CompileError>
+) -> Result<(curios_wasm::Module, ForeignStore, Vec<TestRecord>), CompileError>
 where
     O: FnMut(Stage<'_>),
 {
     curios_profile::profile!("compile_entrypoint");
-    let (module, core_type, foreigns) = check_observed(
+    let (module, core_type, foreigns, records) = check_observed(
         budget,
         scope,
         syntax,
@@ -567,5 +623,9 @@ where
     let mut all_foreigns = scope.foreigns();
     all_foreigns.absorb(&foreigns);
 
-    Ok((lower_from_ersd(ersd_module, &mut observe), all_foreigns))
+    Ok((
+        lower_from_ersd(ersd_module, &mut observe),
+        all_foreigns,
+        records,
+    ))
 }

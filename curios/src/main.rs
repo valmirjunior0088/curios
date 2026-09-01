@@ -16,6 +16,9 @@ use pipeline::*;
 mod report;
 use report::*;
 
+mod test_runner;
+use test_runner::*;
+
 use {
     clap::Parser,
     curios::{serve, wonder_diagnostics, wonder_stage},
@@ -93,6 +96,12 @@ fn dispatch() -> Result<(), Failure> {
 
             if code != 0 {
                 process::exit(code);
+            }
+        }
+        // Exit 1 on any failing, trapping or exiting test, exactly as a failing compile exits 1 and a goal batch exits 2 — 0 means every selected test passed or proved.
+        Mode::Test { filter } => {
+            if !run_tests(budget, &units, manifest.as_deref(), filter.as_deref())? {
+                process::exit(1);
             }
         }
         Mode::Compile {

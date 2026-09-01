@@ -27,6 +27,19 @@ Everything from the target onward is collected verbatim, hyphens included, so a 
 
 A file argument brings no project with it — no manifest, no dependencies, not even the library of the package you are standing in. That is deliberate: project scope is reachable only through something a manifest declares, so a scratch file cannot quietly acquire one. When a scratch program does want the library, one `[[executables]]` line gives it one.
 
+## Testing
+
+`curios test` runs the governing package's declared tests — the `test name() = body;` declarations of its library and of each executable, always the package entire, because a test's identity is its path and a path means the same thing whichever subcommand asks. The optional argument is a **filter**, not a target: a path prefix selecting which tests run.
+
+```sh
+curios test              # every test the package declares
+curios test /app/Map     # only tests whose path starts with /app/Map
+```
+
+Each unit is compiled as its own test program — the same compilation `run` performs, with the final term replaced by a synthesized scheduler over that unit's tests — and every selected test runs in an instantiation of its own, so one test's effects, traps and exits never reach another. The report is one line per test, path then outcome — `proved`, `passed`, `failed`, `trapped`, `exited N` — with a failure's report indented beneath it followed by the test's body as written, and a final line counting outcomes. The exit code is the tri-state below: 0 when every selected test passed or proved, 1 when any failed, trapped, exited or could not be built — and 1 when the filter matched nothing, naming it — 2 when a unit under test holds a written goal.
+
+Test programs are filed in the project's store exactly as `run`'s payloads are, so an invocation whose sources are all unchanged recompiles nothing; the test *verdicts* are never cached — every invocation runs every selected test.
+
 ## Programs on standard input
 
 `-` runs or compiles whatever arrives on standard input, which is what makes a heredoc a program:
