@@ -1,7 +1,7 @@
 //! Tests for the browser bridge helpers and the harness's host table. Program-side `Bytes` is a rope (`$rope/bin/leaf` / `$rope/bin/node` structs); what crosses to a host is always the forced flat payload, which is what the bridge accessors read and write.
 
 use {
-    curios_abi::host_ops,
+    curios_abi::{EXIT, host_ops},
     curios_runtime::test_support::{GuestInstance, GuestValue},
     curios_wasm::{CompType, Export, SubType, TypeName},
 };
@@ -103,7 +103,7 @@ fn bridge_accessors_roundtrip() {
     }
 }
 
-/// Every builtin host operation has an entry in `harness.js`'s `sys` import object. The harness spells the wire names by hand, like any embedder — so without this check, a new `host_ops!` row keeps the workspace suite green while every browser program touching it dies with a `LinkError` only an actual browser can surface.
+/// Every builtin host operation has an entry in `harness.js`'s `sys` import object — every `host_ops!` row, and `exit`, the one `sys` import that is not a row. The harness spells the wire names by hand, like any embedder — so without this check, a new `host_ops!` row keeps the workspace suite green while every browser program touching it dies with a `LinkError` only an actual browser can surface.
 #[test]
 fn harness_implements_every_host_op() {
     let source = include_str!("harness.js");
@@ -116,11 +116,14 @@ fn harness_implements_every_host_op() {
     let end = body.find("\n  };").expect("sysEnv closes");
     let body = &body[..end];
 
-    for function in host_ops().iter() {
+    for name in host_ops()
+        .iter()
+        .map(|function| function.name.as_str())
+        .chain([EXIT])
+    {
         assert!(
-            body.contains(&format!("\n    {}:", function.name)),
-            "harness.js's sysEnv lacks an entry for host op `{}`",
-            function.name
+            body.contains(&format!("\n    {name}:")),
+            "harness.js's sysEnv lacks an entry for host op `{name}`"
         );
     }
 }
