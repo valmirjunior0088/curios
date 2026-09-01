@@ -163,6 +163,93 @@ fn the_stages_show_the_transient_and_its_expansion() {
     assert!(elaborated.contains("Spell/call"), "{elaborated}");
 }
 
+// --- The `Eql` derivation: structural equality, constructor by constructor and payload by payload, through each payload's own witness. ---
+
+#[test]
+fn derived_equality_is_structural() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, Eql, print};
+        induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
+        satisfy Eql(Tree);
+        let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
+        let _ = print(show(Tree/leaf(1) == Tree/leaf(1)))!;
+        let _ = print(show(Tree/leaf(1) == Tree/leaf(2)))!;
+        let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(2)) == Tree/node(Tree/leaf(1), Tree/leaf(2))))!;
+        let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(2)) == Tree/node(Tree/leaf(2), Tree/leaf(1))))!;
+        let _ = print(show(Tree/leaf(1) != Tree/node(Tree/leaf(1), Tree/leaf(1))))!;
+        print(show(Tree/leaf(1) != Tree/leaf(1)))
+        "#;
+
+    assert_eq!(run(source), b"true false true false true false ");
+}
+
+#[test]
+fn a_struct_and_a_parameterized_family_compare_fieldwise() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, Eql, print};
+        struct Point: pub Type { x: Nat, y: Nat }
+        induct Box(A: Type): pub Type | boxed(A) end
+        satisfy Eql(Point);
+        satisfy (@A: Type, use Eql(A)) => Eql(Box(A));
+        let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
+        let _ = print(show(Point { x = 1, y = 2 } == Point { x = 1, y = 2 }))!;
+        let _ = print(show(Point { x = 1, y = 2 } != Point { x = 1, y = 3 }))!;
+        let _ = print(show(Box/boxed("a") == Box/boxed("a")))!;
+        print(show(Box/boxed(Point { x = 1, y = 2 }) == Box/boxed(Point { x = 2, y = 1 })))
+        "#;
+
+    assert_eq!(run(source), b"true true true false ");
+}
+
+#[test]
+fn proofs_and_implicit_payloads_take_no_part_in_equality() {
+    // The proof erases and cannot be compared; the index is implicit and fixed by the payloads it indexes. Both witnesses derive, and equality reads the values alone.
+    let source = r#"
+        use /std/{Nat, Bool, Str, Eq, Eql, print};
+        induct Certified: pub Type | cert(n: Nat, proof: Eq(n, n)) end
+        induct Vec(T: Type): (n: Nat) -> pub Type
+        | nil(): (0)
+        | cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+        end
+        satisfy Eql(Certified);
+        satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T, n));
+        let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
+        let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(1, Eq/refl())))!;
+        let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(2, Eq/refl())))!;
+        let _ = print(show(Vec/cons(1, Vec/cons(2, Vec/nil())) == Vec/cons(1, Vec/cons(2, Vec/nil()))))!;
+        print(show(Vec/cons(1, Vec/cons(2, Vec/nil())) == Vec/cons(1, Vec/cons(3, Vec/nil()))))
+        "#;
+
+    assert_eq!(run(source), b"true false true false ");
+}
+
+#[test]
+fn the_eql_derivation_shares_the_eligibility_and_the_provenance() {
+    let proposition = r#"
+        use /std/{Str, Eql};
+        induct Holds: pub Prop | yes() end
+        satisfy Eql(Holds);
+        /std/print("")
+        "#;
+    let report = error(proposition);
+    assert!(
+        report.contains("cannot derive '/syn/Eql' for Holds\n  Holds is a proposition, whose values erase; write the body"),
+        "{report}"
+    );
+
+    let premise = r#"
+        use /std/{Str, Eql};
+        induct Box(A: Type): pub Type | boxed(A) end
+        satisfy (@A: Type) => Eql(Box(A));
+        /std/print("")
+        "#;
+    let report = error(premise);
+    assert!(
+        report.contains("no witness of Eql(A) found\n  needed by '/Box/boxed' for payload #1 — add `use Eql(A)` to the telescope"),
+        "{report}"
+    );
+}
+
 // --- Refusals, each at the declaration and naming what to write instead. ---
 
 #[test]
