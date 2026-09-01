@@ -56,16 +56,6 @@ pub fn nat_shr(value: u32, shift: u32) -> u32 {
     value.checked_shr(shift).unwrap_or(0)
 }
 
-/// `Nat` 32-bit left rotation; the count is taken modulo 32.
-pub fn nat_rotl(value: u32, shift: u32) -> u32 {
-    value.rotate_left(shift)
-}
-
-/// `Nat` 32-bit right rotation; the count is taken modulo 32.
-pub fn nat_rotr(value: u32, shift: u32) -> u32 {
-    value.rotate_right(shift)
-}
-
 /// `Nat` division; traps on a zero divisor.
 pub fn nat_div(left: u32, right: u32) -> Result<u32, ScalarTrap> {
     match right {
@@ -119,16 +109,6 @@ pub fn int_shr(value: i32, shift: i32) -> Option<i32> {
     let shift = u32::try_from(shift).ok()?;
 
     Some(value.checked_shr(shift).unwrap_or(value >> 31))
-}
-
-/// `Int` 32-bit left rotation of the carrier bits; the count is taken modulo 32.
-pub fn int_rotl(value: i32, shift: i32) -> i32 {
-    (value as u32).rotate_left(shift as u32) as i32
-}
-
-/// `Int` 32-bit right rotation of the carrier bits; the count is taken modulo 32.
-pub fn int_rotr(value: i32, shift: i32) -> i32 {
-    (value as u32).rotate_right(shift as u32) as i32
 }
 
 /// `Int` division; traps on a zero divisor and on `i32::MIN / -1`.
