@@ -222,7 +222,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Parser-combinator library (`std/Parse`)
 - [x] Typed format strings (`std/Fmt`)
 - [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int` and `Flt`; they round-trip)
-- [x] JSON codec (`std/Json`)
+- [x] JSON codec (`std/Json`; numbers are binary32 `Flt`, so an integer above 2²⁴ or a decimal outside binary32 does not round-trip)
 - [x] TOML 1.0.0 codec over native `Int` and binary32 `Flt` (`std/Toml`; not fully conforming)
   - [ ] [TOML's numbers are wider than the carriers under them](roadmap/toml-full-conformance-spec.md) (the gap is named; the float carrier is not chosen)
 - [x] Structured concurrency in `/std/Async`

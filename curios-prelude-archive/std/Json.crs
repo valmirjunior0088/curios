@@ -1,3 +1,5 @@
+-- Numbers are carried as binary32 `Flt`: `decode` narrows every numeric lexeme through `Flt/of_str` and `encode` renders through `Flt/to_str`. An integer above 2²⁴ decodes inexactly, and a finite decimal outside binary32's range saturates rather than being refused, so a document carrying either does not round-trip. The carrier is the language's, and `documentation/roadmap.md` names the gap beside TOML's.
+
 use /std/{Bool, Flt, Str, List};
 
 pub induct Json: pub Type
