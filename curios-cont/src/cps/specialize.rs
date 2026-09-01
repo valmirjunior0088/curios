@@ -53,6 +53,8 @@ impl Lattice for Knowledge {
 /// Compute the parameters of recursive SCC members that are provably a single literal or function reference at every entry, so they can be substituted in place and dropped as dead. This is a monotone constant-propagation fixpoint over the whole known-callee call graph, restricted to literal/function atoms with parameter forwarding, ordered `Unknown < Known < Conflict`.
 ///
 /// Only members of an eligible SCC participate: the SCC must be recursive and must contain no escaping member and not the program entry, because an escaping or host-called function receives arguments this analysis cannot observe. `known_literals` seeds resolution of caller values already known to be constant.
+///
+/// A function reference counts only where the member's body may name it (`CallAnalysis::lexical_scope`); one from outside that scope leaves the parameter unknown rather than forwarding a call the body cannot legally make.
 pub(super) fn scc_invariant_knowns(
     module: &CpsModule,
     analysis: &CallAnalysis,
@@ -82,7 +84,22 @@ pub(super) fn scc_invariant_knowns(
     }
 
     let class = invariant_fixpoint(&params_of, &constraints, known_literals);
+
+    // A function reference is forwarded into a member only where the member's body may name it. `rewrite_atoms` turns the member's closure call on the parameter into a known call, and a recursive callee is exactly the one the inliner then declines to bring into scope — so a reference from outside the member's lexical scope stood as an out-of-scope call at the round's close. Out of scope, the closure call stays a closure call.
+    let owner_of_param: BTreeMap<CpsValueId, CpsFunId> = params_of
+        .iter()
+        .flat_map(|(function, params)| params.iter().map(move |param| (*param, *function)))
+        .collect();
     useful_knowns(class)
+        .into_iter()
+        .filter(|(param, atom)| match atom {
+            CpsAtom::Fun(function) => analysis
+                .lexical_scope
+                .get(&owner_of_param[param])
+                .is_some_and(|scope| scope.contains(function)),
+            CpsAtom::Literal(_) | CpsAtom::Value(_) | CpsAtom::Filler => true,
+        })
+        .collect()
 }
 /// The members of every SCC eligible for known-argument analysis: recursive, and containing neither an escaping member nor the program entry, because those receive arguments the analysis cannot observe.
 pub(super) fn eligible_sccs(module: &CpsModule, analysis: &CallAnalysis) -> Vec<Vec<CpsFunId>> {

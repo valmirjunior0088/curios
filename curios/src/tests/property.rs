@@ -191,19 +191,24 @@ fn a_property_run_is_a_function_of_the_sources() {
 }
 
 #[test]
-#[ignore = "a standing continuation-optimizer defect, recorded as found: a property over a sequence parameter fails `curios-cont`'s round-boundary structural verify with `calls out-of-scope`"]
-fn a_property_over_a_sequence_parameter_compiles() {
-    // Pinned on 2026-09-01 as it was found rather than as it should be: every draw in the roster spells and runs on its own, `Property/run` over a `Str` parameter runs with a user base witness, and a nullary `Test/equal` over lists runs — but a property whose parameter is a `Str`, `Bits`, `Bytes` or `List`, closed through `Test/property`, is refused by `curios-cont`'s round-2 structural verify in a debug build. `Option`, `Nat`, `Int`, `Byte`, `Bool`, `Char`, `Order` and the tuple shapes are unaffected.
+fn a_property_over_a_sequence_parameter_is_probed() {
+    // The four draws that recurse — `Str`, `Bits`, `Bytes`, `List` — once tripped `curios-cont`'s round-boundary verify with a call out of scope: the SCC known-argument fixpoint forwarded the archived draw's function reference into a recursive member that could not name it, and the inliner, which heals that for a non-recursive callee, declines a recursive one. `known_values` now forwards a function reference only within the member's lexical scope, so these compile and run like every other parameter type.
     assert_eq!(
         run_tests_program(
             r#"
-        use /std/{Nat, Str, List, Io, Test};
+        use /std/{Nat, Str, Bits, Bytes, List, Io, Test};
+        test concatenating_nothing_keeps_a_string(s: Str) =
+            Test/equal(Str/concat(s, ""), s);
+        test spreading_bits_keeps_them(b: Bits) =
+            Test/equal(b[..b], b);
+        test spreading_bytes_keeps_them(b: Bytes) =
+            Test/equal(x[..b], b);
         test flattening_keeps_a_lone_list(l: List(Nat)) =
             Test/equal(List/flatten([l, []]), l);
         /std/print("ran\n")
         "#
         ),
-        b"/flattening_keeps_a_lone_list: passed\n"
+        b"/concatenating_nothing_keeps_a_string: passed\n/spreading_bits_keeps_them: passed\n/spreading_bytes_keeps_them: passed\n/flattening_keeps_a_lone_list: passed\n"
     );
 }
 

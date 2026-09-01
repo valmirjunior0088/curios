@@ -9,10 +9,131 @@ use {
     },
     crate::{
         CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral, CpsModule,
-        CpsNode, atoms,
+        CpsNode, CpsValueId, atoms,
     },
     std::collections::BTreeMap,
 };
+
+/// `g(p, n) = let _ = p() in g(p, n)`, a self-recursive member whose closure parameter every entry feeds the same function `f`, called once from `h() = g(f, 0)`. With `nested`, `f` is defined inside `h` — outside `g`'s lexical scope; otherwise it sits in the root group beside `g` and `h`.
+fn a_recursive_member_fed_one_function(nested: bool) -> (CpsModule, CpsValueId) {
+    let mut module = CpsModule::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let g = module.reserve_function();
+    let g_return = module.reserve_continuation();
+    let h = module.reserve_function();
+    let h_return = module.reserve_continuation();
+    let f = module.reserve_function();
+    let f_return = module.reserve_continuation();
+
+    let f_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: f_return,
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
+    }));
+    module.define_function(
+        f,
+        CpsFunction {
+            debug_name: Some("f".into()),
+            params: vec![],
+            return_cont: f_return,
+            body: f_body,
+        },
+    );
+
+    let p = module.add_value(Some("p".into()));
+    let n = module.add_value(Some("n".into()));
+    let r = module.add_value(Some("r".into()));
+    let again = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(g),
+        args: vec![CpsAtom::Value(p), CpsAtom::Value(n)],
+        return_to: g_return,
+    });
+    let after_call = module.reserve_continuation();
+    module.define_continuation(
+        after_call,
+        CpsContinuation {
+            debug_name: None,
+            params: vec![r],
+            body: again,
+        },
+    );
+    let apply_p = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Closure(p),
+        args: vec![],
+        return_to: after_call,
+    });
+    let g_body = module.add_node(CpsNode::LetCont {
+        continuations: vec![after_call],
+        body: apply_p,
+    });
+    module.define_function(
+        g,
+        CpsFunction {
+            debug_name: Some("g".into()),
+            params: vec![p, n],
+            return_cont: g_return,
+            body: g_body,
+        },
+    );
+
+    let call_g = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(g),
+        args: vec![CpsAtom::Fun(f), CpsAtom::Literal(CpsLiteral::Nat(0))],
+        return_to: h_return,
+    });
+    let h_body = match nested {
+        true => module.add_node(CpsNode::LetFun {
+            functions: vec![f],
+            body: call_g,
+        }),
+        false => call_g,
+    };
+    module.define_function(
+        h,
+        CpsFunction {
+            debug_name: Some("h".into()),
+            params: vec![],
+            return_cont: h_return,
+            body: h_body,
+        },
+    );
+
+    let call_h = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(h),
+        args: vec![],
+        return_to: entry_return,
+    });
+    let mut root = vec![g, h];
+    if !nested {
+        root.push(f);
+    }
+    let body = module.add_node(CpsNode::LetFun {
+        functions: root,
+        body: call_h,
+    });
+    module.define_function(
+        entry,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_return,
+            body,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+    (module, p)
+}
+
+#[test]
+fn a_function_reference_reaches_a_recursive_member_only_within_its_scope() {
+    // The SCC fixpoint proves `p` is always `f`, and forwarding that lets `rewrite_atoms` devirtualize `p()` inside `g` — legal only where `g`'s body may name `f`. Nested inside `h`, `f` is out of `g`'s scope, and the devirtualized call would have stood as an out-of-scope call at the round's close, since the inliner declines a recursive callee; the parameter then stays unknown and the closure call stays a closure call. In the root group, the forwarding is admitted as before.
+    let (nested, p) = a_recursive_member_fed_one_function(true);
+    assert_eq!(known_values(&nested).get(&p), None);
+
+    let (flat, p) = a_recursive_member_fed_one_function(false);
+    assert!(matches!(known_values(&flat).get(&p), Some(CpsAtom::Fun(_))));
+}
 
 #[test]
 fn sccs_group_cycles_and_stay_deterministic() {

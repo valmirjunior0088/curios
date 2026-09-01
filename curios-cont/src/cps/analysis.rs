@@ -13,6 +13,8 @@ pub(super) struct CallAnalysis {
     /// On a cycle of the call graph closed under definition — a callee inherits the calls of every function nested within it — which is the inliner's question: see `analyze_calls`.
     pub(super) recursive: BTreeSet<CpsFunId>,
     pub(super) sccs: SccAnalysis,
+    /// The functions each function's body may name: its own `LetFun` group and every group enclosing it, up to the entry — the scope `verify_lexical_scopes` walks, recorded per function so a pass that forwards a function reference into a body can ask whether that body may name it.
+    pub(super) lexical_scope: BTreeMap<CpsFunId, BTreeSet<CpsFunId>>,
 }
 /// Function strongly-connected components of the known-callee call graph, computed at an explicit phase boundary. `SccId` is a dense index into `members`; each component lists its functions in `CpsFunId` order.
 pub(super) type SccId = usize;
@@ -169,6 +171,34 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
         }
     }
     analysis.sccs = analyze_sccs(&analysis.call_graph);
+
+    // Each function's lexical scope, off the same `LetFun` nodes: a member may name its own group and everything its owner may name, and the entry names itself — the walk `verify_lexical_scopes` performs, recorded rather than repeated by the pass that needs it.
+    let mut group_of: BTreeMap<CpsFunId, (CpsFunId, Vec<CpsFunId>)> = BTreeMap::new();
+    for (&node_id, &owner) in &analysis.node_owners {
+        if let Some(CpsNode::LetFun { functions, .. }) = module.node(node_id) {
+            for &member in functions {
+                group_of.insert(member, (owner, functions.clone()));
+            }
+        }
+    }
+    for function in module.functions.live_ids() {
+        let mut scope = BTreeSet::new();
+        let mut visited = BTreeSet::new();
+        let mut current = function;
+        while visited.insert(current) {
+            match group_of.get(&current) {
+                Some((owner, members)) => {
+                    scope.extend(members.iter().copied());
+                    current = *owner;
+                }
+                None => {
+                    scope.insert(current);
+                    break;
+                }
+            }
+        }
+        analysis.lexical_scope.insert(function, scope);
+    }
     analysis
 }
 /// Every node in `function`'s own body, stopping at each nested function's boundary — see [`free_values`] for which callers that suits and which it does not.
