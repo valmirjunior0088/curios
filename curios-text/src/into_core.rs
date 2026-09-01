@@ -492,22 +492,16 @@ fn process_items(
                     false => FlatItem::Let(items.pop().expect("a `let` item has a member")),
                 });
             }
-            // A test is the function sugar its parentheses spell: declared type `() -> /syn/Test` through the registry slot, body the authored body under the nullary lambda — the same `LetSignature::Func` shape the property-testing seam later feeds a telescope.
-            // A test's declared type is `() -> /syn/Test`, emitted as core directly off the registry slot — a synthesized `Var` carries the resolved identity, so nothing here depends on `/syn` being importable — and its body is the authored body under the nullary lambda the written `()` spells, the same function sugar the property-testing seam later feeds a telescope.
+            // A test is the function sugar its parentheses spell — a `let`'s `LetSignature::Func` shape with the output fixed. Its declared type is `(params) -> /syn/Test`: the output emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on `/syn` being importable, closed under the written telescope. Its body is the authored body under the lambda binding every parameter. Empty parentheses give the harness's nullary test; a telescope gives a property the synthesized tail closes through `Test/property`.
             TopItem::Test(test) => {
                 context.record_import_scope(Some(&context.prefixed(&test.label)));
                 let lower = Lowerer::new(context);
-                let type_ = curios_core::Term::func_type(
-                    [] as [(curios_core::Free, curios_core::Term); 0],
-                    curios_core::Term::var(curios_core::Var::free(curios_core::Free::global(
-                        context.syntax().test.test_type.qualifier(),
-                    ))),
-                );
-                let body: Term = Subterm::Func(Func {
-                    params: Vec::new(),
-                    body: test.body.clone(),
-                })
-                .into();
+                let output = curios_core::Term::var(curios_core::Var::free(
+                    curios_core::Free::global(context.syntax().test.test_type.qualifier()),
+                ));
+                let type_ =
+                    lower.func_type_under(&func_sugar_type_params(&test.params), || Ok(output))?;
+                let body = func_sugar_lambda(&test.params, &test.body);
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
                 tests.push(name.clone());
                 flat_items.push(FlatItem::Let(FlatLet {

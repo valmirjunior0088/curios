@@ -399,6 +399,37 @@ pub enum LetSignature {
     },
 }
 
+/// The function-definition sugar's telescope as the parameters of the Π-type it declares. A plain-name parameter names its Π-binder, so a later domain or the output may depend on it. A compound pattern has no single name to give the binder, so it lowers anonymously (`None`) — already a fully legal Π-binder shape (e.g. today's `use`-binder or an unlabeled `(T) -> R` parameter). Shared by a `let`'s signature and a `test`'s, which is the same sugar with its output fixed.
+pub(crate) fn func_sugar_type_params(params: &[FuncSugarParam]) -> Vec<FuncTypeParam> {
+    params
+        .iter()
+        .map(|param| FuncTypeParam {
+            plicity: param.plicity,
+            label: match &param.label {
+                Pattern::Binder(name) => name.clone(),
+                Pattern::Tuple(_) | Pattern::Struct { .. } => None,
+            },
+            type_: param.type_.clone(),
+        })
+        .collect()
+}
+
+/// The function-definition sugar's body as the lambda binding every parameter. Each binder copies its plicity: the generated function value carries the same marks its signature does, so a written `@`/`use` in the sugar is checked against the slot it claims rather than silently dropped.
+pub(crate) fn func_sugar_lambda(params: &[FuncSugarParam], body: &Term) -> Term {
+    Subterm::Func(Func {
+        params: params
+            .iter()
+            .map(|param| FuncParam {
+                plicity: param.plicity,
+                pattern: param.label.clone(),
+                annotation: Some(param.type_.clone()),
+            })
+            .collect(),
+        body: body.clone(),
+    })
+    .into()
+}
+
 impl LetSignature {
     pub(crate) fn type_(&self) -> Term {
         match self {
@@ -407,19 +438,8 @@ impl LetSignature {
             } => type_.clone(),
             // An omitted (local-only) annotation lowers to a hole, so the core elaborator infers the body's type; identical to writing `: _`.
             LetSignature::Name { type_: None, .. } => Subterm::Hole.into(),
-            // A plain-name parameter names its Π-binder, so a later domain or the output may depend on it. A compound pattern has no single name to give the binder, so it lowers anonymously (`None`) — already a fully legal Π-binder shape (e.g. today's `use`-binder or an unlabeled `(T) -> R` parameter).
             LetSignature::Func { params, output, .. } => Subterm::FuncType(FuncType {
-                params: params
-                    .iter()
-                    .map(|param| FuncTypeParam {
-                        plicity: param.plicity,
-                        label: match &param.label {
-                            Pattern::Binder(name) => name.clone(),
-                            Pattern::Tuple(_) | Pattern::Struct { .. } => None,
-                        },
-                        type_: param.type_.clone(),
-                    })
-                    .collect(),
+                params: func_sugar_type_params(params),
                 output: output.clone(),
             })
             .into(),
@@ -429,19 +449,7 @@ impl LetSignature {
     pub(crate) fn body(&self) -> Term {
         match self {
             LetSignature::Name { body, .. } => body.clone(),
-            // The lambda binds every parameter and copies its plicity: the generated function value carries the same marks its signature does, so a written `@`/`use` in the sugar is checked against the slot it claims rather than silently dropped.
-            LetSignature::Func { params, body, .. } => Subterm::Func(Func {
-                params: params
-                    .iter()
-                    .map(|param| FuncParam {
-                        plicity: param.plicity,
-                        pattern: param.label.clone(),
-                        annotation: Some(param.type_.clone()),
-                    })
-                    .collect(),
-                body: body.clone(),
-            })
-            .into(),
+            LetSignature::Func { params, body, .. } => func_sugar_lambda(params, body),
         }
     }
 }

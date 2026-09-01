@@ -361,3 +361,43 @@
 #                         ^ source.curios punctuation.bracket.curios
 #                          ^ source.curios punctuation.separator.curios
 >
+>test sample_add_commutes(n: Nat, m: Nat) =
+#^^^^ source.curios keyword.other.curios
+#    ^ source.curios
+#     ^^^^^^^^^^^^^^^^^^^ source.curios entity.name.function.curios
+#                        ^ source.curios punctuation.bracket.curios
+#                         ^ source.curios variable.other.curios
+#                          ^ source.curios keyword.operator.assignment.curios
+#                           ^ source.curios
+#                            ^^^ source.curios entity.name.type.curios
+#                               ^ source.curios punctuation.separator.curios
+#                                ^ source.curios
+#                                 ^ source.curios variable.other.curios
+#                                  ^ source.curios keyword.operator.assignment.curios
+#                                   ^ source.curios
+#                                    ^^^ source.curios entity.name.type.curios
+#                                       ^ source.curios punctuation.bracket.curios
+#                                        ^ source.curios
+#                                         ^ source.curios keyword.operator.assignment.curios
+>    Test/check(n + m == m + n);
+#^^^^ source.curios
+#    ^^^^ source.curios support.module.curios
+#        ^ source.curios punctuation.separator.path.curios
+#         ^^^^^ source.curios entity.name.function.curios
+#              ^ source.curios punctuation.bracket.curios
+#               ^ source.curios variable.other.curios
+#                ^ source.curios
+#                 ^ source.curios keyword.operator.arithmetic.curios
+#                  ^ source.curios
+#                   ^ source.curios variable.other.curios
+#                    ^ source.curios
+#                     ^^ source.curios keyword.operator.comparison.curios
+#                       ^ source.curios
+#                        ^ source.curios variable.other.curios
+#                         ^ source.curios
+#                          ^ source.curios keyword.operator.arithmetic.curios
+#                           ^ source.curios
+#                            ^ source.curios variable.other.curios
+#                             ^ source.curios punctuation.bracket.curios
+#                              ^ source.curios punctuation.separator.curios
+>

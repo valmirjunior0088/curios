@@ -1295,10 +1295,30 @@ fn print_top_use(item: TopUse) -> Printer {
 }
 
 fn print_top_test(test: TopTest) -> Printer {
+    let items = test
+        .params
+        .into_iter()
+        .map(print_func_sugar_param)
+        .collect::<Vec<_>>();
+    // The telescope lays out as a `let` signature's does — one group, breaking parameter by parameter — minus the result type this form never writes.
+    let parameters = match items.is_empty() {
+        true => pure("()"),
+        false => group(flat([
+            pure("("),
+            indent(flat([
+                soft_line(),
+                sep_flat(items, || flat([pure(","), line()])),
+                if_break("", ","),
+            ])),
+            soft_line(),
+            pure(")"),
+        ])),
+    };
     flat([
         pure("test "),
         pure(test.label),
-        pure("() ="),
+        parameters,
+        pure(" ="),
         hard_line(),
         indent(print_term(test.body)),
         pure(";"),

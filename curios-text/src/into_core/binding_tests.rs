@@ -197,3 +197,36 @@ fn a_test_declaration_registers_by_kind_in_declaration_order() {
         assert_eq!(*type_, expected_type);
     }
 }
+
+#[test]
+fn a_parameterized_test_lowers_under_its_telescope() {
+    // The seam the property-testing decision opens: the written telescope becomes the Π-type's, with the registry-built `/syn/Test` closed under it as the output, and the body is the lambda binding every parameter — the same sugar a `let` lowers through, so nothing about a test's shape is decided twice.
+    let module = lowered_module("test t(n: Type, m: Type) = n;\n()");
+    let definition = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            curios_core::Item::Let(def) if def.name == global_name("t") => Some(def),
+            curios_core::Item::Let(_) | curios_core::Item::Rec(_) => None,
+        })
+        .expect("the test lowers to a definition");
+    assert_eq!(definition.kind, curios_core::DefinitionKind::Test);
+    let curios_core::Subterm::FuncType(func_type) = &*definition.type_ else {
+        panic!("expected a function type, got {:?}", definition.type_);
+    };
+    assert_eq!(
+        func_type.plicities(),
+        vec![
+            curios_utilities::Plicity::Explicit,
+            curios_utilities::Plicity::Explicit
+        ]
+    );
+    assert_eq!(
+        *func_type.telescope.terminal(),
+        curios_core::Term::var(curios_core::Var::free(global("syn/Test/Test")))
+    );
+    let curios_core::Subterm::Func(func) = &*definition.body else {
+        panic!("expected a lambda, got {:?}", definition.body);
+    };
+    assert_eq!(func.telescope.len(), 2);
+}

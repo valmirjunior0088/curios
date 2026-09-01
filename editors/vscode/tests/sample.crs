@@ -24,3 +24,6 @@ satisfy Spell(Nat);
 
 test sample_map_holds() =
     Test/check(even(zero));
+
+test sample_add_commutes(n: Nat, m: Nat) =
+    Test/check(n + m == m + n);

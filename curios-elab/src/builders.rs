@@ -8,7 +8,9 @@ use {
         Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Var,
     },
     curios_num::Natural,
-    curios_utilities::{Grain, InfixOp, PackedBin, Sign, StringSyntax, SyntaxName, SyntaxRegistry},
+    curios_utilities::{
+        Grain, InfixOp, PackedBin, Sign, Span, StringSyntax, SyntaxName, SyntaxRegistry,
+    },
 };
 
 /// A `/syn` function or constructor `Var`, applied — the absolute core identity a registry slot denotes, so privacy is no obstacle: these are already-resolved core references, not surface names.
@@ -38,19 +40,40 @@ pub fn str_literal(syntax: &StringSyntax, bytes: &[u8]) -> Term {
     )
 }
 
-/// The synthesized tail of a unit compiled as its own test program: `Test/main([("path", thunk), …])` over `tests` in declaration order, each pair the test's path as its `Global` renders it and a `Var` at the test itself — already a `() -> Test`, so the declaration is its own thunk. The list's element type is the single fresh hole `element_hole`, solved bidirectionally from `Test/main`'s parameter exactly as a written literal's would be; no binder is minted, so the module's binder floor is untouched.
-pub fn test_program_tail(syntax: &SyntaxRegistry, tests: &[Global], element_hole: usize) -> Term {
+/// One registered test as the synthesized tail schedules it: its name, the arity of the lambda its declaration lowered to — zero for the harness's nullary test, the telescope's length for a property — and the span of its authored body, where a property's witness goal is reported. Read off the definition by `curios-pipeline`, since `Module::tests` records names alone.
+#[derive(Debug, Clone)]
+pub struct ScheduledTest {
+    pub name: Global,
+    pub arity: usize,
+    pub span: Option<Span>,
+}
+
+/// The synthesized tail of a unit compiled as its own test program: `Test/main([("path", thunk), …])` over `tests` in declaration order, each pair the test's path as its `Global` renders it and its thunk. A nullary test is its own thunk — a `Var` at the declaration, already a `() -> Test`. A parameterized one is closed through `Test/property`: `() => Test/property(t)`, the application carrying the one witness goal, `Property((params…) -> Test)`, that the tail's check resolves as any authored tail's goals are — stamped with the declaration's span, so a parameter the roster cannot draw is reported at the declaration by the ordinary missing-witness report. The list's element type is the single fresh hole `element_hole`, solved bidirectionally from `Test/main`'s parameter exactly as a written literal's would be; no binder is minted, so the module's binder floor is untouched.
+pub fn test_program_tail(
+    syntax: &SyntaxRegistry,
+    tests: &[ScheduledTest],
+    element_hole: usize,
+) -> Term {
     let items = tests
         .iter()
         .map(|test| {
-            let path = match test.qualifier() {
+            let path = match test.name.qualifier() {
                 Some(path) => path.join(),
                 None => String::new(),
             };
-            Term::tuple([
-                str_literal(&syntax.string, path.as_bytes()),
-                Term::var(Var::free(Free::from(test))),
-            ])
+            let declaration = Term::var(Var::free(Free::from(&test.name)));
+            let thunk = match test.arity {
+                0 => declaration,
+                _ => {
+                    let property = syn_call(syntax.test.property, [declaration]);
+                    let property = match &test.span {
+                        Some(span) => Term::spanned(span.clone(), property),
+                        None => property,
+                    };
+                    Term::func([] as [(Free, Term); 0], property)
+                }
+            };
+            Term::tuple([str_literal(&syntax.string, path.as_bytes()), thunk])
         })
         .collect::<Vec<_>>();
 

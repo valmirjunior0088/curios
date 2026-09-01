@@ -533,15 +533,27 @@ fn a_test_declaration_parses_and_round_trips() {
 }
 
 #[test]
-fn a_test_takes_no_pub_and_no_binder() {
-    // The name is a report line, not an export; and what may stand between the parentheses is a seam the property-testing specification opens — a binder there has no rule behind it today.
+fn a_parameterized_test_declaration_parses_and_round_trips() {
+    // The parentheses hold the telescope a `let`'s signature holds — a property's parameters — kept verbatim and printed as a signature's are.
+    let source = "test add_commutes(n: Nat, m: Nat) = Test/check(n + m == m + n);";
+    let module = source.parse::<Module>().unwrap();
+    let [TopItem::Test(test)] = module.items.as_slice() else {
+        panic!("expected one test item, got {:?}", module.items);
+    };
+    assert_eq!(test.params.len(), 2);
+    let printed = module.to_string();
+    assert_eq!(
+        printed.trim(),
+        "test add_commutes(n: Nat, m: Nat) =\n    Test/check(n + m == m + n);"
+    );
+    assert_eq!(printed.parse::<Module>().unwrap().items, module.items);
+}
+
+#[test]
+fn a_test_takes_no_pub_and_stays_a_contextual_word() {
+    // The name is a report line, not an export.
     assert!(
         "pub test t() = Test/check(true);"
-            .parse::<Module>()
-            .is_err()
-    );
-    assert!(
-        "test t(n: Nat) = Test/check(true);"
             .parse::<Module>()
             .is_err()
     );

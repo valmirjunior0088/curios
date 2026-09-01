@@ -6,7 +6,7 @@ pub(super) fn parse_pub<'a>() -> Parser<'a, bool> {
 
 // A top-level `let` item: one definition, or the group `let f … and g …;`. Each member takes its own `pub` — before `let` for the first, before `and` for each later one — and one `;` terminates the whole item.
 
-// A `test` declaration: `test name() = body;`. The parentheses are the function sugar written out — required, and empty until the property-testing specification opens that seam, so anything between them fails as an unexpected token with no rule behind it. `pub` is refused by name: a test's identifier is its report line, not an export. Like `satisfy`, `test` stays a contextual word everywhere else.
+// A `test` declaration: `test name(params) = body;`. The parentheses are the function sugar written out — required, holding the telescope a `let`'s signature holds: empty for the harness's nullary test, a parameter list for a property. `pub` is refused by name: a test's identifier is its report line, not an export. Like `satisfy`, `test` stays a contextual word everywhere else.
 pub(super) fn parse_top_test<'a>() -> Parser<'a, TopItem> {
     catch(parse_pub().and(parse_keyword("test")))
         .flat_map(|(vis_pub, ())| match vis_pub {
@@ -15,13 +15,17 @@ pub(super) fn parse_top_test<'a>() -> Parser<'a, TopItem> {
         })
         .and_keep(parse_identifier())
         .and_drop(parse_literal("("))
+        .and(sep_by0_trailing(parse_func_sugar_param, || {
+            parse_literal(",")
+        }))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("="))
         .and(lazy(parse_term))
         .and_drop(parse_literal(";"))
-        .map(|(label, body)| {
+        .map(|((label, params), body)| {
             TopItem::Test(TopTest {
                 label: label.to_string(),
+                params,
                 body,
             })
         })

@@ -2,9 +2,9 @@ use curios_elab::{IntrinsicBuilders, TermBuilders};
 use {
     super::{Context, MatchCompiler},
     crate::{
-        BinSegment, Choose, ChooseTest, Error, Field, FuncParam, Intrinsic, Let, LetBinding,
-        LetGroup, LetSignature, ListEntry, Name, Nat, NatLiteral, NumLit, Pattern, PatternField,
-        StructLitEntry, Subterm, Syn, Term,
+        BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic, Let,
+        LetBinding, LetGroup, LetSignature, ListEntry, Name, Nat, NatLiteral, NumLit, Pattern,
+        PatternField, StructLitEntry, Subterm, Syn, Term,
     },
     curios_utilities::{Grain, PackedBin, Plicity, Qualifier, Span, recurse},
     std::{cell::RefCell, sync::Arc},
@@ -99,6 +99,22 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .with_universe_role(curios_core::UniverseRole::Generalizable, || self.term(term))
     }
 
+    /// A dependent Π-type over `params`: each parameter type sees the *preceding* parameters' binders and the output sees them all, so they lower under a progressively-extended scope. The output is produced by the caller under those binders rather than lowered from a written term, so a declaration whose result the compiler fixes — a `test`'s `/syn/Test` — closes an already-resolved core term under the written telescope instead of spelling a surface name it may not be able to import.
+    pub(super) fn func_type_under(
+        &self,
+        params: &[FuncTypeParam],
+        output: impl FnOnce() -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        let binders = self.mint(params.iter().map(|p| p.label.clone().unwrap_or_default()));
+        let mut lowered = Vec::with_capacity(params.len());
+        for (index, param) in params.iter().enumerate() {
+            let domain = self.bound(&binders[..index], || self.input_type(&param.type_))?;
+            lowered.push((param.plicity, binders[index].1.clone(), domain));
+        }
+        let output = self.bound(&binders, output)?;
+        Ok(curios_core::Term::func_type_marked(lowered, output))
+    }
+
     /// Resolve a surface name to its qualified (joined) core name — the same rule the `Subterm::Name` term-reference arm uses.
     pub(super) fn resolve_name(&self, name: &Name) -> Result<curios_core::Free, Error> {
         if name.is_abs() || !name.is_single() {
@@ -185,21 +201,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Name(name) => {
                 curios_core::Term::var(curios_core::Var::free(self.resolve_name(name)?))
             }
-            // Each parameter type sees the *preceding* parameters' binders, and the output sees them all (a dependent Π-type), so they lower under a progressively-extended scope.
-            Subterm::FuncType(ft) => {
-                let binders = self.mint(
-                    ft.params
-                        .iter()
-                        .map(|p| p.label.clone().unwrap_or_default()),
-                );
-                let mut params = Vec::with_capacity(ft.params.len());
-                for (index, param) in ft.params.iter().enumerate() {
-                    let domain = self.bound(&binders[..index], || self.input_type(&param.type_))?;
-                    params.push((param.plicity, binders[index].1.clone(), domain));
-                }
-                let output = self.bound(&binders, || self.term(&ft.output))?;
-                curios_core::Term::func_type_marked(params, output)
-            }
+            Subterm::FuncType(ft) => self.func_type_under(&ft.params, || self.term(&ft.output))?,
             Subterm::Func(func) => {
                 let binders = self.mint(param_names(&func.params));
                 let body = self.bound(&binders, || self.term(&func.body))?;

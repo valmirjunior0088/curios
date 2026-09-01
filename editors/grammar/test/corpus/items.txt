@@ -606,6 +606,7 @@ test the_answer_holds() =
 (source_file
   (test_item
     (identifier)
+    (parameters)
     (call
       (path
         (identifier)
@@ -615,6 +616,45 @@ test the_answer_holds() =
           (binary
             (number)
             (number)))))))
+
+================================================================================
+A parameterized test declaration is a property
+================================================================================
+
+test add_commutes(n: Nat, m: Nat) =
+    Test/check(n + m == m + n);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (test_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (path
+          (identifier)))
+      (parameter
+        (identifier)
+        (path
+          (identifier))))
+    (call
+      (path
+        (identifier)
+        (identifier))
+      (arguments
+        (argument
+          (binary
+            (binary
+              (path
+                (identifier))
+              (path
+                (identifier)))
+            (binary
+              (path
+                (identifier))
+              (path
+                (identifier)))))))))
 
 ================================================================================
 The test keyword is contextual and stays an ordinary name elsewhere

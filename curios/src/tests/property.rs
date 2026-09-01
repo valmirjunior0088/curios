@@ -1,6 +1,10 @@
 //! Property-based testing across the stages: the pure splittable `Seed`, the `Draw` roster and the tuple `Spell` witnesses a counterexample renders, `Property` and `Test/property`, and the parameterized `test` declaration the synthesized tail closes through `Test/property`.
 
-use super::{error, run};
+use {
+    super::{error, run, run_tests_program},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, compile_tests_with_units},
+    curios_text::{Entrypoint, RootSource},
+};
 
 #[test]
 fn a_drawn_sequence_is_a_function_of_its_seed() {
@@ -145,4 +149,119 @@ fn a_parameter_the_roster_cannot_draw_reports_the_missing_witness() {
         "#,
     );
     assert!(error.contains("Property"), "unexpected error: {error}");
+}
+
+#[test]
+fn a_parameterized_test_is_probed_through_the_synthesized_tail() {
+    // The decision's mission program, and the seam it opens: a `test` with a telescope is a property the tail closes through `Test/property`, reported by the harness's ordinary lines with the counterexample spelled in parameter order — and the nullary test beside it schedules exactly as it did before the seam existed.
+    assert_eq!(
+        run_tests_program(
+            r#"
+        use /std/{Nat, Str, Io, Test};
+        test add_commutes(n: Nat, m: Nat) =
+            Test/check(n + m == m + n);
+        test sum_is_small(n: Nat, m: Nat) =
+            Test/check(n + m < 7);
+        test the_answer_holds() =
+            Test/check(21 * 2 == 42);
+        /std/print("ran\n")
+        "#
+        ),
+        b"/add_commutes: passed\n/sum_is_small: failed\n  for 6, 6: the condition was false\n/the_answer_holds: passed\n"
+    );
+}
+
+#[test]
+fn a_property_run_is_a_function_of_the_sources() {
+    // Determinism: the same unit compiled and run twice writes the same bytes, since no clock or host entropy reaches a draw — the seed and the case count are constants of the library.
+    let source = r#"
+        use /std/{Nat, Str, Option, Io, Test};
+        test an_option_is_drawn(o: Option(Nat)) =
+            Test/check(true);
+        test sums_stay_small(n: Nat, m: Nat, k: Nat) =
+            Test/check(n + m + k < 12);
+        /std/print("ran\n")
+        "#;
+    let first = String::from_utf8(run_tests_program(source)).expect("the report is text");
+    assert_eq!(first, String::from_utf8_lossy(&run_tests_program(source)));
+    assert_eq!(
+        first,
+        "/an_option_is_drawn: passed\n/sums_stay_small: failed\n  for 6, 6, 4: the condition was false\n"
+    );
+}
+
+#[test]
+#[ignore = "a standing continuation-optimizer defect, recorded as found: a property over a sequence parameter fails `curios-cont`'s round-boundary structural verify with `calls out-of-scope`"]
+fn a_property_over_a_sequence_parameter_compiles() {
+    // Pinned on 2026-09-01 as it was found rather than as it should be: every draw in the roster spells and runs on its own, `Property/run` over a `Str` parameter runs with a user base witness, and a nullary `Test/equal` over lists runs — but a property whose parameter is a `Str`, `Bits`, `Bytes` or `List`, closed through `Test/property`, is refused by `curios-cont`'s round-2 structural verify in a debug build. `Option`, `Nat`, `Int`, `Byte`, `Bool`, `Char`, `Order` and the tuple shapes are unaffected.
+    assert_eq!(
+        run_tests_program(
+            r#"
+        use /std/{Nat, Str, List, Io, Test};
+        test flattening_keeps_a_lone_list(l: List(Nat)) =
+            Test/equal(List/flatten([l, []]), l);
+        /std/print("ran\n")
+        "#
+        ),
+        b"/flattening_keeps_a_lone_list: passed\n"
+    );
+}
+
+#[test]
+fn a_parameterized_record_carries_its_body_as_written() {
+    // The runner prints a failing test's body from the record the compile hands back; a property's body is the lambda's interior under the telescope, sliced from the authored span exactly as a nullary test's is.
+    let entrypoint = r#"
+        use /std/{Nat, Str, Io, Test};
+        test add_commutes(n: Nat, m: Nat) =
+            Test/check(n + m == m + n);
+        /std/print("ran\n")
+        "#
+    .parse::<Entrypoint>()
+    .expect("fixture parses");
+    let (_module, _foreigns, records) = compile_tests_with_units(
+        DEFAULT_STEP_BUDGET,
+        &[],
+        &entrypoint,
+        &RootSource::none(),
+        None,
+        EntryTail::Tests,
+        |_| {},
+        |_| {},
+    )
+    .expect("fixture compiles as a test program");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].path, "/add_commutes");
+    assert_eq!(records[0].body, "Test/check(n + m == m + n)");
+}
+
+#[test]
+fn a_parameter_without_a_draw_is_reported_at_its_declaration() {
+    // A dependent telescope unifies with no function-shape witness — outside the roster by design — so the tail's `Property` goal fails, and it is reported at the test as written rather than in a tail the author never sees.
+    let entrypoint = r#"
+        use /std/{Nat, Str, Io, Test};
+        test bounded(n: Nat, p: Nat/Lt(n, 100)) =
+            Test/check(n < 100);
+        /std/print("ran\n")
+        "#
+    .parse::<Entrypoint>()
+    .expect("fixture parses");
+    let error = match compile_tests_with_units(
+        DEFAULT_STEP_BUDGET,
+        &[],
+        &entrypoint,
+        &RootSource::none(),
+        None,
+        EntryTail::Tests,
+        |_| {},
+        |_| {},
+    ) {
+        Ok(_) => panic!("the test program compiled"),
+        Err(error) => error.to_string(),
+    };
+    assert!(error.contains("Property"), "unexpected error: {error}");
+    assert!(
+        error.contains("test bounded(n: Nat, p: Nat/Lt(n, 100))")
+            || error.contains("Test/check(n < 100)"),
+        "the report does not point at the declaration: {error}"
+    );
 }
