@@ -8,7 +8,7 @@ The Curios numeric tower: the unbounded type-level `Natural` and `Integer`, the 
 
 **Decision.** `num-bigint` and `num-traits` are named in this crate's manifest and nowhere else in the workspace, the arrangement [One crate is the authority for one external concern](../documentation/design/toolchain/one-crate-is-the-authority-for-one-external-concern.md) states in general and that `curios-archive` and `curios-profile` follow for rkyv and `tracing`.
 
-**Rationale.** A dependency present in exactly one manifest cannot be added elsewhere without someone writing the version down a second time, which is a question a reviewer will ask. A `[workspace.dependencies]` row shares *configuration* and concentrates no authority at all: every crate may still take the row, so the count of places arithmetic can enter stays unbounded.
+**Rationale.** The design entry's: a pin in one manifest concentrates authority, where a `[workspace.dependencies]` row shares only configuration. What that buys here is that the number of places arithmetic can enter the workspace is one.
 
 ### The magnitudes are sealed, not re-exported
 

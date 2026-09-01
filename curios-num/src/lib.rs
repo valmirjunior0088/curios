@@ -1,14 +1,8 @@
 //! The Curios numeric tower: the one crate that names `num-bigint` and `num-traits`.
 //!
-//! The pattern is `curios-archive`'s and `curios-profile`'s. Those crates are the workspace's only rkyv and `tracing` dependencies and name their pins in their own manifests; this is the same arrangement for arithmetic, and for the same reason — a dependency that exists in exactly one manifest cannot be added elsewhere without someone writing the version down again, which is a question a reviewer will ask. A `[workspace.dependencies]` row shares *configuration* and concentrates no authority at all.
+//! Two layers, each with its own reading key. [`Natural`] and [`Integer`] are *type-level* values — unbounded, pretending ℕ and ℤ, sealed newtypes whose magnitudes are private — and [`Floating`] is the binary32 model beside them, computed exactly over [`Natural`] and rounded once. The `scalar` functions are the *erased* carriers' exact semantics — `Nat` as `u32`, `Int` as `i32` — shared by every stage's constant folder so their arithmetic cannot drift from the backend's; each signature there says what a folder must do with a failure, and [`ScalarTrap`] names why one traps. The `archive` feature adds the rkyv proxies both magnitudes archive through.
 //!
-//! Unlike those two, this crate does not re-export what it owns. [`Natural`] and [`Integer`] are sealed newtypes whose magnitudes are private, so no crate above this one can name a `BigUint` or import a `num-traits` trait to call a method on one. That is what lets `num-traits` disappear from the workspace's code entirely: every use of it was a trait import — `Zero`, `One`, `ToPrimitive`, `FromPrimitive` — existing only to make a method callable on a bignum, and those methods are now inherent.
-//!
-//! # Two layers, deliberately separate
-//!
-//! [`Natural`] and [`Integer`] are *type-level* values: unbounded, pretending ℕ and ℤ, because a type-level natural bounded by a machine word would make a term's meaning depend on the host. The runtime's 31-bit range is enforced only where a literal must materialize, in erasure's narrowing and in the runtime's own overflow traps.
-//!
-//! The `scalar` functions are the other layer: the exact semantics of the *erased* carriers, where `Nat` is a `u32` and `Int` an `i32`, and a computed value past either is a refusal — a recorded trap, never a wrapped number (`documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`). Every stage's constant folder shares them so its arithmetic cannot drift from the backend's. Neither layer is expressible in the other, which is why `Natural`'s `-` panics on underflow while [`nat_sub`] saturates: they are different operations about different things.
+//! Why the dependency is named here and nowhere else, why the magnitudes are sealed rather than re-exported, and why the two layers are kept apart rather than expressed in one another are `README.md`'s decisions.
 
 mod natural;
 pub use natural::*;
