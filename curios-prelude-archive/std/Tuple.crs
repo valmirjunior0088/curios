@@ -150,7 +150,8 @@ satisfy (@A: Type, @B: Type, use Spell(A), use Spell(B)) => Spell({A, B}) {
     spell(t) = parens([Spell/spell(t.0), Spell/spell(t.1)]),
 }
 
-satisfy (@A: Type, @B: Type, @C: Type, use Spell(A), use Spell(B), use Spell(C)) => Spell({A, B, C}) {
+satisfy (@A: Type, @B: Type, @C: Type, use Spell(A), use Spell(B), use Spell(C)) => Spell(
+    {A, B, C}) {
     spell(t) = parens([Spell/spell(t.0), Spell/spell(t.1), Spell/spell(t.2)]),
 }
 
