@@ -222,6 +222,25 @@ fn core(source: &str) -> String {
     printed.expect("the pipeline emits the lowered Core stage")
 }
 
+/// The elaborated Core printout of `source`, observed as [`core`] observes the lowered one.
+fn core_elab(source: &str) -> String {
+    let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
+
+    let mut printed = None;
+    let _ = compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |stage| {
+            if let Stage::CoreElab(module) = stage {
+                printed = Some(module.to_string());
+            }
+        },
+    );
+
+    printed.expect("the pipeline emits the elaborated Core stage")
+}
+
 /// Compile through production and capture the optimized Cont printout.
 fn cont_optm(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");

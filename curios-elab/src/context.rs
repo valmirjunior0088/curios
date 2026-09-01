@@ -1139,6 +1139,11 @@ impl Context {
         self.fresh_metavar_with(result, span, MetavarOrigin::Hole).1
     }
 
+    /// Mint a metavariable identity with no birth record, for a term built ahead of its elaboration exactly as `into_core` builds one: an omitted motive, a list literal's element type, a witness goal with a provenance of its own. Birth happens where elaboration first meets the term, in checking position, as it does for every lowered hole.
+    pub(crate) fn mint_metavar(&mut self) -> MetavarId {
+        self.solutions.mint()
+    }
+
     /// The frozen ambient scope a settle-synthesized lambda's domain metavariables are born under — captured before the settle walk assumes a single lambda binder, so a domain's birth context is never wider than the expectation it will inhabit, which the embedded-metavariable exemption in `solve` relies on ([`Context::metavar_context_contained`]).
     pub(crate) fn domain_scope(&mut self) -> DomainScope {
         let (telescope, spine) = self.identity_snapshot();

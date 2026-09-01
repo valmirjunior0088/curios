@@ -6,7 +6,7 @@
 mod tests;
 
 use {
-    super::{Erased, Error, GoalReport, HeadKey, ShapeDiagnosis},
+    super::{Erased, Error, GoalReport, HeadKey, ShapeDiagnosis, Underivable},
     curios_core::{Spelling, Subterm, Term},
     curios_utilities::{Grain, Plicity, Qualifier},
     std::{fmt, rc::Rc},
@@ -458,6 +458,34 @@ impl fmt::Display for Displayed<'_> {
                     f,
                     "a derived body is legal only as a witness body checked against its concept application"
                 )
+            }
+            Error::Underivable {
+                concept,
+                key,
+                reason,
+            } => {
+                let key = key.spelled(spelling);
+                write!(f, "cannot derive '{concept}' for {key}")?;
+                match reason {
+                    Underivable::NotDeclared => write!(
+                        f,
+                        "\n  {key} is not a declared `induct` or `struct`, and a derivation writes out a declaration's constructors and nothing else; write the body"
+                    ),
+                    Underivable::Proposition => write!(
+                        f,
+                        "\n  {key} is a proposition, whose values erase; write the body"
+                    ),
+                    Underivable::Concept => {
+                        write!(f, "\n  {key} is a concept's record; write the body")
+                    }
+                    Underivable::TypeValued {
+                        constructor,
+                        payload,
+                    } => write!(
+                        f,
+                        "\n  {payload} of '{constructor}' is a type, which no value spells; write the body"
+                    ),
+                }
             }
             Error::CtorArityMismatch {
                 atom,

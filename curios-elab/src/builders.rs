@@ -12,7 +12,7 @@ use {
 };
 
 /// A `/syn` function or constructor `Var`, applied — the absolute core identity a registry slot denotes, so privacy is no obstacle: these are already-resolved core references, not surface names.
-fn syn_call(name: SyntaxName, args: impl IntoIterator<Item = Term>) -> Term {
+pub(crate) fn syn_call(name: SyntaxName, args: impl IntoIterator<Item = Term>) -> Term {
     Term::apply(
         Term::var(Var::free(Free::global(name.qualifier()))),
         args.into_iter().collect::<Vec<_>>(),

@@ -1,6 +1,261 @@
 //! Derived witnesses: the body-less `satisfy C(T);` form, the transient it lowers to, and what the compiler writes — or refuses — in its place.
 
-use crate::tests::{core, error, run};
+use crate::tests::{core, core_elab, error, run};
+
+// --- The `Spell` derivation: a value spells as its constructor's absolute path applied to its explicit payloads, each spelled by its own witness, so the text re-parses wherever the names are visible. ---
+
+#[test]
+fn an_enumeration_spells_as_its_constructor_paths() {
+    let source = r#"
+        use /std/{Str, Spell, print};
+        induct Color: pub Type | red() | green() end
+        satisfy Spell(Color);
+        let _ = print(Spell/spell(Color/red()))!;
+        let _ = print("\n")!;
+        print(Spell/spell(Color/green()))
+        "#;
+
+    assert_eq!(run(source), b"/Color/red()\n/Color/green()");
+}
+
+#[test]
+fn payloads_spell_through_their_own_witnesses() {
+    // Carriers, a string, and nesting through `List` — every payload resolves its own `Spell`, exactly as a written `Spell/spell(x)` would.
+    let source = r#"
+        use /std/{Nat, Str, Bool, List, Spell, print};
+        induct Shape: pub Type | dot(Nat) | tag(Str, Bool) | many(List(Nat)) end
+        satisfy Spell(Shape);
+        let _ = print(Spell/spell(Shape/dot(1)))!;
+        let _ = print("\n")!;
+        let _ = print(Spell/spell(Shape/tag("a\n", true)))!;
+        let _ = print("\n")!;
+        print(Spell/spell(Shape/many([1, 2])))
+        "#;
+
+    assert_eq!(
+        run(source),
+        b"/Shape/dot(1)\n/Shape/tag(\"a\\n\", true)\n/Shape/many([1, 2])"
+    );
+}
+
+#[test]
+fn a_parameterized_family_spells_under_its_premise() {
+    // The telescope's `use Spell(A)` is what spells the payload; the implicit parameter is omitted from the text, since the re-parsed call infers it.
+    let source = r#"
+        use /std/{Nat, Str, Spell, print};
+        induct Box(A: Type): pub Type | boxed(A) end
+        satisfy (@A: Type, use Spell(A)) => Spell(Box(A));
+        let _ = print(Spell/spell(Box/boxed(3)))!;
+        let _ = print("\n")!;
+        print(Spell/spell(Box/boxed(Box/boxed("x"))))
+        "#;
+
+    assert_eq!(run(source), b"/Box/boxed(3)\n/Box/boxed(/Box/boxed(\"x\"))");
+}
+
+#[test]
+fn a_recursive_family_spells_through_its_own_entry_and_re_parses() {
+    // The recursive payload resolves through the witness's own table entry, and the spelled text is a program: written back as the absolute-path literal it spells to, it denotes the same value.
+    let source = r#"
+        use /std/{Nat, Str, Spell, print};
+        induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
+        satisfy Spell(Tree);
+        let built = Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)));
+        let written: Tree = /Tree/node(/Tree/leaf(1), /Tree/node(/Tree/leaf(2), /Tree/leaf(3)));
+        let _ = print(Spell/spell(built))!;
+        let _ = print("\n")!;
+        print(Spell/spell(written))
+        "#;
+
+    let spelled = "/Tree/node(/Tree/leaf(1), /Tree/node(/Tree/leaf(2), /Tree/leaf(3)))";
+    assert_eq!(run(source), format!("{spelled}\n{spelled}").as_bytes());
+}
+
+#[test]
+fn a_mutual_group_derives_as_one() {
+    let source = r#"
+        use /std/{Nat, Str, Spell, print};
+        induct Tree: pub Type | leaf(Nat) | forest(Forest)
+        and Forest: pub Type | nil() | cons(Tree, Forest)
+        end
+        satisfy Spell(Tree);
+        and Spell(Forest);
+        print(Spell/spell(Tree/forest(Forest/cons(Tree/leaf(1), Forest/nil()))))
+        "#;
+
+    assert_eq!(
+        run(source),
+        b"/Tree/forest(/Forest/cons(/Tree/leaf(1), /Forest/nil()))"
+    );
+}
+
+#[test]
+fn a_struct_spells_as_its_literal() {
+    // Labeled always where the field has a label — the literal grammar reads `x = 1` — and positional for the one unlabeled field of a newtype-like struct.
+    let source = r#"
+        use /std/{Nat, Str, Spell, print};
+        struct Point: pub Type { x: Nat, y: Nat }
+        struct Meters: pub Type { Nat }
+        satisfy Spell(Point);
+        satisfy Spell(Meters);
+        let _ = print(Spell/spell(Point { x = 1, y = 2 }))!;
+        let _ = print("\n")!;
+        print(Spell/spell(Meters { 5 }))
+        "#;
+
+    assert_eq!(run(source), b"/Point { x = 1, y = 2 }\n/Meters { 5 }");
+}
+
+#[test]
+fn a_tuple_payload_spells_as_its_literal() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, Spell, print};
+        induct Pair: pub Type | pair({Nat, Bool}) end
+        satisfy Spell(Pair);
+        print(Spell/spell(Pair/pair((1, true))))
+        "#;
+
+    assert_eq!(run(source), b"/Pair/pair((1, true))");
+}
+
+#[test]
+fn a_proof_payload_spells_as_a_goal() {
+    // Evidence erases and has no literal; the written goal is the one thing that re-parses at a proposition, and a reader fills it in.
+    let source = r#"
+        use /std/{Nat, Str, Eq, Spell, print};
+        induct Certified: pub Type | cert(n: Nat, proof: Eq(n, n)) end
+        satisfy Spell(Certified);
+        print(Spell/spell(Certified/cert(1, Eq/refl())))
+        "#;
+
+    assert_eq!(run(source), b"/Certified/cert(1, ?)");
+}
+
+#[test]
+fn an_indexed_family_spells_each_constructor() {
+    // The implicit index payload is bound by the arm and omitted from the text; each arm is checked at its own target indices as a written match's would be.
+    let source = r#"
+        use /std/{Nat, Str, Spell, print};
+        induct Vec(T: Type): (n: Nat) -> pub Type
+        | nil(): (0)
+        | cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+        end
+        satisfy (@T: Type, @n: Nat, use Spell(T)) => Spell(Vec(T, n));
+        print(Spell/spell(Vec/cons(1, Vec/cons(2, Vec/nil()))))
+        "#;
+
+    assert_eq!(run(source), b"/Vec/cons(1, /Vec/cons(2, /Vec/nil()))");
+}
+
+#[test]
+fn the_stages_show_the_transient_and_its_expansion() {
+    let source = r#"
+        use /std/{Nat, Str, Spell, print};
+        induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
+        satisfy Spell(Tree);
+        print(Spell/spell(Tree/leaf(1)))
+        "#;
+
+    let lowered = core(source);
+    assert!(lowered.contains("derive"), "{lowered}");
+    let elaborated = core_elab(source);
+    assert!(!elaborated.contains("derive"), "{elaborated}");
+    assert!(elaborated.contains("Spell/call"), "{elaborated}");
+}
+
+// --- Refusals, each at the declaration and naming what to write instead. ---
+
+#[test]
+fn an_ineligible_key_is_refused_by_its_shape() {
+    let proposition = r#"
+        use /std/{Str, Spell};
+        induct Holds: pub Prop | yes() end
+        satisfy Spell(Holds);
+        /std/print("")
+        "#;
+    let report = error(proposition);
+    assert!(
+        report.contains("cannot derive '/syn/Spell/Spell' for Holds\n  Holds is a proposition, whose values erase; write the body"),
+        "{report}"
+    );
+
+    let concept = r#"
+        use /std/{Nat, Str, Spell};
+        pub concept Tag(A: Type): pub Type {
+            tag(A) -> Str,
+        }
+        satisfy Spell(Tag(Nat));
+        /std/print("")
+        "#;
+    let report = error(concept);
+    assert!(
+        report.contains("cannot derive '/syn/Spell/Spell' for Tag(Nat)\n  Tag(Nat) is a concept's record; write the body"),
+        "{report}"
+    );
+
+    let type_valued = r#"
+        use /std/{Str, Spell};
+        induct Holder: pub Type | holds(Prop) end
+        satisfy Spell(Holder);
+        /std/print("")
+        "#;
+    let report = error(type_valued);
+    assert!(
+        report.contains("cannot derive '/syn/Spell/Spell' for Holder\n  payload #1 of '/Holder/holds' is a type, which no value spells; write the body"),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_private_representation_refuses_the_derivation_outside_its_module() {
+    let source = r#"
+        use /std/{Nat, Str, Spell};
+        mod Guard
+            use /std/{Nat};
+            pub induct Secret: Type | s(Nat) end
+        end
+        use Guard/{Secret};
+        satisfy Spell(Secret);
+        /std/print("")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("the representation of type '/Guard/Secret' is private"),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
+    let premise = r#"
+        use /std/{Str, Spell};
+        induct Box(A: Type): pub Type | boxed(A) end
+        satisfy (@A: Type) => Spell(Box(A));
+        /std/print("")
+        "#;
+    let report = error(premise);
+    assert!(
+        report.contains("no witness of Spell(A) found\n  needed by '/Box/boxed' for payload #1 — add `use Spell(A)` to the telescope"),
+        "{report}"
+    );
+
+    let unwitnessed = r#"
+        use /std/{Str, Spell};
+        induct Opaque: pub Type | o() end
+        induct Holder: pub Type | holds(inner: Opaque) end
+        satisfy Spell(Holder);
+        /std/print("")
+        "#;
+    // The goal's spelling is the deferred-goal report's, which today renders a nominal type through its recursive-group projection (a written `Spell/spell(i)` reports identically); the derivation's contribution is the provenance line, located at the declaration.
+    let report = error(unwitnessed);
+    assert!(report.contains("no witness of Spell("), "{report}");
+    assert!(
+        report.contains("needed by '/Holder/holds' for payload 'inner'\n"),
+        "{report}"
+    );
+    assert!(report.contains("satisfy Spell(Holder);"), "{report}");
+}
 
 // The renderers spell the two shapes a derived body is built from, pinned as the text a re-parse reads: a derivation's output is only ever their output over spelled pieces. An empty label is the positional field of a newtype-like struct.
 #[test]

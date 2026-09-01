@@ -67,6 +67,22 @@ pub struct ShapeDiagnosis {
 }
 
 /// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's span as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
+/// Why a derivation declined a key. Each is a hard refusal at the `satisfy` span, decided from the declaration's shape before any body is written; a payload whose witness is merely missing is not among them — that reports through [`Error::NoWitness`] under the derivation's own provenance, since a later item may still register it.
+#[derive(Debug)]
+pub enum Underivable {
+    /// Not a registered `induct` or `struct`: an intrinsic carrier, a tuple or function shape, a variable, or a stuck head.
+    NotDeclared,
+    /// A `Prop`-sorted declaration, whose values erase and spell nothing.
+    Proposition,
+    /// A concept's own record type.
+    Concept,
+    /// A payload or field whose type is a sort: it is a type, which no value spells.
+    TypeValued {
+        constructor: String,
+        payload: String,
+    },
+}
+
 #[derive(Debug)]
 pub enum Error {
     ReduceExhausted {
@@ -310,6 +326,12 @@ pub enum Error {
     /// A body-less `satisfy` for a concept the compiler has no derivation for. Derivability is registered per concept, never inferred from its shape.
     NoDerivation {
         concept: String,
+    },
+    /// A body-less `satisfy` whose key the registered derivation cannot write a body for: the shape it excludes, named so the refusal says what to write instead.
+    Underivable {
+        concept: String,
+        key: Box<Term>,
+        reason: Underivable,
     },
     /// A `Derive` transient met anywhere but as a witness body checked against its concept application — unreachable from the surface, where only the witness lowering mints one.
     DeriveOutsideWitness,
@@ -813,6 +835,18 @@ impl Error {
         }
     }
 
+    pub(crate) fn underivable<N: Into<String>, T: Into<Term>>(
+        concept: N,
+        key: T,
+        reason: Underivable,
+    ) -> Self {
+        Self::Underivable {
+            concept: concept.into(),
+            key: Box::new(key.into()),
+            reason,
+        }
+    }
+
     pub(crate) fn derive_outside_witness() -> Self {
         Self::DeriveOutsideWitness
     }
@@ -1269,6 +1303,7 @@ impl Error {
             Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),
             Self::MatchCaseMissing { term, .. } => out.push(term),
             Self::UnboundVariable { term } => out.push(term),
+            Self::Underivable { key, .. } => out.push(key),
             Self::PostponedCheck { expected } => out.push(expected),
             Self::PostponedConversion { this, that, .. } => {
                 out.push(this);

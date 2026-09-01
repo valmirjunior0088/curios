@@ -40,6 +40,11 @@ pub(super) fn elaborate_metavar(
                 let (telescope, spine) = context.identity_snapshot();
                 context.birth_metavar(id, telescope, expected.clone());
 
+                // A metavariable born with witness provenance is a witness goal, attempted the moment it is born — how a term built ahead of elaboration (a derived witness body) supplies a `use` argument under a provenance of its own, where `elaborate_apply` would otherwise name the goal after the applied function.
+                if let MetavarOrigin::Witness(provenance) = &metavar.origin {
+                    attempt_witness_goal(context, id, &expected, provenance.clone(), term)?;
+                }
+
                 let rebuilt = Term::metavar_birthed(id, metavar.origin.clone(), spine);
                 let rebuilt = match term.span() {
                     Some(span) => rebuilt.with_span(span),
