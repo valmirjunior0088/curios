@@ -2,7 +2,7 @@
 //!
 //! Every query matches the closed alphabets without a fallback arm, so a newly added operation cannot be silently misclassified — the compiler rejects the unhandled variant. Behavior reported here is *node-local*: it excludes the bodies of functions an `Apply` invokes, the callback an intrinsic runs, and the sub-blocks a match, switch, or fold evaluates; composing those to a fixed point is the effect summary's job ([`super::Summary`]), and this module supplies the leaves it joins.
 //!
-//! Arity is not restated here — it lives on the operation enums where the verifier already reads it. The fold half of the oracle (operation × constant operands → value / would-trap / unknown) lands with its consumer, partial evaluation.
+//! Arity is not restated here — it lives on the operation enums where the verifier already reads it. The fold half of the oracle — operation × constant operands → value, would-trap, or unknown — is [`Semantics::fold_operation`] and [`Semantics::fold_sequence`] below.
 
 #[cfg(test)]
 mod tests;

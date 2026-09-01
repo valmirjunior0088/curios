@@ -220,7 +220,7 @@ impl ErsdBuilder {
         self.module.set_entry(entry);
     }
 
-    /// Finish construction: reject leftover open blocks and dangling function reservations, then run the module verifier and hand the module over. (An empty function slot is a construction error here; after removal lands with its consumer, the same slot is an ordinary tombstone to the verifier.)
+    /// Finish construction: reject leftover open blocks and dangling function reservations, then run the module verifier and hand the module over. (An empty function slot is a construction error here and an ordinary tombstone to the verifier, which is why the outstanding reservations are tracked in `reserved_functions` rather than read off the arena.)
     pub fn finalize(self) -> Result<Module, VerifyError> {
         if !self.open_blocks.is_empty() {
             return Err(VerifyError(format!(
