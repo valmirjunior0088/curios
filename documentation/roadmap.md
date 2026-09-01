@@ -255,6 +255,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [General division and field laws](roadmap/big-flt-general/04-field-laws-spec.md)
   - [ ] [General rational binary32 boundaries](roadmap/big-flt-general/05-binary32-spec.md)
   - [ ] [Exact decimal parsing and presentation](roadmap/big-flt-general/06-decimal-spec.md)
+- [ ] [The standard library's indispensable tier](roadmap/standard-library-indispensable-tier-spec.md)
 
 ## Tooling & Ecosystem
 
