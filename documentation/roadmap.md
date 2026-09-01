@@ -22,7 +22,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Implicit arguments (`@`-marked binders)
   - [x] Plicity as part of function-type identity, with lambda-binder insertion
 - [x] Instance arguments (`concept` and `satisfy` declarations, deterministic resolution)
-  - [x] `Show`/`Eql`/`Ord`/`Monad` in the standard library
+  - [x] The concept roster (`Add`, `Sub`, `Mul`, `Div`, `Rem`, `And`, `Or`, `Cmp`, `Eql`, `Monad` and `Lift` in `/syn`, `Spell` beside them, and `Show`, `Ord` and `/std/Map`'s `Key` in `/std`)
   - [x] Higher-kinded concepts (`Monad(M : (Type) -> Type)`, via flex-apply imitation)
   - [x] Multi-parameter keying (tuple of every parameter head)
   - [x] `Lift` embeddings (`/syn/Lift(M, N)`; one witness per ordered pair, never chained)
@@ -32,6 +32,10 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through a concept)
   - [x] Tuple witness keys (a witness on `{A, B}` keys on the shape `{_, _}`, labels included)
   - [x] Function witness keys (a witness on `(A) -> B` keys on the plicity vector `(_) -> _`)
+  - [x] [Sealed concept representations](design/language/concept-representations-may-be-sealed.md) (`concept C(A): Type` — witness declarations, dictionary literals and raw projections confined to the declaring subtree)
+  - [x] Concept laws (a field whose type is a proposition about earlier fields, discharged by `satisfy` at the implementations it supplies)
+  - [x] Associated types (a field whose result is a sort — what lets `Div` state each carrier's own division precondition)
+  - [x] Superclass edges (a `use`-prefixed field; `use value` fills a slot in a literal, and an `Ord(A)` witness answers an `Eql(A)` goal by projection)
 - [x] [Derived witnesses](design/language/a-witness-body-may-be-written-by-the-compiler.md) (`satisfy C(T);` — the compiler writes `Spell` and `Eql` bodies from the declaration of the type in the key; `/std`'s structural types derive theirs)
 - [x] Unified `struct` declarations (independent nominal and representation visibility)
 - [x] Inductive types (`induct` declarations)
@@ -79,14 +83,16 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 ## Intrinsic Types
 
 - [x] Intrinsics as orthogonal builtins _(uniform `/sys` builtin declarations)_
+  - [x] `Bool` (conjunction, disjunction, exclusive or, and both equalities)
   - [x] `Nat`
   - [x] `Byte` (i31 scalar; contextual literals `0..=255`; `Byte/to_nat` and `Nat/to_byte`)
   - [x] `Int`
   - [x] `Flt` (bit-preserving binary32 identity, with the full arithmetic and comparison family)
   - [x] Packed `Bits` and `Bytes` (shared immutable windows; O(1) slices and tails)
   - [x] `Flt` specified by a hardware-independent model, stated in this repository
-  - [ ] Width-relative bit operations on `Bits`, where a width exists to relate them to
+  - [ ] [An operation whose meaning needs a width belongs to the carrier that has one](roadmap/bits-width-operations-spec.md) (not refined yet)
   - [x] `List`
+  - [x] `Cell` (a mutable reference cell over any carrier, with `set` and `get`)
 - [x] [Total `/sys` primitives](design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md) — an operation whose reduction could fail states its precondition
   - [x] The bound reaches Core and the kernel re-checks it, for every one of the twelve
 
@@ -120,7 +126,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Full memory and data section support in `curios-wasm` (plural memories, 32- and 64-bit)
 - [x] Full table and element section support in `curios-wasm` (plural tables, every segment mode)
 - [x] `Stage::WasmOptm`: the Binaryen-optimized module observable through `wonder stage`
-- [ ] Self-hosting bootstrap of the language-specific stages _(deferred, unspecified)_
 
 ## Optimizations
 
@@ -146,7 +151,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] A copied body reproduces the definitions nested inside it
 - [x] Moving an application into the function that returns it, so a monadic step stops allocating
 - [x] An idiomatic string walk stops building a suffix and a closure per character
-- [ ] Specializing on a known function argument, so a combinator stops calling through it
+- [ ] [A combinator specialized on a known function argument stops calling through it](roadmap/known-function-specialization-spec.md) (not refined yet)
 - [x] The unfolding discard decides on progress
 - [x] [A reduction step costs what it builds](design/toolchain/a-reduction-step-costs-what-it-builds.md)
 - [x] [A type-level concatenation no longer copies what it joins](soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md)
@@ -199,6 +204,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Complete written-goal batches: one elaboration reports every reached goal, located
 - [x] [Goal suggestions (`? ≈`)](design/toolchain/goal-suggestions-are-depth-one-fits-not-proof-search.md): sandboxed candidate fits, verified to compile
 - [x] Goal suggestions reach what a program has not already mentioned
+- [ ] [A failing program names what failed](roadmap/runtime-failure-legibility-spec.md) (every backend trap is a bare `unreachable`, so an overflow and a bad index are one message; not refined yet)
 
 ## Standard Library
 
@@ -219,11 +225,13 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] JSON codec (`std/Json`)
 - [x] TOML 1.0.0 codec over native `Int` and binary32 `Flt` (`std/Toml`; not fully conforming)
   - [ ] [TOML's numbers are wider than the carriers under them](roadmap/toml-full-conformance-spec.md) (the gap is named; the float carrier is not chosen)
-- [x] Async combinators for `/std/Async`
-  - [x] `map`
-  - [x] concurrent `both`/`race`/`select`
-  - [x] result cell (`Cell`)
-  - [x] `sleep`/`timeout`
+- [x] Structured concurrency in `/std/Async`
+  - [x] `map`, and `sleep`/`timeout`
+  - [x] Concurrent `race`/`select`, and `join_all` over a list of tasks
+  - [x] Fibers (`go`) and tasks (`spawn`/`join`/`cancel`), over `Future`/`await`
+  - [x] Wakers and parking (`park`, `yield_now`), driven by the poll-based run loop (`block_on`/`run`)
+  - [x] Scoped handle ownership (`using`/`acquire`/`release`), released on both exits
+  - [x] Deadlock detection (no runnable job, nothing blocked on a handle, no sleeper — reported rather than hung)
 - [x] Purity through an opaque `Io` monad (three intrinsics: `Io(T)`, `pure`, `bind`)
   - [x] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness)
   - [x] Stage 2: the flip — `/std` retyped and the certifier's purity analysis deleted
@@ -233,11 +241,10 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Machine-checked additive, multiplicative, cancellation and order laws
 - [x] Certified strictly-positive arbitrary-precision naturals (`std/BigPos`)
 - [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/BigPos`)
-- [ ] Dyadic `BigFlt` exact core
+- [ ] Dyadic `BigFlt` sequence
   - [ ] [Canonical representation, exact operations, comparison, and witnesses](roadmap/big-flt-dyadic/01-core-spec.md)
   - [ ] [Exact binary32 conversion and correctly rounded output](roadmap/big-flt-dyadic/02-binary32-spec.md)
-- [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big-flt-dyadic/03-big-int-laws-spec.md)
-- [ ] Dyadic `BigFlt` proof and quotient-boundary completion
+  - [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big-flt-dyadic/03-big-int-laws-spec.md)
   - [ ] [Algebra and order theorem corpus](roadmap/big-flt-dyadic/04-laws-spec.md)
   - [ ] [Correctly rounded exact quotient conversion to binary32](roadmap/big-flt-dyadic/05-ratio-narrowing-spec.md)
   - [ ] [Binary32 round-trip and correct-rounding proofs](roadmap/big-flt-dyadic/06-boundary-proofs-spec.md)
@@ -251,31 +258,29 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 ## Tooling & Ecosystem
 
-- [x] CLI (`run` and `compile` subcommands; `compile` bundles a native executable)
+- [x] CLI (`run`, `compile`, `test`, `curate`, `new`, `format` and `wonder`; `compile` bundles a native executable, and a profiling build adds `profile`)
 - [x] Staged IR debugging (`wonder stage <name>`, one pipeline rung reprinted to stdout)
 - [x] Built-in tracing-based profiling harness (`cargo x profile`, per-span aggregation)
-- [x] CI pipeline (fmt/check/clippy/test)
+- [x] CI pipeline (formatting, compilation, lints, tests and doctests, documentation under `-Dwarnings`, the browser bundle, and the grammar parser)
 - [x] Multi-platform release automation (Linux and macOS binaries, via tag-triggered releases)
 - [x] Browser playground
   - [x] Run harness owned by `curios-js` (`compile`/`run`, with wire codes from `curios-abi`)
 - [x] Documentation
-  - [x] Syntax overview, examples, and tutorial
+  - [x] Syntax overview and examples
   - [x] Full language reference
+  - [ ] [The Curios Book](roadmap/the-curios-book-spec.md) (nothing teaches the language in sequence, and the proof half has no material at all; not refined yet)
 - [x] Benchmarks
   - [x] Internal benchmarks
-  - [x] Cross-language benchmarks (a Docker harness against seven other languages)
+  - [x] Cross-language benchmarks (a Docker harness against six other languages in seven columns, Rust compiled both natively and to WebAssembly)
 - [ ] Developer tooling
   - [x] `curios wonder` — questions answered by the compilation, over a CLI and a language server
   - [x] Editor support — a tree-sitter grammar, and Zed and VS Code extensions on `wonder server`
   - [x] Code formatter (`curios format`, in-place with `--check`; verified by reparse)
-  - [ ] Terminal REPL
   - [x] Package manager (exactly pinned dependencies, a content-addressed store, and a unit cache)
   - [x] [Payload reuse](soundness/admission-without-judgment/reused-payloads.md) (an unchanged target re-executes without recompiling)
   - [x] Project manifest & discovery (identity declared once; scope reached through artifacts)
-  - [ ] Project reconciliation: what a project declares and does not use, and what nothing names
   - [x] `curios new` scaffolding (a package named after its directory, with both halves written)
   - [x] One-line installer (`install.sh`, versioned by its URL and checksum-verified)
-  - [ ] Linter
   - [x] [Test runner](design/toolchain/a-test-is-a-declared-description-run-by-a-synthesized-tail.md) (`test name() = body;` declarations run by `curios test`, listed by `wonder tests`)
   - [x] [Property-based testing](design/language/a-parameterized-test-is-a-property.md) (`test name(params) = body;` probed over drawn arguments by `curios test`, a failure spelling its counterexample)
-  - [ ] Documentation generator
+  - [ ] [A package's documentation is generated from the compilation that builds it](roadmap/documentation-generator-spec.md) (not refined yet)
