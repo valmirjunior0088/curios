@@ -1,12 +1,12 @@
 //! The interpreter's runtime value domain and the reasons an evaluation bails.
 //!
-//! A [`Value`] is the compile-time result of running a closed computation — internal to the evaluator, never stored in the module — so it carries the shapes the constant alphabet deliberately omits: `Rc`-shared list, product, and constructor aggregates, and a closure over a module function with its resolved local captures. Reification ([`super::reify`]) turns a value back into arena statements.
+//! A [`Value`] is the compile-time result of running a closed computation — internal to the evaluator, never stored in the module — so it carries the shapes the constant alphabet deliberately omits: `Rc`-shared product and constructor aggregates, a list as a [`ListWindow`] over shared elements, and a closure over a module function with its resolved local captures. Reification ([`super::reify`]) turns a value back into arena statements.
 
 use {
     crate::{Constant, ConstructorId, FunctionId, Module, ProductId, ValueId},
     curios_num::Floating,
     curios_utilities::{Grain, PackedBin},
-    std::{cell::RefCell, rc::Rc},
+    std::{cell::RefCell, ops::Deref, rc::Rc},
 };
 
 /// A compile-time runtime value. Aggregates are `Rc`-shared so an environment clones freely; a closure names its module function and carries its resolved local captures.
@@ -21,7 +21,7 @@ pub(super) enum Value {
     Flt(Floating),
     Handle(u32),
     Bin(Grain, Rc<PackedBin>),
-    List(Rc<Vec<Value>>),
+    List(ListWindow),
     /// A product value, in the schema's field order.
     Product(ProductId, Rc<Vec<Value>>),
     /// A variant value: its constructor and payload, in payload order.
@@ -33,6 +33,45 @@ pub(super) enum Value {
 pub(super) struct Closure {
     pub(super) function: FunctionId,
     pub(super) env: RefCell<Vec<(ValueId, Value)>>,
+}
+
+/// An immutable window over shared list elements — the list mirror of [`PackedBin`], so a suffix or a slice is a start and a length over the same allocation rather than a copy of the elements.
+///
+/// This is the runtime's own shape, not an evaluator convenience: `ListRest` and `ListSlice` are windows over one rope, and the peel the interpreter performs has to cost what the door's `emit_peel` costs, or a walk the program takes in linear time is taken here in quadratic. Before this, a suffix was rebuilt element by element at every step.
+#[derive(Clone)]
+pub(super) struct ListWindow {
+    items: Rc<[Value]>,
+    start: usize,
+    len: usize,
+}
+
+impl ListWindow {
+    /// A window over all of `items`.
+    pub(super) fn new(items: Vec<Value>) -> Self {
+        let len = items.len();
+        Self {
+            items: Rc::from(items),
+            start: 0,
+            len,
+        }
+    }
+
+    /// The `len`-long window at `start` within this one, or `None` when it runs past the end — the bounds a slice traps on.
+    pub(super) fn window(&self, start: usize, len: usize) -> Option<Self> {
+        (start <= self.len && len <= self.len - start).then(|| Self {
+            items: Rc::clone(&self.items),
+            start: self.start + start,
+            len,
+        })
+    }
+}
+
+impl Deref for ListWindow {
+    type Target = [Value];
+
+    fn deref(&self) -> &[Value] {
+        &self.items[self.start..self.start + self.len]
+    }
 }
 
 impl Value {

@@ -1,4 +1,8 @@
-use {super::evaluate_closed_terms, crate::*};
+use {
+    super::evaluate_closed_terms,
+    crate::*,
+    curios_utilities::{Grain, PackedBin},
+};
 
 /// `make(x) = (y) => x + y`, bound as an item.
 ///
@@ -248,4 +252,208 @@ fn a_knots_function_still_folds_within_its_initializer() {
         1,
         "one copy of the method, bound in the initializer:\n{module}"
     );
+}
+
+/// The item `apply f(argument)`, where `f` is a one-parameter function whose body `body` builds around the parameter — the candidate whose folded constant a sequence test reads back.
+fn sequence_candidate(
+    builder: &mut ErsdBuilder,
+    argument: Atom,
+    body: impl FnOnce(&mut ErsdBuilder, ValueId) -> ValueId,
+) -> ValueId {
+    let function = builder.reserve_function();
+    let parameter = builder.value(Some("s".into()));
+    builder.open_block();
+    let result = body(builder, parameter);
+    let block = builder.seal_block(Terminator::Return(Atom::Value(result)));
+    builder.define_function(function, Some("f".into()), vec![parameter], block);
+    builder.item_functions(vec![function]);
+    builder.item_value(
+        Some("r".into()),
+        Rhs::Apply {
+            callee: Atom::Function(function),
+            arguments: vec![argument],
+        },
+    )
+}
+
+/// Finish the fixture with an entry returning zero, fold it, and read the constant `value` was folded to.
+fn folded(mut builder: ErsdBuilder, value: ValueId) -> Constant {
+    let zero = builder.constant(Constant::Nat(0));
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+    builder.set_entry(entry);
+    let mut module = builder.finalize().expect("the fixture verifies");
+
+    assert!(
+        evaluate_closed_terms(&mut module),
+        "the candidate folds:\n{module}"
+    );
+    module.verify().expect("the folded module verifies");
+
+    let constant = module
+        .statements()
+        .iter()
+        .flatten()
+        .find_map(|statement| match statement {
+            Statement::Let {
+                result,
+                rhs: Rhs::Alias(Atom::Constant(constant)),
+            } if *result == value => Some(*constant),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("the candidate folded to a constant:\n{module}"));
+    module.constant(constant).expect("live constant").clone()
+}
+
+/// `uncons s | x[] => 0 | x[_, ..t] => BinLen(t)` over `x[1, 2, 3]`: the cons arm is handed the two bytes after the head, the suffix the runtime's peel hands it.
+#[test]
+fn a_peel_hands_the_cons_arm_the_suffix_after_the_element() {
+    let mut builder = ErsdBuilder::new();
+    let bytes = builder.constant(Constant::Bin(
+        Grain::X,
+        PackedBin::from_bytes(vec![1, 2, 3]),
+    ));
+    let zero = builder.constant(Constant::Nat(0));
+
+    let candidate = sequence_candidate(&mut builder, Atom::Constant(bytes), |builder, s| {
+        builder.open_block();
+        let empty = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+        let element = builder.value(Some("h".into()));
+        let suffix = builder.value(Some("t".into()));
+        builder.open_block();
+        let length = builder.let_value(
+            None,
+            Rhs::Sequence {
+                operation: SequenceOp::BinLen(Grain::X),
+                operands: vec![Atom::Value(suffix)],
+            },
+        );
+        let block = builder.seal_block(Terminator::Return(Atom::Value(length)));
+        builder.let_value(
+            None,
+            Rhs::UnconsSequence {
+                grain: SequenceGrain::Bin(Grain::X),
+                scrutinee: Atom::Value(s),
+                empty,
+                cons: UnconsSequenceStep {
+                    element,
+                    suffix,
+                    block,
+                },
+            },
+        )
+    });
+
+    assert_eq!(folded(builder, candidate), Constant::Nat(2));
+}
+
+/// `uncons s | [] => 0 | [_, ..t] => ListGet(ListSlice(t, 1, 1), 0)` over `[10, 20, 30]`: a slice of the suffix indexes from the suffix's own start, not the list's, so the answer is the third element.
+#[test]
+fn a_list_suffix_is_a_window_whose_slices_index_from_its_own_start() {
+    let mut builder = ErsdBuilder::new();
+    let operands = Vec::from(
+        [10, 20, 30].map(|element| Atom::Constant(builder.constant(Constant::Nat(element)))),
+    );
+    let list = builder.item_value(
+        Some("l".into()),
+        Rhs::Sequence {
+            operation: SequenceOp::ListBuild,
+            operands,
+        },
+    );
+    let zero = builder.constant(Constant::Nat(0));
+    let one = builder.constant(Constant::Nat(1));
+
+    let candidate = sequence_candidate(&mut builder, Atom::Value(list), |builder, s| {
+        builder.open_block();
+        let empty = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+        let element = builder.value(Some("h".into()));
+        let suffix = builder.value(Some("t".into()));
+        builder.open_block();
+        let slice = builder.let_value(
+            None,
+            Rhs::Sequence {
+                operation: SequenceOp::ListSlice,
+                operands: vec![
+                    Atom::Value(suffix),
+                    Atom::Constant(one),
+                    Atom::Constant(one),
+                ],
+            },
+        );
+        let picked = builder.let_value(
+            None,
+            Rhs::Sequence {
+                operation: SequenceOp::ListGet,
+                operands: vec![Atom::Value(slice), Atom::Constant(zero)],
+            },
+        );
+        let block = builder.seal_block(Terminator::Return(Atom::Value(picked)));
+        builder.let_value(
+            None,
+            Rhs::UnconsSequence {
+                grain: SequenceGrain::List,
+                scrutinee: Atom::Value(s),
+                empty,
+                cons: UnconsSequenceStep {
+                    element,
+                    suffix,
+                    block,
+                },
+            },
+        )
+    });
+
+    assert_eq!(folded(builder, candidate), Constant::Nat(30));
+}
+
+/// `fold s | x[] => 0 | x[_, ..t]; acc => BinLen(t) + acc` over `x[1, 2, 3]`: the last element sees the empty suffix and each earlier one the suffix after it, so the suffix lengths sum to three.
+#[test]
+fn a_fold_step_sees_the_suffix_after_its_element() {
+    let mut builder = ErsdBuilder::new();
+    let bytes = builder.constant(Constant::Bin(
+        Grain::X,
+        PackedBin::from_bytes(vec![1, 2, 3]),
+    ));
+    let zero = builder.constant(Constant::Nat(0));
+
+    let candidate = sequence_candidate(&mut builder, Atom::Constant(bytes), |builder, s| {
+        builder.open_block();
+        let empty = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+        let element = builder.value(Some("h".into()));
+        let suffix = builder.value(Some("t".into()));
+        let accumulator = builder.value(Some("acc".into()));
+        builder.open_block();
+        let length = builder.let_value(
+            None,
+            Rhs::Sequence {
+                operation: SequenceOp::BinLen(Grain::X),
+                operands: vec![Atom::Value(suffix)],
+            },
+        );
+        let sum = builder.let_value(
+            None,
+            Rhs::Operation {
+                operation: Operation::NatAdd,
+                operands: vec![Atom::Value(length), Atom::Value(accumulator)],
+            },
+        );
+        let block = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+        builder.let_value(
+            None,
+            Rhs::FoldSequence {
+                grain: SequenceGrain::Bin(Grain::X),
+                scrutinee: Atom::Value(s),
+                empty,
+                step: FoldSequenceStep {
+                    element,
+                    suffix,
+                    accumulator,
+                    block,
+                },
+            },
+        )
+    });
+
+    assert_eq!(folded(builder, candidate), Constant::Nat(3));
 }

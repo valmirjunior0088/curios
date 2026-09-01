@@ -7,14 +7,14 @@
 use {
     super::{
         budget::Budget,
-        value::{Bail, Closure, Value},
+        value::{Bail, Closure, ListWindow, Value},
     },
     crate::{
         Atom, BlockId, Constant, FoldNatStep, FoldOutcome, FoldSequenceStep, ForeignId, FreeValues,
         FunctionId, Intrinsic, Module, Operation, Rhs, Semantics, SequenceGrain, SequenceOp,
         Statement, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
-    curios_utilities::{Grain, PackedBin},
+    curios_utilities::Grain,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -547,8 +547,8 @@ impl<'m> Evaluator<'m> {
             Ok(sequence) => sequence,
             Err(bail) => return Outcome::Bail(bail),
         };
-        let elements = match fold_elements(grain, &sequence) {
-            Ok(elements) => elements,
+        let length = match sequence_length(grain, &sequence) {
+            Ok(length) => length,
             Err(bail) => return Outcome::Bail(bail),
         };
         let mut accumulator = match self.value_of_block(empty, frame) {
@@ -556,12 +556,15 @@ impl<'m> Evaluator<'m> {
             Err(bail) => return Outcome::Bail(bail),
         };
         // A right fold in erasure order: the last element folds first, seeing the empty suffix; each earlier element sees the suffix after it.
-        for cut in (0..elements.len()).rev() {
+        for cut in (0..length).rev() {
             if let Err(bail) = self.budget.charge() {
                 return Outcome::Bail(bail);
             }
-            let element = elements[cut].clone();
-            let suffix = suffix_view(grain, &elements[cut + 1..]);
+            let (element, suffix) = match peel(grain, &sequence, cut) {
+                Ok(Some(peeled)) => peeled,
+                Ok(None) => unreachable!("a cut below the length peels an element"),
+                Err(bail) => return Outcome::Bail(bail),
+            };
             let mark = frame.mark();
             frame.push(step.element, element);
             frame.push(step.suffix, suffix);
@@ -576,7 +579,7 @@ impl<'m> Evaluator<'m> {
         Outcome::Done(accumulator)
     }
 
-    /// One peel, evaluated: the empty block on an empty sequence, else the cons block over the head and the suffix after it. The non-looping sibling of [`Evaluator::eval_fold_sequence`], sharing its element view and its suffix view so the two cannot disagree about what a peel exposes.
+    /// One peel, evaluated: the empty block on an empty sequence, else the cons block over the head and the suffix after it. The non-looping sibling of [`Evaluator::eval_fold_sequence`], sharing [`peel`] so the two cannot disagree about what a peel exposes.
     fn eval_uncons_sequence(
         &mut self,
         grain: SequenceGrain,
@@ -589,12 +592,12 @@ impl<'m> Evaluator<'m> {
             Ok(sequence) => sequence,
             Err(bail) => return Outcome::Bail(bail),
         };
-        let elements = match fold_elements(grain, &sequence) {
-            Ok(elements) => elements,
+        let peeled = match peel(grain, &sequence, 0) {
+            Ok(peeled) => peeled,
             Err(bail) => return Outcome::Bail(bail),
         };
 
-        let Some((element, rest)) = elements.split_first() else {
+        let Some((element, suffix)) = peeled else {
             return match self.value_of_block(empty, frame) {
                 Ok(held) => Outcome::Done(held),
                 Err(bail) => Outcome::Bail(bail),
@@ -606,8 +609,8 @@ impl<'m> Evaluator<'m> {
         }
 
         let mark = frame.mark();
-        frame.push(cons.element, element.clone());
-        frame.push(cons.suffix, suffix_view(grain, rest));
+        frame.push(cons.element, element);
+        frame.push(cons.suffix, suffix);
         let result = self.value_of_block(cons.block, frame);
         frame.restore(mark);
 
@@ -643,7 +646,7 @@ impl<'m> Evaluator<'m> {
                 Outcome::Bail(bail) => return Outcome::Bail(bail),
             }
         }
-        Outcome::Done(Value::List(Rc::new(mapped)))
+        Outcome::Done(Value::List(ListWindow::new(mapped)))
     }
 
     fn eval_operands(&mut self, atoms: &[Atom], frame: &mut Frame) -> Result<Vec<Value>, Bail> {
@@ -675,24 +678,47 @@ fn leaves(values: &[Value]) -> Option<Vec<Constant>> {
     values.iter().map(Value::as_constant).collect()
 }
 
-/// The elements of a sequence value as the fold binds them: a list's own elements, or a packed binary's grains — byte grain as `Byte`, bit grain as `Bool`.
-fn fold_elements(grain: SequenceGrain, sequence: &Value) -> Result<Vec<Value>, Bail> {
+/// The element count of a sequence value at `grain`.
+fn sequence_length(grain: SequenceGrain, sequence: &Value) -> Result<usize, Bail> {
     match (grain, sequence) {
-        (SequenceGrain::List, Value::List(elements)) => Ok(elements.as_ref().clone()),
+        (SequenceGrain::List, Value::List(elements)) => Ok(elements.len()),
+        (SequenceGrain::Bin(expected), Value::Bin(found, packed)) if *found == expected => {
+            Ok(packed.len(expected))
+        }
+        _ => Err(Bail::Unsupported),
+    }
+}
+
+/// One peel of a sequence at `at`: the element there and the suffix after it, or `None` at the end. A byte grain peels a `Byte`, a bit grain a `Bool`.
+///
+/// Read off the original value the way the door's `Emitter::emit_peel` reads it at runtime — the element by index and the suffix as a window sharing the allocation — so a peel costs the same whether three elements or a hundred thousand follow it. Measured before this existed: a recursive byte walk over a 6 000-byte literal rebuilt every suffix element by element, and its 256 levels allocated some 25 GB per evaluation round.
+fn peel(grain: SequenceGrain, sequence: &Value, at: usize) -> Result<Option<(Value, Value)>, Bail> {
+    match (grain, sequence) {
+        (SequenceGrain::List, Value::List(elements)) => {
+            let Some(element) = elements.get(at) else {
+                return Ok(None);
+            };
+            let suffix = elements
+                .window(at + 1, elements.len() - at - 1)
+                .expect("the suffix after an element is within its list");
+            Ok(Some((element.clone(), Value::List(suffix))))
+        }
         (SequenceGrain::Bin(expected), Value::Bin(found, packed)) if *found == expected => {
             let length = packed.len(expected);
-            let mut elements = Vec::with_capacity(length);
-            for index in 0..length {
-                let element = match expected {
-                    Grain::X => packed.byte(index).map(Value::Byte),
-                    Grain::B => packed.bit(index).map(Value::Bool),
-                };
-                match element {
-                    Some(value) => elements.push(value),
-                    None => return Err(Bail::Unsupported),
-                }
+            if at >= length {
+                return Ok(None);
             }
-            Ok(elements)
+            let element = match expected {
+                Grain::X => packed.byte(at).map(Value::Byte),
+                Grain::B => packed.bit(at).map(Value::Bool),
+            };
+            let suffix = packed.slice(expected, at + 1, length);
+            match (element, suffix) {
+                (Some(element), Some(suffix)) => {
+                    Ok(Some((element, Value::Bin(expected, Rc::new(suffix)))))
+                }
+                _ => Err(Bail::Unsupported),
+            }
         }
         _ => Err(Bail::Unsupported),
     }
@@ -709,61 +735,34 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
         _ => Err(Bail::Unsupported),
     };
     match operation {
-        ListBuild => Ok(Value::List(Rc::new(operands.to_vec()))),
+        ListBuild => Ok(Value::List(ListWindow::new(operands.to_vec()))),
         ListLen => Ok(Value::Nat(list(0)?.len() as u32)),
         ListGet => match list(0)?.get(index(1)?) {
             Some(element) => Ok(element.clone()),
             None => Err(Bail::Trap),
         },
         // A window is `(start, length)`, so there is no reversed range left to reject — only one that runs past the end.
-        ListSlice => {
-            let elements = list(0)?;
-            let (start, count) = (index(1)?, index(2)?);
-            match start
-                .checked_add(count)
-                .filter(|end| *end <= elements.len())
-            {
-                Some(end) => Ok(Value::List(Rc::new(elements[start..end].to_vec()))),
-                None => Err(Bail::Trap),
-            }
-        }
+        ListSlice => match list(0)?.window(index(1)?, index(2)?) {
+            Some(window) => Ok(Value::List(window)),
+            None => Err(Bail::Trap),
+        },
         ListAppend => {
-            let mut elements = list(0)?.as_ref().clone();
+            let mut elements = list(0)?.to_vec();
             match operands.get(1) {
                 Some(element) => elements.push(element.clone()),
                 None => return Err(Bail::Arity),
             }
-            Ok(Value::List(Rc::new(elements)))
+            Ok(Value::List(ListWindow::new(elements)))
         }
         ListConcat => {
             let mut elements = Vec::new();
             for position in 0..operands.len() {
                 elements.extend(list(position)?.iter().cloned());
             }
-            Ok(Value::List(Rc::new(elements)))
+            Ok(Value::List(ListWindow::new(elements)))
         }
         BinLen(_) | BinGet(_) | BinSlice(_) | BinAppend(_) | BinConcat(_) | BinEql(_) => {
             unreachable!("packed-binary operations fold through the semantic contract")
-        }
-    }
-}
-
-/// The suffix a fold's step binder sees: the remaining list, or the remaining grains rebuilt into a binary.
-fn suffix_view(grain: SequenceGrain, remainder: &[Value]) -> Value {
-    match grain {
-        SequenceGrain::List => Value::List(Rc::new(remainder.to_vec())),
-        SequenceGrain::Bin(grain) => {
-            let mut packed = PackedBin::from_bytes(Vec::new());
-            for value in remainder {
-                packed = match (grain, value) {
-                    (Grain::X, Value::Byte(byte)) => packed
-                        .append_byte(*byte)
-                        .expect("a byte-built binary stays byte-aligned"),
-                    (Grain::B, Value::Bool(bit)) => packed.append_bit(*bit),
-                    _ => unreachable!("fold elements match their sequence grain"),
-                };
-            }
-            Value::Bin(grain, Rc::new(packed))
         }
     }
 }
