@@ -79,12 +79,12 @@ satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Ordered(Result(A
 }
 
 satisfy (@A: Type, @E: Type, use Draw(A), use Draw(E)) => Draw(Result(A, E)) {
-    all =
+    all() =
         Option/bind(
-            Draw/all(@A),
+            Draw/all(@A)(),
             (xs) =>
                 Option/map(
-                    Draw/all(@E),
+                    Draw/all(@E)(),
                     (es) =>
                         [
                             ..List/map(es, (e) => Result/failure(e)),

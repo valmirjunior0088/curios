@@ -128,7 +128,7 @@ satisfy Ordered(Nat) {
 
 -- A number in `0 ..= size`: the size is the bound, so the first cases are the smallest numbers.
 satisfy Draw(Nat) {
-    all = Option/none(),
+    all() = Option/none(),
     draw(seed, size) =
         let (n, rest) = Seed/next(seed);
         (n % (size + 1), rest),

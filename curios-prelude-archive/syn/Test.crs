@@ -159,7 +159,7 @@ let judge(t: Test) -> Verdict =
 
 satisfy Property(Test) {
     probe(t, seed, size) = judge(t),
-    extent = Option/some(1),
+    extent() = Option/some(1),
     exhaust(t) = [judge(t)],
 }
 

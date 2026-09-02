@@ -438,24 +438,24 @@ satisfy (
 
 -- A tuple is drawn by drawing each field in turn, threading the seed left to right.
 satisfy Draw({}) {
-    all = Option/some([()]),
+    all() = Option/some([()]),
     draw(seed, size) = ((), seed),
 }
 
 satisfy (@A: Type, use Draw(A)) => Draw({A}) {
-    all = Option/map(Draw/all(@A), (xs) => List/map(xs, (a) => (a,))),
+    all() = Option/map(Draw/all(@A)(), (xs) => List/map(xs, (a) => (a,))),
     draw(seed, size) =
         let (a, rest) = Draw/draw(@A, seed, size);
         ((a,), rest),
 }
 
 satisfy (@A: Type, @B: Type, use Draw(A), use Draw(B)) => Draw({A, B}) {
-    all =
+    all() =
         Option/bind(
-            Draw/all(@A),
+            Draw/all(@A)(),
             (xs) =>
                 Option/map(
-                    Draw/all(@B),
+                    Draw/all(@B)(),
                     (ys) => List/concat_map(xs, (a) => List/map(ys, (b) => (a, b))))),
     draw(seed, size) =
         let (a, after) = Draw/draw(@A, seed, size);
@@ -464,15 +464,15 @@ satisfy (@A: Type, @B: Type, use Draw(A), use Draw(B)) => Draw({A, B}) {
 }
 
 satisfy (@A: Type, @B: Type, @C: Type, use Draw(A), use Draw(B), use Draw(C)) => Draw({A, B, C}) {
-    all =
+    all() =
         Option/bind(
-            Draw/all(@A),
+            Draw/all(@A)(),
             (xs) =>
                 Option/bind(
-                    Draw/all(@B),
+                    Draw/all(@B)(),
                     (ys) =>
                         Option/map(
-                            Draw/all(@C),
+                            Draw/all(@C)(),
                             (zs) =>
                                 List/concat_map(
                                     xs,

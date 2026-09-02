@@ -56,8 +56,15 @@ satisfy Ordered(Byte) {
 }
 
 -- `n % 256` is known to the reducer by its remainder bound, so `of_nat`'s precondition decides definitionally.
+-- Every byte in order, by a plain recursion rather than a `List/map` over a lambda: this witness is a global the prelude keeps for every program, so its body must allocate no closure.
+let every_byte(count: Nat, next: Nat) -> List(Byte) =
+    match count
+    | 0 => []
+    | more + 1 => [of_nat(next % 256), ..every_byte(more, next + 1)]
+    end;
+
 satisfy Draw(Byte) {
-    all = Option/some(List/map(List/range(0, 256), (n) => of_nat(n % 256))),
+    all() = Option/some(every_byte(256, 0)),
     draw(seed, size) =
         let (n, rest) = Seed/next(seed);
         (of_nat(n % 256), rest),

@@ -240,7 +240,7 @@ let elements(@A: Type, use Draw(A), seed: Seed, size: Nat, count: Nat) -> {List(
 
 -- At most `size` elements, each drawn at the same size.
 satisfy (@A: Type, use Draw(A)) => Draw(List(A)) {
-    all = Option/none(),
+    all() = Option/none(),
     draw(seed, size) =
         let (count, after) = Draw/draw(@Nat, seed, size);
         elements(after, size, count),

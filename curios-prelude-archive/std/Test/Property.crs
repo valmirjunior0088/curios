@@ -4,13 +4,13 @@ use /std/Test/{Seed, Draw, Verdict};
 
 pub concept Property(A: Type): pub Type {
     probe(A, Seed, Nat) -> Verdict,
-    extent: Option(Nat),
+    extent() -> Option(Nat),
     exhaust(A) -> List(Verdict),
 }
 
 -- A claim whose extent fits the case budget is decided by every case it has, in roster order; any other is probed `cases` times from a seed split once per case, the case's index as its size. The first failure ends the run either way.
 pub let run(@A: Type, use Property(A), prop: A, seed: Seed, cases: Nat) -> Verdict =
-    match Property/extent(@A)
+    match Property/extent(@A)()
     | some(extent) =>
         match extent <= cases
         | true => first_failure(Property/exhaust(prop))
@@ -51,7 +51,7 @@ let bounded(n: Nat) -> Option(Nat) =
 
 -- The roster's size, `none` when the type has no roster or its size is past the ceiling.
 let roster(@A: Type, use Draw(A)) -> Option(Nat) =
-    Option/bind(Draw/all(@A), (xs) => bounded(List/len(xs)));
+    Option/bind(Draw/all(@A)(), (xs) => bounded(List/len(xs)));
 
 let product(a: Option(Nat), b: Option(Nat)) -> Option(Nat) =
     Option/bind(
@@ -64,7 +64,7 @@ let product(a: Option(Nat), b: Option(Nat)) -> Option(Nat) =
 
 -- Every value of the roster, or nothing when there is none: what `exhaust` walks, and consulted only under an extent that fits.
 let values(@A: Type, use Draw(A)) -> List(A) =
-    Option/unwrap_or(Draw/all(@A), []);
+    Option/unwrap_or(Draw/all(@A)(), []);
 
 -- A failure names the case that produced it: the arguments, spelled in parameter order, before the inner report.
 let counterexample(arguments: List(Str), verdict: Verdict) -> Verdict =
@@ -79,7 +79,7 @@ satisfy (@A: Type, @R: Type, use Draw(A), use Spell(A), use Property(R)) => Prop
     probe(prop, seed, size) =
         let (a, rest) = Draw/draw(@A, seed, size);
         counterexample([Spell/spell(a)], Property/probe(prop(a), rest, size)),
-    extent = product(roster(@A), Property/extent(@R)),
+    extent() = product(roster(@A), Property/extent(@R)()),
     exhaust(prop) =
         List/concat_map(
             values(@A),
@@ -102,7 +102,7 @@ satisfy (
         let (a, s1) = Draw/draw(@A, seed, size);
         let (b, rest) = Draw/draw(@B, s1, size);
         counterexample([Spell/spell(a), Spell/spell(b)], Property/probe(prop(a, b), rest, size)),
-    extent = product(roster(@A), product(roster(@B), Property/extent(@R))),
+    extent() = product(roster(@A), product(roster(@B), Property/extent(@R)())),
     exhaust(prop) =
         List/concat_map(
             values(@A),
@@ -134,7 +134,7 @@ satisfy (
         counterexample(
             [Spell/spell(a), Spell/spell(b), Spell/spell(c)],
             Property/probe(prop(a, b, c), rest, size)),
-    extent = product(roster(@A), product(roster(@B), product(roster(@C), Property/extent(@R)))),
+    extent() = product(roster(@A), product(roster(@B), product(roster(@C), Property/extent(@R)()))),
     exhaust(prop) =
         List/concat_map(
             values(@A),
@@ -176,10 +176,10 @@ satisfy (
         counterexample(
             [Spell/spell(a), Spell/spell(b), Spell/spell(c), Spell/spell(d)],
             Property/probe(prop(a, b, c, d), rest, size)),
-    extent =
+    extent() =
         product(
             roster(@A),
-            product(roster(@B), product(roster(@C), product(roster(@D), Property/extent(@R))))),
+            product(roster(@B), product(roster(@C), product(roster(@D), Property/extent(@R)())))),
     exhaust(prop) =
         List/concat_map(
             values(@A),
@@ -232,14 +232,14 @@ satisfy (
         counterexample(
             [Spell/spell(a), Spell/spell(b), Spell/spell(c), Spell/spell(d), Spell/spell(e)],
             Property/probe(prop(a, b, c, d, e), rest, size)),
-    extent =
+    extent() =
         product(
             roster(@A),
             product(
                 roster(@B),
                 product(
                     roster(@C),
-                    product(roster(@D), product(roster(@E), Property/extent(@R)))))),
+                    product(roster(@D), product(roster(@E), Property/extent(@R)()))))),
     exhaust(prop) =
         List/concat_map(
             values(@A),
@@ -306,7 +306,7 @@ satisfy (
                 Spell/spell(e),
                 Spell/spell(f)],
             Property/probe(prop(a, b, c, d, e, f), rest, size)),
-    extent =
+    extent() =
         product(
             roster(@A),
             product(
@@ -315,7 +315,7 @@ satisfy (
                     roster(@C),
                     product(
                         roster(@D),
-                        product(roster(@E), product(roster(@F), Property/extent(@R))))))),
+                        product(roster(@E), product(roster(@F), Property/extent(@R)())))))),
     exhaust(prop) =
         List/concat_map(
             values(@A),
@@ -392,7 +392,7 @@ satisfy (
                 Spell/spell(f),
                 Spell/spell(g)],
             Property/probe(prop(a, b, c, d, e, f, g), rest, size)),
-    extent =
+    extent() =
         product(
             roster(@A),
             product(
@@ -403,7 +403,7 @@ satisfy (
                         roster(@D),
                         product(
                             roster(@E),
-                            product(roster(@F), product(roster(@G), Property/extent(@R)))))))),
+                            product(roster(@F), product(roster(@G), Property/extent(@R)()))))))),
     exhaust(prop) =
         List/concat_map(
             values(@A),
@@ -489,7 +489,7 @@ satisfy (
                 Spell/spell(g),
                 Spell/spell(h)],
             Property/probe(prop(a, b, c, d, e, f, g, h), rest, size)),
-    extent =
+    extent() =
         product(
             roster(@A),
             product(
@@ -504,7 +504,7 @@ satisfy (
                                 roster(@F),
                                 product(
                                     roster(@G),
-                                    product(roster(@H), Property/extent(@R))))))))),
+                                    product(roster(@H), Property/extent(@R)())))))))),
     exhaust(prop) =
         List/concat_map(
             values(@A),

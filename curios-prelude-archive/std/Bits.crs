@@ -46,7 +46,7 @@ let bits(seed: Seed, count: Nat) -> {Bits, Seed} =
     end;
 
 satisfy Draw(Bits) {
-    all = Option/none(),
+    all() = Option/none(),
     draw(seed, size) =
         let (count, after) = Draw/draw(@Nat, seed, size);
         bits(after, count),
