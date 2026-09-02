@@ -1,4 +1,4 @@
-//! The process surface: argv, environment, exit, and children run through `/std/proc`'s `Command`.
+//! The process surface: argv, environment and exit through `/std/proc`, and children started through `/std/Command` and reaped through `/std/Child`.
 
 use {
     crate::tests::{run, run_text},
@@ -137,18 +137,21 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
     assert!(io.output().is_empty());
 }
 
-/// A program computing one `Str` under `Async/block_on`, with the `proc` names in scope.
+/// A program computing one `Str` inside a `Try` region over `Async`, with the process names in scope; a failure that escapes the region prints as its name.
 fn child_program(body: &str) -> String {
     format!(
         r#"
-        use /std/{{Str, Bytes, Nat, Option, Result, Show, Async, Io, Handle, proc}};
+        use /std/{{Str, Bytes, Nat, Option, Result, Show, Try, Async, Io, Path, Command, Child}};
         let text(b: Bytes) -> Str = Option/unwrap_or(Str/of_bytes(b), "?");
-        let program: Async(Str) =
+        let program: Try(Async, Io/Error, Str) =
             {body};
-        match Async/block_on(program)!
-        | failure(_) => /std/print("deadlock")
-        | success(s) => /std/print(s)
-        end
+        let fiber: Async({{}}) =
+            let r = Try/run(program)!;
+            match r
+            | failure(e) => /std/print(Show/show(e))
+            | success(s) => /std/print(s)
+            end;
+        Async/run(fiber)
         "#
     )
 }
@@ -158,12 +161,8 @@ fn child_program(body: &str) -> String {
 fn run_captures_both_outputs_and_the_exit() {
     let source = child_program(
         r#"
-            let r = proc/run(proc/Command/new("greet", ["world"]))!;
-            Async/pure(
-                match r
-                | success(out) => Str/flatten([text(out.stdout), "|", text(out.stderr), "|", Show/show(out.exit)])
-                | failure(e) => Show/show(e)
-                end)
+            let out = Command/run(Command/new("greet", ["world"]))!;
+            Try/pure(Str/flatten([text(out.stdout), "|", text(out.stderr), "|", Show/show(out.exit)]))
         "#,
     );
 
@@ -178,16 +177,15 @@ fn run_captures_both_outputs_and_the_exit() {
     );
 }
 
-// `status` inherits every stream and reports how the child ended; a signal shows as `signaled`, and a program the host cannot find is `not_found`, as an unknown path is to `open`.
+// `status` wires every stream as the command says and reports how the child ended; a signal shows as `signaled`, and a program the host cannot find is `not_found` at its own `run`, as an unknown path is to `open`.
 #[test]
 fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
     let source = child_program(
         r#"
-            let crashed = proc/status(proc/Command/new("crash", []))!;
-            let missing = proc/status(proc/Command { ..proc/Command/new("missing", []), cwd = Option/some("/tmp") })!;
-            let show(r: Result(Io/Error, proc/Exit)) -> Str =
-                match r | success(e) => Show/show(e) | failure(e) => Show/show(e) end;
-            Async/pure(Str/join(" ", [show(crashed), show(missing)]))
+            let crashed = Command/status(Command/new("crash", []))!;
+            let missing = Try/run(Command/status(Command { ..Command/new("missing", []), cwd = Option/some(Path/of_str("/tmp")) }))!;
+            let shown = match missing | success(e) => Show/show(e) | failure(e) => Show/show(e) end;
+            Try/pure(Str/join(" ", [Show/show(crashed), shown]))
         "#,
     );
 
@@ -198,20 +196,19 @@ fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
     assert_eq!(io.output(), b"signaled(9) not_found");
 }
 
-// The child is acquired with `kill` as its finalizer, so a task cancelled while its child runs kills it: the mock records the program name when `kill` reaches it.
+// A child spawned inside `Child/with` is killed when the task around it is cancelled: the mock records the program name when `kill` reaches it.
 #[test]
 fn a_cancelled_task_kills_the_child_it_spawned() {
     let source = child_program(
         r#"
-            let body: Async({}) =
-                let started = proc/spawn(proc/Command/new("sleepy", []))!;
-                let _ = Async/sleep(/std/time/Duration/of(60, 0))!;
-                Async/pure(());
-            let task = Async/spawn(body)!;
+            let body: Try(Async, Io/Error, {}) =
+                let child = Command/spawn(Command/new("sleepy", []))!;
+                Child/with(child, Async/sleep(/std/time/Duration/of(60, 0)));
+            let task = Async/spawn(Try/run(body))!;
             let _ = Async/yield_now!;
-            let _ = Async/lift(Async/cancel(task))!;
+            let _ = Async/cancel(task)!;
             let _ = Async/yield_now!;
-            Async/pure("cancelled")
+            Try/pure("cancelled")
         "#,
     );
 
@@ -221,4 +218,29 @@ fn a_cancelled_task_kills_the_child_it_spawned() {
     run_text(&source, system).expect("expected result");
     assert_eq!(io.output(), b"cancelled");
     assert_eq!(io.kills(), vec![b"sleepy".to_vec()]);
+}
+
+// A child's pipes are streams: `spawn` with piped output hands back a `Child/Pipe` that `stream/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
+#[test]
+fn a_piped_output_is_read_through_the_stream_witness() {
+    let source = child_program(
+        r#"
+            let child = Command/spawn(Command { ..Command/new("greet", []), stdout = Command/Stdio/piped() })!;
+            let read =
+                match Child/stdout(child)
+                | some(p) => /std/stream/read_all(p)
+                | none() => Async/pure(Result/success(x[]))
+                end;
+            let out = read!;
+            let bytes = out!;
+            let exit = Child/wait(child)!;
+            Try/pure(Str/flatten([text(bytes), "|", Show/show(exit)]))
+        "#,
+    );
+
+    let (system, io) = MockHost::builder()
+        .children([("greet", "hello\n", "", 0, 0)])
+        .build();
+    run_text(&source, system).expect("expected result");
+    assert_eq!(io.output(), b"hello\n|exited(0)");
 }

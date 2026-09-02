@@ -1,0 +1,19 @@
+-- How a child ended: with an exit code, or by the signal that ended it.
+use /std/{Nat, Str, Equal, Show};
+
+pub induct Exit: pub Type
+| exited(Nat)
+| signaled(Nat)
+end
+
+pub use Exit/*;
+
+satisfy Equal(Exit);
+
+satisfy Show(Exit) {
+    show(e) =
+        match e
+        | exited(code) => Str/flatten(["exited(", Nat/to_str(code), ")"])
+        | signaled(signal) => Str/flatten(["signaled(", Nat/to_str(signal), ")"])
+        end,
+}

@@ -1,0 +1,96 @@
+-- A program to run, and the ways to run it. `new(program, args)` inherits everything, and the rest — a working directory, environment overrides laid over the inherited environment, and each stream's wiring — is a struct update. `spawn` starts the child synchronously, since the host answers the row at once, and hands back a `Child` whose life is its own; `run` and `status` are the brackets over one inside a fiber, where a task that ends kills what it started.
+use /std/{Bytes, Nat, Str, List, Option, Result, Path, Handle, Try, Io, Async, Child, stream};
+
+pub mod Stdio;
+pub use Stdio/{let Stdio};
+
+pub struct Command: pub Type {
+    program: Str,
+    args: List(Str),
+    cwd: Option(Path),
+    env: List({Str, Str}),
+    stdin: Stdio,
+    stdout: Stdio,
+    stderr: Stdio,
+}
+
+pub let new(program: Str, args: List(Str)) -> Command =
+    Command {
+        program = program,
+        args = args,
+        cwd = Option/none(),
+        env = [],
+        stdin = Stdio/inherit(),
+        stdout = Stdio/inherit(),
+        stderr = Stdio/inherit(),
+    };
+
+let stdio_of(s: Stdio) -> Nat =
+    match s
+    | inherit() => /sys/stdio_mode/inherit
+    | piped() => /sys/stdio_mode/pipe
+    | null() => /sys/stdio_mode/null
+    end;
+
+-- `NAME=VALUE`, which is `execve`'s own shape for an environment entry.
+let env_entry(entry: {Str, Str}) -> Bytes =
+    x[..Str/to_bytes(entry.0), '=', ..Str/to_bytes(entry.1)];
+
+-- A piped stream is fetched from the child by its `stdio` index, filed non-blocking by the host. An unpiped stream has no handle to keep, so the row is not asked.
+let pipe(child: Handle, which: Nat, mode: Stdio) -> Try(Io, Io/Error, Option(Handle)) =
+    match mode
+    | piped() =>
+        let s = /sys/proc/stream(child, which)!;
+        match Io/Error/error_of(s.status)
+        | some(e) => Try/raise(e)
+        | none() => Try/pure(Option/some(s.handle))
+        end
+    | _ => Try/pure(Option/none())
+    end;
+
+-- Start `cmd`. Nothing guards the child here: `Child/with` is the bracket that kills it when the task around it ends, and `run` and `status` are written over that bracket.
+pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
+    let r =
+        /sys/proc/spawn(
+            [Str/to_bytes(cmd.program), ..List/map(cmd.args, Str/to_bytes)],
+            match cmd.cwd | some(p) => Path/to_bytes(p) | none() => x[] end,
+            List/map(cmd.env, env_entry),
+            stdio_of(cmd.stdin),
+            stdio_of(cmd.stdout),
+            stdio_of(cmd.stderr))!;
+    match Io/Error/error_of(r.status)
+    | some(e) => Try/raise(e)
+    | none() =>
+        let stdin = pipe(r.child, 0, cmd.stdin)!;
+        let stdout = pipe(r.child, 1, cmd.stdout)!;
+        let stderr = pipe(r.child, 2, cmd.stderr)!;
+        Try/pure(Child/new(r.child, stdin, stdout, stderr))
+    end;
+
+let drain(p: Option(Child/Pipe)) -> Async(Result(Io/Error, Bytes)) =
+    match p | some(p) => stream/read_all(p) | none() => Async/pure(Result/success(x[])) end;
+
+-- Both outputs to their end, each drained in a task of its own and both joined before the child is waited for: draining one to its end while the other fills is the deadlock every process library documents, and `select` would cancel whichever drain finished second.
+let capture(
+    child: Child,
+) -> Try(Async, Io/Error, {exit: Child/Exit, stdout: Bytes, stderr: Bytes}) =
+    let out = Async/spawn(drain(Child/stdout(child)))!;
+    let err = Async/spawn(drain(Child/stderr(child)))!;
+    let o = Async/join(out)!;
+    let e = Async/join(err)!;
+    let stdout = o!;
+    let stderr = e!;
+    let exit = Child/wait(child)!;
+    Try/pure((exit = exit, stdout = stdout, stderr = stderr));
+
+-- Run `cmd` to its end with both outputs captured and how it ended.
+pub let run(
+    cmd: Command,
+) -> Try(Async, Io/Error, {exit: Child/Exit, stdout: Bytes, stderr: Bytes}) =
+    let child = spawn(Command { ..cmd, stdout = Stdio/piped(), stderr = Stdio/piped() })!;
+    Child/with(child, capture(child));
+
+-- Run `cmd` with every stream as `cmd` wires it and report how it ended.
+pub let status(cmd: Command) -> Try(Async, Io/Error, Child/Exit) =
+    let child = spawn(cmd)!;
+    Child/with(child, Child/wait(child));

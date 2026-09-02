@@ -1,0 +1,81 @@
+-- A running child: its handle, which becomes readable when it exits, and whichever of its streams were piped, each a `Pipe` that reads and writes like any other stream. The representation is this module's; `new` is the seam `Command/spawn` builds one through, as `tcp/Socket/new` is for an accepted handle. `wait` reaps the child, `kill` ends it, and `with` is the bracket that ties its life to a task's.
+use /std/{Handle, Option, Try, Async, Io, stream};
+
+pub mod Exit;
+pub use Exit/{let Exit};
+
+-- One end of a pipe to the child, filed non-blocking by the host, so a fiber reads and writes it through the stream concepts and parks when it has to.
+pub struct Pipe: Type {
+    Handle,
+}
+
+satisfy stream/Read(Pipe) {
+    read(p, n) = Async/raw/read(p.0, n),
+}
+
+satisfy stream/Write(Pipe) {
+    write(p, b) = Async/raw/write(p.0, b),
+}
+
+pub struct Child: Type {
+    handle: Handle,
+    stdin: Option(Pipe),
+    stdout: Option(Pipe),
+    stderr: Option(Pipe),
+}
+
+pub let new(
+    handle: Handle,
+    stdin: Option(Handle),
+    stdout: Option(Handle),
+    stderr: Option(Handle),
+) -> Child =
+    Child {
+        handle = handle,
+        stdin = Option/map(stdin, (h) => Pipe { h }),
+        stdout = Option/map(stdout, (h) => Pipe { h }),
+        stderr = Option/map(stderr, (h) => Pipe { h }),
+    };
+
+pub let stdin(c: Child) -> Option(Pipe) =
+    c.stdin;
+
+pub let stdout(c: Child) -> Option(Pipe) =
+    c.stdout;
+
+pub let stderr(c: Child) -> Option(Pipe) =
+    c.stderr;
+
+let close_pipe(p: Option(Pipe)) -> Io({}) =
+    match p | some(p) => /sys/Handle/close(p.0) | none() => Io/pure(()) end;
+
+let close_pipes(c: Child) -> Io({}) =
+    let _ = close_pipe(c.stdin)!;
+    let _ = close_pipe(c.stdout)!;
+    close_pipe(c.stderr);
+
+-- End the child if it still runs, and close its pipes. The statuses are dropped: a child already reaped answers not found, and nothing minds. This is the finalizer `with` registers.
+pub let kill(c: Child) -> Io({}) =
+    let _ = /sys/proc/kill(c.handle)!;
+    close_pipes(c);
+
+-- Wait for the child to end. Its handle becomes readable when it does, so the fiber parks on it and reaps at once. The pipes are closed with the child, so read what it wrote before waiting for it — `Command/run` drains both outputs first for that reason.
+pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
+    let _ = Async/wait(c.handle, /sys/event/read)!;
+    let r = /sys/proc/wait(c.handle)!;
+    let _ = close_pipes(c)!;
+    match Io/Error/error_of(r.status)
+    | some(e) => Try/raise(e)
+    | none() =>
+        Try/pure(
+            match r.signal == 0
+            | true => Exit/exited(r.code)
+            | false => Exit/signaled(r.signal)
+            end)
+    end;
+
+-- `body` under the child's guard, registered with the scheduler: however the task ends — done, failed or cancelled — `kill` runs, so a child never outlives the bracket it was started in. `Async` releases what a task acquired on both exits, and a child outliving the task that spawned it is the one thing that rule cannot mean.
+pub let with(@A: Type, c: Child, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
+    let outcome = Async/using(c.handle, kill(c), Try/run(body))!;
+    let a = outcome!;
+    Try/pure(a);

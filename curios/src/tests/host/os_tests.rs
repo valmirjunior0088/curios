@@ -9,19 +9,21 @@ fn run_drains_a_real_child_through_the_scheduler() {
     let path = report.to_str().expect("a UTF-8 temporary path");
     let source = format!(
         r#"
-        use /std/{{Str, Bytes, Option, Result, Show, Try, Async, Io, Path, File, proc}};
+        use /std/{{Str, Bytes, Option, Result, Show, Try, Async, Io, Path, File, Command}};
         let text(b: Bytes) -> Str = Option/unwrap_or(Str/of_bytes(b), "?");
-        let program: Async({{}}) =
-            let e = proc/run(proc/Command/new("/bin/echo", ["hi"]))!;
-            let c = proc/run(proc/Command {{ ..proc/Command/new("/bin/cat", []), stdin = proc/Stdio/null() }})!;
-            let first = match e | success(out) => Str/flatten([text(out.stdout), ":", Show/show(out.exit)]) | failure(err) => Show/show(err) end;
-            let second = match c | success(out) => Str/flatten([text(out.stdout), ":", Show/show(out.exit)]) | failure(err) => Show/show(err) end;
-            let _ = Try/run(File/write_all(Path/of_str("{path}"), Str/to_bytes(Str/flatten([first, "|", second]))))!;
-            Async/pure(());
-        match Async/block_on(program)!
-        | failure(_) => /std/print("deadlock")
-        | success(_) => Io/pure(())
-        end
+        let program: Try(Async, Io/Error, {{}}) =
+            let e = Command/run(Command/new("/bin/echo", ["hi"]))!;
+            let c = Command/run(Command {{ ..Command/new("/bin/cat", []), stdin = Command/Stdio/null() }})!;
+            let first = Str/flatten([text(e.stdout), ":", Show/show(e.exit)]);
+            let second = Str/flatten([text(c.stdout), ":", Show/show(c.exit)]);
+            File/write_all(Path/of_str("{path}"), Str/to_bytes(Str/flatten([first, "|", second])));
+        let fiber: Async({{}}) =
+            let r = Try/run(program)!;
+            match r
+            | failure(e) => /std/print(Show/show(e))
+            | success(_) => Io/pure(())
+            end;
+        Async/run(fiber)
         "#
     );
 
