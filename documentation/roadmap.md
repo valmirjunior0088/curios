@@ -187,6 +187,9 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Never-reused fd handle tokens (monotonic mint counter, use-after-close hardening)
 - [x] Clock & randomness
 - [x] Process IO
+- [x] Terminal raw mode and window size (`/sys/tty`, wrapped by `std/tty` with a restoring bracket; the native host restores the terminal when it is dropped)
+- [x] Filesystem (`stat`, listing, making, moving and removing over `Bytes` paths, wrapped by `std/fs`; the browser denies every row)
+- [x] Subprocesses (`spawn`, `wait` and `kill`, a child reaped on a thread that signals a polled pipe, wrapped by `std/proc`'s `Command`, `run` and `status`)
 
 ## Host Interface (FFI)
 
@@ -236,7 +239,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness)
   - [x] Stage 2: the flip — `/std` retyped and the certifier's purity analysis deleted
 - [x] HTTP client (`std/http`, built on `tcp` + `Async`)
-- [x] Host-service modules (`std/time`, `std/proc`, `std/rand`)
+- [x] Host-service modules (`std/time`, `std/proc`, `std/rand`, `std/fs`, `std/tty`)
 - [ ] [Command-line interfaces (`/std/Cli`)](roadmap/command-line-interface-spec.md) (nothing above `/std/proc/args` exists, so an executable walks its `List(Bytes)` by hand as `/syn/Test/main` does)
 - [ ] [A terminal program draws a screen and reads keys (`/std/Tui`)](roadmap/terminal-ui-spec.md)
 - [ ] [A program talks to a serial device (`/std/Serial`)](roadmap/serial-port-spec.md) (one host row and one module; written as if the indispensable tier's runtime prerequisites had landed)
@@ -258,7 +261,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [General division and field laws](roadmap/big-flt-general/04-field-laws-spec.md)
   - [ ] [General rational binary32 boundaries](roadmap/big-flt-general/05-binary32-spec.md)
   - [ ] [Exact decimal parsing and presentation](roadmap/big-flt-general/06-decimal-spec.md)
-- [ ] [The standard library's indispensable tier](roadmap/standard-library-indispensable-tier-spec.md)
+- [x] The standard library's indispensable tier — what every one of nine surveyed peers ships: `Str` decomposition; `Option`, `Result` and `Vec` accessors under decided bounds; `Cmp` and `Ord` on strings, bytes, booleans and the containers; `List`'s structural predicates and searches, builders, `traverse` and a stable sort; `Nat`'s `pow`, `gcd`, `lcm`, `log2` and `sqrt` with course-of-values induction as `Nat/Lt/strong`; `std/Set` over `Map` with `Map`'s rewriting functions; `std/WellFounded` for proofs; and the host half under IO
+  - [ ] The certified sort, `Key(Nat)` and the reducer law it waits on, and the `Ord`-keyed tree, each deferred to a consumer
 
 ## Tooling & Ecosystem
 
