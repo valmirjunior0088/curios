@@ -18,7 +18,7 @@ fn accumulation_loops_are_linear_by_construction() {
     // The design this follows from is `documentation/design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md`.
     assert_eq!(
         run(r#"
-        use /std/{Handle, Bytes, Nat, Str};
+        use /std/{Handle, Bytes, Nat, Str, Io};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
@@ -26,8 +26,8 @@ fn accumulation_loops_are_linear_by_construction() {
             end;
         let built = go(25000, x[]);
         let head = Bytes/slice(built, 0, 10);
-        let _ = Handle/write(Handle/stdout, head)!;
-        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))!;
+        let _ = Io/write(Io/stdout, head)!;
+        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))!;
         /std/Io/pure(())
         "#),
         b"0123456789250000"
@@ -59,7 +59,7 @@ fn peel_loops_are_linear_by_construction() {
                 end
             end;
         let total = drain(Bytes/len(built) + 1, 0)!;
-        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(total)))!;
+        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(total)))!;
         /std/Io/pure(())
         "#),
         b"450000"
@@ -183,15 +183,15 @@ fn a_nan_default_on_a_runtime_option_converges() {
 #[test]
 fn arena_pure_computation_hugs_a_host_effect() {
     let source = r#"
-        use /std/{Handle, Nat, Str};
+        use /std/{Handle, Nat, Str, Io};
         let triangle(n : Nat) -> Nat =
             match n : (_) => Nat
             | 0 => 0
             | p + 1; ih => n + ih
             end;
-        let before = Handle/write(Handle/stdout, Str/to_bytes("a"))!;
+        let before = Io/write(Io/stdout, Str/to_bytes("a"))!;
         let pure = triangle(100);
-        let after = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(pure)))!;
+        let after = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(pure)))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"a10000".to_vec());
@@ -210,7 +210,7 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
     let program = |depth: u32| {
         format!(
             r#"
-        use /std/{{Handle, Nat, Str, Bytes}};
+        use /std/{{Handle, Nat, Str, Bytes, Io}};
         let count(b : Bytes) -> Nat =
             match b : (_) => Nat
             | x[] => 0
@@ -221,7 +221,7 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
             | 0 => acc
             | p + 1; ih => build(p, x[0x61, ..acc])
             end;
-        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(count(build({depth}, x[])))))!;
+        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(count(build({depth}, x[])))))!;
         /std/Io/pure(())
         "#
         )

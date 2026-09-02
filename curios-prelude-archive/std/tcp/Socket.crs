@@ -1,4 +1,4 @@
-use /std/{Bytes, Str, Nat, Bool, Handle, Result, Async, Io};
+use /std/{Bytes, Str, Nat, Bool, Handle, Result, Async, Io, stream};
 use /std/tcp/{Settings, resolve};
 
 pub struct Socket: Type {
@@ -9,11 +9,11 @@ pub struct Socket: Type {
 pub let new(h: Handle) -> Socket =
     Socket { h };
 
-pub let read(c: Socket, n: Nat) -> Async(Handle/Read) =
-    Async/read(c.0, n);
+pub let read(c: Socket, n: Nat) -> Async(stream/Chunk) =
+    Async/raw/read(c.0, n);
 
 pub let write(c: Socket, b: Bytes) -> Async(Result(Io/Error, {})) =
-    Async/write(c.0, b);
+    Async/raw/write(c.0, b);
 
 let upgrade(h: Handle, host: Str, tls: Bool) -> Io(Nat) =
     match tls

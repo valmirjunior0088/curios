@@ -359,7 +359,7 @@ fn boxed_field_read_measurements() {
 /// families holding a family-typed field: 8
 ///   free: 5 families, 5 slots typed at no width cost
 ///   paid: 3 families, 4 slots typed for 4 slots of width
-///   /std/Handle/Read             2 slots -> 3 slots, 0 typed -> 1 typed   PAID
+///   /std/stream/Chunk             2 slots -> 3 slots, 0 typed -> 1 typed   PAID
 ///   /std/Vec/Vec                 4 slots -> 4 slots, 1 typed -> 2 typed   FREE
 ///   /std/Map/Node                4 slots -> 6 slots, 1 typed -> 3 typed   PAID
 ///   /std/Toml/build/Act          2 slots -> 2 slots, 0 typed -> 1 typed   FREE

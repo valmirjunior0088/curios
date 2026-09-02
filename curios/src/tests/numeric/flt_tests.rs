@@ -8,7 +8,7 @@ use crate::tests::run;
 #[test]
 fn codec_round_trips_on_runtime_values() {
     let source = r#"
-        use /std/{Handle, Str, Nat, Flt, Bytes, Option, List, Bool};
+        use /std/{Handle, Str, Nat, Flt, Bytes, Option, List, Bool, Io};
         let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
         let check(x : Flt) -> Str =
             let back = Option/unwrap_or(Flt/of_str(Flt/to_str(x)), Flt/nan);
@@ -30,7 +30,7 @@ fn codec_round_trips_on_runtime_values() {
 #[test]
 fn flt_to_le_bytes_prints_raw_bytes() {
     let source = r#"
-        let _ = std/Handle/write(std/Handle/stdout, std/Flt/to_le_bytes(+1.5))!;
+        let _ = std/Io/write(std/Io/stdout, std/Flt/to_le_bytes(+1.5))!;
         /std/Io/pure(())
         "#;
 
@@ -41,7 +41,7 @@ fn flt_to_le_bytes_prints_raw_bytes() {
 fn flt_of_le_bytes_roundtrips_raw_bytes() {
     // Full-pipeline inverse of `to_le_bytes`: assemble the float back from its four little-endian bytes, then re-serialize. The program is closed, so this also exercises the type-level and optimizer folds of `of_le_bytes`.
     let source = r#"
-        let _ = std/Handle/write(std/Handle/stdout, std/Flt/to_le_bytes(std/Flt/of_le_bytes(std/Flt/to_le_bytes(+1.5))))!;
+        let _ = std/Io/write(std/Io/stdout, std/Flt/to_le_bytes(std/Flt/of_le_bytes(std/Flt/to_le_bytes(+1.5))))!;
         /std/Io/pure(())
         "#;
 
@@ -56,7 +56,7 @@ fn narrowings_answer_their_partiality_with_an_option() {
     //
     // `-0.0` is the case that pins which equality this follows. IEEE says `-0.0 >= +0.0`, so it converts to `0` rather than being rejected as negative — correct, since `i32.trunc_f32_u` does not trap on it — even though `Flt`'s own identity is bitwise and holds the two zeros apart.
     let source = r#"
-        use /std/{Handle, Str, Nat, Int, Flt, Option, List};
+        use /std/{Handle, Str, Nat, Int, Flt, Option, List, Io};
         let n(o : Option(Nat)) -> Str = Nat/to_str(Option/unwrap_or(o, 9));
         let i(o : Option(Int)) -> Str = Nat/to_str(Int/abs(Option/unwrap_or(o, +9)));
         /std/print(Str/join("|", [

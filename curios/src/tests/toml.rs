@@ -512,7 +512,7 @@ fn program() -> String {
         .join("\n        ");
     format!(
         r##"
-        use /std/{{Handle, Str, Toml, Result, List, Map, Option, Byte, Bytes, Char, Nat, Flt, Bool, rand}};
+        use /std/{{Handle, Str, Toml, Result, List, Map, Option, Byte, Bytes, Char, Nat, Flt, Bool, rand, Io}};
         use /std/Toml/{{flt}};
         let taint = Bytes/len(rand/bytes(0)!);
         let opaque_n(n : Nat) -> Nat = (taint + 1) * n;
@@ -568,7 +568,7 @@ fn program() -> String {
                 | none() => "missing"
                 end
             end;
-        let line = match Handle/read(Handle/stdin, 16)! : (_) => Bytes
+        let line = match Io/read(Io/stdin, 16)! : (_) => Bytes
             | chunk(b) => b
             | eof() => x[]
             | error(_) => x[]
@@ -633,7 +633,7 @@ fn every_document_prints_what_its_table_expects() {
 #[test]
 fn encode_rejects_a_non_utf8_key() {
     let source = r#"
-        use /std/{Handle, Str, Toml, Result, Map, Nat, Bytes, rand};
+        use /std/{Handle, Str, Toml, Result, Map, Nat, Bytes, rand, Io};
         let taint = Bytes/len(rand/bytes(0)!);
         let opaque = Nat/to_int(taint + 1);
         let outcome : Str =
@@ -650,7 +650,7 @@ fn encode_rejects_a_non_utf8_key() {
 #[test]
 fn parse_eof_accepts_only_end_of_input() {
     let source = r#"
-        use /std/{Handle, Str, Bytes, Nat, Byte, Result, Parse, rand};
+        use /std/{Handle, Str, Bytes, Nat, Byte, Result, Parse, rand, Io};
         let doc : Parse(Byte) =
             let b = Parse/any_byte!;
             let _ = Parse/eof!;

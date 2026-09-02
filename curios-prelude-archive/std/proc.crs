@@ -136,6 +136,6 @@ pub let status(cmd: Command) -> Async(Result(Io/Error, Exit)) =
 
 let drain(h: Option(Handle)) -> Async(Result(Io/Error, Bytes)) =
     match h
-    | some(h) => Async/drain((n) => Async/read(h, n))
+    | some(h) => Async/drain((n) => Async/raw/read(h, n))
     | none() => Async/pure(Result/success(x[]))
     end;

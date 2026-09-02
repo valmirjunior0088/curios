@@ -1,4 +1,4 @@
-use /std/{Handle, Bytes, Nat, Int, Bool, List, Option, Result, Cell, Monad, Lift, Io, True};
+use /std/{Handle, Bytes, Nat, Int, Bool, List, Option, Result, Cell, Monad, Lift, Io, True, stream};
 use /std/time/{Duration};
 
 -- Both are scheduler plumbing: their operations exist so this module and its descendants can drive a fiber, not so a program can complete someone else's future. The modules stay private and only the two type names are re-exported, which leaves `Future/fulfill` and friends reachable within `/std/Async` alone.
@@ -7,6 +7,9 @@ pub use Waker/{let Waker};
 
 mod Future;
 pub use Future/{let Future};
+
+-- The would-block loops over a raw handle, public so a stream type's witness reaches them from its own module.
+pub mod raw;
 
 struct Token: Type {
     Cell(Bool),
@@ -102,68 +105,8 @@ pub let go(body: Fiber) -> Async({}) =
     let c = Cell/new(false)!;
     fork_with(body, Token { c });
 
--- The host never waits on a peer: a handle a peer decides on is non-blocking from the moment it is minted, so a read that cannot progress answers `would_block` and the fiber parks on the handle until `poll` reports it readable.
-pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
-    let go() -> Async(Handle/Read) =
-        let r = /sys/Handle/read(h, n)!;
-        match r.status == /sys/status/would_block
-        | true =>
-            let _ = wait(h, /sys/event/read)!;
-            go()
-        | false =>
-            match Io/Error/error_of(r.status)
-            | some(e) => pure(Handle/Read/error(e))
-            | none() =>
-                match r.status == /sys/status/eof
-                | true => pure(Handle/Read/eof())
-                | false => pure(Handle/Read/chunk(r.bytes))
-                end
-            end
-        end;
-    go();
-
-pub let write(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
-    let go(rest: Bytes) -> Async(Result(Io/Error, {})) =
-        let r = /sys/Handle/write(h, rest)!;
-        match r.status == /sys/status/would_block
-        | true =>
-            let _ = wait(h, /sys/event/write)!;
-            go(rest)
-        | false =>
-            match Io/Error/error_of(r.status)
-            | some(e) => pure(Result/failure(e))
-            | none() =>
-                match r.written < Bytes/len(rest)
-                | true =>
-                    let _ = wait(h, /sys/event/write)!;
-                    go(
-                        Bytes/drop(
-                            rest,
-                            r.written,
-                            @Nat/Lt/le_of_lt(r.written, Bytes/len(rest), True/qed())))
-                | false => pure(Result/success(()))
-                end
-            end
-        end;
-    go(b);
-
-pub let accept(l: Handle) -> Async(Result(Io/Error, Handle)) =
-    let go() -> Async(Result(Io/Error, Handle)) =
-        let r = /sys/socket/accept(l)!;
-        match r.status == /sys/status/would_block
-        | true =>
-            let _ = wait(l, /sys/event/read)!;
-            go()
-        | false =>
-            match Io/Error/error_of(r.status)
-            | some(e) => pure(Result/failure(e))
-            | none() => pure(Result/success(r.handle))
-            end
-        end;
-    go();
-
 -- `eof` is the stream's orderly terminator; an `error` means it ended without one, so the accumulated prefix is not the content and is dropped rather than passed off as complete.
-pub let drain(read: (Nat) -> Async(Handle/Read)) -> Async(Result(Io/Error, Bytes)) =
+pub let drain(read: (Nat) -> Async(stream/Chunk)) -> Async(Result(Io/Error, Bytes)) =
     let go(acc: Bytes) -> Async(Result(Io/Error, Bytes)) =
         let r = read(4096)!;
         match r

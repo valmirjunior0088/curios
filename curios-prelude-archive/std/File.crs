@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Str, Handle, Result, Async, Io};
+use /std/{Bytes, Nat, Str, Handle, Result, Async, Io, stream};
 
 pub struct File: Type {
     Handle,
@@ -17,11 +17,11 @@ pub let of_mode(mode: Mode) -> Nat =
     | append() => /sys/open_mode/append
     end;
 
-pub let read(f: File, n: Nat) -> Async(Handle/Read) =
-    Async/read(f.0, n);
+pub let read(f: File, n: Nat) -> Async(stream/Chunk) =
+    Async/raw/read(f.0, n);
 
 pub let write(f: File, b: Bytes) -> Async(Result(Io/Error, {})) =
-    Async/write(f.0, b);
+    Async/raw/write(f.0, b);
 
 pub let open(path: Str, mode: Mode) -> Async(Result(Io/Error, File)) =
     let r = /sys/file/open(Str/to_bytes(path), of_mode(mode))!;

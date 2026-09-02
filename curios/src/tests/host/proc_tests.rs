@@ -12,7 +12,7 @@ fn args_indexes_the_argv_snapshot() {
     // argv crosses as a host-built `List(Bytes)`; indexing it round-trips one entry.
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     run_text(r#"
-let _ = std/Handle/write(std/Handle/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/proc/args!, 1), x[]))!;
+let _ = std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/proc/args!, 1), x[]))!;
 /std/Io/pure(())
 "#,
         system,
@@ -29,8 +29,8 @@ fn env_found_unwraps_to_some() {
         r#"
         use /std/{Io};
         match /std/proc/env("HOME")! : (_) => Io({})
-        | some(v) => let _ = std/Handle/write(std/Handle/stdout, v)!; /std/Io/pure(())
-        | none() => let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("missing"))!; /std/Io/pure(())
+        | some(v) => let _ = std/Io/write(std/Io/stdout, v)!; /std/Io/pure(())
+        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("missing"))!; /std/Io/pure(())
         end
         "#,
         system,
@@ -46,8 +46,8 @@ fn env_absent_is_none() {
         run(r#"
         use /std/{Io};
         match /std/proc/env("NOPE")! : (_) => Io({})
-        | some(v) => let _ = std/Handle/write(std/Handle/stdout, v)!; /std/Io/pure(())
-        | none() => let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("missing"))!; /std/Io/pure(())
+        | some(v) => let _ = std/Io/write(std/Io/stdout, v)!; /std/Io/pure(())
+        | none() => let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("missing"))!; /std/Io/pure(())
         end
         "#),
         b"missing"
@@ -59,7 +59,7 @@ fn exit_halts_with_code() {
     // exit traps: it surfaces its code *and* the trailing write never runs.
     let entrypoint = r#"
         let _ = /std/proc/exit(7)!;
-        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("unreachable"))!;
+        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))!;
         /std/Io/pure(())
         "#
     .parse::<Entrypoint>()
@@ -90,7 +90,7 @@ fn exit_in_local_binding_halts() {
             let dead = /std/proc/exit(3)!;
             Io/pure(n);
         let v = go(1)!;
-        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(v)))!;
+        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(v)))!;
         /std/Io/pure(())
         "#
     .parse::<Entrypoint>()

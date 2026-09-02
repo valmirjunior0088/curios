@@ -12,7 +12,7 @@ fn nullary_closure_survives_erasure_and_codegen() {
     // A nullary closure stored in an inductive field and called indirectly via a `call_ref` — the erasure+codegen path that needed `clsr_arities`. Zero-arity closures survive it, which is what lets the suspension/continuation thunks drop their dummy unit argument (`() -> T` rather than `({}) -> T`). The suspension now carries a *description* rather than performing on the way through: `force` walks the `later` closure to the `now` payload, and the write happens where that payload is forced, so the output still proves the closure was reached and called.
     assert_eq!(
         run(r#"
-        use /std/{Handle, Str};
+        use /std/{Handle, Str, Io};
         induct Susp(A : Type) : Type
         | now(A)
         | later(() -> Susp(A))
@@ -46,7 +46,7 @@ fn end_to_end() {
             | left(_) => +42
             | right(_) => +7
             end;
-        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(score(pair))))!;
+        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(score(pair))))!;
         /std/Io/pure(())
         "#;
 
@@ -57,7 +57,7 @@ fn end_to_end() {
 #[test]
 fn local_binders_shadow_module_bindings_without_leaking() {
     let source = r#"
-        use /std/{Nat, Handle, Str};
+        use /std/{Nat, Handle, Str, Io};
         mod Foo
             pub let go : /std/Nat = 7;
             pub let shadowed : /std/Nat =
@@ -67,7 +67,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
                 let probe : /std/Nat = (let go : /std/Nat = 3; go);
                 go;
         end
-        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling))))!;
+        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling))))!;
         /std/Io/pure(())
         "#;
 
@@ -83,7 +83,7 @@ fn triangular_sum() {
             | 0 => 0
             | pred + 1; ih => std/Nat/add(ih, pred)
             end;
-        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))!;
+        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(result)))!;
         /std/Io/pure(())
         "#;
 
@@ -94,7 +94,7 @@ fn triangular_sum() {
 fn multi_arg_function() {
     let source = r#"
         let add : (std/Int, std/Int) -> std/Int = (x, y) => std/Int/add(x, y);
-        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3, +4))))!;
+        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3, +4))))!;
         /std/Io/pure(())
         "#;
 
@@ -105,7 +105,7 @@ fn multi_arg_function() {
 fn curried_function() {
     let source = r#"
         let add : (std/Int) -> (std/Int) -> std/Int = (x) => (y) => std/Int/add(x, y);
-        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3)(+4))))!;
+        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Int/to_str(add(+3)(+4))))!;
         /std/Io/pure(())
         "#;
 
@@ -153,7 +153,7 @@ fn folds_constant_arg_through_let_function() {
 fn nested_local_rec_runs_correctly() {
     assert_eq!(
         run(r#"
-        use /std/{Handle, Nat, Str, Bytes};
+        use /std/{Handle, Nat, Str, Bytes, Io};
         let f(n : Nat) -> Nat =
             (let go(i : Nat) -> Nat =
                 match i
@@ -172,7 +172,7 @@ fn nested_local_rec_runs_correctly() {
 fn local_rec_calls_enclosing_rec_member() {
     assert_eq!(
         run(r#"
-        use /std/{Handle, Nat, Str, Bytes};
+        use /std/{Handle, Nat, Str, Bytes, Io};
         let f(n : Nat) -> Nat =
             (let go(i : Nat) -> Nat =
                 match i
@@ -191,7 +191,7 @@ fn local_rec_calls_enclosing_rec_member() {
 fn self_referential_value_rec_never_forced_compiles_and_runs() {
     assert_eq!(
         run(r#"
-        use /std/{Handle, Nat, Str, Bytes};
+        use /std/{Handle, Nat, Str, Bytes, Io};
         let make(n : Nat) -> Nat =
             let loop : Nat = loop;
             n;
@@ -206,7 +206,7 @@ fn self_referential_value_rec_never_forced_compiles_and_runs() {
 fn recursive_group_signature_reduces_concrete_type_family() {
     assert_eq!(
         run(r#"
-        use /std/{Handle, Nat, Str, Bytes};
+        use /std/{Handle, Nat, Str, Bytes, Io};
         let taint = Bytes/len(/std/rand/bytes(3)!);
         let T(n : Nat) -> Type =
             match n

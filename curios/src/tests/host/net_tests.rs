@@ -13,11 +13,11 @@ fn call_round_trips_a_scripted_endpoint() {
         use /std/{Handle, Str, Async, Io};
         use /std/tcp/{Settings, Socket};
         let _ = (match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))!
-        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | failure(_) => Io/write(Io/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
             match outcome
-            | success(response) => Handle/write(Handle/stdout, response)
-            | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+            | success(response) => Io/write(Io/stdout, response)
+            | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
             end
         end)!;
         /std/Io/pure(())
@@ -68,14 +68,14 @@ fn a_pending_connect_is_awaited_before_the_request_is_sent() {
         use /std/{Handle, Str, Async, Io};
         use /std/tcp/{Settings, Socket};
         let _ = (match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))!
-        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | failure(_) => Io/write(Io/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
             match outcome
-            | success(response) => Handle/write(Handle/stdout, response)
+            | success(response) => Io/write(Io/stdout, response)
             | failure(e) =>
-                match e : (_) => /std/Io(/std/Result(Io/Error, {}))
-                | refused() => Handle/write(Handle/stdout, Str/to_bytes("refused"))
-                | _ => Handle/write(Handle/stdout, Str/to_bytes("error"))
+                match e : (_) => /std/Io({})
+                | refused() => Io/write(Io/stdout, Str/to_bytes("refused"))
+                | _ => Io/write(Io/stdout, Str/to_bytes("error"))
                 end
             end
         end)!;
@@ -142,11 +142,11 @@ fn net_with_custom_timeout_config_reads_response() {
                 | eof() => Async/pure(x[])
                 | error(_) => Async/pure(x[])
                 end)))!
-        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | failure(_) => Io/write(Io/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
             match outcome
-            | success(bytes) => Handle/write(Handle/stdout, bytes)
-            | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+            | success(bytes) => Io/write(Io/stdout, bytes)
+            | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
             end
         end)!;
         /std/Io/pure(())
@@ -206,11 +206,11 @@ fn net_with_tls_upgrades_and_reads() {
                 | eof() => Async/pure(x[])
                 | error(_) => Async/pure(x[])
                 end)))!
-        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | failure(_) => Io/write(Io/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
             match outcome
-            | success(bytes) => Handle/write(Handle/stdout, bytes)
-            | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+            | success(bytes) => Io/write(Io/stdout, bytes)
+            | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
             end
         end)!;
         /std/Io/pure(())
@@ -267,12 +267,12 @@ fn http_perform_parses_a_scripted_response() {
                     end;
                 match Str/of_bytes(response.body) : (_) => /std/Io({})
                 | some(body) =>
-                    let _ = Handle/write(Handle/stdout, Str/to_bytes(Str/flatten([
+                    let _ = Io/write(Io/stdout, Str/to_bytes(Str/flatten([
                         Nat/to_str(response.status.code), " ", ct, " ", body
                     ])))!; /std/Io/pure(())
-                | none() => let _ = Handle/write(Handle/stdout, Str/to_bytes("bad body"))!; /std/Io/pure(())
+                | none() => let _ = Io/write(Io/stdout, Str/to_bytes("bad body"))!; /std/Io/pure(())
                 end
-            | failure(_) => let _ = Handle/write(Handle/stdout, Str/to_bytes("error"))!; /std/Io/pure(())
+            | failure(_) => let _ = Io/write(Io/stdout, Str/to_bytes("error"))!; /std/Io/pure(())
             end
         end
         "#;
@@ -294,7 +294,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     let source = r#"
         foreign double : (Nat) -> Nat;
         let _ = /std/proc/exit(double(21)!)!;
-        let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("unreachable"))!;
+        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))!;
         /std/Io/pure(())
         "#
     .parse::<Entrypoint>()

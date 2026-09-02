@@ -76,9 +76,9 @@ fn percent_slot_shows_containers() {
 fn print_partial_evaluation_reduces_residual() {
     // End-to-end residue guard for the staging stack on `Fmt/print("% is %")(name)(30)` with a *runtime* first argument. The ersd `evaluate` pass folds the closed prefix — the format-string parse (Parse combinators and the segment UTF-8 revalidation included) runs at compile time and `Fmt/print(lit)` reifies as the curried hole-filling closure over a constant `Fmt` spine. What stays runtime is exactly the runtime work: specialized `go_with` over the spine, the runtime `Str` slot (`Str/trim` and stdin UTF-8 validation through `classify`, shown by `Show(Str)` identity), and the `Nat` slot (`Show(Nat)` = `Nat/to_str`'s digit producer). The single-entry `go_with` spine is then contified into the entry, so the boundary is pinned by the surviving `Nat/to_str` digit producer together with the absence of the generic `Fmt/print` driver and the compile-time `Parse` combinators, without depending on a legacy backend function-count metric.
     let source = r#"
-        use /std/{Str, Handle, Bytes, Fmt};
+        use /std/{Str, Handle, Bytes, Fmt, Io};
 
-        match Handle/read(Handle/stdin, 1024)! : (_) => /std/Io({})
+        match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
         | chunk(bytes) =>
             match Str/of_bytes(bytes) : (_) => /std/Io({})
             | some(s) => Fmt/print("% is %")(Str/trim(s))(30)
@@ -124,9 +124,9 @@ fn print_partial_evaluation_reduces_residual() {
 fn print_runtime_args_specializes_spine() {
     // The mixed case: a literal format string with runtime hole arguments. The ersd `evaluate` pass folds the parse to a constant `Fmt` spine, and `specialize` unrolls `go_with` over it — the ersd-optm module carries the minted spine items and neither the format-string parser nor the generic fold survives to codegen.
     let source = r#"
-        use /std/{Str, Handle, Bytes, Fmt};
+        use /std/{Str, Handle, Bytes, Fmt, Io};
 
-        match Handle/read(Handle/stdin, 1024)! : (_) => /std/Io({})
+        match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
         | chunk(bytes) =>
             match Str/of_bytes(bytes) : (_) => /std/Io({})
             | some(s) => Fmt/print("% is %")(Str/trim(s))(30)
@@ -175,7 +175,7 @@ fn print_err_formats_to_stderr() {
     // Same staging as `Fmt/print`, routed through `/std/print_err`. MockIo captures stdout and stderr concatenated in write order, so the ordering also shows the stderr write really happened between the stdout ones.
     assert_eq!(
         run(r#"
-        use /std/{Fmt, Handle};
+        use /std/{Fmt, Handle, Io};
         let a = /std/print("before;")!;
         let b = Fmt/print_err("%: %;")("code")(3)!;
         /std/print("after")

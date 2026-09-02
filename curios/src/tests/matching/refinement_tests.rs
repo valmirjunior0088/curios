@@ -120,7 +120,7 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     run_text(
         r#"
-        use /std/{Handle, Byte, Bytes, Nat, Option, Str};
+        use /std/{Handle, Byte, Bytes, Nat, Option, Str, Io};
 
         induct L : Type
         | stop(Nat)
@@ -139,7 +139,7 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
             | cons(v, tail) => total(tail, acc + v)
             end;
 
-        let bytes = match Handle/read(Handle/stdin, 16)! : (_) => Bytes
+        let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
             | chunk(b) => b
             | eof() => x[]
             | error(_) => x[]

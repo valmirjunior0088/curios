@@ -37,7 +37,7 @@ let listen(host: Str, port: Nat) -> Async(Result(Io/Error, Listener)) =
 -- A body of its own, so its sequencing does not hoist into `listen_loop`'s region ahead of the `using` that owns the listener's lifetime.
 let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
     let go() -> Async({}) =
-        let r = Async/accept(l.0)!;
+        let r = Async/raw/accept(l.0)!;
         match r
         | failure(_) => Async/pure(())
         | success(h) =>

@@ -8,13 +8,13 @@ use {
 #[test]
 fn read_all_reads_a_seeded_file() {
     let source = r#"
-        use /std/{File, Handle, Async};
+        use /std/{File, Handle, Async, Io};
         let _ = (match Async/block_on(File/read_all("data.txt"))!
-        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | failure(_) => Io/write(Io/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
             match outcome
-            | success(contents) => Handle/write(Handle/stdout, contents)
-            | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("error"))
+            | success(contents) => Io/write(Io/stdout, contents)
+            | failure(_) => Io/write(Io/stdout, /std/Str/to_bytes("error"))
             end
         end)!;
         /std/Io/pure(())
@@ -30,7 +30,7 @@ fn read_all_reads_a_seeded_file() {
 #[test]
 fn read_all_of_a_missing_path_is_not_found() {
     let source = r#"
-        use /std/{File, Handle, Async};
+        use /std/{File, Handle, Async, Io};
         match Async/block_on(File/read_all("nope.txt"))!
         | failure(_) => /std/print("deadlock")
         | success(outcome) =>
@@ -59,7 +59,7 @@ fn read_all_of_a_missing_path_is_not_found() {
 #[test]
 fn file_with_write_mode_persists_through_close() {
     let source = r#"
-        use /std/{File, Handle, Async};
+        use /std/{File, Handle, Async, Io};
         match Async/block_on(File/with("out.txt", File/Mode/write(), (f) => File/write(f, /std/Str/to_bytes("written"))))!
         | failure(_) => /std/print("deadlock")
         | success(outcome) =>
@@ -80,7 +80,7 @@ fn file_with_write_mode_persists_through_close() {
 #[test]
 fn read_pulls_bytes_inside_the_bracket() {
     let source = r#"
-        use /std/{File, Handle, Str, Bytes, Async};
+        use /std/{File, Handle, Str, Bytes, Async, Io};
         let _ = (match Async/block_on(File/with("lines.txt", File/Mode/read(), (f) =>
             Async/bind(File/read(f, 1024), (r) =>
                 match r : (_) => Async(Bytes)
@@ -88,11 +88,11 @@ fn read_pulls_bytes_inside_the_bracket() {
                 | eof() => Async/pure(x[])
                 | error(_) => Async/pure(x[])
                 end)))!
-        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | failure(_) => Io/write(Io/stdout, /std/Str/to_bytes("deadlock"))
         | success(outcome) =>
             match outcome
-            | success(bytes) => Handle/write(Handle/stdout, bytes)
-            | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+            | success(bytes) => Io/write(Io/stdout, bytes)
+            | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
             end
         end)!;
         /std/Io/pure(())

@@ -24,8 +24,8 @@ pub(super) fn table(rows: &[&str], taint: bool) -> String {
         .join("\n        ");
     format!(
         r#"
-        use /std/{{Handle, Nat, Int, Flt, Byte, Bytes, Str, Option}};
-        let bytes = match Handle/read(Handle/stdin, 16)! : (_) => Bytes
+        use /std/{{Handle, Nat, Int, Flt, Byte, Bytes, Str, Option, Io}};
+        let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
             | chunk(b) => b
             | eof() => x[]
             | error(_) => x[]

@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Lift};
+use /std/{Monad, Lift, Bytes, Byte, Nat, Option, Async, True, stream};
 
 pub mod Error;
 pub use Error/{let Error};
@@ -13,4 +13,75 @@ satisfy Monad(Io) {
 -- The identity edge. A `!` never consults it — equal keys are never wrapped — but a witness whose premise is `Lift(Io, M)` needs it at `M = Io`, which is how `/std/Try`'s one `Io` edge serves `Try(Io, E)`.
 satisfy Lift(Io, Io) {
     lift(@A, m) = m,
+}
+
+-- This process's standard streams, beside the monad as every peer keeps them. `In` and `Out` hold the raw handle behind a private representation: a fiber reads and writes them through the stream concepts, and a plain `Io` program through `read`, `read_line` and `write`, the synchronous conveniences below.
+pub struct In: Type {
+    /sys/Handle,
+}
+
+pub struct Out: Type {
+    /sys/Handle,
+}
+
+pub let stdin: In =
+    In { /sys/Handle/stdin };
+
+pub let stdout: Out =
+    Out { /sys/Handle/stdout };
+
+pub let stderr: Out =
+    Out { /sys/Handle/stderr };
+
+-- Up to `n` bytes of standard input, waited for on this program's own behalf: the host answers `would_block` when nothing is there, and a plain `Io` program has no scheduler to park, so it sits in `poll` and reads again. The stream concept's `read` is the form that parks a fiber instead.
+pub let read(i: In, n: Nat) -> Io(stream/Chunk) =
+    let r = /sys/Handle/read(i.0, n)!;
+    choose
+    | r.status == /sys/status/would_block =>
+        let _ = /sys/Handle/poll([i.0], [/sys/event/read], -1)!;
+        read(i, n)
+    | _ =>
+        Io/pure(
+            match Error/error_of(r.status)
+            | some(e) => stream/Chunk/error(e)
+            | none() =>
+                match r.status == /sys/status/eof
+                | true => stream/Chunk/eof()
+                | false => stream/Chunk/chunk(r.bytes)
+                end
+            end)
+    end;
+
+-- One line of standard input without its newline, `none` at the end of the input: a byte at a time, so nothing past the line is taken. An error ends the input as `eof` does; what was read before it is still the line.
+pub let read_line(i: In) -> Io(Option(Bytes)) =
+    let go(acc: Bytes) -> Io(Option(Bytes)) =
+        let c = read(i, 1)!;
+        match c
+        | chunk(b) =>
+            match Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 0), 0)) == 0xA
+            | true => Io/pure(Option/some(acc))
+            | false => go(x[..acc, ..b])
+            end
+        | _ =>
+            Io/pure(
+                match Bytes/len(acc) == 0 | true => Option/none() | false => Option/some(acc) end)
+        end;
+    go(x[]);
+
+-- The whole of `b` to `o`, a short write resent and the status dropped: `print`'s contract, for a program with nowhere to report a failed write. The stream concept's `write` reports.
+pub let write(o: Out, b: Bytes) -> Io({}) =
+    let r = /sys/Handle/write(o.0, b)!;
+    choose
+    | r.status != /sys/status/ok => Io/pure(())
+    | r.written < Bytes/len(b) =>
+        write(o, Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
+    | _ => Io/pure(())
+    end;
+
+satisfy stream/Read(In) {
+    read(i, n) = Async/raw/read(i.0, n),
+}
+
+satisfy stream/Write(Out) {
+    write(o, b) = Async/raw/write(o.0, b),
 }

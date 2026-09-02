@@ -1,38 +1,7 @@
+-- The raw handle the host mints, re-exported for `/std`'s own modules: a stream type wraps one behind a private representation and reads it through `/std/Async/raw`. A program never holds one.
 pub use /sys/{Handle};
 pub use /sys/Handle/{stdin, stdout, stderr, eql};
-use /std/{Bytes, Nat, Result, Io, True, Bool, Equal};
-
-pub induct Read: pub Type
-| chunk(Bytes)
-| eof()
-| error(Io/Error)
-end
-
-pub let read(h: Handle, n: Nat) -> Io(Read) =
-    let r = /sys/Handle/read(h, n)!;
-    Io/pure(
-        match Io/Error/error_of(r.status)
-        | some(e) => Read/error(e)
-        | none() =>
-            match r.status == /sys/status/eof
-            | true => Read/eof()
-            | false => Read/chunk(r.bytes)
-            end
-        end);
-
-pub let write(h: Handle, b: Bytes) -> Io(Result(Io/Error, {})) =
-    let r = /sys/Handle/write(h, b)!;
-    match Io/Error/error_of(r.status)
-    | some(e) => Io/pure(Result/failure(e))
-    | none() =>
-        match r.written < Bytes/len(b)
-        | true =>
-            write(
-                h,
-                Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
-        | false => Io/pure(Result/success(()))
-        end
-    end;
+use /std/{Bool, Equal};
 
 satisfy Equal(Handle) {
     eql = eql,

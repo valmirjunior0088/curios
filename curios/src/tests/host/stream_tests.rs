@@ -9,7 +9,7 @@ use {
 fn io_write() {
     assert_eq!(
         run(r#"
-let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("hello"))!;
+let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("hello"))!;
 /std/Io/pure(())
 "#),
         b"hello"
@@ -21,16 +21,16 @@ fn handles_compare_with_the_operators() {
     // `Handle` had `eql` from `/sys` but no `Equal` witness, so `h == Handle/stdout` reported "no witness of Equal(Handle) found" while every other intrinsic carrier compared with the operator. The witness is over the same `eql`; the output is the truth table at runtime, where a handle is its token.
     assert_eq!(
         run(r#"
-use /std/{Handle, Str, Bool, Io};
+use /std/{Handle, Str, Bool, Io, stream};
 let pick(h: Handle) -> Str =
     choose
     | h == Handle/stdout => "out"
     | h != Handle/stderr => "other"
     | _ => "err"
     end;
-let _ = Handle/write(Handle/stdout, Str/to_bytes(pick(Handle/stdout)))!;
-let _ = Handle/write(Handle/stdout, Str/to_bytes(pick(Handle/stderr)))!;
-let _ = Handle/write(Handle/stdout, Str/to_bytes(pick(Handle/stdin)))!;
+let _ = Io/write(Io/stdout, Str/to_bytes(pick(Handle/stdout)))!;
+let _ = Io/write(Io/stdout, Str/to_bytes(pick(Handle/stderr)))!;
+let _ = Io/write(Io/stdout, Str/to_bytes(pick(Handle/stdin)))!;
 /std/Io/pure(())
 "#),
         b"outerrother"
@@ -41,7 +41,7 @@ let _ = Handle/write(Handle/stdout, Str/to_bytes(pick(Handle/stdin)))!;
 fn io_write_stderr() {
     assert_eq!(
         run(r#"
-let _ = std/Handle/write(std/Handle/stderr, /std/Str/to_bytes("oops"))!;
+let _ = std/Io/write(std/Io/stderr, /std/Str/to_bytes("oops"))!;
 /std/Io/pure(())
 "#),
         b"oops"
@@ -53,8 +53,8 @@ fn io_read() {
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     run_text(
         r#"
-        match std/Handle/read(std/Handle/stdin, 1024)! : (_) => /std/Io({})
-        | chunk(b) => let w = std/Handle/write(std/Handle/stdout, b)!; /std/Io/pure(())
+        match std/Io/read(std/Io/stdin, 1024)! : (_) => /std/Io({})
+        | chunk(b) => let w = std/Io/write(std/Io/stdout, b)!; /std/Io/pure(())
         | eof() => /std/Io/pure(())
         | error(_) => /std/Io/pure(())
         end
@@ -69,16 +69,16 @@ fn io_read() {
 #[test]
 fn io_read_short_reads_and_eof() {
     let source = r#"
-        use /std/{Handle, Io};
-        let show(r : Handle/Read) -> Io({}) =
+        use /std/{Handle, Io, stream};
+        let show(r : stream/Chunk) -> Io({}) =
             match r : (_) => Io({})
-            | chunk(b) => let _ = Handle/write(Handle/stdout, b)!; /std/Io/pure(())
+            | chunk(b) => let _ = Io/write(Io/stdout, b)!; /std/Io/pure(())
             | eof() => /std/print("1")
             | error(_) => /std/print("e")
             end;
-        let _ = show(Handle/read(Handle/stdin, 2)!)!;
-        let _ = show(Handle/read(Handle/stdin, 2)!)!;
-        show(Handle/read(Handle/stdin, 2)!)
+        let _ = show(Io/read(Io/stdin, 2)!)!;
+        let _ = show(Io/read(Io/stdin, 2)!)!;
+        show(Io/read(Io/stdin, 2)!)
         "#;
 
     let (system, io) = MockHost::builder().stdin_lines(["abc"]).build();
@@ -90,7 +90,7 @@ fn io_read_short_reads_and_eof() {
 #[test]
 fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
     let source = r#"
-        use /std/{Nat, Bytes, Handle, Result, Async, Cell, Str, Io, print};
+        use /std/{Nat, Bytes, Handle, Result, Async, Cell, Str, Io, print, stream};
         let show(r : Result(Async/Deadlock, Result(Io/Error, Bytes))) -> Str =
             match r
             | failure(_) => "deadlock"
@@ -100,25 +100,25 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 | failure(_) => "error"
                 end
             end;
-        let error_first(n : Nat) -> Async(Handle/Read) =
-            Async/pure(Handle/Read/error(Io/Error/other(247)));
-        let chunk_then_error : Io((Nat) -> Async(Handle/Read)) =
+        let error_first(n : Nat) -> Async(stream/Chunk) =
+            Async/pure(stream/Chunk/error(Io/Error/other(247)));
+        let chunk_then_error : Io((Nat) -> Async(stream/Chunk)) =
             let calls = Cell/new(0)!;
             Io/pure((n) =>
                 let k = Async/lift(Cell/get(calls))!;
                 let _ = Async/lift(Cell/set(calls, k + 1))!;
                 match k
-                | 0 => Async/pure(Handle/Read/chunk(x[0x41, 0x42]))
-                | _ => Async/pure(Handle/Read/error(Io/Error/other(247)))
+                | 0 => Async/pure(stream/Chunk/chunk(x[0x41, 0x42]))
+                | _ => Async/pure(stream/Chunk/error(Io/Error/other(247)))
                 end);
-        let chunk_then_eof : Io((Nat) -> Async(Handle/Read)) =
+        let chunk_then_eof : Io((Nat) -> Async(stream/Chunk)) =
             let calls = Cell/new(0)!;
             Io/pure((n) =>
                 let k = Async/lift(Cell/get(calls))!;
                 let _ = Async/lift(Cell/set(calls, k + 1))!;
                 match k
-                | 0 => Async/pure(Handle/Read/chunk(x[0x41, 0x42, 0x43]))
-                | _ => Async/pure(Handle/Read/eof())
+                | 0 => Async/pure(stream/Chunk/chunk(x[0x41, 0x42, 0x43]))
+                | _ => Async/pure(stream/Chunk/eof())
                 end);
         let _ = print(show(Async/block_on(Async/drain(error_first))!))!;
         let _ = print(" / ")!;
