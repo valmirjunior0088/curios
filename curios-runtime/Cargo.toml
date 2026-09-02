@@ -30,7 +30,7 @@ wasmtime = { version = "47.0.3", default-features = false, features = [
 ] }
 getrandom = { version = "0.4.3" }
 socket2 = { version = "0.6.4" }
-rustix = { version = "1.1.4", features = ["event"] }
+rustix = { version = "1.1.4", features = ["event", "fs", "process", "termios"] }
 rustls = { version = "0.23.41", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pemfile = { version = "2.2.0" }
 webpki-roots = { version = "1.0.8" }

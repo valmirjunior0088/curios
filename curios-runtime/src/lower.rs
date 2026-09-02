@@ -65,35 +65,30 @@ impl Lower for u32 {
     }
 }
 
-// Pairs lower positionally: each component fills one result slot. (Every single-value impl writes `results[0]`, so slicing re-aligns them.)
-impl<A: Lower, B: Lower> Lower for (A, B) {
-    fn lower(
-        self,
-        caller: &mut Caller<'_, ()>,
-        results: &mut [Val],
-    ) -> Result<(), wasmtime::Error> {
-        let (a, b) = self;
-        a.lower(caller, &mut results[0..1])?;
-        b.lower(caller, &mut results[1..2])?;
+/// Tuples lower positionally: each component fills one result slot, and slicing re-aligns the single-value impls, which all write `results[0]`. Arities two through seven — `stat`'s seven results are the widest row.
+macro_rules! lower_tuple {
+    ($($name:ident $value:ident $index:tt),+) => {
+        impl<$($name: Lower),+> Lower for ($($name,)+) {
+            fn lower(
+                self,
+                caller: &mut Caller<'_, ()>,
+                results: &mut [Val],
+            ) -> Result<(), wasmtime::Error> {
+                let ($($value,)+) = self;
+                $($value.lower(caller, &mut results[$index..$index + 1])?;)+
 
-        Ok(())
-    }
+                Ok(())
+            }
+        }
+    };
 }
 
-impl<A: Lower, B: Lower, C: Lower> Lower for (A, B, C) {
-    fn lower(
-        self,
-        caller: &mut Caller<'_, ()>,
-        results: &mut [Val],
-    ) -> Result<(), wasmtime::Error> {
-        let (a, b, c) = self;
-        a.lower(caller, &mut results[0..1])?;
-        b.lower(caller, &mut results[1..2])?;
-        c.lower(caller, &mut results[2..3])?;
-
-        Ok(())
-    }
-}
+lower_tuple!(A a 0, B b 1);
+lower_tuple!(A a 0, B b 1, C c 2);
+lower_tuple!(A a 0, B b 1, C c 2, D d 3);
+lower_tuple!(A a 0, B b 1, C c 2, D d 3, E e 4);
+lower_tuple!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5);
+lower_tuple!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6);
 
 /// The GC array type an `i8` byte array (`Bytes`) allocates under — shared by every wire shape that carries raw bytes, whether directly (`Vec<u8>`) or as `List(Bytes)`'s per-element `Bytes` (`Vec<Vec<u8>>`), and by `engine.rs`'s `host_func_type`, which describes the same shape for a host import's static function type.
 pub(crate) fn i8_array_type(engine: &Engine) -> ArrayType {

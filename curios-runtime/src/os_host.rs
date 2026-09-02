@@ -479,7 +479,10 @@ impl HostOps for OsHost {
         let mut buffer = vec![0; count as usize];
 
         let result = match &io {
-            Handle::Stdin => stdin().lock().read(&mut buffer),
+            // On the raw descriptor, as the write below is, rather than through `std::io::Stdin`'s buffered reader: a request smaller than what arrived would leave the remainder in a buffer `poll` cannot see, and a fiber waiting on fd 0 would stall with input already inside the process.
+            Handle::Stdin => {
+                rustix::io::read(stdin(), &mut buffer[..]).map_err(std::io::Error::from)
+            }
             Handle::Other(_) => {
                 let mut table = self.table.lock().unwrap();
                 let stream: &mut dyn Read = match table.get_mut(&io) {
@@ -497,15 +500,7 @@ impl HostOps for OsHost {
             _ => return (Status::Eof, vec![]),
         };
 
-        match result {
-            Ok(0) => (Status::Eof, vec![]),
-            Ok(n) => {
-                buffer.truncate(n);
-
-                (Status::Ok, buffer)
-            }
-            Err(error) => (status_from_error(error), vec![]),
-        }
+        read_outcome(result, buffer)
     }
 
     fn write(&self, io: Handle, bytes: &[u8]) -> (Status, u32) {
@@ -586,6 +581,19 @@ impl HostOps for OsHost {
             Some(value) => (Status::Ok, value.into_encoded_bytes()),
             None => (Status::NotFound, vec![]),
         }
+    }
+}
+
+/// The reply of one `read`: a zero count is end of stream, a positive one the prefix it filled, an error its status. Shared by every descriptor `read` serves, the raw ones included.
+fn read_outcome(result: std::io::Result<usize>, mut buffer: Vec<u8>) -> (Status, Vec<u8>) {
+    match result {
+        Ok(0) => (Status::Eof, vec![]),
+        Ok(n) => {
+            buffer.truncate(n);
+
+            (Status::Ok, buffer)
+        }
+        Err(error) => (status_from_error(error), vec![]),
     }
 }
 

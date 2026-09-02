@@ -47,26 +47,23 @@ impl Lift for i32 {
     }
 }
 
-// Pairs lift positionally: each component consumes one param slot. (Every single-value impl above reads `params[0]`, so slicing re-aligns them.)
-impl<A: Lift, B: Lift> Lift for (A, B) {
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok((
-            A::lift(caller, &params[0..1])?,
-            B::lift(caller, &params[1..2])?,
-        ))
-    }
+/// Tuples lift positionally: each component consumes one param slot, and slicing re-aligns the single-value impls, which all read `params[0]`. Arities two through seven — `spawn`'s seven operands are the widest row.
+macro_rules! lift_tuple {
+    ($($name:ident $index:tt),+) => {
+        impl<$($name: Lift),+> Lift for ($($name,)+) {
+            fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+                Ok(($($name::lift(caller, &params[$index..$index + 1])?,)+))
+            }
+        }
+    };
 }
 
-// Triples lift positionally too — `poll(handles, events, timeout)` is the one host import with three operands.
-impl<A: Lift, B: Lift, C: Lift> Lift for (A, B, C) {
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
-        Ok((
-            A::lift(caller, &params[0..1])?,
-            B::lift(caller, &params[1..2])?,
-            C::lift(caller, &params[2..3])?,
-        ))
-    }
-}
+lift_tuple!(A 0, B 1);
+lift_tuple!(A 0, B 1, C 2);
+lift_tuple!(A 0, B 1, C 2, D 3);
+lift_tuple!(A 0, B 1, C 2, D 3, E 4);
+lift_tuple!(A 0, B 1, C 2, D 3, E 4, F 5);
+lift_tuple!(A 0, B 1, C 2, D 3, E 4, F 5, G 6);
 
 impl Lift for Vec<u8> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
@@ -145,6 +142,13 @@ fn lift_bytes_array(
             Vec::<u8>::lift(caller, &[element])
         })
         .collect()
+}
+
+/// `List(Bytes)` lifts each element as the `Bytes` it is — `spawn`'s argument and environment lists.
+impl Lift for Vec<Vec<u8>> {
+    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        lift_bytes_array(caller, &params[0])
+    }
 }
 
 /// `List(Handle)` lifts each token through the same stdio/handle classification a single `Handle` does — `poll`'s `handles` array.

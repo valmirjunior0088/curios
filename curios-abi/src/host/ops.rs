@@ -146,6 +146,9 @@ macro_rules! trait_param_of {
     (Mode) => {
         Mode
     };
+    (ListBytes) => {
+        &[Vec<u8>]
+    };
     (ListHandle) => {
         &[Handle]
     };
