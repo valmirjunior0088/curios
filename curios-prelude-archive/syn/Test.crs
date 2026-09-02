@@ -52,6 +52,52 @@ pub let equal(@A: Type, use Equal(A), use Spell(A), actual: A, expected: A) -> T
 pub let perform(thunk: () -> Io(Test)) -> Test =
     Test/action(thunk());
 
+-- The conjunction of descriptions, so a family of cases — a parameterized test applied to a table of arguments — closes into one test: every theorem is a theorem, the empty list included; a verdict beside a theorem is that verdict; the first failure is the report, naming its position; and an action on either side sequences what follows under it. Written here because a description is matched nowhere else.
+pub let all(tests: List(Test)) -> Test =
+    let (conjunction, _) =
+        List/fold(
+            tests,
+            (Test/theorem(), 0),
+            (t, state: {Test, Nat}) =>
+                let (acc, index) = state;
+                (conjoin(acc, case(index, t)), index + 1));
+    conjunction;
+
+-- A case's report names its position, so a failing conjunction says which member failed.
+let case(index: Nat, t: Test) -> Test =
+    match t
+    | theorem() => t
+    | verdict(v) =>
+        match v
+        | passed() => t
+        | failed(message) =>
+            Test/verdict(
+                Verdict/failed(
+                    Str/concat(
+                        "case ",
+                        Str/concat(Nat/to_str(index), Str/concat(": ", message)))))
+        end
+    | action(io) =>
+        perform(() =>
+            let inner = io!;
+            Io/pure(case(index, inner)))
+    end;
+
+-- The rung of two descriptions: a failure on the left is final and nothing to its right runs; a theorem contributes nothing; a pass is a pass unless the right says otherwise; an action on the left performs before the right is consulted.
+let conjoin(left: Test, right: Test) -> Test =
+    match left
+    | theorem() => right
+    | verdict(v) =>
+        match v
+        | passed() => match right | theorem() => left | verdict(_) => right | action(_) => right end
+        | failed(_) => left
+        end
+    | action(io) =>
+        perform(() =>
+            let inner = io!;
+            Io/pure(conjoin(inner, right)))
+    end;
+
 let report(name: Str, t: Test) -> Io(Bool) =
     match t
     | theorem() =>

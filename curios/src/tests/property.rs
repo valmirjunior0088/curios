@@ -371,7 +371,8 @@ fn a_hand_written_settled_needs_real_evidence() {
         "#,
     );
     assert!(
-        error.contains("Settled") || error.contains("True") || error.contains("False"),
+        !error.contains("binding not found")
+            && (error.contains("Settled") || error.contains("True") || error.contains("False")),
         "unexpected error: {error}"
     );
 }

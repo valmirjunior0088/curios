@@ -58,6 +58,51 @@ fn spelled_strings_are_quoted_and_escaped() {
 }
 
 #[test]
+fn a_conjunction_takes_the_weakest_rung_and_names_the_first_failure() {
+    // `Test/all` at every rung: theorems alone stay a theorem, the empty conjunction included; a verdict among theorems is the verdict; the first failure is the report, positioned; an action performs before what follows it is consulted, and a failure before an action leaves the action unrun.
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, Io, Eq, Test};
+        let counter() -> Io(Test) =
+            let _ = /std/print("performed\n")!;
+            Io/pure(Test/check(true));
+        Test/main([
+            ("/tests/theorems", () => Test/all([Test/refl(1, 1, Eq/refl()), Test/refl(2, 2, Eq/refl())])),
+            ("/tests/empty", () => Test/all([])),
+            ("/tests/mixed", () => Test/all([Test/refl(1, 1, Eq/refl()), Test/check(true)])),
+            ("/tests/first_failure", () => Test/all([Test/check(true), Test/equal(2, 3), Test/equal(4, 5)])),
+            ("/tests/action_then_verdict", () => Test/all([Test/perform(counter), Test/check(true)])),
+            ("/tests/failure_before_action", () => Test/all([Test/check(false), Test/perform(counter)])),
+        ])
+        "#),
+        b"/tests/theorems: proved\n/tests/empty: proved\n/tests/mixed: passed\n/tests/first_failure: failed\n  case 1: expected 3 but got 2\nperformed\n/tests/action_then_verdict: passed\n/tests/failure_before_action: failed\n  case 0: the condition was false\n"
+    );
+}
+
+#[test]
+fn a_declared_test_applied_to_a_table_is_one_test() {
+    // A test is callable by name, so a table of cases is `Test/all` over its applications — the author-supplied domain beside the drawn one — and a case's failure carries both its position and the inner report.
+    assert_eq!(
+        run_tests_program(
+            r#"
+        use /std/{Nat, Str, List, Io, Test};
+        test add_commutes(n: Nat, m: Nat) =
+            Test/check(n + m == m + n);
+        let small(n: Nat) -> Test =
+            Test/check(n < 3);
+        let cases: List({Nat, Nat}) = [(1, 2), (3, 4)];
+        test table() =
+            Test/all(List/map(cases, ((a, b)) => add_commutes(a, b)));
+        test failing_table() =
+            Test/all(List/map([0, 1, 5], small));
+        /std/print("ran\n")
+        "#
+        ),
+        b"/add_commutes: passed\n/table: passed\n/failing_table: failed\n  case 2: the condition was false\n"
+    );
+}
+
+#[test]
 fn a_description_is_matched_only_by_its_own_module() {
     // `Test`'s representation is private to `/syn/Test`: a consumer builds descriptions through the combinators and cannot eliminate one.
     let report = error(
