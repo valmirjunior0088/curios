@@ -176,6 +176,92 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
     host.close(listener);
 }
 
+/// A connected loopback pair: a listener, a client settled through `poll` and `finish_connect` where the kernel made it pend, and the accepted server end.
+fn loopback_pair(host: &OsHost) -> (Handle, Handle, Handle) {
+    let blob = free_loopback_address();
+    let (status, listener) = host.socket(&blob);
+    assert!(matches!(status, Status::Ok));
+    assert!(matches!(
+        host.set_reuseaddr(listener.clone(), 1),
+        Status::Ok
+    ));
+    assert!(matches!(host.bind(listener.clone(), &blob), Status::Ok));
+    assert!(matches!(host.listen(listener.clone(), 1), Status::Ok));
+
+    let (status, client) = host.socket(&blob);
+    assert!(matches!(status, Status::Ok));
+    if matches!(host.connect(client.clone(), &blob), Status::WouldBlock) {
+        host.poll(
+            std::slice::from_ref(&client),
+            &[Poll::from_bits(curios_abi::poll::WRITE)],
+            5_000,
+        );
+        assert!(matches!(host.finish_connect(client.clone()), Status::Ok));
+    }
+    host.poll(
+        std::slice::from_ref(&listener),
+        &[Poll::from_bits(curios_abi::poll::READ)],
+        5_000,
+    );
+    let (status, server) = host.accept(listener.clone());
+    assert!(matches!(status, Status::Ok));
+
+    (listener, client, server)
+}
+
+/// A TLS upgrade files the stream and touches the socket not at all: the client hello leaves only when the guest first writes, which answers `WouldBlock` while the reply is awaited, and the bytes the server side then reads are a TLS handshake record — the handshake is driven by the guest's own reads and writes and parks like any other progress. A plaintext reply is not TLS, so the client's next read reports `TlsError`, with the handle still filed for its finalizer to close.
+#[test]
+fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
+    let host = OsHost::with_args(vec![]);
+    let (listener, client, server) = loopback_pair(&host);
+
+    assert!(matches!(
+        host.start_tls(client.clone(), b"localhost"),
+        Status::Ok
+    ));
+    assert!(matches!(
+        host.read(server.clone(), 8),
+        (Status::WouldBlock, bytes) if bytes.is_empty()
+    ));
+    assert!(matches!(
+        host.write(client.clone(), b"x"),
+        (Status::WouldBlock, 0)
+    ));
+
+    let ready = host.poll(
+        std::slice::from_ref(&server),
+        &[Poll::from_bits(curios_abi::poll::READ)],
+        5_000,
+    );
+    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    let (status, hello) = host.read(server.clone(), 4096);
+    assert!(matches!(status, Status::Ok));
+    assert_eq!(&hello[..2], &[0x16, 0x03], "a TLS handshake record");
+
+    assert!(matches!(
+        host.write(server.clone(), b"HTTP/1.0 400 Bad Request\r\n\r\n"),
+        (Status::Ok, _)
+    ));
+    let ready = host.poll(
+        std::slice::from_ref(&client),
+        &[Poll::from_bits(curios_abi::poll::READ)],
+        5_000,
+    );
+    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    assert!(matches!(
+        host.read(client.clone(), 8),
+        (Status::TlsError, _)
+    ));
+    assert!(!matches!(
+        host.read(client.clone(), 8),
+        (Status::NotFound, _)
+    ));
+
+    host.close(server);
+    host.close(client);
+    host.close(listener);
+}
+
 /// A connect nobody listens for is refused — at once, or through `finish_connect` once the pending connect has settled — and the socket is gone either way.
 #[test]
 fn a_refused_connect_reports_and_drops_the_socket() {

@@ -94,6 +94,34 @@ fn a_pending_connect_is_awaited_before_the_request_is_sent() {
     assert_eq!(io.output(), b"refused");
 }
 
+// The one case that needs the network: an HTTPS request against a public host, driven end to end by the scheduler over the real host — the resolution, the pending connect and the handshake each park on `poll` between the fiber's reads and writes. Ignored by default; run by hand on a networked machine with `cargo test -p curios --lib -- --ignored https_perform`. The real host's output cannot be captured, so the program reports through a file.
+#[test]
+#[ignore = "needs the network"]
+fn https_perform_reaches_a_public_host_over_the_real_host() {
+    let report = std::env::temp_dir().join(format!("curios-https-{}", std::process::id()));
+    let path = report.to_str().expect("a UTF-8 temporary path");
+    let source = format!(
+        r#"
+        use /std/{{Str, Nat, Result, Async, Io, File, http}};
+        let program: Async({{}}) =
+            let r = http/perform(http/get_tls("example.com", 443, "/"))!;
+            let line = match r | success(resp) => Nat/to_str(resp.status.code) | failure(_) => "failed" end;
+            let _ = File/write_all("{path}", Str/to_bytes(line))!;
+            Async/pure(());
+        match Async/block_on(program)!
+        | failure(_) => /std/print("deadlock")
+        | success(_) => Io/pure(())
+        end
+        "#
+    );
+
+    run_text(&source, curios_runtime::OsHost::with_args(vec![])).expect("expected result");
+
+    let written = std::fs::read(&report).expect("the program wrote its report");
+    std::fs::remove_file(&report).expect("the report is removable");
+    assert_eq!(written, b"200");
+}
+
 // A custom `Config` with an optional `Duration` timeout flows through the bracket; `Socket/read` pulls bytes from the socket the body is handed.
 #[test]
 fn net_with_custom_timeout_config_reads_response() {

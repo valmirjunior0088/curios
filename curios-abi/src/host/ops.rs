@@ -20,7 +20,7 @@ macro_rules! host_ops {
             /// Read up to `n` bytes from `h`. `(status, bytes)`: `Ok` with 1..n bytes, `Eof` with none, or an error status. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `poll` is where the wait happens; a regular file is read synchronously, since the disk answers it.
             read as Handle/read [h: Handle, n: Nat] [status: Status, bytes: Bytes];
 
-            /// Write `b` to `h`, returning `(status, written)` — the bytes accepted this call. A non-blocking handle may take only a prefix (so the caller resends the tail without duplicating); `WouldBlock` reports `written` 0, the blocking std streams the full length.
+            /// Write `b` to `h`, returning `(status, written)` — the bytes accepted this call. A non-blocking handle may take only a prefix (so the caller resends the tail without duplicating); `WouldBlock` reports `written` 0, the blocking std streams the full length. A TLS stream reports the plaintext it accepted and pushes the encrypted remainder on the next read or write of the handle.
             write as Handle/write [h: Handle, b: Bytes] [status: Status, written: Nat];
 
             /// Open the file at `path` in `mode`. `(status, handle)`; the handle is meaningful only when the status is `Ok`.
@@ -50,13 +50,13 @@ macro_rules! host_ops {
             /// Pull the next connection from listener `h`: `WouldBlock` when none is pending, else `(Ok, handle)`, a non-blocking byte stream like a connected socket.
             accept as socket/accept [h: Handle] [status: Status, handle: Handle];
 
-            /// Upgrade connected socket `h` to a TLS client stream in place, running the handshake inline. `sni` is the server name to present and verify against; on failure the connection drops with `TlsError`.
+            /// Upgrade connected socket `h` to a TLS client stream in place. `sni` is the server name to present and verify against. The handshake is driven by the reads and writes that follow, each answering `WouldBlock` while it waits on the peer; a failed verification or protocol surfaces as `TlsError` from the read or write that discovers it, with the handle still filed for `close`.
             start_tls as tls/start [h: Handle, sni: Bytes] [status: Status];
 
             /// Build an opaque server-side TLS configuration from a PEM certificate chain and private key. `(status, handle)` like `socket`: a host-owned config token consumed by `start_tls_server` and released by `close`.
             tls_server_config as tls/server_config [cert: Bytes, key: Bytes] [status: Status, handle: Handle];
 
-            /// Upgrade accepted socket `h` to a TLS server stream in place using configuration handle `cfg`, running the handshake inline.
+            /// Upgrade accepted socket `h` to a TLS server stream in place using configuration handle `cfg`; the handshake is driven by the reads and writes that follow, as `start_tls`'s is.
             start_tls_server as tls/start_server [h: Handle, cfg: Handle] [status: Status];
 
             /// Set socket `h`'s `SO_REUSEADDR` flag; set before `bind`.

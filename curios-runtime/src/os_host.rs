@@ -1,6 +1,6 @@
 use {
     super::{OsResolver, Running, Slot, Spawned, Table, host::*, os_child},
-    curios_abi::kind,
+    curios_abi::{kind, poll as interest},
     rustix::{
         event::{PollFd, Timespec, poll},
         fs::{OFlags, fcntl_getfl, fcntl_setfl},
@@ -388,7 +388,6 @@ impl HostOps for OsHost {
             None => return Status::TlsError,
         };
 
-        // Take the connected socket out so the blocking handshake runs without the table lock held. A failed upgrade drops the (now unusable) connection rather than re-filing it as cleartext.
         let socket = match self.take_connected(&io) {
             Some(socket) => socket,
             None => return Status::NotFound,
@@ -399,20 +398,13 @@ impl HostOps for OsHost {
             Err(_) => return Status::TlsError,
         };
 
-        let mut stream = StreamOwned::new(conn, socket);
+        // The stream is filed with its handshake still to run: the socket is non-blocking, so the handshake is driven by the reads and writes that follow — `rustls`'s stream completes prior IO before each — and parks the fiber through `poll` like any other progress. A verification or protocol failure surfaces as `TlsError` from the read or write that discovers it.
+        self.table.lock().unwrap().insert(
+            &io,
+            OsResource::ClientTls(Box::new(StreamOwned::new(conn, socket))),
+        );
 
-        // Drive the handshake to completion inline so a verification or protocol failure surfaces here, at the upgrade, not on a later read.
-        match stream.conn.complete_io(&mut stream.sock) {
-            Ok(_) => {
-                self.table
-                    .lock()
-                    .unwrap()
-                    .insert(&io, OsResource::ClientTls(Box::new(stream)));
-
-                Status::Ok
-            }
-            Err(_) => Status::TlsError,
-        }
+        Status::Ok
     }
 
     fn tls_server_config(&self, mut cert: &[u8], mut key: &[u8]) -> (Status, Handle) {
@@ -456,19 +448,13 @@ impl HostOps for OsHost {
             Err(_) => return Status::TlsError,
         };
 
-        let mut stream = StreamOwned::new(conn, socket);
+        // Filed with the handshake still to run, as `start_tls` files the client side.
+        self.table.lock().unwrap().insert(
+            &io,
+            OsResource::ServerTls(Box::new(StreamOwned::new(conn, socket))),
+        );
 
-        match stream.conn.complete_io(&mut stream.sock) {
-            Ok(_) => {
-                self.table
-                    .lock()
-                    .unwrap()
-                    .insert(&io, OsResource::ServerTls(Box::new(stream)));
-
-                Status::Ok
-            }
-            Err(_) => Status::TlsError,
-        }
+        Status::Ok
     }
 
     fn listen(&self, io: Handle, backlog: u32) -> Status {
@@ -520,36 +506,40 @@ impl HostOps for OsHost {
         let mut results = vec![Poll::empty(); handles.len()];
 
         for (slot, handle) in handles.iter().enumerate() {
-            let fd = match handle {
-                Handle::Stdin => Some(in_handle.as_fd()),
-                Handle::Stdout => Some(out_handle.as_fd()),
-                Handle::Stderr => Some(err_handle.as_fd()),
+            let requested = events.get(slot).copied().unwrap_or_else(Poll::empty);
+            let watched = match handle {
+                Handle::Stdin => Some((in_handle.as_fd(), requested)),
+                Handle::Stdout => Some((out_handle.as_fd(), requested)),
+                Handle::Stderr => Some((err_handle.as_fd(), requested)),
                 Handle::Other(_) => table.get(handle).and_then(|resource| match resource {
-                    OsResource::File(file) => Some(file.as_fd()),
+                    OsResource::File(file) => Some((file.as_fd(), requested)),
                     // A connecting socket is watched for `WRITE`, which is what the kernel reports once the connect has settled either way.
                     OsResource::Connected(socket)
                     | OsResource::Connecting(socket)
                     | OsResource::Unconnected(socket)
-                    | OsResource::Listener(socket) => Some(socket.as_fd()),
+                    | OsResource::Listener(socket) => Some((socket.as_fd(), requested)),
                     // The lookup's pipe read end: `READ`-ready once the worker has written its wakeup byte, which is the completion signal.
-                    OsResource::Resolving { done, .. } => Some(done.as_fd()),
-                    OsResource::Descriptor(fd) => Some(fd.as_fd()),
+                    OsResource::Resolving { done, .. } => Some((done.as_fd(), requested)),
+                    OsResource::Descriptor(fd) => Some((fd.as_fd(), requested)),
                     // The reaper's pipe read end: `READ`-ready once the child has exited, which is when `wait` answers.
-                    OsResource::Child { running, .. } => Some(running.done.as_fd()),
-                    // TLS record readiness is not socket readiness (rustls buffers records, and an app read can require a socket write), so a TLS stream is not polled at the socket layer under the sync model; the config token has no fd. Both report as unrecognized — an `empty()` revents slot.
-                    OsResource::ClientTls(_)
-                    | OsResource::ServerTls(_)
-                    | OsResource::TlsConfig(_) => None,
+                    OsResource::Child { running, .. } => Some((running.done.as_fd(), requested)),
+                    // A TLS stream is watched through its socket, for the interest `rustls` itself has while the handshake is under way and the guest's own afterwards; the config token has no descriptor and reports as unrecognized.
+                    OsResource::ClientTls(stream) => {
+                        Some((stream.sock.as_fd(), tls_interest(&stream.conn, requested)))
+                    }
+                    OsResource::ServerTls(stream) => {
+                        Some((stream.sock.as_fd(), tls_interest(&stream.conn, requested)))
+                    }
+                    OsResource::TlsConfig(_) => None,
                 }),
             };
 
-            if let Some(fd) = fd {
-                polls.push(PollFd::from_borrowed_fd(
-                    fd,
-                    poll_to_flags(events.get(slot).copied().unwrap_or_else(Poll::empty)),
-                ));
+            if let Some((fd, interest)) = watched {
+                polls.push(PollFd::from_borrowed_fd(fd, poll_to_flags(interest)));
 
-                slots.push(slot);
+                // Where the watched interest is not the guest's own, readiness is reported in the guest's terms: the guest parked for what it asked, and a wake on what `rustls` needed is a wake for it too — reported as the substituted bits alone, the guest would look for its own, see nothing, and re-poll a socket that answers at once, forever.
+                let translated = (interest != requested).then_some(requested);
+                slots.push((slot, translated));
             }
         }
 
@@ -565,8 +555,15 @@ impl HostOps for OsHost {
 
         // A failed poll (e.g. `EINTR`) reports no readiness; the scheduler re-polls. On success, scatter each revents back to its input slot.
         if poll(&mut polls, timeout.as_ref()).is_ok() {
-            for (index, &slot) in slots.iter().enumerate() {
-                results[slot] = poll_from_flags(polls[index].revents());
+            for (index, &(slot, translated)) in slots.iter().enumerate() {
+                let ready = poll_from_flags(polls[index].revents());
+
+                results[slot] = match translated {
+                    Some(requested) if ready.bits() != 0 => {
+                        Poll::from_bits(ready.bits() | requested.bits())
+                    }
+                    _ => ready,
+                };
             }
         }
 
@@ -590,8 +587,17 @@ impl HostOps for OsHost {
                 let stream: &mut dyn Read = match table.get_mut(&io) {
                     Some(OsResource::File(file)) => file,
                     Some(OsResource::Connected(socket)) => socket,
-                    Some(OsResource::ClientTls(tls)) => &mut **tls,
-                    Some(OsResource::ServerTls(tls)) => &mut **tls,
+                    // A TLS read drives whatever handshake or record exchange is pending first, so its failures are `rustls`'s as well as the socket's.
+                    Some(OsResource::ClientTls(tls)) => {
+                        let result = tls.read(&mut buffer);
+
+                        return tls_read_outcome(result, buffer);
+                    }
+                    Some(OsResource::ServerTls(tls)) => {
+                        let result = tls.read(&mut buffer);
+
+                        return tls_read_outcome(result, buffer);
+                    }
                     Some(OsResource::Descriptor(fd)) => {
                         let result = rustix::io::read(&*fd, &mut buffer[..]);
 
@@ -640,8 +646,19 @@ impl HostOps for OsHost {
         let stream = match table.get_mut(&io) {
             Some(OsResource::File(file)) => file as &mut dyn Write,
             Some(OsResource::Connected(socket)) => socket,
-            Some(OsResource::ClientTls(tls)) => &mut **tls,
-            Some(OsResource::ServerTls(tls)) => &mut **tls,
+            // A TLS write completes the pending handshake first and accepts no plaintext until it has, so `WouldBlock` here reports `written` 0 and the caller resends. Once established it buffers the plaintext, reports it all accepted, and flushes as far as the socket allows: the next read or write on the handle pushes the remainder, and a `close` drops what never left — acceptable for a request that is always followed by a read, and the limitation a streaming protocol would meet.
+            Some(OsResource::ClientTls(tls)) => {
+                return match tls.write(bytes) {
+                    Ok(written) => (Status::Ok, written as u32),
+                    Err(error) => (tls_status(error), 0),
+                };
+            }
+            Some(OsResource::ServerTls(tls)) => {
+                return match tls.write(bytes) {
+                    Ok(written) => (Status::Ok, written as u32),
+                    Err(error) => (tls_status(error), 0),
+                };
+            }
             Some(OsResource::Descriptor(fd)) => {
                 return match rustix::io::write(&*fd, bytes) {
                     Ok(written) => (Status::Ok, written as u32),
@@ -917,6 +934,42 @@ fn nonblocking(fd: &OwnedFd) -> std::io::Result<()> {
 /// Whether `error` carries the OS errno `errno` — the read for the connect statuses that have no `ErrorKind`.
 fn is_errno(error: &std::io::Error, errno: Errno) -> bool {
     error.raw_os_error() == Some(errno.raw_os_error())
+}
+
+/// The status a TLS stream's read or write failure lowers to: `rustls`'s own errors — a failed verification, a protocol violation, a plaintext peer — arrive wrapped in an `InvalidData` error and collapse to `TlsError`, and everything else is the socket's, mapped as every other stream maps it.
+fn tls_status(error: std::io::Error) -> Status {
+    if error
+        .get_ref()
+        .is_some_and(|inner| inner.is::<rustls::Error>())
+    {
+        return Status::TlsError;
+    }
+
+    status_from_error(error)
+}
+
+/// A TLS read's outcome in the row's `(status, bytes)` shape: a peer that closed without `close_notify` reads as the end of the stream, since a length-framed protocol notices a truncation itself, and the rest as [`tls_status`] maps it.
+fn tls_read_outcome(result: std::io::Result<usize>, buffer: Vec<u8>) -> (Status, Vec<u8>) {
+    match result {
+        Err(error) if error.kind() == ErrorKind::UnexpectedEof => (Status::Eof, vec![]),
+        Err(error) => (tls_status(error), vec![]),
+        Ok(_) => read_outcome(result, buffer),
+    }
+}
+
+/// The interest to watch a TLS stream's socket for. While the handshake is under way `rustls`'s own demand replaces the guest's: a socket is nearly always writable, so a fiber that parked on `WRITE` to send its request would spin while `rustls` was in fact waiting to read the server's reply. Afterwards the guest's interest stands, plus `WRITE` whenever `rustls` still holds records to push.
+fn tls_interest(conn: &rustls::CommonState, requested: Poll) -> Poll {
+    let read = if conn.wants_read() { interest::READ } else { 0 };
+    let write = if conn.wants_write() {
+        interest::WRITE
+    } else {
+        0
+    };
+
+    match conn.is_handshaking() {
+        true => Poll::from_bits(read | write),
+        false => Poll::from_bits(requested.bits() | write),
+    }
 }
 
 /// A status-only row's reply: the failure's status, or `Ok`.
