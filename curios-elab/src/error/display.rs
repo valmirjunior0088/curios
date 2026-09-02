@@ -144,6 +144,14 @@ impl fmt::Display for Displayed<'_> {
                     "this sequencing needs a region whose type is {needed}\n  the region here has type {region}\n  '!' sequences within the nearest enclosing value body; a 'let' with a type annotation is a declaration, and its body is its own region"
                 )
             }
+            Error::UnembeddedAction { action, expected } => {
+                let action = action.spelled(spelling);
+                let expected = expected.spelled(spelling);
+                write!(
+                    f,
+                    "an action of one monad where another is expected\n  action: {action}\n  expected: {expected}\n  an action is embedded through the declared Lift witness when its monad can be read from its head's declaration\n  write lift(action) to embed this one explicitly; that resolves the witness, or reports the edge to declare"
+                )
+            }
             Error::UniverseInconsistency { lower, upper, path } => {
                 write!(
                     f,

@@ -10,6 +10,7 @@ use struct_::*;
 
 mod binding;
 use binding::*;
+pub(crate) use binding::{embeds, is_monad, monad_shape};
 
 mod metavar;
 use metavar::*;

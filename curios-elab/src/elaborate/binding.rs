@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::{HeadKey, TermBuilders, WitnessKey},
+    crate::{HeadKey, TermBuilders, WitnessKey, convert::convert},
     curios_core::Global,
     curios_utilities::Span,
 };
@@ -506,7 +506,7 @@ fn infix_method(
     }))
 }
 
-/// Desugar a postfix `!` sequencing site ([`Bang`]) into its `/syn/Monad/bind` application and elaborate the result. The region's monad is read from the expected type and never inferred from the action — the discipline Lean's do-elaborator enforces with `tryPostponeIfNoneOrMVar` and `extractBind`: a bang whose region type is still an unsolved metavariable parks as a whole checking problem and re-runs when it lands, and one in an inference position is refused, because sequencing has no monad until the region names one. The rebuilt application takes the node's own span, so diagnostics keep anchoring at the written `!`.
+/// Desugar a postfix `!` sequencing site ([`Bang`]) into its `/syn/Monad/bind` application and elaborate the result. The region's monad is read from the expected type and never inferred from the action — the discipline Lean's do-elaborator enforces with `tryPostponeIfNoneOrMVar` and `extractBind`: a bang whose region type is still an unsolved metavariable parks as a whole checking problem and re-runs when it lands, and one in an inference position is refused, because sequencing has no monad until the region names one. The discipline is structural, not a matter of unification order: the wrapper is handed the region's monad as its `@M` (see [`region_monad`]), so every action is checked against `M(A)` with `M` the region's, and an action of another monad is reported at its own `!`. The rebuilt application takes the node's own span, so diagnostics keep anchoring at the written `!`.
 pub(super) fn elaborate_bang(
     context: &mut Context,
     bang: &Bang,
@@ -534,13 +534,36 @@ pub(super) fn elaborate_bang(
         _ => bang.action.clone(),
     };
 
+    // The bind's monad is the region's, supplied before any action is checked. Left to the wrapper's own inference, `M` is pinned by whichever side unifies first — the action's type, since arguments elaborate before the result meets the expected type — so an action of another monad the oracle could not read would fix the region to *its* monad, and the mismatch would surface at the outermost `!` of the region, against an action that was never wrong. A region the imitation cannot read keeps the wrapper's inference, as before.
+    let monad = region_monad(context, &region, term.span());
     let head = Term::free_var(&Free::global(context.syntax().monad.bind.qualifier()));
-    let app = Term::apply(head, vec![action, bang.continuation.clone()]);
+    let arguments = monad
+        .map(|monad| (Plicity::Implicit, monad))
+        .into_iter()
+        .chain([
+            (Plicity::Explicit, action),
+            (Plicity::Explicit, bang.continuation.clone()),
+        ]);
+    let app = Term::apply_marked(head, arguments);
     let app = match term.span() {
         Some(span) => Term::spanned(span, app),
         None => app,
     };
     elaborate(context, &app, mode)
+}
+
+/// The region's monad as a term — `λx. T(c̄, x)` for a region `T(c̄, v)` — read by unifying `?M(?B)` with the region: the flex-apply imitation commits the right-biased partial application, exactly the solution the wrapper's own instantiation reaches, and the pairwise equation solves `?B` to the region's value slot. `None` where the imitation does not apply — a region whose head is no nominal or intrinsic former — and the wrapper then infers as before.
+fn region_monad(context: &mut Context, region: &Term, span: Option<Span>) -> Option<Term> {
+    let sort = context.fresh_classifier_type("region monad");
+    let binder = context.fresh(None);
+    let former = Term::func_type([(binder, sort.clone())], sort.clone());
+    let (_, monad) = context.fresh_placeholder(former, span.clone());
+    let (_, value) = context.fresh_placeholder(sort.clone(), span);
+    let applied = Term::apply(monad.clone(), [value]);
+    match convert(context, &sort, &applied, region) {
+        Ok(true) => Some(monad),
+        _ => None,
+    }
 }
 
 /// `action` wrapped in `/syn/Lift`'s `lift`, whose `use` slot resolves the declared embedding into the region or reports the missing edge; the wrapper takes the action's own span, or `fallback`, so the report anchors where the action was written.
@@ -583,13 +606,13 @@ pub(super) fn lift_on_check(
 }
 
 /// What identifies a monad for the lift oracle: the rigid head, and the keys of the application's *context* arguments — every argument but the last, which is the slot a right-biased partial application abstracts and so the value slot, free to differ between an action and its region. A context argument that keys on nothing, a binder the action's own telescope will solve above all, is `None` and compatible with anything.
-struct MonadShape {
-    head: HeadKey,
-    context: Vec<Option<HeadKey>>,
+pub(crate) struct MonadShape {
+    pub(crate) head: HeadKey,
+    pub(crate) context: Vec<Option<HeadKey>>,
 }
 
 /// The shape of a weak-head-normal monad application, or `None` where its head is not keyable.
-fn monad_shape(context: &mut Context, whnf: &Term) -> Option<MonadShape> {
+pub(crate) fn monad_shape(context: &mut Context, whnf: &Term) -> Option<MonadShape> {
     let head = HeadKey::of_whnf(whnf)?;
     let params: &[Term] = match &**whnf {
         Subterm::StructType(struct_type) => &struct_type.params,
@@ -610,7 +633,7 @@ fn monad_shape(context: &mut Context, whnf: &Term) -> Option<MonadShape> {
 }
 
 /// Whether an action of shape `action` belongs to another monad than a region of shape `region`, so that sequencing it needs an embedding: a different head, or a context argument both sides key and key differently — `Try(Io, E)` beside `Try(Async, E)`, which share a head and are two monads. Two shapes that agree wherever both are known are one monad as far as the oracle can read, and unification settles the rest.
-fn embeds(region: &MonadShape, action: &MonadShape) -> bool {
+pub(crate) fn embeds(region: &MonadShape, action: &MonadShape) -> bool {
     region.head != action.head
         || region
             .context
@@ -620,7 +643,7 @@ fn embeds(region: &MonadShape, action: &MonadShape) -> bool {
 }
 
 /// Whether a `Monad` witness is registered under `key` — the concept's name derives from the registry's bind wrapper, whose namespace is the concept.
-fn is_monad(context: &Context, key: &HeadKey) -> bool {
+pub(crate) fn is_monad(context: &Context, key: &HeadKey) -> bool {
     let monad = Global::Authored(context.syntax().monad.bind.qualifier().without_last());
     context
         .witness(&monad, &WitnessKey(vec![key.clone()]))
@@ -663,7 +686,7 @@ fn action_result_shape(context: &mut Context, action: &Term) -> Option<MonadShap
     }
 }
 
-/// The [`MonadShape`] of `declared`'s result when a spine of `explicit_args` explicit arguments saturates it exactly; `None` otherwise. The telescope is opened with fresh frees on the way to the result, so a *dependent* result — `Io(Cell(T))`, `Io(Future(A))` — keys on its head like any other: the head is rigid whatever the binder, and a result actually *headed* by a binder (`M(Nat)` under `(M: (Type) -> Type, …)`) still abstains, because a free-variable head has no key; a binder in a *context* argument (`Try(M, E, A)` under the same telescope) keys on nothing there and is compatible with any region. The result takes one weak-head reduction before keying, because a declared type keeps its nominal spelling (`Io({})` is stored as the `/sys/Io/Io` application, aliases as their own names); the reduction is the same read `resolve`'s `node_type` performs on assumption-derived types, and a reduction failure abstains. A wrong abstention still costs a message, never a solution.
+/// The [`MonadShape`] of `declared`'s result when a spine of `explicit_args` explicit arguments saturates it exactly; `None` otherwise. The telescope is opened with fresh frees on the way to the result, so a *dependent* result — `Io(Cell(T))`, `Io(Future(A))` — keys on its head like any other: the head is rigid whatever the binder, and a result actually *headed* by a binder (`M(Nat)` under `(M: (Type) -> Type, …)`), or carrying one in a *context* argument (`Try(M, E, A)` under the same telescope), keys that binder by the argument that fixes it (see [`binder_key`]), and one no argument fixes keys on nothing there and is compatible with any region. The result takes one weak-head reduction before keying, because a declared type keeps its nominal spelling (`Io({})` is stored as the `/sys/Io/Io` application, aliases as their own names); the reduction is the same read `resolve`'s `node_type` performs on assumption-derived types, and a reduction failure abstains. A wrong abstention still costs a message, never a solution.
 fn declared_result_shape(
     context: &mut Context,
     declared: &Term,
@@ -703,7 +726,22 @@ fn declared_result_shape(
     if !remaining.is_empty() {
         return None;
     }
-    if let Some(shape) = monad_shape(context, &whnf) {
+    if let Some(mut shape) = monad_shape(context, &whnf) {
+        // A context slot that is one of the telescope's own binders — the `M` of `Try(M, E, A)` under `(@M: (Type) -> Type, …, m: Try(M, E, A), …)` — keys on nothing by itself, and is the base an argument fixes: `Try/rescue(t, h)!` lifts as the action `t` was declared over, exactly as a binder-headed result below does. A slot no argument settles stays `None`, compatible with any region.
+        let params: Vec<Term> = match &*whnf {
+            Subterm::StructType(struct_type) => struct_type.params.clone(),
+            Subterm::InductType(induct_type) => induct_type.params.clone(),
+            _ => Vec::new(),
+        };
+        let context_params = params.split_last().map_or(&[][..], |(_, context)| context);
+        for (slot, param) in shape.context.iter_mut().zip(context_params) {
+            if slot.is_none()
+                && let Subterm::Var(var) = &**param
+                && let Some(base) = var.as_free()
+            {
+                *slot = binder_key(context, base, &explicit_binders, args);
+            }
+        }
         return Some(shape);
     }
 

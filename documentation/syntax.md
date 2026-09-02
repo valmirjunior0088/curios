@@ -447,7 +447,7 @@ pub let fiber: Async({}) =
     Async/pure(());
 ```
 
-The explicit spelling `lift(action)` names the same embedding, with the target monad inferred from the region. A region's tail — the last expression of a value body, a lambda body, or a match arm — is lifted by the same read when both its head's declared monad and the region's are monads and differ; a tail that is not a monadic action at all keeps the ordinary type mismatch.
+The explicit spelling `lift(action)` names the same embedding, with the target monad inferred from the region. A region's tail — the last expression of a value body, a lambda body, or a match arm — is lifted by the same read when both its head's declared monad and the region's are monads and differ; a tail that is not a monadic action at all keeps the ordinary type mismatch. The read is of the action's *head's declaration*, so an action whose head is not a declared name — a projection, a call of a lambda — is not embedded on its own: it is reported as an action of one monad where another is expected, at its own `!` or tail, and `lift(action)` is the spelling that embeds it.
 
 Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does not let an `Io` action sequence in a `Sched` region: the missing `Lift(Io, Sched)` is reported, together with any chain of declared embeddings that would have reached it, and the composite embedding is declared like any other — a decision about `Sched`, written by its author, not derived by the compiler.
 

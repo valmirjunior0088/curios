@@ -142,6 +142,11 @@ pub enum Error {
         sequenced: Option<Box<Term>>,
         region: Box<Term>,
     },
+    /// An action of one monad where another is expected: both sides of a mismatch are monad applications differing in their head or a context argument. The `!` and tail oracles embed an action through the declared `Lift` witness when its monad can be read from its head's declaration; this is the case they could not read, or a position they never look at, and the explicit `lift` spelling is the remedy.
+    UnembeddedAction {
+        action: Box<Term>,
+        expected: Box<Term>,
+    },
     NotAFunction {
         head_type: Box<Term>,
     },
@@ -552,6 +557,13 @@ impl Error {
         Self::StrandedSequencing {
             sequenced: sequenced.map(Box::new),
             region: Box::new(region.into()),
+        }
+    }
+
+    pub(crate) fn unembedded_action<U: Into<Term>, V: Into<Term>>(action: U, expected: V) -> Self {
+        Self::UnembeddedAction {
+            action: Box::new(action.into()),
+            expected: Box::new(expected.into()),
         }
     }
 
@@ -1285,6 +1297,10 @@ impl Error {
             Self::StrandedSequencing { sequenced, region } => {
                 out.extend(sequenced.as_deref());
                 out.push(region);
+            }
+            Self::UnembeddedAction { action, expected } => {
+                out.push(action);
+                out.push(expected);
             }
             Self::NotAFunction { head_type }
             | Self::NotATuple { head_type }

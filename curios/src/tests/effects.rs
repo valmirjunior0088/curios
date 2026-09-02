@@ -282,6 +282,56 @@ fn running_a_try_lifts_by_the_base_its_argument_was_declared_over() {
     assert_eq!(run(source), b"s5");
 }
 
+/// `Try/rescue`'s declared result is `Try(M, E, A)` with `M` a binder in a *context* slot, so the lift oracle reads the base off the argument in that position: an `Io`-based rescue sequenced in an `Async`-based `Try` region lifts through the `Try` edge, as the action it wraps would have.
+#[test]
+fn a_try_action_lifts_by_the_base_its_context_argument_was_declared_over() {
+    let source = r#"
+        use /std/{Nat, Str, Result, Try, Async, Io, print};
+        pub let step: Try(Io, Str, Nat) =
+            let _ = print("s")!;
+            Try/raise("e");
+        pub let rescued: Try(Async, Str, {}) =
+            let n = Try/rescue(step, (e) => Try/pure(4))!;
+            let _ = Async/yield_now!;
+            let _ = print(Nat/to_str(n))!;
+            Try/pure(());
+        pub let fiber: Async({}) =
+            let r = Try/run(rescued)!;
+            match r
+            | success(_) => print("!")
+            | failure(e) => print(e)
+            end;
+        Async/run(fiber)
+        "#;
+
+    assert_eq!(run(source), b"s4!");
+}
+
+/// The bind's monad is the region's, supplied before any action is checked, so an action of another monad that the oracle cannot read — here a projection, which has no declaration to read — is reported at its own `!` as what it is, and the well-typed actions before it are never blamed: the region is `Async` throughout, not pinned to `Io` by the unreadable action.
+#[test]
+fn an_unreadable_action_of_another_monad_is_reported_at_its_own_bang() {
+    let source = r#"
+        use /std/{Nat, Async, Io, print};
+        let fiber: Async({}) =
+            let _ = Async/yield_now!;
+            let _ = print("a")!;
+            let acts = (print("b"), 1);
+            let _ = acts.0!;
+            Async/pure(());
+        Async/run(fiber)
+        "#;
+
+    let error = typecheck(source).expect_err("an unlifted action must refuse");
+    assert!(
+        error.contains("an action of one monad where another is expected")
+            && error.contains("action: Io({})")
+            && error.contains("expected: Async(")
+            && error.contains("acts.0!")
+            && !error.contains("yield_now!"),
+        "expected the report at the projection's own `!`, got: {error}"
+    );
+}
+
 /// A plain `Result` value sequences in a `Result` region with nothing to convert: the constructors are the monad's own.
 #[test]
 fn a_result_value_sequences_in_a_result_region() {

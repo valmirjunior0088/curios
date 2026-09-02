@@ -169,13 +169,23 @@ pub(super) fn parse_suffix<'a>() -> Parser<'a, Suffix> {
         .map(|()| Suffix::Bang))
 }
 
-pub(super) fn apply_suffixes(head: Term, suffixes: Vec<Suffix>) -> Term {
+/// Folds a postfix chain onto its head, one node per suffix. Every intermediate node takes the span from the head's start to its own suffix's end — `acts.0` inside `acts.0!`, `f(x)` inside `f(x).1` — so an error at a node in the middle of a chain reports there rather than at the nearest spanned ancestor, which for a hoisted action is the outermost `!` of its region. A head without a span (a bare name) leaves the chain's own nodes unspanned, and the caller's `with_span` over the whole chain covers those as before.
+pub(super) fn apply_suffixes(head: Term, suffixes: Vec<(Span, Suffix)>) -> Term {
     suffixes
         .into_iter()
-        .fold(head, |head, suffix| match suffix {
-            Suffix::Proj(field) => Subterm::Proj(Proj { head, field }).into(),
-            Suffix::Apply(arguments) => Subterm::Apply(Apply { head, arguments }).into(),
-            Suffix::Bang => Subterm::Bang(head).into(),
+        .fold(head, |head, (suffix_span, suffix)| {
+            let span = head
+                .span()
+                .map(|start| Span::new(start.source.clone(), start.start, suffix_span.end));
+            let node: Term = match suffix {
+                Suffix::Proj(field) => Subterm::Proj(Proj { head, field }).into(),
+                Suffix::Apply(arguments) => Subterm::Apply(Apply { head, arguments }).into(),
+                Suffix::Bang => Subterm::Bang(head).into(),
+            };
+            match span {
+                Some(span) => node.with_span(span),
+                None => node,
+            }
         })
 }
 
@@ -199,20 +209,23 @@ pub(super) fn parse_atomic_term<'a>() -> Parser<'a, Term> {
 }
 
 pub(super) fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
+    // The head is spanned on its own, and each suffix with its own extent, so `apply_suffixes` can span every node of the chain; the outer `with_span` still covers the whole chain, innermost-wins.
     with_span(
-        parse_goal()
-            .or(parse_struct_lit())
-            .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
-            .or(parse_type())
-            .or(parse_prop())
-            .or(parse_intrinsic())
-            .or(parse_tuple_type())
-            .or(parse_empty_tuple())
-            .or(parse_tuple())
-            .or(parse_parens())
-            .or(parse_name().map(|n| Subterm::Name(n).into()))
-            .and(many0(parse_suffix))
-            .map(|(head, suffixes): (Term, _)| apply_suffixes(head, suffixes)),
+        with_span(
+            parse_goal()
+                .or(parse_struct_lit())
+                .or(parse_qualified_name().map(|n| Subterm::Name(n).into()))
+                .or(parse_type())
+                .or(parse_prop())
+                .or(parse_intrinsic())
+                .or(parse_tuple_type())
+                .or(parse_empty_tuple())
+                .or(parse_tuple())
+                .or(parse_parens())
+                .or(parse_name().map(|n| Subterm::Name(n).into())),
+        )
+        .and(many0(|| spanned(parse_suffix())))
+        .map(|(head, suffixes): (Term, _)| apply_suffixes(head, suffixes)),
     )
 }
 

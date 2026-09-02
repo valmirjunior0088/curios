@@ -113,8 +113,24 @@ fn display_mismatch(context: &mut Context, term: &Term, this: &Term, that: &Term
     if is_sequencing(context, term) && wraps_a_result(&this) && !wraps_a_result(&that) {
         return Error::stranded_sequencing(required_region_type(context, &this), that);
     }
+    if let Some(report) = unembedded_action(context, &this, &that) {
+        return report;
+    }
 
     Error::type_mismatch(this, that)
+}
+
+/// The specialized report for a mismatch between two monad applications that differ in their head or a context argument: an action of one monad where another is expected. The `!` and tail oracles embed such an action through the declared `Lift` witness when its monad can be read from its head's declaration, so this is the case they could not read — a projection, a computed head — or a position they never look at, and the explicit `lift` spelling is the remedy the report names. `None` for every other mismatch, which keeps the generic report.
+fn unembedded_action(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
+    let this_whnf = super::reduce_forced(context, this.clone()).ok()?;
+    let that_whnf = super::reduce_forced(context, that.clone()).ok()?;
+    let action = super::monad_shape(context, &this_whnf)?;
+    let expected = super::monad_shape(context, &that_whnf)?;
+    let differ = super::embeds(&expected, &action)
+        && super::is_monad(context, &action.head)
+        && super::is_monad(context, &expected.head);
+
+    differ.then(|| Error::unembedded_action(this.clone(), that.clone()))
 }
 
 /// Whether `term` is a `/syn/Monad/bind` application — what every `!` lowers to, and the only shape whose result type is an `M(B)` a stranded sequencing can clash on.
