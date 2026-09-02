@@ -289,7 +289,7 @@ fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
 
 // `Nat/Lt/strong` is course-of-values induction at a `Type`-valued motive, and cumulativity lets a `Prop`-valued claim ride it: `below` proves `Lt(n, n + 3)` through it and the proof discharges `Str/get`'s bound, an erased position. The second use computes: a step that reads the hypothesis two steps down is a recursion the successor's principle cannot express, and `strong` carries it as ordinary induction on the bound.
 //
-// The proof is consumed where erasure deletes it, deliberately: binding it by a value-level `let` runs `strong` with a step erased to `unit`, which is the erasure asymmetry `tests::erasure` pins as ignored.
+// The proof is consumed where erasure deletes it; `tests::erasure` pins the other route, a proof bound by a value-level `let`, which runs `strong` with a step erased to a function returning the unit constant.
 #[test]
 fn strong_induction_serves_a_proposition_and_a_computation() {
     assert_eq!(

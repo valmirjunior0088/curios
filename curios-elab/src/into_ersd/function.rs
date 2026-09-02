@@ -152,7 +152,7 @@ impl Lowering {
         Ok(self.bind(hint, curios_ersd::Rhs::Apply { callee, arguments }))
     }
 
-    /// Erase a value held in a kept slot. The mask keeps the slot for uniform arity, but this instantiation can still make it a proof or a type, which carries no runtime content: proof irrelevance fills the slot with the unit constant rather than materializing a witness no runtime code reads.
+    /// Erase a value held in a kept slot. The mask keeps the slot for uniform arity, but this instantiation can still make it a proof or a type, which carries no runtime content: proof irrelevance fills the slot with content-free stand-in — the unit constant, or, where the declaration kept a *function* it will apply, a function of the declared runtime arity returning it — rather than materializing a witness no runtime code reads.
     pub(super) fn kept_operand(
         &mut self,
         context: &mut Context,
@@ -160,9 +160,53 @@ impl Lowering {
         type_: &Term,
     ) -> Result<Outcome, Error> {
         match is_erasable(context, type_)? {
-            true => Ok(Outcome::Emitted(self.unit())),
+            true => Ok(Outcome::Emitted(self.proof_stub(context, type_)?)),
             false => self.walk(context, value, type_, None),
         }
+    }
+
+    /// The content-free stand-in for an erased value in a kept slot, shaped by the slot's type. A proof or a type is the unit constant. A proof-valued *function* — a `Type`-valued parameter instantiated at a proposition, `strong`'s `step` at a `Prop` motive — is a function of the slot's kept arity whose body is the stand-in for its codomain, one layer per curried arrow: the declaration kept the slot because the callee applies it, and applying the unit constant traps where applying this returns. The two sides of the seam agree the way the declaration mask and `masked_fields` do — the callee's own calls drop the same parameters this stub omits, both reading the one telescope.
+    fn proof_stub(
+        &mut self,
+        context: &mut Context,
+        type_: &Term,
+    ) -> Result<curios_ersd::Atom, Error> {
+        let ft = match Term::unwrap_or_clone(reduce_with(context, type_)?) {
+            Subterm::FuncType(ft) => ft,
+            _ => return Ok(self.unit()),
+        };
+
+        let function = self.builder.reserve_function();
+        let mut params = Vec::new();
+
+        let body = context.with_frame(|context| -> Result<_, Error> {
+            let mut telescope = ft.telescope;
+            let output = loop {
+                match telescope {
+                    Telescope::Done(output) => break *output,
+                    Telescope::Cons(domain, rest) => {
+                        let name = context.fresh(None);
+                        let variable = Term::free_var(&name);
+                        let erasable = is_erasable(context, &domain)?;
+                        context.assume(&name, &domain);
+                        if !erasable {
+                            params.push(self.builder.value(None));
+                        }
+                        telescope = rest.open(&[&variable]);
+                    }
+                }
+            };
+
+            self.builder.open_block();
+            let result = self.proof_stub(context, &output)?;
+            Ok(self
+                .builder
+                .seal_block(curios_ersd::Terminator::Return(result)))
+        })?;
+
+        self.builder.define_function(function, None, params, body);
+        self.builder.let_functions(vec![function]);
+        Ok(curios_ersd::Atom::Function(function))
     }
 }
 
