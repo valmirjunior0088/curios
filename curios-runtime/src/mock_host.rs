@@ -1,38 +1,101 @@
 use {
     super::{Table, host::*},
+    curios_abi::kind,
     std::{
-        collections::{HashMap, VecDeque},
+        collections::{BTreeSet, HashMap, VecDeque},
         sync::{Arc, Mutex},
     },
 };
 
-/// The in-memory file map: path → contents, behind a shared lock. A live [`MockHost`] writes it during the run; the [`MockIo`] handle a test holds reads it back afterwards. `clone` shares the one underlying map.
-#[derive(Clone)]
-struct MockFileSystem {
-    inner: Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>,
+/// The in-memory disk: files as `path → contents` and the set of directories. Seeding a file implies every directory above it, so a seeded tree can be walked, listed and removed as a real one is.
+#[derive(Default)]
+struct MockDisk {
+    files: HashMap<Vec<u8>, Vec<u8>>,
+    dirs: BTreeSet<Vec<u8>>,
 }
 
-impl MockFileSystem {
-    /// Wrap a seeded `path → contents` map.
-    fn new(files: HashMap<Vec<u8>, Vec<u8>>) -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(files)),
+/// The path above `path` — the bytes before its last `/` — or `None` for a bare name.
+fn parent_of(path: &[u8]) -> Option<&[u8]> {
+    path.iter()
+        .rposition(|&byte| byte == b'/')
+        .map(|slash| &path[..slash])
+}
+
+impl MockDisk {
+    /// Record `path` and every directory above it as directories.
+    fn imply_dirs(&mut self, mut path: &[u8]) {
+        while let Some(parent) = parent_of(path) {
+            if parent.is_empty() {
+                break;
+            }
+
+            self.dirs.insert(parent.to_vec());
+            path = parent;
         }
     }
 
-    /// Whether `path` exists — `open`'s existence check in read mode.
+    /// The names directly inside directory `dir`, files and directories alike, in byte order.
+    fn children(&self, dir: &[u8]) -> Vec<Vec<u8>> {
+        let name_in = |path: &[u8]| -> Option<Vec<u8>> {
+            (parent_of(path) == Some(dir)).then(|| path[dir.len() + 1..].to_vec())
+        };
+
+        self.files
+            .keys()
+            .chain(self.dirs.iter())
+            .filter_map(|path| name_in(path))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+}
+
+/// The disk behind a shared lock. A live [`MockHost`] writes it during the run; the [`MockIo`] handle a test holds reads it back afterwards. `clone` shares the one underlying disk.
+#[derive(Clone)]
+struct MockFileSystem {
+    inner: Arc<Mutex<MockDisk>>,
+}
+
+impl MockFileSystem {
+    /// Wrap a seeded `path → contents` map and a set of directories, every ancestor of either implied.
+    fn new(files: HashMap<Vec<u8>, Vec<u8>>, dirs: BTreeSet<Vec<u8>>) -> Self {
+        let mut disk = MockDisk { files, dirs };
+
+        for path in disk.files.keys().cloned().collect::<Vec<_>>() {
+            disk.imply_dirs(&path);
+        }
+
+        for dir in disk.dirs.clone() {
+            disk.imply_dirs(&dir);
+        }
+
+        Self {
+            inner: Arc::new(Mutex::new(disk)),
+        }
+    }
+
+    /// Whether `path` is a file — `open`'s existence check in read mode.
     fn contains(&self, path: &[u8]) -> bool {
-        self.inner.lock().unwrap().contains_key(path)
+        self.inner.lock().unwrap().files.contains_key(path)
     }
 
     /// Reset `path` to empty, creating it if absent — `open` in write mode.
     fn truncate(&self, path: &[u8]) {
-        self.inner.lock().unwrap().insert(path.to_vec(), vec![]);
+        self.inner
+            .lock()
+            .unwrap()
+            .files
+            .insert(path.to_vec(), vec![]);
     }
 
     /// Create `path` empty if absent, leaving any existing contents — `open` in append mode.
     fn ensure(&self, path: &[u8]) {
-        self.inner.lock().unwrap().entry(path.to_vec()).or_default();
+        self.inner
+            .lock()
+            .unwrap()
+            .files
+            .entry(path.to_vec())
+            .or_default();
     }
 
     /// Append `bytes` to `path`, creating it if absent.
@@ -40,6 +103,7 @@ impl MockFileSystem {
         self.inner
             .lock()
             .unwrap()
+            .files
             .entry(path.to_vec())
             .or_default()
             .extend_from_slice(bytes);
@@ -47,14 +111,115 @@ impl MockFileSystem {
 
     /// Borrow `path`'s contents (empty if absent) under the lock, so a read can serve a slice without cloning the whole file.
     fn with<R>(&self, path: &[u8], serve: impl FnOnce(&[u8]) -> R) -> R {
-        let files = self.inner.lock().unwrap();
+        let disk = self.inner.lock().unwrap();
 
-        serve(files.get(path).map(Vec::as_slice).unwrap_or(&[]))
+        serve(disk.files.get(path).map(Vec::as_slice).unwrap_or(&[]))
     }
 
     /// A clone of `path`'s contents, or `None` if absent — post-run inspection.
     fn get(&self, path: &[u8]) -> Option<Vec<u8>> {
-        self.inner.lock().unwrap().get(path).cloned()
+        self.inner.lock().unwrap().files.get(path).cloned()
+    }
+
+    /// `stat`: the kind tag and the size of what is at `path`.
+    fn stat(&self, path: &[u8]) -> Option<(u32, usize)> {
+        let disk = self.inner.lock().unwrap();
+
+        match disk.files.get(path) {
+            Some(contents) => Some((kind::FILE, contents.len())),
+            None => disk.dirs.contains(path).then_some((kind::DIRECTORY, 0)),
+        }
+    }
+
+    fn remove_file(&self, path: &[u8]) -> Status {
+        let mut disk = self.inner.lock().unwrap();
+
+        match disk.files.remove(path) {
+            Some(_) => Status::Ok,
+            None if disk.dirs.contains(path) => Status::IsDirectory,
+            None => Status::NotFound,
+        }
+    }
+
+    /// A file moves alone; a directory moves with everything beneath it, as `rename(2)` does.
+    fn rename(&self, from: &[u8], to: &[u8]) -> Status {
+        let mut disk = self.inner.lock().unwrap();
+
+        if let Some(contents) = disk.files.remove(from) {
+            disk.files.insert(to.to_vec(), contents);
+
+            return Status::Ok;
+        }
+
+        if !disk.dirs.remove(from) {
+            return Status::NotFound;
+        }
+
+        let rebased = |path: &[u8]| [to, &path[from.len()..]].concat();
+        let prefixed = |path: &[u8]| path.starts_with(from) && path.get(from.len()) == Some(&b'/');
+
+        disk.dirs.insert(to.to_vec());
+        disk.dirs = disk
+            .dirs
+            .iter()
+            .map(|dir| match prefixed(dir) {
+                true => rebased(dir),
+                false => dir.clone(),
+            })
+            .collect();
+        disk.files = disk
+            .files
+            .drain()
+            .map(|(path, contents)| match prefixed(&path) {
+                true => (rebased(&path), contents),
+                false => (path, contents),
+            })
+            .collect();
+
+        Status::Ok
+    }
+
+    fn list(&self, path: &[u8]) -> (Status, Vec<Vec<u8>>) {
+        let disk = self.inner.lock().unwrap();
+
+        match () {
+            () if disk.files.contains_key(path) => (Status::NotDirectory, vec![]),
+            () if !disk.dirs.contains(path) => (Status::NotFound, vec![]),
+            () => (Status::Ok, disk.children(path)),
+        }
+    }
+
+    fn create_dir(&self, path: &[u8]) -> Status {
+        let mut disk = self.inner.lock().unwrap();
+
+        match () {
+            () if disk.files.contains_key(path) || disk.dirs.contains(path) => {
+                Status::AlreadyExists
+            }
+            () if parent_of(path).is_some_and(|parent| !disk.dirs.contains(parent)) => {
+                Status::NotFound
+            }
+            () => {
+                disk.dirs.insert(path.to_vec());
+
+                Status::Ok
+            }
+        }
+    }
+
+    fn remove_dir(&self, path: &[u8]) -> Status {
+        let mut disk = self.inner.lock().unwrap();
+
+        match () {
+            () if disk.files.contains_key(path) => Status::NotDirectory,
+            () if !disk.dirs.contains(path) => Status::NotFound,
+            () if !disk.children(path).is_empty() => Status::NotEmpty,
+            () => {
+                disk.dirs.remove(path);
+
+                Status::Ok
+            }
+        }
     }
 }
 
@@ -120,6 +285,8 @@ pub struct MockHost {
     raw_modes: Arc<Mutex<Vec<bool>>>,
     /// The scripted terminal size `size` answers; `None` is a host with no terminal, which answers `ENOTTY` as the native host does.
     tty_size: Option<(u32, u32)>,
+    /// The scripted working directory `cwd` answers.
+    cwd: Vec<u8>,
 }
 
 /// `ENOTTY`, the errno a terminal `ioctl` reports on a descriptor that is not a terminal — `25` on both release targets, Linux and macOS.
@@ -478,6 +645,50 @@ impl HostOps for MockHost {
             None => (Status::Other(ENOTTY), 0, 0),
         }
     }
+
+    fn stat(&self, path: &[u8]) -> (Status, u32, u32, u32, u32, u32, u32) {
+        // The scripted disk keeps no timestamps, so a modification time is the epoch.
+        match self.files.stat(path) {
+            Some((kind, size)) => {
+                let size = size as u64;
+
+                (
+                    Status::Ok,
+                    kind,
+                    (size / 1_000_000_000) as u32,
+                    (size % 1_000_000_000) as u32,
+                    0,
+                    0,
+                    0,
+                )
+            }
+            None => (Status::NotFound, 0, 0, 0, 0, 0, 0),
+        }
+    }
+
+    fn remove_file(&self, path: &[u8]) -> Status {
+        self.files.remove_file(path)
+    }
+
+    fn rename(&self, from: &[u8], to: &[u8]) -> Status {
+        self.files.rename(from, to)
+    }
+
+    fn list(&self, path: &[u8]) -> (Status, Vec<Vec<u8>>) {
+        self.files.list(path)
+    }
+
+    fn create_dir(&self, path: &[u8]) -> Status {
+        self.files.create_dir(path)
+    }
+
+    fn remove_dir(&self, path: &[u8]) -> Status {
+        self.files.remove_dir(path)
+    }
+
+    fn cwd(&self) -> (Status, Vec<u8>) {
+        (Status::Ok, self.cwd.clone())
+    }
 }
 
 /// Serve up to `count` bytes of `contents` from `*position`, advancing the cursor; `Status::Eof` with empty bytes once it reaches the end. The shared shape of every scripted read (file, inbound request, outbound response).
@@ -535,9 +746,26 @@ pub struct MockHostBuilder {
     args: Vec<Vec<u8>>,
     env: HashMap<Vec<u8>, Vec<u8>>,
     tty_size: Option<(u32, u32)>,
+    dirs: BTreeSet<Vec<u8>>,
+    cwd: Option<Vec<u8>>,
 }
 
 impl MockHostBuilder {
+    /// Seed empty directories; the directories above every seeded file exist without being named here.
+    pub fn dirs<P: AsRef<[u8]>, I: IntoIterator<Item = P>>(mut self, dirs: I) -> Self {
+        self.dirs
+            .extend(dirs.into_iter().map(|dir| dir.as_ref().to_vec()));
+
+        self
+    }
+
+    /// Script the working directory `cwd` answers; `/` when unset.
+    pub fn cwd(mut self, path: impl AsRef<[u8]>) -> Self {
+        self.cwd = Some(path.as_ref().to_vec());
+
+        self
+    }
+
     /// Give the host a terminal of `cols` by `rows`: `size` answers it and `raw` records its switches. Without one, both rows answer `ENOTTY`.
     pub fn tty_size(mut self, cols: u32, rows: u32) -> Self {
         self.tty_size = Some((cols, rows));
@@ -641,7 +869,7 @@ impl MockHostBuilder {
     /// Wrap the seeded values into a live host and its [`MockIo`] inspection handle: the host is moved into the runner, the handle stays behind.
     pub fn build(self) -> (MockHost, MockIo) {
         let output = Arc::new(Mutex::new(Vec::new()));
-        let files = MockFileSystem::new(self.files);
+        let files = MockFileSystem::new(self.files, self.dirs);
         let captures = Arc::new(Mutex::new(Vec::new()));
         let raw_modes = Arc::new(Mutex::new(Vec::new()));
 
@@ -668,6 +896,7 @@ impl MockHostBuilder {
             env: self.env,
             raw_modes,
             tty_size: self.tty_size,
+            cwd: self.cwd.unwrap_or_else(|| b"/".to_vec()),
         };
 
         (host, io)

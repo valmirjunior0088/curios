@@ -1,4 +1,4 @@
-//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, and stdio-handle tags. Each set is mirrored by a guest-side declaration; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
+//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, and stdio-handle tags. Each set is mirrored by a guest-side declaration; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
 
 /// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Handle/Error`. `Other` has no fixed code here: it lowers its carried errno offset by `OTHER_BASE`, keeping the errno lane disjoint from the named codes.
 pub mod status {
@@ -18,8 +18,14 @@ pub mod status {
     pub const WOULD_BLOCK: u32 = 6;
     /// A TLS upgrade or server-config build failed. `rustls` errors carry no OS errno, so they collapse to this one named code instead of riding the errno passthrough.
     pub const TLS_ERROR: u32 = 7;
+    /// A `dir/remove` on a directory that still has entries (`ErrorKind::DirectoryNotEmpty`). Named, with the two below, because a program removing a directory has to tell them apart portably and the browser has no errno to pass through.
+    pub const NOT_EMPTY: u32 = 8;
+    /// A file operation applied to a directory (`ErrorKind::IsADirectory`).
+    pub const IS_DIRECTORY: u32 = 9;
+    /// A directory operation applied to something that is not one (`ErrorKind::NotADirectory`).
+    pub const NOT_DIRECTORY: u32 = 10;
     /// The errno passthrough lane: `Status::Other(errno)` lowers as `OTHER_BASE + errno`, one past the last named code, so a raw OS errno — EIO is 5, ENXIO is 6 — can never masquerade as `OK` or a named failure. The guest's `error_of` subtracts it back out.
-    pub const OTHER_BASE: u32 = TLS_ERROR + 1;
+    pub const OTHER_BASE: u32 = NOT_DIRECTORY + 1;
 }
 
 /// `poll` interest/readiness flags — a bitmask, mirrored by `/sys/poll`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.
@@ -42,6 +48,18 @@ pub mod mode {
     pub const WRITE: u32 = 1;
     /// Open for appending: created if absent, every write lands at the end.
     pub const APPEND: u32 = 2;
+}
+
+/// What `file/stat` found at a path, mirrored by `/sys/kind` and the guest's `/std/fs/Kind`. `stat` follows symbolic links, so `SYMLINK` is reported only where the link's target is missing.
+pub mod kind {
+    /// A regular file.
+    pub const FILE: u32 = 0;
+    /// A directory.
+    pub const DIRECTORY: u32 = 1;
+    /// A symbolic link whose target is missing — the one case following the link finds nothing to report.
+    pub const SYMLINK: u32 = 2;
+    /// Anything else: a device, a socket, a pipe.
+    pub const OTHER: u32 = 3;
 }
 
 /// The well-known stdio handle tokens minted by the `/sys/Handle` prelude. A handle's wire encoding is the little-endian `Natural` bytes of its token (see `Handle::encode`), which mints one zero byte for zero — so STDIN encodes as `[0]`, never the empty byte string.

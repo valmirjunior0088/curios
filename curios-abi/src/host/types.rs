@@ -122,6 +122,12 @@ pub enum Status {
     WouldBlock,
     /// A TLS upgrade (`start_tls`/`start_tls_server`) or server-config build failed: an unparseable certificate/key, an invalid SNI, or a failed handshake (bad cert chain, protocol error). These are `rustls`'s own errors, not OS errnos, so they collapse to this one named code rather than passing through the errno mapping.
     TlsError,
+    /// A directory removal refused because the directory still has entries (`ErrorKind::DirectoryNotEmpty`).
+    NotEmpty,
+    /// A file operation applied to a directory (`ErrorKind::IsADirectory`).
+    IsDirectory,
+    /// A directory operation applied to something that is not one (`ErrorKind::NotADirectory`).
+    NotDirectory,
     /// An otherwise-unrecognized failure, carrying the OS errno that produced it.
     Other(u32),
 }
@@ -138,6 +144,9 @@ impl Status {
             Status::ConnectionRefused => status::CONNECTION_REFUSED,
             Status::WouldBlock => status::WOULD_BLOCK,
             Status::TlsError => status::TLS_ERROR,
+            Status::NotEmpty => status::NOT_EMPTY,
+            Status::IsDirectory => status::IS_DIRECTORY,
+            Status::NotDirectory => status::NOT_DIRECTORY,
             Status::Other(errno) => status::OTHER_BASE + errno,
         }
     }

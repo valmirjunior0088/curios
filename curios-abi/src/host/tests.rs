@@ -16,6 +16,9 @@ fn errno_lane_is_disjoint_from_named_codes() {
         status::CONNECTION_REFUSED,
         status::WOULD_BLOCK,
         status::TLS_ERROR,
+        status::NOT_EMPTY,
+        status::IS_DIRECTORY,
+        status::NOT_DIRECTORY,
     ];
 
     assert!(named.iter().all(|&code| code < status::OTHER_BASE));
@@ -59,6 +62,13 @@ fn names_are_the_wire_abi() {
             "env",
             "raw",
             "size",
+            "stat",
+            "remove_file",
+            "rename",
+            "list",
+            "create_dir",
+            "remove_dir",
+            "cwd",
         ]
     );
 }
@@ -108,6 +118,20 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels("clock_mono"), ["secs", "nanos"]);
     assert_eq!(labels("env"), ["status", "value"]);
     assert_eq!(labels("size"), ["status", "cols", "rows"]);
+    assert_eq!(
+        labels("stat"),
+        [
+            "status",
+            "kind",
+            "size_hi",
+            "size_lo",
+            "mtime_hi",
+            "mtime_lo",
+            "mtime_nanos"
+        ]
+    );
+    assert_eq!(labels("list"), ["status", "names"]);
+    assert_eq!(labels("cwd"), ["status", "path"]);
 }
 
 /// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature. Nothing asserts that `List` does not nest — [`WireLeaf`](super::WireLeaf) makes a nested one unrepresentable.

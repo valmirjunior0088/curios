@@ -94,6 +94,27 @@ macro_rules! host_ops {
 
             /// The terminal's dimensions (`TIOCGWINSZ`). `(status, cols, rows)`; the counts are meaningful only under `Ok`.
             size as tty/size [h: Handle] [status: Status, cols: Nat, rows: Nat];
+
+            /// What is at `path`, following symbolic links. `kind` is a [`kind`](crate::kind) tag; the size and the modification time are split base-10⁹ as `clock_wall` splits its seconds, so the i31 envelope is never asked to hold a file size. A dangling link reports the `SYMLINK` kind with zero sizes; every field but `status` is meaningful only under `Ok`.
+            stat as file/stat [path: Bytes] [status: Status, kind: Nat, size_hi: Nat, size_lo: Nat, mtime_hi: Nat, mtime_lo: Nat, mtime_nanos: Nat];
+
+            /// Remove the file at `path`. `IsDirectory` on a directory.
+            remove_file as file/remove [path: Bytes] [status: Status];
+
+            /// Rename `from` to `to`, file or directory, replacing an existing `to` as `rename(2)` does.
+            rename as file/rename [from: Bytes, to: Bytes] [status: Status];
+
+            /// The names in directory `path`, as the bytes the directory holds — no `.` or `..`, sorted so two listings agree. `NotDirectory` on a file.
+            list as dir/list [path: Bytes] [status: Status, names: ListBytes];
+
+            /// Create the directory at `path`; its parent must exist. `AlreadyExists` when anything is there.
+            create_dir as dir/create [path: Bytes] [status: Status];
+
+            /// Remove the empty directory at `path`. `NotEmpty` when it has entries, `NotDirectory` on a file.
+            remove_dir as dir/remove [path: Bytes] [status: Status];
+
+            /// The process's working directory, as bytes. WASI has preopens instead, so the browser denies it.
+            cwd as proc/cwd [] [status: Status, path: Bytes];
         }
     };
 }

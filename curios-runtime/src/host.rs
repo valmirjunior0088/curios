@@ -18,6 +18,9 @@ pub(crate) fn status_from_error(error: Error) -> Status {
         ErrorKind::AlreadyExists => Status::AlreadyExists,
         ErrorKind::ConnectionRefused => Status::ConnectionRefused,
         ErrorKind::WouldBlock => Status::WouldBlock,
+        ErrorKind::DirectoryNotEmpty => Status::NotEmpty,
+        ErrorKind::IsADirectory => Status::IsDirectory,
+        ErrorKind::NotADirectory => Status::NotDirectory,
         _ => match error.raw_os_error() {
             Some(errno) => Status::Other(errno as u32),
             None => Status::Other(0),

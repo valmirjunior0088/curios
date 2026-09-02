@@ -1,5 +1,6 @@
 use {
     super::{OsResolver, Slot, Table, host::*},
+    curios_abi::kind,
     rustix::{
         event::{PollFd, Timespec, poll},
         termios::{OptionalActions, Termios, tcgetattr, tcgetwinsize, tcsetattr},
@@ -11,10 +12,14 @@ use {
     socket2::{Domain, SockAddr, Socket, Type},
     std::{
         env,
-        fs::{File, OpenOptions},
-        io::{Read, Write, stderr, stdin, stdout},
+        ffi::OsStr,
+        fs::{self, File, OpenOptions},
+        io::{ErrorKind, Read, Write, stderr, stdin, stdout},
         net::SocketAddr,
-        os::fd::{AsFd, BorrowedFd, OwnedFd},
+        os::{
+            fd::{AsFd, BorrowedFd, OwnedFd},
+            unix::ffi::{OsStrExt, OsStringExt},
+        },
         sync::{Arc, LazyLock, Mutex, OnceLock},
         time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     },
@@ -659,6 +664,112 @@ impl HostOps for OsHost {
             Some(Err(errno)) => (status_from_error(std::io::Error::from(errno)), 0, 0),
         }
     }
+
+    fn stat(&self, path: &[u8]) -> (Status, u32, u32, u32, u32, u32, u32) {
+        let path = OsStr::from_bytes(path);
+
+        let metadata = match fs::metadata(path) {
+            Ok(metadata) => metadata,
+            // Following the link found nothing. `symlink_metadata` tells a dangling link from a path with nothing at all, and it is the one case the `symlink` kind is reported.
+            Err(error) if error.kind() == ErrorKind::NotFound => {
+                return match fs::symlink_metadata(path) {
+                    Ok(link) if link.file_type().is_symlink() => {
+                        (Status::Ok, kind::SYMLINK, 0, 0, 0, 0, 0)
+                    }
+                    _ => (status_from_error(error), 0, 0, 0, 0, 0, 0),
+                };
+            }
+            Err(error) => return (status_from_error(error), 0, 0, 0, 0, 0, 0),
+        };
+
+        let file_type = metadata.file_type();
+        let kind = match () {
+            () if file_type.is_dir() => kind::DIRECTORY,
+            () if file_type.is_file() => kind::FILE,
+            () => kind::OTHER,
+        };
+        let (size_hi, size_lo) = split_billions(metadata.len());
+        let (mtime_hi, mtime_lo, mtime_nanos) = metadata
+            .modified()
+            .ok()
+            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+            .map(|since_epoch| {
+                let (hi, lo) = split_billions(since_epoch.as_secs());
+
+                (hi, lo, since_epoch.subsec_nanos())
+            })
+            .unwrap_or((0, 0, 0));
+
+        (
+            Status::Ok,
+            kind,
+            size_hi,
+            size_lo,
+            mtime_hi,
+            mtime_lo,
+            mtime_nanos,
+        )
+    }
+
+    fn remove_file(&self, path: &[u8]) -> Status {
+        outcome(fs::remove_file(OsStr::from_bytes(path)))
+    }
+
+    fn rename(&self, from: &[u8], to: &[u8]) -> Status {
+        outcome(fs::rename(OsStr::from_bytes(from), OsStr::from_bytes(to)))
+    }
+
+    fn list(&self, path: &[u8]) -> (Status, Vec<Vec<u8>>) {
+        let entries = match fs::read_dir(OsStr::from_bytes(path)) {
+            Ok(entries) => entries,
+            Err(error) => return (status_from_error(error), vec![]),
+        };
+
+        let mut names = Vec::new();
+
+        for entry in entries {
+            match entry {
+                Ok(entry) => names.push(entry.file_name().into_vec()),
+                Err(error) => return (status_from_error(error), vec![]),
+            }
+        }
+
+        // The directory's own order is whatever the filesystem keeps; sorted, two listings of one directory agree and a test can pin one.
+        names.sort();
+
+        (Status::Ok, names)
+    }
+
+    fn create_dir(&self, path: &[u8]) -> Status {
+        outcome(fs::create_dir(OsStr::from_bytes(path)))
+    }
+
+    fn remove_dir(&self, path: &[u8]) -> Status {
+        outcome(fs::remove_dir(OsStr::from_bytes(path)))
+    }
+
+    fn cwd(&self) -> (Status, Vec<u8>) {
+        match env::current_dir() {
+            Ok(path) => (Status::Ok, path.into_os_string().into_vec()),
+            Err(error) => (status_from_error(error), vec![]),
+        }
+    }
+}
+
+/// A status-only row's reply: the failure's status, or `Ok`.
+fn outcome(result: std::io::Result<()>) -> Status {
+    match result {
+        Ok(()) => Status::Ok,
+        Err(error) => status_from_error(error),
+    }
+}
+
+/// A count split base-10⁹ into two limbs that each fit an i31, the way `clock_wall` splits its seconds.
+fn split_billions(count: u64) -> (u32, u32) {
+    (
+        (count / 1_000_000_000) as u32,
+        (count % 1_000_000_000) as u32,
+    )
 }
 
 /// The reply of one `read`: a zero count is end of stream, a positive one the prefix it filled, an error its status. Shared by every descriptor `read` serves, the raw ones included.

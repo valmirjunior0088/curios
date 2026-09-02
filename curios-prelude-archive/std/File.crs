@@ -62,3 +62,7 @@ let drain(f: File) -> Async(Result(Bytes, Handle/Error)) =
 
 pub let read_all(path: Str) -> Async(Result(Bytes, Handle/Error)) =
     Async/map(with(path, Mode/read(), (f) => drain(f)), (r) => Result/flatten(r));
+
+-- The whole file in one call, the twin of `read_all`: created if absent, replaced if present.
+pub let write_all(path: Str, b: Bytes) -> Async(Result({}, Handle/Error)) =
+    Async/map(with(path, Mode/write(), (f) => write(f, b)), (r) => Result/flatten(r));

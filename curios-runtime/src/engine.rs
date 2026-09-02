@@ -326,6 +326,48 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
         move |handle: Handle| host.size(handle)
     });
 
+    impls.define("stat", {
+        let host = host.clone();
+
+        move |path: Vec<u8>| host.stat(&path)
+    });
+
+    impls.define("remove_file", {
+        let host = host.clone();
+
+        move |path: Vec<u8>| host.remove_file(&path)
+    });
+
+    impls.define("rename", {
+        let host = host.clone();
+
+        move |(from, to): (Vec<u8>, Vec<u8>)| host.rename(&from, &to)
+    });
+
+    impls.define("list", {
+        let host = host.clone();
+
+        move |path: Vec<u8>| host.list(&path)
+    });
+
+    impls.define("create_dir", {
+        let host = host.clone();
+
+        move |path: Vec<u8>| host.create_dir(&path)
+    });
+
+    impls.define("remove_dir", {
+        let host = host.clone();
+
+        move |path: Vec<u8>| host.remove_dir(&path)
+    });
+
+    impls.define("cwd", {
+        let host = host.clone();
+
+        move |()| host.cwd()
+    });
+
     // Completeness — the half the per-`define` asserts cannot see: a store row with no binding would otherwise surface only when a program that imports it reaches `link`. Membership and uniqueness are asserted per `define`, so no unbound row is exactly one binding per row.
     let missing = impls
         .foreigns

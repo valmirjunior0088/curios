@@ -164,6 +164,14 @@ export async function run(config) {
     // The playground has no terminal to switch or measure, so both tty rows are denied as `open` is.
     raw: denied,
     size: () => [config.status.PERMISSION_DENIED, 0, 0],
+    // No filesystem either: every filesystem row is denied as `open` is. `list` would answer a `List(Bytes)`, a shape the bridge has no encoder for — `resolve` and `args` are unsupported for the same reason — so it traps by name rather than returning a value it cannot build.
+    stat: () => [config.status.PERMISSION_DENIED, 0, 0, 0, 0, 0, 0],
+    remove_file: denied,
+    rename: denied,
+    list: unsupported("list"),
+    create_dir: denied,
+    remove_dir: denied,
+    cwd: deniedHandle,
     exit: (code) => {
       throw new ExitSignal(code);
     },

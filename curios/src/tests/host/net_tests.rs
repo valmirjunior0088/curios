@@ -49,6 +49,9 @@ fn call_to_an_unscripted_endpoint_is_refused() {
                 | permission_denied() => /std/print("denied")
                 | exists() => /std/print("exists")
                 | would_block() => /std/print("would block")
+                | not_empty() => /std/print("not empty")
+                | is_directory() => /std/print("is a directory")
+                | not_directory() => /std/print("not a directory")
                 | other(_) => /std/print("other")
                 end
             end

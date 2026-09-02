@@ -7,9 +7,13 @@ pub struct Instant: Type {
     nanos: Nat,
 }
 
+-- An instant from the limbs a host row hands over — `clock/wall`'s, and `file/stat`'s modification time — which is the one way a sibling module builds one, the representation being this module's.
+pub let of_parts(secs_hi: Nat, secs_lo: Nat, nanos: Nat) -> Instant =
+    Instant { secs_hi = secs_hi, secs_lo = secs_lo, nanos = nanos };
+
 pub let now() -> Io(Instant) =
     let r = /sys/clock/wall!;
-    Io/pure(Instant { secs_hi = r.secs_hi, secs_lo = r.secs_lo, nanos = r.nanos });
+    Io/pure(of_parts(r.secs_hi, r.secs_lo, r.nanos));
 
 let sub_digit(x: Nat, y: Nat) -> {digit: Nat, borrow: Nat} =
     match x < y

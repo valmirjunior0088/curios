@@ -4,7 +4,9 @@ use {
         LetSignature, Module, Name, Nat, NatLiteral, Pattern, Subterm, Term, TopForeign, TopItem,
         TopLet, TopMod, TopUse, TupleType, TupleTypeParam, UseGroup,
     },
-    curios_abi::{ForeignFunction, ForeignStore, Namespace, WireType, mode, poll, status, stdio},
+    curios_abi::{
+        ForeignFunction, ForeignStore, Namespace, WireType, kind, mode, poll, status, stdio,
+    },
     curios_utilities::{Grain, Plicity, SyntaxName, SyntaxRegistry},
     std::sync::Arc,
 };
@@ -920,6 +922,9 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
                 pub_let("refused", nat(), nat_lit(status::CONNECTION_REFUSED)),
                 pub_let("would_block", nat(), nat_lit(status::WOULD_BLOCK)),
                 pub_let("tls", nat(), nat_lit(status::TLS_ERROR)),
+                pub_let("not_empty", nat(), nat_lit(status::NOT_EMPTY)),
+                pub_let("is_directory", nat(), nat_lit(status::IS_DIRECTORY)),
+                pub_let("not_directory", nat(), nat_lit(status::NOT_DIRECTORY)),
                 pub_let("other_base", nat(), nat_lit(status::OTHER_BASE)),
             ],
         ),
@@ -938,6 +943,15 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
                 pub_let("read", nat(), nat_lit(mode::READ)),
                 pub_let("write", nat(), nat_lit(mode::WRITE)),
                 pub_let("append", nat(), nat_lit(mode::APPEND)),
+            ],
+        ),
+        pub_mod(
+            "kind",
+            vec![
+                pub_let("file", nat(), nat_lit(kind::FILE)),
+                pub_let("directory", nat(), nat_lit(kind::DIRECTORY)),
+                pub_let("symlink", nat(), nat_lit(kind::SYMLINK)),
+                pub_let("other", nat(), nat_lit(kind::OTHER)),
             ],
         ),
     ]);
