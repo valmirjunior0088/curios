@@ -51,7 +51,7 @@ Six layers, pure except the lowest and the highest. Names are proposals.
 
 ### 1. The host floor
 
-`/std/tty/raw`, `/std/tty/size` and the bracket `/std/tty/with_raw` wrap the two host rows, `/sys/tty/raw` and `/sys/tty/size`; `raw(h, true)` records the descriptor's termios on first use and applies the raw settings, `raw(h, false)` restores the record, and `size` is `TIOCGWINSZ`. The size is a row rather than a `CSI 18 t` query, which leaks its reply to the inner shell under tmux and ssh and puts a parser in the path of every keystroke; resize is polled on a tick rather than a signal, which would be the first signal in the ABI and carries the race in-band resize reports were introduced to remove. Nothing in this design touches the host except through `/std/tty`, and `Term` below is where it is wrapped.
+`/std/tty/raw`, `/std/tty/size` and the bracket `/std/tty/with_raw` wrap the two host rows, `/sys/tty/raw` and `/sys/tty/size`; `raw(h, true)` records the descriptor's termios on first use and applies the raw settings, `raw(h, false)` restores the record, and `size` is `TIOCGWINSZ`. The size is a row rather than a `CSI 18 t` query, which leaks its reply to the inner shell under tmux and ssh and puts a parser in the path of every keystroke; resize is polled on a tick rather than a signal, which would be the first signal in the ABI and carries the race in-band resize reports were introduced to remove. Nothing in this design touches the host except through `/std/tty`, and `Session` below is where it is wrapped.
 
 ### 2. Values
 
@@ -102,7 +102,7 @@ pub let render(@w, @h, previous: Option(Image(w, h)), next: Image(w, h), cursor:
 
 ### 5. The session and the loop
 
-`Term` is the effectful floor: `enter` puts stdin in raw mode, enters the alternate screen (`CSI ? 1049 h`), hides the cursor, enables bracketed paste (`CSI ? 2004 h`) and pushes the kitty flag `1` (`CSI > 1 u`); `leave` undoes each in reverse, and it is what `using` releases on both scheduler exits. `Term/size`, `Term/draw` and `Term/read` wrap `/std/tty`, the decoder and the renderer, so a program that wants its own loop has one.
+`Session` is the effectful floor, named for the bracket it is: `enter` puts stdin in raw mode, enters the alternate screen (`CSI ? 1049 h`), hides the cursor, enables bracketed paste (`CSI ? 2004 h`) and pushes the kitty flag `1` (`CSI > 1 u`); `leave` undoes each in reverse, and it is what `using` releases on both scheduler exits. `Session/size`, `Session/draw` and `Session/read` wrap `/std/tty`, the decoder and the renderer, so a program that wants its own loop has one.
 
 `App` is the framework on top — brick's record in Curios's types:
 
@@ -147,7 +147,7 @@ The question was put to the survey and the literature directly. They help at thr
 Each names the alternatives and what the recommendation rests on.
 
 1. **Sized images, or Notty's implicit padding.** Recommended: sized. It is `Vec`'s idiom, it is the one place the type system pays for itself in this library, the probe shows the composition costs no proof, and the escape hatch is one function.
-2. **Which loop is public.** Recommended: both `Term` and `App`, as ratatui exposes the terminal and tui-realm the framework, so a program with its own loop is not refused.
+2. **Which loop is public.** Recommended: both `Session` and `App`, as ratatui exposes the terminal and tui-realm the framework, so a program with its own loop is not refused.
 3. **The resize tick.** Recommended: 100 ms — one `ioctl`, and what every library does on the platform without signals. That the size is a row and resize is not a signal is decided with the rows above, not here.
 4. **Kitty keyboard protocol in the MVP.** Recommended: yes, the disambiguation flag alone, since the legacy decoder must exist regardless and the protocol's form is one extra arm.
 5. **Mouse.** Recommended: out. It is the one capability the survey splits on, and it brings hit-testing, which the image algebra has no rectangles for.
