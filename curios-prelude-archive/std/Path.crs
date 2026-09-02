@@ -1,0 +1,93 @@
+-- A path as the host holds it: bytes, with `/` as the one separator, since the release targets are Linux and macOS. The representation is private for one invariant — a path is exactly the bytes the host handed over or a program built, never decoded on the way — so a name that is not UTF-8 is a path like any other, and `to_str` is where a program chooses to decode it or refuse. The algebra here is pure; `fs` and `File` take a `Path` and hand one back, and a listing's entry is a `Path` that `join` puts back under its directory.
+use /std/{Bytes, Byte, Str, Nat, Bool, Option, List, Equal, Show};
+
+pub struct Path: Type {
+    Bytes,
+}
+
+pub let of_bytes(b: Bytes) -> Path =
+    Path { b };
+
+pub let of_str(s: Str) -> Path =
+    Path { Str/to_bytes(s) };
+
+pub let to_bytes(p: Path) -> Bytes =
+    p.0;
+
+-- `none` for a path that is not UTF-8, which is the caller's to decode otherwise or refuse.
+pub let to_str(p: Path) -> Option(Str) =
+    Str/of_bytes(p.0);
+
+pub let is_empty(p: Path) -> Bool =
+    Bytes/len(p.0) == 0;
+
+let separator: Byte =
+    '/';
+
+let ends_with_separator(b: Bytes) -> Bool =
+    match Bytes/try_get(b, Bytes/len(b) - 1)
+    | some(last) => last == separator
+    | none() => false
+    end;
+
+-- The components between separators, an empty one where two separators touch or the path starts or ends with one: `/c` is `["", "c"]` and `a/` is `["a", ""]`.
+let components(b: Bytes) -> List(Bytes) =
+    let (done, current): {List(Bytes), Bytes} =
+        Bytes/fold(
+            b,
+            ([], x[]),
+            (byte, (done, current)) =>
+                match byte == separator
+                | true => ([..done, current], x[])
+                | false => (done, x[..current, byte])
+                end);
+    [..done, current];
+
+-- `a/b`, with one separator between them whatever `a` ends in; an empty side is the other side.
+pub let join(a: Path, b: Path) -> Path =
+    choose
+    | is_empty(a) => b
+    | is_empty(b) => a
+    | ends_with_separator(a.0) => Path { x[..a.0, ..b.0] }
+    | _ => Path { x[..a.0, separator, ..b.0] }
+    end;
+
+-- The last component, which a listing's entry is; empty after a trailing separator.
+pub let name(p: Path) -> Path =
+    Path { Option/unwrap_or(List/last(components(p.0)), x[]) };
+
+-- Everything before the last separator: `none` for a bare name, and `/` itself for a child of the root.
+pub let parent(p: Path) -> Option(Path) =
+    let parts = components(p.0);
+    let n = List/len(parts);
+    match n < 2
+    | true => Option/none()
+    | false =>
+        let above = Bytes/join(x[separator], List/take(parts, n - 1));
+        Option/some(
+            Path { match Bytes/len(above) == 0 | true => x[separator] | false => above end })
+    end;
+
+-- The bytes after the last `.` of the name, when the name has one that is not its first byte: `.bashrc` has none and `archive.tar.gz` has `gz`.
+pub let extension(p: Path) -> Option(Path) =
+    let dot: Byte = '.';
+    let (_, seen, current): {Nat, Bool, Bytes} =
+        Bytes/fold(
+            name(p).0,
+            (0, false, x[]),
+            (byte, (i, seen, current)) =>
+                match byte == dot && i > 0
+                | true => (i + 1, true, x[])
+                | false => (i + 1, seen, x[..current, byte])
+                end);
+    match seen | true => Option/some(Path { current }) | false => Option/none() end;
+
+satisfy Equal(Path) {
+    eql(a, b) = a.0 == b.0,
+    neq(a, b) = a.0 != b.0,
+}
+
+-- The text where the bytes are UTF-8, and the bytes spelled as bytes where they are not.
+satisfy Show(Path) {
+    show(p) = match Str/of_bytes(p.0) | some(s) => s | none() => Show/show(p.0) end,
+}

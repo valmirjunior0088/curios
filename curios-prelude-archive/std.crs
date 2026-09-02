@@ -127,6 +127,9 @@ pub use True/{let True};
 pub mod Str;
 pub use Str/{let Str};
 
+pub mod Path;
+pub use Path/{let Path};
+
 pub mod Bool;
 pub use Bool/{let Bool};
 
