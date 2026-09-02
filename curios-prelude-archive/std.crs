@@ -169,10 +169,14 @@ pub let print_err(s: Str) -> Io({}) =
     let _ = Handle/write(Handle/stderr, Str/to_bytes(s))!;
     Io/pure(());
 
+-- One line of standard input, without its newline; `none` at the end of the input. The host never waits on a peer unasked, and this is the one synchronous reader that asks: a plain `Io` program has no scheduler to park, so a read that answers `would_block` waits in `poll` on its own behalf and tries again.
 pub let read() -> Io(Option(Bytes)) =
     let go(acc: Bytes) -> Io(Option(Bytes)) =
         let r = /sys/Handle/read(Handle/stdin, 1)!;
         choose
+        | r.status == /sys/status/would_block =>
+            let _ = /sys/Handle/poll([Handle/stdin], [/sys/event/read], -1)!;
+            go(acc)
         | r.status != /sys/status/ok && Bytes/len(acc) == 0 => Io/pure(Option/none())
         | r.status != /sys/status/ok => Io/pure(Option/some(acc))
         | Byte/to_nat(Option/unwrap_or(Bytes/try_get(r.bytes, 0), 0)) == 0xA =>

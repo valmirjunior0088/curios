@@ -98,6 +98,23 @@ fn a_piped_child_stream_is_filed_non_blocking() {
     host.close(stdout);
 }
 
+/// The stdin gate, exercised on a pipe of its own: an empty pipe is not readable, a written byte makes it readable, and so does the writer's close, since a read then answers the end of the stream at once.
+#[test]
+fn readable_now_follows_a_pipe_end_as_its_writer_fills_and_closes_it() {
+    let (mut reader, mut writer) = std::io::pipe().expect("a pipe");
+
+    assert!(!readable_now(reader.as_fd()));
+    writer.write_all(b"x").expect("the pipe takes a byte");
+    assert!(readable_now(reader.as_fd()));
+
+    let mut byte = [0u8; 1];
+    reader.read_exact(&mut byte).expect("the byte is there");
+    assert!(!readable_now(reader.as_fd()));
+
+    drop(writer);
+    assert!(readable_now(reader.as_fd()));
+}
+
 /// The canonical `ip:port` blob `resolve` mints, for a loopback port nothing listens on: bound once at port zero to learn a free one, then released.
 fn free_loopback_address() -> Vec<u8> {
     let probe = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port");
@@ -266,7 +283,21 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
 #[test]
 fn a_refused_connect_reports_and_drops_the_socket() {
     let host = OsHost::with_args(vec![]);
-    let blob = free_loopback_address();
+
+    // A socket bound to a loopback port but never listening refuses every connect, and holding it for the test's duration keeps a parallel test from listening on that port in between.
+    let holder = Socket::new(Domain::IPV4, Type::STREAM, None).expect("a socket");
+    holder
+        .bind(&SockAddr::from(
+            "127.0.0.1:0".parse::<SocketAddr>().expect("an address"),
+        ))
+        .expect("a loopback port");
+    let port = holder
+        .local_addr()
+        .expect("a bound address")
+        .as_socket()
+        .expect("an IP address")
+        .port();
+    let blob = format!("127.0.0.1:{port}").into_bytes();
 
     let (status, client) = host.socket(&blob);
     assert!(matches!(status, Status::Ok));

@@ -20,7 +20,7 @@ macro_rules! host_ops {
             /// Read up to `n` bytes from `h`. `(status, bytes)`: `Ok` with 1..n bytes, `Eof` with none, or an error status. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `poll` is where the wait happens; a regular file is read synchronously, since the disk answers it.
             read as Handle/read [h: Handle, n: Nat] [status: Status, bytes: Bytes];
 
-            /// Write `b` to `h`, returning `(status, written)` — the bytes accepted this call. A non-blocking handle may take only a prefix (so the caller resends the tail without duplicating); `WouldBlock` reports `written` 0, the blocking std streams the full length. A TLS stream reports the plaintext it accepted and pushes the encrypted remainder on the next read or write of the handle.
+            /// Write `b` to `h`, returning `(status, written)` — the bytes accepted this call. A non-blocking handle may take only a prefix (so the caller resends the tail without duplicating); `WouldBlock` reports `written` 0. The standard output streams write the whole buffer, waiting on the terminal or pipe that reads them: they are shared with the parent rather than a peer the program chose, and a partial write to a terminal would interleave its output. A TLS stream reports the plaintext it accepted and pushes the encrypted remainder on the next read or write of the handle.
             write as Handle/write [h: Handle, b: Bytes] [status: Status, written: Nat];
 
             /// Open the file at `path` in `mode`. `(status, handle)`; the handle is meaningful only when the status is `Ok`.

@@ -2,7 +2,7 @@ use {
     super::{OsResolver, Running, Slot, Spawned, Table, host::*, os_child},
     curios_abi::{event, file_kind},
     rustix::{
-        event::{PollFd, Timespec, poll},
+        event::{PollFd, PollFlags, Timespec, poll},
         fs::{OFlags, fcntl_getfl, fcntl_setfl},
         io::Errno,
         termios::{OptionalActions, Termios, tcgetattr, tcgetwinsize, tcsetattr},
@@ -578,9 +578,15 @@ impl HostOps for OsHost {
         let mut buffer = vec![0; count as usize];
 
         let result = match &io {
-            // On the raw descriptor, as the write below is, rather than through `std::io::Stdin`'s buffered reader: a request smaller than what arrived would leave the remainder in a buffer `poll` cannot see, and a fiber waiting on fd 0 would stall with input already inside the process.
+            // Standard input is the process's, shared with the terminal or the pipe that feeds it, so its descriptor's flags are never touched; the read is gated by a zero-timeout poll instead, answering `WouldBlock` when nothing is there, which is how a shared descriptor keeps the rule that no row waits on a peer. On the raw descriptor, as the write below is, rather than through `std::io::Stdin`'s buffered reader: a request smaller than what arrived would leave the remainder in a buffer `poll` cannot see, and a fiber waiting on fd 0 would stall with input already inside the process.
             Handle::Stdin => {
-                rustix::io::read(stdin(), &mut buffer[..]).map_err(std::io::Error::from)
+                let input = stdin();
+
+                if !readable_now(input.as_fd()) {
+                    return (Status::WouldBlock, vec![]);
+                }
+
+                rustix::io::read(&input, &mut buffer[..]).map_err(std::io::Error::from)
             }
             Handle::Other(_) => {
                 let mut table = self.table.lock().unwrap();
@@ -921,6 +927,22 @@ impl HostOps for OsHost {
             Some(OsResource::Child { running, .. }) => running.kill(),
             _ => Status::NotFound,
         }
+    }
+}
+
+/// Whether `fd` has input to read right now: a zero-timeout poll for `IN`, with a hang-up or an error counting as readable, since a read then answers at once with the end of the stream or the fault. A failed poll answers `true`, so the read runs and reports the fault itself.
+fn readable_now(fd: BorrowedFd<'_>) -> bool {
+    let mut polls = [PollFd::from_borrowed_fd(fd, PollFlags::IN)];
+    let now = Timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+
+    match poll(&mut polls, Some(&now)) {
+        Ok(_) => polls[0]
+            .revents()
+            .intersects(PollFlags::IN | PollFlags::HUP | PollFlags::ERR),
+        Err(_) => true,
     }
 }
 
