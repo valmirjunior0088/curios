@@ -6,6 +6,7 @@ use {
     },
     curios_abi::{
         ForeignFunction, ForeignStore, Namespace, WireType, kind, mode, poll, status, stdio,
+        stdio_mode,
     },
     curios_utilities::{Grain, Plicity, SyntaxName, SyntaxRegistry},
     std::sync::Arc,
@@ -952,6 +953,14 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
                 pub_let("directory", nat(), nat_lit(kind::DIRECTORY)),
                 pub_let("symlink", nat(), nat_lit(kind::SYMLINK)),
                 pub_let("other", nat(), nat_lit(kind::OTHER)),
+            ],
+        ),
+        pub_mod(
+            "stdio_mode",
+            vec![
+                pub_let("inherit", nat(), nat_lit(stdio_mode::INHERIT)),
+                pub_let("pipe", nat(), nat_lit(stdio_mode::PIPE)),
+                pub_let("null", nat(), nat_lit(stdio_mode::NULL)),
             ],
         ),
     ]);

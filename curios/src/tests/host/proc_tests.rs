@@ -1,4 +1,4 @@
-//! The process surface: argv, environment, and exit.
+//! The process surface: argv, environment, exit, and children run through `/std/proc`'s `Command`.
 
 use {
     crate::tests::{run, run_text},
@@ -135,4 +135,90 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
 
     assert_eq!(code, 3);
     assert!(io.output().is_empty());
+}
+
+/// A program computing one `Str` under `Async/block_on`, with the `proc` names in scope.
+fn child_program(body: &str) -> String {
+    format!(
+        r#"
+        use /std/{{Str, Bytes, Nat, Option, Result, Show, Async, Io, Handle, proc}};
+        let text(b: Bytes) -> Str = Option/unwrap_or(Str/of_bytes(b), "?");
+        let program: Async(Str) =
+            {body};
+        match Async/block_on(program)!
+        | failure(_) => /std/print("deadlock")
+        | success(s) => /std/print(s)
+        end
+        "#
+    )
+}
+
+// `run` captures both outputs and the exit: each pipe is drained in a task of its own and both are joined before the child is waited for, so neither output can stall the other.
+#[test]
+fn run_captures_both_outputs_and_the_exit() {
+    let source = child_program(
+        r#"
+            let r = proc/run(proc/Command/new("greet", ["world"]))!;
+            Async/pure(
+                match r
+                | success(out) => Str/flatten([text(out.stdout), "|", text(out.stderr), "|", Show/show(out.exit)])
+                | failure(e) => Show/show(e)
+                end)
+        "#,
+    );
+
+    let (system, io) = MockHost::builder()
+        .children([("greet", "hello\n", "warn\n", 0, 0)])
+        .build();
+    run_text(&source, system).expect("expected result");
+    assert_eq!(io.output(), b"hello\n|warn\n|exited(0)");
+    assert!(
+        io.kills().is_empty(),
+        "a child that was waited for is not killed"
+    );
+}
+
+// `status` inherits every stream and reports how the child ended; a signal shows as `signaled`, and a program the host cannot find is `not_found`, as an unknown path is to `open`.
+#[test]
+fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
+    let source = child_program(
+        r#"
+            let crashed = proc/status(proc/Command/new("crash", []))!;
+            let missing = proc/status(proc/Command { ..proc/Command/new("missing", []), cwd = Option/some("/tmp") })!;
+            let show(r: Result(proc/Exit, Handle/Error)) -> Str =
+                match r | success(e) => Show/show(e) | failure(e) => Show/show(e) end;
+            Async/pure(Str/join(" ", [show(crashed), show(missing)]))
+        "#,
+    );
+
+    let (system, io) = MockHost::builder()
+        .children([("crash", "", "", 0, 9)])
+        .build();
+    run_text(&source, system).expect("expected result");
+    assert_eq!(io.output(), b"signaled(9) not_found");
+}
+
+// The child is acquired with `kill` as its finalizer, so a task cancelled while its child runs kills it: the mock records the program name when `kill` reaches it.
+#[test]
+fn a_cancelled_task_kills_the_child_it_spawned() {
+    let source = child_program(
+        r#"
+            let body: Async({}) =
+                let started = proc/spawn(proc/Command/new("sleepy", []))!;
+                let _ = Async/sleep(/std/time/Duration/of(60, 0))!;
+                Async/pure(());
+            let task = Async/spawn(body)!;
+            let _ = Async/yield_now!;
+            let _ = Async/lift(Async/cancel(task))!;
+            let _ = Async/yield_now!;
+            Async/pure("cancelled")
+        "#,
+    );
+
+    let (system, io) = MockHost::builder()
+        .children([("sleepy", "", "", 0, 0)])
+        .build();
+    run_text(&source, system).expect("expected result");
+    assert_eq!(io.output(), b"cancelled");
+    assert_eq!(io.kills(), vec![b"sleepy".to_vec()]);
 }

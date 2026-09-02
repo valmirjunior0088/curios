@@ -2,7 +2,7 @@
 
 use {
     crate::set,
-    curios_abi::{kind, status, stdio},
+    curios_abi::{kind, status, stdio, stdio_mode},
     js_sys::Object,
     wasm_bindgen::JsValue,
 };
@@ -17,7 +17,7 @@ fn constants(entries: &[(&str, u32)]) -> Object {
     object
 }
 
-/// The numeric wire codes as a JS object: the `status`/`kind`/`stdio` code tables.
+/// The numeric wire codes as a JS object: the `status`/`kind`/`stdio_mode`/`stdio` code tables.
 pub(crate) fn abi() -> Object {
     let object = Object::new();
     set(
@@ -45,6 +45,15 @@ pub(crate) fn abi() -> Object {
             ("DIRECTORY", kind::DIRECTORY),
             ("SYMLINK", kind::SYMLINK),
             ("OTHER", kind::OTHER),
+        ]),
+    );
+    set(
+        &object,
+        "stdio_mode",
+        &constants(&[
+            ("INHERIT", stdio_mode::INHERIT),
+            ("PIPE", stdio_mode::PIPE),
+            ("NULL", stdio_mode::NULL),
         ]),
     );
     set(

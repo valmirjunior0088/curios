@@ -1,4 +1,4 @@
-//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, and stdio-handle tags. Each set is mirrored by a guest-side declaration; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
+//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, and stdio-handle tags. Each set is mirrored by a guest-side declaration; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
 
 /// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Handle/Error`. `Other` has no fixed code here: it lowers its carried errno offset by `OTHER_BASE`, keeping the errno lane disjoint from the named codes.
 pub mod status {
@@ -60,6 +60,16 @@ pub mod kind {
     pub const SYMLINK: u32 = 2;
     /// Anything else: a device, a socket, a pipe.
     pub const OTHER: u32 = 3;
+}
+
+/// How `proc/spawn` wires each of a child's standard streams, mirrored by `/sys/stdio_mode` and the guest's `/std/proc/Stdio`: the shape Lean's `Stdio`, Haskell's `StdStream`, Rust's `Stdio` and Zig's `StdIo` share.
+pub mod stdio_mode {
+    /// The child shares the parent's stream.
+    pub const INHERIT: u32 = 0;
+    /// The stream is a pipe the parent holds the other end of, as a handle.
+    pub const PIPE: u32 = 1;
+    /// The stream is attached to the null device.
+    pub const NULL: u32 = 2;
 }
 
 /// The well-known stdio handle tokens minted by the `/sys/Handle` prelude. A handle's wire encoding is the little-endian `Natural` bytes of its token (see `Handle::encode`), which mints one zero byte for zero — so STDIN encodes as `[0]`, never the empty byte string.

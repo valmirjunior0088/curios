@@ -1,6 +1,6 @@
 use {
     super::{Table, host::*},
-    curios_abi::kind,
+    curios_abi::{kind, stdio_mode},
     std::{
         collections::{BTreeSet, HashMap, VecDeque},
         sync::{Arc, Mutex},
@@ -242,9 +242,36 @@ struct MockServer {
     capture: usize,
 }
 
-/// A non-stdio handle in [`MockHost`]'s unified table — the scripted, in-memory mirror of `OsHost`'s `OsResource`. The BSD lifecycle moves a handle between states: `socket` mints a `Socket`, `connect` turns it into an `Outbound` stream, `listen` turns it into a `Listener` that `accept` pulls `Inbound` streams from; `open` files a `File`. `close` drops any kind.
+/// A scripted child: what it writes on each stream and how it ends, keyed by program name in the builder.
+#[derive(Clone)]
+struct MockChildScript {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    code: u32,
+    signal: u32,
+}
+
+/// A live scripted child: exited the moment it was spawned, its handle ready and its exit waiting for `wait`, its piped streams filed and handed out through `stream`.
+struct MockChild {
+    program: Vec<u8>,
+    code: u32,
+    signal: u32,
+    streams: [Handle; 3],
+}
+
+/// A child's piped output as the parent reads it: scripted bytes behind a cursor.
+struct MockStream {
+    bytes: Vec<u8>,
+    position: usize,
+}
+
+/// A non-stdio handle in [`MockHost`]'s unified table — the scripted, in-memory mirror of `OsHost`'s `OsResource`. The BSD lifecycle moves a handle between states: `socket` mints a `Socket`, `connect` turns it into an `Outbound` stream, `listen` turns it into a `Listener` that `accept` pulls `Inbound` streams from; `open` files a `File`; `spawn` files a `Child` with a `Piped` stream per piped output and a `Sink` for a piped stdin. `close` drops any kind.
 enum MockResource {
     File(MockFile),
+    Child(MockChild),
+    Piped(MockStream),
+    /// A piped stdin of a scripted child: writes are accepted and discarded.
+    Sink,
     /// A finished name lookup minted by `lookup`, holding the resolved address blobs `resolve` drains. The scripted host resolves synchronously, so the handle is ready the moment it is minted.
     Resolved(Vec<Vec<u8>>),
     Outbound(MockClient),
@@ -287,6 +314,10 @@ pub struct MockHost {
     tty_size: Option<(u32, u32)>,
     /// The scripted working directory `cwd` answers.
     cwd: Vec<u8>,
+    /// Scripted children by program name: what `spawn` finds.
+    children: HashMap<Vec<u8>, MockChildScript>,
+    /// The program names of every child `kill` was asked to end, in order. Shared with [`MockIo::kills`], so a test can see that a cancelled task killed what it spawned.
+    kills: Arc<Mutex<Vec<Vec<u8>>>>,
 }
 
 /// `ENOTTY`, the errno a terminal `ioctl` reports on a descriptor that is not a terminal — `25` on both release targets, Linux and macOS.
@@ -541,6 +572,10 @@ impl HostOps for MockHost {
             Some(MockResource::Outbound(conn)) => {
                 serve_from(&conn.response, &mut conn.position, count)
             }
+            // A child's piped output: serve the scripted bytes.
+            Some(MockResource::Piped(stream)) => {
+                serve_from(&stream.bytes, &mut stream.position, count)
+            }
             // A missing or non-stream handle is a fault, not an exhausted stream — mirror write's `NotFound` so use-after-close stays loud.
             _ => (Status::NotFound, vec![]),
         }
@@ -580,6 +615,8 @@ impl HostOps for MockHost {
             }
             // Outbound connection: accept and discard (the in-memory test host does not capture request bytes).
             Some(MockResource::Outbound(_)) => (Status::Ok, full),
+            // A child's piped stdin: accepted and discarded too.
+            Some(MockResource::Sink) => (Status::Ok, full),
             _ => (Status::NotFound, 0),
         }
     }
@@ -689,6 +726,79 @@ impl HostOps for MockHost {
     fn cwd(&self) -> (Status, Vec<u8>) {
         (Status::Ok, self.cwd.clone())
     }
+
+    fn spawn(
+        &self,
+        argv: &[Vec<u8>],
+        _cwd: &[u8],
+        _env: &[Vec<u8>],
+        stdin: u32,
+        stdout: u32,
+        stderr: u32,
+    ) -> (Status, Handle) {
+        let empty = || Handle::Other(Vec::new());
+
+        // An unscripted program is one the host cannot find, as an unknown path is to `open`; the script is keyed by `argv[0]`.
+        let Some(script) = argv
+            .first()
+            .and_then(|program| self.children.get(program))
+            .cloned()
+        else {
+            return (Status::NotFound, empty());
+        };
+        let program = &argv[0];
+
+        // Each stream is filed only where the guest asked for a pipe; the scripted child has already written everything it ever will.
+        let piped = |mode: u32, bytes: Vec<u8>| match mode == stdio_mode::PIPE {
+            true => self.mint(MockResource::Piped(MockStream { bytes, position: 0 })),
+            false => empty(),
+        };
+        let stdin = match stdin == stdio_mode::PIPE {
+            true => self.mint(MockResource::Sink),
+            false => empty(),
+        };
+        let streams = [
+            stdin,
+            piped(stdout, script.stdout),
+            piped(stderr, script.stderr),
+        ];
+        let child = self.mint(MockResource::Child(MockChild {
+            program: program.to_vec(),
+            code: script.code,
+            signal: script.signal,
+            streams,
+        }));
+
+        (Status::Ok, child)
+    }
+
+    fn stream(&self, child: Handle, which: u32) -> (Status, Handle) {
+        match self.table.lock().unwrap().get(&child) {
+            Some(MockResource::Child(running)) => match running.streams.get(which as usize) {
+                Some(handle) => (Status::Ok, handle.clone()),
+                None => (Status::NotFound, Handle::Other(Vec::new())),
+            },
+            _ => (Status::NotFound, Handle::Other(Vec::new())),
+        }
+    }
+
+    fn wait(&self, child: Handle) -> (Status, u32, u32) {
+        match self.table.lock().unwrap().remove(&child) {
+            Some(MockResource::Child(ended)) => (Status::Ok, ended.code, ended.signal),
+            _ => (Status::NotFound, 0, 0),
+        }
+    }
+
+    fn kill(&self, child: Handle) -> Status {
+        match self.table.lock().unwrap().get(&child) {
+            Some(MockResource::Child(running)) => {
+                self.kills.lock().unwrap().push(running.program.clone());
+
+                Status::Ok
+            }
+            _ => Status::NotFound,
+        }
+    }
 }
 
 /// Serve up to `count` bytes of `contents` from `*position`, advancing the cursor; `Status::Eof` with empty bytes once it reaches the end. The shared shape of every scripted read (file, inbound request, outbound response).
@@ -710,6 +820,7 @@ pub struct MockIo {
     files: MockFileSystem,
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
     raw_modes: Arc<Mutex<Vec<bool>>>,
+    kills: Arc<Mutex<Vec<Vec<u8>>>>,
 }
 
 impl MockIo {
@@ -732,6 +843,11 @@ impl MockIo {
     pub fn raw_modes(&self) -> Vec<bool> {
         self.raw_modes.lock().unwrap().clone()
     }
+
+    /// The program names of the children the guest killed, in order.
+    pub fn kills(&self) -> Vec<Vec<u8>> {
+        self.kills.lock().unwrap().clone()
+    }
 }
 
 /// Fluent seed for a [`MockHost`]: gather the scripted inputs (stdin, files, network endpoints, clocks, …) as plain values, then [`build`](Self::build) wraps them for the run and hands back the host and its [`MockIo`].
@@ -748,9 +864,35 @@ pub struct MockHostBuilder {
     tty_size: Option<(u32, u32)>,
     dirs: BTreeSet<Vec<u8>>,
     cwd: Option<Vec<u8>>,
+    children: HashMap<Vec<u8>, MockChildScript>,
 }
 
 impl MockHostBuilder {
+    /// Script the children `spawn` can start: `(program, stdout, stderr, code, signal)`, the exit a signal when `signal` is nonzero. Spawning an unscripted program is `NotFound`.
+    pub fn children<P, O, E, I>(mut self, children: I) -> Self
+    where
+        P: AsRef<[u8]>,
+        O: AsRef<[u8]>,
+        E: AsRef<[u8]>,
+        I: IntoIterator<Item = (P, O, E, u32, u32)>,
+    {
+        self.children.extend(children.into_iter().map(
+            |(program, stdout, stderr, code, signal)| {
+                (
+                    program.as_ref().to_vec(),
+                    MockChildScript {
+                        stdout: stdout.as_ref().to_vec(),
+                        stderr: stderr.as_ref().to_vec(),
+                        code,
+                        signal,
+                    },
+                )
+            },
+        ));
+
+        self
+    }
+
     /// Seed empty directories; the directories above every seeded file exist without being named here.
     pub fn dirs<P: AsRef<[u8]>, I: IntoIterator<Item = P>>(mut self, dirs: I) -> Self {
         self.dirs
@@ -872,12 +1014,14 @@ impl MockHostBuilder {
         let files = MockFileSystem::new(self.files, self.dirs);
         let captures = Arc::new(Mutex::new(Vec::new()));
         let raw_modes = Arc::new(Mutex::new(Vec::new()));
+        let kills = Arc::new(Mutex::new(Vec::new()));
 
         let io = MockIo {
             output: output.clone(),
             files: files.clone(),
             captures: captures.clone(),
             raw_modes: raw_modes.clone(),
+            kills: kills.clone(),
         };
 
         let host = MockHost {
@@ -897,6 +1041,8 @@ impl MockHostBuilder {
             raw_modes,
             tty_size: self.tty_size,
             cwd: self.cwd.unwrap_or_else(|| b"/".to_vec()),
+            children: self.children,
+            kills,
         };
 
         (host, io)

@@ -28,6 +28,9 @@ pub use os_host::*;
 mod os_resolver;
 use os_resolver::*;
 
+mod os_child;
+use os_child::*;
+
 mod mock_host;
 pub use mock_host::*;
 

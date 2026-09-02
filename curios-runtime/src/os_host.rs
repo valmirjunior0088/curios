@@ -1,8 +1,9 @@
 use {
-    super::{OsResolver, Slot, Table, host::*},
+    super::{OsResolver, Running, Slot, Spawned, Table, host::*, os_child},
     curios_abi::kind,
     rustix::{
         event::{PollFd, Timespec, poll},
+        fs::{OFlags, fcntl_getfl, fcntl_setfl},
         termios::{OptionalActions, Termios, tcgetattr, tcgetwinsize, tcsetattr},
     },
     rustls::{
@@ -48,6 +49,13 @@ enum OsResource {
     Resolving {
         done: OwnedFd,
         slot: Slot,
+    },
+    /// One end of a pipe — a child's piped stream, filed by `spawn`. Unlike a file it is made non-blocking for real: `set_nonblocking` applies `O_NONBLOCK` through `fcntl`, so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, and `read`, `write`, `poll` and `close` serve it as they serve a file.
+    Pipe(OwnedFd),
+    /// A running child minted by `spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the exit, `wait` drains it, `kill` addresses its pid, and `stream` hands out the handles of its piped standard streams — filed as `Pipe`s at spawn time and boxed here so a child costs the table no more than a socket does.
+    Child {
+        running: Running,
+        streams: Box<[Handle; 3]>,
     },
     Connected(Socket),
     Unconnected(Socket),
@@ -101,6 +109,7 @@ impl OsHost {
             Handle::Stderr => Some(apply(stderr().as_fd())),
             Handle::Other(_) => match self.table.lock().unwrap().get(handle)? {
                 OsResource::File(file) => Some(apply(file.as_fd())),
+                OsResource::Pipe(fd) => Some(apply(fd.as_fd())),
                 _ => None,
             },
         }
@@ -152,9 +161,13 @@ impl OsHost {
                 // A TLS stream forwards setters to its underlying socket, so a timeout set after the upgrade still takes effect.
                 Some(OsResource::ClientTls(stream)) => &stream.sock,
                 Some(OsResource::ServerTls(stream)) => &stream.sock,
-                // A file, a config token, and an in-flight lookup have no socket options: record nothing.
+                // A file, a pipe, a child, a config token, and an in-flight lookup have no socket options: record nothing. A pipe's one settable flag, `O_NONBLOCK`, is `set_nonblocking`'s to apply before it reaches here.
                 Some(
-                    OsResource::File(_) | OsResource::TlsConfig(_) | OsResource::Resolving { .. },
+                    OsResource::File(_)
+                    | OsResource::Pipe(_)
+                    | OsResource::Child { .. }
+                    | OsResource::TlsConfig(_)
+                    | OsResource::Resolving { .. },
                 ) => return Status::Ok,
                 None => return Status::NotFound,
             },
@@ -424,6 +437,19 @@ impl HostOps for OsHost {
     }
 
     fn set_nonblocking(&self, io: Handle, on: u32) -> Status {
+        // A pipe has no socket options but does take `O_NONBLOCK`, and it has to: a child's output is drained by a fiber, and a blocking read on one pipe while the child writes the other is the deadlock every process library documents. The socket kinds go through `socket2` as before.
+        if let Some(OsResource::Pipe(fd)) = self.table.lock().unwrap().get(&io) {
+            let flags = fcntl_getfl(fd).map(|flags| match on != 0 {
+                true => flags | OFlags::NONBLOCK,
+                false => flags - OFlags::NONBLOCK,
+            });
+
+            return match flags.and_then(|flags| fcntl_setfl(fd, flags)) {
+                Ok(()) => Status::Ok,
+                Err(errno) => status_from_error(std::io::Error::from(errno)),
+            };
+        }
+
         self.with_socket(&io, |socket| socket.set_nonblocking(on != 0))
     }
 
@@ -470,6 +496,9 @@ impl HostOps for OsHost {
                     OsResource::Listener(socket) => Some(socket.as_fd()),
                     // The lookup's pipe read end: `READ`-ready once the worker has written its wakeup byte, which is the completion signal.
                     OsResource::Resolving { done, .. } => Some(done.as_fd()),
+                    OsResource::Pipe(fd) => Some(fd.as_fd()),
+                    // The reaper's pipe read end: `READ`-ready once the child has exited, which is when `wait` answers.
+                    OsResource::Child { running, .. } => Some(running.done.as_fd()),
                     // TLS record readiness is not socket readiness (rustls buffers records, and an app read can require a socket write), so a TLS stream is not polled at the socket layer under the sync model; the config token has no fd. Both report as unrecognized — an `empty()` revents slot.
                     OsResource::ClientTls(_)
                     | OsResource::ServerTls(_)
@@ -526,6 +555,11 @@ impl HostOps for OsHost {
                     Some(OsResource::Connected(socket)) => socket,
                     Some(OsResource::ClientTls(tls)) => &mut **tls,
                     Some(OsResource::ServerTls(tls)) => &mut **tls,
+                    Some(OsResource::Pipe(fd)) => {
+                        let result = rustix::io::read(&*fd, &mut buffer[..]);
+
+                        return read_outcome(result.map_err(std::io::Error::from), buffer);
+                    }
                     // A missing or non-stream handle is a fault, not an exhausted stream — mirror write's `NotFound` so use-after-close stays loud.
                     _ => return (Status::NotFound, vec![]),
                 };
@@ -571,6 +605,12 @@ impl HostOps for OsHost {
             Some(OsResource::Connected(socket)) => socket,
             Some(OsResource::ClientTls(tls)) => &mut **tls,
             Some(OsResource::ServerTls(tls)) => &mut **tls,
+            Some(OsResource::Pipe(fd)) => {
+                return match rustix::io::write(&*fd, bytes) {
+                    Ok(written) => (Status::Ok, written as u32),
+                    Err(errno) => (status_from_error(std::io::Error::from(errno)), 0),
+                };
+            }
             _ => return (Status::NotFound, 0),
         };
 
@@ -752,6 +792,77 @@ impl HostOps for OsHost {
         match env::current_dir() {
             Ok(path) => (Status::Ok, path.into_os_string().into_vec()),
             Err(error) => (status_from_error(error), vec![]),
+        }
+    }
+
+    fn spawn(
+        &self,
+        argv: &[Vec<u8>],
+        cwd: &[u8],
+        env: &[Vec<u8>],
+        stdin: u32,
+        stdout: u32,
+        stderr: u32,
+    ) -> (Status, Handle) {
+        match os_child::spawn(argv, cwd, env, (stdin, stdout, stderr)) {
+            Ok(Spawned {
+                child,
+                stdin,
+                stdout,
+                stderr,
+            }) => {
+                // An unpiped stream is the empty handle a failed `open` returns; a piped one is filed as a `Pipe`, the kind `set_nonblocking` acts on.
+                let file = |fd: Option<OwnedFd>| match fd {
+                    Some(fd) => self.mint(OsResource::Pipe(fd)),
+                    None => Handle::Other(Vec::new()),
+                };
+                let streams = Box::new([file(stdin), file(stdout), file(stderr)]);
+
+                (
+                    Status::Ok,
+                    self.mint(OsResource::Child {
+                        running: child,
+                        streams,
+                    }),
+                )
+            }
+            Err(error) => (status_from_error(error), Handle::Other(Vec::new())),
+        }
+    }
+
+    fn stream(&self, child: Handle, which: u32) -> (Status, Handle) {
+        match self.table.lock().unwrap().get(&child) {
+            Some(OsResource::Child { streams, .. }) => match streams.get(which as usize) {
+                Some(handle) => (Status::Ok, handle.clone()),
+                None => (Status::NotFound, Handle::Other(Vec::new())),
+            },
+            _ => (Status::NotFound, Handle::Other(Vec::new())),
+        }
+    }
+
+    fn wait(&self, child: Handle) -> (Status, u32, u32) {
+        // Reached once `poll` reports the child's handle ready, so the slot is filled; an early call leaves the handle intact and reports `WouldBlock`, as `resolve` does.
+        let mut table = self.table.lock().unwrap();
+
+        let exit = match table.get(&child) {
+            Some(OsResource::Child { running, .. }) => running.exit.get(),
+            _ => return (Status::NotFound, 0, 0),
+        };
+
+        match exit {
+            Some(exit) => {
+                table.remove(&child);
+
+                (Status::Ok, exit.code, exit.signal)
+            }
+            None => (Status::WouldBlock, 0, 0),
+        }
+    }
+
+    fn kill(&self, child: Handle) -> Status {
+        match self.table.lock().unwrap().get(&child) {
+            Some(OsResource::Child { running, .. }) => running.kill(),
+            _ => Status::NotFound,
         }
     }
 }

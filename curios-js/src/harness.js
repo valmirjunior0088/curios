@@ -172,6 +172,11 @@ export async function run(config) {
     create_dir: denied,
     remove_dir: denied,
     cwd: deniedHandle,
+    // WASI has no process creation and neither does the playground.
+    spawn: deniedHandle,
+    stream: deniedHandle,
+    wait: () => [config.status.PERMISSION_DENIED, 0, 0],
+    kill: denied,
     exit: (code) => {
       throw new ExitSignal(code);
     },

@@ -1,5 +1,11 @@
 pub use /sys/proc/{args};
-use /std/{Bytes, Nat, Str, Option, Io};
+use /std/{Bytes, Nat, Str, Option, Result, List, Handle, Io, Async, Eql, Show};
+
+pub mod Command;
+pub use Command/{let Command};
+
+pub mod Child;
+pub use Child/{let Child};
 
 pub let env(name: Str) -> Io(Option(Bytes)) =
     let r = /sys/proc/env(Str/to_bytes(name))!;
@@ -12,3 +18,131 @@ pub let env(name: Str) -> Io(Option(Bytes)) =
 -- Unit inside the wrapper, not a caller-chosen type: `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits. At `{}` there is nothing to forge. A branch that exits must still produce a description, so write `let _ = proc/exit(1)!; …` rather than passing the exit off as the value itself.
 pub let exit(code: Nat) -> Io({}) =
     /sys/proc/exit(code);
+
+-- How a child's standard stream is wired: shared with this process, piped to a handle the parent holds, or attached to the null device — the shape Lean's `Stdio`, Haskell's `StdStream`, Rust's `Stdio` and Zig's `StdIo` share.
+pub induct Stdio: pub Type
+| inherit()
+| piped()
+| null()
+end
+
+let stdio_of(s: Stdio) -> Nat =
+    match s
+    | inherit() => /sys/stdio_mode/inherit
+    | piped() => /sys/stdio_mode/pipe
+    | null() => /sys/stdio_mode/null
+    end;
+
+-- How a child ended: with an exit code, or by the signal that ended it.
+pub induct Exit: pub Type
+| exited(Nat)
+| signaled(Nat)
+end
+
+satisfy Eql(Exit);
+
+satisfy Show(Exit) {
+    show(e) =
+        match e
+        | exited(code) => Str/flatten(["exited(", Nat/to_str(code), ")"])
+        | signaled(signal) => Str/flatten(["signaled(", Nat/to_str(signal), ")"])
+        end,
+}
+
+-- `NAME=VALUE`, which is `execve`'s own shape for an environment entry.
+let env_entry(entry: {Str, Str}) -> Bytes =
+    x[..Str/to_bytes(entry.0), '=', ..Str/to_bytes(entry.1)];
+
+-- A piped stream is fetched from the child by its `stdio` index, made non-blocking and acquired with `close` as its finalizer, as `File/open` does, so a task that ends releases the pipe with everything else it held. An unpiped stream has no handle to keep, so the row is not asked.
+let keep(child: Handle, which: Nat, mode: Stdio) -> Async(Result(Option(Handle), Handle/Error)) =
+    match mode
+    | piped() =>
+        let s = /sys/proc/stream(child, which)!;
+        match Handle/error_of(s.status)
+        | some(e) => Async/pure(Result/failure(e))
+        | none() =>
+            let nb = Async/nonblocking(s.handle)!;
+            match nb
+            | failure(e) => Async/pure(Result/failure(e))
+            | success(_) =>
+                let _ = Async/acquire(s.handle, /sys/Handle/close(s.handle))!;
+                Async/pure(Result/success(Option/some(s.handle)))
+            end
+        end
+    | _ => Async/pure(Result/success(Option/none()))
+    end;
+
+-- Start `cmd`. The child is acquired with `kill` as its finalizer, so a cancelled task kills what it started — `Async` releases what a task acquired on both exits, and a child outliving the task that spawned it is the one thing that rule cannot mean. `Child/wait` releases it.
+pub let spawn(cmd: Command) -> Async(Result(Child, Handle/Error)) =
+    let r =
+        /sys/proc/spawn(
+            [Str/to_bytes(cmd.program), ..List/map(cmd.args, Str/to_bytes)],
+            Str/to_bytes(Option/unwrap_or(cmd.cwd, "")),
+            List/map(cmd.env, env_entry),
+            stdio_of(cmd.stdin),
+            stdio_of(cmd.stdout),
+            stdio_of(cmd.stderr))!;
+    match Handle/error_of(r.status)
+    | some(e) => Async/pure(Result/failure(e))
+    | none() =>
+        let _ = Async/acquire(r.child, Io/bind(/sys/proc/kill(r.child), (_) => Io/pure(())))!;
+        let stdin = keep(r.child, 0, cmd.stdin)!;
+        let stdout = keep(r.child, 1, cmd.stdout)!;
+        let stderr = keep(r.child, 2, cmd.stderr)!;
+        Async/pure(
+            match stdin
+            | failure(e) => Result/failure(e)
+            | success(i) =>
+                match stdout
+                | failure(e) => Result/failure(e)
+                | success(o) =>
+                    match stderr
+                    | failure(e) => Result/failure(e)
+                    | success(er) => Result/success(Child/new(r.child, i, o, er))
+                    end
+                end
+            end)
+    end;
+
+-- Run `cmd` to its end with both outputs captured, each drained in a task of its own and both joined: draining one to its end while the other fills is the deadlock every process library documents, and `select` would cancel whichever drain finished second.
+pub let run(
+    cmd: Command,
+) -> Async(Result({exit: Exit, stdout: Bytes, stderr: Bytes}, Handle/Error)) =
+    let started = spawn(Command { ..cmd, stdout = Stdio/piped(), stderr = Stdio/piped() })!;
+    match started
+    | failure(e) => Async/pure(Result/failure(e))
+    | success(child) =>
+        let out = Async/spawn(drain(Child/stdout(child)))!;
+        let err = Async/spawn(drain(Child/stderr(child)))!;
+        let o = Async/join(out)!;
+        let e = Async/join(err)!;
+        let ended = Child/wait(child)!;
+        Async/pure(
+            match o
+            | failure(f) => Result/failure(f)
+            | success(stdout) =>
+                match e
+                | failure(f) => Result/failure(f)
+                | success(stderr) =>
+                    match ended
+                    | failure(f) => Result/failure(f)
+                    | success(exit) =>
+                        Result/success((exit = exit, stdout = stdout, stderr = stderr))
+                    end
+                end
+            end)
+    end;
+
+-- Run `cmd` with every stream inherited and report how it ended.
+pub let status(cmd: Command) -> Async(Result(Exit, Handle/Error)) =
+    let started = spawn(cmd)!;
+    match started
+    | failure(e) => Async/pure(Result/failure(e))
+    | success(child) => Child/wait(child)
+    end;
+
+let drain(h: Option(Handle)) -> Async(Result(Bytes, Handle/Error)) =
+    match h
+    | some(h) => Async/drain((n) => Async/read(h, n))
+    | none() => Async/pure(Result/success(x[]))
+    end;

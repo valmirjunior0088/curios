@@ -1,0 +1,24 @@
+-- A program to run: `new(program, args)` inherits everything, and the rest — a working directory, environment overrides laid over the inherited environment, and each stream's wiring — is a struct update.
+use /std/{Str, List, Option};
+use /std/proc/{Stdio};
+
+pub struct Command: pub Type {
+    program: Str,
+    args: List(Str),
+    cwd: Option(Str),
+    env: List({Str, Str}),
+    stdin: Stdio,
+    stdout: Stdio,
+    stderr: Stdio,
+}
+
+pub let new(program: Str, args: List(Str)) -> Command =
+    Command {
+        program = program,
+        args = args,
+        cwd = Option/none(),
+        env = [],
+        stdin = Stdio/inherit(),
+        stdout = Stdio/inherit(),
+        stderr = Stdio/inherit(),
+    };

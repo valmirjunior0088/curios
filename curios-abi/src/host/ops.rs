@@ -115,6 +115,18 @@ macro_rules! host_ops {
 
             /// The process's working directory, as bytes. WASI has preopens instead, so the browser denies it.
             cwd as proc/cwd [] [status: Status, path: Bytes];
+
+            /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. `(status, child)`: the child handle becomes `READ`-ready when the child exits, which is when `wait` answers, and its piped streams are fetched one at a time through `stream`, because a row carries at most one reference result and it is the last.
+            spawn as proc/spawn [argv: ListBytes, cwd: Bytes, env: ListBytes, stdin: Nat, stdout: Nat, stderr: Nat] [status: Status, child: Handle];
+
+            /// One of `child`'s piped streams, `which` being the [`stdio`](crate::stdio) index of the stream (`0` stdin, `1` stdout, `2` stderr). `(status, handle)`: a piped stream is a handle `read`, `write`, `poll`, `close` and `set_nonblocking` serve; an unpiped one is the empty handle a failed `open` returns.
+            stream as proc/stream [child: Handle, which: Nat] [status: Status, handle: Handle];
+
+            /// How `child` ended, once its handle is readable: `(status, code, signal)`, `signal` nonzero when a signal ended it and `code` the exit code otherwise. `WouldBlock` while it still runs; consumes the handle.
+            wait as proc/wait [child: Handle] [status: Status, code: Nat, signal: Nat];
+
+            /// Send `child` `SIGKILL`; `wait` then reports the signal.
+            kill as proc/kill [child: Handle] [status: Status];
         }
     };
 }

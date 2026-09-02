@@ -164,6 +164,9 @@ impl ForeignBindings {
     }
 }
 
+/// `spawn`'s lifted operands — `argv`, `cwd`, `env` and the three stdio-wiring tags — the one row wide enough to deserve a name.
+type SpawnOperands = (Vec<Vec<u8>>, Vec<u8>, Vec<Vec<u8>>, u32, u32, u32);
+
 /// The registry of builtin implementations: every [`host_ops`] row bound to its [`HostOps`] method. The store and the trait are generated from one authored list in `curios-abi`, and these hand-written bindings are cross-checked against both — each `define` name must be a real store row (asserted), and each method call must match the trait (compiler-checked) — so the three stay in agreement without a fourth independent spelling.
 fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
     let mut impls = ForeignBindings::new(host_ops());
@@ -366,6 +369,32 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
         let host = host.clone();
 
         move |()| host.cwd()
+    });
+
+    impls.define("spawn", {
+        let host = host.clone();
+
+        move |(argv, cwd, env, stdin, stdout, stderr): SpawnOperands| {
+            host.spawn(&argv, &cwd, &env, stdin, stdout, stderr)
+        }
+    });
+
+    impls.define("stream", {
+        let host = host.clone();
+
+        move |(child, which): (Handle, u32)| host.stream(child, which)
+    });
+
+    impls.define("wait", {
+        let host = host.clone();
+
+        move |child: Handle| host.wait(child)
+    });
+
+    impls.define("kill", {
+        let host = host.clone();
+
+        move |child: Handle| host.kill(child)
     });
 
     // Completeness — the half the per-`define` asserts cannot see: a store row with no binding would otherwise surface only when a program that imports it reaches `link`. Membership and uniqueness are asserted per `define`, so no unbound row is exactly one binding per row.
