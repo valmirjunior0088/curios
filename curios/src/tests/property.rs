@@ -60,7 +60,7 @@ fn tuple_shapes_draw_and_spell_through_their_premises() {
                     Spell/spell((1, "a", ('x', true))),
                     ""]))
         "#),
-        b"(), ()\n(0,), (2,), (0,)\n(0, true), (0, true), (2, false), (4, false)\n(0, 'r', /std/Option/Option/none()), (2, '1', /std/Option/Option/none()), (4, ':', /std/Option/Option/some(false))\n(1, \"a\", ('x', true))\n"
+        b"(), ()\n(0,), (2,), (0,)\n(0, true), (0, true), (2, false), (4, false)\n(0, 'r', Option/none()), (2, '1', Option/none()), (4, ':', Option/some(false))\n(1, \"a\", ('x', true))\n"
     );
 }
 
@@ -375,7 +375,7 @@ fn a_finite_domain_is_exhausted_in_roster_order() {
         /std/print("ran\n")
         "#
         ),
-        b"/either: failed\n  for false, false: the condition was false\n/first_argument: failed\n  for false, /std/Ordering/Ordering/lt(): the condition was false\n/every_pair: passed\n"
+        b"/either: failed\n  for false, false: the condition was false\n/first_argument: failed\n  for false, Ordering/lt(): the condition was false\n/every_pair: passed\n"
     );
 }
 

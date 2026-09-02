@@ -15,7 +15,7 @@ fn an_enumeration_spells_as_its_constructor_paths() {
         print(Spell/spell(Color/green()))
         "#;
 
-    assert_eq!(run(source), b"/Color/red()\n/Color/green()");
+    assert_eq!(run(source), b"Color/red()\nColor/green()");
 }
 
 #[test]
@@ -34,7 +34,7 @@ fn payloads_spell_through_their_own_witnesses() {
 
     assert_eq!(
         run(source),
-        b"/Shape/dot(1)\n/Shape/tag(\"a\\n\", true)\n/Shape/many([1, 2])"
+        b"Shape/dot(1)\nShape/tag(\"a\\n\", true)\nShape/many([1, 2])"
     );
 }
 
@@ -50,7 +50,7 @@ fn a_parameterized_family_spells_under_its_premise() {
         print(Spell/spell(Box/boxed(Box/boxed("x"))))
         "#;
 
-    assert_eq!(run(source), b"/Box/boxed(3)\n/Box/boxed(/Box/boxed(\"x\"))");
+    assert_eq!(run(source), b"Box/boxed(3)\nBox/boxed(Box/boxed(\"x\"))");
 }
 
 #[test]
@@ -61,13 +61,13 @@ fn a_recursive_family_spells_through_its_own_entry_and_re_parses() {
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Spell(Tree);
         let built = Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)));
-        let written: Tree = /Tree/node(/Tree/leaf(1), /Tree/node(/Tree/leaf(2), /Tree/leaf(3)));
+        let written: Tree = Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)));
         let _ = print(Spell/spell(built))!;
         let _ = print("\n")!;
         print(Spell/spell(written))
         "#;
 
-    let spelled = "/Tree/node(/Tree/leaf(1), /Tree/node(/Tree/leaf(2), /Tree/leaf(3)))";
+    let spelled = "Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)))";
     assert_eq!(run(source), format!("{spelled}\n{spelled}").as_bytes());
 }
 
@@ -85,7 +85,7 @@ fn a_mutual_group_derives_as_one() {
 
     assert_eq!(
         run(source),
-        b"/Tree/forest(/Forest/cons(/Tree/leaf(1), /Forest/nil()))"
+        b"Tree/forest(Forest/cons(Tree/leaf(1), Forest/nil()))"
     );
 }
 
@@ -103,7 +103,7 @@ fn a_struct_spells_as_its_literal() {
         print(Spell/spell(Meters { 5 }))
         "#;
 
-    assert_eq!(run(source), b"/Point { x = 1, y = 2 }\n/Meters { 5 }");
+    assert_eq!(run(source), b"Point { x = 1, y = 2 }\nMeters { 5 }");
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn a_tuple_payload_spells_as_its_literal() {
         print(Spell/spell(Pair/pair((1, true))))
         "#;
 
-    assert_eq!(run(source), b"/Pair/pair((1, true))");
+    assert_eq!(run(source), b"Pair/pair((1, true))");
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn a_proof_payload_spells_as_a_goal() {
         print(Spell/spell(Certified/cert(1, Eq/refl())))
         "#;
 
-    assert_eq!(run(source), b"/Certified/cert(1, ?)");
+    assert_eq!(run(source), b"Certified/cert(1, ?)");
 }
 
 #[test]
@@ -144,7 +144,7 @@ fn an_indexed_family_spells_each_constructor() {
         print(Spell/spell(Vec/cons(1, Vec/cons(2, Vec/nil()))))
         "#;
 
-    assert_eq!(run(source), b"/Vec/cons(1, /Vec/cons(2, /Vec/nil()))");
+    assert_eq!(run(source), b"Vec/cons(1, Vec/cons(2, Vec/nil()))");
 }
 
 #[test]
@@ -245,7 +245,7 @@ fn the_eql_derivation_shares_the_eligibility_and_the_provenance() {
         "#;
     let report = error(premise);
     assert!(
-        report.contains("no witness of Equal(A) found\n  needed by '/Box/boxed' for payload #1 — add `use Equal(A)` to the telescope"),
+        report.contains("no witness of Equal(A) found\n  needed by 'Box/boxed' for payload #1 — add `use Equal(A)` to the telescope"),
         "{report}"
     );
 }
@@ -280,7 +280,7 @@ fn the_standard_library_derives_option_result_and_order() {
 
     assert_eq!(
         run(source),
-        b"/std/Option/Option/some(1)\n/std/Option/Option/none()\n/std/Result/Result/success(1)\n/std/Result/Result/failure(\"no\")\n/std/Ordering/Ordering/lt()/std/Ordering/Ordering/eq()/std/Ordering/Ordering/gt()\ntrue false true true true true "
+        b"Option/some(1)\nOption/none()\nResult/success(1)\nResult/failure(\"no\")\nOrdering/lt()Ordering/eq()Ordering/gt()\ntrue false true true true true "
     );
 }
 
@@ -322,7 +322,7 @@ fn an_ineligible_key_is_refused_by_its_shape() {
         "#;
     let report = error(type_valued);
     assert!(
-        report.contains("cannot derive '/syn/Spell/Spell' for Holder\n  payload #1 of '/Holder/holds' is a type, which no value spells; write the body"),
+        report.contains("cannot derive '/syn/Spell/Spell' for Holder\n  payload #1 of 'Holder/holds' is a type, which no value spells; write the body"),
         "{report}"
     );
 }
@@ -357,7 +357,7 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
         "#;
     let report = error(premise);
     assert!(
-        report.contains("no witness of Spell(A) found\n  needed by '/Box/boxed' for payload #1 — add `use Spell(A)` to the telescope"),
+        report.contains("no witness of Spell(A) found\n  needed by 'Box/boxed' for payload #1 — add `use Spell(A)` to the telescope"),
         "{report}"
     );
 
@@ -372,7 +372,7 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
     let report = error(unwitnessed);
     assert!(
         report.contains(
-            "no witness of Spell(Opaque) found\n  needed by '/Holder/holds' for payload 'inner'\n"
+            "no witness of Spell(Opaque) found\n  needed by 'Holder/holds' for payload 'inner'\n"
         ),
         "{report}"
     );

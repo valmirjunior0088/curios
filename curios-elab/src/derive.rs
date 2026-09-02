@@ -199,14 +199,15 @@ fn transparent(
     Ok(())
 }
 
-/// The absolute path a declaration or constructor re-parses from.
+/// The path a declaration or constructor spells as: the type's own name and, for a constructor, its tag — `Ordering/lt`, `Point` — which re-parses wherever the type's name is visible unqualified, the one place a value of it can be written at all. The absolute path re-parsed everywhere but read as `/std/Ordering/Ordering/lt()` in every test report, and a report is where a spelled value is read.
 fn path(name: &Global, tag: Option<&str>) -> String {
     let qualifier = name
         .qualifier()
         .expect("a declared type has the path it was declared at");
+    let type_name = qualifier.last();
     match tag {
-        Some(tag) => qualifier.with(tag).join(),
-        None => qualifier.join(),
+        Some(tag) => format!("{type_name}/{tag}"),
+        None => type_name.to_string(),
     }
 }
 
