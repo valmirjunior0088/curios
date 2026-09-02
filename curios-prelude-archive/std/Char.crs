@@ -1,7 +1,8 @@
 -- Unicode scalar values are certified by /syn/Char. Classification and case conversion in this initial API are deliberately ASCII-only; Unicode database policy remains outside the foundational scalar type.
 pub use /syn/{Char};
 pub use /syn/Char/{Below, InRange, Scalar};
-use /std/{Nat, Byte, Bool, Bytes, Option, Order, Eq, True, Str, Eql, Cmp, Show, Spell, Ord};
+use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, True, Str, Equal, Compare, Show, Spell,
+    Ordered};
 use /std/Test/{Draw, Seed};
 
 pub let to_nat(c: Char) -> Nat =
@@ -30,7 +31,7 @@ pub let eq_of_code(a: Char, b: Char, proof: Eq(a.code, b.code)) -> Eq(a, b) =
 pub let eql(a: Char, b: Char) -> Bool =
     a.code == b.code;
 
-pub let cmp(a: Char, b: Char) -> Order =
+pub let cmp(a: Char, b: Char) -> Ordering =
     Nat/cmp(a.code, b.code);
 
 pub let lt(a: Char, b: Char) -> Bool =
@@ -113,12 +114,12 @@ pub let to_utf8(c: Char) -> Bytes =
     | _ => emit_continuations(x[Nat/to_byte(0xF0 + codepoint / 0x40000)], codepoint, 0x1000)
     end;
 
-satisfy Eql(Char) {
+satisfy Equal(Char) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
 }
 
-satisfy Cmp(Char) {
+satisfy Compare(Char) {
     lt = lt,
     le = le,
     gt = gt,
@@ -144,7 +145,7 @@ satisfy Spell(Char) {
         Str/concat("'", Str/concat(body, "'")),
 }
 
-satisfy Ord(Char) {
+satisfy Ordered(Char) {
     cmp = cmp,
 }
 

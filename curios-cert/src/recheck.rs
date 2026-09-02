@@ -54,7 +54,7 @@ use {
 
 /// `module`'s items in dependency order: every item after the ones it mentions.
 ///
-/// The kernel checks items in sequence, defining each as it goes, so an item that mentions a name defined later is `Unbound`. `Module::items` is *not* in that order. `into_core` does sort topologically, but it sorts the surface program — and a concept-dispatched call names a *method*, not the witness that satisfies it. `/syn/Char/Below` uses `<` at `Nat`, and the edge to the witness carrying that `Cmp` instance is created by witness resolution during elaboration, long after the lowering sort could have seen it. So the sort has to be redone here, over the elaborated module, where the edge exists.
+/// The kernel checks items in sequence, defining each as it goes, so an item that mentions a name defined later is `Unbound`. `Module::items` is *not* in that order. `into_core` does sort topologically, but it sorts the surface program — and a concept-dispatched call names a *method*, not the witness that satisfies it. `/syn/Char/Below` uses `<` at `Nat`, and the edge to the witness carrying that `Compare` instance is created by witness resolution during elaboration, long after the lowering sort could have seen it. So the sort has to be redone here, over the elaborated module, where the edge exists.
 ///
 /// `judged` names the items to order, as indices into `module.items`; it is expected in ascending order, which is what makes the tie-break below the lowest-index one.
 ///

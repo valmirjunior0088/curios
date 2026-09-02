@@ -68,7 +68,7 @@ fn traverse_and_each_run_under_a_monad() {
 #[test]
 fn sort_is_stable_and_sort_by_takes_a_comparator() {
     let source = r#"
-        use /std/{Nat, Str, List, Order, Show};
+        use /std/{Nat, Str, List, Ordering, Show};
         let pairs = [(2, "b"), (1, "x"), (2, "a"), (1, "y")];
         let by_key = List/sort_by(pairs, (p: {Nat, Str}, q: {Nat, Str}) => Nat/cmp(p.0, q.0));
         let by_key_desc = List/sort_by(pairs, (p: {Nat, Str}, q: {Nat, Str}) => Nat/cmp(q.0, p.0));

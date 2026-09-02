@@ -4,11 +4,11 @@ use {crate::*, curios_utilities::Plicity};
 
 #[test]
 fn parse_concept_item() {
-    // Fields: a `use` superclass edge, the signature sugar `cmp(A, A) -> Order` (kept as written — `func_params` carries the parameter list; `into_core` undoes the sugar), and a plain `name : T` field.
+    // Fields: a `use` superclass edge, the signature sugar `cmp(A, A) -> Ordering` (kept as written — `func_params` carries the parameter list; `into_core` undoes the sugar), and a plain `name : T` field.
     let source = "\
-        concept Ord(A : Type) : Type { \
-            use Eql(A), \
-            cmp(A, A) -> Order, \
+        concept Ordered(A : Type) : Type { \
+            use Equal(A), \
+            cmp(A, A) -> Ordering, \
             top : A \
         } u";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
@@ -17,7 +17,7 @@ fn parse_concept_item() {
     };
     let concept = &concepts[0];
 
-    assert_eq!(concept.label, "Ord");
+    assert_eq!(concept.label, "Ordered");
     assert_eq!(concept.params.len(), 1);
     assert_eq!(concept.fields.len(), 3);
     // `: Type` without `pub` is a sealed (private-representation) concept.
@@ -87,9 +87,9 @@ fn concept_out_marker_is_rejected() {
 fn parse_witness_item() {
     // A premised witness: an `@` binder, a `use` premise, an explicit `use <term>` fill for the concept's superclass field, and the definition sugar (`cmp(a, b) = ...`).
     let source = "\
-        satisfy (@A : Type, use Ord(A)) => Ord(List(A)) { \
+        satisfy (@A : Type, use Ordered(A)) => Ordered(List(A)) { \
             use eql_list, \
-            cmp(a, b) = Order/lt() \
+            cmp(a, b) = Ordering/lt() \
         } u";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     let TopItem::Witness(witnesses) = &entrypoint.module.items[0] else {
@@ -97,7 +97,7 @@ fn parse_witness_item() {
     };
     let witness = &witnesses[0];
 
-    assert_eq!(witness.concept, Name::from(["Ord".to_string()]));
+    assert_eq!(witness.concept, Name::from(["Ordered".to_string()]));
     assert_eq!(witness.args.len(), 1);
 
     // The telescope: an implicit `@A` and an anonymous `use` premise.
@@ -126,7 +126,7 @@ fn parse_witness_item() {
 #[test]
 fn use_parameter_forms() {
     // Two anonymous `use` Π-binders, alongside `@` and plain binders.
-    let TopItem::Let(item) = &"pub let f(@A : Type, use Show(A), use Eql(A), x : A) -> A = x; u"
+    let TopItem::Let(item) = &"pub let f(@A : Type, use Show(A), use Equal(A), x : A) -> A = x; u"
         .parse::<Entrypoint>()
         .unwrap()
         .module
@@ -164,7 +164,7 @@ fn witness_use_round_trip() {
         "concept Show(A : Type) : Type { show : A } u",
         "pub concept Show(A : Type) : pub Type { show : A } u",
         "pub concept Certified(A : Type) : pub Prop { proof : A } u",
-        "pub concept Ord(A : Type) : Type { use Eql(A), cmp : A } u",
+        "pub concept Ordered(A : Type) : Type { use Equal(A), cmp : A } u",
         "concept Convert(A : Type, B : Type) : Type { convert : A } u",
         "satisfy Show(Nat) { show = f } u",
         "satisfy (@A : Type, use Show(A)) => Show(List(A)) { show = g } u",

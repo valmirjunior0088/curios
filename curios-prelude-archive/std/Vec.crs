@@ -1,4 +1,4 @@
-use /std/{Nat, List, Bool, Str, Eql, Show};
+use /std/{Nat, List, Bool, Str, Equal, Show};
 
 pub induct Vec(T: Type): (Nat) -> pub Type
 | nil(): (0)
@@ -56,7 +56,7 @@ pub let zip(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), w: Vec(B, n)) -> Vec({A, 
 pub let fold(@T: Type, @A: Type, @n: Nat, v: Vec(T, n), init: A, f: (T, A) -> A) -> A =
     match v: (k, w) => A | nil() => init | cons(@m, x, xs) => fold(xs, f(x, init), f) end;
 
-satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T, n)) {
+satisfy (@T: Type, @n: Nat, use Equal(T)) => Equal(Vec(T, n)) {
     eql(v, w) = to_list(v) == to_list(w),
     neq(v, w) = to_list(v) != to_list(w),
 }

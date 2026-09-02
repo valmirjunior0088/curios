@@ -1,6 +1,6 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{stdin, stdout, stderr, eql};
-use /std/{Bytes, Nat, Str, Result, List, Io, True, Bool, Option, Eql, Show};
+use /std/{Bytes, Nat, Str, Result, List, Io, True, Bool, Option, Equal, Show};
 
 pub induct Error: pub Type
 | not_found()
@@ -90,7 +90,7 @@ pub let write(h: Handle, b: Bytes) -> Io(Result({}, Error)) =
         end
     end;
 
-satisfy Eql(Handle) {
+satisfy Equal(Handle) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
 }

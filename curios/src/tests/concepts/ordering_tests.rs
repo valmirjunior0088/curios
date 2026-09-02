@@ -1,8 +1,8 @@
-//! The ordering witnesses beyond the numerics: `Cmp` and `Ord` on strings, bytes, booleans, lists, options and results, and `Eql`/`Show` on maps.
+//! The ordering witnesses beyond the numerics: `Compare` and `Ordered` on strings, bytes, booleans, lists, options and results, and `Equal`/`Show` on maps.
 
 use crate::tests::run;
 
-// UTF-8 bytewise order is scalar-value order, so `Cmp(Str)` compares code points without decoding: `é` (U+00E9) sorts after `z`, a prefix sorts before its extension, and the empty string before everything.
+// UTF-8 bytewise order is scalar-value order, so `Compare(Str)` compares code points without decoding: `é` (U+00E9) sorts after `z`, a prefix sorts before its extension, and the empty string before everything.
 #[test]
 fn strings_compare_by_code_point_and_bytes_and_booleans_bytewise() {
     let source = r#"
@@ -21,22 +21,22 @@ fn strings_compare_by_code_point_and_bytes_and_booleans_bytewise() {
     );
 }
 
-// `List` is lexicographic with the shorter prefix first, `none` sits below `some`, and `failure` below `success`; each is stated once in its module and read here through `Ord/cmp`.
+// `List` is lexicographic with the shorter prefix first, `none` sits below `some`, and `failure` below `success`; each is stated once in its module and read here through `Ordered/cmp`.
 #[test]
 fn lists_options_and_results_order_through_ord() {
     let source = r#"
-        use /std/{Str, Nat, List, Option, Result, Order, Ord, Show, Bool};
+        use /std/{Str, Nat, List, Option, Result, Ordering, Ordered, Show, Bool};
         let none: Option(Nat) = Option/none();
         let bad: Result(Nat, Str) = Result/failure("e");
         /std/print(Str/join(",", [
-            Show/show(Ord/cmp([1, 2], [1, 3])),
-            Show/show(Ord/cmp([1, 2], [1, 2])),
-            Show/show(Ord/cmp([1], [1, 0])),
-            Show/show(Ord/cmp(["b"], ["a", "z"])),
-            Show/show(Ord/cmp(none, Option/some(0))),
-            Show/show(Ord/cmp(Option/some(2), Option/some(1))),
-            Show/show(Ord/cmp(bad, Result/success(0))),
-            Show/show(Ord/cmp(Result/failure("a"), bad)),
+            Show/show(Ordered/cmp([1, 2], [1, 3])),
+            Show/show(Ordered/cmp([1, 2], [1, 2])),
+            Show/show(Ordered/cmp([1], [1, 0])),
+            Show/show(Ordered/cmp(["b"], ["a", "z"])),
+            Show/show(Ordered/cmp(none, Option/some(0))),
+            Show/show(Ordered/cmp(Option/some(2), Option/some(1))),
+            Show/show(Ordered/cmp(bad, Result/success(0))),
+            Show/show(Ordered/cmp(Result/failure("a"), bad)),
             Bool/to_str([1, 2] < [2]),
             Bool/to_str(Option/some(1) >= none)
         ]))

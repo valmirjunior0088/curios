@@ -6,19 +6,19 @@ use crate::tests::{error, run};
 #[test]
 fn use_entry_fills_a_concept_field_explicitly() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Ordering};
         pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
         pub concept Ord2(A : Type) : pub Type {
             use Eq2(A),
-            cmp2(A, A) -> Order
+            cmp2(A, A) -> Ordering
         }
         satisfy Eq2(Nat) {
             eq2(a, b) = a == b
         }
         let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
-        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Ordering/lt() };
         pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
         /std/print(Bool/to_str(observe(use o)))
         "#;
@@ -30,17 +30,17 @@ fn use_entry_fills_a_concept_field_explicitly() {
 #[test]
 fn use_entry_fills_a_witness_superclass() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Ordering};
         pub concept Eq3(A : Type) : pub Type {
             eq3(A, A) -> Bool
         }
         pub concept Ord3(A : Type) : pub Type {
             use Eq3(A),
-            cmp3(A, A) -> Order
+            cmp3(A, A) -> Ordering
         }
         satisfy Ord3(Nat) {
             use Eq3 { eq3(a, b) = a == b },
-            cmp3(a, b) = Order/lt()
+            cmp3(a, b) = Ordering/lt()
         }
         pub let same(@A : Type, use Ord3(A), x : A, y : A) -> Bool = Eq3/eq3(x, y);
         /std/print(Bool/to_str(same(2, 2)))
@@ -49,17 +49,17 @@ fn use_entry_fills_a_witness_superclass() {
     assert_eq!(run(source), b"true");
 }
 
-// A superclass field is anonymous, so its concept's former field name is not a label: assigning it is a plain unknown-field error, with no special `use`-field diagnostic (`Eql`'s superclass is reached by resolution, never by name).
+// A superclass field is anonymous, so its concept's former field name is not a label: assigning it is a plain unknown-field error, with no special `use`-field diagnostic (`Equal`'s superclass is reached by resolution, never by name).
 #[test]
 fn labeled_fill_of_a_former_superclass_is_unknown() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Ordering};
         pub concept Eq4(A : Type) : pub Type {
             eq4(A, A) -> Bool
         }
         pub concept Ord4(A : Type) : pub Type {
             use Eq4(A),
-            cmp4(A, A) -> Order
+            cmp4(A, A) -> Ordering
         }
         satisfy Eq4(Nat) {
             eq4(a, b) = a == b
@@ -85,13 +85,13 @@ fn misplaced_use_entries_are_errors() {
     assert!(error(non_concept).contains("not a concept"));
 
     let surplus = r#"
-        use /std/{Nat, Bool, Handle, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Ordering};
         pub concept Eq5(A : Type) : pub Type {
             eq5(A, A) -> Bool
         }
         pub concept Ord5(A : Type) : pub Type {
             use Eq5(A),
-            cmp5(A, A) -> Order
+            cmp5(A, A) -> Ordering
         }
         satisfy Eq5(Nat) {
             eq5(a, b) = a == b
@@ -99,7 +99,7 @@ fn misplaced_use_entries_are_errors() {
         satisfy Ord5(Nat) {
             use Eq5 { eq5(a, b) = a == b },
             use Eq5 { eq5(a, b) = a == b },
-            cmp5(a, b) = Order/lt()
+            cmp5(a, b) = Ordering/lt()
         }
         /std/print("no")
         "#;
@@ -110,13 +110,13 @@ fn misplaced_use_entries_are_errors() {
 #[test]
 fn omitted_superclass_resolves_from_a_premise() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Order, List};
+        use /std/{Nat, Bool, Handle, Str, Ordering, List};
         pub concept Eq6(A : Type) : pub Type {
             eq6(A, A) -> Bool
         }
         pub concept Ord6(A : Type) : pub Type {
             use Eq6(A),
-            cmp6(A, A) -> Order
+            cmp6(A, A) -> Ordering
         }
         satisfy Eq6(Nat) {
             eq6(a, b) = a == b
@@ -125,10 +125,10 @@ fn omitted_superclass_resolves_from_a_premise() {
             eq6(a, b) = List/len(a) == List/len(b)
         }
         satisfy (@A : Type, use Ord6(A)) => Ord6(List(A)) {
-            cmp6(a, b) = Order/lt()
+            cmp6(a, b) = Ordering/lt()
         }
         satisfy Ord6(Nat) {
-            cmp6(a, b) = Order/lt()
+            cmp6(a, b) = Ordering/lt()
         }
         pub let same(@A : Type, use Ord6(A), x : A, y : A) -> Bool = Eq6/eq6(x, y);
         let l : List(Nat) = [1, 2];
@@ -142,20 +142,20 @@ fn omitted_superclass_resolves_from_a_premise() {
 #[test]
 fn concept_literal_spread_copies_superclass() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Ordering};
         pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
         pub concept Ord2(A : Type) : pub Type {
             use Eq2(A),
-            cmp2(A, A) -> Order
+            cmp2(A, A) -> Ordering
         }
         satisfy Eq2(Nat) {
             eq2(a, b) = a == b
         }
         let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
-        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
-        let o2 : Ord2(Nat) = Ord2 { ..o, cmp2(a, b) = Order/gt() };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Ordering/lt() };
+        let o2 : Ord2(Nat) = Ord2 { ..o, cmp2(a, b) = Ordering/gt() };
         pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
         /std/print(Bool/to_str(observe(use o2)))
         "#;
@@ -167,17 +167,17 @@ fn concept_literal_spread_copies_superclass() {
 #[test]
 fn concept_literal_spread_use_override() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Order};
+        use /std/{Nat, Bool, Handle, Str, Ordering};
         pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
         pub concept Ord2(A : Type) : pub Type {
             use Eq2(A),
-            cmp2(A, A) -> Order
+            cmp2(A, A) -> Ordering
         }
         let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
         let straight : Eq2(Nat) = Eq2 { eq2(a, b) = true };
-        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Ordering/lt() };
         let o2 : Ord2(Nat) = Ord2 { ..o, use straight };
         pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
         /std/print(Bool/to_str(observe(use o2)))

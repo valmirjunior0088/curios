@@ -4,21 +4,20 @@ pub concept Add(A: Type): pub Type {
     add(A, A) -> A,
 }
 
-pub concept Sub(A: Type): pub Type {
+pub concept Subtract(A: Type): pub Type {
     sub(A, A) -> A,
 }
 
-pub concept Mul(A: Type): pub Type {
+pub concept Multiply(A: Type): pub Type {
     mul(A, A) -> A,
 }
 
--- Division states its own domain. A carrier whose division is partial names the precondition it wants — `Nat` and `Int` a nonzero divisor — and one whose division is total says so with `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail.
-pub concept Div(A: Type): pub Type {
+pub concept Divide(A: Type): pub Type {
     Ok(A) -> Prop,
     div(a: A, b: A, @ok: Ok(b)) -> A,
 }
 
-pub concept Rem(A: Type): pub Type {
+pub concept Remainder(A: Type): pub Type {
     Ok(A) -> Prop,
     rem(a: A, b: A, @ok: Ok(b)) -> A,
 }
@@ -31,14 +30,14 @@ pub concept Or(A: Type): pub Type {
     or(A, A) -> A,
 }
 
-pub concept Cmp(A: Type): pub Type {
+pub concept Compare(A: Type): pub Type {
     lt(A, A) -> Bool,
     le(A, A) -> Bool,
     gt(A, A) -> Bool,
     ge(A, A) -> Bool,
 }
 
-pub concept Eql(A: Type): pub Type {
+pub concept Equal(A: Type): pub Type {
     eql(A, A) -> Bool,
     neq(A, A) -> Bool,
 }

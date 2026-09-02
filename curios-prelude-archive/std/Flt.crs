@@ -2,8 +2,8 @@ pub use /sys/{Flt};
 pub use /syn/Flt/{FourBytes, Finite, NonNeg};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
-use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Order, BigNat, Eql, Cmp, Add, Sub,
-    Mul, Div, Rem, Show, Spell, Ord, True, False};
+use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat, Equal, Compare,
+    Add, Subtract, Multiply, Divide, Remainder, Show, Spell, Ordered, True, False};
 
 -- The two infinities are spelled by division rather than by their bit patterns, and that is a dependency fact rather than a style preference: `of_le_bytes` states a length precondition, so building an infinity from bytes would make these depend on the very operation whose bound wants naming an infinity. `div` states no precondition — `Flt` division is total, an IEEE infinity being a value rather than a failure — so this direction has no edge back.
 pub let pos_inf: Flt =
@@ -184,8 +184,8 @@ let render(f_mant: Nat, exp_field: Nat, even: Bool) -> Str =
     | false => layout(digits_to_str(norm), k2)
     end;
 
-pub let cmp(x: Flt, y: Flt) -> Order =
-    choose | x < y => Order/lt() | x == y => Order/eq() | _ => Order/gt() end;
+pub let cmp(x: Flt, y: Flt) -> Ordering =
+    choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
 pub let to_str(f: Flt) -> Str =
     let b = to_le_bytes(f);
@@ -345,12 +345,12 @@ pub let of_str(s: Str) -> Option(Flt) =
         end
     end;
 
-satisfy Eql(Flt) {
+satisfy Equal(Flt) {
     eql = eql,
     neq = neq,
 }
 
-satisfy Cmp(Flt) {
+satisfy Compare(Flt) {
     lt = lt,
     le = le,
     gt = gt,
@@ -361,21 +361,21 @@ satisfy Add(Flt) {
     add = add,
 }
 
-satisfy Sub(Flt) {
+satisfy Subtract(Flt) {
     sub = sub,
 }
 
-satisfy Mul(Flt) {
+satisfy Multiply(Flt) {
     mul = mul,
 }
 
 -- IEEE division is total, so this carrier's domain is everything and the obligation costs nothing — the check that the concept can express "no precondition" without a carve-out.
-satisfy Div(Flt) {
+satisfy Divide(Flt) {
     Ok(b) = True,
     div(a, b) = div(a, b),
 }
 
-satisfy Rem(Flt) {
+satisfy Remainder(Flt) {
     Ok(b) = True,
     rem(a, b) = rem(a, b),
 }
@@ -408,6 +408,6 @@ satisfy Spell(Flt) {
         end,
 }
 
-satisfy Ord(Flt) {
+satisfy Ordered(Flt) {
     cmp = cmp,
 }

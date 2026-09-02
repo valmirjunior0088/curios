@@ -1,5 +1,6 @@
 -- Arbitrary-precision integers: a sign tag over a strictly-positive `BigPos` magnitude (or the distinguished `zero`). Every operation dispatches on the sign constructors and delegates the magnitude arithmetic to `BigPos`/`BigNat`. Signed subtraction (`pos_sub`) reads the sign straight off `non_zero_cmp` and takes the truncating `BigNat/sub` of the larger minus the smaller magnitude, so no borrow/compare bridge is needed. The algebraic lemma corpus is deferred until a consumer needs it (see documentation/roadmap/big-flt-dyadic-proofs/01-big-int-laws-spec.md).
-use /std/{Nat, Int, Bool, Str, Order, BigNat, BigPos, Eql, Cmp, Add, Sub, Mul, Show, Ord};
+use /std/{Nat, Int, Bool, Str, Ordering, BigNat, BigPos, Equal, Compare, Add, Subtract, Multiply,
+    Show, Ordered};
 
 pub induct BigInt: pub Type
 | neg(BigPos)
@@ -65,16 +66,16 @@ pub let mul(a: BigInt, b: BigInt) -> BigInt =
     | (pos(p), pos(q)) => BigInt/pos(BigPos/mul(p, q))
     end;
 
-pub let cmp(a: BigInt, b: BigInt) -> Order =
+pub let cmp(a: BigInt, b: BigInt) -> Ordering =
     match (a, b)
     | (neg(p), neg(q)) => BigPos/cmp(q, p)
-    | (neg(_), zero()) => Order/lt()
-    | (neg(_), pos(_)) => Order/lt()
-    | (zero(), neg(_)) => Order/gt()
-    | (zero(), zero()) => Order/eq()
-    | (zero(), pos(_)) => Order/lt()
-    | (pos(_), neg(_)) => Order/gt()
-    | (pos(_), zero()) => Order/gt()
+    | (neg(_), zero()) => Ordering/lt()
+    | (neg(_), pos(_)) => Ordering/lt()
+    | (zero(), neg(_)) => Ordering/gt()
+    | (zero(), zero()) => Ordering/eq()
+    | (zero(), pos(_)) => Ordering/lt()
+    | (pos(_), neg(_)) => Ordering/gt()
+    | (pos(_), zero()) => Ordering/gt()
     | (pos(p), pos(q)) => BigPos/cmp(p, q)
     end;
 
@@ -117,12 +118,12 @@ pub let to_str(a: BigInt) -> Str =
     | pos(p) => Str/concat("+", BigNat/to_str(p.value))
     end;
 
-satisfy Eql(BigInt) {
+satisfy Equal(BigInt) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
 }
 
-satisfy Cmp(BigInt) {
+satisfy Compare(BigInt) {
     lt = lt,
     le = le,
     gt = gt,
@@ -133,11 +134,11 @@ satisfy Add(BigInt) {
     add = add,
 }
 
-satisfy Sub(BigInt) {
+satisfy Subtract(BigInt) {
     sub = sub,
 }
 
-satisfy Mul(BigInt) {
+satisfy Multiply(BigInt) {
     mul = mul,
 }
 
@@ -145,6 +146,6 @@ satisfy Show(BigInt) {
     show = to_str,
 }
 
-satisfy Ord(BigInt) {
+satisfy Ordered(BigInt) {
     cmp = cmp,
 }

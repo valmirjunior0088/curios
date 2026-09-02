@@ -1,5 +1,5 @@
 -- The filesystem beyond a file's contents: what is at a path, the names in a directory, and making, moving and removing things. Every row carries `Bytes` paths as `file/open` does, and a listing and the working directory come back as the bytes the host holds — a name that is not UTF-8 is the caller's to decode or refuse, so nothing here decodes. The rows are synchronous and hold no handle, but the functions are `Async` as `File/open` is, so one region mixes them freely. The release targets are Linux and macOS, so the path functions at the end take `/` as the one separator.
-use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Handle, Async, Io, Eql, Show};
+use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Handle, Async, Io, Equal, Show};
 use /std/time/{Timestamp};
 
 pub induct Kind: pub Type
@@ -9,7 +9,7 @@ pub induct Kind: pub Type
 | other()
 end
 
-satisfy Eql(Kind);
+satisfy Equal(Kind);
 
 satisfy Show(Kind) {
     show(k) =

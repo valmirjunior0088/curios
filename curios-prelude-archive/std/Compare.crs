@@ -1,0 +1,2 @@
+pub use /syn/{Compare};
+pub use /syn/Compare/{lt, le, gt, ge};

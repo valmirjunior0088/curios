@@ -1,0 +1,8 @@
+use /std/{Ordering, Equal};
+
+pub concept Ordered(A: Type): pub Type {
+    use Equal(A),
+    cmp(A, A) -> Ordering,
+}
+
+pub use Ordered/*;

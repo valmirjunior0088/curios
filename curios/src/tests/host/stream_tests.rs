@@ -18,7 +18,7 @@ let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes("hello"))!;
 
 #[test]
 fn handles_compare_with_the_operators() {
-    // `Handle` had `eql` from `/sys` but no `Eql` witness, so `h == Handle/stdout` reported "no witness of Eql(Handle) found" while every other intrinsic carrier compared with the operator. The witness is over the same `eql`; the output is the truth table at runtime, where a handle is its token.
+    // `Handle` had `eql` from `/sys` but no `Equal` witness, so `h == Handle/stdout` reported "no witness of Equal(Handle) found" while every other intrinsic carrier compared with the operator. The witness is over the same `eql`; the output is the truth table at runtime, where a handle is its token.
     assert_eq!(
         run(r#"
 use /std/{Handle, Str, Bool};

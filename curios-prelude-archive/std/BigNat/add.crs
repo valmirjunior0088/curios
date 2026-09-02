@@ -1,6 +1,7 @@
-use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
+use /std/{Nat, Bool, Bits, Str, Ordering, Eq, False, True, Equal, Compare, Add, Subtract, Multiply,
+    Show, Ordered};
 use /std/Bool/{false_neq_true};
-use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
+use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, cong_bits, cong_cons2, cong_is_trimmed, cons_inj_head, cons_inj_tail, eq,
     is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, nonempty, of_trimmed_bits, refl_at,
     tail_is_trimmed, xor3, mod succ};

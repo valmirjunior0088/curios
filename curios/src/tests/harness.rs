@@ -136,21 +136,21 @@ fn structural_values_spell_as_absolute_constructor_paths() {
     // The declaration's own path — `/std/Option/Option/some`, the induct `Option` inside module `/std/Option` — rather than the facade's `/std/Option/some` the written witnesses once spelled: both re-parse, and the derived witness spells the one it reads off the registry.
     assert_eq!(
         run(r#"
-        use /std/{Nat, Str, Option, Result, Order, Io, Spell, print};
+        use /std/{Nat, Str, Option, Result, Ordering, Io, Spell, print};
         let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
         let _ = line(Spell/spell(Option/some(3)))!;
         let _ = line(Spell/spell(Option/none(@Nat)))!;
         let _ = line(Spell/spell(Result/failure(@Nat, "why")))!;
-        let _ = line(Spell/spell(Order/lt()))!;
+        let _ = line(Spell/spell(Ordering/lt()))!;
         Io/pure(())
         "#),
-        b"/std/Option/Option/some(3)\n/std/Option/Option/none()\n/std/Result/Result/failure(\"why\")\n/std/Order/Order/lt()\n"
+        b"/std/Option/Option/some(3)\n/std/Option/Option/none()\n/std/Result/Result/failure(\"why\")\n/std/Ordering/Ordering/lt()\n"
     );
 }
 
 #[test]
 fn a_structural_fixture_compares_and_spells() {
-    // The `/std` gap closed: `Option`, `Result` and `Order` carry `Eql` and `Spell`, so `Test/equal` works on them out of the box.
+    // The `/std` gap closed: `Option`, `Result` and `Ordering` carry `Equal` and `Spell`, so `Test/equal` works on them out of the box.
     assert_eq!(
         run(r#"
         use /std/{Nat, Io, Option, Test};

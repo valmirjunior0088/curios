@@ -29,7 +29,7 @@ fn a_module_file_without_a_tail_formats() {
 #[test]
 fn a_derived_witness_stays_a_declaration() {
     // The formatter leaves the body-less form unexpanded, alone and inside a mixed group: `;` is the whole of what was written, so nothing is there to break across lines.
-    let source = "use /std/{Nat, Bool, Spell, Eql};\n\nsatisfy Spell(Nat);\n\nsatisfy Spell(Bool);\nand Eql(Bool) {\n    eql = eql,\n    neq = xor,\n}\n";
+    let source = "use /std/{Nat, Bool, Spell, Equal};\n\nsatisfy Spell(Nat);\n\nsatisfy Spell(Bool);\nand Equal(Bool) {\n    eql = eql,\n    neq = xor,\n}\n";
     assert_eq!(formatted(source), source);
 }
 
@@ -243,9 +243,9 @@ fn blank_lines_normalize_to_exactly_one_between_items() {
 const POSITIONS: [&str; 5] = [
     "use /std/{Bool, Str, Option};\n\npub let of_str(s: Str) -> Option(Bool) =\n    choose\n    | s == \"true\" => Option/some(true)\n    | _ => Option/none()\n    end;\n",
     "use /std/{Bool, Str};\n\npub let to_str(b: Bool) -> Str =\n    let x: Str = \"y\";\n    match b | true => x | false => \"false\" end;\n",
-    "pub induct Order: pub Type\n| lt()\n| eq()\n| gt()\nend\n",
-    "use /std/{Eql, Order};\n\npub concept Ord(A: Type): pub Type {\n    use Eql(A),\n    cmp(A, A) -> Order,\n}\n",
-    "use /std/{Eql, Bool};\n\nsatisfy Eql(Bool) {\n    eql = eql,\n    neq = xor,\n}\n",
+    "pub induct Ordering: pub Type\n| lt()\n| eq()\n| gt()\nend\n",
+    "use /std/{Equal, Ordering};\n\npub concept Ordered(A: Type): pub Type {\n    use Equal(A),\n    cmp(A, A) -> Ordering,\n}\n",
+    "use /std/{Equal, Bool};\n\nsatisfy Equal(Bool) {\n    eql = eql,\n    neq = xor,\n}\n",
 ];
 
 /// **Formatting converges: a second run over the first run's output changes nothing.**

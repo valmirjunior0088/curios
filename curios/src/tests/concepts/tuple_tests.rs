@@ -1,4 +1,4 @@
-//! The standard library's witnesses on the tuple shapes, end to end: `/std/Tuple`'s `Show`, `Eql` and `Ord`.
+//! The standard library's witnesses on the tuple shapes, end to end: `/std/Tuple`'s `Show`, `Equal` and `Ordered`.
 
 use crate::tests::run;
 
@@ -50,7 +50,7 @@ fn a_format_directive_shows_a_tuple() {
 #[test]
 fn equality_is_componentwise() {
     let source = r#"
-        use /std/{Show, Eql, Nat, Bool, Str, List};
+        use /std/{Show, Equal, Nat, Bool, Str, List};
         let a: {Nat, Bool} = (1, true);
         let b: {Nat, Bool} = (2, true);
         let u: {} = ();
@@ -66,18 +66,18 @@ fn equality_is_componentwise() {
     assert_eq!(run(source), b"true false true true");
 }
 
-// Lexicographic: the first component that is not `eq` decides, and a tie falls through to the next. `Ord`'s `Eql` superclass slot is left to resolution and lands on the tuple `Eql` witness, whose own premises come from projecting the `Ord` premises — the ordinary machinery, composing.
+// Lexicographic: the first component that is not `eq` decides, and a tie falls through to the next. `Ordered`'s `Equal` superclass slot is left to resolution and lands on the tuple `Equal` witness, whose own premises come from projecting the `Ordered` premises — the ordinary machinery, composing.
 #[test]
 fn ordering_is_lexicographic() {
     let source = r#"
-        use /std/{Show, Ord, Order, Nat, Str, List};
+        use /std/{Show, Ordered, Ordering, Nat, Str, List};
         let p: {Nat, Nat} = (1, 2);
         let q: {Nat, Nat} = (1, 3);
         let r: {Nat, Nat} = (2, 2);
         let parts: List(Str) = [
-            Show/show(Ord/cmp(p, q)),
-            Show/show(Ord/cmp(r, q)),
-            Show/show(Ord/cmp(p, p)),
+            Show/show(Ordered/cmp(p, q)),
+            Show/show(Ordered/cmp(r, q)),
+            Show/show(Ordered/cmp(p, p)),
         ];
         /std/print(Str/join(" ", parts))
         "#;

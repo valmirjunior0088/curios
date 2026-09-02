@@ -1,7 +1,7 @@
 pub use /sys/{Byte};
 pub use /sys/Byte/{to_nat, eql, lt, le, gt, ge};
 use /sys/Bytes/{let Bytes, get};
-use /std/{Order, Eql, Cmp, Nat, Bool, Show, Spell, Ord};
+use /std/{Ordering, Equal, Compare, Nat, Bool, Show, Spell, Ordered};
 use /std/Test/{Draw, Seed};
 
 -- The 256 byte values in order, so a computed `Nat` becomes a `Byte` by indexing.
@@ -28,15 +28,15 @@ let atoms: Bytes =
 pub let of_nat(n: Nat, @ok: Nat/Lt(n, 256)) -> Byte =
     get(atoms, n, @ok);
 
-pub let cmp(a: Byte, b: Byte) -> Order =
-    choose | lt(a, b) => Order/lt() | eql(a, b) => Order/eq() | _ => Order/gt() end;
+pub let cmp(a: Byte, b: Byte) -> Ordering =
+    choose | lt(a, b) => Ordering/lt() | eql(a, b) => Ordering/eq() | _ => Ordering/gt() end;
 
-satisfy Eql(Byte) {
+satisfy Equal(Byte) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
 }
 
-satisfy Cmp(Byte) {
+satisfy Compare(Byte) {
     lt = lt,
     le = le,
     gt = gt,
@@ -51,7 +51,7 @@ satisfy Spell(Byte) {
     spell(b) = Nat/to_str(to_nat(b)),
 }
 
-satisfy Ord(Byte) {
+satisfy Ordered(Byte) {
     cmp = cmp,
 }
 

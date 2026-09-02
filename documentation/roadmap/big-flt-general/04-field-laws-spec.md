@@ -21,7 +21,7 @@ Required behavior:
 - successful division equals multiplication by the successful reciprocal;
 - no special infinity, NaN, or signed-zero value enters the exact type.
 
-Whether a global `Div(BigFlt)` witness is added is a deliberate API decision: the concept requires a total `BigFlt -> BigFlt -> BigFlt` operation, while exact division is partial at zero. The default is no witness unless the concept or a nonzero-denominator wrapper supplies an honest total domain.
+Whether a global `Divide(BigFlt)` witness is added is a deliberate API decision: the concept requires a total `BigFlt -> BigFlt -> BigFlt` operation, while exact division is partial at zero. The default is no witness unless the concept or a nonzero-denominator wrapper supplies an honest total domain.
 
 ## Laws
 
@@ -50,7 +50,7 @@ Avoid proving field identities by opening proof certificates. Equality concludes
 - Pin zero, one, negative one, dyadic, odd-denominator, and cross-cancelling quotients.
 - Compare successful division with an arbitrary-precision rational reference.
 - Exercise every law over symbolic nonzero evidence.
-- Confirm no `Div(BigFlt)` witness exists unless its totality contract is separately approved.
+- Confirm no `Divide(BigFlt)` witness exists unless its totality contract is separately approved.
 - Confirm proof erasure and run the repository done bar.
 
 ## Non-goals
@@ -66,4 +66,4 @@ Avoid proving field identities by opening proof certificates. Equality concludes
 - The field laws hold under explicit nonzero premises.
 - Zero is never hidden behind a default quotient or runtime trap.
 - Public witness behavior remains mathematically honest.
-- Before this specification is deleted, partial division semantics, the nonzero-premised field theorem surface, and the `Div(BigFlt)` witness decision are recorded in the owning `/std/BigFlt` documentation, signatures, and tests; remaining plans refer to landed operations and laws rather than this file; the roadmap subitem is a checked unlinked summary; and no reference to this filename remains.
+- Before this specification is deleted, partial division semantics, the nonzero-premised field theorem surface, and the `Divide(BigFlt)` witness decision are recorded in the owning `/std/BigFlt` documentation, signatures, and tests; remaining plans refer to landed operations and laws rather than this file; the roadmap subitem is a checked unlinked summary; and no reference to this filename remains.

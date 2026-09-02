@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Str, Bytes, List, Option, Io, Eq, Eql, Spell, print, proc};
+use /std/{Nat, Bool, Str, Bytes, List, Option, Io, Eq, Equal, Spell, print, proc};
 use /std/Test/{Seed, Property};
 
 pub induct Verdict: pub Type
@@ -27,7 +27,7 @@ pub let check(condition: Bool) -> Test =
         | false => Verdict/failed("the condition was false")
         end);
 
-pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Test =
+pub let equal(@A: Type, use Equal(A), use Spell(A), actual: A, expected: A) -> Test =
     match actual == expected
     | true => Test/verdict(Verdict/passed())
     | false =>

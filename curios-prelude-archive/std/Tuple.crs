@@ -1,9 +1,9 @@
--- Show, Spell, Eql, Ord and Draw for the anonymous products programs write. A tuple type is keyed by its shape — the label at each position — so each shape is its own witness and its own table entry, and `{Nat, Bool}`, `{a: Nat, b: Bool}` and `{x: Nat, y: Bool}` are three of them because they are three types.
+-- Show, Spell, Equal, Ordered and Draw for the anonymous products programs write. A tuple type is keyed by its shape — the label at each position — so each shape is its own witness and its own table entry, and `{Nat, Bool}`, `{a: Nat, b: Bool}` and `{x: Nat, y: Bool}` are three of them because they are three types.
 --
 -- Only positional shapes are written. Labels are open-ended, and the labeled product with an owner is a `struct`, which is where a program wanting these on `{x: Nat, y: Bool}` is pointed.
 --
 -- The ceiling is eight, past which a labeled `struct` is the readable type. Because a tuple shape is owned by no module, the orphan rule leaves `/std` the only root that may key a witness on one for a `/std` concept, so the ceiling is a promise rather than a default and was chosen with room: raising it is adding lines and nothing else. `Spell` stops at three for now — a derived witness reaches it through a tuple payload, and no consumer has asked past that — and `Draw` at three beside it, since a drawn argument is spelled when it is reported; raising either is the same kind of edit.
-use /std/{Show, Spell, Eql, Ord, Order, Str, Bool, List};
+use /std/{Show, Spell, Equal, Ordered, Ordering, Str, Bool, List};
 use /std/Test/{Draw};
 
 -- A tuple shows as its literal is written, so the rendering is source text as the carriers' renderings are. The one-field literal keeps the trailing comma that separates it from a parenthesized term, so it is written out rather than joined.
@@ -11,7 +11,7 @@ let parens(parts: List(Str)) -> Str =
     Str/concat("(", Str/concat(Str/join(", ", parts), ")"));
 
 -- The first component that is not `eq` decides, so the rest of the comparison is a thunk rather than a value: at the ceiling a strict fold would compare all eight fields on every call.
-let then(first: Order, rest: ({}) -> Order) -> Order =
+let then(first: Ordering, rest: ({}) -> Ordering) -> Ordering =
     match first | eq() => rest(()) | _ => first end;
 
 satisfy Show({}) {
@@ -156,22 +156,23 @@ satisfy (@A: Type, @B: Type, @C: Type, use Spell(A), use Spell(B), use Spell(C))
     spell(t) = parens([Spell/spell(t.0), Spell/spell(t.1), Spell/spell(t.2)]),
 }
 
-satisfy Eql({}) {
+satisfy Equal({}) {
     eql(a, b) = true,
     neq(a, b) = false,
 }
 
-satisfy (@A: Type, use Eql(A)) => Eql({A}) {
+satisfy (@A: Type, use Equal(A)) => Equal({A}) {
     eql(a, b) = a.0 == b.0,
     neq(a, b) = Bool/not(a == b),
 }
 
-satisfy (@A: Type, @B: Type, use Eql(A), use Eql(B)) => Eql({A, B}) {
+satisfy (@A: Type, @B: Type, use Equal(A), use Equal(B)) => Equal({A, B}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1,
     neq(a, b) = Bool/not(a == b),
 }
 
-satisfy (@A: Type, @B: Type, @C: Type, use Eql(A), use Eql(B), use Eql(C)) => Eql({A, B, C}) {
+satisfy (@A: Type, @B: Type, @C: Type, use Equal(A), use Equal(B), use Equal(C)) => Equal(
+    {A, B, C}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2,
     neq(a, b) = Bool/not(a == b),
 }
@@ -181,10 +182,10 @@ satisfy (
     @B: Type,
     @C: Type,
     @D: Type,
-    use Eql(A),
-    use Eql(B),
-    use Eql(C),
-    use Eql(D)) => Eql({A, B, C, D}) {
+    use Equal(A),
+    use Equal(B),
+    use Equal(C),
+    use Equal(D)) => Equal({A, B, C, D}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
     neq(a, b) = Bool/not(a == b),
 }
@@ -195,11 +196,11 @@ satisfy (
     @C: Type,
     @D: Type,
     @E: Type,
-    use Eql(A),
-    use Eql(B),
-    use Eql(C),
-    use Eql(D),
-    use Eql(E)) => Eql({A, B, C, D, E}) {
+    use Equal(A),
+    use Equal(B),
+    use Equal(C),
+    use Equal(D),
+    use Equal(E)) => Equal({A, B, C, D, E}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
     neq(a, b) = Bool/not(a == b),
 }
@@ -211,12 +212,12 @@ satisfy (
     @D: Type,
     @E: Type,
     @F: Type,
-    use Eql(A),
-    use Eql(B),
-    use Eql(C),
-    use Eql(D),
-    use Eql(E),
-    use Eql(F)) => Eql({A, B, C, D, E, F}) {
+    use Equal(A),
+    use Equal(B),
+    use Equal(C),
+    use Equal(D),
+    use Equal(E),
+    use Equal(F)) => Equal({A, B, C, D, E, F}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
     neq(a, b) = Bool/not(a == b),
 }
@@ -229,13 +230,13 @@ satisfy (
     @E: Type,
     @F: Type,
     @G: Type,
-    use Eql(A),
-    use Eql(B),
-    use Eql(C),
-    use Eql(D),
-    use Eql(E),
-    use Eql(F),
-    use Eql(G)) => Eql({A, B, C, D, E, F, G}) {
+    use Equal(A),
+    use Equal(B),
+    use Equal(C),
+    use Equal(D),
+    use Equal(E),
+    use Equal(F),
+    use Equal(G)) => Equal({A, B, C, D, E, F, G}) {
     eql(a, b) =
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6,
@@ -251,14 +252,14 @@ satisfy (
     @F: Type,
     @G: Type,
     @H: Type,
-    use Eql(A),
-    use Eql(B),
-    use Eql(C),
-    use Eql(D),
-    use Eql(E),
-    use Eql(F),
-    use Eql(G),
-    use Eql(H)) => Eql({A, B, C, D, E, F, G, H}) {
+    use Equal(A),
+    use Equal(B),
+    use Equal(C),
+    use Equal(D),
+    use Equal(E),
+    use Equal(F),
+    use Equal(G),
+    use Equal(H)) => Equal({A, B, C, D, E, F, G, H}) {
     eql(a, b) =
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6
@@ -266,20 +267,24 @@ satisfy (
     neq(a, b) = Bool/not(a == b),
 }
 
-satisfy Ord({}) {
-    cmp(a, b) = Order/eq(),
+satisfy Ordered({}) {
+    cmp(a, b) = Ordering/eq(),
 }
 
-satisfy (@A: Type, use Ord(A)) => Ord({A}) {
-    cmp(a, b) = Ord/cmp(a.0, b.0),
+satisfy (@A: Type, use Ordered(A)) => Ordered({A}) {
+    cmp(a, b) = Ordered/cmp(a.0, b.0),
 }
 
-satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) => Ord({A, B}) {
-    cmp(a, b) = then(Ord/cmp(a.0, b.0), (u) => Ord/cmp(a.1, b.1)),
+satisfy (@A: Type, @B: Type, use Ordered(A), use Ordered(B)) => Ordered({A, B}) {
+    cmp(a, b) = then(Ordered/cmp(a.0, b.0), (u) => Ordered/cmp(a.1, b.1)),
 }
 
-satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Ord({A, B, C}) {
-    cmp(a, b) = then(Ord/cmp(a.0, b.0), (u) => then(Ord/cmp(a.1, b.1), (u) => Ord/cmp(a.2, b.2))),
+satisfy (@A: Type, @B: Type, @C: Type, use Ordered(A), use Ordered(B), use Ordered(C)) => Ordered(
+    {A, B, C}) {
+    cmp(a, b) =
+        then(
+            Ordered/cmp(a.0, b.0),
+            (u) => then(Ordered/cmp(a.1, b.1), (u) => Ordered/cmp(a.2, b.2))),
 }
 
 satisfy (
@@ -287,15 +292,17 @@ satisfy (
     @B: Type,
     @C: Type,
     @D: Type,
-    use Ord(A),
-    use Ord(B),
-    use Ord(C),
-    use Ord(D)) => Ord({A, B, C, D}) {
+    use Ordered(A),
+    use Ordered(B),
+    use Ordered(C),
+    use Ordered(D)) => Ordered({A, B, C, D}) {
     cmp(a, b) =
         then(
-            Ord/cmp(a.0, b.0),
+            Ordered/cmp(a.0, b.0),
             (u) =>
-                then(Ord/cmp(a.1, b.1), (u) => then(Ord/cmp(a.2, b.2), (u) => Ord/cmp(a.3, b.3)))),
+                then(
+                    Ordered/cmp(a.1, b.1),
+                    (u) => then(Ordered/cmp(a.2, b.2), (u) => Ordered/cmp(a.3, b.3)))),
 }
 
 satisfy (
@@ -304,21 +311,21 @@ satisfy (
     @C: Type,
     @D: Type,
     @E: Type,
-    use Ord(A),
-    use Ord(B),
-    use Ord(C),
-    use Ord(D),
-    use Ord(E)) => Ord({A, B, C, D, E}) {
+    use Ordered(A),
+    use Ordered(B),
+    use Ordered(C),
+    use Ordered(D),
+    use Ordered(E)) => Ordered({A, B, C, D, E}) {
     cmp(a, b) =
         then(
-            Ord/cmp(a.0, b.0),
+            Ordered/cmp(a.0, b.0),
             (u) =>
                 then(
-                    Ord/cmp(a.1, b.1),
+                    Ordered/cmp(a.1, b.1),
                     (u) =>
                         then(
-                            Ord/cmp(a.2, b.2),
-                            (u) => then(Ord/cmp(a.3, b.3), (u) => Ord/cmp(a.4, b.4))))),
+                            Ordered/cmp(a.2, b.2),
+                            (u) => then(Ordered/cmp(a.3, b.3), (u) => Ordered/cmp(a.4, b.4))))),
 }
 
 satisfy (
@@ -328,25 +335,28 @@ satisfy (
     @D: Type,
     @E: Type,
     @F: Type,
-    use Ord(A),
-    use Ord(B),
-    use Ord(C),
-    use Ord(D),
-    use Ord(E),
-    use Ord(F)) => Ord({A, B, C, D, E, F}) {
+    use Ordered(A),
+    use Ordered(B),
+    use Ordered(C),
+    use Ordered(D),
+    use Ordered(E),
+    use Ordered(F)) => Ordered({A, B, C, D, E, F}) {
     cmp(a, b) =
         then(
-            Ord/cmp(a.0, b.0),
+            Ordered/cmp(a.0, b.0),
             (u) =>
                 then(
-                    Ord/cmp(a.1, b.1),
+                    Ordered/cmp(a.1, b.1),
                     (u) =>
                         then(
-                            Ord/cmp(a.2, b.2),
+                            Ordered/cmp(a.2, b.2),
                             (u) =>
                                 then(
-                                    Ord/cmp(a.3, b.3),
-                                    (u) => then(Ord/cmp(a.4, b.4), (u) => Ord/cmp(a.5, b.5)))))),
+                                    Ordered/cmp(a.3, b.3),
+                                    (u) =>
+                                        then(
+                                            Ordered/cmp(a.4, b.4),
+                                            (u) => Ordered/cmp(a.5, b.5)))))),
 }
 
 satisfy (
@@ -357,32 +367,32 @@ satisfy (
     @E: Type,
     @F: Type,
     @G: Type,
-    use Ord(A),
-    use Ord(B),
-    use Ord(C),
-    use Ord(D),
-    use Ord(E),
-    use Ord(F),
-    use Ord(G)) => Ord({A, B, C, D, E, F, G}) {
+    use Ordered(A),
+    use Ordered(B),
+    use Ordered(C),
+    use Ordered(D),
+    use Ordered(E),
+    use Ordered(F),
+    use Ordered(G)) => Ordered({A, B, C, D, E, F, G}) {
     cmp(a, b) =
         then(
-            Ord/cmp(a.0, b.0),
+            Ordered/cmp(a.0, b.0),
             (u) =>
                 then(
-                    Ord/cmp(a.1, b.1),
+                    Ordered/cmp(a.1, b.1),
                     (u) =>
                         then(
-                            Ord/cmp(a.2, b.2),
+                            Ordered/cmp(a.2, b.2),
                             (u) =>
                                 then(
-                                    Ord/cmp(a.3, b.3),
+                                    Ordered/cmp(a.3, b.3),
                                     (u) =>
                                         then(
-                                            Ord/cmp(a.4, b.4),
+                                            Ordered/cmp(a.4, b.4),
                                             (u) =>
                                                 then(
-                                                    Ord/cmp(a.5, b.5),
-                                                    (u) => Ord/cmp(a.6, b.6))))))),
+                                                    Ordered/cmp(a.5, b.5),
+                                                    (u) => Ordered/cmp(a.6, b.6))))))),
 }
 
 satisfy (
@@ -394,36 +404,36 @@ satisfy (
     @F: Type,
     @G: Type,
     @H: Type,
-    use Ord(A),
-    use Ord(B),
-    use Ord(C),
-    use Ord(D),
-    use Ord(E),
-    use Ord(F),
-    use Ord(G),
-    use Ord(H)) => Ord({A, B, C, D, E, F, G, H}) {
+    use Ordered(A),
+    use Ordered(B),
+    use Ordered(C),
+    use Ordered(D),
+    use Ordered(E),
+    use Ordered(F),
+    use Ordered(G),
+    use Ordered(H)) => Ordered({A, B, C, D, E, F, G, H}) {
     cmp(a, b) =
         then(
-            Ord/cmp(a.0, b.0),
+            Ordered/cmp(a.0, b.0),
             (u) =>
                 then(
-                    Ord/cmp(a.1, b.1),
+                    Ordered/cmp(a.1, b.1),
                     (u) =>
                         then(
-                            Ord/cmp(a.2, b.2),
+                            Ordered/cmp(a.2, b.2),
                             (u) =>
                                 then(
-                                    Ord/cmp(a.3, b.3),
+                                    Ordered/cmp(a.3, b.3),
                                     (u) =>
                                         then(
-                                            Ord/cmp(a.4, b.4),
+                                            Ordered/cmp(a.4, b.4),
                                             (u) =>
                                                 then(
-                                                    Ord/cmp(a.5, b.5),
+                                                    Ordered/cmp(a.5, b.5),
                                                     (u) =>
                                                         then(
-                                                            Ord/cmp(a.6, b.6),
-                                                            (u) => Ord/cmp(a.7, b.7)))))))),
+                                                            Ordered/cmp(a.6, b.6),
+                                                            (u) => Ordered/cmp(a.7, b.7)))))))),
 }
 
 -- A tuple is drawn by drawing each field in turn, threading the seed left to right.

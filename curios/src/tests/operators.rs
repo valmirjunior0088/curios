@@ -266,7 +266,7 @@ fn infix_rem_on_flt_computes_fmod() {
 
 #[test]
 fn infix_not_equal_on_bool_resolves_to_bool_neq() {
-    // `bool_ != bool_` projects `Eql(Bool)`'s `neq`, which is `xor` — disequality on one bit needs no negation, so this collapses to a single `BoolXor`. `true != false` is `true`.
+    // `bool_ != bool_` projects `Equal(Bool)`'s `neq`, which is `xor` — disequality on one bit needs no negation, so this collapses to a single `BoolXor`. `true != false` is `true`.
     assert_eq!(
         run(r#"
             use /std/{Handle, Str};
@@ -388,7 +388,7 @@ fn type_level_operator_indices_stay_convertible() {
     );
 }
 
-// `!=` is `Eql`'s own `neq` method; on `Bytes` both `==` and `!=` resolve through the migrated sys witness, `neq` negating `eql` because the packed carrier has no disequality instruction.
+// `!=` is `Equal`'s own `neq` method; on `Bytes` both `==` and `!=` resolve through the migrated sys witness, `neq` negating `eql` because the packed carrier has no disequality instruction.
 #[test]
 fn infix_equality_works_on_bin() {
     assert_eq!(

@@ -336,9 +336,9 @@ pub struct Pair(A: Type, B: Type): pub Type {
     snd: B,
 }
 pub struct Meters: pub Type { Nat }
-pub concept Ord(A: Type): Type {
-    use Eql(A),
-    cmp(A, A) -> Order,
+pub concept Ordered(A: Type): Type {
+    use Equal(A),
+    cmp(A, A) -> Ordering,
     law: (x: A) -> Eq(x, x),
 }
 
@@ -686,7 +686,7 @@ A derived witness omits its body, alone and inside a mixed group
 
 satisfy Spell(Point);
 satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));
-and Eql(Point) {
+and Equal(Point) {
     eql(a, b) = same(a, b),
 }
 

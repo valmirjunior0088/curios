@@ -343,7 +343,7 @@ fn struct_round_trips() {
         "Pair { ..p }",
         "Pair { ..p, snd = b }",
         "Pair(Nat, ?) { ..p, fst = a }",
-        "Ord(Nat) { ..o, use my_eql }",
+        "Ordered(Nat) { ..o, use my_eql }",
         "Api { ..a, ping(x) = f(x) }",
     ] {
         let term = source.parse::<Term>().unwrap();
@@ -465,9 +465,9 @@ fn function_field_sugar_round_trips() {
 
     for source in [
         "struct Api : pub Type { version : Nat, ping(x : Nat) -> Nat } u",
-        "concept Ord(A : Type) : Type { use Eql(A), cmp(A, A) -> Order } u",
-        "satisfy Ord(Nat) { use eql_nat, cmp(a, b) = f(a, b) } u",
-        "satisfy Ord(Nat) { cmp(a, b) = f(a, b) } u",
+        "concept Ordered(A : Type) : Type { use Equal(A), cmp(A, A) -> Ordering } u",
+        "satisfy Ordered(Nat) { use eql_nat, cmp(a, b) = f(a, b) } u",
+        "satisfy Ordered(Nat) { cmp(a, b) = f(a, b) } u",
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(

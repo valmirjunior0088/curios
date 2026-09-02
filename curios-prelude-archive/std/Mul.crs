@@ -1,2 +1,0 @@
-pub use /syn/{Mul};
-pub use /syn/Mul/{mul};

@@ -1,7 +1,8 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /syn/{True, False};
-use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Eql, Show, Spell, Order, Cmp, Ord};
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Equal, Show, Spell, Ordering, Compare,
+    Ordered};
 use /std/Test/{Draw, Seed};
 
 -- The scan-witness machinery every operation below rests on.
@@ -283,7 +284,7 @@ pub let pad_start(s: Str, n: Nat, c: Char) -> Str =
 pub let pad_end(s: Str, n: Nat, c: Char) -> Str =
     concat(s, repeat(of_char(c), n - len(s)));
 
-satisfy Eql(Str) {
+satisfy Equal(Str) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
 }
@@ -313,17 +314,17 @@ satisfy Spell(Str) {
 }
 
 -- Code-point order without decoding: UTF-8 bytewise order is scalar-value order, so the comparison is `Bytes/cmp` over the storage and `sort` on strings means code-point order.
-pub let cmp(a: Str, b: Str) -> Order =
+pub let cmp(a: Str, b: Str) -> Ordering =
     Bytes/cmp(to_bytes(a), to_bytes(b));
 
-satisfy Cmp(Str) {
-    lt(a, b) = Order/is_lt(cmp(a, b)),
-    le(a, b) = Order/is_le(cmp(a, b)),
-    gt(a, b) = Order/is_gt(cmp(a, b)),
-    ge(a, b) = Order/is_ge(cmp(a, b)),
+satisfy Compare(Str) {
+    lt(a, b) = Ordering/is_lt(cmp(a, b)),
+    le(a, b) = Ordering/is_le(cmp(a, b)),
+    gt(a, b) = Ordering/is_gt(cmp(a, b)),
+    ge(a, b) = Ordering/is_ge(cmp(a, b)),
 }
 
-satisfy Ord(Str) {
+satisfy Ordered(Str) {
     cmp = cmp,
 }
 

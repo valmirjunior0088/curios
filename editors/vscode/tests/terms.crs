@@ -8,9 +8,9 @@ pub struct Pair(A: Type, B: Type): pub Type {
     snd: B,
 }
 
-pub concept Ord(A: Type): Type {
-    use Eql(A),
-    cmp(A, A) -> Order,
+pub concept Ordered(A: Type): Type {
+    use Equal(A),
+    cmp(A, A) -> Ordering,
 }
 
 pub mod Internal

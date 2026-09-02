@@ -1,5 +1,5 @@
 pub use /sys/Bits/{let Bits, get, len, eql, slice};
-use /std/{List, Nat, Bool, Option, Eq, Str, Eql, Show, Spell};
+use /std/{List, Nat, Bool, Option, Eq, Str, Equal, Show, Spell};
 use /std/Test/{Draw, Seed};
 
 pub let try_get(b: Bits, i: Nat) -> Option(Bool) =
@@ -21,7 +21,7 @@ pub let fold(@A: Type, b: Bits, init: A, f: (Bool, A) -> A) -> A =
         end;
     go(n, 0, init, Eq/refl());
 
-satisfy Eql(Bits) {
+satisfy Equal(Bits) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
 }

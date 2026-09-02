@@ -12,7 +12,7 @@ Provide the only division-shaped operation in stage 1:
 BigFlt/ratio_to_flt_bytes : BigFlt -> BigFlt -> Bytes
 ```
 
-The function rounds the exact mathematical quotient once, directly to a binary32 byte pattern using round-to-nearest-even. It does not construct an interior rational value and does not justify a `Div(BigFlt)` witness.
+The function rounds the exact mathematical quotient once, directly to a binary32 byte pattern using round-to-nearest-even. It does not construct an interior rational value and does not justify a `Divide(BigFlt)` witness.
 
 ## Algorithm
 
@@ -65,7 +65,7 @@ These obligations expose facts for the later formal proof; they do not by themse
 
 - Exact interior division or a quotient-valued result.
 - General BigNat `divmod`, `gcd`, or rational reduction.
-- A `Div(BigFlt)` witness.
+- A `Divide(BigFlt)` witness.
 - The formal denominator-cleared nearest-value theorem, which belongs to the boundary proof specification.
 
 ## Completion criteria

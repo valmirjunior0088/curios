@@ -41,7 +41,7 @@ Prove and export:
 - sign and absolute-value order facts;
 - subtraction and absolute-difference transformations.
 
-Reuse `/std/Order` and `/std/Eq` rather than introducing a parallel relation hierarchy. Boolean operations remain lowercase; proposition-valued relations introduced for public theorem statements use PascalCase only when a named proposition materially improves the API.
+Reuse `/std/Ordering` and `/std/Eq` rather than introducing a parallel relation hierarchy. Boolean operations remain lowercase; proposition-valued relations introduced for public theorem statements use PascalCase only when a named proposition materially improves the API.
 
 ## Binary-scale laws
 

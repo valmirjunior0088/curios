@@ -1,12 +1,12 @@
 -- The terminal rows, wrapped: raw mode and the window size, and the bracket a terminal session is written over. `raw` and `size` are one `ioctl` each, and a program with no terminal learns it as `other(ENOTTY)`. The rows themselves are `/sys/tty`, which only the prelude may name, so this module is the whole of what a program reaches; the alternate screen, the cursor and the keyboard protocol are escape sequences a terminal library writes inside the bracket, not rows.
-use /std/{Nat, Bool, Str, Handle, Result, Async, Io, Eql, Show};
+use /std/{Nat, Bool, Str, Handle, Result, Async, Io, Equal, Show};
 
 pub struct Size: pub Type {
     cols: Nat,
     rows: Nat,
 }
 
-satisfy Eql(Size);
+satisfy Equal(Size);
 
 satisfy Show(Size) {
     show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),

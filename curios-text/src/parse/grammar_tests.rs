@@ -19,8 +19,8 @@ fn field_lists_admit_a_trailing_comma() {
         ("(a, b,)", "(a, b)"),
         ("Pair { fst = a, snd = b, }", "Pair { fst = a, snd = b }"),
         (
-            "Ord(Nat) { use w, cmp = f, }",
-            "Ord(Nat) { use w, cmp = f }",
+            "Ordered(Nat) { use w, cmp = f, }",
+            "Ordered(Nat) { use w, cmp = f }",
         ),
     ] {
         assert_eq!(

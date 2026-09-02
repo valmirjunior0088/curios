@@ -1448,7 +1448,7 @@ impl Convert {
             Solved::Postponed | Solved::Failed => return self.block(context, problem),
         }
 
-        // Equate the spine against the rigid *suffix* pairwise, at the candidate telescope's domains (mirroring `compare_apply`'s recovered argument types). The baked-in prefix needs no equations: after substitution both sides carry it verbatim.
+        // Equal the spine against the rigid *suffix* pairwise, at the candidate telescope's domains (mirroring `compare_apply`'s recovered argument types). The baked-in prefix needs no equations: after substitution both sides carry it verbatim.
         for ((flex_arg, rigid_arg), (_, _, domain)) in flex
             .arguments
             .into_iter()

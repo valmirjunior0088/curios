@@ -56,25 +56,25 @@ fn duplicate_witness_reports_its_declaring_module() {
     ));
 }
 
-// The orphan rule: a witness may be declared only where the concept it witnesses, or a type in its key, is already declared. `Ord` and `Bool` are both `/std`/`/sys`-owned and the entry program owns neither, so `Ord(Bool)` (not already witnessed anywhere in the standard library) is rejected.
+// The orphan rule: a witness may be declared only where the concept it witnesses, or a type in its key, is already declared. `Ordered` and `Bool` are both `/std`/`/sys`-owned and the entry program owns neither, so `Ordered(Bool)` (not already witnessed anywhere in the standard library) is rejected.
 #[test]
 fn orphan_witness_is_rejected() {
     let source = r#"
-        use /std/{Bool, Ord, Order};
-        satisfy Ord(Bool) {
-            cmp(a, b) = Order/eq()
+        use /std/{Bool, Ordered, Ordering};
+        satisfy Ordered(Bool) {
+            cmp(a, b) = Ordering/eq()
         }
         let n : Bool = true;
         n
         "#;
 
     assert!(error(source).ends_with(
-        "orphan witness of '/std/Ord/Ord' for head 'Bool', declared in the entry module\n  \
+        "orphan witness of '/std/Ordered/Ordered' for head 'Bool', declared in the entry module\n  \
          a witness may only be declared where the concept or a type in its head is already declared"
     ));
 }
 
-// The user's most natural attempt at incoherence, and the one the fixtures above leave out. `orphan_witness_is_rejected` deliberately picks `Ord(Bool)`, a pair the standard library does *not* witness, so nothing yet pins what happens when the entry program re-declares a witness the prelude already holds. `/std/Bool` witnesses `Show(Bool)`, and the answer must be a refusal — otherwise a program could silently replace a standard-library instance at every site that resolves it, which is exactly the incoherence "one witness per key, program-wide" exists to exclude.
+// The user's most natural attempt at incoherence, and the one the fixtures above leave out. `orphan_witness_is_rejected` deliberately picks `Ordered(Bool)`, a pair the standard library does *not* witness, so nothing yet pins what happens when the entry program re-declares a witness the prelude already holds. `/std/Bool` witnesses `Show(Bool)`, and the answer must be a refusal — otherwise a program could silently replace a standard-library instance at every site that resolves it, which is exactly the incoherence "one witness per key, program-wide" exists to exclude.
 //
 // The orphan rule is what refuses it, and the ordering is deliberate: `register_witness` checks orphanhood before the duplicate-key insert, because "not allowed to declare this at all" is the more fundamental violation than "and it also collides". Coherence is not resting on that ordering, though, and this is the part worth recording. The replay path re-registers *every* prefix witness through the same `register_witness` — orphan check and duplicate insert alike — rather than trusting the archive, so the prelude's keys are already in the map a user's declaration is inserted into. Both barriers are live and each would refuse this alone; the fixture pins the one a user actually reaches.
 #[test]

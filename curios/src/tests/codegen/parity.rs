@@ -146,12 +146,12 @@ fn operation_ending_at(dump: &str, at: usize) -> Option<String> {
         })
 }
 
-/// The comparison concept folds the same way: `Cmp/lt` at `Nat` is the bare `Nat.lt` instruction. Unlike the single-method operators, `Cmp` is a many-method concept whose witness is a *tuple* of methods, so its resolved instance does not newtype-collapse to a bare field — it is baked in by closure specialization, whose `Tuple.get`s then fold to the same intrinsic. The specialized-clone names therefore differ from the direct wrapper's, so the dumps are no longer byte-identical; what must still match is the emitted instructions — the concept path lowers `Cmp/lt` to the bare `Nat.lt` with no witness dispatch left behind, so it emits exactly the direct intrinsic's operations.
+/// The comparison concept folds the same way: `Compare/lt` at `Nat` is the bare `Nat.lt` instruction. Unlike the single-method operators, `Compare` is a many-method concept whose witness is a *tuple* of methods, so its resolved instance does not newtype-collapse to a bare field — it is baked in by closure specialization, whose `Tuple.get`s then fold to the same intrinsic. The specialized-clone names therefore differ from the direct wrapper's, so the dumps are no longer byte-identical; what must still match is the emitted instructions — the concept path lowers `Compare/lt` to the bare `Nat.lt` with no witness dispatch left behind, so it emits exactly the direct intrinsic's operations.
 #[test]
 fn concept_comparison_matches_direct_intrinsic_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Bool, List, Handle, Str, Cmp, proc};
-        pub let small(x : Nat) -> Bool = Cmp/lt(x, 10);
+        use /std/{Nat, Bool, List, Handle, Str, Compare, proc};
+        pub let small(x : Nat) -> Bool = Compare/lt(x, 10);
         let taint = List/len(proc/args!);
         let n : Nat = taint;
         /std/print(Bool/to_str(small(n)))

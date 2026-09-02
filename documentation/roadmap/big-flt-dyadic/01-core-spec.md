@@ -30,7 +30,7 @@ These focused facts remain owned by `/std/BigInt` and become foundations reused 
 
 **Representation privacy preserves future mobility.** Exported laws mention only the abstract type and its operations. No public theorem exposes a complete dyadic case analysis, so the later general rational phase may add an odd denominator without invalidating clients.
 
-**Rounding stays at native boundaries.** The dyadic core has no exact interior division and no `Div(BigFlt)` witness. Exact quotient rounding is a separate post-bootstrap boundary operation.
+**Rounding stays at native boundaries.** The dyadic core has no exact interior division and no `Divide(BigFlt)` witness. Exact quotient rounding is a separate post-bootstrap boundary operation.
 
 ## Representation
 
@@ -75,7 +75,7 @@ of_dyadic : BigInt -> BigInt -> BigFlt
 add, sub, mul : BigFlt -> BigFlt -> BigFlt
 neg, abs : BigFlt -> BigFlt
 eql : BigFlt -> BigFlt -> Bool
-cmp : BigFlt -> BigFlt -> Order
+cmp : BigFlt -> BigFlt -> Ordering
 lt, le, gt, ge : BigFlt -> BigFlt -> Bool
 ```
 
@@ -102,7 +102,7 @@ pub mod BigFlt;
 pub use BigFlt/{let BigFlt};
 ```
 
-`Add`, `Sub`, `Mul`, `Eql`, and `Cmp` witnesses belong in the existing `/std` operator façade modules. `Show` and `Ord` may be supplied where useful. There is no dyadic `Div(BigFlt)` witness.
+`Add`, `Subtract`, `Multiply`, `Equal`, and `Compare` witnesses belong in the existing `/std` operator façade modules. `Show` and `Ordered` may be supplied where useful. There is no dyadic `Divide(BigFlt)` witness.
 
 `BigFlt` belongs entirely to `/std`; no compiler lowering emits it, so `/syn` and the canonical syntax registry remain unchanged.
 
@@ -119,7 +119,7 @@ pub use BigFlt/{let BigFlt};
 
 - Laws about native `/sys/Flt` arithmetic.
 - The complete dyadic ring and order theorem corpus, which is a post-bootstrap effort.
-- Exact interior division, field laws, or a `Div(BigFlt)` witness.
+- Exact interior division, field laws, or a `Divide(BigFlt)` witness.
 - General Euclidean division, GCD, coprimality, or reduced rational normalization.
 - Exact square roots, constructive reals, or exact decimal arithmetic.
 - `BigFlt/of_str` or decimal formatting.

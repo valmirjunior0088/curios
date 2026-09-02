@@ -1,6 +1,7 @@
-use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
+use /std/{Nat, Bool, Bits, Str, Ordering, Eq, False, True, Equal, Compare, Add, Subtract, Multiply,
+    Show, Ordered};
 use /std/Bool/{false_neq_true};
-use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
+use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, view, zero, mod add, mod cmp, mod mul, mod sub};
 
 pub let bit_len(a: BigNat) -> Nat =
@@ -26,23 +27,23 @@ let to_str_go(a: BigNat, acc: Str) -> Str =
 pub let to_str(a: BigNat) -> Str =
     match is_zero(a) | true => "0" | false => to_str_go(a, "") end;
 
-satisfy Eql(BigNat) {
+satisfy Equal(BigNat) {
     eql = cmp/eql,
     neq(a, b) = Bool/not(cmp/eql(a, b)),
 }
 
-satisfy Cmp(BigNat) {
+satisfy Compare(BigNat) {
     lt = cmp/lt,
     le = cmp/le,
     gt = cmp/gt,
     ge = cmp/ge,
 }
 
-satisfy Sub(BigNat) {
+satisfy Subtract(BigNat) {
     sub = sub/sub,
 }
 
-satisfy Mul(BigNat) {
+satisfy Multiply(BigNat) {
     mul = mul/mul,
 }
 
@@ -50,6 +51,6 @@ satisfy Show(BigNat) {
     show = to_str,
 }
 
-satisfy Ord(BigNat) {
+satisfy Ordered(BigNat) {
     cmp = cmp/cmp,
 }

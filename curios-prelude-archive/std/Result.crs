@@ -1,4 +1,4 @@
-use /std/{Bool, Eql, Show, Spell, Str, Option, Order, Cmp, Ord};
+use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered};
 use /std/Test/{Draw, Seed};
 
 pub induct Result(A: Type, E: Type): pub Type
@@ -41,7 +41,7 @@ pub let to_option(@A: Type, @E: Type, r: Result(A, E)) -> Option(A) =
 pub let unwrap_or_else(@A: Type, @E: Type, r: Result(A, E), default: (E) -> A) -> A =
     match r | success(a) => a | failure(e) => default(e) end;
 
-satisfy (@A: Type, @E: Type, use Eql(A), use Eql(E)) => Eql(Result(A, E));
+satisfy (@A: Type, @E: Type, use Equal(A), use Equal(E)) => Equal(Result(A, E));
 
 satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(A, E)) {
     show(r) =
@@ -54,20 +54,27 @@ satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(A, E)) {
 satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(A, E));
 
 -- `failure` below `success`.
-pub let cmp(@A: Type, @E: Type, use Ord(A), use Ord(E), a: Result(A, E), b: Result(A, E)) -> Order =
+pub let cmp(
+    @A: Type,
+    @E: Type,
+    use Ordered(A),
+    use Ordered(E),
+    a: Result(A, E),
+    b: Result(A, E),
+) -> Ordering =
     match a
-    | failure(e) => match b | failure(f) => Ord/cmp(e, f) | success(_) => Order/lt() end
-    | success(x) => match b | failure(_) => Order/gt() | success(y) => Ord/cmp(x, y) end
+    | failure(e) => match b | failure(f) => Ordered/cmp(e, f) | success(_) => Ordering/lt() end
+    | success(x) => match b | failure(_) => Ordering/gt() | success(y) => Ordered/cmp(x, y) end
     end;
 
-satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Cmp(Result(A, E)) {
-    lt(a, b) = Order/is_lt(cmp(a, b)),
-    le(a, b) = Order/is_le(cmp(a, b)),
-    gt(a, b) = Order/is_gt(cmp(a, b)),
-    ge(a, b) = Order/is_ge(cmp(a, b)),
+satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Compare(Result(A, E)) {
+    lt(a, b) = Ordering/is_lt(cmp(a, b)),
+    le(a, b) = Ordering/is_le(cmp(a, b)),
+    gt(a, b) = Ordering/is_gt(cmp(a, b)),
+    ge(a, b) = Ordering/is_ge(cmp(a, b)),
 }
 
-satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(A, E)) {
+satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Ordered(Result(A, E)) {
     cmp = cmp,
 }
 

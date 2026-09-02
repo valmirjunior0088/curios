@@ -1,20 +1,20 @@
-pub mod Eql;
-pub use Eql/{let Eql};
+pub mod Equal;
+pub use Equal/{let Equal};
 
 pub mod Add;
 pub use Add/{let Add};
 
-pub mod Sub;
-pub use Sub/{let Sub};
+pub mod Subtract;
+pub use Subtract/{let Subtract};
 
-pub mod Mul;
-pub use Mul/{let Mul};
+pub mod Multiply;
+pub use Multiply/{let Multiply};
 
-pub mod Div;
-pub use Div/{let Div};
+pub mod Divide;
+pub use Divide/{let Divide};
 
-pub mod Rem;
-pub use Rem/{let Rem};
+pub mod Remainder;
+pub use Remainder/{let Remainder};
 
 pub mod And;
 pub use And/{let And};
@@ -22,8 +22,8 @@ pub use And/{let And};
 pub mod Or;
 pub use Or/{let Or};
 
-pub mod Cmp;
-pub use Cmp/{let Cmp};
+pub mod Compare;
+pub use Compare/{let Compare};
 
 pub mod Monad;
 pub use Monad/{let Monad};
@@ -43,8 +43,8 @@ pub use Show/{let Show};
 pub mod Spell;
 pub use Spell/{let Spell};
 
-pub mod Ord;
-pub use Ord/{let Ord};
+pub mod Ordered;
+pub use Ordered/{let Ordered};
 
 pub mod Nat;
 pub use Nat/{let Nat};
@@ -91,8 +91,8 @@ pub use Throw/{let Throw};
 pub mod Option;
 pub use Option/{let Option};
 
-pub mod Order;
-pub use Order/{let Order};
+pub mod Ordering;
+pub use Ordering/{let Ordering};
 
 pub mod BigNat;
 pub use BigNat/{let BigNat};
@@ -130,7 +130,6 @@ pub use Str/{let Str};
 pub mod Bool;
 pub use Bool/{let Bool};
 
--- The anonymous product has no namesake binding to re-export: the module is here for the witnesses it registers on the tuple shapes.
 pub mod Tuple;
 
 pub mod Parse;

@@ -4,11 +4,11 @@
 //!
 //! **Eligibility.** A derivation writes from a declaration, and only from one: the key must reduce to a registered `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — that is representation-transparent at the declaring island and not `Prop`-sorted, its parameters and indices given by the key. Sealing is refused before any of that, with the rule a written literal meets, so that derivation is never a door through representation privacy; a concept with no derivation refuses by name, since derivability is registered per concept and never inferred from its shape. Every refusal is a hard error at the `satisfy` span.
 //!
-//! **Payloads.** Both derivations read a declaration the same way: the constructor telescopes (or the field telescope) opened at the key's parameters, one binder minted per payload, each explicit payload classified by its type under the binders before it. A payload that is itself a type is refused; a proof payload takes no part beyond what the derivation states for it; every other payload takes part through the concept's own method, `Spell/spell` or `Eql/eql`, applied with a `use` argument the body supplies as a witness goal of its own — resolved by ordinary resolution in the witness's scope (a telescope premise, the witness's own entry, an `and` sibling), and reported unresolved under a provenance naming the constructor and the payload, with the telescope premise to add when the payload's type is a telescope variable. An implicit payload is bound and never named. A field or payload the lowerer named `_{position}` had no written label, which is the one mark Core keeps of it.
+//! **Payloads.** Both derivations read a declaration the same way: the constructor telescopes (or the field telescope) opened at the key's parameters, one binder minted per payload, each explicit payload classified by its type under the binders before it. A payload that is itself a type is refused; a proof payload takes no part beyond what the derivation states for it; every other payload takes part through the concept's own method, `Spell/spell` or `Equal/eql`, applied with a `use` argument the body supplies as a witness goal of its own — resolved by ordinary resolution in the witness's scope (a telescope premise, the witness's own entry, an `and` sibling), and reported unresolved under a provenance naming the constructor and the payload, with the telescope premise to add when the payload's type is a telescope variable. An implicit payload is bound and never named. A field or payload the lowerer named `_{position}` had no written label, which is the one mark Core keeps of it.
 //!
 //! **The `Spell` body.** One match arm per constructor in declaration order, the motive omitted as a written match omits it, and per arm a single renderer application over structured pieces: `Spell/call("/Tree/node", [spell(l), …])` for a constructor, `Spell/record("/Point", [("x", spell(x)), …])` for a struct, whose fields are projected. A value therefore spells as its constructor's absolute path applied to its explicit payloads, so the text re-parses from any module that sees the names; a struct spells labeled, or positionally where its field has no label; a proof payload spells as the written goal `"?"`.
 //!
-//! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs and implicit payloads do not take part. `neq` negates the same comparison, built a second time over binders of its own.
+//! **The `Equal` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Equal/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs and implicit payloads do not take part. `neq` negates the same comparison, built a second time over binders of its own.
 
 use {
     super::{
@@ -25,14 +25,14 @@ use {
 /// A concept the compiler can write a witness body for.
 enum Derivation {
     Spell,
-    Eql,
+    Equal,
 }
 
 /// The derivation registered for `concept`'s slot, if any.
 fn derivation_for(syntax: &SyntaxRegistry, concept: &Global) -> Option<Derivation> {
     let registered = [
         (syntax.spell.spell.concept, Derivation::Spell),
-        (syntax.operator.eql.concept, Derivation::Eql),
+        (syntax.operator.eql.concept, Derivation::Equal),
     ];
     registered
         .into_iter()
@@ -87,7 +87,7 @@ pub(crate) fn elaborate_derive(
     let subject = subject(context, &site)?;
     let body = match derivation {
         Derivation::Spell => spell_body(context, &site, &subject)?,
-        Derivation::Eql => eql_body(context, &site, &subject)?,
+        Derivation::Equal => eql_body(context, &site, &subject)?,
     };
     elaborate(context, &body, mode)
 }
@@ -546,7 +546,7 @@ fn spell_body(context: &mut Context, site: &Site<'_>, subject: &Subject) -> Resu
     )))
 }
 
-/// The `Eql` witness record: `eql` over the derived comparison, `neq` over its negation.
+/// The `Equal` witness record: `eql` over the derived comparison, `neq` over its negation.
 fn eql_body(context: &mut Context, site: &Site<'_>, subject: &Subject) -> Result<Term, Error> {
     let method = |context: &mut Context, negated: bool| -> Result<Term, Error> {
         let left = context.fresh(Some("left"));

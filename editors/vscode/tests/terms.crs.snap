@@ -118,33 +118,33 @@
 >}
 #^ source.curios punctuation.bracket.curios
 >
->pub concept Ord(A: Type): Type {
+>pub concept Ordered(A: Type): Type {
 #^^^ source.curios keyword.other.curios
 #   ^ source.curios
 #    ^^^^^^^ source.curios keyword.other.curios
 #           ^ source.curios
-#            ^^^ source.curios entity.name.type.curios
-#               ^ source.curios punctuation.bracket.curios
-#                ^ source.curios entity.name.type.curios
-#                 ^ source.curios keyword.operator.assignment.curios
-#                  ^ source.curios
-#                   ^^^^ source.curios storage.type.sort.curios
-#                       ^ source.curios punctuation.bracket.curios
-#                        ^ source.curios keyword.operator.assignment.curios
-#                         ^ source.curios
-#                          ^^^^ source.curios storage.type.sort.curios
-#                              ^ source.curios
-#                               ^ source.curios punctuation.bracket.curios
->    use Eql(A),
+#            ^^^^^^^ source.curios entity.name.type.curios
+#                   ^ source.curios punctuation.bracket.curios
+#                    ^ source.curios entity.name.type.curios
+#                     ^ source.curios keyword.operator.assignment.curios
+#                      ^ source.curios
+#                       ^^^^ source.curios storage.type.sort.curios
+#                           ^ source.curios punctuation.bracket.curios
+#                            ^ source.curios keyword.operator.assignment.curios
+#                             ^ source.curios
+#                              ^^^^ source.curios storage.type.sort.curios
+#                                  ^ source.curios
+#                                   ^ source.curios punctuation.bracket.curios
+>    use Equal(A),
 #^^^^ source.curios
 #    ^^^ source.curios keyword.other.curios
 #       ^ source.curios
-#        ^^^ source.curios entity.name.type.curios
-#           ^ source.curios punctuation.bracket.curios
-#            ^ source.curios entity.name.type.curios
+#        ^^^^^ source.curios entity.name.type.curios
 #             ^ source.curios punctuation.bracket.curios
-#              ^ source.curios punctuation.separator.curios
->    cmp(A, A) -> Order,
+#              ^ source.curios entity.name.type.curios
+#               ^ source.curios punctuation.bracket.curios
+#                ^ source.curios punctuation.separator.curios
+>    cmp(A, A) -> Ordering,
 #^^^^ source.curios
 #    ^^^ source.curios entity.name.function.curios
 #       ^ source.curios punctuation.bracket.curios
@@ -156,8 +156,8 @@
 #             ^ source.curios
 #              ^^ source.curios keyword.operator.arrow.curios
 #                ^ source.curios
-#                 ^^^^^ source.curios entity.name.type.curios
-#                      ^ source.curios punctuation.separator.curios
+#                 ^^^^^^^^ source.curios entity.name.type.curios
+#                         ^ source.curios punctuation.separator.curios
 >}
 #^ source.curios punctuation.bracket.curios
 >

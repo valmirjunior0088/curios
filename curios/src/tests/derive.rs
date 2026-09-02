@@ -163,14 +163,14 @@ fn the_stages_show_the_transient_and_its_expansion() {
     assert!(elaborated.contains("Spell/call"), "{elaborated}");
 }
 
-// --- The `Eql` derivation: structural equality, constructor by constructor and payload by payload, through each payload's own witness. ---
+// --- The `Equal` derivation: structural equality, constructor by constructor and payload by payload, through each payload's own witness. ---
 
 #[test]
 fn derived_equality_is_structural() {
     let source = r#"
-        use /std/{Nat, Bool, Str, Eql, print};
+        use /std/{Nat, Bool, Str, Equal, print};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
-        satisfy Eql(Tree);
+        satisfy Equal(Tree);
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
         let _ = print(show(Tree/leaf(1) == Tree/leaf(1)))!;
         let _ = print(show(Tree/leaf(1) == Tree/leaf(2)))!;
@@ -186,11 +186,11 @@ fn derived_equality_is_structural() {
 #[test]
 fn a_struct_and_a_parameterized_family_compare_fieldwise() {
     let source = r#"
-        use /std/{Nat, Bool, Str, Eql, print};
+        use /std/{Nat, Bool, Str, Equal, print};
         struct Point: pub Type { x: Nat, y: Nat }
         induct Box(A: Type): pub Type | boxed(A) end
-        satisfy Eql(Point);
-        satisfy (@A: Type, use Eql(A)) => Eql(Box(A));
+        satisfy Equal(Point);
+        satisfy (@A: Type, use Equal(A)) => Equal(Box(A));
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
         let _ = print(show(Point { x = 1, y = 2 } == Point { x = 1, y = 2 }))!;
         let _ = print(show(Point { x = 1, y = 2 } != Point { x = 1, y = 3 }))!;
@@ -205,14 +205,14 @@ fn a_struct_and_a_parameterized_family_compare_fieldwise() {
 fn proofs_and_implicit_payloads_take_no_part_in_equality() {
     // The proof erases and cannot be compared; the index is implicit and fixed by the payloads it indexes. Both witnesses derive, and equality reads the values alone.
     let source = r#"
-        use /std/{Nat, Bool, Str, Eq, Eql, print};
+        use /std/{Nat, Bool, Str, Eq, Equal, print};
         induct Certified: pub Type | cert(n: Nat, proof: Eq(n, n)) end
         induct Vec(T: Type): (n: Nat) -> pub Type
         | nil(): (0)
         | cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
         end
-        satisfy Eql(Certified);
-        satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T, n));
+        satisfy Equal(Certified);
+        satisfy (@T: Type, @n: Nat, use Equal(T)) => Equal(Vec(T, n));
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
         let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(1, Eq/refl())))!;
         let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(2, Eq/refl())))!;
@@ -226,26 +226,26 @@ fn proofs_and_implicit_payloads_take_no_part_in_equality() {
 #[test]
 fn the_eql_derivation_shares_the_eligibility_and_the_provenance() {
     let proposition = r#"
-        use /std/{Str, Eql};
+        use /std/{Str, Equal};
         induct Holds: pub Prop | yes() end
-        satisfy Eql(Holds);
+        satisfy Equal(Holds);
         /std/print("")
         "#;
     let report = error(proposition);
     assert!(
-        report.contains("cannot derive '/syn/Eql' for Holds\n  Holds is a proposition, whose values erase; write the body"),
+        report.contains("cannot derive '/syn/Equal' for Holds\n  Holds is a proposition, whose values erase; write the body"),
         "{report}"
     );
 
     let premise = r#"
-        use /std/{Str, Eql};
+        use /std/{Str, Equal};
         induct Box(A: Type): pub Type | boxed(A) end
-        satisfy (@A: Type) => Eql(Box(A));
+        satisfy (@A: Type) => Equal(Box(A));
         /std/print("")
         "#;
     let report = error(premise);
     assert!(
-        report.contains("no witness of Eql(A) found\n  needed by '/Box/boxed' for payload #1 — add `use Eql(A)` to the telescope"),
+        report.contains("no witness of Equal(A) found\n  needed by '/Box/boxed' for payload #1 — add `use Equal(A)` to the telescope"),
         "{report}"
     );
 }
@@ -255,7 +255,7 @@ fn the_eql_derivation_shares_the_eligibility_and_the_provenance() {
 #[test]
 fn the_standard_library_derives_option_result_and_order() {
     let source = r#"
-        use /std/{Nat, Bool, Str, Option, Result, Order, Spell, Eql, print};
+        use /std/{Nat, Bool, Str, Option, Result, Ordering, Spell, Equal, print};
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
         let failing: Result(Nat, Str) = Result/failure("no");
         let _ = print(Spell/spell(Option/some(1)))!;
@@ -266,21 +266,21 @@ fn the_standard_library_derives_option_result_and_order() {
         let _ = print("\n")!;
         let _ = print(Spell/spell(failing))!;
         let _ = print("\n")!;
-        let _ = print(Spell/spell(Order/lt()))!;
-        let _ = print(Spell/spell(Order/eq()))!;
-        let _ = print(Spell/spell(Order/gt()))!;
+        let _ = print(Spell/spell(Ordering/lt()))!;
+        let _ = print(Spell/spell(Ordering/eq()))!;
+        let _ = print(Spell/spell(Ordering/gt()))!;
         let _ = print("\n")!;
         let _ = print(show(Option/some(1) == Option/some(1)))!;
         let _ = print(show(Option/some(1) == Option/none()))!;
         let _ = print(show(failing == Result/failure("no")))!;
         let _ = print(show(failing != Result/success(1)))!;
-        let _ = print(show(Order/lt() == Order/lt()))!;
-        print(show(Order/lt() != Order/gt()))
+        let _ = print(show(Ordering/lt() == Ordering/lt()))!;
+        print(show(Ordering/lt() != Ordering/gt()))
         "#;
 
     assert_eq!(
         run(source),
-        b"/std/Option/Option/some(1)\n/std/Option/Option/none()\n/std/Result/Result/success(1)\n/std/Result/Result/failure(\"no\")\n/std/Order/Order/lt()/std/Order/Order/eq()/std/Order/Order/gt()\ntrue false true true true true "
+        b"/std/Option/Option/some(1)\n/std/Option/Option/none()\n/std/Result/Result/success(1)\n/std/Result/Result/failure(\"no\")\n/std/Ordering/Ordering/lt()/std/Ordering/Ordering/eq()/std/Ordering/Ordering/gt()\ntrue false true true true true "
     );
 }
 
@@ -481,12 +481,12 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
 #[test]
 fn the_signature_refusals_fire_on_a_body_less_witness_as_on_a_written_one() {
     let orphan = r#"
-        use /std/{Bool, Ord};
-        satisfy Ord(Bool);
+        use /std/{Bool, Ordered};
+        satisfy Ordered(Bool);
         /std/print("")
         "#;
     assert!(error(orphan).ends_with(
-        "orphan witness of '/std/Ord/Ord' for head 'Bool', declared in the entry module\n  \
+        "orphan witness of '/std/Ordered/Ordered' for head 'Bool', declared in the entry module\n  \
          a witness may only be declared where the concept or a type in its head is already declared"
     ));
 

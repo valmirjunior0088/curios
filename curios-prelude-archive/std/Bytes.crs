@@ -1,5 +1,6 @@
 pub use /sys/Bytes/{let Bytes, get, len, eql, slice};
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Eql, Show, Spell, Order, Cmp, Ord};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Equal, Show, Spell, Ordering, Compare,
+    Ordered};
 use /std/Test/{Draw, Seed};
 
 pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
@@ -57,13 +58,13 @@ pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
         (l, r) => x[..l, ..sep, ..r]);
 
 -- Bytewise, the shorter prefix first. Each index is scrutinised against the length it reads through, which is what discharges `get`'s bound with nothing written.
-pub let cmp(a: Bytes, b: Bytes) -> Order =
-    let go(i: Nat) -> Order =
+pub let cmp(a: Bytes, b: Bytes) -> Ordering =
+    let go(i: Nat) -> Ordering =
         match i < len(a)
-        | false => match i < len(b) | true => Order/lt() | false => Order/eq() end
+        | false => match i < len(b) | true => Ordering/lt() | false => Ordering/eq() end
         | true =>
             match i < len(b)
-            | false => Order/gt()
+            | false => Ordering/gt()
             | true =>
                 let r = Nat/cmp(Byte/to_nat(get(a, i)), Byte/to_nat(get(b, i)));
                 match r | eq() => go(i + 1) | _ => r end
@@ -71,19 +72,19 @@ pub let cmp(a: Bytes, b: Bytes) -> Order =
         end;
     go(0);
 
-satisfy Eql(Bytes) {
+satisfy Equal(Bytes) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
 }
 
-satisfy Cmp(Bytes) {
-    lt(a, b) = Order/is_lt(cmp(a, b)),
-    le(a, b) = Order/is_le(cmp(a, b)),
-    gt(a, b) = Order/is_gt(cmp(a, b)),
-    ge(a, b) = Order/is_ge(cmp(a, b)),
+satisfy Compare(Bytes) {
+    lt(a, b) = Ordering/is_lt(cmp(a, b)),
+    le(a, b) = Ordering/is_le(cmp(a, b)),
+    gt(a, b) = Ordering/is_gt(cmp(a, b)),
+    ge(a, b) = Ordering/is_ge(cmp(a, b)),
 }
 
-satisfy Ord(Bytes) {
+satisfy Ordered(Bytes) {
     cmp = cmp,
 }
 

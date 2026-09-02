@@ -1,7 +1,8 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr,
     to_int, to_flt, to_byte};
-use /std/{Str, Option, Char, Bool, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Spell, Ord};
+use /std/{Str, Option, Char, Bool, Ordering, Equal, Compare, Add, Subtract, Multiply, Divide,
+    Remainder, Show, Spell, Ordered};
 use /std/Test/{Draw, Seed};
 
 let single_digit(d: Nat) -> Str =
@@ -76,15 +77,15 @@ pub let is_even(n: Nat) -> Bool =
 pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
     match c >= lo | true => c <= hi | false => false end;
 
-pub let cmp(x: Nat, y: Nat) -> Order =
-    choose | x < y => Order/lt() | x == y => Order/eq() | _ => Order/gt() end;
+pub let cmp(x: Nat, y: Nat) -> Ordering =
+    choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
-satisfy Eql(Nat) {
+satisfy Equal(Nat) {
     eql = eql,
     neq = neq,
 }
 
-satisfy Cmp(Nat) {
+satisfy Compare(Nat) {
     lt = lt,
     le = le,
     gt = gt,
@@ -95,20 +96,20 @@ satisfy Add(Nat) {
     add = add,
 }
 
-satisfy Sub(Nat) {
+satisfy Subtract(Nat) {
     sub = sub,
 }
 
-satisfy Mul(Nat) {
+satisfy Multiply(Nat) {
     mul = mul,
 }
 
-satisfy Div(Nat) {
+satisfy Divide(Nat) {
     Ok(b) = /syn/Nat/Lt(0, b),
     div = div,
 }
 
-satisfy Rem(Nat) {
+satisfy Remainder(Nat) {
     Ok(b) = /syn/Nat/Lt(0, b),
     rem = rem,
 }
@@ -121,7 +122,7 @@ satisfy Spell(Nat) {
     spell = to_str,
 }
 
-satisfy Ord(Nat) {
+satisfy Ordered(Nat) {
     cmp = cmp,
 }
 

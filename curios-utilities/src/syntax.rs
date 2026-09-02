@@ -60,7 +60,7 @@ pub struct SyntaxRegistry {
 }
 
 impl SyntaxRegistry {
-    /// Every registered name, for the prelude build's presence check. The operator concepts appear once per method that dispatches through them, so `/syn/Cmp` recurs — a duplicate costs a redundant assertion and nothing else.
+    /// Every registered name, for the prelude build's presence check. The operator concepts appear once per method that dispatches through them, so `/syn/Compare` recurs — a duplicate costs a redundant assertion and nothing else.
     ///
     /// Each group answers for its own slots instead of having them reached through from here, so that the exhaustive pattern sits in the same scope as the fields it has to keep up with.
     pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
@@ -138,7 +138,7 @@ impl LiftSyntax {
 
 /// The operator→concept table backing `elaborate_infix`: one slot per method the fixed infix operators dispatch through.
 ///
-/// One slot per *method* rather than per concept, because that is the granularity the elaborator asks at — `Cmp` answers four operators and `Eql` answers two, and a per-concept grouping would have to reintroduce the method as a positional index into a field list. Every operator, `&&`/`||` included, resolves through a witness projection of its concept; there is no carved-out exception, so there is no operator without a slot.
+/// One slot per *method* rather than per concept, because that is the granularity the elaborator asks at — `Compare` answers four operators and `Equal` answers two, and a per-concept grouping would have to reintroduce the method as a positional index into a field list. Every operator, `&&`/`||` included, resolves through a witness projection of its concept; there is no carved-out exception, so there is no operator without a slot.
 #[derive(Debug, Clone, Copy)]
 pub struct OperatorSyntax {
     pub add: ConceptField,
@@ -157,7 +157,7 @@ pub struct OperatorSyntax {
 }
 
 impl OperatorSyntax {
-    /// The concept and method `op` dispatches through. `Neq` has its own slot rather than sharing `Eql`'s: it projects `neq`, so a carrier with a native disequality instruction names it instead of paying for an equality and a negation.
+    /// The concept and method `op` dispatches through. `Neq` has its own slot rather than sharing `Equal`'s: it projects `neq`, so a carrier with a native disequality instruction names it instead of paying for an equality and a negation.
     pub const fn concept_field(self, op: InfixOp) -> ConceptField {
         match op {
             InfixOp::Add => self.add,

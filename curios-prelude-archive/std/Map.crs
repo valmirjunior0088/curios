@@ -1,5 +1,5 @@
 -- A crit-bit (Patricia) trie keyed on the byte string a `Key` witness produces. The map deliberately does not remember `K`: the trie's identity *is* that byte string, so two key types serializing alike are the same key. `Key` is therefore a write-side injection only — `entries`, `keys`, and `fold` hand back `Bytes`, and a caller wanting typed keys decodes at the boundary.
-use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq, Eql, Show};
+use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq, Equal, Show};
 
 induct Node(V: Type): Type
 | leaf(key: Bytes, value: V)
@@ -228,8 +228,8 @@ pub let filter(@V: Type, m: Map(V), pred: (Bytes, V) -> Bool) -> Map(V) =
 pub let union(@V: Type, a: Map(V), b: Map(V)) -> Map(V) =
     fold(b, a, (k, v, acc) => insert(acc, k, v));
 
--- Entry lists compared pairwise through the value witness alone. Going through `Eql(List({Bytes, V}))` instantiates the tuple witness at a second universe instance of `V`, which the kernel refuses to identify with the premise's; the direct walk asks the premise itself.
-let same_entries(@V: Type, use Eql(V), xs: List({Bytes, V}), ys: List({Bytes, V})) -> Bool =
+-- Entry lists compared pairwise through the value witness alone. Going through `Equal(List({Bytes, V}))` instantiates the tuple witness at a second universe instance of `V`, which the kernel refuses to identify with the premise's; the direct walk asks the premise itself.
+let same_entries(@V: Type, use Equal(V), xs: List({Bytes, V}), ys: List({Bytes, V})) -> Bool =
     match xs
     | [] => match ys | [] => true | _ => false end
     | [x, ..xt] =>
@@ -240,7 +240,7 @@ let same_entries(@V: Type, use Eql(V), xs: List({Bytes, V}), ys: List({Bytes, V}
     end;
 
 -- The trie is canonical, so two maps are equal exactly when their entries are; the keys compared and shown are the `Bytes` the trie holds.
-satisfy (@V: Type, use Eql(V)) => Eql(Map(V)) {
+satisfy (@V: Type, use Equal(V)) => Equal(Map(V)) {
     eql(a, b) = same_entries(entries(a), entries(b)),
     neq(a, b) = Bool/not(same_entries(entries(a), entries(b))),
 }

@@ -196,7 +196,9 @@ fn parse_use_glob() {
 #[test]
 fn use_entries_are_struct_literal_only() {
     // A `use <term>` entry parses in a struct literal (a concept literal by intent — non-concept heads are rejected at elaboration, not parse)...
-    let term = "Ord(Nat) { use my_eql, cmp = f }".parse::<Term>().unwrap();
+    let term = "Ordered(Nat) { use my_eql, cmp = f }"
+        .parse::<Term>()
+        .unwrap();
     let Subterm::StructLit(StructLit { entries, .. }) = term.as_subterm() else {
         panic!("expected a struct literal");
     };
@@ -214,7 +216,7 @@ fn use_entries_are_struct_literal_only() {
 fn a_malformed_item_is_reported_by_the_head_it_names() {
     for (source, expected) in [
         ("pub let a : /std/Nat -> 1;", "Expected '='"),
-        ("satisfy => /std/Eql { }", "Expected identifier"),
+        ("satisfy => /std/Equal { }", "Expected identifier"),
         ("use /std/Nat, /std/Bool;", "Expected '/'"),
     ] {
         let report = source.parse::<Module>().unwrap_err().format();

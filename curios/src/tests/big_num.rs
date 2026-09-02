@@ -90,8 +90,8 @@ fn big_nat_bit_len_counts_binary_digits() {
 fn big_nat_cmp_orders_by_magnitude() {
     // `cmp` lets the high bits decide (the recursion on the numeral tails), breaking ties on the low bit only afterward, so two values differing only in the lowest bit still order correctly: 12345678 < 12345679, equal to itself, and the reverse is greater.
     let source = r#"
-        use /std/{Handle, Str, BigNat, Order};
-        let show(o : Order) -> Str =
+        use /std/{Handle, Str, BigNat, Ordering};
+        let show(o : Ordering) -> Str =
             match o : (_) => Str
             | lt() => "lt"
             | eq() => "eq"
@@ -263,8 +263,8 @@ fn bigint_mul_multiplies_signs() {
 fn bigint_cmp_orders_across_signs() {
     // `cmp` decides by sign first and only then by magnitude — where the negative stratum orders REVERSED: -2 < -1 even though 2 > 1.
     let source = r#"
-        use /std/{Handle, Str, BigInt, Order};
-        let show(o : Order) -> Str =
+        use /std/{Handle, Str, BigInt, Ordering};
+        let show(o : Ordering) -> Str =
             match o : (_) => Str
             | lt() => "lt"
             | eq() => "eq"
@@ -316,7 +316,7 @@ fn bigint_neg_abs_and_parity() {
 
 #[test]
 fn bigint_operators_dispatch_through_concepts() {
-    // The `/std` facades carry `Add`/`Sub`/`Mul`/`Eql`/`Cmp`/`Show` witnesses for `BigInt`, so the operator syntax and `show` resolve on it like on any native numeric type.
+    // The `/std` facades carry `Add`/`Subtract`/`Multiply`/`Equal`/`Compare`/`Show` witnesses for `BigInt`, so the operator syntax and `show` resolve on it like on any native numeric type.
     let source = r#"
         use /std/{Handle, Str, Bool, List, BigInt, Show};
         let a = BigInt/of_int(-6);

@@ -2,8 +2,8 @@ pub use /sys/{Int};
 pub use /syn/Int/{NonZero, NonNeg};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
     to_flt};
-use /std/{Nat, Str, Option, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Spell, Ord, True,
-    False};
+use /std/{Nat, Str, Option, Ordering, Equal, Compare, Add, Subtract, Multiply, Divide, Remainder,
+    Show, Spell, Ordered, True, False};
 use /std/Test/{Draw, Seed};
 
 pub let to_str(n: Int) -> Str =
@@ -45,8 +45,8 @@ pub let abs(n: Int) -> Nat =
     | none() => match non_neg(+0 - n) | some(ok) => to_nat(+0 - n, @ok) | none() => 0 end
     end;
 
-pub let cmp(x: Int, y: Int) -> Order =
-    choose | x < y => Order/lt() | x == y => Order/eq() | _ => Order/gt() end;
+pub let cmp(x: Int, y: Int) -> Ordering =
+    choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
 pub let min(a: Int, b: Int) -> Int =
     match a < b | true => a | false => b end;
@@ -58,12 +58,12 @@ pub let max(a: Int, b: Int) -> Int =
 pub let sign(n: Int) -> Int =
     choose | n < +0 => -1 | n == +0 => +0 | _ => +1 end;
 
-satisfy Eql(Int) {
+satisfy Equal(Int) {
     eql = eql,
     neq = neq,
 }
 
-satisfy Cmp(Int) {
+satisfy Compare(Int) {
     lt = lt,
     le = le,
     gt = gt,
@@ -74,20 +74,20 @@ satisfy Add(Int) {
     add = add,
 }
 
-satisfy Sub(Int) {
+satisfy Subtract(Int) {
     sub = sub,
 }
 
-satisfy Mul(Int) {
+satisfy Multiply(Int) {
     mul = mul,
 }
 
-satisfy Div(Int) {
+satisfy Divide(Int) {
     Ok(b) = NonZero(b),
     div = div,
 }
 
-satisfy Rem(Int) {
+satisfy Remainder(Int) {
     Ok(b) = NonZero(b),
     rem = rem,
 }
@@ -101,7 +101,7 @@ satisfy Spell(Int) {
     spell = to_str,
 }
 
-satisfy Ord(Int) {
+satisfy Ordered(Int) {
     cmp = cmp,
 }
 

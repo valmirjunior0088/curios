@@ -1,6 +1,6 @@
 //! The fixed infix operators of the surface grammar — arithmetic, comparison, and the two logical connectives alike.
 //!
-//! Named `NumOp` until the numeric types moved to `curios-num` and the name started pulling the type after them. It never belonged there: `&&` and `||` operate on `Bool`, `==` on anything with an `Eql` witness, and none of the thirteen is ever evaluated as an operator — elaboration resolves each to an `Intrinsic` and the operator is gone.
+//! Named `NumOp` until the numeric types moved to `curios-num` and the name started pulling the type after them. It never belonged there: `&&` and `||` operate on `Bool`, `==` on anything with an `Equal` witness, and none of the thirteen is ever evaluated as an operator — elaboration resolves each to an `Intrinsic` and the operator is gone.
 
 /// Declares [`InfixOp`] from one variant table, so the roster, [`InfixOp::ALL`], and the spellings cannot drift apart: a new operator is written exactly once.
 macro_rules! infix_ops {

@@ -1,28 +1,29 @@
-use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
+use /std/{Nat, Bool, Bits, Str, Ordering, Eq, False, True, Equal, Compare, Add, Subtract, Multiply,
+    Show, Ordered};
 use /std/Bool/{false_neq_true};
-use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
+use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, cong_cons2, eq};
 
-pub let raw(x: Bits, y: Bits) -> Order =
+pub let raw(x: Bits, y: Bits) -> Ordering =
     match x
-    | b[] => match y | b[] => Order/eq() | b[_, .._] => Order/lt() end
+    | b[] => match y | b[] => Ordering/eq() | b[_, .._] => Ordering/lt() end
     | b[xh, ..xt] =>
         match y
-        | b[] => Order/gt()
+        | b[] => Ordering/gt()
         | b[yh, ..yt] =>
             match raw(xt, yt)
             | eq() =>
                 match xh
-                | true => match yh | true => Order/eq() | false => Order/gt() end
-                | false => match yh | true => Order/lt() | false => Order/eq() end
+                | true => match yh | true => Ordering/eq() | false => Ordering/gt() end
+                | false => match yh | true => Ordering/lt() | false => Ordering/eq() end
                 end
-            | lt() => Order/lt()
-            | gt() => Order/gt()
+            | lt() => Ordering/lt()
+            | gt() => Ordering/gt()
             end
         end
     end;
 
-pub let cmp(a: BigNat, b: BigNat) -> Order =
+pub let cmp(a: BigNat, b: BigNat) -> Ordering =
     raw(a.bits, b.bits);
 
 pub let eql(a: BigNat, b: BigNat) -> Bool =
@@ -41,21 +42,25 @@ pub let ge(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | lt() => false | _ => true end;
 
 let absorb_eq(
-    o: Order,
-    p: Eq(o, Order/eq()),
+    o: Ordering,
+    p: Eq(o, Ordering/eq()),
 ) -> Eq(
-    match o: (_) => Order | eq() => Order/eq() | lt() => Order/lt() | gt() => Order/gt() end,
-    Order/eq()) =
+    match o: (_) => Ordering
+    | eq() => Ordering/eq()
+    | lt() => Ordering/lt()
+    | gt() => Ordering/gt()
+    end,
+    Ordering/eq()) =
     Eq/subst(
-        (v: Order) =>
+        (v: Ordering) =>
             Eq(
-                match v | eq() => Order/eq() | lt() => Order/lt() | gt() => Order/gt() end,
-                Order/eq()),
+                match v | eq() => Ordering/eq() | lt() => Ordering/lt() | gt() => Ordering/gt() end,
+                Ordering/eq()),
         Eq/sym(p),
         Eq/refl());
 
-pub let raw_refl(x: Bits) -> Eq(raw(x, x), Order/eq()) =
-    match x: (a) => Eq(raw(a, a), Order/eq())
+pub let raw_refl(x: Bits) -> Eq(raw(x, x), Ordering/eq()) =
+    match x: (a) => Eq(raw(a, a), Ordering/eq())
     | b[] => Eq/refl()
     | b[h, ..t] =>
         match h
@@ -65,32 +70,40 @@ pub let raw_refl(x: Bits) -> Eq(raw(x, x), Order/eq()) =
     end;
 
 let sub_split(
-    s: Order,
-    @E: Order,
-    p: Eq(match s | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/eq()),
-) -> Eq(s, Order/eq()) =
-    match s: (r) => Eq(r, Order/eq())
+    s: Ordering,
+    @E: Ordering,
+    p: Eq(match s | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end, Ordering/eq()),
+) -> Eq(s, Ordering/eq()) =
+    match s: (r) => Eq(r, Ordering/eq())
     | eq() => Eq/refl()
     | lt() => match lt_neq_eq(p) end
     | gt() => match gt_neq_eq(p) end
     end;
 
 let cong_cmp_match(
-    @s: Order,
-    @t: Order,
+    @s: Ordering,
+    @t: Ordering,
     p: Eq(s, t),
-    @E: Order,
+    @E: Ordering,
 ) -> Eq(
-    match s: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end,
-    match t: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end) =
+    match s: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
+    match t: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end) =
     match p: (u, v, q) =>
         Eq(
-            match u: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end,
-            match v: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end)
+            match u: (_) => Ordering
+            | eq() => E
+            | lt() => Ordering/lt()
+            | gt() => Ordering/gt()
+            end,
+            match v: (_) => Ordering
+            | eq() => E
+            | lt() => Ordering/lt()
+            | gt() => Ordering/gt()
+            end)
     | refl(@z) => Eq/refl()
     end;
 
-pub let raw_to_eq(x: Bits, y: Bits, p: Eq(raw(x, y), Order/eq())) -> Eq(x, y) =
+pub let raw_to_eq(x: Bits, y: Bits, p: Eq(raw(x, y), Ordering/eq())) -> Eq(x, y) =
     match x
     | b[] =>
         match y
@@ -111,10 +124,10 @@ and cmp_head_eq(
     yh: Bool,
     p: Eq(
         match xh
-        | true => match yh | true => Order/eq() | false => Order/gt() end
-        | false => match yh | true => Order/lt() | false => Order/eq() end
+        | true => match yh | true => Ordering/eq() | false => Ordering/gt() end
+        | false => match yh | true => Ordering/lt() | false => Ordering/eq() end
         end,
-        Order/eq()),
+        Ordering/eq()),
 ) -> Eq(xh, yh) =
     match xh
     | true =>
@@ -134,52 +147,54 @@ let flip_heads(
     yh: Bool,
 ) -> Eq(
     match yh
-    | true => match xh | true => Order/eq() | false => Order/gt() end
-    | false => match xh | true => Order/lt() | false => Order/eq() end
+    | true => match xh | true => Ordering/eq() | false => Ordering/gt() end
+    | false => match xh | true => Ordering/lt() | false => Ordering/eq() end
     end,
-    Order/flip(
+    Ordering/flip(
         match xh
-        | true => match yh | true => Order/eq() | false => Order/gt() end
-        | false => match yh | true => Order/lt() | false => Order/eq() end
+        | true => match yh | true => Ordering/eq() | false => Ordering/gt() end
+        | false => match yh | true => Ordering/lt() | false => Ordering/eq() end
         end)) =
     match xh
     | true => match yh | true => Eq/refl() | false => Eq/refl() end
     | false => match yh | true => Eq/refl() | false => Eq/refl() end
     end;
 
-pub let raw_flip(x: Bits, y: Bits) -> Eq(raw(y, x), Order/flip(raw(x, y))) =
-    match x: (a) => Eq(raw(y, a), Order/flip(raw(a, y)))
+pub let raw_flip(x: Bits, y: Bits) -> Eq(raw(y, x), Ordering/flip(raw(x, y))) =
+    match x: (a) => Eq(raw(y, a), Ordering/flip(raw(a, y)))
     | b[] =>
-        match y: (b) => Eq(raw(b, b[]), Order/flip(raw(b[], b)))
+        match y: (b) => Eq(raw(b, b[]), Ordering/flip(raw(b[], b)))
         | b[] => Eq/refl()
         | b[_, .._] => Eq/refl()
         end
     | b[xh, ..xt] =>
-        match y: (b) => Eq(raw(b, b[xh, ..xt]), Order/flip(raw(b[xh, ..xt], b)))
+        match y: (b) => Eq(raw(b, b[xh, ..xt]), Ordering/flip(raw(b[xh, ..xt], b)))
         | b[] => Eq/refl()
         | b[yh, ..yt] =>
             Eq/trans(
                 cong_cmp_match(raw_flip(xt, yt)),
                 match raw(xt, yt): (r) =>
                     Eq(
-                        match Order/flip(r)
+                        match Ordering/flip(r)
                         | eq() =>
                             match yh
-                            | true => match xh | true => Order/eq() | false => Order/gt() end
-                            | false => match xh | true => Order/lt() | false => Order/eq() end
+                            | true => match xh | true => Ordering/eq() | false => Ordering/gt() end
+                            | false => match xh | true => Ordering/lt() | false => Ordering/eq() end
                             end
-                        | lt() => Order/lt()
-                        | gt() => Order/gt()
+                        | lt() => Ordering/lt()
+                        | gt() => Ordering/gt()
                         end,
-                        Order/flip(
+                        Ordering/flip(
                             match r
                             | eq() =>
                                 match xh
-                                | true => match yh | true => Order/eq() | false => Order/gt() end
-                                | false => match yh | true => Order/lt() | false => Order/eq() end
+                                | true =>
+                                    match yh | true => Ordering/eq() | false => Ordering/gt() end
+                                | false =>
+                                    match yh | true => Ordering/lt() | false => Ordering/eq() end
                                 end
-                            | lt() => Order/lt()
-                            | gt() => Order/gt()
+                            | lt() => Ordering/lt()
+                            | gt() => Ordering/gt()
                             end))
                 | eq() => flip_heads(xh, yh)
                 | lt() => Eq/refl()
@@ -189,15 +204,17 @@ pub let raw_flip(x: Bits, y: Bits) -> Eq(raw(y, x), Order/flip(raw(x, y))) =
     end;
 
 let force_lt(
-    @s: Order,
-    @E: Order,
-    p: Eq(s, Order/lt()),
+    @s: Ordering,
+    @E: Ordering,
+    p: Eq(s, Ordering/lt()),
 ) -> Eq(
-    match s: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end,
-    Order/lt()) =
+    match s: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
+    Ordering/lt()) =
     Eq/subst(
-        (v: Order) =>
-            Eq(match v | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()),
+        (v: Ordering) =>
+            Eq(
+                match v | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
+                Ordering/lt()),
         Eq/sym(p),
         Eq/refl());
 
@@ -206,10 +223,10 @@ let head_lt_yh(
     yh: Bool,
     p: Eq(
         match xh
-        | true => match yh | true => Order/eq() | false => Order/gt() end
-        | false => match yh | true => Order/lt() | false => Order/eq() end
+        | true => match yh | true => Ordering/eq() | false => Ordering/gt() end
+        | false => match yh | true => Ordering/lt() | false => Ordering/eq() end
         end,
-        Order/lt()),
+        Ordering/lt()),
 ) -> Eq(yh, true) =
     match xh
     | true =>
@@ -229,10 +246,10 @@ let head_lt_xh(
     yh: Bool,
     p: Eq(
         match xh
-        | true => match yh | true => Order/eq() | false => Order/gt() end
-        | false => match yh | true => Order/lt() | false => Order/eq() end
+        | true => match yh | true => Ordering/eq() | false => Ordering/gt() end
+        | false => match yh | true => Ordering/lt() | false => Ordering/eq() end
         end,
-        Order/lt()),
+        Ordering/lt()),
 ) -> Eq(xh, false) =
     match xh
     | true =>
@@ -246,16 +263,20 @@ let head_lt_xh(
 let reduce_whole(
     @a: Bits,
     @b: Bits,
-    @s: Order,
+    @s: Ordering,
     e: Eq(raw(a, b), s),
-    @E: Order,
-    p: Eq(match raw(a, b) | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()),
+    @E: Ordering,
+    p: Eq(
+        match raw(a, b) | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
+        Ordering/lt()),
 ) -> Eq(
-    match s: (_) => Order | eq() => E | lt() => Order/lt() | gt() => Order/gt() end,
-    Order/lt()) =
+    match s: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
+    Ordering/lt()) =
     Eq/subst(
-        (r: Order) =>
-            Eq(match r | eq() => E | lt() => Order/lt() | gt() => Order/gt() end, Order/lt()),
+        (r: Ordering) =>
+            Eq(
+                match r | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
+                Ordering/lt()),
         e,
         p);
 
@@ -264,8 +285,8 @@ let cons_lt(
     zh: Bool,
     @xt: Bits,
     @zt: Bits,
-    tail_lt: Eq(raw(xt, zt), Order/lt()),
-) -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt()) =
+    tail_lt: Eq(raw(xt, zt), Ordering/lt()),
+) -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt()) =
     match xh
     | true => match zh | true => force_lt(tail_lt) | false => force_lt(tail_lt) end
     | false => match zh | true => force_lt(tail_lt) | false => force_lt(tail_lt) end
@@ -278,37 +299,37 @@ let trans_cons(
     @yt: Bits,
     @zh: Bool,
     @zt: Bits,
-    s1: Order,
+    s1: Ordering,
     e1: Eq(raw(xt, yt), s1),
-    s2: Order,
+    s2: Ordering,
     e2: Eq(raw(yt, zt), s2),
-    p: Eq(raw(b[xh, ..xt], b[yh, ..yt]), Order/lt()),
-    q: Eq(raw(b[yh, ..yt], b[zh, ..zt]), Order/lt()),
-    ih: (pl: Eq(raw(xt, yt), Order/lt())) -> (ql: Eq(raw(yt, zt), Order/lt())) -> Eq(
+    p: Eq(raw(b[xh, ..xt], b[yh, ..yt]), Ordering/lt()),
+    q: Eq(raw(b[yh, ..yt], b[zh, ..zt]), Ordering/lt()),
+    ih: (pl: Eq(raw(xt, yt), Ordering/lt())) -> (ql: Eq(raw(yt, zt), Ordering/lt())) -> Eq(
         raw(xt, zt),
-        Order/lt()),
-) -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt()) =
-    match s1: (r1) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
+        Ordering/lt()),
+) -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt()) =
+    match s1: (r1) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
     | gt() => match gt_neq_lt(reduce_whole(e1, p)) end
     | lt() =>
-        match s2: (r2) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
+        match s2: (r2) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
         | gt() => match gt_neq_lt(reduce_whole(e2, q)) end
         | lt() => cons_lt(xh, zh, ih(e1)(e2))
         | eq() =>
             cons_lt(
                 xh,
                 zh,
-                Eq/subst((w: Bits) => Eq(raw(xt, w), Order/lt()), raw_to_eq(yt, zt, e2), e1))
+                Eq/subst((w: Bits) => Eq(raw(xt, w), Ordering/lt()), raw_to_eq(yt, zt, e2), e1))
         end
     | eq() =>
-        match s2: (r3) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Order/lt())
+        match s2: (r3) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
         | gt() => match gt_neq_lt(reduce_whole(e2, q)) end
         | lt() =>
             cons_lt(
                 xh,
                 zh,
                 Eq/subst(
-                    (w: Bits) => Eq(raw(w, zt), Order/lt()),
+                    (w: Bits) => Eq(raw(w, zt), Ordering/lt()),
                     Eq/sym(raw_to_eq(xt, yt, e1)),
                     e2))
         | eq() =>
@@ -324,9 +345,9 @@ pub let raw_trans(
     x: Bits,
     y: Bits,
     z: Bits,
-    p: Eq(raw(x, y), Order/lt()),
-    q: Eq(raw(y, z), Order/lt()),
-) -> Eq(raw(x, z), Order/lt()) =
+    p: Eq(raw(x, y), Ordering/lt()),
+    q: Eq(raw(y, z), Ordering/lt()),
+) -> Eq(raw(x, z), Ordering/lt()) =
     match x
     | b[] =>
         match y
@@ -356,20 +377,20 @@ pub let raw_trans(
         end
     end;
 
-pub let refl(a: BigNat) -> Eq(cmp(a, a), Order/eq()) =
+pub let refl(a: BigNat) -> Eq(cmp(a, a), Ordering/eq()) =
     raw_refl(a.bits);
 
-pub let to_eq(a: BigNat, b: BigNat, p: Eq(cmp(a, b), Order/eq())) -> Eq(a, b) =
+pub let to_eq(a: BigNat, b: BigNat, p: Eq(cmp(a, b), Ordering/eq())) -> Eq(a, b) =
     eq(a, b, raw_to_eq(a.bits, b.bits, p));
 
-pub let flip(a: BigNat, b: BigNat) -> Eq(cmp(b, a), Order/flip(cmp(a, b))) =
+pub let flip(a: BigNat, b: BigNat) -> Eq(cmp(b, a), Ordering/flip(cmp(a, b))) =
     raw_flip(a.bits, b.bits);
 
 pub let trans(
     a: BigNat,
     b: BigNat,
     c: BigNat,
-    p: Eq(cmp(a, b), Order/lt()),
-    q: Eq(cmp(b, c), Order/lt()),
-) -> Eq(cmp(a, c), Order/lt()) =
+    p: Eq(cmp(a, b), Ordering/lt()),
+    q: Eq(cmp(b, c), Ordering/lt()),
+) -> Eq(cmp(a, c), Ordering/lt()) =
     raw_trans(a.bits, b.bits, c.bits, p, q);

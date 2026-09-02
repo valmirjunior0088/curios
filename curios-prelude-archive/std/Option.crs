@@ -1,4 +1,4 @@
-use /std/{Bool, Eql, Show, Spell, Str, Monad, Result, True, False, Order, Cmp, Ord};
+use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, Compare, Ordered};
 use /std/Test/{Draw, Seed};
 
 pub induct Option(A: Type): pub Type
@@ -54,7 +54,7 @@ pub let get(@A: Type, m: Option(A), @ok: IsSome(m)) -> A =
     | none() => match ok end
     end;
 
-satisfy (@A: Type, use Eql(A)) => Eql(Option(A));
+satisfy (@A: Type, use Equal(A)) => Equal(Option(A));
 
 satisfy (@A: Type, use Show(A)) => Show(Option(A)) {
     show(m) =
@@ -72,20 +72,20 @@ satisfy Monad(Option) {
 }
 
 -- `none` below `some`.
-pub let cmp(@A: Type, use Ord(A), a: Option(A), b: Option(A)) -> Order =
+pub let cmp(@A: Type, use Ordered(A), a: Option(A), b: Option(A)) -> Ordering =
     match a
-    | none() => match b | none() => Order/eq() | some(_) => Order/lt() end
-    | some(x) => match b | none() => Order/gt() | some(y) => Ord/cmp(x, y) end
+    | none() => match b | none() => Ordering/eq() | some(_) => Ordering/lt() end
+    | some(x) => match b | none() => Ordering/gt() | some(y) => Ordered/cmp(x, y) end
     end;
 
-satisfy (@A: Type, use Ord(A)) => Cmp(Option(A)) {
-    lt(a, b) = Order/is_lt(cmp(a, b)),
-    le(a, b) = Order/is_le(cmp(a, b)),
-    gt(a, b) = Order/is_gt(cmp(a, b)),
-    ge(a, b) = Order/is_ge(cmp(a, b)),
+satisfy (@A: Type, use Ordered(A)) => Compare(Option(A)) {
+    lt(a, b) = Ordering/is_lt(cmp(a, b)),
+    le(a, b) = Ordering/is_le(cmp(a, b)),
+    gt(a, b) = Ordering/is_gt(cmp(a, b)),
+    ge(a, b) = Ordering/is_ge(cmp(a, b)),
 }
 
-satisfy (@A: Type, use Ord(A)) => Ord(Option(A)) {
+satisfy (@A: Type, use Ordered(A)) => Ordered(Option(A)) {
     cmp = cmp,
 }
 

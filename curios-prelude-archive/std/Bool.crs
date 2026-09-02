@@ -1,6 +1,7 @@
 pub use /sys/{Bool};
 pub use /sys/Bool/{and, or, xor, eql};
-use /std/{Nat, Str, Option, Eq, False, True, Eql, Or, And, Show, Spell, Order, Cmp, Ord};
+use /std/{Nat, Str, Option, Eq, False, True, Equal, Or, And, Show, Spell, Ordering, Compare,
+    Ordered};
 use /std/Test/{Draw, Seed};
 
 pub let not(b: Bool) -> Bool =
@@ -21,7 +22,7 @@ pub let false_neq_true(p: Eq(false, true)) -> False =
     Eq/subst((b: Bool) => match b | true => False | false => True end, p, True/qed());
 
 -- `xor` is disequality on one bit, so `!=` needs no negation here.
-satisfy Eql(Bool) {
+satisfy Equal(Bool) {
     eql = eql,
     neq = xor,
 }
@@ -43,20 +44,20 @@ satisfy Spell(Bool) {
 }
 
 -- `false` below `true`.
-pub let cmp(a: Bool, b: Bool) -> Order =
+pub let cmp(a: Bool, b: Bool) -> Ordering =
     match a
-    | false => match b | false => Order/eq() | true => Order/lt() end
-    | true => match b | false => Order/gt() | true => Order/eq() end
+    | false => match b | false => Ordering/eq() | true => Ordering/lt() end
+    | true => match b | false => Ordering/gt() | true => Ordering/eq() end
     end;
 
-satisfy Cmp(Bool) {
-    lt(a, b) = Order/is_lt(cmp(a, b)),
-    le(a, b) = Order/is_le(cmp(a, b)),
-    gt(a, b) = Order/is_gt(cmp(a, b)),
-    ge(a, b) = Order/is_ge(cmp(a, b)),
+satisfy Compare(Bool) {
+    lt(a, b) = Ordering/is_lt(cmp(a, b)),
+    le(a, b) = Ordering/is_le(cmp(a, b)),
+    gt(a, b) = Ordering/is_gt(cmp(a, b)),
+    ge(a, b) = Ordering/is_ge(cmp(a, b)),
 }
 
-satisfy Ord(Bool) {
+satisfy Ordered(Bool) {
     cmp = cmp,
 }
 

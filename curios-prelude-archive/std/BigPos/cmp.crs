@@ -1,27 +1,31 @@
 -- Comparison of strictly-positive naturals. Every law is a one-line delegation: the magnitudes decide the order, and `BigPos/eq` lifts a magnitude equality back to the record, since the certificate is proof-irrelevant.
-use /std/{Order, Eq, BigNat, BigPos};
-use /std/Order/{cong_flip};
+use /std/{Ordering, Eq, BigNat, BigPos};
+use /std/Ordering/{cong_flip};
 
-pub let cmp(p: BigPos, q: BigPos) -> Order =
+pub let cmp(p: BigPos, q: BigPos) -> Ordering =
     BigNat/cmp/cmp(p.value, q.value);
 
-pub let refl(p: BigPos) -> Eq(cmp(p, p), Order/eq()) =
+pub let refl(p: BigPos) -> Eq(cmp(p, p), Ordering/eq()) =
     BigNat/cmp/refl(p.value);
 
-pub let to_eq(p: BigPos, q: BigPos, w: Eq(cmp(p, q), Order/eq())) -> Eq(p, q) =
+pub let to_eq(p: BigPos, q: BigPos, w: Eq(cmp(p, q), Ordering/eq())) -> Eq(p, q) =
     BigPos/eq(p, q, BigNat/cmp/to_eq(p.value, q.value, w));
 
-pub let flip(p: BigPos, q: BigPos) -> Eq(cmp(q, p), Order/flip(cmp(p, q))) =
+pub let flip(p: BigPos, q: BigPos) -> Eq(cmp(q, p), Ordering/flip(cmp(p, q))) =
     BigNat/cmp/flip(p.value, q.value);
 
 pub let trans(
     p: BigPos,
     q: BigPos,
     r: BigPos,
-    u: Eq(cmp(p, q), Order/lt()),
-    v: Eq(cmp(q, r), Order/lt()),
-) -> Eq(cmp(p, r), Order/lt()) =
+    u: Eq(cmp(p, q), Ordering/lt()),
+    v: Eq(cmp(q, r), Ordering/lt()),
+) -> Eq(cmp(p, r), Ordering/lt()) =
     BigNat/cmp/trans(p.value, q.value, r.value, u, v);
 
-pub let gt_to_lt(p: BigPos, q: BigPos, w: Eq(cmp(p, q), Order/gt())) -> Eq(cmp(q, p), Order/lt()) =
+pub let gt_to_lt(
+    p: BigPos,
+    q: BigPos,
+    w: Eq(cmp(p, q), Ordering/gt()),
+) -> Eq(cmp(q, p), Ordering/lt()) =
     Eq/trans(flip(p, q), cong_flip(w));

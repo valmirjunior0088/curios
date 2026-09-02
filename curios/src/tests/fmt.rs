@@ -52,12 +52,12 @@ fn escaped_percent_renders_literally() {
     assert_eq!(run(literal_then_slot), b"%50");
 }
 
-// The scalar `Show` witnesses (`Byte` as decimal, `Bytes` as lowercase hex, `Order` by constructor) render through the same slot.
+// The scalar `Show` witnesses (`Byte` as decimal, `Bytes` as lowercase hex, `Ordering` by constructor) render through the same slot.
 #[test]
 fn percent_slot_shows_scalar_witnesses() {
     let source = r#"
-        use /std/{Fmt, Nat, Str, Ord};
-        Fmt/print("byte=% bytes=% ord=%")(Nat/to_byte(65))(Str/to_bytes("ABC"))(Ord/cmp(9, 4))
+        use /std/{Fmt, Nat, Str, Ordered};
+        Fmt/print("byte=% bytes=% ord=%")(Nat/to_byte(65))(Str/to_bytes("ABC"))(Ordered/cmp(9, 4))
     "#;
     assert_eq!(run(source), b"byte=65 bytes=414243 ord=gt");
 }

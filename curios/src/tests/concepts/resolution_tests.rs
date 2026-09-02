@@ -62,25 +62,25 @@ fn explicit_use_argument_overrides() {
     assert_eq!(run(source), b"(7)");
 }
 
-// A superclass edge resolved by projection: inside `same`, the goal `Eql(A)` has a bound-variable head (no table entry), so it is solved by projecting the local `use Ord(A)` binder's (anonymous) superclass field, keyed by index. The `use Ord(A)` slot itself resolves through the table to `ord_nat`, whose own omitted superclass field resolves to `eql_nat` — no field names a witness anywhere.
+// A superclass edge resolved by projection: inside `same`, the goal `Equal(A)` has a bound-variable head (no table entry), so it is solved by projecting the local `use Ordered(A)` binder's (anonymous) superclass field, keyed by index. The `use Ordered(A)` slot itself resolves through the table to `ord_nat`, whose own omitted superclass field resolves to `eql_nat` — no field names a witness anywhere.
 #[test]
 fn superclass_projection_resolves() {
     let source = r#"
-        use /std/{Nat, Bool, Order, Handle};
-        pub concept Eql(A : Type) : pub Type {
+        use /std/{Nat, Bool, Ordering, Handle};
+        pub concept Equal(A : Type) : pub Type {
             eql(A, A) -> Bool
         }
-        pub concept Ord(A : Type) : pub Type {
-            use Eql(A),
-            cmp(A, A) -> Order
+        pub concept Ordered(A : Type) : pub Type {
+            use Equal(A),
+            cmp(A, A) -> Ordering
         }
-        satisfy Eql(Nat) {
+        satisfy Equal(Nat) {
             eql(a, b) = a == b
         }
-        satisfy Ord(Nat) {
-            cmp(a, b) = Order/lt()
+        satisfy Ordered(Nat) {
+            cmp(a, b) = Ordering/lt()
         }
-        pub let same(@A : Type, use Ord(A), x : A, y : A) -> Bool = Eql/eql(x, y);
+        pub let same(@A : Type, use Ordered(A), x : A, y : A) -> Bool = Equal/eql(x, y);
         let n : Nat = 3;
         /std/print(Bool/to_str(same(n, n)))
         "#;
@@ -118,25 +118,25 @@ fn prelude_show_resolves() {
     assert_eq!(run(source), b"42");
 }
 
-// The prelude `Eql` concept resolves through the value-level witnesses.
+// The prelude `Equal` concept resolves through the value-level witnesses.
 #[test]
 fn prelude_eql_resolves() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Eql};
+        use /std/{Nat, Bool, Handle, Equal};
         let a : Nat = 5;
         let b : Nat = 5;
-        /std/print(Bool/to_str(Eql/eql(a, b)))
+        /std/print(Bool/to_str(Equal/eql(a, b)))
         "#;
 
     assert_eq!(run(source), b"true");
 }
 
-// The prelude `Ord` concept resolves, and its `Eql` superclass is reachable by projection from an `Ord` in scope.
+// The prelude `Ordered` concept resolves, and its `Equal` superclass is reachable by projection from an `Ordered` in scope.
 #[test]
 fn prelude_ord_superclass_projects() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Ord, Eql};
-        pub let equal(@A : Type, use Ord(A), x : A, y : A) -> Bool = Eql/eql(x, y);
+        use /std/{Nat, Bool, Handle, Ordered, Equal};
+        pub let equal(@A : Type, use Ordered(A), x : A, y : A) -> Bool = Equal/eql(x, y);
         let n : Nat = 4;
         /std/print(Bool/to_str(equal(n, n)))
         "#;
@@ -316,22 +316,22 @@ fn syn_add_concept_resolves_everywhere() {
     assert_eq!(run(source), b"27");
 }
 
-// `Eql` and `Cmp` resolve across intrinsics with the witnesses now homed beside each type — `Eql(Nat)`/`Cmp(Nat)` in `/std/Nat`, `Eql(Str)` in `/std/Str`, `Cmp(Flt)` in `/std/Flt` — rather than in the operator-concept facades, which keep only the concept re-exports.
+// `Equal` and `Compare` resolve across intrinsics with the witnesses now homed beside each type — `Equal(Nat)`/`Compare(Nat)` in `/std/Nat`, `Equal(Str)` in `/std/Str`, `Compare(Flt)` in `/std/Flt` — rather than in the operator-concept facades, which keep only the concept re-exports.
 #[test]
 fn eql_and_cmp_resolve_across_intrinsics() {
     let source = r#"
-        use /std/{Nat, Flt, Bool, Handle, Str, Eql, Cmp};
-        let a : Bool = Eql/eql(2, 2);
-        let b : Bool = Eql/eql("abc", "abc");
-        let c : Bool = Cmp/lt(1.0, 2.0);
-        let d : Bool = Cmp/ge(3, 3);
+        use /std/{Nat, Flt, Bool, Handle, Str, Equal, Compare};
+        let a : Bool = Equal/eql(2, 2);
+        let b : Bool = Equal/eql("abc", "abc");
+        let c : Bool = Compare/lt(1.0, 2.0);
+        let d : Bool = Compare/ge(3, 3);
         /std/print(Bool/to_str(Bool/and(Bool/and(a, b), Bool/and(c, d))))
         "#;
 
     assert_eq!(run(source), b"true");
 }
 
-// A witness declared *after* a value that uses it still resolves: the use-site goal defers on the missing table entry, the later `satisfy` registers it, and the end-of-module sweep discharges the deferred goal. This ordering freedom is what lets a `/std` witness live beside its type — a type module's own value functions may call an operator before the module's trailing witness block, the way `/std/Nat`'s `min`/`cmp` use `<`/`==` ahead of `Cmp(Nat)`.
+// A witness declared *after* a value that uses it still resolves: the use-site goal defers on the missing table entry, the later `satisfy` registers it, and the end-of-module sweep discharges the deferred goal. This ordering freedom is what lets a `/std` witness live beside its type — a type module's own value functions may call an operator before the module's trailing witness block, the way `/std/Nat`'s `min`/`cmp` use `<`/`==` ahead of `Compare(Nat)`.
 #[test]
 fn forward_declared_witness_resolves() {
     let source = r#"
@@ -479,10 +479,10 @@ fn a_missing_witness_names_the_premise_by_position() {
 #[test]
 fn a_later_premise_is_named_by_its_own_position() {
     let source = r#"
-        use /std/{Nat, Str, Show, Eql, Handle};
+        use /std/{Nat, Str, Show, Equal, Handle};
         induct T : pub Type | t() end
         satisfy Show(T) { show(x) = "t", }
-        let g(@A : Type, use Show(A), use Eql(A), a : A) -> Str = Show/show(a);
+        let g(@A : Type, use Show(A), use Equal(A), a : A) -> Str = Show/show(a);
         let s : Str = g(T/t());
         /std/print("unreachable")
         "#;

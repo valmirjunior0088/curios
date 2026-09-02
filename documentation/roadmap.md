@@ -22,7 +22,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Implicit arguments (`@`-marked binders)
   - [x] Plicity as part of function-type identity, with lambda-binder insertion
 - [x] Instance arguments (`concept` and `satisfy` declarations, deterministic resolution)
-  - [x] The concept roster (`Add`, `Sub`, `Mul`, `Div`, `Rem`, `And`, `Or`, `Cmp`, `Eql`, `Monad` and `Lift` in `/syn`, `Spell` beside them, and `Show`, `Ord` and `/std/Map`'s `Key` in `/std`)
+  - [x] The concept roster (`Add`, `Subtract`, `Multiply`, `Divide`, `Remainder`, `And`, `Or`, `Compare`, `Equal`, `Monad` and `Lift` in `/syn`, `Spell` beside them, and `Show`, `Ordered` and `/std/Map`'s `Key` in `/std`)
   - [x] Higher-kinded concepts (`Monad(M : (Type) -> Type)`, via flex-apply imitation)
   - [x] Multi-parameter keying (tuple of every parameter head)
   - [x] `Lift` embeddings (`/syn/Lift(M, N)`; one witness per ordered pair, never chained)
@@ -34,9 +34,9 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Function witness keys (a witness on `(A) -> B` keys on the plicity vector `(_) -> _`)
   - [x] [Sealed concept representations](design/language/concept-representations-may-be-sealed.md) (`concept C(A): Type` — witness declarations, dictionary literals and raw projections confined to the declaring subtree)
   - [x] Concept laws (a field whose type is a proposition about earlier fields, discharged by `satisfy` at the implementations it supplies)
-  - [x] Associated types (a field whose result is a sort — what lets `Div` state each carrier's own division precondition)
-  - [x] Superclass edges (a `use`-prefixed field; `use value` fills a slot in a literal, and an `Ord(A)` witness answers an `Eql(A)` goal by projection)
-- [x] [Derived witnesses](design/language/a-witness-body-may-be-written-by-the-compiler.md) (`satisfy C(T);` — the compiler writes `Spell` and `Eql` bodies from the declaration of the type in the key; `/std`'s structural types derive theirs)
+  - [x] Associated types (a field whose result is a sort — what lets `Divide` state each carrier's own division precondition)
+  - [x] Superclass edges (a `use`-prefixed field; `use value` fills a slot in a literal, and an `Ordered(A)` witness answers an `Equal(A)` goal by projection)
+- [x] [Derived witnesses](design/language/a-witness-body-may-be-written-by-the-compiler.md) (`satisfy C(T);` — the compiler writes `Spell` and `Equal` bodies from the declaration of the type in the key; `/std`'s structural types derive theirs)
 - [x] Unified `struct` declarations (independent nominal and representation visibility)
 - [x] Inductive types (`induct` declarations)
   - [x] Independent nominal/representation visibility, with opaque construction
@@ -213,7 +213,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 - [x] Canonicalized module layout and registration
 - [x] Foundational proof/logic types (`std/True`, `std/False`)
-- [x] Equality and ordering (`std/Eq`, `std/Order`)
+- [x] Equality and ordering (`std/Eq`, `std/Ordering`)
 - [x] Foundational sum types (`std/Option`, `std/Result`)
 - [x] Pure state threading (`std/State`; no `Lift(Io, State(S))` edge, so a region performs nothing)
 - [x] Short-circuiting failure (`std/Throw` over `Result`; `!` as checked early return)
@@ -261,8 +261,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [General division and field laws](roadmap/big-flt-general/04-field-laws-spec.md)
   - [ ] [General rational binary32 boundaries](roadmap/big-flt-general/05-binary32-spec.md)
   - [ ] [Exact decimal parsing and presentation](roadmap/big-flt-general/06-decimal-spec.md)
-- [x] The standard library's indispensable tier — what every one of nine surveyed peers ships: `Str` decomposition; `Option`, `Result` and `Vec` accessors under decided bounds; `Cmp` and `Ord` on strings, bytes, booleans and the containers; `List`'s structural predicates and searches, builders, `traverse` and a stable sort; `Nat`'s `pow`, `gcd`, `lcm`, `log2` and `sqrt` with course-of-values induction as `Nat/Lt/strong`; `std/Set` over `Map` with `Map`'s rewriting functions; `std/WellFounded` for proofs; and the host half under IO
-  - [ ] The certified sort, `Key(Nat)` and the reducer law it waits on, and the `Ord`-keyed tree, each deferred to a consumer
+- [x] The standard library's indispensable tier — what every one of nine surveyed peers ships: `Str` decomposition; `Option`, `Result` and `Vec` accessors under decided bounds; `Compare` and `Ordered` on strings, bytes, booleans and the containers; `List`'s structural predicates and searches, builders, `traverse` and a stable sort; `Nat`'s `pow`, `gcd`, `lcm`, `log2` and `sqrt` with course-of-values induction as `Nat/Lt/strong`; `std/Set` over `Map` with `Map`'s rewriting functions; `std/WellFounded` for proofs; and the host half under IO
+  - [ ] The certified sort, `Key(Nat)` and the reducer law it waits on, and the `Ordered`-keyed tree, each deferred to a consumer
 
 ## Tooling & Ecosystem
 
