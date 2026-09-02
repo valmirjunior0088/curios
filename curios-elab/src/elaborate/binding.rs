@@ -523,12 +523,12 @@ pub(super) fn elaborate_bang(
         return park_checking(context, term, expected);
     }
 
-    // Auto-lift, decided before anything elaborates by reading declared shapes: both heads keyable and different means the action is wrapped in `/syn/Lift`'s `lift`, whose `use` slot resolves the declared embedding — or reports the missing edge. An unreadable action stays unwrapped and keeps the ordinary mismatch; the explicit `lift(action)` spelling always remains.
+    // Auto-lift, decided before anything elaborates by reading declared shapes: both monads keyable and different means the action is wrapped in `/syn/Lift`'s `lift`, whose `use` slot resolves the declared embedding — or reports the missing edge. An unreadable action stays unwrapped and keeps the ordinary mismatch; the explicit `lift(action)` spelling always remains.
     let action = match (
-        HeadKey::of_whnf(&region),
-        action_result_key(context, &bang.action),
+        monad_shape(context, &region),
+        action_result_shape(context, &bang.action),
     ) {
-        (Some(region_key), Some(action_key)) if region_key != action_key => {
+        (Some(region_shape), Some(action_shape)) if embeds(&region_shape, &action_shape) => {
             lift_wrapped(context, &bang.action, term.span())
         }
         _ => bang.action.clone(),
@@ -567,19 +567,56 @@ pub(super) fn lift_on_check(
     if region_flex(context, &region) {
         return Ok(None);
     }
-    let Some(region_key) = HeadKey::of_whnf(&region) else {
+    let Some(region_shape) = monad_shape(context, &region) else {
         return Ok(None);
     };
-    if !is_monad(context, &region_key) {
+    if !is_monad(context, &region_shape.head) {
         return Ok(None);
     }
-    let Some(action_key) = action_result_key(context, term) else {
+    let Some(action_shape) = action_result_shape(context, term) else {
         return Ok(None);
     };
-    if action_key == region_key || !is_monad(context, &action_key) {
+    if !embeds(&region_shape, &action_shape) || !is_monad(context, &action_shape.head) {
         return Ok(None);
     }
     Ok(Some(lift_wrapped(context, term, None)))
+}
+
+/// What identifies a monad for the lift oracle: the rigid head, and the keys of the application's *context* arguments — every argument but the last, which is the slot a right-biased partial application abstracts and so the value slot, free to differ between an action and its region. A context argument that keys on nothing, a binder the action's own telescope will solve above all, is `None` and compatible with anything.
+struct MonadShape {
+    head: HeadKey,
+    context: Vec<Option<HeadKey>>,
+}
+
+/// The shape of a weak-head-normal monad application, or `None` where its head is not keyable.
+fn monad_shape(context: &mut Context, whnf: &Term) -> Option<MonadShape> {
+    let head = HeadKey::of_whnf(whnf)?;
+    let params: &[Term] = match &**whnf {
+        Subterm::StructType(struct_type) => &struct_type.params,
+        Subterm::InductType(induct_type) => &induct_type.params,
+        _ => &[],
+    };
+    let context_args = params.split_last().map_or(&[][..], |(_, context)| context);
+    let context = context_args
+        .iter()
+        .map(|arg| {
+            reduce_with(context, arg)
+                .ok()
+                .and_then(|whnf| HeadKey::of_whnf(&whnf))
+        })
+        .collect();
+
+    Some(MonadShape { head, context })
+}
+
+/// Whether an action of shape `action` belongs to another monad than a region of shape `region`, so that sequencing it needs an embedding: a different head, or a context argument both sides key and key differently — `Try(Io, E)` beside `Try(Async, E)`, which share a head and are two monads. Two shapes that agree wherever both are known are one monad as far as the oracle can read, and unification settles the rest.
+fn embeds(region: &MonadShape, action: &MonadShape) -> bool {
+    region.head != action.head
+        || region
+            .context
+            .iter()
+            .zip(&action.context)
+            .any(|pair| matches!(pair, (Some(here), Some(there)) if here != there))
 }
 
 /// Whether a `Monad` witness is registered under `key` — the concept's name derives from the registry's bind wrapper, whose namespace is the concept.
@@ -600,7 +637,7 @@ fn region_flex(context: &Context, whnf: &Term) -> bool {
 }
 
 /// The action's monad head, read without elaborating: peel the explicit application spine to a named head, read the head's *declared* type from the assumption store, and key the syntactic result behind its telescope. `None` on anything unreadable — an unnamed or computed head, a spine whose explicit-argument count differs from the declared telescope's, an alias-headed or computed result — so the oracle never wraps on a guess: reads only, no elaboration, no reduction, no instantiation, and a wrong abstention costs a message, never a solution.
-fn action_result_key(context: &mut Context, action: &Term) -> Option<HeadKey> {
+fn action_result_shape(context: &mut Context, action: &Term) -> Option<MonadShape> {
     let mut head = action;
     let mut explicit_args = 0usize;
     loop {
@@ -614,19 +651,19 @@ fn action_result_key(context: &mut Context, action: &Term) -> Option<HeadKey> {
             }
             Subterm::Var(var) => {
                 let declared = context.assumption(var.as_free()?)?.clone();
-                return declared_result_key(context, &declared, explicit_args);
+                return declared_result_shape(context, &declared, explicit_args);
             }
             _ => return None,
         }
     }
 }
 
-/// The [`HeadKey`] of `declared`'s result when a spine of `explicit_args` explicit arguments saturates it exactly; `None` otherwise. The telescope is opened with fresh frees on the way to the result, so a *dependent* result — `Io(Cell(T))`, `Io(Future(A))` — keys on its head like any other: the head is rigid whatever the binder, and a result actually *headed* by a binder (`M(Nat)` under `(M: (Type) -> Type, …)`) still abstains, because a free-variable head has no key. The result takes one weak-head reduction before keying, because a declared type keeps its nominal spelling (`Io({})` is stored as the `/sys/Io/Io` application, aliases as their own names); the reduction is the same read `resolve`'s `node_type` performs on assumption-derived types, and a reduction failure abstains. A wrong abstention still costs a message, never a solution.
-fn declared_result_key(
+/// The [`MonadShape`] of `declared`'s result when a spine of `explicit_args` explicit arguments saturates it exactly; `None` otherwise. The telescope is opened with fresh frees on the way to the result, so a *dependent* result — `Io(Cell(T))`, `Io(Future(A))` — keys on its head like any other: the head is rigid whatever the binder, and a result actually *headed* by a binder (`M(Nat)` under `(M: (Type) -> Type, …)`) still abstains, because a free-variable head has no key; a binder in a *context* argument (`Try(M, E, A)` under the same telescope) keys on nothing there and is compatible with any region. The result takes one weak-head reduction before keying, because a declared type keeps its nominal spelling (`Io({})` is stored as the `/sys/Io/Io` application, aliases as their own names); the reduction is the same read `resolve`'s `node_type` performs on assumption-derived types, and a reduction failure abstains. A wrong abstention still costs a message, never a solution.
+fn declared_result_shape(
     context: &mut Context,
     declared: &Term,
     explicit_args: usize,
-) -> Option<HeadKey> {
+) -> Option<MonadShape> {
     let result = match &**declared {
         Subterm::FuncType(func_type) => {
             let explicit_binders = func_type
@@ -655,7 +692,7 @@ fn declared_result_key(
         },
     };
     let whnf = reduce_with(context, &result).ok()?;
-    HeadKey::of_whnf(&whnf)
+    monad_shape(context, &whnf)
 }
 
 /// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh operand-type metavar `?T` is pinned by the non-literal operands first (or, for an operator whose method returns its operand type, by the expected result type), then defaulted from the operand literals if nothing constrains it; only then are the literal operands checked — against a `?T` that is already concrete, so they never force it to their own default. That ordering is what lets `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch.
