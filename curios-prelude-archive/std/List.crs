@@ -20,6 +20,7 @@ pub let drop(@T: Type, a: List(T), k: Nat, @ok: Nat/Le(k, len(a))) -> List(T) =
 pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
     fold(parts, [], (a, acc) => [..acc, ..a]);
 
+-- Left to right, `f(elem, acc)`, as every fold in `/std` walks: `fold([1, 2], acc, f)` is `f(2, f(1, acc))`. The right fold is the language's `; ih` binding on a `[head, ..tail]` arm, so there is no `fold_right`. Two shapes share this module: the accumulator-threading functions are written over `fold`, and every predicate and search below is a case split on `[head, ..tail]` with a call on the tail — total by structure, and therefore usable where a proposition depends on it, which the index loop under an invariant is not.
 pub let fold(@T: Type, @A: Type, l: List(T), init: A, f: (T, A) -> A) -> A =
     let n = len(l);
     let go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
@@ -33,16 +34,140 @@ pub let fold(@T: Type, @A: Type, l: List(T), init: A, f: (T, A) -> A) -> A =
         end;
     go(n, 0, init, Eq/refl());
 
--- The bound is scrutinised as `len(l)` rather than through a `let`-bound alias, for the reason `Map/bit` states: a refinement records the term it scrutinised, and `at` demands the bound spelled the way `Nat/Lt` states it.
 pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =
-    let go(i: Nat) -> Option(T) =
-        match i < len(l)
-        | true =>
-            let x = get(l, i);
-            match pred(x) | true => Option/some(x) | false => go(i + 1) end
-        | false => Option/none()
+    match l
+    | [] => Option/none()
+    | [h, ..t] => match pred(h) | true => Option/some(h) | false => find(t, pred) end
+    end;
+
+pub let find_index(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(Nat) =
+    let go(i: Nat, rest: List(T)) -> Option(Nat) =
+        match rest
+        | [] => Option/none()
+        | [h, ..t] => match pred(h) | true => Option/some(i) | false => go(i + 1, t) end
         end;
-    go(0);
+    go(0, l);
+
+pub let any(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
+    match l
+    | [] => false
+    | [h, ..t] => match pred(h) | true => true | false => any(t, pred) end
+    end;
+
+pub let all(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
+    match l
+    | [] => true
+    | [h, ..t] => match pred(h) | true => all(t, pred) | false => false end
+    end;
+
+pub let contains(@T: Type, use Eql(T), l: List(T), x: T) -> Bool =
+    any(l, (y) => y == x);
+
+pub let index_of(@T: Type, use Eql(T), l: List(T), x: T) -> Option(Nat) =
+    find_index(l, (y) => y == x);
+
+pub let last(@T: Type, l: List(T)) -> Option(T) =
+    match l
+    | [] => Option/none()
+    | [h, ..t] => match t | [] => Option/some(h) | _ => last(t) end
+    end;
+
+pub let take_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
+    match l
+    | [] => []
+    | [h, ..t] => match pred(h) | true => [h, ..take_while(t, pred)] | false => [] end
+    end;
+
+pub let drop_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
+    match l
+    | [] => []
+    | [h, ..t] => match pred(h) | true => drop_while(t, pred) | false => l end
+    end;
+
+pub let take(@T: Type, l: List(T), n: Nat) -> List(T) =
+    match n
+    | 0 => []
+    | k + 1 => match l | [] => [] | [h, ..t] => [h, ..take(t, k)] end
+    end;
+
+pub let zip(@A: Type, @B: Type, a: List(A), b: List(B)) -> List({A, B}) =
+    match a
+    | [] => []
+    | [x, ..xs] => match b | [] => [] | [y, ..ys] => [(x, y), ..zip(xs, ys)] end
+    end;
+
+pub let reverse(@T: Type, l: List(T)) -> List(T) =
+    fold(l, [], (x, acc) => [x, ..acc]);
+
+pub let filter(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
+    fold(l, [], (x, acc) => match pred(x) | true => [..acc, x] | false => acc end);
+
+pub let filter_map(@T: Type, @B: Type, l: List(T), f: (T) -> Option(B)) -> List(B) =
+    fold(l, [], (x, acc) => match f(x) | some(y) => [..acc, y] | none() => acc end);
+
+pub let partition(@T: Type, l: List(T), pred: (T) -> Bool) -> {List(T), List(T)} =
+    let empty: {List(T), List(T)} = ([], []);
+    fold(
+        l,
+        empty,
+        (x, (yes, no)) => match pred(x) | true => ([..yes, x], no) | false => (yes, [..no, x]) end);
+
+pub let unzip(@A: Type, @B: Type, l: List({A, B})) -> {List(A), List(B)} =
+    let empty: {List(A), List(B)} = ([], []);
+    fold(l, empty, ((x, y), (xs, ys)) => ([..xs, x], [..ys, y]));
+
+-- `lo` up to and excluding `hi`; empty when `hi` is not above `lo`. Structural on the count, so a type may mention it.
+pub let range(lo: Nat, hi: Nat) -> List(Nat) =
+    let go(k: Nat, i: Nat) -> List(Nat) = match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;
+    go(hi - lo, lo);
+
+pub let replicate(@T: Type, n: Nat, x: T) -> List(T) =
+    match n | 0 => [] | k + 1; acc => [x, ..acc] end;
+
+pub let concat_map(@T: Type, @B: Type, l: List(T), f: (T) -> List(B)) -> List(B) =
+    fold(l, [], (x, acc) => [..acc, ..f(x)]);
+
+pub let intersperse(@T: Type, l: List(T), sep: T) -> List(T) =
+    match l | [] => [] | [h, ..t] => [h, ..fold(t, [], (x, acc) => [..acc, sep, x])] end;
+
+-- Sequencing under any `Monad`, one function per container rather than a `Traversable` concept: the effects run in element order and the results are collected in it.
+pub let traverse(
+    @M: (Type) -> Type,
+    @T: Type,
+    @B: Type,
+    use Monad(M),
+    l: List(T),
+    f: (T) -> M(B),
+) -> M(List(B)) =
+    match l
+    | [] => Monad/pure([])
+    | [h, ..t] =>
+        let b = f(h)!;
+        let bs = traverse(t, f)!;
+        Monad/pure([b, ..bs])
+    end;
+
+pub let each(@M: (Type) -> Type, @T: Type, use Monad(M), l: List(T), f: (T) -> M({})) -> M({}) =
+    match l
+    | [] => Monad/pure(())
+    | [h, ..t] =>
+        let _ = f(h)!;
+        each(t, f)
+    end;
+
+-- Insertion before the elements equal to `x`, which is what keeps `sort_by` stable: the `; ih` right fold hands each element the sorted suffix of the elements after it, and placing it before its equals keeps the earlier element first.
+let insert_by(@T: Type, x: T, sorted: List(T), cmp: (T, T) -> Order) -> List(T) =
+    match sorted
+    | [] => [x]
+    | [h, ..t] => match cmp(x, h) | gt() => [h, ..insert_by(x, t, cmp)] | _ => [x, h, ..t] end
+    end;
+
+-- An insertion sort, written as the right fold so a later proof follows the recursion without the program changing; a merge sort carries fuel when a consumer wants the speed.
+pub let sort_by(@T: Type, l: List(T), cmp: (T, T) -> Order) -> List(T) =
+    match l | [] => [] | [h, ..t]; sorted => insert_by(h, sorted, cmp) end;
+
+pub let sort(@T: Type, use Ord(T), l: List(T)) -> List(T) =
+    sort_by(l, (a, b) => Ord/cmp(a, b));
 
 pub let balanced(@A: Type, n: Nat, empty: A, single: (Nat) -> A, combine: (A, A) -> A) -> A =
     let go(lo: Nat, hi: Nat) -> A =

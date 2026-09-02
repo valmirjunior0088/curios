@@ -270,3 +270,27 @@ fn a_parameter_without_a_draw_is_reported_at_its_declaration() {
         "the report does not point at the declaration: {error}"
     );
 }
+
+// The two properties that pin `List/sort` as a program: its output is sorted under an adjacent-pairs check, and it holds every element as many times as its input did. The certified sort is a later item with a consumer; these are what the program version owes.
+#[test]
+fn sort_is_sorted_and_preserves_every_count() {
+    assert_eq!(
+        run_tests_program(
+            r#"
+        use /std/{Nat, List, Bool, Str, Io, Test};
+        let is_sorted(l: List(Nat)) -> Bool =
+            match l
+            | [] => true
+            | [h, ..t] => match t | [] => true | [h2, ..t2] => h <= h2 && is_sorted(t) end
+            end;
+        let count(l: List(Nat), x: Nat) -> Nat = List/len(List/filter(l, (y: Nat) => y == x));
+        test sort_is_sorted(l: List(Nat)) =
+            Test/check(is_sorted(List/sort(l)));
+        test sort_preserves_counts(l: List(Nat), x: Nat) =
+            Test/check(count(List/sort(l), x) == count(l, x));
+        /std/print("ran\n")
+        "#
+        ),
+        b"/sort_is_sorted: passed\n/sort_preserves_counts: passed\n"
+    );
+}
