@@ -184,6 +184,8 @@ pub enum EntryTail {
     Tests,
     /// The same synthesized tail over the last mounted unit's registered tests — the library-under-test case, where the entry is an empty program and the subject is the scope's final unit.
     LastUnitTests,
+    /// The authored entrypoint kept, and the entry unit's test tail checked beside it in the same elaboration, then dropped: a diagnosis of both programs a unit compiles to, for the checking path alone — see [`curios_elab::Tail::Both`].
+    Both,
 }
 
 /// One registered test, as the runner reports it: the path that names it, and its body as written — sliced from the span the authored body carries, empty when no span survives (a unit restored from a store may carry none).
@@ -281,7 +283,7 @@ where
     // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; `type_: None` on the synthesized entry routes it into the `Io({})` expectation below like an authored tail without an annotation. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     let scheduled = match tail {
         EntryTail::Authored => Vec::new(),
-        EntryTail::Tests => scheduled_tests(&lowered.tests, &lowered.items),
+        EntryTail::Tests | EntryTail::Both => scheduled_tests(&lowered.tests, &lowered.items),
         EntryTail::LastUnitTests => match cores.last() {
             Some(core) => scheduled_tests(&core.tests, &core.items),
             None => Vec::new(),
@@ -291,6 +293,7 @@ where
     let elab_tail = match tail {
         EntryTail::Authored => Tail::Written,
         EntryTail::Tests | EntryTail::LastUnitTests => Tail::Tests(&scheduled),
+        EntryTail::Both => Tail::Both(&scheduled),
     };
 
     observe(Stage::Core(&lowered));
@@ -299,7 +302,7 @@ where
     //
     // `Io({})` is closed, which is what makes this a `Mode::Check` at all. Checking against `Io(?T)` would need a metavariable minted before the elaboration context exists, and that is why this contract used to be a post-hoc head test on the inferred type instead. Stating the unit payload removes the metavariable, and checking rather than inferring is what lets a tail spell itself `Io/pure(())` — the payload comes from the expectation exactly as it does under a written match motive.
     let written_annotation = match tail {
-        EntryTail::Authored => lowered
+        EntryTail::Authored | EntryTail::Both => lowered
             .entry
             .as_ref()
             .and_then(|entry| entry.type_.as_ref()),
@@ -343,17 +346,10 @@ pub fn check_entrypoint(
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: &RootSource,
+    tail: EntryTail,
 ) -> Result<curios_core::Module, CompileError> {
-    check_observed(
-        budget,
-        scope,
-        syntax,
-        entrypoint,
-        loader,
-        EntryTail::Authored,
-        &mut |_| {},
-    )
-    .map(|(module, _core_type, _foreigns, _records)| module.into_module())
+    check_observed(budget, scope, syntax, entrypoint, loader, tail, &mut |_| {})
+        .map(|(module, _core_type, _foreigns, _records)| module.into_module())
 }
 
 /// [`check_entrypoint`] with the stages it passes observed, and the entry's type and foreign rows kept for the lowering that follows it.

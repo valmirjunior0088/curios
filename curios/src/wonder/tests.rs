@@ -80,6 +80,58 @@ fn a_rung_of_a_program_that_compiles_carries_no_diagnostics() {
 }
 
 #[test]
+fn a_parameterized_test_the_roster_cannot_draw_is_reported_through_the_test_program() {
+    // The written program compiles — a test body is an item like any other — and the fault is in the test program's tail, where the `Property` goal is raised: the answer is that goal, at the declaration, exactly as `curios test` reports it. A drawable twin reports nothing, since its test program compiles too.
+    let diagnostics = of(r#"
+use /std/{Nat, Test};
+test bounded(n: Nat, p: Nat/Lt(n, 100)) =
+    Test/check(n < 100);
+/std/print("ran\n")
+"#);
+    assert_eq!(diagnostics.len(), 1);
+    assert!(matches!(diagnostics[0].severity, Severity::Error));
+    let rendered = diagnostics[0].render();
+    assert!(
+        rendered.contains("Property") && rendered.contains("Test/check(n < 100)"),
+        "{rendered}"
+    );
+
+    let diagnostics = of(r#"
+use /std/{Nat, Test};
+test small(n: Nat) =
+    Test/check(n < 100);
+/std/print("ran\n")
+"#);
+    assert!(diagnostics.is_empty());
+}
+
+#[test]
+fn a_library_test_the_roster_cannot_draw_is_reported_through_its_test_program() {
+    // A library has no written program: it is checked through the `()` entry under the last unit's tests tail, the way `curios test` compiles it, so the goal lands on the declaration in `lib.crs`.
+    let root = mounted_project("library-test-program");
+    write(
+        &root,
+        "b/lib.crs",
+        "use /std/{Nat, Test};\n\ntest bounded(n: Nat, p: Nat/Lt(n, 100)) =\n    Test/check(n < 100);\n",
+    );
+    let diagnostics = diagnostics(
+        DEFAULT_STEP_BUDGET,
+        Subject::Unit {
+            units: mounted(&root),
+        },
+        &Overlay::default(),
+        None,
+    );
+    assert_eq!(diagnostics.len(), 1);
+    let rendered = diagnostics[0].render();
+    assert!(
+        rendered.contains("Property") && rendered.contains("lib.crs"),
+        "{rendered}"
+    );
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
 fn a_program_that_compiles_reports_nothing() {
     assert!(of("/std/print(\"hi\\n\")").is_empty());
 }

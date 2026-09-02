@@ -86,13 +86,14 @@ pub fn check_with_units<P>(
     entrypoint: &curios_text::Entrypoint,
     loader: &curios_text::RootSource,
     cache: Option<&dyn Cache>,
+    tail: EntryTail,
     progress: P,
 ) -> Result<curios_core::Module, CompileError>
 where
     P: FnMut(Progress<'_>),
 {
     fold_with_units(budget, units, cache, progress, |scope| {
-        check_entrypoint(budget, scope, &SYNTAX, entrypoint, loader)
+        check_entrypoint(budget, scope, &SYNTAX, entrypoint, loader, tail)
     })
 }
 

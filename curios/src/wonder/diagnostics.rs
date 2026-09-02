@@ -3,7 +3,8 @@
 use {
     super::{Diagnostic, Severity},
     crate::Verdicts,
-    curios_pipeline::{Cache, CompileError, check_units_with_prelude, check_with_units},
+    curios_package::LIBRARY,
+    curios_pipeline::{Cache, CompileError, EntryTail, check_with_units},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
     std::path::PathBuf,
@@ -32,6 +33,8 @@ pub enum Origin {
 
 /// Every diagnostic and goal `subject` reports when lowered, elaborated and judged against the prelude — empty when it compiles. `overlay` is consulted before the disk for every file read, the entry included.
 ///
+/// **A unit that declares tests compiles to two programs, and both are asked.** The test program is the unit's items under the synthesized `Test/main` tail, and that tail is where a parameterized test's `Property` goal is raised — a parameter nothing draws is a fault `curios test` reports and `curios run` never meets, so a question about the unit that checked only the written program would be silent about it. A program is elaborated once under both tails ([`EntryTail::Both`]): the written entry as the module's, the test tail checked beside it and dropped. A library has no written program, so it is checked through the same `()` entry `curios test` uses, scheduling the last unit's tests — the fold that compiles the units is one and the same, and a unit with no tests gets `Test/main([])`, which costs nothing.
+///
 /// **One failure stops the compilation, as it does on the compile path.** A parse failure yields one diagnostic and nothing after it; a refused declaration yields its own and nothing after it; only a goal batch yields several, one per `?`. Per-item recovery would be a change to three loops on the shared compile path, and until it lands this is the answer on a broken file: what stopped the compiler, and where.
 ///
 /// `cache` is consulted for units already built and never written — see the `wonder` module documentation.
@@ -47,7 +50,21 @@ pub fn diagnostics(
     let checked = match subject {
         Subject::Unit { units } => {
             let units = overlaid(units, overlay);
-            check_units_with_prelude(budget, &units, cache, |_| {})
+            // `()` is the smallest text an entrypoint parses, and the tests tail replaces it before anything checks it — the subject is the scope's final unit, exactly as `curios test` compiles a library.
+            let (entrypoint, loader, _source) = match Entrypoint::supplied(LIBRARY, "()") {
+                Ok(opened) => opened,
+                Err(error) => return of_error(CompileError::Failure(vec![error.report()])),
+            };
+            check_with_units(
+                budget,
+                &units,
+                &entrypoint,
+                &loader,
+                cache,
+                EntryTail::LastUnitTests,
+                |_| {},
+            )
+            .map(|_module| ())
         }
         Subject::Entry { units, origin } => {
             let (entrypoint, loader) = match open(origin, overlay) {
@@ -56,7 +73,16 @@ pub fn diagnostics(
             };
             let units = overlaid(units, overlay);
 
-            check_with_units(budget, &units, &entrypoint, &loader, cache, |_| {}).map(|_module| ())
+            check_with_units(
+                budget,
+                &units,
+                &entrypoint,
+                &loader,
+                cache,
+                EntryTail::Both,
+                |_| {},
+            )
+            .map(|_module| ())
         }
     };
 

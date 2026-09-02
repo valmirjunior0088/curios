@@ -11,9 +11,10 @@ use {
     curios_analysis::group_totality,
     curios_core::{
         Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType, Global,
-        InductDecl, InductParam, Item, Level, Module, RecItem, SelfReference, StructDecl, Subterm,
-        Telescope, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
+        InductDecl, InductParam, Intrinsic, Item, Level, Module, RecItem, SelfReference,
+        StructDecl, Subterm, Telescope, Term, Totality, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
+        stamp_declaration_instance, universe_metas,
     },
     curios_utilities::{Qualifier, grown},
     std::{
@@ -1248,7 +1249,7 @@ fn elaborate_module_suffix(
     // A test program's tail is synthesized here rather than handed in: it is built over the elaborated definitions the items just produced, in the scope they were defined into, so the discharge it chooses for each test can consult them. The unit's own written entry — the ordinary program — is not part of a test program and is neither checked nor kept.
     let synthesized;
     let entry = match tail {
-        Tail::Written => module.entry.as_ref(),
+        Tail::Written | Tail::Both(_) => module.entry.as_ref(),
         Tail::Tests(scheduled) => {
             synthesized = Entrypoint {
                 body: test_program_tail(context, scheduled),
@@ -1286,6 +1287,15 @@ fn elaborate_module_suffix(
         }
         None => (None, None),
     };
+    // The test program beside the written one: its tail is built over the same defined items and checked against the contract every entry meets, `Io({})`, on a budget of its own, and what it elaborated to is dropped — the errors and goals it raised are the point, and a parameterized test's `Property` goal is raised nowhere else.
+    if let Tail::Both(scheduled) = tail {
+        context.restore_budget();
+        let synthesized = test_program_tail(context, scheduled);
+        context.restore_budget();
+        let contract = Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()));
+        let contract = check_is_sort(context, &contract)?.0;
+        elaborate(context, &synthesized, Mode::Check(contract))?;
+    }
     // The whole program has elaborated: a witness goal still deferred will never find a table entry — report it now.
     finish_deferred_witnesses(context)?;
     context.drain_parked()?;
@@ -1473,13 +1483,15 @@ fn elaborate_and_zonk_module_within(
 /// Sound because a scope is unit-independent: its items never see this unit's code, and — since top-level definitions are excluded from a metavariable's Γ (`Context::identity_snapshot`) — an item elaborates against the identical local context it would with no scope at all, so the solutions (and the zonked output) are identical.
 ///
 /// **The returned module holds this unit's items and no one else's.** That is a contract rather than an artifact of how the elaboration happens to be written: [`crate::erase_unit`] erases a unit *onto* what its scope already erased, and re-deriving the standard library on every compilation is exactly what carrying it here would cost. The one quantity that combines is the binder floor, which is a bound rather than a set and is taken as the maximum of the scope's and this unit's.
-/// Which final term a unit's elaboration checks: the entry the module carries, or a test program's tail synthesized over the unit's registered tests once its items are defined. A policy rather than an optional entry, because the tail cannot be built before the items it schedules have elaborated and must not be built anywhere else.
+/// Which final term a unit's elaboration checks: the entry the module carries, a test program's tail synthesized over the unit's registered tests once its items are defined, or both. A policy rather than an optional entry, because the tail cannot be built before the items it schedules have elaborated and must not be built anywhere else.
 #[derive(Debug, Clone, Copy)]
 pub enum Tail<'a> {
     /// The module's own [`Entrypoint`], exactly as lowered — or none, for a library.
     Written,
     /// `Test/main([...])` over these tests, replacing whatever entry the module carries; a unit with no tests gets `Test/main([])`.
     Tests(&'a [ScheduledTest]),
+    /// The written entry, kept as the module's, and the test tail checked beside it against `Io({})` and then dropped: what a question about a unit that declares tests is answered by, since the two programs share every item and differ only in their tails. The dropped tail reaches neither the kernel nor erasure — a diagnosis, not a build — which is why nothing that compiles takes this policy.
+    Both(&'a [ScheduledTest]),
 }
 
 pub fn elaborate_and_zonk_unit(

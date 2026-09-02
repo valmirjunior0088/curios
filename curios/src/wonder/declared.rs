@@ -4,7 +4,7 @@ use {
     super::{DeclaredTest, ReadOnly, Subject, open},
     crate::Verdicts,
     curios_pipeline::{
-        Cache, CompileError, check_with_units, declared_test_paths, unit_test_paths,
+        Cache, CompileError, EntryTail, check_with_units, declared_test_paths, unit_test_paths,
     },
     curios_text::Overlay,
 };
@@ -35,7 +35,15 @@ pub fn declared_tests(
                 )
             })?;
             let units = super::overlaid(units, overlay);
-            let module = check_with_units(budget, &units, &entrypoint, &loader, cache, |_| {})?;
+            let module = check_with_units(
+                budget,
+                &units,
+                &entrypoint,
+                &loader,
+                cache,
+                EntryTail::Authored,
+                |_| {},
+            )?;
 
             declared_test_paths(&module)
         }
