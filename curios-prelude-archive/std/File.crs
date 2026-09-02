@@ -1,4 +1,5 @@
-use /std/{Bytes, Nat, Str, Handle, Result, Async, Io, stream};
+-- A file the program opened: its handle behind a private representation, the mode it was opened in, and the operations a program wants over it. Every operation here is `Io`, because a regular file never waits on a peer — the disk answers it — so a read or a write is one synchronous row, and what can fail is `Try` over `Io`. The stream witnesses lift the same operations into a fiber, where a `File` reads and writes like any other stream. `with` is the bracket a file lives inside; `with_async` is the same bracket registered with the scheduler, so a cancelled task closes what it opened.
+use /std/{Bytes, Nat, Path, Handle, Result, Try, Async, Io, True, stream};
 
 pub struct File: Type {
     Handle,
@@ -17,45 +18,86 @@ pub let of_mode(mode: Mode) -> Nat =
     | append() => /sys/open_mode/append
     end;
 
-pub let read(f: File, n: Nat) -> Async(stream/Chunk) =
-    Async/raw/read(f.0, n);
-
-pub let write(f: File, b: Bytes) -> Async(Result(Io/Error, {})) =
-    Async/raw/write(f.0, b);
-
-pub let open(path: Str, mode: Mode) -> Async(Result(Io/Error, File)) =
-    let r = /sys/file/open(Str/to_bytes(path), of_mode(mode))!;
+pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
+    let r = /sys/file/open(Path/to_bytes(path), of_mode(mode))!;
     match Io/Error/error_of(r.status)
-    | some(e) => Async/pure(Result/failure(e))
-    | none() =>
-        let _ = Async/acquire(r.handle, /sys/Handle/close(r.handle))!;
-        Async/pure(Result/success(File { r.handle }))
+    | some(e) => Try/raise(e)
+    | none() => Try/pure(File { r.handle })
     end;
 
-pub let close(f: File) -> Async({}) =
-    Async/release(f.0);
+pub let close(f: File) -> Io({}) =
+    /sys/Handle/close(f.0);
 
+-- Up to `n` bytes, synchronously: the disk answers a regular file at once.
+pub let read(f: File, n: Nat) -> Io(stream/Chunk) =
+    let r = /sys/Handle/read(f.0, n)!;
+    Io/pure(stream/of_status(r.status, r.bytes));
+
+-- The whole of `b`, a short write resent.
+pub let write(f: File, b: Bytes) -> Try(Io, Io/Error, {}) =
+    let r = /sys/Handle/write(f.0, b)!;
+    match Io/Error/error_of(r.status)
+    | some(e) => Try/raise(e)
+    | none() =>
+        match r.written < Bytes/len(b)
+        | true =>
+            write(
+                f,
+                Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
+        | false => Try/pure(())
+        end
+    end;
+
+satisfy stream/Read(File) {
+    read(f, n) = Async/lift(read(f, n)),
+}
+
+satisfy stream/Write(File) {
+    write(f, b) = Async/lift(Try/run(write(f, b))),
+}
+
+-- `body` over an open file, closed whichever way the body ends; the body's own failure is the answer after the close.
 pub let with(
     @A: Type,
-    path: Str,
+    path: Path,
     mode: Mode,
-    body: (File) -> Async(A),
-) -> Async(Result(Io/Error, A)) =
-    let opened = open(path, mode)!;
-    match opened
-    | success(f) =>
-        let a = body(f)!;
-        let _ = close(f)!;
-        Async/pure(Result/success(a))
-    | failure(e) => Async/pure(Result/failure(e))
-    end;
+    body: (File) -> Try(Io, Io/Error, A),
+) -> Try(Io, Io/Error, A) =
+    let f = open(path, mode)!;
+    let a =
+        Try/rescue(
+            body(f),
+            (e) =>
+                let _ = close(f)!;
+                Try/raise(e))!;
+    let _ = close(f)!;
+    Try/pure(a);
 
-let drain(f: File) -> Async(Result(Io/Error, Bytes)) =
-    Async/drain((n) => read(f, n));
+-- The same bracket inside a fiber, registered with the scheduler: a cancelled task closes what it opened, and the body may park.
+pub let with_async(
+    @A: Type,
+    path: Path,
+    mode: Mode,
+    body: (File) -> Try(Async, Io/Error, A),
+) -> Try(Async, Io/Error, A) =
+    let f = open(path, mode)!;
+    let outcome = Async/using(f.0, close(f), Try/run(body(f)))!;
+    let a = outcome!;
+    Try/pure(a);
 
-pub let read_all(path: Str) -> Async(Result(Io/Error, Bytes)) =
-    Async/map(with(path, Mode/read(), (f) => drain(f)), (r) => Result/flatten(r));
+let read_to_end(f: File) -> Try(Io, Io/Error, Bytes) =
+    let go(acc: Bytes) -> Try(Io, Io/Error, Bytes) =
+        let c = read(f, 4096)!;
+        match c
+        | chunk(b) => go(x[..acc, ..b])
+        | eof() => Try/pure(acc)
+        | error(e) => Try/raise(e)
+        end;
+    go(x[]);
+
+pub let read_all(path: Path) -> Try(Io, Io/Error, Bytes) =
+    with(path, Mode/read(), read_to_end);
 
 -- The whole file in one call, the twin of `read_all`: created if absent, replaced if present.
-pub let write_all(path: Str, b: Bytes) -> Async(Result(Io/Error, {})) =
-    Async/map(with(path, Mode/write(), (f) => write(f, b)), (r) => Result/flatten(r));
+pub let write_all(path: Path, b: Bytes) -> Try(Io, Io/Error, {}) =
+    with(path, Mode/write(), (f) => write(f, b));

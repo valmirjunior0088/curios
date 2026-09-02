@@ -105,14 +105,10 @@ fn struct_arm_privacy_is_enforced() {
 #[test]
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
-        use /std/{File, Handle, Async};
-        match Async/block_on(File/with("log.txt", File/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))!
-        | failure(_) => /std/print("deadlock")
-        | success(outcome) =>
-            match outcome
-            | success(_) => /std/print("ok")
-            | failure(_) => /std/print("error")
-            end
+        use /std/{File, Path, Try};
+        match Try/run(File/with(Path/of_str("log.txt"), File/Mode/append(), (f) => File/write(f, /std/Str/to_bytes("x"))))!
+        | success(_) => /std/print("ok")
+        | failure(_) => /std/print("error")
         end
         "#;
 

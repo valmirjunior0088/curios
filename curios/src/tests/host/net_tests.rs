@@ -102,11 +102,11 @@ fn https_perform_reaches_a_public_host_over_the_real_host() {
     let path = report.to_str().expect("a UTF-8 temporary path");
     let source = format!(
         r#"
-        use /std/{{Str, Nat, Result, Async, Io, File, http}};
+        use /std/{{Str, Nat, Result, Try, Async, Io, Path, File, http}};
         let program: Async({{}}) =
             let r = http/perform(http/get_tls("example.com", 443, "/"))!;
             let line = match r | success(resp) => Nat/to_str(resp.status.code) | failure(_) => "failed" end;
-            let _ = File/write_all("{path}", Str/to_bytes(line))!;
+            let _ = Try/run(File/write_all(Path/of_str("{path}"), Str/to_bytes(line)))!;
             Async/pure(());
         match Async/block_on(program)!
         | failure(_) => /std/print("deadlock")

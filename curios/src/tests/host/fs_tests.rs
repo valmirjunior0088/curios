@@ -16,7 +16,7 @@ fn seeded() -> (MockHost, MockIo) {
 fn program(body: &str) -> String {
     format!(
         r#"
-        use /std/{{Str, Bytes, Nat, Bool, List, Option, Result, Show, Async, Io, Handle, File, fs}};
+        use /std/{{Str, Bytes, Nat, Bool, List, Option, Result, Show, Try, Async, Io, Handle, Path, File, fs}};
         let show_bool(r: Result(Io/Error, Bool)) -> Str =
             match r | success(b) => Bool/to_str(b) | failure(e) => Show/show(e) end;
         let show_unit(r: Result(Io/Error, {{}})) -> Str =
@@ -74,8 +74,8 @@ fn directories_are_made_moved_and_removed_whole() {
         r#"
             let made_all = fs/create_dir_all("x/y/z")!;
             let made = fs/is_dir("x/y/z")!;
-            let written = File/write_all("x/y/z/f.txt", Str/to_bytes("hi"))!;
-            let back = File/read_all("x/y/z/f.txt")!;
+            let written = Try/run(File/write_all(Path/of_str("x/y/z/f.txt"), Str/to_bytes("hi")))!;
+            let back = Try/run(File/read_all(Path/of_str("x/y/z/f.txt")))!;
             let renamed = fs/rename("x/y", "x/w")!;
             let moved = fs/is_file("x/w/z/f.txt")!;
             let removed = fs/remove_all("x")!;
