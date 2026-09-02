@@ -109,6 +109,9 @@ pub use Vec/{let Vec};
 pub mod Map;
 pub use Map/{let Map};
 
+pub mod Set;
+pub use Set/{let Set};
+
 pub mod Eq;
 pub use Eq/{let Eq};
 

@@ -1,0 +1,43 @@
+-- A set of keys, stored as a `Map` whose value is the key itself: `insert(s, k)` is `Map/insert(m, k, k)`, so `to_list` and `fold` hand the typed elements back through `Map/values` with no decoder and no new law, where a set over `Map({})` would hand back the `Bytes` the trie is keyed on. The surface mirrors `Map`'s with the value elided, and set algebra exists exactly where `Map` has the counterpart — `union`, and nothing else until a `Map` consumer wants more.
+use /std/{Nat, Bool, List, Map, Eql, Show};
+use /std/Map/{Key};
+
+pub struct Set(K: Type): Type {
+    map: Map(K),
+}
+
+pub let empty(@K: Type) -> Set(K) =
+    Set { map = Map/empty() };
+
+pub let len(@K: Type, s: Set(K)) -> Nat =
+    Map/len(s.map);
+
+pub let has(@K: Type, use Key(K), s: Set(K), k: K) -> Bool =
+    Map/has(s.map, k);
+
+pub let insert(@K: Type, use Key(K), s: Set(K), k: K) -> Set(K) =
+    Set { map = Map/insert(s.map, k, k) };
+
+pub let remove(@K: Type, use Key(K), s: Set(K), k: K) -> Set(K) =
+    Set { map = Map/remove(s.map, k) };
+
+pub let fold(@K: Type, @A: Type, s: Set(K), init: A, f: (K, A) -> A) -> A =
+    Map/fold(s.map, init, (_, k, acc) => f(k, acc));
+
+pub let to_list(@K: Type, s: Set(K)) -> List(K) =
+    Map/values(s.map);
+
+pub let of(@K: Type, use Key(K), l: List(K)) -> Set(K) =
+    List/fold(l, empty(), (k, acc) => insert(acc, k));
+
+pub let union(@K: Type, a: Set(K), b: Set(K)) -> Set(K) =
+    Set { map = Map/union(a.map, b.map) };
+
+satisfy (@K: Type, use Eql(K)) => Eql(Set(K)) {
+    eql(a, b) = to_list(a) == to_list(b),
+    neq(a, b) = to_list(a) != to_list(b),
+}
+
+satisfy (@K: Type, use Show(K)) => Show(Set(K)) {
+    show(s) = Show/show(to_list(s)),
+}

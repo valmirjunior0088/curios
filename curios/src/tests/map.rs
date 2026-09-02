@@ -1,3 +1,5 @@
+//! `Map`, the crit-bit trie over `Key`-encoded bytes, and `Set` over it: lookups, the canonical shape, the rewriting functions, and the `Key` law.
+
 use super::run;
 
 #[test]
@@ -131,4 +133,45 @@ fn a_colliding_key_witness_is_rejected() {
 
     let message = super::error(source);
     assert!(message.contains("type mismatch"), "{message}");
+}
+
+// `update` is the one rewriting entry point: the function sees the current value or `none`, and answers the value to keep or `none` to remove. `map` and `filter` walk the entries, `union` is right-biased, and `get_or` reads with a default; every `Show` spells the keys as the `Bytes` the trie holds.
+#[test]
+fn update_map_filter_union_and_get_or_rewrite_entries() {
+    let source = r#"
+        use /std/{Str, Nat, Map, Option, Show, Bool, Bytes};
+        let m: Map(Nat) = Map/of([("a", 1), ("b", 2), ("c", 3)]);
+        let bumped = Map/update(m, "a", (o: Option(Nat)) => Option/map(o, (n: Nat) => n + 10));
+        let dropped = Map/update(m, "b", (o: Option(Nat)) => Option/none());
+        let added = Map/update(m, "d", (o: Option(Nat)) => Option/some(4));
+        let doubled = Map/map(m, (n: Nat) => n * 2);
+        let odd = Map/filter(m, (k: Bytes, n: Nat) => Bool/not(Nat/is_even(n)));
+        let both = Map/union(Map/of([("a", 1), ("x", 9)]), Map/of([("a", 100), ("y", 8)]));
+        /std/print(Str/join(" ", [
+            Show/show(bumped), Nat/to_str(Map/len(dropped)), Show/show(added), Show/show(doubled),
+            Show/show(odd), Show/show(both), Nat/to_str(Map/get_or(m, "z", 0)), Nat/to_str(Map/get_or(m, "c", 0))
+        ]))
+        "#;
+    assert_eq!(
+        run(source),
+        b"{61: 11, 62: 2, 63: 3} 2 {61: 1, 62: 2, 63: 3, 64: 4} {61: 2, 62: 4, 63: 6} {61: 1, 63: 3} {61: 100, 78: 9, 79: 8} 0 3"
+    );
+}
+
+// A `Set(K)` is a `Map(K)` storing each key as its own value, so `to_list` hands the elements back typed — `List(Str)` here, joined without a decoder — where a set over `Map({})` would hand back the trie's `Bytes`.
+#[test]
+fn a_set_stores_its_keys_typed_and_unions() {
+    let source = r#"
+        use /std/{Str, Set, List, Nat, Show, Bool};
+        let s = Set/of(["b", "a", "c", "a"]);
+        let t = Set/insert(Set/of(["d"]), "a");
+        let u = Set/union(s, t);
+        /std/print(Str/join(",", [
+            Nat/to_str(Set/len(s)), Bool/to_str(Set/has(s, "a")), Bool/to_str(Set/has(s, "z")),
+            Str/join("", Set/to_list(Set/remove(s, "b"))), Str/join("", Set/to_list(u)),
+            Show/show(u), Bool/to_str(u == Set/of(["a", "b", "c", "d"])),
+            Nat/to_str(Set/fold(Set/of(["x", "yy", "zzz"]), 0, (x: Str, acc: Nat) => Str/len(x) + acc))
+        ]))
+        "#;
+    assert_eq!(run(source), b"3,true,false,ac,abcd,[a, b, c, d],true,6");
 }

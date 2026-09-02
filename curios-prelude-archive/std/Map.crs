@@ -193,6 +193,41 @@ pub let values(@V: Type, m: Map(V)) -> List(V) =
 pub let of(@K: Type, @V: Type, use Key(K), l: List({K, V})) -> Map(V) =
     List/fold(l, empty(), ((k, v), acc) => insert(acc, k, v));
 
+pub let get_or(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, default: V) -> V =
+    Option/unwrap_or(get(m, key), default);
+
+-- The one rewriting entry point: `f` sees the current value or `none`, and answers the value to keep or `none` to remove.
+pub let update(
+    @K: Type,
+    @V: Type,
+    use Key(K),
+    m: Map(V),
+    key: K,
+    f: (Option(V)) -> Option(V),
+) -> Map(V) =
+    match f(get(m, key)) | some(v) => insert(m, key, v) | none() => remove(m, key) end;
+
+-- Over the values alone: the keys are the trie's and stay where they are, so the shape is rebuilt node for node.
+let map_node(@V: Type, @W: Type, t: Node(V), f: (V) -> W) -> Node(W) =
+    match t
+    | leaf(k, v) => Node/leaf(k, f(v))
+    | fork(c, z, o) => Node/fork(c, map_node(z, f), map_node(o, f))
+    end;
+
+pub let map(@V: Type, @W: Type, m: Map(V), f: (V) -> W) -> Map(W) =
+    Map { size = m.size, root = Option/map(m.root, (n: Node(V)) => map_node(n, f)) };
+
+-- Rebuilt entry by entry, since a removed leaf collapses its fork and a filtered shape is easier to rebuild than to repair.
+pub let filter(@V: Type, m: Map(V), pred: (Bytes, V) -> Bool) -> Map(V) =
+    fold(
+        m,
+        empty(),
+        (k, v, acc) => match pred(k, v) | true => insert(acc, k, v) | false => acc end);
+
+-- Right-biased: an entry of `b` replaces `a`'s under the same key.
+pub let union(@V: Type, a: Map(V), b: Map(V)) -> Map(V) =
+    fold(b, a, (k, v, acc) => insert(acc, k, v));
+
 -- Entry lists compared pairwise through the value witness alone. Going through `Eql(List({Bytes, V}))` instantiates the tuple witness at a second universe instance of `V`, which the kernel refuses to identify with the premise's; the direct walk asks the premise itself.
 let same_entries(@V: Type, use Eql(V), xs: List({Bytes, V}), ys: List({Bytes, V})) -> Bool =
     match xs
