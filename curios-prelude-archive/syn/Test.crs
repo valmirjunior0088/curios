@@ -1,5 +1,4 @@
 use /std/{Nat, Bool, Str, Bytes, List, Option, Io, Eq, Equal, Spell, True, False, print, proc};
-use /std/Test/{Seed, Property};
 
 pub induct Verdict: pub Type
 | passed()
@@ -157,19 +156,19 @@ let judge(t: Test) -> Verdict =
     | action(_) => Verdict/failed("an action cannot be probed")
     end;
 
-satisfy Property(Test) {
+satisfy /std/Test/Property(Test) {
     probe(t, seed, size) = judge(t),
     extent() = Option/some(1),
     exhaust(t) = [judge(t)],
 }
 
 -- The default run: a fixed case count from a fixed seed, so a property's verdict is a function of the sources alone. Each is one number, in one place.
-let default_seed: Seed =
-    Seed/make(20260831);
+let default_seed: /std/Test/Seed =
+    /std/Test/Seed/make(20260831);
 
 let default_cases: Nat =
     100;
 
 -- A property closed into a description: `prop` is anything `Property` judges — a nullary `Test`, or a function whose arguments the roster draws — and the tail of a unit compiled as its test program is what applies this to every parameterized test declaration. Public rather than emission-only, so a property is also built and combined by hand.
-pub let property(@A: Type, use Property(A), prop: A) -> Test =
-    Test/verdict(Property/run(prop, default_seed, default_cases));
+pub let property(@A: Type, use /std/Test/Property(A), prop: A) -> Test =
+    Test/verdict(/std/Test/Property/run(prop, default_seed, default_cases));

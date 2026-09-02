@@ -2,8 +2,7 @@ pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr,
     to_int, to_flt, to_byte};
 use /std/{Str, Option, Char, Bool, Ordering, Equal, Compare, Add, Subtract, Multiply, Divide,
-    Remainder, Show, Spell, Ordered};
-use /std/Test/{Draw, Seed};
+    Remainder, Show, Spell, Ordered, Test};
 
 let single_digit(d: Nat) -> Str =
     match d
@@ -127,10 +126,10 @@ satisfy Ordered(Nat) {
 }
 
 -- A number in `0 ..= size`: the size is the bound, so the first cases are the smallest numbers.
-satisfy Draw(Nat) {
+satisfy Test/Draw(Nat) {
     all() = Option/none(),
     draw(seed, size) =
-        let (n, rest) = Seed/next(seed);
+        let (n, rest) = Test/Seed/next(seed);
         (n % (size + 1), rest),
 }
 

@@ -1,5 +1,4 @@
-use /std/{Bool, Eq, Equal, False, Show, Spell, Option, List};
-use /std/Test/{Draw, Seed};
+use /std/{Bool, Eq, Equal, False, Show, Spell, Option, List, Test};
 use /std/Bool/{false_neq_true};
 
 pub induct Ordering: pub Type
@@ -58,9 +57,9 @@ satisfy Show(Ordering) {
 
 satisfy Spell(Ordering);
 
-satisfy Draw(Ordering) {
+satisfy Test/Draw(Ordering) {
     all() = Option/some([Ordering/lt(), Ordering/eq(), Ordering/gt()]),
     draw(seed, size) =
-        let (n, rest) = Seed/next(seed);
+        let (n, rest) = Test/Seed/next(seed);
         (match n % 3 | 0 => Ordering/lt() | 1 => Ordering/eq() | _ => Ordering/gt() end, rest),
 }

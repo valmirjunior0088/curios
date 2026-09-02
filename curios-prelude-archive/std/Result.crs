@@ -1,5 +1,4 @@
-use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered, List};
-use /std/Test/{Draw, Seed};
+use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered, List, Test};
 
 pub induct Result(A: Type, E: Type): pub Type
 | success(A)
@@ -78,25 +77,25 @@ satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Ordered(Result(A
     cmp = cmp,
 }
 
-satisfy (@A: Type, @E: Type, use Draw(A), use Draw(E)) => Draw(Result(A, E)) {
+satisfy (@A: Type, @E: Type, use Test/Draw(A), use Test/Draw(E)) => Test/Draw(Result(A, E)) {
     all() =
         Option/bind(
-            Draw/all(@A)(),
+            Test/Draw/all(@A)(),
             (xs) =>
                 Option/map(
-                    Draw/all(@E)(),
+                    Test/Draw/all(@E)(),
                     (es) =>
                         [
                             ..List/map(es, (e) => Result/failure(e)),
                             ..List/map(xs, (a) => Result/success(a))])),
     draw(seed, size) =
-        let (n, after) = Seed/next(seed);
+        let (n, after) = Test/Seed/next(seed);
         match n % 4 == 0
         | true =>
-            let (failure, rest) = Draw/draw(@E, after, size);
+            let (failure, rest) = Test/Draw/draw(@E, after, size);
             (Result/failure(failure), rest)
         | false =>
-            let (value, rest) = Draw/draw(@A, after, size);
+            let (value, rest) = Test/Draw/draw(@A, after, size);
             (Result/success(value), rest)
         end,
 }

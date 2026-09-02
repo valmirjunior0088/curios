@@ -1,6 +1,5 @@
 pub use /sys/Bits/{let Bits, get, len, eql, slice};
-use /std/{List, Nat, Bool, Option, Eq, Str, Equal, Show, Spell};
-use /std/Test/{Draw, Seed};
+use /std/{List, Nat, Bool, Option, Eq, Str, Equal, Show, Spell, Test};
 
 pub let try_get(b: Bits, i: Nat) -> Option(Bool) =
     match i < len(b) | true => Option/some(get(b, i)) | false => Option/none() end;
@@ -37,17 +36,17 @@ satisfy Spell(Bits) {
         Str/concat("b[", Str/concat(Str/join(", ", parts), "]")),
 }
 
-let bits(seed: Seed, count: Nat) -> {Bits, Seed} =
+let bits(seed: Test/Seed, count: Nat) -> {Bits, Test/Seed} =
     match count
     | 0 => (b[], seed)
     | more + 1; (acc, after) =>
-        let (bit, rest) = Draw/draw(@Bool, after, 0);
+        let (bit, rest) = Test/Draw/draw(@Bool, after, 0);
         (b[..acc, bit], rest)
     end;
 
-satisfy Draw(Bits) {
+satisfy Test/Draw(Bits) {
     all() = Option/none(),
     draw(seed, size) =
-        let (count, after) = Draw/draw(@Nat, seed, size);
+        let (count, after) = Test/Draw/draw(@Nat, seed, size);
         bits(after, count),
 }

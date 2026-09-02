@@ -2,8 +2,7 @@ pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /syn/{True, False};
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Equal, Show, Spell, Ordering, Compare,
-    Ordered};
-use /std/Test/{Draw, Seed};
+    Ordered, Test};
 
 -- The scan-witness machinery every operation below rests on.
 pub mod utf8;
@@ -328,18 +327,18 @@ satisfy Ordered(Str) {
     cmp = cmp,
 }
 
-let chars(seed: Seed, size: Nat, count: Nat) -> {Str, Seed} =
+let chars(seed: Test/Seed, size: Nat, count: Nat) -> {Str, Test/Seed} =
     match count
     | 0 => ("", seed)
     | more + 1; (acc, after) =>
-        let (c, rest) = Draw/draw(@Char, after, size);
+        let (c, rest) = Test/Draw/draw(@Char, after, size);
         (concat(acc, of_char(c)), rest)
     end;
 
 -- At most `size` characters, each drawn as a `Char`.
-satisfy Draw(Str) {
+satisfy Test/Draw(Str) {
     all() = Option/none(),
     draw(seed, size) =
-        let (count, after) = Draw/draw(@Nat, seed, size);
+        let (count, after) = Test/Draw/draw(@Nat, seed, size);
         chars(after, size, count),
 }

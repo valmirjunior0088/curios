@@ -2,8 +2,7 @@
 pub use /syn/{Char};
 pub use /syn/Char/{Below, InRange, Scalar};
 use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, True, Str, Equal, Compare, Show, Spell,
-    Ordered};
-use /std/Test/{Draw, Seed};
+    Ordered, Test};
 
 pub let to_nat(c: Char) -> Nat =
     c.code;
@@ -150,9 +149,9 @@ satisfy Ordered(Char) {
 }
 
 -- Printable ASCII, so a drawn character spells as itself and a drawn string reads as text. `of_nat` cannot refuse a code below 128, so the fallback is never reached.
-satisfy Draw(Char) {
+satisfy Test/Draw(Char) {
     all() = Option/none(),
     draw(seed, size) =
-        let (n, rest) = Seed/next(seed);
+        let (n, rest) = Test/Seed/next(seed);
         (Option/unwrap_or(of_nat(32 + n % 95), ' '), rest),
 }

@@ -3,8 +3,7 @@ pub use /syn/Int/{NonZero, NonNeg};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
     to_flt};
 use /std/{Nat, Str, Option, Ordering, Equal, Compare, Add, Subtract, Multiply, Divide, Remainder,
-    Show, Spell, Ordered, True, False};
-use /std/Test/{Draw, Seed};
+    Show, Spell, Ordered, True, False, Test};
 
 pub let to_str(n: Int) -> Str =
     let mag = Nat/to_str(abs(n));
@@ -106,11 +105,11 @@ satisfy Ordered(Int) {
 }
 
 -- A magnitude drawn as a `Nat`, and one more bit for the sign.
-satisfy Draw(Int) {
+satisfy Test/Draw(Int) {
     all() = Option/none(),
     draw(seed, size) =
-        let (magnitude, after) = Draw/draw(@Nat, seed, size);
-        let (sign, rest) = Seed/next(after);
+        let (magnitude, after) = Test/Draw/draw(@Nat, seed, size);
+        let (sign, rest) = Test/Seed/next(after);
         let value = Nat/to_int(magnitude);
         (match Nat/and(sign, 1) == 1 | true => 0 - value | false => value end, rest),
 }

@@ -58,7 +58,11 @@ let settle(h: Handle, pending: Bool) -> Async(Result({}, Handle/Error)) =
         end
     end;
 
-let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Async(Result(Socket, Handle/Error)) =
+let connect_addr(
+    settings: Settings,
+    host: Str,
+    addr: Bytes,
+) -> Async(Result(Socket, Handle/Error)) =
     let opened = open_and_connect(addr)!;
     match opened
     | failure(e) => Async/pure(Result/failure(e))

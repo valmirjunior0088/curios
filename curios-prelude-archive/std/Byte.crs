@@ -1,8 +1,7 @@
 pub use /sys/{Byte};
 pub use /sys/Byte/{to_nat, eql, lt, le, gt, ge};
 use /sys/Bytes/{let Bytes, get};
-use /std/{Ordering, Equal, Compare, Nat, Bool, Show, Spell, Ordered, Option, List};
-use /std/Test/{Draw, Seed};
+use /std/{Ordering, Equal, Compare, Nat, Bool, Show, Spell, Ordered, Option, List, Test};
 
 -- The 256 byte values in order, so a computed `Nat` becomes a `Byte` by indexing.
 let atoms: Bytes =
@@ -60,9 +59,9 @@ let every_byte(count: Nat, next: Nat) -> List(Byte) =
     match count | 0 => [] | more + 1 => [of_nat(next % 256), ..every_byte(more, next + 1)] end;
 
 -- `n % 256` is known to the reducer by its remainder bound, so `of_nat`'s precondition decides definitionally.
-satisfy Draw(Byte) {
+satisfy Test/Draw(Byte) {
     all() = Option/some(every_byte(256, 0)),
     draw(seed, size) =
-        let (n, rest) = Seed/next(seed);
+        let (n, rest) = Test/Seed/next(seed);
         (of_nat(n % 256), rest),
 }

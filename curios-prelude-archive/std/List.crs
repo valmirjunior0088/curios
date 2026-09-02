@@ -1,7 +1,6 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map};
-use /std/{Nat, Bool, Option, Eq, Equal, Str, Show, Spell, Monad, Ordering, Compare, Ordered};
-use /std/Test/{Draw, Seed};
+use /std/{Nat, Bool, Option, Eq, Equal, Str, Show, Spell, Monad, Ordering, Compare, Ordered, Test};
 
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;
@@ -230,18 +229,24 @@ satisfy (@T: Type, use Ordered(T)) => Ordered(List(T)) {
     cmp = cmp,
 }
 
-let elements(@A: Type, use Draw(A), seed: Seed, size: Nat, count: Nat) -> {List(A), Seed} =
+let elements(
+    @A: Type,
+    use Test/Draw(A),
+    seed: Test/Seed,
+    size: Nat,
+    count: Nat,
+) -> {List(A), Test/Seed} =
     match count
     | 0 => ([], seed)
     | more + 1; (acc, after) =>
-        let (value, rest) = Draw/draw(@A, after, size);
+        let (value, rest) = Test/Draw/draw(@A, after, size);
         ([..acc, value], rest)
     end;
 
 -- At most `size` elements, each drawn at the same size.
-satisfy (@A: Type, use Draw(A)) => Draw(List(A)) {
+satisfy (@A: Type, use Test/Draw(A)) => Test/Draw(List(A)) {
     all() = Option/none(),
     draw(seed, size) =
-        let (count, after) = Draw/draw(@Nat, seed, size);
+        let (count, after) = Test/Draw/draw(@Nat, seed, size);
         elements(after, size, count),
 }

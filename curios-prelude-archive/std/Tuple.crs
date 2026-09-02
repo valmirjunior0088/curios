@@ -3,8 +3,7 @@
 -- Only positional shapes are written. Labels are open-ended, and the labeled product with an owner is a `struct`, which is where a program wanting these on `{x: Nat, y: Bool}` is pointed.
 --
 -- The ceiling is eight, past which a labeled `struct` is the readable type. Because a tuple shape is owned by no module, the orphan rule leaves `/std` the only root that may key a witness on one for a `/std` concept, so the ceiling is a promise rather than a default and was chosen with room: raising it is adding lines and nothing else. `Spell` stops at three for now — a derived witness reaches it through a tuple payload, and no consumer has asked past that — and `Draw` at three beside it, since a drawn argument is spelled when it is reported; raising either is the same kind of edit.
-use /std/{Show, Spell, Equal, Ordered, Ordering, Str, Bool, List, Option};
-use /std/Test/{Draw};
+use /std/{Show, Spell, Equal, Ordered, Ordering, Str, Bool, List, Option, Test};
 
 -- A tuple shows as its literal is written, so the rendering is source text as the carriers' renderings are. The one-field literal keeps the trailing comma that separates it from a parenthesized term, so it is written out rather than joined.
 let parens(parts: List(Str)) -> Str =
@@ -437,42 +436,48 @@ satisfy (
 }
 
 -- A tuple is drawn by drawing each field in turn, threading the seed left to right.
-satisfy Draw({}) {
+satisfy Test/Draw({}) {
     all() = Option/some([()]),
     draw(seed, size) = ((), seed),
 }
 
-satisfy (@A: Type, use Draw(A)) => Draw({A}) {
-    all() = Option/map(Draw/all(@A)(), (xs) => List/map(xs, (a) => (a,))),
+satisfy (@A: Type, use Test/Draw(A)) => Test/Draw({A}) {
+    all() = Option/map(Test/Draw/all(@A)(), (xs) => List/map(xs, (a) => (a,))),
     draw(seed, size) =
-        let (a, rest) = Draw/draw(@A, seed, size);
+        let (a, rest) = Test/Draw/draw(@A, seed, size);
         ((a,), rest),
 }
 
-satisfy (@A: Type, @B: Type, use Draw(A), use Draw(B)) => Draw({A, B}) {
+satisfy (@A: Type, @B: Type, use Test/Draw(A), use Test/Draw(B)) => Test/Draw({A, B}) {
     all() =
         Option/bind(
-            Draw/all(@A)(),
+            Test/Draw/all(@A)(),
             (xs) =>
                 Option/map(
-                    Draw/all(@B)(),
+                    Test/Draw/all(@B)(),
                     (ys) => List/concat_map(xs, (a) => List/map(ys, (b) => (a, b))))),
     draw(seed, size) =
-        let (a, after) = Draw/draw(@A, seed, size);
-        let (b, rest) = Draw/draw(@B, after, size);
+        let (a, after) = Test/Draw/draw(@A, seed, size);
+        let (b, rest) = Test/Draw/draw(@B, after, size);
         ((a, b), rest),
 }
 
-satisfy (@A: Type, @B: Type, @C: Type, use Draw(A), use Draw(B), use Draw(C)) => Draw({A, B, C}) {
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    use Test/Draw(A),
+    use Test/Draw(B),
+    use Test/Draw(C)) => Test/Draw({A, B, C}) {
     all() =
         Option/bind(
-            Draw/all(@A)(),
+            Test/Draw/all(@A)(),
             (xs) =>
                 Option/bind(
-                    Draw/all(@B)(),
+                    Test/Draw/all(@B)(),
                     (ys) =>
                         Option/map(
-                            Draw/all(@C)(),
+                            Test/Draw/all(@C)(),
                             (zs) =>
                                 List/concat_map(
                                     xs,
@@ -481,8 +486,8 @@ satisfy (@A: Type, @B: Type, @C: Type, use Draw(A), use Draw(B), use Draw(C)) =>
                                             ys,
                                             (b) => List/map(zs, (c) => (a, b, c))))))),
     draw(seed, size) =
-        let (a, first) = Draw/draw(@A, seed, size);
-        let (b, second) = Draw/draw(@B, first, size);
-        let (c, rest) = Draw/draw(@C, second, size);
+        let (a, first) = Test/Draw/draw(@A, seed, size);
+        let (b, second) = Test/Draw/draw(@B, first, size);
+        let (c, rest) = Test/Draw/draw(@C, second, size);
         ((a, b, c), rest),
 }
