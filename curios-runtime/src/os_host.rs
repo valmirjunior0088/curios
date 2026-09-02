@@ -1,6 +1,9 @@
 use {
     super::{OsResolver, Slot, Table, host::*},
-    rustix::event::{PollFd, Timespec, poll},
+    rustix::{
+        event::{PollFd, Timespec, poll},
+        termios::{OptionalActions, Termios, tcgetattr, tcgetwinsize, tcsetattr},
+    },
     rustls::{
         ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
         crypto::ring, pki_types::ServerName,
@@ -11,7 +14,7 @@ use {
         fs::{File, OpenOptions},
         io::{Read, Write, stderr, stdin, stdout},
         net::SocketAddr,
-        os::fd::{AsFd, OwnedFd},
+        os::fd::{AsFd, BorrowedFd, OwnedFd},
         sync::{Arc, LazyLock, Mutex, OnceLock},
         time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     },
@@ -65,6 +68,8 @@ pub struct OsHost {
     args: Vec<Vec<u8>>,
     /// The blocking-DNS worker pool, started on the first `lookup` so programs that never resolve a name pay for no threads.
     resolver: OnceLock<OsResolver>,
+    /// The termios of every descriptor `raw` switched, keyed by the handle's token, so `raw(h, false)` and [`Drop`] restore exactly what the program found. The first host state with an exit obligation: a terminal left raw outlives the process that switched it.
+    termios: Mutex<Vec<(Vec<u8>, Termios)>>,
 }
 
 impl OsHost {
@@ -79,6 +84,20 @@ impl OsHost {
             start: Instant::now(),
             args,
             resolver: OnceLock::new(),
+            termios: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Run `apply` over the descriptor behind `handle` — a standard stream's, or an open file's out of the table. `None` for a handle with no descriptor a terminal `ioctl` could address, which the callers report as `NotFound`.
+    fn with_fd<R>(&self, handle: &Handle, apply: impl FnOnce(BorrowedFd<'_>) -> R) -> Option<R> {
+        match handle {
+            Handle::Stdin => Some(apply(stdin().as_fd())),
+            Handle::Stdout => Some(apply(stdout().as_fd())),
+            Handle::Stderr => Some(apply(stderr().as_fd())),
+            Handle::Other(_) => match self.table.lock().unwrap().get(handle)? {
+                OsResource::File(file) => Some(apply(file.as_fd())),
+                _ => None,
+            },
         }
     }
 
@@ -146,6 +165,18 @@ impl OsHost {
 impl Default for OsHost {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Restore every terminal `raw` switched. `instantiate` drops the host after a trap is classified and before the process exits, so a trap or an `exit` leaves the terminal as the program found it, whether or not the program's own bracket ran.
+impl Drop for OsHost {
+    fn drop(&mut self) {
+        let records = std::mem::take(&mut *self.termios.lock().unwrap());
+
+        for (token, saved) in records {
+            let handle = Handle::from_bytes(token);
+            let _ = self.with_fd(&handle, |fd| tcsetattr(fd, OptionalActions::Now, &saved));
+        }
     }
 }
 
@@ -580,6 +611,52 @@ impl HostOps for OsHost {
         match env::var_os(String::from_utf8_lossy(name).as_ref()) {
             Some(value) => (Status::Ok, value.into_encoded_bytes()),
             None => (Status::NotFound, vec![]),
+        }
+    }
+
+    fn raw(&self, io: Handle, on: u32) -> Status {
+        let token = io.bytes();
+
+        let outcome = self.with_fd(&io, |fd| {
+            let mut records = self.termios.lock().unwrap();
+            let recorded = records.iter().position(|(saved, _)| *saved == token);
+
+            match (on != 0, recorded) {
+                // The record is taken once, on the first switch, so a second `raw(h, true)` cannot overwrite the settings the program found with raw ones.
+                (true, recorded) => {
+                    let current = tcgetattr(fd)?;
+
+                    if recorded.is_none() {
+                        records.push((token.clone(), current.clone()));
+                    }
+
+                    let mut raw = current;
+                    raw.make_raw();
+
+                    tcsetattr(fd, OptionalActions::Now, &raw)
+                }
+                (false, Some(index)) => {
+                    let (_, saved) = records.remove(index);
+
+                    tcsetattr(fd, OptionalActions::Now, &saved)
+                }
+                // Never switched: there is nothing to restore.
+                (false, None) => Ok(()),
+            }
+        });
+
+        match outcome {
+            None => Status::NotFound,
+            Some(Ok(())) => Status::Ok,
+            Some(Err(errno)) => status_from_error(std::io::Error::from(errno)),
+        }
+    }
+
+    fn size(&self, io: Handle) -> (Status, u32, u32) {
+        match self.with_fd(&io, |fd| tcgetwinsize(fd)) {
+            None => (Status::NotFound, 0, 0),
+            Some(Ok(size)) => (Status::Ok, size.ws_col.into(), size.ws_row.into()),
+            Some(Err(errno)) => (status_from_error(std::io::Error::from(errno)), 0, 0),
         }
     }
 }

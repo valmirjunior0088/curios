@@ -116,7 +116,14 @@ pub struct MockHost {
     args: Vec<Vec<u8>>,
     /// Scripted environment served by `env`: name → value.
     env: HashMap<Vec<u8>, Vec<u8>>,
+    /// Every mode `raw` was asked for, in order. Shared with [`MockIo::raw_modes`], so a test can see that a bracket switched raw mode on and back off.
+    raw_modes: Arc<Mutex<Vec<bool>>>,
+    /// The scripted terminal size `size` answers; `None` is a host with no terminal, which answers `ENOTTY` as the native host does.
+    tty_size: Option<(u32, u32)>,
 }
+
+/// `ENOTTY`, the errno a terminal `ioctl` reports on a descriptor that is not a terminal — `25` on both release targets, Linux and macOS.
+const ENOTTY: u32 = 25;
 
 impl MockHost {
     /// Start seeding a host. Chain the `stdin_lines`/`files`/`net`/… setters, then `build` for the `(host, io)` pair.
@@ -453,6 +460,24 @@ impl HostOps for MockHost {
             None => (Status::NotFound, vec![]),
         }
     }
+
+    fn raw(&self, _io: Handle, on: u32) -> Status {
+        match self.tty_size {
+            Some(_) => {
+                self.raw_modes.lock().unwrap().push(on != 0);
+
+                Status::Ok
+            }
+            None => Status::Other(ENOTTY),
+        }
+    }
+
+    fn size(&self, _io: Handle) -> (Status, u32, u32) {
+        match self.tty_size {
+            Some((cols, rows)) => (Status::Ok, cols, rows),
+            None => (Status::Other(ENOTTY), 0, 0),
+        }
+    }
 }
 
 /// Serve up to `count` bytes of `contents` from `*position`, advancing the cursor; `Status::Eof` with empty bytes once it reaches the end. The shared shape of every scripted read (file, inbound request, outbound response).
@@ -473,6 +498,7 @@ pub struct MockIo {
     output: Arc<Mutex<Vec<u8>>>,
     files: MockFileSystem,
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
+    raw_modes: Arc<Mutex<Vec<bool>>>,
 }
 
 impl MockIo {
@@ -490,6 +516,11 @@ impl MockIo {
     pub fn captures(&self) -> Vec<Vec<u8>> {
         self.captures.lock().unwrap().clone()
     }
+
+    /// Every raw-mode switch the guest asked for, in order: `true` for on, `false` for off.
+    pub fn raw_modes(&self) -> Vec<bool> {
+        self.raw_modes.lock().unwrap().clone()
+    }
 }
 
 /// Fluent seed for a [`MockHost`]: gather the scripted inputs (stdin, files, network endpoints, clocks, …) as plain values, then [`build`](Self::build) wraps them for the run and hands back the host and its [`MockIo`].
@@ -503,9 +534,17 @@ pub struct MockHostBuilder {
     clock_mono_seq: VecDeque<(u32, u32)>,
     args: Vec<Vec<u8>>,
     env: HashMap<Vec<u8>, Vec<u8>>,
+    tty_size: Option<(u32, u32)>,
 }
 
 impl MockHostBuilder {
+    /// Give the host a terminal of `cols` by `rows`: `size` answers it and `raw` records its switches. Without one, both rows answer `ENOTTY`.
+    pub fn tty_size(mut self, cols: u32, rows: u32) -> Self {
+        self.tty_size = Some((cols, rows));
+
+        self
+    }
+
     /// Append one line to scripted stdin; the newline the terminal would deliver is appended for you.
     fn stdin_line(mut self, line: impl AsRef<[u8]>) -> Self {
         self.input.extend_from_slice(line.as_ref());
@@ -604,11 +643,13 @@ impl MockHostBuilder {
         let output = Arc::new(Mutex::new(Vec::new()));
         let files = MockFileSystem::new(self.files);
         let captures = Arc::new(Mutex::new(Vec::new()));
+        let raw_modes = Arc::new(Mutex::new(Vec::new()));
 
         let io = MockIo {
             output: output.clone(),
             files: files.clone(),
             captures: captures.clone(),
+            raw_modes: raw_modes.clone(),
         };
 
         let host = MockHost {
@@ -625,6 +666,8 @@ impl MockHostBuilder {
             rng: Mutex::new(0x2545_F491_4F6C_DD1D),
             args: self.args,
             env: self.env,
+            raw_modes,
+            tty_size: self.tty_size,
         };
 
         (host, io)

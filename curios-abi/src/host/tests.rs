@@ -57,6 +57,8 @@ fn names_are_the_wire_abi() {
             "random",
             "args",
             "env",
+            "raw",
+            "size",
         ]
     );
 }
@@ -105,6 +107,7 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels("clock_wall"), ["secs_hi", "secs_lo", "nanos"]);
     assert_eq!(labels("clock_mono"), ["secs", "nanos"]);
     assert_eq!(labels("env"), ["status", "value"]);
+    assert_eq!(labels("size"), ["status", "cols", "rows"]);
 }
 
 /// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature. Nothing asserts that `List` does not nest — [`WireLeaf`](super::WireLeaf) makes a nested one unrepresentable.

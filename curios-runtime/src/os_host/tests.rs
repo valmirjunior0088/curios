@@ -31,3 +31,20 @@ fn a_standard_stream_takes_the_socket_setters_like_a_file() {
         assert!(matches!(host.set_reuseaddr(handle, 1), Status::Ok));
     }
 }
+
+/// A descriptor that is not a terminal refuses both tty rows with `ENOTTY` through the errno lane, which is how a program learns it has none. `/dev/null` rather than a standard stream, because under an interactive `cargo test` stdin *is* a terminal and a passing `raw` would leave it in raw mode.
+#[test]
+fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_report_enotty() {
+    let host = OsHost::with_args(vec![]);
+    let (status, handle) = host.open(b"/dev/null", Mode::Read);
+
+    assert!(matches!(status, Status::Ok));
+    assert!(matches!(host.raw(handle.clone(), 1), Status::Other(25)));
+    assert!(matches!(
+        host.size(handle.clone()),
+        (Status::Other(25), 0, 0)
+    ));
+    assert!(matches!(host.raw(handle.clone(), 0), Status::Ok));
+
+    host.close(handle);
+}

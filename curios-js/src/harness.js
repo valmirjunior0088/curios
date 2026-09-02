@@ -161,6 +161,9 @@ export async function run(config) {
     },
     args: unsupported("args"),
     env: () => [config.status.NOT_FOUND, emptyBytes()],
+    // The playground has no terminal to switch or measure, so both tty rows are denied as `open` is.
+    raw: denied,
+    size: () => [config.status.PERMISSION_DENIED, 0, 0],
     exit: (code) => {
       throw new ExitSignal(code);
     },

@@ -158,6 +158,8 @@ pub mod rand;
 
 pub mod proc;
 
+pub mod tty;
+
 pub let print(s: Str) -> Io({}) =
     let _ = Handle/write(Handle/stdout, Str/to_bytes(s))!;
     Io/pure(());

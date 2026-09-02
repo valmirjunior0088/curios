@@ -88,6 +88,12 @@ macro_rules! host_ops {
 
             /// Look up the environment variable `name`. `(status, value)`: `Ok` with the value, or `NotFound` with empty bytes.
             env as proc/env [name: Bytes] [status: Status, value: Bytes];
+
+            /// Put terminal `h` in raw mode (`on`) — the descriptor's termios recorded on first use, then no canonical mode, no echo, no signal keys, no output post-processing, `VMIN` 1, `VTIME` 0 — or restore the record (`off`). The native host also restores every record when it is dropped, so a trap or an `exit` leaves the terminal usable. `ENOTTY` through the errno lane is how a program learns it has no terminal.
+            raw as tty/raw [h: Handle, on: Bool] [status: Status];
+
+            /// The terminal's dimensions (`TIOCGWINSZ`). `(status, cols, rows)`; the counts are meaningful only under `Ok`.
+            size as tty/size [h: Handle] [status: Status, cols: Nat, rows: Nat];
         }
     };
 }
