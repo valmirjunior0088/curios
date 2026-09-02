@@ -1,5 +1,9 @@
-use crate::{HeadKey, TermBuilders};
-use {super::*, curios_core::Global};
+use {
+    super::*,
+    crate::{HeadKey, TermBuilders, WitnessKey},
+    curios_core::Global,
+    curios_utilities::Span,
+};
 
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding folds through `Term::let_`, which merges the bindings back into a single flat `Let`. The whole block is one source term with one span, stamped by `elaborate`'s wrapper — no per-binding span bookkeeping.
 pub(super) fn elaborate_let(
@@ -525,14 +529,7 @@ pub(super) fn elaborate_bang(
         action_result_key(context, &bang.action),
     ) {
         (Some(region_key), Some(action_key)) if region_key != action_key => {
-            let field = context.syntax().lift.lift;
-            let wrapper =
-                Term::free_var(&Free::global(field.concept.qualifier().with(field.field)));
-            let wrapped = Term::apply(wrapper, vec![bang.action.clone()]);
-            match bang.action.span().or_else(|| term.span()) {
-                Some(span) => Term::spanned(span, wrapped),
-                None => wrapped,
-            }
+            lift_wrapped(context, &bang.action, term.span())
         }
         _ => bang.action.clone(),
     };
@@ -544,6 +541,53 @@ pub(super) fn elaborate_bang(
         None => app,
     };
     elaborate(context, &app, mode)
+}
+
+/// `action` wrapped in `/syn/Lift`'s `lift`, whose `use` slot resolves the declared embedding into the region or reports the missing edge; the wrapper takes the action's own span, or `fallback`, so the report anchors where the action was written.
+fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Span>) -> Term {
+    let field = context.syntax().lift.lift;
+    let wrapper = Term::free_var(&Free::global(field.concept.qualifier().with(field.field)));
+    let wrapped = Term::apply(wrapper, vec![action.clone()]);
+    match action.span().or(fallback) {
+        Some(span) => Term::spanned(span, wrapped),
+        None => wrapped,
+    }
+}
+
+/// Auto-lift on a checked tail, the region-end twin of [`elaborate_bang`]'s wrap: a term whose named head is declared in a monad other than the region's, checked where the region's monad is rigid, is wrapped in `lift` before it elaborates, so the declared edge carries it or the missing edge is reported — `Some(wrapped)` to elaborate in the tail's place. It fires only where both heads are registered monads, so a mismatch between two data types stays the ordinary mismatch, and it abstains exactly where the `!` oracle does: a flexible region, an unreadable head, or equal keys. The monad gate is read before the head, since most checked nodes sit under a data type and settle on one table lookup.
+pub(super) fn lift_on_check(
+    context: &mut Context,
+    term: &Term,
+    expected: &Term,
+) -> Result<Option<Term>, Error> {
+    if !matches!(&**term, Subterm::Var(_) | Subterm::Apply(_)) {
+        return Ok(None);
+    }
+    let region = reduce_with(context, expected)?;
+    if region_flex(context, &region) {
+        return Ok(None);
+    }
+    let Some(region_key) = HeadKey::of_whnf(&region) else {
+        return Ok(None);
+    };
+    if !is_monad(context, &region_key) {
+        return Ok(None);
+    }
+    let Some(action_key) = action_result_key(context, term) else {
+        return Ok(None);
+    };
+    if action_key == region_key || !is_monad(context, &action_key) {
+        return Ok(None);
+    }
+    Ok(Some(lift_wrapped(context, term, None)))
+}
+
+/// Whether a `Monad` witness is registered under `key` — the concept's name derives from the registry's bind wrapper, whose namespace is the concept.
+fn is_monad(context: &Context, key: &HeadKey) -> bool {
+    let monad = Global::Authored(context.syntax().monad.bind.qualifier().without_last());
+    context
+        .witness(&monad, &WitnessKey(vec![key.clone()]))
+        .is_some()
 }
 
 /// Whether the region's weak-head form is still headed by an unsolved metavariable — including a stuck application of one, the higher-kinded case.

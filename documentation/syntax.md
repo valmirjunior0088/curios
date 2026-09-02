@@ -386,7 +386,7 @@ Every value body is a sequencing region. Lambda bodies, match arms, and recursiv
 
 A region's monad is read from the region's type and never inferred from a sequenced action. A region whose type is not yet known waits for it, and one whose type can never name a monad — the body of a lambda in inference position, say — is rejected with a request to annotate the enclosing result type.
 
-An action whose own monad differs from the region's is lifted: the `!` wraps the action in `/syn/Lift`'s `lift`, and the declared `Lift` witness for that ordered pair of monads carries it into the region. A pair with no declared witness is rejected. See [Lifting between monads](#lifting-between-monads).
+An action whose own monad differs from the region's is lifted: the `!` wraps the action in `/syn/Lift`'s `lift`, and the declared `Lift` witness for that ordered pair of monads carries it into the region. A pair with no declared witness is rejected. A region's tail is lifted the same way when its head is declared in another monad, so an `Io` action may end an `Async` region bare. See [Lifting between monads](#lifting-between-monads).
 
 Postfix `!` is not allowed in types. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
 
@@ -447,7 +447,7 @@ pub let fiber: Async({}) =
     Async/pure(());
 ```
 
-The explicit spelling `lift(action)` names the same embedding, with the target monad inferred from the region.
+The explicit spelling `lift(action)` names the same embedding, with the target monad inferred from the region. A region's tail — the last expression of a value body, a lambda body, or a match arm — is lifted by the same read when both its head's declared monad and the region's are monads and differ; a tail that is not a monadic action at all keeps the ordinary type mismatch.
 
 Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does not let an `Io` action sequence in a `Sched` region: the missing `Lift(Io, Sched)` is reported, together with any chain of declared embeddings that would have reached it, and the composite embedding is declared like any other — a decision about `Sched`, written by its author, not derived by the compiler.
 

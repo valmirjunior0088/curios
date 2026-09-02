@@ -113,6 +113,13 @@ fn elaborate_subterm(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
+    // A checked node declared in another monad than the region's is lifted before it elaborates, as a `!` action is — a region's tail is the second place an embedding is written, and the same declared edge carries it.
+    if let Mode::Check(expected) = &mode
+        && let Some(lifted) = lift_on_check(context, term, expected)?
+    {
+        return elaborate(context, &lifted, mode);
+    }
+
     // Synthesizable nodes compute their type and hit the `expect` turnaround in `Check` mode; naturally-checked nodes (and the mode-propagating `Let`/`Rec`) consume `mode` directly and return early. Every arm returns the rebuilt term — binders re-closed, lambda domains solved.
     let (rebuilt, type_) = match &**term {
         Subterm::Type(level) => (

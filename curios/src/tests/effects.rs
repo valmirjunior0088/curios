@@ -241,6 +241,53 @@ fn an_io_action_lifts_into_an_async_region() {
     assert_eq!(run(source), b"ab");
 }
 
+/// A region's tail is the second place an embedding is written: an `Io` action ending an `Async` region is lifted through the same edge a `!` would use, and so is one ending a match arm, which is a region of its own.
+#[test]
+fn an_io_tail_lifts_into_an_async_region() {
+    let source = r#"
+        use /std/{Async, Bool, print};
+        pub let fiber(flag: Bool) -> Async({}) =
+            let _ = Async/yield_now!;
+            match flag
+            | true => print("t")
+            | false => print("f")
+            end;
+        pub let plain: Async({}) =
+            print("p");
+        Async/run(Async/bind(fiber(true), (_) => plain))
+        "#;
+
+    assert_eq!(run(source), b"tp");
+}
+
+/// A tail with no declared edge reports the missing embedding as a `!` does, rather than a bare type mismatch: both heads are monads, so the report names the edge to declare.
+#[test]
+fn a_tail_with_no_edge_reports_the_lift_witness() {
+    let source = r#"
+        use /std/{Monad, Io, Async};
+        pub struct Job(A: Type): pub Type {
+            Io(A),
+        }
+        pub let jpure(@A: Type, a: A) -> Job(A) =
+            Job { Io/pure(a) };
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+            Job { Io/bind(m.0, (a) => f(a).0) };
+        satisfy Monad(Job) {
+            pure = jpure,
+            bind = jbind,
+        }
+        pub let job: Job({}) =
+            Async/yield_now;
+        job.0
+        "#;
+
+    let error = typecheck(source).expect_err("a missing edge must refuse");
+    assert!(
+        error.contains("no witness of Lift(Async, /Job)"),
+        "expected the embedding report, got: {error}"
+    );
+}
+
 /// The explicit spelling stays available and means the same embedding: `lift` is `/syn/Lift`'s method, its target inferred from the region.
 #[test]
 fn an_explicit_lift_spells_the_same_embedding() {
