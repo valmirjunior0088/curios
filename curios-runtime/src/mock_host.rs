@@ -1,6 +1,6 @@
 use {
     super::{Table, host::*},
-    curios_abi::{kind, poll, stdio_mode},
+    curios_abi::{event, file_kind, stdio_mode},
     std::{
         collections::{BTreeSet, HashMap, VecDeque},
         sync::{Arc, Mutex},
@@ -126,8 +126,11 @@ impl MockFileSystem {
         let disk = self.inner.lock().unwrap();
 
         match disk.files.get(path) {
-            Some(contents) => Some((kind::FILE, contents.len())),
-            None => disk.dirs.contains(path).then_some((kind::DIRECTORY, 0)),
+            Some(contents) => Some((file_kind::FILE, contents.len())),
+            None => disk
+                .dirs
+                .contains(path)
+                .then_some((file_kind::DIRECTORY, 0)),
         }
     }
 
@@ -588,7 +591,7 @@ impl HostOps for MockHost {
             .enumerate()
             .map(|(slot, handle)| {
                 let requested = events.get(slot).copied().unwrap_or_else(Poll::empty);
-                let readable = Poll::from_bits(poll::READ | (requested.bits() & poll::WRITE));
+                let readable = Poll::from_bits(event::READ | (requested.bits() & event::WRITE));
 
                 match handle {
                     Handle::Stdin | Handle::Stdout | Handle::Stderr => requested,
@@ -606,7 +609,7 @@ impl HostOps for MockHost {
                         Some(MockResource::Connecting { due, .. }) => {
                             *due = true;
 
-                            Poll::from_bits(poll::WRITE)
+                            Poll::from_bits(event::WRITE)
                         }
                         Some(_) => requested,
                         None => Poll::empty(),

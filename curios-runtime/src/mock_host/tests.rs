@@ -2,7 +2,7 @@
 
 use {
     super::{super::host::*, MockHost},
-    curios_abi::poll,
+    curios_abi::event,
 };
 
 #[test]
@@ -28,10 +28,10 @@ fn a_chunked_endpoint_serves_one_chunk_then_would_blocks_until_polled() {
     // A poll arms the next chunk and reports the handle readable, and only then does the read serve it.
     let ready = host.poll(
         std::slice::from_ref(&handle),
-        &[Poll::from_bits(poll::READ)],
+        &[Poll::from_bits(event::READ)],
         -1,
     );
-    assert_eq!(ready[0].bits() & poll::READ, poll::READ);
+    assert_eq!(ready[0].bits() & event::READ, event::READ);
     assert!(matches!(host.read(handle.clone(), 8), (Status::Ok, bytes) if bytes == b"cd"));
 
     // Past the last chunk the stream is at its end, which a poll still reports as readable.
@@ -39,8 +39,8 @@ fn a_chunked_endpoint_serves_one_chunk_then_would_blocks_until_polled() {
         host.read(handle.clone(), 8),
         (Status::Eof, bytes) if bytes.is_empty()
     ));
-    let ready = host.poll(&[handle], &[Poll::from_bits(poll::READ)], -1);
-    assert_eq!(ready[0].bits() & poll::READ, poll::READ);
+    let ready = host.poll(&[handle], &[Poll::from_bits(event::READ)], -1);
+    assert_eq!(ready[0].bits() & event::READ, event::READ);
 }
 
 #[test]
@@ -62,10 +62,10 @@ fn a_pending_connect_settles_through_poll_and_finish_connect() {
     ));
     let ready = host.poll(
         std::slice::from_ref(&handle),
-        &[Poll::from_bits(poll::WRITE)],
+        &[Poll::from_bits(event::WRITE)],
         -1,
     );
-    assert_eq!(ready[0].bits() & poll::WRITE, poll::WRITE);
+    assert_eq!(ready[0].bits() & event::WRITE, event::WRITE);
     assert!(matches!(host.finish_connect(handle.clone()), Status::Ok));
     assert!(matches!(host.read(handle, 8), (Status::Ok, bytes) if bytes == b"pong"));
 
@@ -77,7 +77,7 @@ fn a_pending_connect_settles_through_poll_and_finish_connect() {
     ));
     host.poll(
         std::slice::from_ref(&stray),
-        &[Poll::from_bits(poll::WRITE)],
+        &[Poll::from_bits(event::WRITE)],
         -1,
     );
     assert!(matches!(
@@ -101,8 +101,8 @@ fn a_chunked_endpoint_ends_readable() {
         host.read(handle.clone(), 8),
         (Status::Eof, bytes) if bytes.is_empty()
     ));
-    let ready = host.poll(&[handle], &[Poll::from_bits(poll::READ)], -1);
-    assert_eq!(ready[0].bits() & poll::READ, poll::READ);
+    let ready = host.poll(&[handle], &[Poll::from_bits(event::READ)], -1);
+    assert_eq!(ready[0].bits() & event::READ, event::READ);
 }
 
 #[test]

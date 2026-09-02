@@ -28,7 +28,7 @@ pub let stderr(c: Child) -> Option(Handle) =
 
 -- Wait for the child to end. Its handle becomes readable when it does, so the fiber parks on it and reaps at once; the release then runs the `kill` finalizer on a child already reaped, which the host answers as not found and nothing minds.
 pub let wait(c: Child) -> Async(Result(Exit, Handle/Error)) =
-    let _ = Async/wait(c.handle, /sys/poll/read)!;
+    let _ = Async/wait(c.handle, /sys/event/read)!;
     let r = /sys/proc/wait(c.handle)!;
     let _ = Async/release(c.handle)!;
     Async/pure(

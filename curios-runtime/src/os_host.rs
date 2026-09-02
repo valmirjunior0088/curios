@@ -1,6 +1,6 @@
 use {
     super::{OsResolver, Running, Slot, Spawned, Table, host::*, os_child},
-    curios_abi::{kind, poll as interest},
+    curios_abi::{event, file_kind},
     rustix::{
         event::{PollFd, Timespec, poll},
         fs::{OFlags, fcntl_getfl, fcntl_setfl},
@@ -768,7 +768,7 @@ impl HostOps for OsHost {
             Err(error) if error.kind() == ErrorKind::NotFound => {
                 return match fs::symlink_metadata(path) {
                     Ok(link) if link.file_type().is_symlink() => {
-                        (Status::Ok, kind::SYMLINK, 0, 0, 0, 0, 0)
+                        (Status::Ok, file_kind::SYMLINK, 0, 0, 0, 0, 0)
                     }
                     _ => (status_from_error(error), 0, 0, 0, 0, 0, 0),
                 };
@@ -778,9 +778,9 @@ impl HostOps for OsHost {
 
         let file_type = metadata.file_type();
         let kind = match () {
-            () if file_type.is_dir() => kind::DIRECTORY,
-            () if file_type.is_file() => kind::FILE,
-            () => kind::OTHER,
+            () if file_type.is_dir() => file_kind::DIRECTORY,
+            () if file_type.is_file() => file_kind::FILE,
+            () => file_kind::OTHER,
         };
         let (size_hi, size_lo) = split_billions(metadata.len());
         let (mtime_hi, mtime_lo, mtime_nanos) = metadata
@@ -959,12 +959,8 @@ fn tls_read_outcome(result: std::io::Result<usize>, buffer: Vec<u8>) -> (Status,
 
 /// The interest to watch a TLS stream's socket for. While the handshake is under way `rustls`'s own demand replaces the guest's: a socket is nearly always writable, so a fiber that parked on `WRITE` to send its request would spin while `rustls` was in fact waiting to read the server's reply. Afterwards the guest's interest stands, plus `WRITE` whenever `rustls` still holds records to push.
 fn tls_interest(conn: &rustls::CommonState, requested: Poll) -> Poll {
-    let read = if conn.wants_read() { interest::READ } else { 0 };
-    let write = if conn.wants_write() {
-        interest::WRITE
-    } else {
-        0
-    };
+    let read = if conn.wants_read() { event::READ } else { 0 };
+    let write = if conn.wants_write() { event::WRITE } else { 0 };
 
     match conn.is_handshaking() {
         true => Poll::from_bits(read | write),

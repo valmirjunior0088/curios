@@ -89,7 +89,7 @@ macro_rules! host_ops {
             /// The terminal's dimensions (`TIOCGWINSZ`). `(status, cols, rows)`; the counts are meaningful only under `Ok`.
             size as tty/size [h: Handle] [status: Status, cols: Nat, rows: Nat];
 
-            /// What is at `path`, following symbolic links. `kind` is a [`kind`](crate::kind) tag; the size and the modification time are split base-10⁹ as `clock_wall` splits its seconds, so the i31 envelope is never asked to hold a file size. A dangling link reports the `SYMLINK` kind with zero sizes; every field but `status` is meaningful only under `Ok`.
+            /// What is at `path`, following symbolic links. `kind` is a [`file_kind`](crate::file_kind) tag; the size and the modification time are split base-10⁹ as `clock_wall` splits its seconds, so the i31 envelope is never asked to hold a file size. A dangling link reports the `SYMLINK` kind with zero sizes; every field but `status` is meaningful only under `Ok`.
             stat as file/stat [path: Bytes] [status: Status, kind: Nat, size_hi: Nat, size_lo: Nat, mtime_hi: Nat, mtime_lo: Nat, mtime_nanos: Nat];
 
             /// Remove the file at `path`. `IsDirectory` on a directory.

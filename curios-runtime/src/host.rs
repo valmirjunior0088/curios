@@ -5,7 +5,7 @@
 pub use curios_abi::{Handle, HostOps, Mode, Poll, Status};
 
 use {
-    curios_abi::poll,
+    curios_abi::event,
     rustix::event::PollFlags,
     std::io::{Error, ErrorKind},
 };
@@ -32,11 +32,11 @@ pub(crate) fn status_from_error(error: Error) -> Status {
 pub(crate) fn poll_to_flags(events: Poll) -> PollFlags {
     let mut flags = PollFlags::empty();
 
-    if events.bits() & poll::READ != 0 {
+    if events.bits() & event::READ != 0 {
         flags |= PollFlags::IN;
     }
 
-    if events.bits() & poll::WRITE != 0 {
+    if events.bits() & event::WRITE != 0 {
         flags |= PollFlags::OUT;
     }
 
@@ -48,19 +48,19 @@ pub(crate) fn poll_from_flags(flags: PollFlags) -> Poll {
     let mut bits = 0;
 
     if flags.contains(PollFlags::IN) {
-        bits |= poll::READ;
+        bits |= event::READ;
     }
 
     if flags.contains(PollFlags::OUT) {
-        bits |= poll::WRITE;
+        bits |= event::WRITE;
     }
 
     if flags.contains(PollFlags::ERR) {
-        bits |= poll::ERR;
+        bits |= event::ERR;
     }
 
     if flags.contains(PollFlags::HUP) {
-        bits |= poll::HUP;
+        bits |= event::HUP;
     }
 
     Poll::from_bits(bits)

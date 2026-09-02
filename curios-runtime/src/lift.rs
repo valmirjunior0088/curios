@@ -1,6 +1,6 @@
 use {
     super::{Handle, Mode, Poll},
-    curios_abi::mode,
+    curios_abi::open_mode,
     wasmtime::{Caller, Val},
 };
 
@@ -27,9 +27,9 @@ impl Lift for Handle {
 impl Lift for Mode {
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(match params[0].unwrap_i32() as u32 {
-            mode::READ => Mode::Read,
-            mode::WRITE => Mode::Write,
-            mode::APPEND => Mode::Append,
+            open_mode::READ => Mode::Read,
+            open_mode::WRITE => Mode::Write,
+            open_mode::APPEND => Mode::Append,
             tag => panic!("invalid open mode tag: {tag}"),
         })
     }

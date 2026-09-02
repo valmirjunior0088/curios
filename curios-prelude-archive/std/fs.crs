@@ -23,9 +23,9 @@ satisfy Show(Kind) {
 
 let kind_of(code: Nat) -> Kind =
     choose
-    | code == /sys/kind/file => Kind/file()
-    | code == /sys/kind/directory => Kind/directory()
-    | code == /sys/kind/symlink => Kind/symlink()
+    | code == /sys/file_kind/file => Kind/file()
+    | code == /sys/file_kind/directory => Kind/directory()
+    | code == /sys/file_kind/symlink => Kind/symlink()
     | _ => Kind/other()
     end;
 
@@ -169,7 +169,7 @@ let remove_all_bytes(path: Bytes) -> Async(Result({}, Handle/Error)) =
     match Handle/error_of(s.status)
     | some(e) => Async/pure(Result/failure(e))
     | none() =>
-        match s.kind == /sys/kind/directory
+        match s.kind == /sys/file_kind/directory
         | false =>
             let status = /sys/file/remove(path)!;
             Async/pure(outcome(status))

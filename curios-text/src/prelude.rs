@@ -5,8 +5,8 @@ use {
         TopLet, TopMod, TopUse, TupleType, TupleTypeParam, UseGroup,
     },
     curios_abi::{
-        ForeignFunction, ForeignStore, Namespace, WireType, kind, mode, poll, status, stdio,
-        stdio_mode,
+        ForeignFunction, ForeignStore, Namespace, WireType, event, file_kind, open_mode, status,
+        stdio, stdio_mode,
     },
     curios_utilities::{Grain, Plicity, SyntaxName, SyntaxRegistry},
     std::sync::Arc,
@@ -49,7 +49,7 @@ fn byte() -> Term {
     intrinsic(Intrinsic::ByteType)
 }
 
-// A `Nat` literal value term, built exactly as the parser builds one: `0` is bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire codes (`status`, `poll`, and `mode`) into the `/sys/Handle` constant mirror.
+// A `Nat` literal value term, built exactly as the parser builds one: `0` is bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire codes (`status`, `event`, `open_mode`, `file_kind` and `stdio_mode`) into the `/sys` code modules.
 fn nat_lit(n: u32) -> Term {
     match n {
         0 => intrinsic(Intrinsic::Nat(Nat::Zero)),
@@ -887,7 +887,7 @@ fn take_subject(subjects: &mut Vec<(String, Vec<TopItem>)>, subject: &str) -> Ve
     subjects.remove(index).1
 }
 
-// The remaining host-operation subjects, `exit`, and the wire-code mirror: one `/sys` module per subject, then the `status`/`poll`/`mode` code modules. Every one of these names is lowercase because no type backs it — a capitalized `/sys` module is one whose type the root facade re-exports, and the code modules are `Nat` constants. The mirror was capitalized only so the `poll` op and the `Poll` module could coexist; nesting moved the op to `/sys/Handle/poll` and retired that reason.
+// The remaining host-operation subjects, `exit`, and the wire-code mirror: one `/sys` module per subject, then the code modules, each named by the tag it holds — `status`, `event`, `open_mode`, `file_kind`, `stdio_mode` — as `curios-abi`'s `codes` names them. Every one of these names is lowercase because no type backs it — a capitalized `/sys` module is one whose type the root facade re-exports, and the code modules are `Nat` constants.
 fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
     let mut items = subjects
         .into_iter()
@@ -930,29 +930,29 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
             ],
         ),
         pub_mod(
-            "poll",
+            "event",
             vec![
-                pub_let("read", nat(), nat_lit(poll::READ)),
-                pub_let("write", nat(), nat_lit(poll::WRITE)),
-                pub_let("err", nat(), nat_lit(poll::ERR)),
-                pub_let("hup", nat(), nat_lit(poll::HUP)),
+                pub_let("read", nat(), nat_lit(event::READ)),
+                pub_let("write", nat(), nat_lit(event::WRITE)),
+                pub_let("err", nat(), nat_lit(event::ERR)),
+                pub_let("hup", nat(), nat_lit(event::HUP)),
             ],
         ),
         pub_mod(
-            "mode",
+            "open_mode",
             vec![
-                pub_let("read", nat(), nat_lit(mode::READ)),
-                pub_let("write", nat(), nat_lit(mode::WRITE)),
-                pub_let("append", nat(), nat_lit(mode::APPEND)),
+                pub_let("read", nat(), nat_lit(open_mode::READ)),
+                pub_let("write", nat(), nat_lit(open_mode::WRITE)),
+                pub_let("append", nat(), nat_lit(open_mode::APPEND)),
             ],
         ),
         pub_mod(
-            "kind",
+            "file_kind",
             vec![
-                pub_let("file", nat(), nat_lit(kind::FILE)),
-                pub_let("directory", nat(), nat_lit(kind::DIRECTORY)),
-                pub_let("symlink", nat(), nat_lit(kind::SYMLINK)),
-                pub_let("other", nat(), nat_lit(kind::OTHER)),
+                pub_let("file", nat(), nat_lit(file_kind::FILE)),
+                pub_let("directory", nat(), nat_lit(file_kind::DIRECTORY)),
+                pub_let("symlink", nat(), nat_lit(file_kind::SYMLINK)),
+                pub_let("other", nat(), nat_lit(file_kind::OTHER)),
             ],
         ),
         pub_mod(
@@ -968,7 +968,7 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
     items
 }
 
-/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `List`, `Cell`, `Io`) holds its type and operations and hoists the type to the `/sys` root; each host-operation subject the store names becomes a module of its own (`file`, `socket`, `dns`, …) except `Handle`'s, which join their type module; then the `status`/`poll`/`mode` code modules. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
+/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `List`, `Cell`, `Io`) holds its type and operations and hoists the type to the `/sys` root; each host-operation subject the store names becomes a module of its own (`file`, `socket`, `dns`, …) except `Handle`'s, which join their type module; then the code modules. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
     let mut subjects = host_subjects(foreigns);
     let handle_host = take_subject(&mut subjects, "Handle");

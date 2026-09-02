@@ -108,7 +108,7 @@ pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
         let r = /sys/Handle/read(h, n)!;
         match r.status == /sys/status/would_block
         | true =>
-            let _ = wait(h, /sys/poll/read)!;
+            let _ = wait(h, /sys/event/read)!;
             go()
         | false =>
             match Handle/error_of(r.status)
@@ -127,7 +127,7 @@ pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
         let r = /sys/Handle/write(h, rest)!;
         match r.status == /sys/status/would_block
         | true =>
-            let _ = wait(h, /sys/poll/write)!;
+            let _ = wait(h, /sys/event/write)!;
             go(rest)
         | false =>
             match Handle/error_of(r.status)
@@ -135,7 +135,7 @@ pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
             | none() =>
                 match r.written < Bytes/len(rest)
                 | true =>
-                    let _ = wait(h, /sys/poll/write)!;
+                    let _ = wait(h, /sys/event/write)!;
                     go(
                         Bytes/drop(
                             rest,
@@ -152,7 +152,7 @@ pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
         let r = /sys/socket/accept(l)!;
         match r.status == /sys/status/would_block
         | true =>
-            let _ = wait(l, /sys/poll/read)!;
+            let _ = wait(l, /sys/event/read)!;
             go()
         | false =>
             match Handle/error_of(r.status)
@@ -287,7 +287,7 @@ let sweep_parked(ss: List(Slot)) -> Io(List(Slot)) =
     end;
 
 let is_ready(results: Nat, interest: Nat) -> Bool =
-    Nat/and(results, Nat/or(Nat/or(interest, /sys/poll/err), /sys/poll/hup)) > 0;
+    Nat/and(results, Nat/or(Nat/or(interest, /sys/event/err), /sys/event/hup)) > 0;
 
 let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parked)}) =
     let handles = List/map(blocked, (p: Parked) => p.handle);

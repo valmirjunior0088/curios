@@ -12,9 +12,9 @@ end
 
 pub let of_mode(mode: Mode) -> Nat =
     match mode
-    | read() => /sys/mode/read
-    | write() => /sys/mode/write
-    | append() => /sys/mode/append
+    | read() => /sys/open_mode/read
+    | write() => /sys/open_mode/write
+    | append() => /sys/open_mode/append
     end;
 
 pub let read(f: File, n: Nat) -> Async(Handle/Read) =

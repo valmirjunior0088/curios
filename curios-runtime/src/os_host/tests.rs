@@ -66,10 +66,10 @@ fn a_piped_child_stream_is_filed_non_blocking() {
     assert!(matches!(host.write(stdin.clone(), b"abc"), (Status::Ok, 3)));
     let ready = host.poll(
         std::slice::from_ref(&stdout),
-        &[Poll::from_bits(curios_abi::poll::READ)],
+        &[Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
-    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
     assert!(matches!(
         host.read(stdout.clone(), 8),
         (Status::Ok, bytes) if bytes == b"abc"
@@ -89,10 +89,10 @@ fn a_piped_child_stream_is_filed_non_blocking() {
 
     let ready = host.poll(
         std::slice::from_ref(&child),
-        &[Poll::from_bits(curios_abi::poll::READ)],
+        &[Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
-    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
     assert!(matches!(host.wait(child), (Status::Ok, 0, 0)));
 
     host.close(stdout);
@@ -133,10 +133,10 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
         Status::WouldBlock => {
             let ready = host.poll(
                 std::slice::from_ref(&client),
-                &[Poll::from_bits(curios_abi::poll::WRITE)],
+                &[Poll::from_bits(curios_abi::event::WRITE)],
                 5_000,
             );
-            assert_ne!(ready[0].bits() & curios_abi::poll::WRITE, 0);
+            assert_ne!(ready[0].bits() & curios_abi::event::WRITE, 0);
             assert!(matches!(host.finish_connect(client.clone()), Status::Ok));
         }
         other => panic!("connect answered status code {}", other.code()),
@@ -145,10 +145,10 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
 
     let ready = host.poll(
         std::slice::from_ref(&listener),
-        &[Poll::from_bits(curios_abi::poll::READ)],
+        &[Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
-    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
     let (status, server) = host.accept(listener.clone());
     assert!(matches!(status, Status::Ok));
 
@@ -162,10 +162,10 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
     ));
     let ready = host.poll(
         std::slice::from_ref(&server),
-        &[Poll::from_bits(curios_abi::poll::READ)],
+        &[Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
-    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
     assert!(matches!(
         host.read(server.clone(), 8),
         (Status::Ok, bytes) if bytes == b"ping"
@@ -193,14 +193,14 @@ fn loopback_pair(host: &OsHost) -> (Handle, Handle, Handle) {
     if matches!(host.connect(client.clone(), &blob), Status::WouldBlock) {
         host.poll(
             std::slice::from_ref(&client),
-            &[Poll::from_bits(curios_abi::poll::WRITE)],
+            &[Poll::from_bits(curios_abi::event::WRITE)],
             5_000,
         );
         assert!(matches!(host.finish_connect(client.clone()), Status::Ok));
     }
     host.poll(
         std::slice::from_ref(&listener),
-        &[Poll::from_bits(curios_abi::poll::READ)],
+        &[Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
     let (status, server) = host.accept(listener.clone());
@@ -230,10 +230,10 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
 
     let ready = host.poll(
         std::slice::from_ref(&server),
-        &[Poll::from_bits(curios_abi::poll::READ)],
+        &[Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
-    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
     let (status, hello) = host.read(server.clone(), 4096);
     assert!(matches!(status, Status::Ok));
     assert_eq!(&hello[..2], &[0x16, 0x03], "a TLS handshake record");
@@ -244,10 +244,10 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
     ));
     let ready = host.poll(
         std::slice::from_ref(&client),
-        &[Poll::from_bits(curios_abi::poll::READ)],
+        &[Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
-    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
     assert!(matches!(
         host.read(client.clone(), 8),
         (Status::TlsError, _)
@@ -274,10 +274,10 @@ fn a_refused_connect_reports_and_drops_the_socket() {
         Status::WouldBlock => {
             let ready = host.poll(
                 std::slice::from_ref(&client),
-                &[Poll::from_bits(curios_abi::poll::WRITE)],
+                &[Poll::from_bits(curios_abi::event::WRITE)],
                 5_000,
             );
-            assert_ne!(ready[0].bits() & curios_abi::poll::WRITE, 0);
+            assert_ne!(ready[0].bits() & curios_abi::event::WRITE, 0);
             host.finish_connect(client.clone())
         }
         other => other,
@@ -308,10 +308,10 @@ fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
 
     let ready = host.poll(
         std::slice::from_ref(&child),
-        &[Poll::from_bits(curios_abi::poll::READ)],
+        &[Poll::from_bits(curios_abi::event::READ)],
         5_000,
     );
-    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    assert_ne!(ready[0].bits() & curios_abi::event::READ, 0);
     assert!(matches!(host.wait(child), (Status::Ok, 0, 0)));
     assert!(matches!(
         host.read(stdout.clone(), 64),

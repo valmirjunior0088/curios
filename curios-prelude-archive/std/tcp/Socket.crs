@@ -45,7 +45,7 @@ let settle(h: Handle, pending: Bool) -> Async(Result({}, Handle/Error)) =
     match pending
     | false => Async/pure(Result/success(()))
     | true =>
-        let _ = Async/wait(h, /sys/poll/write)!;
+        let _ = Async/wait(h, /sys/event/write)!;
         let status = /sys/socket/finish_connect(h)!;
         choose
         | status == /sys/status/would_block => settle(h, true)

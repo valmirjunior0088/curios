@@ -1,4 +1,4 @@
-//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, and stdio-handle tags. Each set is mirrored by a guest-side declaration; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
+//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, and stdio-handle tags, each module named by the tag it holds. Each set is mirrored by a guest-side `/sys` module of the same name; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
 
 /// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Handle/Error`. `Other` has no fixed code here: it lowers its carried errno offset by `OTHER_BASE`, keeping the errno lane disjoint from the named codes.
 pub mod status {
@@ -28,8 +28,8 @@ pub mod status {
     pub const OTHER_BASE: u32 = NOT_DIRECTORY + 1;
 }
 
-/// `poll` interest/readiness flags — a bitmask, mirrored by `/sys/poll`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.
-pub mod poll {
+/// `poll` interest/readiness flags — a bitmask, mirrored by `/sys/event`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.
+pub mod event {
     /// The handle is (or should be watched to become) readable.
     pub const READ: u32 = 0b0001;
     /// The handle is (or should be watched to become) writable.
@@ -40,8 +40,8 @@ pub mod poll {
     pub const HUP: u32 = 0b1000;
 }
 
-/// `open` modes, mirrored by `/sys/mode` and the guest's `/std/File/Mode`.
-pub mod mode {
+/// `open` modes, mirrored by `/sys/open_mode` and the guest's `/std/File/Mode`.
+pub mod open_mode {
     /// Open an existing file read-only.
     pub const READ: u32 = 0;
     /// Open for writing: created if absent, truncated if present.
@@ -50,8 +50,8 @@ pub mod mode {
     pub const APPEND: u32 = 2;
 }
 
-/// What `file/stat` found at a path, mirrored by `/sys/kind` and the guest's `/std/fs/Kind`. `stat` follows symbolic links, so `SYMLINK` is reported only where the link's target is missing.
-pub mod kind {
+/// What `file/stat` found at a path, mirrored by `/sys/file_kind` and the guest's `/std/fs/Kind`. `stat` follows symbolic links, so `SYMLINK` is reported only where the link's target is missing.
+pub mod file_kind {
     /// A regular file.
     pub const FILE: u32 = 0;
     /// A directory.
