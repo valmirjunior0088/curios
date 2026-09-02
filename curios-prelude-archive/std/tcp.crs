@@ -1,6 +1,3 @@
-pub mod Settings;
-pub use Settings/{let Settings};
-
 pub mod resolve;
 pub use resolve/{let resolve};
 

@@ -1,40 +1,42 @@
-use /std/{Bytes, Str, Nat, Handle, Result, Async, Io};
+-- A bound and listening socket: `listen` opens one, `accept` pulls the next connection off it as a `Socket`, and `close` ends it. `serve` and `serve_tls` are the loop written over them, one fiber per connection, the listener closed when the loop ends.
+use /std/{Bytes, Str, Nat, Handle, Try, Async, Io};
 use /std/tcp/{resolve, Socket};
 
 pub struct Listener: Type {
     Handle,
 }
 
-let bind_listen(addr: Bytes) -> Io(Result(Io/Error, Listener)) =
+let ok(status: Nat) -> Try(Io, Io/Error, {}) =
+    match Io/Error/error_of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+
+let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
+    let _ = /sys/Handle/close(h)!;
+    Try/raise(e);
+
+let bind_listen(addr: Bytes) -> Try(Io, Io/Error, Listener) =
     let s = /sys/socket/open(addr)!;
-    match Io/Error/error_of(s.status)
-    | some(e) => Io/pure(Result/failure(e))
-    | none() =>
-        let _ = /sys/socket/set_reuseaddr(s.handle, true)!;
-        let bound = /sys/socket/bind(s.handle, addr)!;
-        match Io/Error/error_of(bound)
-        | some(e) =>
-            let _ = /sys/Handle/close(s.handle)!;
-            Io/pure(Result/failure(e))
-        | none() =>
-            let status = /sys/socket/listen(s.handle, 128)!;
-            match Io/Error/error_of(status)
-            | some(e) =>
-                let _ = /sys/Handle/close(s.handle)!;
-                Io/pure(Result/failure(e))
-            | none() => Io/pure(Result/success(Listener { s.handle }))
-            end
-        end
-    end;
+    let _ = ok(s.status)!;
+    let _ = /sys/socket/set_reuseaddr(s.handle, true)!;
+    let bound = /sys/socket/bind(s.handle, addr)!;
+    let _ = Try/rescue(ok(bound), (e) => close_raising(s.handle, e))!;
+    let listening = /sys/socket/listen(s.handle, 128)!;
+    let _ = Try/rescue(ok(listening), (e) => close_raising(s.handle, e))!;
+    Try/pure(Listener { s.handle });
 
-let listen(host: Str, port: Nat) -> Async(Result(Io/Error, Listener)) =
-    let resolved = resolve(host, port)!;
-    match resolved
-    | failure(e) => Async/pure(Result/failure(e))
-    | success(addr) => Async/lift(bind_listen(addr))
-    end;
+-- A listener bound to `host` at `port`, with the address reusable so a restart does not wait out the previous socket's linger. The resolution parks; the bind and listen answer at once.
+pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Listener) =
+    let addr = resolve(host, port)!;
+    bind_listen(addr);
 
--- A body of its own, so its sequencing does not hoist into `listen_loop`'s region ahead of the `using` that owns the listener's lifetime.
+-- The next connection, parked for until a peer arrives. It comes non-blocking from the host, so it reads and writes like any other stream.
+pub let accept(l: Listener) -> Try(Async, Io/Error, Socket) =
+    let h = Try/attempt(Async/raw/accept(l.0))!;
+    Try/pure(Socket/new(h));
+
+pub let close(l: Listener) -> Io({}) =
+    /sys/Handle/close(l.0);
+
+-- A body of its own, so its sequencing does not hoist into `serve`'s region ahead of the `using` that owns the listener's lifetime. The loop ends at the first failed accept, which is how an exhausted scripted host ends it.
 let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
     let go() -> Async({}) =
         let r = Async/raw/accept(l.0)!;
@@ -46,46 +48,35 @@ let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
         end;
     go();
 
-let listen_loop(
-    host: Str,
-    port: Nat,
-    on_conn: (Handle) -> Async({}),
-) -> Async(Result(Io/Error, {})) =
-    let opened = listen(host, port)!;
-    match opened
-    | failure(e) => Async/pure(Result/failure(e))
-    | success(l) =>
-        let _ = Async/using(l.0, /sys/Handle/close(l.0), accept_loop(l, on_conn))!;
-        Async/pure(Result/success(()))
-    end;
-
--- An accepted stream arrives non-blocking from the host, so it is handed to its own fiber at once.
+-- An accepted stream arrives non-blocking from the host, so it is handed to its own fiber at once, closed when that fiber ends.
 let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
     Async/go(Async/using(h, /sys/Handle/close(h), handler(Socket/new(h))));
 
-pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Async(Result(Io/Error, {})) =
-    listen_loop(host, port, (h) => serve_conn(h, handler));
+-- Every connection to `host` at `port` handed to `handler` in a fiber of its own, until the loop ends; the listener is closed on both scheduler exits.
+pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Try(Async, Io/Error, {}) =
+    let l = listen(host, port)!;
+    Async/using(l.0, close(l), accept_loop(l, (h) => serve_conn(h, handler)));
 
+-- The server side of the handshake is filed, not performed: the handler's reads and writes drive it. A connection the host cannot file is closed and skipped.
 let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> Async({}) =
     let status = /sys/tls/start_server(h, cfg)!;
     match status == /sys/status/ok
-    | true => Async/using(h, /sys/Handle/close(h), handler(Socket/new(h)))
+    | true => serve_conn(h, handler)
     | false => Async/lift(/sys/Handle/close(h))
     end;
 
+-- `serve` under TLS, every accepted connection upgraded with the certificate and key before `handler` sees it; the configuration lives as long as the loop.
 pub let serve_tls(
     host: Str,
     port: Nat,
     cert: Bytes,
     key: Bytes,
     handler: (Socket) -> Async({}),
-) -> Async(Result(Io/Error, {})) =
+) -> Try(Async, Io/Error, {}) =
     let cfg = /sys/tls/server_config(cert, key)!;
-    match Io/Error/error_of(cfg.status)
-    | some(e) => Async/pure(Result/failure(e))
-    | none() =>
-        Async/using(
-            cfg.handle,
-            /sys/Handle/close(cfg.handle),
-            listen_loop(host, port, (h) => serve_tls_conn(h, cfg.handle, handler)))
-    end;
+    let _ = ok(cfg.status)!;
+    let l = listen(host, port)!;
+    Async/using(
+        cfg.handle,
+        /sys/Handle/close(cfg.handle),
+        Async/using(l.0, close(l), accept_loop(l, (h) => serve_tls_conn(h, cfg.handle, handler))));

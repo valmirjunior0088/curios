@@ -27,17 +27,15 @@ fn a_read_parks_and_resumes_across_a_chunk_boundary() {
         .build();
     run_text(
         r#"
-        use /std/{Handle, Str, Async, Io, stream};
-        use /std/tcp/{Settings, Socket};
-        let _ = (match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))!
-        | failure(_) => Io/write(Io/stdout, Str/to_bytes("deadlock"))
-        | success(outcome) =>
-            match outcome
+        use /std/{Str, Show, Try, Async, Io};
+        use /std/tcp/{Socket};
+        let fiber: Async({}) =
+            let r = Try/run(Socket/call(Socket/connect("example.com", 80), Str/to_bytes("GET /\r\n\r\n")))!;
+            match r
             | success(response) => Io/write(Io/stdout, response)
-            | failure(_) => Io/write(Io/stdout, Str/to_bytes("error"))
-            end
-        end)!;
-        /std/Io/pure(())
+            | failure(e) => /std/print(Show/show(e))
+            end;
+        Async/run(fiber)
         "#,
         system,
     )

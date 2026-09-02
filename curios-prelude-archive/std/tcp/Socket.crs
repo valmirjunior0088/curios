@@ -1,5 +1,6 @@
-use /std/{Bytes, Str, Nat, Bool, Handle, Result, Async, Io, stream};
-use /std/tcp/{Settings, resolve};
+-- A connected stream: `connect` and `connect_tls` open one, `with` is the bracket a body runs inside, and `call` is one request and the whole reply. A socket reads and writes through the stream concepts, so everything written over `stream` applies to it, and `read` and `write` are the same operations by name.
+use /std/{Bytes, Str, Nat, Bool, Handle, Result, Try, Async, Io, stream};
+use /std/tcp/{resolve};
 
 pub struct Socket: Type {
     Handle,
@@ -15,121 +16,91 @@ pub let read(c: Socket, n: Nat) -> Async(stream/Chunk) =
 pub let write(c: Socket, b: Bytes) -> Async(Result(Io/Error, {})) =
     Async/raw/write(c.0, b);
 
-let upgrade(h: Handle, host: Str, tls: Bool) -> Io(Nat) =
-    match tls
-    | true => /sys/tls/start(h, Str/to_bytes(host))
-    | false => Io/pure(/sys/status/ok)
-    end;
+satisfy stream/Read(Socket) {
+    read(c, n) = read(c, n),
+}
+
+satisfy stream/Write(Socket) {
+    write(c, b) = write(c, b),
+}
+
+pub let close(c: Socket) -> Io({}) =
+    /sys/Handle/close(c.0);
+
+let ok(status: Nat) -> Try(Io, Io/Error, {}) =
+    match Io/Error/error_of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+
+-- The handle closed and the failure passed on: what a connect that got as far as a socket does with a failure after it. Written over `Io` and lifted where the failing step parks.
+let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
+    let _ = /sys/Handle/close(h)!;
+    Try/raise(e);
 
 -- Every step up to the connect is a syscall that answers at once; the connect itself is where a peer decides, so the host may hand the wait back: a non-blocking socket answers `would_block` for any peer that is not local, which `settle` turns into a park on `WRITE` until the kernel has settled it.
-let open_and_connect(addr: Bytes) -> Io(Result(Io/Error, {Handle, Bool})) =
+let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
     let s = /sys/socket/open(addr)!;
-    match Io/Error/error_of(s.status)
-    | some(e) => Io/pure(Result/failure(e))
-    | none() =>
-        let status = /sys/socket/connect(s.handle, addr)!;
-        choose
-        | status == /sys/status/would_block => Io/pure(Result/success((s.handle, true)))
-        | _ =>
-            match Io/Error/error_of(status)
-            | some(e) =>
-                let _ = /sys/Handle/close(s.handle)!;
-                Io/pure(Result/failure(e))
-            | none() => Io/pure(Result/success((s.handle, false)))
-            end
+    let _ = ok(s.status)!;
+    let status = /sys/socket/connect(s.handle, addr)!;
+    choose
+    | status == /sys/status/would_block => Try/pure((s.handle, true))
+    | _ =>
+        match Io/Error/error_of(status)
+        | some(e) =>
+            let _ = /sys/Handle/close(s.handle)!;
+            Try/raise(e)
+        | none() => Try/pure((s.handle, false))
         end
     end;
 
 -- A pending connect settles once the socket polls writable, and `finish_connect` reads the outcome; an honest early answer of `would_block` parks again.
-let settle(h: Handle, pending: Bool) -> Async(Result(Io/Error, {})) =
+let settle(h: Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
     match pending
-    | false => Async/pure(Result/success(()))
+    | false => Try/pure(())
     | true =>
         let _ = Async/wait(h, /sys/event/write)!;
         let status = /sys/socket/finish_connect(h)!;
-        choose
-        | status == /sys/status/would_block => settle(h, true)
-        | _ =>
-            Async/pure(
-                match Io/Error/error_of(status)
-                | some(e) => Result/failure(e)
-                | none() => Result/success(())
-                end)
-        end
+        choose | status == /sys/status/would_block => settle(h, true) | _ => ok(status) end
     end;
 
-let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Async(Result(Io/Error, Socket)) =
-    let opened = open_and_connect(addr)!;
-    match opened
-    | failure(e) => Async/pure(Result/failure(e))
-    | success((h, pending)) =>
-        let settled = settle(h, pending)!;
-        match settled
-        | failure(e) =>
-            let _ = /sys/Handle/close(h)!;
-            Async/pure(Result/failure(e))
-        | success(_) =>
-            let upgraded = upgrade(h, host, settings.tls)!;
-            match Io/Error/error_of(upgraded)
-            | some(e) =>
-                let _ = /sys/Handle/close(h)!;
-                Async/pure(Result/failure(e))
-            | none() => Async/pure(Result/success(Socket { h }))
-            end
-        end
+-- The TLS client handshake is not performed here: the host files the session and the reads and writes that follow drive it, parking as any other read or write does.
+let upgrade(h: Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
+    match tls
+    | true =>
+        let status = /sys/tls/start(h, Str/to_bytes(host))!;
+        ok(status)
+    | false => Try/pure(())
     end;
 
-let connect_socket(settings: Settings, host: Str, port: Nat) -> Async(Result(Io/Error, Socket)) =
-    let resolved = resolve(host, port)!;
-    match resolved
-    | failure(e) => Async/pure(Result/failure(e))
-    | success(addr) => connect_addr(settings, host, addr)
-    end;
+let connect_addr(host: Str, addr: Bytes, tls: Bool) -> Try(Async, Io/Error, Socket) =
+    let (h, pending) = open_and_connect(addr)!;
+    let _ = Try/rescue(settle(h, pending), (e) => close_raising(h, e))!;
+    let _ = Try/rescue(upgrade(h, host, tls), (e) => close_raising(h, e))!;
+    Try/pure(Socket { h });
 
-pub let connect(settings: Settings, host: Str, port: Nat) -> Async(Result(Io/Error, Socket)) =
-    let opened = connect_socket(settings, host, port)!;
-    match opened
-    | failure(e) => Async/pure(Result/failure(e))
-    | success(c) =>
-        let _ = Async/acquire(c.0, /sys/Handle/close(c.0))!;
-        Async/pure(Result/success(c))
-    end;
+-- A connection to `host` at `port`, cleartext. Nothing guards it: `with` is the bracket that closes it when the body ends, and a bare `connect` is closed by `close`.
+pub let connect(host: Str, port: Nat) -> Try(Async, Io/Error, Socket) =
+    let addr = resolve(host, port)!;
+    connect_addr(host, addr, false);
 
-pub let close(c: Socket) -> Async({}) =
-    Async/release(c.0);
+-- The same connection under TLS, the certificate checked against `host`.
+pub let connect_tls(host: Str, port: Nat) -> Try(Async, Io/Error, Socket) =
+    let addr = resolve(host, port)!;
+    connect_addr(host, addr, true);
 
+-- `body` over the socket `open` connects, closed on both scheduler exits — a cancelled task included — with the body's own failure as the answer after the close.
 pub let with(
     @A: Type,
-    settings: Settings,
-    host: Str,
-    port: Nat,
-    f: (Socket) -> Async(A),
-) -> Async(Result(Io/Error, A)) =
-    let opened = connect(settings, host, port)!;
-    match opened
-    | failure(e) => Async/pure(Result/failure(e))
-    | success(c) =>
-        let a = f(c)!;
-        let _ = close(c)!;
-        Async/pure(Result/success(a))
-    end;
+    open: Try(Async, Io/Error, Socket),
+    body: (Socket) -> Try(Async, Io/Error, A),
+) -> Try(Async, Io/Error, A) =
+    let c = open!;
+    let outcome = Async/using(c.0, close(c), Try/run(body(c)))!;
+    let a = outcome!;
+    Try/pure(a);
 
-let drain(c: Socket) -> Async(Result(Io/Error, Bytes)) =
-    Async/drain((n) => read(c, n));
-
--- `with` wraps the body's own failure channel in its connect/close one; flatten collapses the two so a caller sees one channel whichever stage failed.
-pub let call(
-    settings: Settings,
-    host: Str,
-    port: Nat,
-    request: Bytes,
-) -> Async(Result(Io/Error, Bytes)) =
-    Async/map(
-        with(
-            settings,
-            host,
-            port,
-            (c) =>
-                let w = write(c, request)!;
-                match w | success(_) => drain(c) | failure(e) => Async/pure(Result/failure(e)) end),
-        (r) => Result/flatten(r));
+-- `request` written whole and the reply read to its end, over the socket `open` connects, closed after: one exchange with a peer that closes when it has answered.
+pub let call(open: Try(Async, Io/Error, Socket), request: Bytes) -> Try(Async, Io/Error, Bytes) =
+    with(
+        open,
+        (c) =>
+            let _ = Try/attempt(write(c, request))!;
+            Try/attempt(stream/read_all(c)));

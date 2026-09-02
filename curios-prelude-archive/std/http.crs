@@ -1,5 +1,6 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, List, Parse, Result, Option, Handle, Async, Io};
-use /std/tcp/{Settings, Socket};
+-- HTTP/1.1 over one connection per request: a `Request` rendered onto a socket, the whole reply read back and decoded through `/std/Parse`. `perform` is `Try` over `Async` with this module's own `Error`, which keeps the network's failure beside the reply's.
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Parse, Result, Option, Try, Async, Io};
+use /std/tcp/{Socket};
 
 pub induct Method: pub Type
 | get()
@@ -21,7 +22,7 @@ pub struct Request: pub Type {
     path: Str,
     headers: List({Str, Str}),
     body: Bytes,
-    settings: Settings,
+    tls: Bool,
 }
 
 pub let get(host: Str, port: Nat, path: Str) -> Request =
@@ -32,7 +33,7 @@ pub let get(host: Str, port: Nat, path: Str) -> Request =
         path = path,
         headers = [],
         body = x[],
-        settings = Settings/default,
+        tls = false,
     };
 
 pub let post(host: Str, port: Nat, path: Str, body: Bytes) -> Request =
@@ -43,14 +44,11 @@ pub let post(host: Str, port: Nat, path: Str, body: Bytes) -> Request =
         path = path,
         headers = [],
         body = body,
-        settings = Settings/default,
+        tls = false,
     };
 
-let with_tls(s: Settings) -> Settings =
-    Settings { ..s, tls = true };
-
 pub let secure(request: Request) -> Request =
-    Request { ..request, settings = with_tls(request.settings) };
+    Request { ..request, tls = true };
 
 pub let get_tls(host: Str, port: Nat, path: Str) -> Request =
     secure(get(host, port, path));
@@ -165,15 +163,15 @@ pub let decode: Parse(Response) =
 pub let header(resp: Response, name: Str) -> Option(Str) =
     header_lookup(resp.headers, name);
 
-pub let perform(request: Request) -> Async(Result(Error, Response)) =
-    Async/bind(
-        Socket/call(request.settings, request.host, request.port, render(request)),
-        (r) =>
-            match r
-            | success(bytes) =>
-                match Parse/run(decode, bytes)
-                | success(response) => Async/pure(Result/success(response))
-                | failure(message) => Async/pure(Result/failure(Error/malformed(message)))
-                end
-            | failure(error) => Async/pure(Result/failure(Error/net(error)))
-            end);
+-- One exchange: connect as the request says, send it whole, read the reply to the close, decode. A failure on the wire is `net`; a reply the decoder refuses is `malformed`.
+pub let perform(request: Request) -> Try(Async, Error, Response) =
+    let open =
+        match request.tls
+        | true => Socket/connect_tls(request.host, request.port)
+        | false => Socket/connect(request.host, request.port)
+        end;
+    let bytes = Try/map_error(Socket/call(open, render(request)), (e) => Error/net(e))!;
+    match Parse/run(decode, bytes)
+    | success(response) => Try/pure(response)
+    | failure(message) => Try/raise(Error/malformed(message))
+    end;
