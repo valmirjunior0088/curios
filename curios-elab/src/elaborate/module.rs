@@ -1254,6 +1254,8 @@ fn elaborate_module_suffix(
                 body: test_program_tail(context, scheduled),
                 type_: None,
             };
+            // Choosing each test's discharge reduces bodies under their telescopes; that is spent on the declarations' behalf, so the tail itself still checks on a full budget.
+            context.restore_budget();
             Some(&synthesized)
         }
     };

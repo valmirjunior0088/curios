@@ -112,7 +112,7 @@ fn a_property_is_probed_over_drawn_arguments() {
 
 #[test]
 fn a_theorem_bodied_property_passes_without_a_case_failing() {
-    // The kernel settled `n + 0 = n` over the open binder once, at elaboration, so the runner meets `theorem()` at every case and has nothing left to decide — and still reports `passed` rather than `proved`, because a property is a verdict decided by running it, whatever each case turned out to be.
+    // `Test/property` is the sampler: the kernel settled `n + 0 = n` over the open binder once, at elaboration, so the runner meets `theorem()` at every case and has nothing left to decide — and still reports `passed`, because a property is a verdict decided by running it, whatever each case turned out to be. The `proved` report for the same body is the tail's, which chooses `Test/settled` instead (`a_theorem_bodied_test_is_reported_proved`).
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, Eq, Test};
@@ -317,6 +317,62 @@ fn an_implicit_nothing_fixes_is_reported_at_the_declaration() {
         error.contains("test drawn(@A: Type, use Test/Draw(A), use Spell(A), a: A)")
             || error.contains("Test/check(true)"),
         "the report does not point at the declaration: {error}"
+    );
+}
+
+#[test]
+fn a_theorem_bodied_test_is_reported_proved() {
+    // The body converts to a theorem under its open telescope, so the tail closes the declaration through `Test/settled` rather than sampling it, and the kernel rechecks that closer's evidence: `proved` means what it means for a nullary test. The premise-bearing twin is closed the same way over its explicit binder.
+    assert_eq!(
+        run_tests_program(
+            r#"
+        use /std/{Nat, Str, Io, Eq, Equal, Test};
+        test plus_zero(n: Nat) =
+            Test/refl(n + 0, n, Eq/refl());
+        test twice(n: Nat, m: Nat) =
+            Test/refl(n + m, n + m, Eq/refl());
+        test with_premise(use Equal(Nat), n: Nat) =
+            Test/refl(n, n, Eq/refl());
+        /std/print("ran\n")
+        "#
+        ),
+        b"/plus_zero: proved\n/twice: proved\n/with_premise: proved\n"
+    );
+}
+
+#[test]
+fn a_body_that_branches_on_its_parameter_is_still_sampled() {
+    // A theorem in one arm is not a theorem under the binder: the match is stuck on `n`, conversion answers no, and the tail samples — which is also what keeps `proved` the kernel's word rather than the sampler's, since a hundred settled cases would say nothing about the arm never drawn.
+    assert_eq!(
+        run_tests_program(
+            r#"
+        use /std/{Nat, Str, Io, Eq, Test};
+        test mixed(n: Nat) =
+            match n
+            | 0 => Test/refl(0, 0, Eq/refl())
+            | _ => Test/check(n > 0)
+            end;
+        /std/print("ran\n")
+        "#
+        ),
+        b"/mixed: passed\n"
+    );
+}
+
+#[test]
+fn a_hand_written_settled_needs_real_evidence() {
+    // The closer is public, and its evidence is an obligation the checker decides: `Settled(prop(a))` reduces to `False` for a `check` body, so nothing inhabits it and a theorem cannot be fabricated from a verdict.
+    let error = error(
+        r#"
+        use /std/{Nat, Str, Io, True, Test};
+        let claim(n: Nat) -> Test = Test/check(n == n);
+        let closed: Test = Test/settled(claim, (n) => True/qed());
+        /std/print("ran\n")
+        "#,
+    );
+    assert!(
+        error.contains("Settled") || error.contains("True") || error.contains("False"),
+        "unexpected error: {error}"
     );
 }
 

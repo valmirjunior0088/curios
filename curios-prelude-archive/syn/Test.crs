@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Str, Bytes, List, Option, Io, Eq, Equal, Spell, print, proc};
+use /std/{Nat, Bool, Str, Bytes, List, Option, Io, Eq, Equal, Spell, True, False, print, proc};
 use /std/Test/{Seed, Property};
 
 pub induct Verdict: pub Type
@@ -18,6 +18,14 @@ pub let prove(P: Prop, proof: P) -> Test =
     Test/theorem();
 
 pub let refl(@A: Type, a: A, b: A, proof: Eq(a, b)) -> Test =
+    Test/theorem();
+
+-- That a description was settled by the kernel: `True` on a theorem and `False` otherwise, so the only evidence that exists is for a body that reduces to a theorem, and `settled` below can be handed nothing else.
+pub let Settled(t: Test) -> Prop =
+    match t | theorem() => True | verdict(_) => False | action(_) => False end;
+
+-- A parameterized description the kernel settled at every argument, closed into one theorem: the evidence is `(a) => True/qed()` exactly when `prop(a)` reduces to a theorem under the open binder, which is what the checker decides at the call. The synthesized tail nests this once per explicit parameter of a test whose body converts to a theorem under its telescope — so `curios test` reports `proved` for what was proved — and the same nesting is how a proved family is closed by hand.
+pub let settled(@A: Type, prop: (A) -> Test, evidence: (a: A) -> Settled(prop(a))) -> Test =
     Test/theorem();
 
 pub let check(condition: Bool) -> Test =

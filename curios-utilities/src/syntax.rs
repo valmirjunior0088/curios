@@ -298,12 +298,14 @@ impl ProofSyntax {
     }
 }
 
-/// The names the `test` declaration form emits: `/syn/Test`, the declared output type of every lowered test; `/syn/Test/main`, the scheduler the synthesized tail applies to the collected tests; and `/syn/Test/property`, what that tail closes a parameterized test through.
+/// The names the `test` declaration form emits: `/syn/Test`, the declared output type of every lowered test; `/syn/Test/main`, the scheduler the synthesized tail applies to the collected tests; `/syn/Test/property`, what that tail closes a parameterized test through when it is probed; `/syn/Test/settled`, what it closes one through when the kernel settled it, and `/syn/Test/Test/theorem`, the description the elaborator compares the body against to tell the two apart.
 #[derive(Debug, Clone, Copy)]
 pub struct TestSyntax {
     pub test_type: SyntaxName,
     pub main: SyntaxName,
     pub property: SyntaxName,
+    pub settled: SyntaxName,
+    pub theorem: SyntaxName,
 }
 
 impl TestSyntax {
@@ -312,9 +314,11 @@ impl TestSyntax {
             test_type,
             main,
             property,
+            settled,
+            theorem,
         } = self;
 
-        [test_type, main, property].into_iter()
+        [test_type, main, property, settled, theorem].into_iter()
     }
 }
 

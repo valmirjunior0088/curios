@@ -290,5 +290,5 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `curios new` scaffolding (a package named after its directory, with both halves written)
   - [x] One-line installer (`install.sh`, versioned by its URL and checksum-verified)
   - [x] [Test runner](design/toolchain/a-test-is-a-declared-description-run-by-a-synthesized-tail.md) (`test name() = body;` declarations run by `curios test`, listed by `wonder tests`)
-  - [x] [Property-based testing](design/language/a-parameterized-test-is-a-property.md) (`test name(params) = body;` probed over drawn arguments by `curios test`, a failure spelling its counterexample)
+  - [x] [Property-based testing](design/language/a-parameterized-test-is-a-property.md) (`test name(params) = body;` probed over drawn arguments by `curios test`, a failure spelling its counterexample; a body the kernel settles under its telescope reports `proved` instead)
   - [ ] [A package's documentation is generated from the compilation that builds it](roadmap/documentation-generator-spec.md) (not refined yet)

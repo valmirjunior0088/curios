@@ -65,6 +65,8 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         test_type: name(&["syn", "Test", "Test"]),
         main: name(&["syn", "Test", "main"]),
         property: name(&["syn", "Test", "property"]),
+        settled: name(&["syn", "Test", "settled"]),
+        theorem: name(&["syn", "Test", "Test", "theorem"]),
     },
     spell: SpellSyntax {
         spell: field(&["syn", "Spell", "Spell"], "spell"),
