@@ -1,5 +1,5 @@
--- The filesystem beyond a file's contents: what is at a path, the names in a directory, and making, moving and removing things. Every row carries `Bytes` paths as `file/open` does, and a listing and the working directory come back as the bytes the host holds — a name that is not UTF-8 is the caller's to decode or refuse, so nothing here decodes. The rows are synchronous and hold no handle, but the functions are `Async` as `File/open` is, so one region mixes them freely. The release targets are Linux and macOS, so the path functions at the end take `/` as the one separator.
-use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Handle, Async, Io, Equal, Show};
+-- The filesystem beyond a file's contents: what is at a path, the names in a directory, and making, moving and removing things. Every function takes a `Path` and hands one back where the host names something, so a listing's entry or the working directory is exactly the bytes the host holds, and decoding is `Path/to_str`'s and the caller's. The rows are synchronous and hold no handle — the disk answers them — so every function here is `Io`, and what can fail is `Try` over `Io` with `Io/Error` as the failure. The pure algebra over paths is `Path`'s.
+use /std/{Nat, Bool, List, Option, Path, Try, Io, Equal, Show};
 use /std/time/{Timestamp};
 
 pub induct Kind: pub Type
@@ -39,165 +39,103 @@ pub struct Metadata: pub Type {
 pub let size_nat(m: Metadata) -> Option(Nat) =
     match m.size.hi == 0 | true => Option/some(m.size.lo) | false => Option/none() end;
 
-let outcome(status: Nat) -> Result(Io/Error, {}) =
-    match Io/Error/error_of(status)
-    | some(e) => Result/failure(e)
-    | none() => Result/success(())
-    end;
+let outcome(status: Nat) -> Try(Io, Io/Error, {}) =
+    match Io/Error/error_of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
-pub let stat(path: Str) -> Async(Result(Io/Error, Metadata)) =
-    let r = /sys/file/stat(Str/to_bytes(path))!;
-    Async/pure(
-        match Io/Error/error_of(r.status)
-        | some(e) => Result/failure(e)
-        | none() =>
-            Result/success(
-                Metadata {
-                    kind = kind_of(r.kind),
-                    size = (hi = r.size_hi, lo = r.size_lo),
-                    mtime = Timestamp/of_unix(r.mtime_hi, r.mtime_lo, r.mtime_nanos),
-                })
-        end);
+pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
+    let r = /sys/file/stat(Path/to_bytes(path))!;
+    match Io/Error/error_of(r.status)
+    | some(e) => Try/raise(e)
+    | none() =>
+        Try/pure(
+            Metadata {
+                kind = kind_of(r.kind),
+                size = (hi = r.size_hi, lo = r.size_lo),
+                mtime = Timestamp/of_unix(r.mtime_hi, r.mtime_lo, r.mtime_nanos),
+            })
+    end;
 
 -- `not_found` is the answer `false`; every other failure is the failure it is.
-let kind_is(path: Str, want: (Kind) -> Bool) -> Async(Result(Io/Error, Bool)) =
-    let r = stat(path)!;
-    Async/pure(
-        match r
-        | success(m) => Result/success(want(m.kind))
-        | failure(e) => match e | not_found() => Result/success(false) | _ => Result/failure(e) end
-        end);
+let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
+    let r = Try/run(stat(path))!;
+    match r
+    | success(m) => Try/pure(want(m.kind))
+    | failure(e) => match e | not_found() => Try/pure(false) | _ => Try/raise(e) end
+    end;
 
-pub let exists(path: Str) -> Async(Result(Io/Error, Bool)) =
+pub let exists(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (k) => true);
 
-pub let is_file(path: Str) -> Async(Result(Io/Error, Bool)) =
+pub let is_file(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (k) => k == Kind/file());
 
-pub let is_dir(path: Str) -> Async(Result(Io/Error, Bool)) =
+pub let is_dir(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (k) => k == Kind/directory());
 
-pub let list(path: Str) -> Async(Result(Io/Error, List(Bytes))) =
-    let r = /sys/dir/list(Str/to_bytes(path))!;
-    Async/pure(
-        match Io/Error/error_of(r.status)
-        | some(e) => Result/failure(e)
-        | none() => Result/success(r.names)
-        end);
+-- The entries' names, each a `Path` that `Path/join` puts back under `path`.
+pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
+    let r = /sys/dir/list(Path/to_bytes(path))!;
+    match Io/Error/error_of(r.status)
+    | some(e) => Try/raise(e)
+    | none() => Try/pure(List/map(r.names, Path/of_bytes))
+    end;
 
-pub let create_dir(path: Str) -> Async(Result(Io/Error, {})) =
-    let status = /sys/dir/create(Str/to_bytes(path))!;
-    Async/pure(outcome(status));
+pub let create_dir(path: Path) -> Try(Io, Io/Error, {}) =
+    let status = /sys/dir/create(Path/to_bytes(path))!;
+    outcome(status);
 
-pub let remove_dir(path: Str) -> Async(Result(Io/Error, {})) =
-    let status = /sys/dir/remove(Str/to_bytes(path))!;
-    Async/pure(outcome(status));
+pub let remove_dir(path: Path) -> Try(Io, Io/Error, {}) =
+    let status = /sys/dir/remove(Path/to_bytes(path))!;
+    outcome(status);
 
-pub let remove_file(path: Str) -> Async(Result(Io/Error, {})) =
-    let status = /sys/file/remove(Str/to_bytes(path))!;
-    Async/pure(outcome(status));
+pub let remove_file(path: Path) -> Try(Io, Io/Error, {}) =
+    let status = /sys/file/remove(Path/to_bytes(path))!;
+    outcome(status);
 
-pub let rename(from: Str, to: Str) -> Async(Result(Io/Error, {})) =
-    let status = /sys/file/rename(Str/to_bytes(from), Str/to_bytes(to))!;
-    Async/pure(outcome(status));
+pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
+    let status = /sys/file/rename(Path/to_bytes(from), Path/to_bytes(to))!;
+    outcome(status);
 
-pub let cwd: Async(Result(Io/Error, Bytes)) =
+pub let cwd: Try(Io, Io/Error, Path) =
     let r = /sys/proc/cwd!;
-    Async/pure(
-        match Io/Error/error_of(r.status)
-        | some(e) => Result/failure(e)
-        | none() => Result/success(r.path)
-        end);
-
--- `a/b`, with one separator between them whatever `a` ends in; an empty side is the other side.
-pub let join(a: Str, b: Str) -> Str =
-    choose
-    | Str/is_empty(a) => b
-    | Str/is_empty(b) => a
-    | Str/ends_with(a, "/") => Str/concat(a, b)
-    | _ => Str/flatten([a, "/", b])
+    match Io/Error/error_of(r.status)
+    | some(e) => Try/raise(e)
+    | none() => Try/pure(Path/of_bytes(r.path))
     end;
 
--- The last component, which a listing's entry is; empty after a trailing separator.
-pub let name(p: Str) -> Str =
-    Option/unwrap_or(List/last(Str/split(p, "/")), "");
-
--- Everything before the last separator: `none` for a bare name, and `/` itself for a child of the root.
-pub let parent(p: Str) -> Option(Str) =
-    let parts = Str/split(p, "/");
-    let n = List/len(parts);
-    match n < 2
-    | true => Option/none()
-    | false =>
-        let above = Str/join("/", List/take(parts, n - 1));
-        Option/some(match Str/is_empty(above) | true => "/" | false => above end)
-    end;
-
--- The text after the last `.` of the name, when the name has one that is not its first character: `.bashrc` has none and `archive.tar.gz` has `gz`.
-pub let extension(p: Str) -> Option(Str) =
-    let parts = Str/split(name(p), ".");
-    let n = List/len(parts);
-    choose
-    | n < 2 => Option/none()
-    | n == 2 && Str/is_empty(Option/unwrap_or(List/try_get(parts, 0), "")) => Option/none()
-    | _ => List/last(parts)
-    end;
-
--- Every prefix of `path` created in turn, one that already exists left as it is. Written over the rows with no row of its own, since a majority of the surveyed libraries ship it and the host pays nothing for it.
-pub let create_dir_all(path: Str) -> Async(Result(Io/Error, {})) =
-    let go(prefix: Str, parts: List(Str)) -> Async(Result(Io/Error, {})) =
-        match parts
-        | [] => Async/pure(Result/success(()))
-        | [part, ..rest] =>
-            let next =
-                choose
-                | Str/is_empty(prefix) && Str/is_empty(part) => "/"
-                | _ => join(prefix, part)
-                end;
-            let r = create_dir(next)!;
-            match r
-            | success(_) => go(next, rest)
-            | failure(e) =>
-                match e | exists() => go(next, rest) | _ => Async/pure(Result/failure(e)) end
+-- `path` and every missing prefix of it, one that already exists left as it is: a `not_found` from the row is a missing parent, made first and then the directory tried again. Written over the rows with no row of its own, since a majority of the surveyed libraries ship it and the host pays nothing for it.
+pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =
+    let r = Try/run(create_dir(path))!;
+    match r
+    | success(_) => Try/pure(())
+    | failure(e) =>
+        match e
+        | exists() => Try/pure(())
+        | not_found() =>
+            match Path/parent(path)
+            | some(parent) =>
+                let _ = create_dir_all(parent)!;
+                create_dir(path)
+            | none() => Try/raise(e)
             end
-        end;
-    go("", Str/split(path, "/"));
-
--- Everything at `path`, a directory's entries first. Written over the rows at `Bytes`, so a name that is not UTF-8 is removed like any other.
-pub let remove_all(path: Str) -> Async(Result(Io/Error, {})) =
-    remove_all_bytes(Str/to_bytes(path));
-
-let remove_all_bytes(path: Bytes) -> Async(Result(Io/Error, {})) =
-    let s = /sys/file/stat(path)!;
-    match Io/Error/error_of(s.status)
-    | some(e) => Async/pure(Result/failure(e))
-    | none() =>
-        match s.kind == /sys/file_kind/directory
-        | false =>
-            let status = /sys/file/remove(path)!;
-            Async/pure(outcome(status))
-        | true =>
-            let l = /sys/dir/list(path)!;
-            match Io/Error/error_of(l.status)
-            | some(e) => Async/pure(Result/failure(e))
-            | none() =>
-                let r = remove_each(path, l.names)!;
-                match r
-                | failure(e) => Async/pure(Result/failure(e))
-                | success(_) =>
-                    let status = /sys/dir/remove(path)!;
-                    Async/pure(outcome(status))
-                end
-            end
+        | _ => Try/raise(e)
         end
+    end;
+
+-- Everything at `path`, a directory's entries first. Written over `list` at `Path`, so a name that is not UTF-8 is removed like any other.
+pub let remove_all(path: Path) -> Try(Io, Io/Error, {}) =
+    let m = stat(path)!;
+    match m.kind
+    | directory() =>
+        let entries = list(path)!;
+        let _ = remove_each(path, entries)!;
+        remove_dir(path)
+    | _ => remove_file(path)
     end
-and remove_each(dir: Bytes, names: List(Bytes)) -> Async(Result(Io/Error, {})) =
-    match names
-    | [] => Async/pure(Result/success(()))
-    | [name, ..rest] =>
-        let r = remove_all_bytes(x[..dir, '/', ..name])!;
-        match r
-        | failure(e) => Async/pure(Result/failure(e))
-        | success(_) => remove_each(dir, rest)
-        end
+and remove_each(dir: Path, entries: List(Path)) -> Try(Io, Io/Error, {}) =
+    match entries
+    | [] => Try/pure(())
+    | [entry, ..rest] =>
+        let _ = remove_all(Path/join(dir, entry))!;
+        remove_each(dir, rest)
     end;
