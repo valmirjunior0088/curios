@@ -107,6 +107,7 @@ satisfy Ordered(Int) {
 
 -- A magnitude drawn as a `Nat`, and one more bit for the sign.
 satisfy Draw(Int) {
+    all = Option/none(),
     draw(seed, size) =
         let (magnitude, after) = Draw/draw(@Nat, seed, size);
         let (sign, rest) = Seed/next(after);

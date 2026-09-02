@@ -1,4 +1,4 @@
-use /std/{Bool, Eq, Equal, False, Show, Spell};
+use /std/{Bool, Eq, Equal, False, Show, Spell, Option, List};
 use /std/Test/{Draw, Seed};
 use /std/Bool/{false_neq_true};
 
@@ -59,6 +59,7 @@ satisfy Show(Ordering) {
 satisfy Spell(Ordering);
 
 satisfy Draw(Ordering) {
+    all = Option/some([Ordering/lt(), Ordering/eq(), Ordering/gt()]),
     draw(seed, size) =
         let (n, rest) = Seed/next(seed);
         (match n % 3 | 0 => Ordering/lt() | 1 => Ordering/eq() | _ => Ordering/gt() end, rest),

@@ -360,6 +360,45 @@ fn a_body_that_branches_on_its_parameter_is_still_sampled() {
 }
 
 #[test]
+fn a_finite_domain_is_exhausted_in_roster_order() {
+    // `Bool` and `Ordering` have rosters and their product fits the case budget, so every case is put to the claim in roster order — `true` before `false`, `lt` before `eq` before `gt` — and the first failure is the first failing case in that order, not whichever a seed happened to draw first. A roster composes through `Option` and the tuple shapes the same way.
+    assert_eq!(
+        run_tests_program(
+            r#"
+        use /std/{Nat, Bool, Str, Io, Ordering, Option, Test};
+        test either(a: Bool, b: Bool) =
+            Test/check(a || b);
+        test first_argument(a: Bool, o: Ordering) =
+            Test/check(a);
+        test every_pair(p: {Bool, Bool}, o: Option(Ordering)) =
+            Test/check(true);
+        /std/print("ran\n")
+        "#
+        ),
+        b"/either: failed\n  for false, false: the condition was false\n/first_argument: failed\n  for false, /std/Ordering/Ordering/lt(): the condition was false\n/every_pair: passed\n"
+    );
+}
+
+#[test]
+fn a_domain_past_the_budget_is_sampled() {
+    // `Byte`'s roster has two hundred and fifty-six values, past the hundred-case budget, so the claim is sampled as before: the counterexample is a drawn byte, which is not the first one in roster order that fails.
+    let report = run_tests_program(
+        r#"
+        use /std/{Nat, Byte, Str, Io, Test};
+        test small(b: Byte) =
+            Test/check(Byte/to_nat(b) < 10);
+        /std/print("ran\n")
+        "#,
+    );
+    let report = String::from_utf8(report).expect("the report is text");
+    assert!(report.starts_with("/small: failed\n  for "), "{report}");
+    assert!(
+        !report.contains("for 10:"),
+        "sampled rather than exhausted: {report}"
+    );
+}
+
+#[test]
 fn a_hand_written_settled_needs_real_evidence() {
     // The closer is public, and its evidence is an obligation the checker decides: `Settled(prop(a))` reduces to `False` for a `check` body, so nothing inhabits it and a theorem cannot be fabricated from a verdict.
     let error = error(

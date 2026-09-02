@@ -1,4 +1,4 @@
-use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, Compare, Ordered};
+use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, Compare, Ordered, List};
 use /std/Test/{Draw, Seed};
 
 pub induct Option(A: Type): pub Type
@@ -91,6 +91,7 @@ satisfy (@A: Type, use Ordered(A)) => Ordered(Option(A)) {
 
 -- `none` one case in four, so a drawn option is usually inhabited and the empty case still turns up early.
 satisfy (@A: Type, use Draw(A)) => Draw(Option(A)) {
+    all = map(Draw/all(@A), (xs) => [Option/none(), ..List/map(xs, (a) => Option/some(a))]),
     draw(seed, size) =
         let (n, after) = Seed/next(seed);
         match n % 4 == 0

@@ -151,6 +151,7 @@ satisfy Ordered(Char) {
 
 -- Printable ASCII, so a drawn character spells as itself and a drawn string reads as text. `of_nat` cannot refuse a code below 128, so the fallback is never reached.
 satisfy Draw(Char) {
+    all = Option/none(),
     draw(seed, size) =
         let (n, rest) = Seed/next(seed);
         (Option/unwrap_or(of_nat(32 + n % 95), ' '), rest),

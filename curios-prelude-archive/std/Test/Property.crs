@@ -1,14 +1,23 @@
--- The per-case judgment behind a property test: `probe(prop, seed, size)` puts one drawn case to the claim and answers in `Verdict`, purely — only `/syn/Test`'s own witness sees a `Test`, since a description is matched nowhere else. The witnesses at the function shapes draw every argument, apply, and hand the result to the premise on the result type, so a curried spelling composes through recursion while a declaration's uncurried type finds its arity directly; the result type is not part of a function key, so `-> Test` at each arity is the concept's one canonical discipline. The ceiling is eight parameters, matching the tuple shapes'.
-use /std/{Nat, Str, List, Spell};
+-- The per-case judgment behind a property test: `probe(prop, seed, size)` puts one drawn case to the claim and answers in `Verdict`, purely — only `/syn/Test`'s own witness sees a `Test`, since a description is matched nowhere else. `extent` is how many cases the claim has when every argument has a roster (`Draw/all`), capped so no product leaves the envelope, and `exhaust` puts each of those cases to the claim, so `run` enumerates a small finite domain instead of sampling it. The witnesses at the function shapes draw every argument, apply, and hand the result to the premise on the result type, so a curried spelling composes through recursion while a declaration's uncurried type finds its arity directly; the result type is not part of a function key, so `-> Test` at each arity is the concept's one canonical discipline. The ceiling is eight parameters, matching the tuple shapes'.
+use /std/{Nat, Str, List, Option, Spell};
 use /std/Test/{Seed, Draw, Verdict};
 
 pub concept Property(A: Type): pub Type {
     probe(A, Seed, Nat) -> Verdict,
+    extent: Option(Nat),
+    exhaust(A) -> List(Verdict),
 }
 
--- `cases` probes from a seed split once per case, the case's index as its size, the first failure ending the run.
+-- A claim whose extent fits the case budget is decided by every case it has, in roster order; any other is probed `cases` times from a seed split once per case, the case's index as its size. The first failure ends the run either way.
 pub let run(@A: Type, use Property(A), prop: A, seed: Seed, cases: Nat) -> Verdict =
-    cases_from(prop, seed, cases, 0);
+    match Property/extent(@A)
+    | some(extent) =>
+        match extent <= cases
+        | true => first_failure(Property/exhaust(prop))
+        | false => cases_from(prop, seed, cases, 0)
+        end
+    | none() => cases_from(prop, seed, cases, 0)
+    end;
 
 let cases_from(
     @A: Type,
@@ -28,7 +37,36 @@ let cases_from(
         end
     end;
 
--- A failure names the case that produced it: the drawn arguments, spelled in parameter order, before the inner report.
+let first_failure(verdicts: List(Verdict)) -> Verdict =
+    List/fold(
+        verdicts,
+        Verdict/passed(),
+        (here, acc) => match acc | passed() => here | failed(_) => acc end);
+
+-- A roster past this many cases is as good as none: nothing would enumerate it, and keeping every factor at or below the ceiling is what keeps a product of two inside the i31 envelope before it is compared.
+let ceiling: Nat = 1024;
+
+let bounded(n: Nat) -> Option(Nat) =
+    match n <= ceiling | true => Option/some(n) | false => Option/none() end;
+
+-- The roster's size, `none` when the type has no roster or its size is past the ceiling.
+let roster(@A: Type, use Draw(A)) -> Option(Nat) =
+    Option/bind(Draw/all(@A), (xs) => bounded(List/len(xs)));
+
+let product(a: Option(Nat), b: Option(Nat)) -> Option(Nat) =
+    Option/bind(
+        a,
+        (x) =>
+            Option/bind(
+                b,
+                (y) =>
+                    match y <= ceiling | true => bounded(x * y) | false => Option/none() end));
+
+-- Every value of the roster, or nothing when there is none: what `exhaust` walks, and consulted only under an extent that fits.
+let values(@A: Type, use Draw(A)) -> List(A) =
+    Option/unwrap_or(Draw/all(@A), []);
+
+-- A failure names the case that produced it: the arguments, spelled in parameter order, before the inner report.
 let counterexample(arguments: List(Str), verdict: Verdict) -> Verdict =
     match verdict
     | passed() => Verdict/passed()
@@ -41,6 +79,14 @@ satisfy (@A: Type, @R: Type, use Draw(A), use Spell(A), use Property(R)) => Prop
     probe(prop, seed, size) =
         let (a, rest) = Draw/draw(@A, seed, size);
         counterexample([Spell/spell(a)], Property/probe(prop(a), rest, size)),
+    extent = product(roster(@A), Property/extent(@R)),
+    exhaust(prop) =
+        List/concat_map(
+            values(@A),
+            (a) =>
+                List/map(
+                    Property/exhaust(prop(a)),
+                    (v) => counterexample([Spell/spell(a)], v))),
 }
 
 satisfy (
@@ -56,6 +102,17 @@ satisfy (
         let (a, s1) = Draw/draw(@A, seed, size);
         let (b, rest) = Draw/draw(@B, s1, size);
         counterexample([Spell/spell(a), Spell/spell(b)], Property/probe(prop(a, b), rest, size)),
+    extent = product(roster(@A), product(roster(@B), Property/extent(@R))),
+    exhaust(prop) =
+        List/concat_map(
+            values(@A),
+            (a) =>
+                List/concat_map(
+                    values(@B),
+                    (b) =>
+                        List/map(
+                            Property/exhaust(prop(a, b)),
+                            (v) => counterexample([Spell/spell(a), Spell/spell(b)], v)))),
 }
 
 satisfy (
@@ -77,6 +134,23 @@ satisfy (
         counterexample(
             [Spell/spell(a), Spell/spell(b), Spell/spell(c)],
             Property/probe(prop(a, b, c), rest, size)),
+    extent = product(roster(@A), product(roster(@B), product(roster(@C), Property/extent(@R)))),
+    exhaust(prop) =
+        List/concat_map(
+            values(@A),
+            (a) =>
+                List/concat_map(
+                    values(@B),
+                    (b) =>
+                        List/concat_map(
+                            values(@C),
+                            (c) =>
+                                List/map(
+                                    Property/exhaust(prop(a, b, c)),
+                                    (v) =>
+                                        counterexample(
+                                            [Spell/spell(a), Spell/spell(b), Spell/spell(c)],
+                                            v))))),
 }
 
 satisfy (
@@ -102,6 +176,33 @@ satisfy (
         counterexample(
             [Spell/spell(a), Spell/spell(b), Spell/spell(c), Spell/spell(d)],
             Property/probe(prop(a, b, c, d), rest, size)),
+    extent =
+        product(
+            roster(@A),
+            product(roster(@B), product(roster(@C), product(roster(@D), Property/extent(@R))))),
+    exhaust(prop) =
+        List/concat_map(
+            values(@A),
+            (a) =>
+                List/concat_map(
+                    values(@B),
+                    (b) =>
+                        List/concat_map(
+                            values(@C),
+                            (c) =>
+                                List/concat_map(
+                                    values(@D),
+                                    (d) =>
+                                        List/map(
+                                            Property/exhaust(prop(a, b, c, d)),
+                                            (v) =>
+                                                counterexample(
+                                                    [
+                                                        Spell/spell(a),
+                                                        Spell/spell(b),
+                                                        Spell/spell(c),
+                                                        Spell/spell(d)],
+                                                    v)))))),
 }
 
 satisfy (
@@ -131,6 +232,41 @@ satisfy (
         counterexample(
             [Spell/spell(a), Spell/spell(b), Spell/spell(c), Spell/spell(d), Spell/spell(e)],
             Property/probe(prop(a, b, c, d, e), rest, size)),
+    extent =
+        product(
+            roster(@A),
+            product(
+                roster(@B),
+                product(
+                    roster(@C),
+                    product(roster(@D), product(roster(@E), Property/extent(@R)))))),
+    exhaust(prop) =
+        List/concat_map(
+            values(@A),
+            (a) =>
+                List/concat_map(
+                    values(@B),
+                    (b) =>
+                        List/concat_map(
+                            values(@C),
+                            (c) =>
+                                List/concat_map(
+                                    values(@D),
+                                    (d) =>
+                                        List/concat_map(
+                                            values(@E),
+                                            (e) =>
+                                                List/map(
+                                                    Property/exhaust(prop(a, b, c, d, e)),
+                                                    (v) =>
+                                                        counterexample(
+                                                            [
+                                                                Spell/spell(a),
+                                                                Spell/spell(b),
+                                                                Spell/spell(c),
+                                                                Spell/spell(d),
+                                                                Spell/spell(e)],
+                                                            v))))))),
 }
 
 satisfy (
@@ -170,6 +306,48 @@ satisfy (
                 Spell/spell(e),
                 Spell/spell(f)],
             Property/probe(prop(a, b, c, d, e, f), rest, size)),
+    extent =
+        product(
+            roster(@A),
+            product(
+                roster(@B),
+                product(
+                    roster(@C),
+                    product(
+                        roster(@D),
+                        product(roster(@E), product(roster(@F), Property/extent(@R))))))),
+    exhaust(prop) =
+        List/concat_map(
+            values(@A),
+            (a) =>
+                List/concat_map(
+                    values(@B),
+                    (b) =>
+                        List/concat_map(
+                            values(@C),
+                            (c) =>
+                                List/concat_map(
+                                    values(@D),
+                                    (d) =>
+                                        List/concat_map(
+                                            values(@E),
+                                            (e) =>
+                                                List/concat_map(
+                                                    values(@F),
+                                                    (f) =>
+                                                        List/map(
+                                                            Property/exhaust(
+                                                                prop(a, b, c, d, e, f)),
+                                                            (v) =>
+                                                                counterexample(
+                                                                    [
+                                                                        Spell/spell(a),
+                                                                        Spell/spell(b),
+                                                                        Spell/spell(c),
+                                                                        Spell/spell(d),
+                                                                        Spell/spell(e),
+                                                                        Spell/spell(f)],
+                                                                    v)))))))),
 }
 
 satisfy (
@@ -214,6 +392,54 @@ satisfy (
                 Spell/spell(f),
                 Spell/spell(g)],
             Property/probe(prop(a, b, c, d, e, f, g), rest, size)),
+    extent =
+        product(
+            roster(@A),
+            product(
+                roster(@B),
+                product(
+                    roster(@C),
+                    product(
+                        roster(@D),
+                        product(
+                            roster(@E),
+                            product(roster(@F), product(roster(@G), Property/extent(@R)))))))),
+    exhaust(prop) =
+        List/concat_map(
+            values(@A),
+            (a) =>
+                List/concat_map(
+                    values(@B),
+                    (b) =>
+                        List/concat_map(
+                            values(@C),
+                            (c) =>
+                                List/concat_map(
+                                    values(@D),
+                                    (d) =>
+                                        List/concat_map(
+                                            values(@E),
+                                            (e) =>
+                                                List/concat_map(
+                                                    values(@F),
+                                                    (f) =>
+                                                        List/concat_map(
+                                                            values(@G),
+                                                            (g) =>
+                                                                List/map(
+                                                                    Property/exhaust(
+                                                                        prop(a, b, c, d, e, f, g)),
+                                                                    (v) =>
+                                                                        counterexample(
+                                                                            [
+                                                                                Spell/spell(a),
+                                                                                Spell/spell(b),
+                                                                                Spell/spell(c),
+                                                                                Spell/spell(d),
+                                                                                Spell/spell(e),
+                                                                                Spell/spell(f),
+                                                                                Spell/spell(g)],
+                                                                            v))))))))),
 }
 
 satisfy (
@@ -263,6 +489,78 @@ satisfy (
                 Spell/spell(g),
                 Spell/spell(h)],
             Property/probe(prop(a, b, c, d, e, f, g, h), rest, size)),
+    extent =
+        product(
+            roster(@A),
+            product(
+                roster(@B),
+                product(
+                    roster(@C),
+                    product(
+                        roster(@D),
+                        product(
+                            roster(@E),
+                            product(
+                                roster(@F),
+                                product(
+                                    roster(@G),
+                                    product(roster(@H), Property/extent(@R))))))))),
+    exhaust(prop) =
+        List/concat_map(
+            values(@A),
+            (a) =>
+                List/concat_map(
+                    values(@B),
+                    (b) =>
+                        List/concat_map(
+                            values(@C),
+                            (c) =>
+                                List/concat_map(
+                                    values(@D),
+                                    (d) =>
+                                        List/concat_map(
+                                            values(@E),
+                                            (e) =>
+                                                List/concat_map(
+                                                    values(@F),
+                                                    (f) =>
+                                                        List/concat_map(
+                                                            values(@G),
+                                                            (g) =>
+                                                                List/concat_map(
+                                                                    values(@H),
+                                                                    (h) =>
+                                                                        List/map(
+                                                                            Property/exhaust(
+                                                                                prop(
+                                                                                    a,
+                                                                                    b,
+                                                                                    c,
+                                                                                    d,
+                                                                                    e,
+                                                                                    f,
+                                                                                    g,
+                                                                                    h)),
+                                                                            (v) =>
+                                                                                counterexample(
+                                                                                    [
+                                                                                        Spell/spell(
+                                                                                            a),
+                                                                                        Spell/spell(
+                                                                                            b),
+                                                                                        Spell/spell(
+                                                                                            c),
+                                                                                        Spell/spell(
+                                                                                            d),
+                                                                                        Spell/spell(
+                                                                                            e),
+                                                                                        Spell/spell(
+                                                                                            f),
+                                                                                        Spell/spell(
+                                                                                            g),
+                                                                                        Spell/spell(
+                                                                                            h)],
+                                                                                    v)))))))))),
 }
 
 pub use Property/*;

@@ -338,6 +338,7 @@ let chars(seed: Seed, size: Nat, count: Nat) -> {Str, Seed} =
 
 -- At most `size` characters, each drawn as a `Char`.
 satisfy Draw(Str) {
+    all = Option/none(),
     draw(seed, size) =
         let (count, after) = Draw/draw(@Nat, seed, size);
         chars(after, size, count),

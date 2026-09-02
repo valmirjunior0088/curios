@@ -1,4 +1,4 @@
-use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered};
+use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered, List};
 use /std/Test/{Draw, Seed};
 
 pub induct Result(A: Type, E: Type): pub Type
@@ -79,6 +79,16 @@ satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Ordered(Result(A
 }
 
 satisfy (@A: Type, @E: Type, use Draw(A), use Draw(E)) => Draw(Result(A, E)) {
+    all =
+        Option/bind(
+            Draw/all(@A),
+            (xs) =>
+                Option/map(
+                    Draw/all(@E),
+                    (es) =>
+                        [
+                            ..List/map(es, (e) => Result/failure(e)),
+                            ..List/map(xs, (a) => Result/success(a))])),
     draw(seed, size) =
         let (n, after) = Seed/next(seed);
         match n % 4 == 0

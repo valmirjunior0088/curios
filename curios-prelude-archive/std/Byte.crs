@@ -1,7 +1,7 @@
 pub use /sys/{Byte};
 pub use /sys/Byte/{to_nat, eql, lt, le, gt, ge};
 use /sys/Bytes/{let Bytes, get};
-use /std/{Ordering, Equal, Compare, Nat, Bool, Show, Spell, Ordered};
+use /std/{Ordering, Equal, Compare, Nat, Bool, Show, Spell, Ordered, Option, List};
 use /std/Test/{Draw, Seed};
 
 -- The 256 byte values in order, so a computed `Nat` becomes a `Byte` by indexing.
@@ -57,6 +57,7 @@ satisfy Ordered(Byte) {
 
 -- `n % 256` is known to the reducer by its remainder bound, so `of_nat`'s precondition decides definitionally.
 satisfy Draw(Byte) {
+    all = Option/some(List/map(List/range(0, 256), (n) => of_nat(n % 256))),
     draw(seed, size) =
         let (n, rest) = Seed/next(seed);
         (of_nat(n % 256), rest),

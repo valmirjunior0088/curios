@@ -118,6 +118,7 @@ let bytes(seed: Seed, count: Nat) -> {Bytes, Seed} =
     end;
 
 satisfy Draw(Bytes) {
+    all = Option/none(),
     draw(seed, size) =
         let (count, after) = Draw/draw(@Nat, seed, size);
         bytes(after, count),
