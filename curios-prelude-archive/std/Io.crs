@@ -2,6 +2,9 @@ pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
 use /std/{Monad, Lift};
 
+pub mod Error;
+pub use Error/{let Error};
+
 satisfy Monad(Io) {
     pure = pure,
     bind = bind,

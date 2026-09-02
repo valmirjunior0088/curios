@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, List, Parse, Result, Option, Handle, Async};
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Parse, Result, Option, Handle, Async, Io};
 use /std/tcp/{Settings, Socket};
 
 pub induct Method: pub Type
@@ -10,7 +10,7 @@ let method_str(m: Method) -> Str =
     match m | get() => "GET" | post() => "POST" end;
 
 pub induct Error: pub Type
-| net(Handle/Error)
+| net(Io/Error)
 | malformed(Str)
 end
 

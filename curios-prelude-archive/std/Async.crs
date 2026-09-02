@@ -111,7 +111,7 @@ pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
             let _ = wait(h, /sys/event/read)!;
             go()
         | false =>
-            match Handle/error_of(r.status)
+            match Io/Error/error_of(r.status)
             | some(e) => pure(Handle/Read/error(e))
             | none() =>
                 match r.status == /sys/status/eof
@@ -122,15 +122,15 @@ pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
         end;
     go();
 
-pub let write(h: Handle, b: Bytes) -> Async(Result(Handle/Error, {})) =
-    let go(rest: Bytes) -> Async(Result(Handle/Error, {})) =
+pub let write(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
+    let go(rest: Bytes) -> Async(Result(Io/Error, {})) =
         let r = /sys/Handle/write(h, rest)!;
         match r.status == /sys/status/would_block
         | true =>
             let _ = wait(h, /sys/event/write)!;
             go(rest)
         | false =>
-            match Handle/error_of(r.status)
+            match Io/Error/error_of(r.status)
             | some(e) => pure(Result/failure(e))
             | none() =>
                 match r.written < Bytes/len(rest)
@@ -147,15 +147,15 @@ pub let write(h: Handle, b: Bytes) -> Async(Result(Handle/Error, {})) =
         end;
     go(b);
 
-pub let accept(l: Handle) -> Async(Result(Handle/Error, Handle)) =
-    let go() -> Async(Result(Handle/Error, Handle)) =
+pub let accept(l: Handle) -> Async(Result(Io/Error, Handle)) =
+    let go() -> Async(Result(Io/Error, Handle)) =
         let r = /sys/socket/accept(l)!;
         match r.status == /sys/status/would_block
         | true =>
             let _ = wait(l, /sys/event/read)!;
             go()
         | false =>
-            match Handle/error_of(r.status)
+            match Io/Error/error_of(r.status)
             | some(e) => pure(Result/failure(e))
             | none() => pure(Result/success(r.handle))
             end
@@ -163,8 +163,8 @@ pub let accept(l: Handle) -> Async(Result(Handle/Error, Handle)) =
     go();
 
 -- `eof` is the stream's orderly terminator; an `error` means it ended without one, so the accumulated prefix is not the content and is dropped rather than passed off as complete.
-pub let drain(read: (Nat) -> Async(Handle/Read)) -> Async(Result(Handle/Error, Bytes)) =
-    let go(acc: Bytes) -> Async(Result(Handle/Error, Bytes)) =
+pub let drain(read: (Nat) -> Async(Handle/Read)) -> Async(Result(Io/Error, Bytes)) =
+    let go(acc: Bytes) -> Async(Result(Io/Error, Bytes)) =
         let r = read(4096)!;
         match r
         | chunk(bytes) => go(x[..acc, ..bytes])

@@ -46,7 +46,8 @@ pub let rescue(
     Try {
         Monad/bind(
             m.0,
-            (r: Result(E, A)) => match r | success(_) => Monad/pure(r) | failure(e) => handler(e).0 end),
+            (r: Result(E, A)) =>
+                match r | success(_) => Monad/pure(r) | failure(e) => handler(e).0 end),
     };
 
 pub let map_error(
@@ -66,17 +67,23 @@ satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Monad((A: Type) => Try(M
 }
 
 -- A bare `Result` in a `Try` region is early return over the base.
-satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Lift((A: Type) => Result(E, A), (A: Type) => Try(M, E, A)) {
+satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Lift(
+    (A: Type) => Result(E, A),
+    (A: Type) => Try(M, E, A)) {
     lift(@A, r) = Try { Monad/pure(r) },
 }
 
 -- An `Io` action in a `Try` region over any base that admits one: the premise is what makes one witness serve every base — `Lift(Io, Io)` for `Try(Io, E)`, `Lift(Io, Async)` for `Try(Async, E)`.
-satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Io, M)) => Lift(Io, (A: Type) => Try(M, E, A)) {
+satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Io, M)) => Lift(
+    Io,
+    (A: Type) => Try(M, E, A)) {
     lift(@A, m) = Try { Monad/bind(Lift/lift(m), (a: A) => Monad/pure(Result/success(a))) },
 }
 
 -- An `Async` action in a `Try` region over `Async`, or over any base `Async` embeds in.
-satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Async, M)) => Lift(Async, (A: Type) => Try(M, E, A)) {
+satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Async, M)) => Lift(
+    Async,
+    (A: Type) => Try(M, E, A)) {
     lift(@A, m) = Try { Monad/bind(Lift/lift(m), (a: A) => Monad/pure(Result/success(a))) },
 }
 
@@ -87,7 +94,6 @@ satisfy (
     @E: Type,
     use Monad(M),
     use Monad(N),
-    use Lift(M, N),
-) => Lift((A: Type) => Try(M, E, A), (A: Type) => Try(N, E, A)) {
+    use Lift(M, N)) => Lift((A: Type) => Try(M, E, A), (A: Type) => Try(N, E, A)) {
     lift(@A, m) = Try { Lift/lift(m.0) },
 }

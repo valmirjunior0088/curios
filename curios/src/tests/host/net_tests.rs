@@ -10,7 +10,7 @@ use {
 #[test]
 fn call_round_trips_a_scripted_endpoint() {
     let source = r#"
-        use /std/{Handle, Str, Async};
+        use /std/{Handle, Str, Async, Io};
         use /std/tcp/{Settings, Socket};
         let _ = (match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))!
         | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
@@ -34,7 +34,7 @@ fn call_round_trips_a_scripted_endpoint() {
 #[test]
 fn call_to_an_unscripted_endpoint_is_refused() {
     let source = r#"
-        use /std/{Handle, Async};
+        use /std/{Handle, Async, Io};
         use /std/tcp/{Settings, Socket};
         match Async/block_on(Socket/call(Settings/default, "example.com", 80, /std/Str/to_bytes("ping")))!
         | failure(_) => /std/print("deadlock")
@@ -65,7 +65,7 @@ fn call_to_an_unscripted_endpoint_is_refused() {
 #[test]
 fn a_pending_connect_is_awaited_before_the_request_is_sent() {
     let source = r#"
-        use /std/{Handle, Str, Async};
+        use /std/{Handle, Str, Async, Io};
         use /std/tcp/{Settings, Socket};
         let _ = (match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))!
         | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
@@ -73,7 +73,7 @@ fn a_pending_connect_is_awaited_before_the_request_is_sent() {
             match outcome
             | success(response) => Handle/write(Handle/stdout, response)
             | failure(e) =>
-                match e : (_) => /std/Io(/std/Result(Handle/Error, {}))
+                match e : (_) => /std/Io(/std/Result(Io/Error, {}))
                 | refused() => Handle/write(Handle/stdout, Str/to_bytes("refused"))
                 | _ => Handle/write(Handle/stdout, Str/to_bytes("error"))
                 end
@@ -126,7 +126,7 @@ fn https_perform_reaches_a_public_host_over_the_real_host() {
 #[test]
 fn net_with_custom_timeout_config_reads_response() {
     let source = r#"
-        use /std/{Handle, Str, Bytes, Option, Async};
+        use /std/{Handle, Str, Bytes, Option, Async, Io};
         use /std/tcp/{Settings, Socket};
         use /std/time/{Duration};
         let settings = Settings {
@@ -163,7 +163,7 @@ fn net_with_custom_timeout_config_reads_response() {
 #[test]
 fn serve_handles_a_scripted_inbound_connection() {
     let source = r#"
-        use /std/{Handle, Str, Bytes, Async};
+        use /std/{Handle, Str, Bytes, Async, Io};
         use /std/tcp/{Listener, Socket};
         match Async/block_on(Listener/serve("0.0.0.0", 8080, (c) =>
             Async/bind(Socket/read(c, 64), (r) =>
@@ -191,7 +191,7 @@ fn serve_handles_a_scripted_inbound_connection() {
 #[test]
 fn net_with_tls_upgrades_and_reads() {
     let source = r#"
-        use /std/{Handle, Str, Bytes, Option, Async};
+        use /std/{Handle, Str, Bytes, Option, Async, Io};
         use /std/tcp/{Settings, Socket};
         let settings = Settings {
             connect_timeout = Option/none(),
@@ -227,7 +227,7 @@ fn net_with_tls_upgrades_and_reads() {
 #[test]
 fn serve_tls_handles_a_scripted_inbound_connection() {
     let source = r#"
-        use /std/{Handle, Str, Bytes, Async};
+        use /std/{Handle, Str, Bytes, Async, Io};
         use /std/tcp/{Listener, Socket};
         match Async/block_on(Listener/serve_tls("0.0.0.0", 8443, Str/to_bytes("CERT"), Str/to_bytes("KEY"), (c) =>
             Async/bind(Socket/read(c, 64), (r) =>
@@ -255,7 +255,7 @@ fn serve_tls_handles_a_scripted_inbound_connection() {
 #[test]
 fn http_perform_parses_a_scripted_response() {
     let source = r#"
-        use /std/{Handle, Str, Nat, Async, http};
+        use /std/{Handle, Str, Nat, Async, http, Io};
         match Async/block_on(http/perform(http/get("example.com", 80, "/")))!
         | failure(_) => /std/print("deadlock")
         | success(outcome) =>

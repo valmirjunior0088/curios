@@ -5,20 +5,20 @@ pub struct Listener: Type {
     Handle,
 }
 
-let bind_listen(addr: Bytes) -> Io(Result(Handle/Error, Listener)) =
+let bind_listen(addr: Bytes) -> Io(Result(Io/Error, Listener)) =
     let s = /sys/socket/open(addr)!;
-    match Handle/error_of(s.status)
+    match Io/Error/error_of(s.status)
     | some(e) => Io/pure(Result/failure(e))
     | none() =>
         let _ = /sys/socket/set_reuseaddr(s.handle, true)!;
         let bound = /sys/socket/bind(s.handle, addr)!;
-        match Handle/error_of(bound)
+        match Io/Error/error_of(bound)
         | some(e) =>
             let _ = /sys/Handle/close(s.handle)!;
             Io/pure(Result/failure(e))
         | none() =>
             let status = /sys/socket/listen(s.handle, 128)!;
-            match Handle/error_of(status)
+            match Io/Error/error_of(status)
             | some(e) =>
                 let _ = /sys/Handle/close(s.handle)!;
                 Io/pure(Result/failure(e))
@@ -27,7 +27,7 @@ let bind_listen(addr: Bytes) -> Io(Result(Handle/Error, Listener)) =
         end
     end;
 
-let listen(host: Str, port: Nat) -> Async(Result(Handle/Error, Listener)) =
+let listen(host: Str, port: Nat) -> Async(Result(Io/Error, Listener)) =
     let resolved = resolve(host, port)!;
     match resolved
     | failure(e) => Async/pure(Result/failure(e))
@@ -50,7 +50,7 @@ let listen_loop(
     host: Str,
     port: Nat,
     on_conn: (Handle) -> Async({}),
-) -> Async(Result(Handle/Error, {})) =
+) -> Async(Result(Io/Error, {})) =
     let opened = listen(host, port)!;
     match opened
     | failure(e) => Async/pure(Result/failure(e))
@@ -63,11 +63,7 @@ let listen_loop(
 let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
     Async/go(Async/using(h, /sys/Handle/close(h), handler(Socket/new(h))));
 
-pub let serve(
-    host: Str,
-    port: Nat,
-    handler: (Socket) -> Async({}),
-) -> Async(Result(Handle/Error, {})) =
+pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Async(Result(Io/Error, {})) =
     listen_loop(host, port, (h) => serve_conn(h, handler));
 
 let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> Async({}) =
@@ -83,9 +79,9 @@ pub let serve_tls(
     cert: Bytes,
     key: Bytes,
     handler: (Socket) -> Async({}),
-) -> Async(Result(Handle/Error, {})) =
+) -> Async(Result(Io/Error, {})) =
     let cfg = /sys/tls/server_config(cert, key)!;
-    match Handle/error_of(cfg.status)
+    match Io/Error/error_of(cfg.status)
     | some(e) => Async/pure(Result/failure(e))
     | none() =>
         Async/using(

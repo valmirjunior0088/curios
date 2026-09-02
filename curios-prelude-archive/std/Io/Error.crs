@@ -1,0 +1,60 @@
+-- The failure vocabulary every host operation decodes into: each named status by its name, and `other` with the errno it carries. It lives under `Io` because a failure is a fact about the effect rather than about a handle — `fs`, `proc` and `tcp` report it as `File` does — and `error_of` is the one place a status becomes an `Error`.
+use /std/{Nat, Str, List, Option, Show};
+
+pub induct Error: pub Type
+| not_found()
+| permission_denied()
+| exists()
+| refused()
+| tls()
+| would_block()
+| not_empty()
+| is_directory()
+| not_directory()
+| other(Nat)
+end
+
+pub use Error/*;
+
+let errors: List({Nat, Error}) =
+    [
+        (/sys/status/not_found, Error/not_found()),
+        (/sys/status/permission_denied, Error/permission_denied()),
+        (/sys/status/exists, Error/exists()),
+        (/sys/status/refused, Error/refused()),
+        (/sys/status/tls, Error/tls()),
+        (/sys/status/would_block, Error/would_block()),
+        (/sys/status/not_empty, Error/not_empty()),
+        (/sys/status/is_directory, Error/is_directory()),
+        (/sys/status/not_directory, Error/not_directory())];
+
+-- Each constructor by its name, and `other` with the errno it carries: a program that fails has to say why.
+satisfy Show(Error) {
+    show(e) =
+        match e
+        | not_found() => "not_found"
+        | permission_denied() => "permission_denied"
+        | exists() => "exists"
+        | refused() => "refused"
+        | tls() => "tls"
+        | would_block() => "would_block"
+        | not_empty() => "not_empty"
+        | is_directory() => "is_directory"
+        | not_directory() => "not_directory"
+        | other(n) => Str/flatten(["other(", Nat/to_str(n), ")"])
+        end,
+}
+
+-- The failure `status` names, or `none` for the two non-failure codes, `ok` and `eof` — stated here once so a status that is not an error cannot be manufactured into one. It used to be total, and the two non-failure codes fell through the passthrough monus to `other(0)`, indistinguishable from the errno-less catch-all a host legitimately reports; every caller had to pre-filter them, and twelve of sixteen guarded only `ok`.
+pub let error_of(status: Nat) -> Option(Error) =
+    choose
+    | status == /sys/status/ok => Option/none()
+    | status == /sys/status/eof => Option/none()
+    | _ =>
+        Option/some(
+            List/fold(
+                errors,
+                -- Not a named code: the errno passthrough lane, offset by other_base so an errno never collides with a named code.
+                Error/other(status - /sys/status/other_base),
+                (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end))
+    end;

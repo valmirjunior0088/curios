@@ -12,24 +12,24 @@ satisfy Show(Size) {
     show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),
 }
 
-pub let raw(h: Handle, on: Bool) -> Async(Result(Handle/Error, {})) =
+pub let raw(h: Handle, on: Bool) -> Async(Result(Io/Error, {})) =
     let status = /sys/tty/raw(h, on)!;
     Async/pure(
-        match Handle/error_of(status)
+        match Io/Error/error_of(status)
         | some(e) => Result/failure(e)
         | none() => Result/success(())
         end);
 
-pub let size(h: Handle) -> Async(Result(Handle/Error, Size)) =
+pub let size(h: Handle) -> Async(Result(Io/Error, Size)) =
     let r = /sys/tty/size(h)!;
     Async/pure(
-        match Handle/error_of(r.status)
+        match Io/Error/error_of(r.status)
         | some(e) => Result/failure(e)
         | none() => Result/success(Size { cols = r.cols, rows = r.rows })
         end);
 
 -- Raw mode around `body`, restored by `Async/using` on both scheduler exits — a cancelled task included — and by the native host underneath on a trap or an `exit`. The restoring switch's own status is dropped: there is nothing left to report it to.
-pub let with_raw(@A: Type, h: Handle, body: Async(A)) -> Async(Result(Handle/Error, A)) =
+pub let with_raw(@A: Type, h: Handle, body: Async(A)) -> Async(Result(Io/Error, A)) =
     let on = raw(h, true)!;
     match on
     | failure(e) => Async/pure(Result/failure(e))

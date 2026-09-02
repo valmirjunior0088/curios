@@ -2,17 +2,17 @@ use /std/{Str, Nat, Bytes, Handle, Result, Option, List, Async, Io};
 
 -- Split out so its sequencing is a body of its own. A `!` in an argument position hoists into the
 -- *enclosing* region, which would perform the wait before `using` had acquired the handle; a call hands `using` an inert description instead.
-let resolved_address(h: Handle) -> Async(Result(Handle/Error, Bytes)) =
+let resolved_address(h: Handle) -> Async(Result(Io/Error, Bytes)) =
     let _ = Async/wait(h, /sys/event/read)!;
     let a = /sys/dns/resolve(h)!;
-    match Handle/error_of(a.status)
+    match Io/Error/error_of(a.status)
     | some(e) => Async/pure(Result/failure(e))
     | none() => Async/pure(Result/success(Option/unwrap_or(List/try_get(a.addresses, 0), x[])))
     end;
 
-pub let resolve(host: Str, port: Nat) -> Async(Result(Handle/Error, Bytes)) =
+pub let resolve(host: Str, port: Nat) -> Async(Result(Io/Error, Bytes)) =
     let r = /sys/dns/lookup(Str/to_bytes(host), port)!;
-    match Handle/error_of(r.status)
+    match Io/Error/error_of(r.status)
     | some(e) => Async/pure(Result/failure(e))
     | none() => Async/using(r.handle, /sys/Handle/close(r.handle), resolved_address(r.handle))
     end;

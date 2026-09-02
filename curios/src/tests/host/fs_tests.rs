@@ -17,11 +17,11 @@ fn program(body: &str) -> String {
     format!(
         r#"
         use /std/{{Str, Bytes, Nat, Bool, List, Option, Result, Show, Async, Io, Handle, File, fs}};
-        let show_bool(r: Result(Handle/Error, Bool)) -> Str =
+        let show_bool(r: Result(Io/Error, Bool)) -> Str =
             match r | success(b) => Bool/to_str(b) | failure(e) => Show/show(e) end;
-        let show_unit(r: Result(Handle/Error, {{}})) -> Str =
+        let show_unit(r: Result(Io/Error, {{}})) -> Str =
             match r | success(_) => "ok" | failure(e) => Show/show(e) end;
-        let text(r: Result(Handle/Error, Bytes)) -> Str =
+        let text(r: Result(Io/Error, Bytes)) -> Str =
             match r | success(b) => Option/unwrap_or(Str/of_bytes(b), "?") | failure(e) => Show/show(e) end;
         let program: Async(Str) =
             {body};
@@ -91,7 +91,7 @@ fn directories_are_made_moved_and_removed_whole() {
     assert_eq!(io.file(b"x/w/z/f.txt"), None);
 }
 
-// The three status codes this campaign named, each told apart by `Show(Handle/Error)`: a file operation on a directory, a directory operation on a file, and a listing of nothing.
+// The three status codes this campaign named, each told apart by `Show(Io/Error)`: a file operation on a directory, a directory operation on a file, and a listing of nothing.
 #[test]
 fn the_named_filesystem_failures_show_by_name() {
     let source = program(

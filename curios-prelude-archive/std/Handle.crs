@@ -1,73 +1,17 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{stdin, stdout, stderr, eql};
-use /std/{Bytes, Nat, Str, Result, List, Io, True, Bool, Option, Equal, Show};
-
-pub induct Error: pub Type
-| not_found()
-| permission_denied()
-| exists()
-| refused()
-| tls()
-| would_block()
-| not_empty()
-| is_directory()
-| not_directory()
-| other(Nat)
-end
-
-let errors: List({Nat, Error}) =
-    [
-        (/sys/status/not_found, Error/not_found()),
-        (/sys/status/permission_denied, Error/permission_denied()),
-        (/sys/status/exists, Error/exists()),
-        (/sys/status/refused, Error/refused()),
-        (/sys/status/tls, Error/tls()),
-        (/sys/status/would_block, Error/would_block()),
-        (/sys/status/not_empty, Error/not_empty()),
-        (/sys/status/is_directory, Error/is_directory()),
-        (/sys/status/not_directory, Error/not_directory())];
-
--- Each constructor by its name, and `other` with the errno it carries: a program that fails has to say why.
-satisfy Show(Error) {
-    show(e) =
-        match e
-        | not_found() => "not_found"
-        | permission_denied() => "permission_denied"
-        | exists() => "exists"
-        | refused() => "refused"
-        | tls() => "tls"
-        | would_block() => "would_block"
-        | not_empty() => "not_empty"
-        | is_directory() => "is_directory"
-        | not_directory() => "not_directory"
-        | other(n) => Str/flatten(["other(", Nat/to_str(n), ")"])
-        end,
-}
-
--- The failure `status` names, or `none` for the two non-failure codes, `ok` and `eof` — stated here once so a status that is not an error cannot be manufactured into one. It used to be total, and the two non-failure codes fell through the passthrough monus to `other(0)`, indistinguishable from the errno-less catch-all a host legitimately reports; every caller had to pre-filter them, and twelve of sixteen guarded only `ok`.
-pub let error_of(status: Nat) -> Option(Error) =
-    choose
-    | status == /sys/status/ok => Option/none()
-    | status == /sys/status/eof => Option/none()
-    | _ =>
-        Option/some(
-            List/fold(
-                errors,
-                -- Not a named code: the errno passthrough lane, offset by other_base so an errno never collides with a named code.
-                Error/other(status - /sys/status/other_base),
-                (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end))
-    end;
+use /std/{Bytes, Nat, Result, Io, True, Bool, Equal};
 
 pub induct Read: pub Type
 | chunk(Bytes)
 | eof()
-| error(Error)
+| error(Io/Error)
 end
 
 pub let read(h: Handle, n: Nat) -> Io(Read) =
     let r = /sys/Handle/read(h, n)!;
     Io/pure(
-        match error_of(r.status)
+        match Io/Error/error_of(r.status)
         | some(e) => Read/error(e)
         | none() =>
             match r.status == /sys/status/eof
@@ -76,9 +20,9 @@ pub let read(h: Handle, n: Nat) -> Io(Read) =
             end
         end);
 
-pub let write(h: Handle, b: Bytes) -> Io(Result(Error, {})) =
+pub let write(h: Handle, b: Bytes) -> Io(Result(Io/Error, {})) =
     let r = /sys/Handle/write(h, b)!;
-    match error_of(r.status)
+    match Io/Error/error_of(r.status)
     | some(e) => Io/pure(Result/failure(e))
     | none() =>
         match r.written < Bytes/len(b)

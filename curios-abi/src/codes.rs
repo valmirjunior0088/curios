@@ -1,6 +1,6 @@
 //! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, and stdio-handle tags, each module named by the tag it holds. Each set is mirrored by a guest-side `/sys` module of the same name; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
 
-/// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Handle/Error`. `Other` has no fixed code here: it lowers its carried errno offset by `OTHER_BASE`, keeping the errno lane disjoint from the named codes.
+/// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Io/Error`. `Other` has no fixed code here: it lowers its carried errno offset by `OTHER_BASE`, keeping the errno lane disjoint from the named codes.
 pub mod status {
     /// The op succeeded — the reply's payload fields are meaningful only under this code.
     pub const OK: u32 = 0;

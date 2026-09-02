@@ -21,7 +21,7 @@ fn handles_compare_with_the_operators() {
     // `Handle` had `eql` from `/sys` but no `Equal` witness, so `h == Handle/stdout` reported "no witness of Equal(Handle) found" while every other intrinsic carrier compared with the operator. The witness is over the same `eql`; the output is the truth table at runtime, where a handle is its token.
     assert_eq!(
         run(r#"
-use /std/{Handle, Str, Bool};
+use /std/{Handle, Str, Bool, Io};
 let pick(h: Handle) -> Str =
     choose
     | h == Handle/stdout => "out"
@@ -91,7 +91,7 @@ fn io_read_short_reads_and_eof() {
 fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
     let source = r#"
         use /std/{Nat, Bytes, Handle, Result, Async, Cell, Str, Io, print};
-        let show(r : Result(Async/Deadlock, Result(Handle/Error, Bytes))) -> Str =
+        let show(r : Result(Async/Deadlock, Result(Io/Error, Bytes))) -> Str =
             match r
             | failure(_) => "deadlock"
             | success(inner) =>
@@ -101,7 +101,7 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 end
             end;
         let error_first(n : Nat) -> Async(Handle/Read) =
-            Async/pure(Handle/Read/error(Handle/Error/other(247)));
+            Async/pure(Handle/Read/error(Io/Error/other(247)));
         let chunk_then_error : Io((Nat) -> Async(Handle/Read)) =
             let calls = Cell/new(0)!;
             Io/pure((n) =>
@@ -109,7 +109,7 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 let _ = Async/lift(Cell/set(calls, k + 1))!;
                 match k
                 | 0 => Async/pure(Handle/Read/chunk(x[0x41, 0x42]))
-                | _ => Async/pure(Handle/Read/error(Handle/Error/other(247)))
+                | _ => Async/pure(Handle/Read/error(Io/Error/other(247)))
                 end);
         let chunk_then_eof : Io((Nat) -> Async(Handle/Read)) =
             let calls = Cell/new(0)!;
