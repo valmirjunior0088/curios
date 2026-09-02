@@ -1,5 +1,5 @@
--- The terminal rows, wrapped: raw mode and the window size, and the bracket a terminal session is written over. `raw` and `size` are one `ioctl` each, and a program with no terminal learns it as `other(ENOTTY)`. The rows themselves are `/sys/tty`, which only the prelude may name, so this module is the whole of what a program reaches; the alternate screen, the cursor and the keyboard protocol are escape sequences a terminal library writes inside the bracket, not rows.
-use /std/{Nat, Bool, Str, Handle, Result, Async, Io, Equal, Show};
+-- The terminal rows, wrapped: raw mode and the window size, and the bracket a terminal session is written over. The terminal is the one this process's standard input is attached to — the one it reads keys from — so nothing here takes a handle; `raw` and `size` are one `ioctl` each on it, synchronous in `Io` and `Try` over it, and a program with no terminal learns it as `other(ENOTTY)`. The rows themselves are `/sys/tty`, which only the prelude may name, so this module is the whole of what a program reaches; the alternate screen, the cursor and the keyboard protocol are escape sequences a terminal library writes inside the bracket, not rows.
+use /std/{Nat, Bool, Str, Try, Async, Io, Equal, Show};
 
 pub struct Size: pub Type {
     cols: Nat,
@@ -12,29 +12,36 @@ satisfy Show(Size) {
     show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),
 }
 
-pub let raw(h: Handle, on: Bool) -> Async(Result(Io/Error, {})) =
-    let status = /sys/tty/raw(h, on)!;
-    Async/pure(
-        match Io/Error/error_of(status)
-        | some(e) => Result/failure(e)
-        | none() => Result/success(())
-        end);
+pub let raw(on: Bool) -> Try(Io, Io/Error, {}) =
+    let status = /sys/tty/raw(/sys/Handle/stdin, on)!;
+    match Io/Error/error_of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
-pub let size(h: Handle) -> Async(Result(Io/Error, Size)) =
-    let r = /sys/tty/size(h)!;
-    Async/pure(
-        match Io/Error/error_of(r.status)
-        | some(e) => Result/failure(e)
-        | none() => Result/success(Size { cols = r.cols, rows = r.rows })
-        end);
-
--- Raw mode around `body`, restored by `Async/using` on both scheduler exits — a cancelled task included — and by the native host underneath on a trap or an `exit`. The restoring switch's own status is dropped: there is nothing left to report it to.
-pub let with_raw(@A: Type, h: Handle, body: Async(A)) -> Async(Result(Io/Error, A)) =
-    let on = raw(h, true)!;
-    match on
-    | failure(e) => Async/pure(Result/failure(e))
-    | success(_) =>
-        let restore = Io/bind(/sys/tty/raw(h, false), (_) => Io/pure(()));
-        let a = Async/using(h, restore, body)!;
-        Async/pure(Result/success(a))
+pub let size: Try(Io, Io/Error, Size) =
+    let r = /sys/tty/size(/sys/Handle/stdin)!;
+    match Io/Error/error_of(r.status)
+    | some(e) => Try/raise(e)
+    | none() => Try/pure(Size { cols = r.cols, rows = r.rows })
     end;
+
+-- The restoring switch, its own status dropped: there is nothing left to report it to.
+let restore: Io({}) =
+    Io/bind(/sys/tty/raw(/sys/Handle/stdin, false), (_) => Io/pure(()));
+
+-- Raw mode around `body`, restored whichever way the body ends — and by the native host underneath on a trap or an `exit`. The body's own failure is the answer after the restore.
+pub let with_raw(@A: Type, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
+    let _ = raw(true)!;
+    let a =
+        Try/rescue(
+            body,
+            (e) =>
+                let _ = restore!;
+                Try/raise(e))!;
+    let _ = restore!;
+    Try/pure(a);
+
+-- The same bracket inside a fiber, registered with the scheduler through `Async/using`: a cancelled task restores the mode it switched, and the body may park.
+pub let with_raw_async(@A: Type, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
+    let _ = raw(true)!;
+    let outcome = Async/using(/sys/Handle/stdin, restore, Try/run(body))!;
+    let a = outcome!;
+    Try/pure(a);
