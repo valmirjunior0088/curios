@@ -1093,7 +1093,7 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `Name { ..base, ... }` | Structure update |
 | `match term ... end` | Typed elimination or dispatch |
 | `choose ... end` | Ordered guarded ladder |
-| `test name(params) = body;` | Declared test — a `/syn/Test` description, collected per unit; with parameters, a property probed over drawn arguments |
+| `test name(params) = body;` | Declared test — a `/syn/Test` description, collected per unit; with parameters, a claim over every instantiation: proved when the kernel settles the body, exhausted over a small finite domain, probed over drawn arguments otherwise |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
 | `satisfy C(args);` | Derived witness — the compiler writes the body |
 | `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |
