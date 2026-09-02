@@ -3,14 +3,13 @@
 //! Extension traits keep every call site spelling what it always spelled — `Intrinsic::flt_add(…)`, `Term::struct_at(…)` — under a plain trait import (`use curios_elab::IntrinsicBuilders;`). The representation crate keeps only the constructors its own fold table and the certifier name; everything that exists purely so a lowering or an elaborator reads well lives here.
 
 use {
+    crate::Context,
     curios_core::{
         Apply, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, NumLit, Scope,
         Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Var,
     },
     curios_num::Natural,
-    curios_utilities::{
-        Grain, InfixOp, PackedBin, Sign, Span, StringSyntax, SyntaxName, SyntaxRegistry,
-    },
+    curios_utilities::{Grain, InfixOp, PackedBin, Plicity, Sign, Span, StringSyntax, SyntaxName},
 };
 
 /// A `/syn` function or constructor `Var`, applied — the absolute core identity a registry slot denotes, so privacy is no obstacle: these are already-resolved core references, not surface names.
@@ -40,26 +39,33 @@ pub fn str_literal(syntax: &StringSyntax, bytes: &[u8]) -> Term {
     )
 }
 
-/// One registered test as the synthesized tail schedules it: its name, the arity of the lambda its declaration lowered to — zero for the harness's nullary test, the telescope's length for a property — and the span of its authored body, where a property's witness goal is reported. Read off the definition by `curios-pipeline`, since `Module::tests` records names alone.
+/// One registered test as the synthesized tail schedules it: its name, the plicity vector of the lambda its declaration lowered to — empty for the harness's nullary test, one mark per telescope entry for a property — and the span of its authored body, where a property's witness goal is reported. Read off the lowered definition by `curios-pipeline`, since `Module::tests` records names alone.
 #[derive(Debug, Clone)]
 pub struct ScheduledTest {
     pub name: Global,
-    pub arity: usize,
+    pub plicities: Vec<Plicity>,
     pub span: Option<Span>,
 }
 
-/// The synthesized tail of a unit compiled as its own test program: `Test/main([("path", thunk), …])` over `tests` in declaration order, each pair the test's path as its `Global` renders it and its thunk. A nullary test is its own thunk — a `Var` at the declaration, already a `() -> Test`. A parameterized one is closed through `Test/property`: `() => Test/property(t)`, the application carrying the one witness goal, `Property((params…) -> Test)`, that the tail's check resolves as any authored tail's goals are — stamped with the declaration's span, so a parameter the roster cannot draw is reported at the declaration by the ordinary missing-witness report. The list's element type is the single fresh hole `element_hole`, solved bidirectionally from `Test/main`'s parameter exactly as a written literal's would be; no binder is minted, so the module's binder floor is untouched.
-pub fn test_program_tail(
-    syntax: &SyntaxRegistry,
-    tests: &[ScheduledTest],
-    element_hole: usize,
-) -> Term {
+impl ScheduledTest {
+    /// The telescope's length: zero for a nullary test.
+    pub fn arity(&self) -> usize {
+        self.plicities.len()
+    }
+}
+
+/// The synthesized tail of a unit compiled as its own test program: `Test/main([("path", thunk), …])` over `tests` in declaration order, each pair the test's path as its `Global` renders it and its thunk. A nullary test is its own thunk — a `Var` at the declaration, already a `() -> Test`. A parameterized one is closed through `Test/property`: `() => Test/property(t)`, the application carrying the one witness goal, `Property((params…) -> Test)`, that the tail's check resolves as any authored tail's goals are — stamped with the declaration's span, so a parameter the roster cannot draw is reported at the declaration by the ordinary missing-witness report. The list's element type is one fresh hole minted here, solved bidirectionally from `Test/main`'s parameter exactly as a written literal's would be; no binder is minted, so the module's binder floor is untouched.
+///
+/// Built by the elaborator itself, after the unit's items have been defined and before the entry is checked ([`Tail::Tests`](crate::Tail)): that is the one point with the elaborated definitions, the conversion oracle and fresh binders in reach, which the discharges a parameterized test can take all need.
+pub(crate) fn test_program_tail(context: &mut Context, tests: &[ScheduledTest]) -> Term {
+    let syntax = context.syntax();
+    let element_hole = context.mint_metavar();
     let items = tests
         .iter()
         .map(|test| {
             let path = test.name.path();
             let declaration = Term::var(Var::free(Free::from(&test.name)));
-            let thunk = match test.arity {
+            let thunk = match test.arity() {
                 0 => declaration,
                 _ => {
                     let property = syn_call(syntax.test.property, [declaration]);

@@ -187,6 +187,7 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core:
         metavar_floor,
         universe_floor,
         curios_elab::Mode::Infer,
+        curios_elab::Tail::Written,
     )
     .unwrap()
     .0;

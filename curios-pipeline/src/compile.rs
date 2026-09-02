@@ -8,7 +8,7 @@ use {
     curios_core::derived_binder_floor,
     curios_core::{Consumption, Intrinsic, Term},
     curios_elab::{
-        Context, Established, Mode, Resumed, elaborate_and_zonk_unit,
+        Context, Established, Mode, Resumed, Tail, elaborate_and_zonk_unit,
         elaborate_and_zonk_unit_reporting, erase_unit,
     },
     curios_ersd::lower_to_cont,
@@ -153,6 +153,7 @@ pub fn typecheck_measured(
         metavars,
         universe_floor,
         core_mode,
+        Tail::Written,
     )
     .map_err(|error| {
         CompileError::of(
@@ -208,7 +209,7 @@ fn test_definition<'a>(
     })
 }
 
-/// Each registered test as the tail schedules it, read off the definition that carries it: the arity of the lambda its declaration lowered to, and the span of the authored body — the lambda's interior, since the wrapper node is synthesized and spans nothing. One lookup serves the tail and the runner's records, so the two cannot disagree about what the tests are.
+/// Each registered test as the tail schedules it, read off the lowered definition that carries it: the plicity vector of the lambda its declaration lowered to, and the span of the authored body — the lambda's interior, since the wrapper node is synthesized and spans nothing. One lookup serves the tail and the runner's records, so the two cannot disagree about what the tests are.
 fn scheduled_tests(
     tests: &[curios_core::Global],
     items: &[curios_core::Item],
@@ -223,7 +224,9 @@ fn scheduled_tests(
 
             curios_elab::ScheduledTest {
                 name: test.clone(),
-                arity: lambda.map(|func| func.telescope.len()).unwrap_or(0),
+                plicities: lambda
+                    .map(|func| func.plicities().to_vec())
+                    .unwrap_or_default(),
                 span: lambda.and_then(|func| func.telescope.terminal().span()),
             }
         })
@@ -266,8 +269,8 @@ where
     let text = scope.text();
     let cores = scope.cores();
     let LoweredEntry {
-        core: mut lowered,
-        metavariable_floor: mut metavars,
+        core: lowered,
+        metavariable_floor: metavars,
         universe_floor,
         foreigns: user_foreigns,
         unbound,
@@ -275,7 +278,7 @@ where
     } = into_core_with_prelude(entrypoint, loader, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
-    // The test tail is synthesized in Core, on the lowered module, and checked exactly as an authored one is: `type_: None` routes it into the `Io({})` expectation below, and the tail's single list-element hole is minted at the module's metavariable floor so elaboration solves it bidirectionally from `Test/main`'s parameter like any written literal's. The records for the runner are read off the same definitions the tail schedules, so the two cannot disagree about what the tests are.
+    // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; `type_: None` on the synthesized entry routes it into the `Io({})` expectation below like an authored tail without an annotation. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     let scheduled = match tail {
         EntryTail::Authored => Vec::new(),
         EntryTail::Tests => scheduled_tests(&lowered.tests, &lowered.items),
@@ -285,22 +288,24 @@ where
         },
     };
     let records = test_records(&scheduled);
-    if tail != EntryTail::Authored {
-        let body = curios_elab::test_program_tail(syntax, &scheduled, metavars);
-        metavars += 1;
-        lowered.entry = Some(curios_core::Entrypoint { body, type_: None });
-    }
+    let elab_tail = match tail {
+        EntryTail::Authored => Tail::Written,
+        EntryTail::Tests | EntryTail::LastUnitTests => Tail::Tests(&scheduled),
+    };
 
     observe(Stage::Core(&lowered));
 
-    // The entrypoint contract, as an ordinary expectation rather than a judgment after the fact: a program *is* a description of doing something and yielding nothing. An embedder that states its own type still gets it — that is how the typecheck-only fixtures reach both checkers with deliberately odd tails.
+    // The entrypoint contract, as an ordinary expectation rather than a judgment after the fact: a program *is* a description of doing something and yielding nothing. An embedder that states its own type still gets it — that is how the typecheck-only fixtures reach both checkers with deliberately odd tails. A test program's tail replaces the written entry, annotation included, so only the authored policy reads one.
     //
     // `Io({})` is closed, which is what makes this a `Mode::Check` at all. Checking against `Io(?T)` would need a metavariable minted before the elaboration context exists, and that is why this contract used to be a post-hoc head test on the inferred type instead. Stating the unit payload removes the metavariable, and checking rather than inferring is what lets a tail spell itself `Io/pure(())` — the payload comes from the expectation exactly as it does under a written match motive.
-    let core_mode = match lowered
-        .entry
-        .as_ref()
-        .and_then(|entry| entry.type_.as_ref())
-    {
+    let written_annotation = match tail {
+        EntryTail::Authored => lowered
+            .entry
+            .as_ref()
+            .and_then(|entry| entry.type_.as_ref()),
+        EntryTail::Tests | EntryTail::LastUnitTests => None,
+    };
+    let core_mode = match written_annotation {
         Some(type_) => Mode::Check(type_.clone()),
         None => Mode::Check(Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()))),
     };
@@ -314,6 +319,7 @@ where
         metavars,
         universe_floor,
         core_mode,
+        elab_tail,
     )
     .map_err(|error| {
         CompileError::of(
@@ -449,6 +455,7 @@ pub fn compile_unit(
         lowered.metavariable_floor(),
         lowered.universe_floor(),
         Mode::Infer,
+        Tail::Written,
     )
     .map_err(|error| {
         CompileError::of(

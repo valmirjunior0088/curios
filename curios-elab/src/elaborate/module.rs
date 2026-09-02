@@ -1,11 +1,12 @@
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        Established, Zonked, check_concept_registry, check_is_sort, check_positivity,
-        check_proof_totality, check_rec_item_totality, check_type_totality,
+        Established, ScheduledTest, Zonked, check_concept_registry, check_is_sort,
+        check_positivity, check_proof_totality, check_rec_item_totality, check_type_totality,
         check_written_type_totality, collect_goal_reports, finish_deferred_witnesses, is_prop,
         record_definition_totality, record_totality, reduce_with, register_witness,
-        retry_deferred_witnesses, sort_term, zonk, zonk_arity, zonk_module, zonk_solved_term_metas,
+        retry_deferred_witnesses, sort_term, test_program_tail, zonk, zonk_arity, zonk_module,
+        zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_core::{
@@ -1198,6 +1199,7 @@ fn elaborate_module_suffix(
     metavar_floor: usize,
     universe_floor: usize,
     mode: Mode,
+    tail: Tail<'_>,
 ) -> Result<(Module, Option<Term>), Error> {
     curios_profile::profile!("elaborate_module_suffix");
     // What is already in scope goes in before any item is checked; `register_*` rejects a duplicate key, and the unit declares only its own, so the two cannot collide.
@@ -1243,15 +1245,25 @@ fn elaborate_module_suffix(
     context.set_island(Qualifier::empty());
     // The entrypoint expression is not an item, so it gets its own budget on the same footing as one.
     context.restore_budget();
+    // A test program's tail is synthesized here rather than handed in: it is built over the elaborated definitions the items just produced, in the scope they were defined into, so the discharge it chooses for each test can consult them. The unit's own written entry — the ordinary program — is not part of a test program and is neither checked nor kept.
+    let synthesized;
+    let entry = match tail {
+        Tail::Written => module.entry.as_ref(),
+        Tail::Tests(scheduled) => {
+            synthesized = Entrypoint {
+                body: test_program_tail(context, scheduled),
+                type_: None,
+            };
+            Some(&synthesized)
+        }
+    };
     // The annotation is a written type like any item's, and elaborating it is what makes it usable as an expectation: a universe-polymorphic head arrives instantiated, and an application of a type former reduces to the intrinsic it denotes. Left raw it stayed exactly as lowered, so `List(Nat)` reached conversion as an `Apply` no unfolding could reconcile with the inferred `Intrinsic::ListType` — a mismatch reported between two spellings of the same type. Elaborating here rather than in the caller keeps it in the frame every item was just defined into, which is the scope its globals resolve against.
     //
     // The rebuilt module carries the elaborated spelling, because the entry's annotation is what the kernel rechecks the entrypoint against and what `zonk` walks: a raw annotation would put the two checkers on different terms and hand zonk one that never passed through elaboration. Only a *written* annotation is kept, so a synthesized expectation leaves the annotation as absent as the program wrote it.
     let (mode, annotation) = match mode {
         Mode::Check(expected) => {
             let elaborated = check_is_sort(context, &expected)?.0;
-            let annotation = module
-                .entry
-                .as_ref()
+            let annotation = entry
                 .is_some_and(|entry| entry.type_.is_some())
                 .then(|| elaborated.clone());
             (Mode::Check(elaborated), annotation)
@@ -1259,7 +1271,7 @@ fn elaborate_module_suffix(
         Mode::Infer => (Mode::Infer, None),
     };
     // A unit with no entrypoint has none to elaborate and no type for one — the `Entrypoint` carries both, which is what keeps them one fact from here to the kernel.
-    let (entry, body_type) = match &module.entry {
+    let (entry, body_type) = match entry {
         Some(entry) => {
             let (body, body_type) = elaborate(context, &entry.body, mode)?;
             (
@@ -1441,6 +1453,7 @@ fn elaborate_and_zonk_module_within(
         metavar_floor,
         universe_floor,
         mode,
+        Tail::Written,
     )?;
     // Nothing is inherited: `module` is the whole program, so every name it mentions it also defines.
     raise(finalize_and_check(
@@ -1458,6 +1471,15 @@ fn elaborate_and_zonk_module_within(
 /// Sound because a scope is unit-independent: its items never see this unit's code, and — since top-level definitions are excluded from a metavariable's Γ (`Context::identity_snapshot`) — an item elaborates against the identical local context it would with no scope at all, so the solutions (and the zonked output) are identical.
 ///
 /// **The returned module holds this unit's items and no one else's.** That is a contract rather than an artifact of how the elaboration happens to be written: [`crate::erase_unit`] erases a unit *onto* what its scope already erased, and re-deriving the standard library on every compilation is exactly what carrying it here would cost. The one quantity that combines is the binder floor, which is a bound rather than a set and is taken as the maximum of the scope's and this unit's.
+/// Which final term a unit's elaboration checks: the entry the module carries, or a test program's tail synthesized over the unit's registered tests once its items are defined. A policy rather than an optional entry, because the tail cannot be built before the items it schedules have elaborated and must not be built anywhere else.
+#[derive(Debug, Clone, Copy)]
+pub enum Tail<'a> {
+    /// The module's own [`Entrypoint`], exactly as lowered — or none, for a library.
+    Written,
+    /// `Test/main([...])` over these tests, replacing whatever entry the module carries; a unit with no tests gets `Test/main([])`.
+    Tests(&'a [ScheduledTest]),
+}
+
 pub fn elaborate_and_zonk_unit(
     context: &mut Context,
     established: Established<'_>,
@@ -1465,6 +1487,7 @@ pub fn elaborate_and_zonk_unit(
     metavar_floor: usize,
     universe_floor: usize,
     mode: Mode,
+    tail: Tail<'_>,
 ) -> Result<(Module, Option<Term>), Error> {
     let (module, body_type, obligations) = elaborate_and_zonk_unit_reporting(
         context,
@@ -1473,6 +1496,7 @@ pub fn elaborate_and_zonk_unit(
         metavar_floor,
         universe_floor,
         mode,
+        tail,
     )?;
 
     raise((module, body_type, obligations))
@@ -1488,6 +1512,7 @@ pub fn elaborate_and_zonk_unit_reporting(
     metavar_floor: usize,
     universe_floor: usize,
     mode: Mode,
+    tail: Tail<'_>,
 ) -> Result<(Module, Option<Term>, Vec<Error>), Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
     let (suffix, body_type) = elaborate_module_suffix(
@@ -1497,6 +1522,7 @@ pub fn elaborate_and_zonk_unit_reporting(
         metavar_floor,
         universe_floor,
         mode,
+        tail,
     )?;
     // The scope's own stamps come out of the archive already closed, so inheriting them is what lets a user proof see that `/std/Async/bind` is partial without walking `/std` again.
     let inherited = established.recorded_totality();
