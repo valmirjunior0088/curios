@@ -1,4 +1,4 @@
-//! The `/std` effect vocabularies and how a `!` region sequences each: `Io` descriptions, `State` threading, `Throw`'s early return, and the `Lift` edges between them.
+//! The `/std` effect vocabularies and how a `!` region sequences each: `Io` descriptions, `State` threading, `Result`'s early return, and the `Lift` edges between them.
 //!
 //! What each vocabulary *is* stays with its own section below. What they share is the shape these tests pin: a region's monad is read from its expected type, never inferred from the action, and an embedding across monads exists only where a `/syn/Lift` witness declares one.
 
@@ -168,29 +168,29 @@ fn a_state_region_cannot_perform_io() {
     );
 }
 
-// === `/std/Throw`: short-circuiting failure — `raise` and `!` as checked early return over `Result`. ====
+// === `/std/Result` as a monad: `raise` and `!` as checked early return. ====
 
-/// The success path computes through; the failure path short-circuits at the `raise`, skipping the rest of the region.
+/// The success path computes through; the failure path short-circuits at the `raise`, skipping the rest of the region. A `Result` is its own monad, error first, so no wrapper stands between the data type and the region.
 #[test]
 fn a_raise_short_circuits_the_region() {
     let source = r#"
-        use /std/{Nat, Str, Throw, print};
-        use /std/Throw/{raise, rescue};
-        pub let checked_div(a: Nat, b: Nat) -> Throw(Str, Nat) =
+        use /std/{Nat, Str, Result, print};
+        use /std/Result/{raise, rescue};
+        pub let checked_div(a: Nat, b: Nat) -> Result(Str, Nat) =
             match 0 < b
             | false => raise("division by zero")
-            | true => Throw/pure(a / b)
+            | true => Result/pure(a / b)
             end;
-        pub let compute(a: Nat, b: Nat) -> Throw(Str, Nat) =
+        pub let compute(a: Nat, b: Nat) -> Result(Str, Nat) =
             let q = checked_div(a, b)!;
-            Throw/pure(q + 1);
+            Result/pure(q + 1);
         let ok =
-            match Throw/run(compute(10, 2))
+            match compute(10, 2)
             | success(n) => Nat/to_str(n)
             | failure(e) => e
             end;
         let caught =
-            match Throw/run(rescue(compute(1, 0), (_) => Throw/pure(0)))
+            match rescue(compute(1, 0), (_) => Result/pure(0))
             | success(n) => Nat/to_str(n)
             | failure(e) => e
             end;
@@ -202,18 +202,17 @@ fn a_raise_short_circuits_the_region() {
     assert_eq!(run(source), b"60");
 }
 
-/// `of` and `run` bridge to the plain `Result` vocabulary in both directions.
+/// A plain `Result` value sequences in a `Result` region with nothing to convert: the constructors are the monad's own.
 #[test]
-fn throw_bridges_result_in_both_directions() {
+fn a_result_value_sequences_in_a_result_region() {
     let source = r#"
-        use /std/{Nat, Str, Result, Throw, print};
-        use /std/Throw/{of};
-        pub let parse_pair(a: Result(Nat, Str), b: Result(Nat, Str)) -> Throw(Str, Nat) =
-            let x = of(a)!;
-            let y = of(b)!;
-            Throw/pure(x + y);
+        use /std/{Nat, Str, Result, print};
+        pub let add_pair(a: Result(Str, Nat), b: Result(Str, Nat)) -> Result(Str, Nat) =
+            let x = a!;
+            let y = b!;
+            Result/success(x + y);
         let shown =
-            match Throw/run(parse_pair(Result/success(40), Result/success(2)))
+            match add_pair(Result/success(40), Result/success(2))
             | success(n) => Nat/to_str(n)
             | failure(e) => e
             end;

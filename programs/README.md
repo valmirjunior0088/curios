@@ -25,7 +25,7 @@ Every program except `hello_world.crs` and `dependent_vectors.crs` reads its wor
 
 **The walk mirrors.** `walk_mirror_baseline.crs` is a faithful user-level mirror of `/std/Str/fold`'s walk, and one program per removed obligation follows it: `flat_acc` (the accumulator tuple), `held_scan` (the scan-argument reconstruction), `inline_step` (the returned scan state), `indexed` (the suffix view). They are bounds rather than equivalents — each removal reshapes the arms around it, and they carry no validity witness — which is why they sit outside the census corpus.
 
-**Subject and control pairs.** `state_monad.crs`/`state_manual.crs` and `rng_state.crs`/`rng_manual.crs` run the same loop through a monad and by hand, with identical arithmetic and identical output. `monad_io.crs`, `monad_throw.crs` and `monad_async.crs` run one loop in three carriers, to separate the cost of `bind` from the cost of what `bind` builds.
+**Subject and control pairs.** `state_monad.crs`/`state_manual.crs` and `rng_state.crs`/`rng_manual.crs` run the same loop through a monad and by hand, with identical arithmetic and identical output. `monad_io.crs`, `monad_result.crs` and `monad_async.crs` run one loop in three carriers, to separate the cost of `bind` from the cost of what `bind` builds.
 
 **Samples.** `hello_world.crs` — also `cargo x profile`'s default subject — and `dependent_vectors.crs`, which show the language rather than measure it.
 

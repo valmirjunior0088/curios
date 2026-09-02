@@ -165,7 +165,7 @@ pub let decode: Parse(Response) =
 pub let header(resp: Response, name: Str) -> Option(Str) =
     header_lookup(resp.headers, name);
 
-pub let perform(request: Request) -> Async(Result(Response, Error)) =
+pub let perform(request: Request) -> Async(Result(Error, Response)) =
     Async/bind(
         Socket/call(request.settings, request.host, request.port, render(request)),
         (r) =>

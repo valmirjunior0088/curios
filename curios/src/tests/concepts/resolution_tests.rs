@@ -516,11 +516,11 @@ fn a_missing_witness_over_a_nominal_type_spells_its_name() {
 fn a_premise_naming_a_constant_beside_a_binder_resolves_through_the_constant_edge() {
     let source = r#"
         use /std/{Monad, Lift, Result, Io, Async, Nat, Str, print};
-        pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type { M(Result(A, E)) }
+        pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type { M(Result(E, A)) }
         let pure(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), a: A) -> Try(M, E, A) =
             Try { Monad/pure(Result/success(a)) };
         let bind(@M: (Type) -> Type, @E: Type, @A: Type, @B: Type, use Monad(M), m: Try(M, E, A), f: (A) -> Try(M, E, B)) -> Try(M, E, B) =
-            Try { Monad/bind(m.0, (r: Result(A, E)) => match r | success(a) => f(a).0 | failure(e) => Monad/pure(Result/failure(e)) end) };
+            Try { Monad/bind(m.0, (r: Result(E, A)) => match r | success(a) => f(a).0 | failure(e) => Monad/pure(Result/failure(e)) end) };
         satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Monad((A: Type) => Try(M, E, A)) {
             pure(@A, a) = pure(a),
             bind(@A, @B, m, f) = bind(m, f),

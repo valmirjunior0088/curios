@@ -91,7 +91,7 @@ fn io_read_short_reads_and_eof() {
 fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
     let source = r#"
         use /std/{Nat, Bytes, Handle, Result, Async, Cell, Str, Io, print};
-        let show(r : Result(Result(Bytes, Handle/Error), Async/Deadlock)) -> Str =
+        let show(r : Result(Async/Deadlock, Result(Handle/Error, Bytes))) -> Str =
             match r
             | failure(_) => "deadlock"
             | success(inner) =>

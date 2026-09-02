@@ -205,7 +205,7 @@ pub struct Proj {
     pub field: Field,
 }
 
-/// An inductive type as an intrinsic normal form. Built inside the automatically-generated type-constructor function's body. Users never write one directly — they write `Result(A, E)` and the type-constructor function reduces to this. Two `InductType`s are convertible iff same `name` and pointwise-convertible `params` and `indices`.
+/// An inductive type as an intrinsic normal form. Built inside the automatically-generated type-constructor function's body. Users never write one directly — they write `Result(E, A)` and the type-constructor function reduces to this. Two `InductType`s are convertible iff same `name` and pointwise-convertible `params` and `indices`.
 ///
 /// `params` are uniform across constructors; `indices` are the per-case constrained binders — each constructor's registry terminal states its own index expressions. Use sites never distinguish them (`Vec(Bin, 3)` is one flat application of the type-constructor function); the split lives here and in the registry.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

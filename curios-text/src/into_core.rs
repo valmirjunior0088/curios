@@ -528,7 +528,7 @@ fn process_items(
                 }));
             }
             TopItem::Induct(group) => {
-                // Step 1: type bindings as one rec group. An inductive's type binding wraps an intrinsic `InductType` normal form in a `Func` over its type parameters and indices (so `Result(Nat, Bin)` beta-reduces to `InductType { Result, [Nat, Bin] }` and `Vec(Bin, 3)` to `InductType { Vec, [Bin], [3] }`), and its shape is recorded in the inductive registry.
+                // Step 1: type bindings as one rec group. An inductive's type binding wraps an intrinsic `InductType` normal form in a `Func` over its type parameters and indices (so `Result(Bin, Nat)` beta-reduces to `InductType { Result, [Bin, Nat] }` and `Vec(Bin, 3)` to `InductType { Vec, [Bin], [3] }`), and its shape is recorded in the inductive registry.
                 let type_flat_items = group
                     .iter()
                     .map(|u| {

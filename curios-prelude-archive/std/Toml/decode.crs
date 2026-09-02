@@ -67,11 +67,11 @@ let stmts(acc: List(Stmt)) -> Parse(List(Stmt)) =
         stmts([..acc, s])
     end;
 
-pub let decode(source: Str) -> Result(Map(Toml), Str) =
+pub let decode(source: Str) -> Result(Str, Map(Toml)) =
     match Parse/run(stmts([]), Str/to_bytes(source))
     | failure(msg) => Result/failure(msg)
     | success(parsed) =>
-        let start: Result(Build, Str) = Result/success(build_empty);
+        let start: Result(Str, Build) = Result/success(build_empty);
         match List/fold(
             parsed,
             start,

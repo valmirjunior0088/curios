@@ -50,7 +50,7 @@ let replace_at(
         value,
         ..List/drop(@Toml, items, index + 1, @Nat/Lt/le_succ_of_lt(index, count, ok))];
 
-let may_extend(side: Map(State), kp: Bytes, act: Act) -> Result({}, Str) =
+let may_extend(side: Map(State), kp: Bytes, act: Act) -> Result(Str, {}) =
     match Map/get(side, kp)
     | some(st) =>
         match act
@@ -77,7 +77,7 @@ let walk_final(
     pre: Bytes,
     name: Str,
     act: Act,
-) -> Result({Map(Toml), Map(State), List(Seg)}, Str) =
+) -> Result(Str, {Map(Toml), Map(State), List(Seg)}) =
     let kf = seg_key(pre, Seg/plain(name));
     match act
     | act_table() =>
@@ -152,7 +152,7 @@ let walk(
     segs: List(Seg),
     unchecked: Nat,
     act: Act,
-) -> Result({Map(Toml), Map(State), List(Seg)}, Str) =
+) -> Result(Str, {Map(Toml), Map(State), List(Seg)}) =
     match segs
     | [] => Result/failure("empty key path")
     | [seg, ..rest] =>
@@ -294,7 +294,7 @@ let walk(
 let plains(names: List(Str)) -> List(Seg) =
     List/map(names, (n) => Seg/plain(n));
 
-pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Build, Str) =
+pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Str, Build) =
     match walk(
         b.root,
         b.side,
@@ -307,14 +307,14 @@ pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Build, Str) =
     | failure(msg) => Result/failure(msg)
     end;
 
-pub let apply_header(b: Build, path: List(Str)) -> Result(Build, Str) =
+pub let apply_header(b: Build, path: List(Str)) -> Result(Str, Build) =
     match walk(b.root, b.side, x[], plains(path), 0, Act/act_table())
     | success((root2, side2, resolved)) =>
         Result/success(Build { root = root2, side = side2, scope = resolved })
     | failure(msg) => Result/failure(msg)
     end;
 
-pub let apply_aot(b: Build, path: List(Str)) -> Result(Build, Str) =
+pub let apply_aot(b: Build, path: List(Str)) -> Result(Str, Build) =
     match walk(b.root, b.side, x[], plains(path), 0, Act/act_many())
     | success((root2, side2, resolved)) =>
         Result/success(Build { root = root2, side = side2, scope = resolved })
@@ -322,8 +322,8 @@ pub let apply_aot(b: Build, path: List(Str)) -> Result(Build, Str) =
     end;
 
 -- Inline tables reuse the same construction rules, scoped to the literal.
-pub let inline_fold(pairs: List({List(Str), Toml})) -> Result(Map(Toml), Str) =
-    let start: Result(Build, Str) = Result/success(build_empty);
+pub let inline_fold(pairs: List({List(Str), Toml})) -> Result(Str, Map(Toml)) =
+    let start: Result(Str, Build) = Result/success(build_empty);
     match List/fold(
         pairs,
         start,

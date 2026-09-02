@@ -340,7 +340,7 @@ pub(super) fn resolve_struct_params(
     Ok(resolved)
 }
 
-/// Seed omitted parameters from the checking expectation *before* the fields elaborate: a field checked against a type carrying an unsolved parameter metavariable can strand flex-flex constraints (e.g. a `match` tail's inferred motive against `Result({Nat, ?P}, Str)`) that nothing wakes. Only a same-named struct expectation seeds — anything else falls through to the dispatch-level `expect`, preserving implicit insertion and the ordinary mismatch diagnostics.
+/// Seed omitted parameters from the checking expectation *before* the fields elaborate: a field checked against a type carrying an unsolved parameter metavariable can strand flex-flex constraints (e.g. a `match` tail's inferred motive against `Result(Str, {Nat, ?P})`) that nothing wakes. Only a same-named struct expectation seeds — anything else falls through to the dispatch-level `expect`, preserving implicit insertion and the ordinary mismatch diagnostics.
 pub(super) fn seed_struct_expectation(
     context: &mut Context,
     name: &Global,

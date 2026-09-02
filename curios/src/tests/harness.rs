@@ -185,7 +185,7 @@ fn structural_values_spell_as_type_qualified_constructor_paths() {
         let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
         let _ = line(Spell/spell(Option/some(3)))!;
         let _ = line(Spell/spell(Option/none(@Nat)))!;
-        let _ = line(Spell/spell(Result/failure(@Nat, "why")))!;
+        let _ = line(Spell/spell(Result/failure(@Str, @Nat, "why")))!;
         let _ = line(Spell/spell(Ordering/lt()))!;
         Io/pure(())
         "#),

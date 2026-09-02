@@ -1,48 +1,63 @@
-use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered, List, Test};
+use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered, List, Monad, Test};
 
-pub induct Result(A: Type, E: Type): pub Type
+-- Error first, value last: the family partially applies as a monad, `(A: Type) => Result(E, A)`, so a `Result` is its own short-circuiting monad — `!` on one is checked early return, `raise` stops a region and `rescue` handles the stop. See `documentation/design/language/an-error-comes-first-so-a-result-is-its-own-monad.md`. Deliberately *no* `Lift(Io, Result(E))` edge exists: a `Result` region provably performs nothing.
+pub induct Result(E: Type, A: Type): pub Type
 | success(A)
 | failure(E)
 end
 
 pub use Result/*;
 
-pub let map_success(@A: Type, @B: Type, @E: Type, r: Result(A, E), f: (A) -> B) -> Result(B, E) =
+pub let pure(@E: Type, @A: Type, a: A) -> Result(E, A) =
+    Result/success(a);
+
+pub let raise(@E: Type, @A: Type, e: E) -> Result(E, A) =
+    Result/failure(e);
+
+pub let rescue(@E: Type, @A: Type, r: Result(E, A), handler: (E) -> Result(E, A)) -> Result(E, A) =
+    match r | success(_) => r | failure(e) => handler(e) end;
+
+pub let map_success(@A: Type, @B: Type, @E: Type, r: Result(E, A), f: (A) -> B) -> Result(E, B) =
     match r | success(a) => Result/success(f(a)) | failure(e) => Result/failure(e) end;
 
-pub let map_failure(@A: Type, @E: Type, @F: Type, r: Result(A, E), f: (E) -> F) -> Result(A, F) =
+pub let map_failure(@A: Type, @E: Type, @F: Type, r: Result(E, A), f: (E) -> F) -> Result(F, A) =
     match r | success(a) => Result/success(a) | failure(e) => Result/failure(f(e)) end;
 
 pub let bind(
     @A: Type,
     @B: Type,
     @E: Type,
-    m: Result(A, E),
-    f: (A) -> Result(B, E),
-) -> Result(B, E) =
+    m: Result(E, A),
+    f: (A) -> Result(E, B),
+) -> Result(E, B) =
     match m | success(a) => f(a) | failure(e) => Result/failure(e) end;
 
-pub let flatten(@A: Type, @E: Type, r: Result(Result(A, E), E)) -> Result(A, E) =
+pub let flatten(@A: Type, @E: Type, r: Result(E, Result(E, A))) -> Result(E, A) =
     match r | success(inner) => inner | failure(e) => Result/failure(e) end;
 
-pub let unwrap_or(@A: Type, @E: Type, r: Result(A, E), default: A) -> A =
+pub let unwrap_or(@A: Type, @E: Type, r: Result(E, A), default: A) -> A =
     match r | success(a) => a | failure(_) => default end;
 
-pub let is_success(@A: Type, @E: Type, r: Result(A, E)) -> Bool =
+pub let is_success(@A: Type, @E: Type, r: Result(E, A)) -> Bool =
     match r | success(_) => true | failure(_) => false end;
 
-pub let is_failure(@A: Type, @E: Type, r: Result(A, E)) -> Bool =
+pub let is_failure(@A: Type, @E: Type, r: Result(E, A)) -> Bool =
     match r | success(_) => false | failure(_) => true end;
 
-pub let to_option(@A: Type, @E: Type, r: Result(A, E)) -> Option(A) =
+pub let to_option(@A: Type, @E: Type, r: Result(E, A)) -> Option(A) =
     match r | success(a) => Option/some(a) | failure(_) => Option/none() end;
 
-pub let unwrap_or_else(@A: Type, @E: Type, r: Result(A, E), default: (E) -> A) -> A =
+pub let unwrap_or_else(@A: Type, @E: Type, r: Result(E, A), default: (E) -> A) -> A =
     match r | success(a) => a | failure(e) => default(e) end;
 
-satisfy (@A: Type, @E: Type, use Equal(A), use Equal(E)) => Equal(Result(A, E));
+satisfy (@E: Type) => Monad((A: Type) => Result(E, A)) {
+    pure(@A, a) = pure(a),
+    bind(@A, @B, m, f) = bind(m, f),
+}
 
-satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(A, E)) {
+satisfy (@A: Type, @E: Type, use Equal(A), use Equal(E)) => Equal(Result(E, A));
+
+satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(E, A)) {
     show(r) =
         match r
         | success(x) => Str/concat("success(", Str/concat(Show/show(x), ")"))
@@ -50,7 +65,7 @@ satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(A, E)) {
         end,
 }
 
-satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(A, E));
+satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(E, A));
 
 -- `failure` below `success`.
 pub let cmp(
@@ -58,26 +73,26 @@ pub let cmp(
     @E: Type,
     use Ordered(A),
     use Ordered(E),
-    a: Result(A, E),
-    b: Result(A, E),
+    a: Result(E, A),
+    b: Result(E, A),
 ) -> Ordering =
     match a
     | failure(e) => match b | failure(f) => Ordered/cmp(e, f) | success(_) => Ordering/lt() end
     | success(x) => match b | failure(_) => Ordering/gt() | success(y) => Ordered/cmp(x, y) end
     end;
 
-satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Compare(Result(A, E)) {
+satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Compare(Result(E, A)) {
     lt(a, b) = Ordering/is_lt(cmp(a, b)),
     le(a, b) = Ordering/is_le(cmp(a, b)),
     gt(a, b) = Ordering/is_gt(cmp(a, b)),
     ge(a, b) = Ordering/is_ge(cmp(a, b)),
 }
 
-satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Ordered(Result(A, E)) {
+satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Ordered(Result(E, A)) {
     cmp = cmp,
 }
 
-satisfy (@A: Type, @E: Type, use Test/Draw(A), use Test/Draw(E)) => Test/Draw(Result(A, E)) {
+satisfy (@A: Type, @E: Type, use Test/Draw(A), use Test/Draw(E)) => Test/Draw(Result(E, A)) {
     all() =
         Option/bind(
             Test/Draw/all(@A)(),

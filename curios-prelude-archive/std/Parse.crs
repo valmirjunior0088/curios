@@ -4,7 +4,7 @@ use /std/{Result, Nat, Byte, Bytes, Str, Bool, List, Option, Monad};
 --
 -- Sealing it is what makes the carrier free to change. Nothing outside this module names a position, so a later representation carrying more -- the position a failure occurred at, a defunctionalized step -- is this module's decision alone rather than an edit to every parser in `/std`. The committed flag was the first such addition, and it landed as `Refusal` without an edit outside this file.
 pub struct Parse(A: Type): Type {
-    run(input: Bytes, pos: Nat) -> Result({Nat, A}, Refusal),
+    run(input: Bytes, pos: Nat) -> Result(Refusal, {Nat, A}),
 }
 
 -- How a parser refused. A parser *declines* when the input is simply not its shape, and `or` then restores the position and tries its alternative; it refuses *committed* once it has recognized enough to know the input is its shape and malformed, and then `or` reports that reason rather than letting a later alternative read the same bytes as something else -- which is how a date with a bad day was once rejected as an integer followed by junk. Every primitive declines; only `commit` promotes.
@@ -16,7 +16,7 @@ end
 let message(refusal: Refusal) -> Str =
     match refusal | declined(msg) => msg | committed(msg) => msg end;
 
-pub let run(@A: Type, p: Parse(A), input: Bytes) -> Result(A, Str) =
+pub let run(@A: Type, p: Parse(A), input: Bytes) -> Result(Str, A) =
     match p.run(input, 0)
     | success((_, a)) => Result/success(a)
     | failure(refusal) => Result/failure(message(refusal))
@@ -254,7 +254,7 @@ pub let take(n: Nat) -> Parse(Bytes) =
 pub let many0(@A: Type, p: Parse(A)) -> Parse(List(A)) =
     Parse {
         run(input, pos) =
-            let go(acc: List(A), cur: Nat) -> Result({Nat, List(A)}, Refusal) =
+            let go(acc: List(A), cur: Nat) -> Result(Refusal, {Nat, List(A)}) =
                 match p.run(input, cur)
                 | failure(declined(_)) => Result/success((cur, acc))
                 | failure(committed(msg)) => Result/failure(Refusal/committed(msg))
@@ -274,7 +274,7 @@ pub let sep_by0(@A: Type, @S: Type, elem: Parse(A), sep: Parse(S)) -> Parse(List
             | failure(declined(_)) => Result/success((pos, []))
             | failure(committed(msg)) => Result/failure(Refusal/committed(msg))
             | success((first_end, first)) =>
-                let go(acc: List(A), cur: Nat) -> Result({Nat, List(A)}, Refusal) =
+                let go(acc: List(A), cur: Nat) -> Result(Refusal, {Nat, List(A)}) =
                     match sep.run(input, cur)
                     | failure(declined(_)) => Result/success((cur, acc))
                     | failure(committed(msg)) => Result/failure(Refusal/committed(msg))

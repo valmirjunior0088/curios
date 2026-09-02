@@ -38,7 +38,7 @@ pub let filter(@A: Type, m: Option(A), pred: (A) -> Bool) -> Option(A) =
 pub let flatten(@A: Type, m: Option(Option(A))) -> Option(A) =
     match m | some(inner) => inner | none() => Option/none() end;
 
-pub let to_result(@A: Type, @E: Type, m: Option(A), e: E) -> Result(A, E) =
+pub let to_result(@A: Type, @E: Type, m: Option(A), e: E) -> Result(E, A) =
     match m | some(a) => Result/success(a) | none() => Result/failure(e) end;
 
 pub let unwrap_or_else(@A: Type, m: Option(A), default: () -> A) -> A =

@@ -141,7 +141,7 @@ let value_str(v: Toml) -> Result(Str, Str) =
         | false => Result/failure("invalid time value")
         end
     | arr(items) =>
-        let start: Result(List(Str), Str) = Result/success([]);
+        let start: Result(Str, List(Str)) = Result/success([]);
         match List/fold(
             items,
             start,
@@ -163,7 +163,7 @@ let value_str(v: Toml) -> Result(Str, Str) =
         end
     end
 and pairs_str(entries: List({Bytes, Toml})) -> Result(Str, Str) =
-    let start: Result(List(Str), Str) = Result/success([]);
+    let start: Result(Str, List(Str)) = Result/success([]);
     match List/fold(
         entries,
         start,
@@ -183,7 +183,7 @@ and pairs_str(entries: List({Bytes, Toml})) -> Result(Str, Str) =
 
 let encode_table(prefix: List(Str), m: Map(Toml)) -> Result(Str, Str) =
     let entries = Map/entries(m);
-    let start: Result(List(Str), Str) = Result/success([]);
+    let start: Result(Str, List(Str)) = Result/success([]);
     match List/fold(
         entries,
         start,

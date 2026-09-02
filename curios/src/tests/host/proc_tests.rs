@@ -185,7 +185,7 @@ fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
         r#"
             let crashed = proc/status(proc/Command/new("crash", []))!;
             let missing = proc/status(proc/Command { ..proc/Command/new("missing", []), cwd = Option/some("/tmp") })!;
-            let show(r: Result(proc/Exit, Handle/Error)) -> Str =
+            let show(r: Result(Handle/Error, proc/Exit)) -> Str =
                 match r | success(e) => Show/show(e) | failure(e) => Show/show(e) end;
             Async/pure(Str/join(" ", [show(crashed), show(missing)]))
         "#,

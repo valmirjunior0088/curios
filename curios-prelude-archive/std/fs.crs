@@ -39,10 +39,10 @@ pub struct Metadata: pub Type {
 pub let size_nat(m: Metadata) -> Option(Nat) =
     match m.size.hi == 0 | true => Option/some(m.size.lo) | false => Option/none() end;
 
-let outcome(status: Nat) -> Result({}, Handle/Error) =
+let outcome(status: Nat) -> Result(Handle/Error, {}) =
     match Handle/error_of(status) | some(e) => Result/failure(e) | none() => Result/success(()) end;
 
-pub let stat(path: Str) -> Async(Result(Metadata, Handle/Error)) =
+pub let stat(path: Str) -> Async(Result(Handle/Error, Metadata)) =
     let r = /sys/file/stat(Str/to_bytes(path))!;
     Async/pure(
         match Handle/error_of(r.status)
@@ -57,7 +57,7 @@ pub let stat(path: Str) -> Async(Result(Metadata, Handle/Error)) =
         end);
 
 -- `not_found` is the answer `false`; every other failure is the failure it is.
-let kind_is(path: Str, want: (Kind) -> Bool) -> Async(Result(Bool, Handle/Error)) =
+let kind_is(path: Str, want: (Kind) -> Bool) -> Async(Result(Handle/Error, Bool)) =
     let r = stat(path)!;
     Async/pure(
         match r
@@ -65,16 +65,16 @@ let kind_is(path: Str, want: (Kind) -> Bool) -> Async(Result(Bool, Handle/Error)
         | failure(e) => match e | not_found() => Result/success(false) | _ => Result/failure(e) end
         end);
 
-pub let exists(path: Str) -> Async(Result(Bool, Handle/Error)) =
+pub let exists(path: Str) -> Async(Result(Handle/Error, Bool)) =
     kind_is(path, (k) => true);
 
-pub let is_file(path: Str) -> Async(Result(Bool, Handle/Error)) =
+pub let is_file(path: Str) -> Async(Result(Handle/Error, Bool)) =
     kind_is(path, (k) => k == Kind/file());
 
-pub let is_dir(path: Str) -> Async(Result(Bool, Handle/Error)) =
+pub let is_dir(path: Str) -> Async(Result(Handle/Error, Bool)) =
     kind_is(path, (k) => k == Kind/directory());
 
-pub let list(path: Str) -> Async(Result(List(Bytes), Handle/Error)) =
+pub let list(path: Str) -> Async(Result(Handle/Error, List(Bytes))) =
     let r = /sys/dir/list(Str/to_bytes(path))!;
     Async/pure(
         match Handle/error_of(r.status)
@@ -82,23 +82,23 @@ pub let list(path: Str) -> Async(Result(List(Bytes), Handle/Error)) =
         | none() => Result/success(r.names)
         end);
 
-pub let create_dir(path: Str) -> Async(Result({}, Handle/Error)) =
+pub let create_dir(path: Str) -> Async(Result(Handle/Error, {})) =
     let status = /sys/dir/create(Str/to_bytes(path))!;
     Async/pure(outcome(status));
 
-pub let remove_dir(path: Str) -> Async(Result({}, Handle/Error)) =
+pub let remove_dir(path: Str) -> Async(Result(Handle/Error, {})) =
     let status = /sys/dir/remove(Str/to_bytes(path))!;
     Async/pure(outcome(status));
 
-pub let remove_file(path: Str) -> Async(Result({}, Handle/Error)) =
+pub let remove_file(path: Str) -> Async(Result(Handle/Error, {})) =
     let status = /sys/file/remove(Str/to_bytes(path))!;
     Async/pure(outcome(status));
 
-pub let rename(from: Str, to: Str) -> Async(Result({}, Handle/Error)) =
+pub let rename(from: Str, to: Str) -> Async(Result(Handle/Error, {})) =
     let status = /sys/file/rename(Str/to_bytes(from), Str/to_bytes(to))!;
     Async/pure(outcome(status));
 
-pub let cwd: Async(Result(Bytes, Handle/Error)) =
+pub let cwd: Async(Result(Handle/Error, Bytes)) =
     let r = /sys/proc/cwd!;
     Async/pure(
         match Handle/error_of(r.status)
@@ -141,8 +141,8 @@ pub let extension(p: Str) -> Option(Str) =
     end;
 
 -- Every prefix of `path` created in turn, one that already exists left as it is. Written over the rows with no row of its own, since a majority of the surveyed libraries ship it and the host pays nothing for it.
-pub let create_dir_all(path: Str) -> Async(Result({}, Handle/Error)) =
-    let go(prefix: Str, parts: List(Str)) -> Async(Result({}, Handle/Error)) =
+pub let create_dir_all(path: Str) -> Async(Result(Handle/Error, {})) =
+    let go(prefix: Str, parts: List(Str)) -> Async(Result(Handle/Error, {})) =
         match parts
         | [] => Async/pure(Result/success(()))
         | [part, ..rest] =>
@@ -161,10 +161,10 @@ pub let create_dir_all(path: Str) -> Async(Result({}, Handle/Error)) =
     go("", Str/split(path, "/"));
 
 -- Everything at `path`, a directory's entries first. Written over the rows at `Bytes`, so a name that is not UTF-8 is removed like any other.
-pub let remove_all(path: Str) -> Async(Result({}, Handle/Error)) =
+pub let remove_all(path: Str) -> Async(Result(Handle/Error, {})) =
     remove_all_bytes(Str/to_bytes(path));
 
-let remove_all_bytes(path: Bytes) -> Async(Result({}, Handle/Error)) =
+let remove_all_bytes(path: Bytes) -> Async(Result(Handle/Error, {})) =
     let s = /sys/file/stat(path)!;
     match Handle/error_of(s.status)
     | some(e) => Async/pure(Result/failure(e))
@@ -188,7 +188,7 @@ let remove_all_bytes(path: Bytes) -> Async(Result({}, Handle/Error)) =
             end
         end
     end
-and remove_each(dir: Bytes, names: List(Bytes)) -> Async(Result({}, Handle/Error)) =
+and remove_each(dir: Bytes, names: List(Bytes)) -> Async(Result(Handle/Error, {})) =
     match names
     | [] => Async/pure(Result/success(()))
     | [name, ..rest] =>

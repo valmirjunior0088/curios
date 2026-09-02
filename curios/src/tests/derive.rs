@@ -257,12 +257,12 @@ fn the_standard_library_derives_option_result_and_order() {
     let source = r#"
         use /std/{Nat, Bool, Str, Option, Result, Ordering, Spell, Equal, print};
         let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
-        let failing: Result(Nat, Str) = Result/failure("no");
+        let failing: Result(Str, Nat) = Result/failure("no");
         let _ = print(Spell/spell(Option/some(1)))!;
         let _ = print("\n")!;
         let _ = print(Spell/spell(Option/none(@Nat)))!;
         let _ = print("\n")!;
-        let _ = print(Spell/spell(Result/success(@Nat, @Str, 1)))!;
+        let _ = print(Spell/spell(Result/success(@Str, @Nat, 1)))!;
         let _ = print("\n")!;
         let _ = print(Spell/spell(failing))!;
         let _ = print("\n")!;

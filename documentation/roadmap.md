@@ -216,7 +216,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Equality and ordering (`std/Eq`, `std/Ordering`)
 - [x] Foundational sum types (`std/Option`, `std/Result`)
 - [x] Pure state threading (`std/State`; no `Lift(Io, State(S))` edge, so a region performs nothing)
-- [x] Short-circuiting failure (`std/Throw` over `Result`; `!` as checked early return)
+- [x] Short-circuiting failure (`std/Result` is its own monad, error first; `!` as checked early return)
 - [x] Core collections (`std/List` and its helpers, length-indexed `std/Vec`)
 - [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys)
 - [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`, over packed `Bytes`)

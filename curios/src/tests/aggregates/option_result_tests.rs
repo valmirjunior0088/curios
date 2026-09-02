@@ -26,8 +26,8 @@ fn option_and_result_convert_into_each_other() {
         use /std/{Option, Result, Nat, Str, Show};
         let a: Option(Nat) = Option/some(1);
         let b: Option(Nat) = Option/none();
-        let ok: Result(Nat, Str) = Result/success(2);
-        let bad: Result(Nat, Str) = Result/failure("no");
+        let ok: Result(Str, Nat) = Result/success(2);
+        let bad: Result(Str, Nat) = Result/failure("no");
         /std/print(Str/join(" ", [
             Show/show(Option/to_result(a, "missing")),
             Show/show(Option/to_result(b, "missing")),

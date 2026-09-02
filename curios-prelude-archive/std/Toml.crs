@@ -1,7 +1,7 @@
 -- TOML 1.0.0 codec over native `Int` and binary32 `Flt`.
 --
 -- Public contract:
---   decode : (Str) -> Result(Map(Toml), Str) — consumes exactly one complete TOML 1.0.0 document (trailing non-trivia input is rejected) and builds the root table, enforcing table-construction semantics: duplicate keys, table redefinition, sealed inline tables, table/value and table/array conflicts, appending to static arrays, invalid parent selection through arrays of tables, and dotted-key redefinitions are all errors.
+--   decode : (Str) -> Result(Str, Map(Toml)) — consumes exactly one complete TOML 1.0.0 document (trailing non-trivia input is rejected) and builds the root table, enforcing table-construction semantics: duplicate keys, table redefinition, sealed inline tables, table/value and table/array conflicts, appending to static arrays, invalid parent selection through arrays of tables, and dotted-key redefinitions are all errors.
 --   encode : (Map(Toml)) -> Result(Str, Str) — emits one deterministic document in the map's structural order (root key/value lines first, then table sections; tables inside arrays as inline tables). It fails, rather than emitting invalid TOML, on a non-UTF-8 map key or an invalid calendar/clock/offset value. Every emitted document decodes back to the same value, NaN included: `Flt` has exactly one NaN, so there is no encoding left for an implementation to choose.
 --
 -- Numeric policy — all conversion is codec-owned; `Nat/of_str` and `Flt/of_str` are never used, so no accepted lexeme can silently wrap:

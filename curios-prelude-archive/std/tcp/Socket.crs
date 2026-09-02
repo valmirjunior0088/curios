@@ -12,7 +12,7 @@ pub let new(h: Handle) -> Socket =
 pub let read(c: Socket, n: Nat) -> Async(Handle/Read) =
     Async/read(c.0, n);
 
-pub let write(c: Socket, b: Bytes) -> Async(Result({}, Handle/Error)) =
+pub let write(c: Socket, b: Bytes) -> Async(Result(Handle/Error, {})) =
     Async/write(c.0, b);
 
 let upgrade(h: Handle, host: Str, tls: Bool) -> Io(Nat) =
@@ -22,7 +22,7 @@ let upgrade(h: Handle, host: Str, tls: Bool) -> Io(Nat) =
     end;
 
 -- Every step up to the connect is a syscall that answers at once; the connect itself is where a peer decides, so the host may hand the wait back: a non-blocking socket answers `would_block` for any peer that is not local, which `settle` turns into a park on `WRITE` until the kernel has settled it.
-let open_and_connect(addr: Bytes) -> Io(Result({Handle, Bool}, Handle/Error)) =
+let open_and_connect(addr: Bytes) -> Io(Result(Handle/Error, {Handle, Bool})) =
     let s = /sys/socket/open(addr)!;
     match Handle/error_of(s.status)
     | some(e) => Io/pure(Result/failure(e))
@@ -41,7 +41,7 @@ let open_and_connect(addr: Bytes) -> Io(Result({Handle, Bool}, Handle/Error)) =
     end;
 
 -- A pending connect settles once the socket polls writable, and `finish_connect` reads the outcome; an honest early answer of `would_block` parks again.
-let settle(h: Handle, pending: Bool) -> Async(Result({}, Handle/Error)) =
+let settle(h: Handle, pending: Bool) -> Async(Result(Handle/Error, {})) =
     match pending
     | false => Async/pure(Result/success(()))
     | true =>
@@ -62,7 +62,7 @@ let connect_addr(
     settings: Settings,
     host: Str,
     addr: Bytes,
-) -> Async(Result(Socket, Handle/Error)) =
+) -> Async(Result(Handle/Error, Socket)) =
     let opened = open_and_connect(addr)!;
     match opened
     | failure(e) => Async/pure(Result/failure(e))
@@ -87,14 +87,14 @@ let connect_socket(
     settings: Settings,
     host: Str,
     port: Nat,
-) -> Async(Result(Socket, Handle/Error)) =
+) -> Async(Result(Handle/Error, Socket)) =
     let resolved = resolve(host, port)!;
     match resolved
     | failure(e) => Async/pure(Result/failure(e))
     | success(addr) => connect_addr(settings, host, addr)
     end;
 
-pub let connect(settings: Settings, host: Str, port: Nat) -> Async(Result(Socket, Handle/Error)) =
+pub let connect(settings: Settings, host: Str, port: Nat) -> Async(Result(Handle/Error, Socket)) =
     let opened = connect_socket(settings, host, port)!;
     match opened
     | failure(e) => Async/pure(Result/failure(e))
@@ -112,7 +112,7 @@ pub let with(
     host: Str,
     port: Nat,
     f: (Socket) -> Async(A),
-) -> Async(Result(A, Handle/Error)) =
+) -> Async(Result(Handle/Error, A)) =
     let opened = connect(settings, host, port)!;
     match opened
     | failure(e) => Async/pure(Result/failure(e))
@@ -122,7 +122,7 @@ pub let with(
         Async/pure(Result/success(a))
     end;
 
-let drain(c: Socket) -> Async(Result(Bytes, Handle/Error)) =
+let drain(c: Socket) -> Async(Result(Handle/Error, Bytes)) =
     Async/drain((n) => read(c, n));
 
 -- `with` wraps the body's own failure channel in its connect/close one; flatten collapses the two so a caller sees one channel whichever stage failed.
@@ -131,7 +131,7 @@ pub let call(
     host: Str,
     port: Nat,
     request: Bytes,
-) -> Async(Result(Bytes, Handle/Error)) =
+) -> Async(Result(Handle/Error, Bytes)) =
     Async/map(
         with(
             settings,

@@ -20,10 +20,10 @@ pub let of_mode(mode: Mode) -> Nat =
 pub let read(f: File, n: Nat) -> Async(Handle/Read) =
     Async/read(f.0, n);
 
-pub let write(f: File, b: Bytes) -> Async(Result({}, Handle/Error)) =
+pub let write(f: File, b: Bytes) -> Async(Result(Handle/Error, {})) =
     Async/write(f.0, b);
 
-pub let open(path: Str, mode: Mode) -> Async(Result(File, Handle/Error)) =
+pub let open(path: Str, mode: Mode) -> Async(Result(Handle/Error, File)) =
     let r = /sys/file/open(Str/to_bytes(path), of_mode(mode))!;
     match Handle/error_of(r.status)
     | some(e) => Async/pure(Result/failure(e))
@@ -40,7 +40,7 @@ pub let with(
     path: Str,
     mode: Mode,
     body: (File) -> Async(A),
-) -> Async(Result(A, Handle/Error)) =
+) -> Async(Result(Handle/Error, A)) =
     let opened = open(path, mode)!;
     match opened
     | success(f) =>
@@ -50,12 +50,12 @@ pub let with(
     | failure(e) => Async/pure(Result/failure(e))
     end;
 
-let drain(f: File) -> Async(Result(Bytes, Handle/Error)) =
+let drain(f: File) -> Async(Result(Handle/Error, Bytes)) =
     Async/drain((n) => read(f, n));
 
-pub let read_all(path: Str) -> Async(Result(Bytes, Handle/Error)) =
+pub let read_all(path: Str) -> Async(Result(Handle/Error, Bytes)) =
     Async/map(with(path, Mode/read(), (f) => drain(f)), (r) => Result/flatten(r));
 
 -- The whole file in one call, the twin of `read_all`: created if absent, replaced if present.
-pub let write_all(path: Str, b: Bytes) -> Async(Result({}, Handle/Error)) =
+pub let write_all(path: Str, b: Bytes) -> Async(Result(Handle/Error, {})) =
     Async/map(with(path, Mode/write(), (f) => write(f, b)), (r) => Result/flatten(r));

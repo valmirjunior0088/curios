@@ -501,7 +501,7 @@ fn finalize_definition(
         let body = context.zonk_universe_levels(&body)?;
         return Ok((universe_context, type_, body));
     }
-    // A value constructor stands in the same relation to its inductive as a method wrapper does to its concept, and fails the same way. `Result(S, F)` has two universe parameters; `success` mentions only `S` in its payload, so generalizing it alone mints its own `Param(0..1)` in meta-id order and displaces the inductive's — which `generalize` then shifts up past the declared count, leaving `Param(2)`/`Param(3)` with nothing to name them. A constructor is not independently polymorphic: its universes *are* the inductive's, so it inherits that context and binds its instance to those parameters positionally.
+    // A value constructor stands in the same relation to its inductive as a method wrapper does to its concept, and fails the same way. `Result(F, S)` has two universe parameters; `success` mentions only `S` in its payload, so generalizing it alone mints its own `Param(0..1)` in meta-id order and displaces the inductive's — which `generalize` then shifts up past the declared count, leaving `Param(2)`/`Param(3)` with nothing to name them. A constructor is not independently polymorphic: its universes *are* the inductive's, so it inherits that context and binds its instance to those parameters positionally.
     //
     // Like `ConceptMethod`, the owner is a field `into_core` records where the constructor is generated, not something recovered from `name`.
     if let DefinitionKind::InductiveConstructor { owner, .. } = kind {

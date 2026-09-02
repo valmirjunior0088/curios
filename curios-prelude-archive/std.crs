@@ -85,9 +85,6 @@ pub use Char/{let Char};
 pub mod Result;
 pub use Result/{let Result};
 
-pub mod Throw;
-pub use Throw/{let Throw};
-
 pub mod Option;
 pub use Option/{let Option};
 

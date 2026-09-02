@@ -17,11 +17,11 @@ fn program(body: &str) -> String {
     format!(
         r#"
         use /std/{{Str, Bytes, Nat, Bool, List, Option, Result, Show, Async, Io, Handle, File, fs}};
-        let show_bool(r: Result(Bool, Handle/Error)) -> Str =
+        let show_bool(r: Result(Handle/Error, Bool)) -> Str =
             match r | success(b) => Bool/to_str(b) | failure(e) => Show/show(e) end;
-        let show_unit(r: Result({{}}, Handle/Error)) -> Str =
+        let show_unit(r: Result(Handle/Error, {{}})) -> Str =
             match r | success(_) => "ok" | failure(e) => Show/show(e) end;
-        let text(r: Result(Bytes, Handle/Error)) -> Str =
+        let text(r: Result(Handle/Error, Bytes)) -> Str =
             match r | success(b) => Option/unwrap_or(Str/of_bytes(b), "?") | failure(e) => Show/show(e) end;
         let program: Async(Str) =
             {body};

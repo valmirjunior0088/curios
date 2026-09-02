@@ -46,10 +46,10 @@ const CORPUS: [(&str, &str); 14] = [
         )),
     ),
     (
-        "monad_throw",
+        "monad_result",
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../programs/monad_throw.crs"
+            "/../programs/monad_result.crs"
         )),
     ),
     (

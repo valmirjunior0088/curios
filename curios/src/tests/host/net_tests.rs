@@ -73,7 +73,7 @@ fn a_pending_connect_is_awaited_before_the_request_is_sent() {
             match outcome
             | success(response) => Handle/write(Handle/stdout, response)
             | failure(e) =>
-                match e : (_) => /std/Io(/std/Result({}, Handle/Error))
+                match e : (_) => /std/Io(/std/Result(Handle/Error, {}))
                 | refused() => Handle/write(Handle/stdout, Str/to_bytes("refused"))
                 | _ => Handle/write(Handle/stdout, Str/to_bytes("error"))
                 end

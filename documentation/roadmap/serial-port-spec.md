@@ -75,14 +75,14 @@ pub induct Flow:     pub Type | none() | hardware() | software() end
 pub struct Settings: pub Type { baud: Nat, data_bits: DataBits, parity: Parity, stop_bits: StopBits, flow: Flow }
 pub let default: Settings                                   -- 9600, eight, none, one, none
 
-pub let open(path: Str, baud: Nat) -> Async(Result(Serial, Handle/Error))
-pub let open_with(path: Str, settings: Settings) -> Async(Result(Serial, Handle/Error))
+pub let open(path: Str, baud: Nat) -> Async(Result(Handle/Error, Serial))
+pub let open_with(path: Str, settings: Settings) -> Async(Result(Handle/Error, Serial))
 pub let read(s: Serial, n: Nat) -> Async(Handle/Read)
-pub let write(s: Serial, b: Bytes) -> Async(Result({}, Handle/Error))
-pub let read_until(s: Serial, delimiter: Byte) -> Async(Result(Bytes, Handle/Error))
-pub let discard_input(s: Serial) -> Async(Result({}, Handle/Error))
+pub let write(s: Serial, b: Bytes) -> Async(Result(Handle/Error, {}))
+pub let read_until(s: Serial, delimiter: Byte) -> Async(Result(Handle/Error, Bytes))
+pub let discard_input(s: Serial) -> Async(Result(Handle/Error, {}))
 pub let close(s: Serial) -> Async({})
-pub let with(@A: Type, path: Str, settings: Settings, body: (Serial) -> Async(A)) -> Async(Result(A, Handle/Error))
+pub let with(@A: Type, path: Str, settings: Settings, body: (Serial) -> Async(A)) -> Async(Result(Handle/Error, A))
 ```
 
 `open_with` maps each tag to its `/sys` code by a match, as `File/of_mode` does, calls the row, reads the status through `Handle/error_of`, sets non-blocking through `Async/nonblocking`, and acquires the handle with `close` as its finalizer — the sequence `File/open` spells, closing the handle on either failure. `close` is `Async/release`. `open` is `open_with` at `default` with the baud replaced by a struct update. The inducts make every settings value total, so no invalid frame reaches the host and the row's `EINVAL` lane is reached only by a speed. The default is 9600 8N1 with no flow control because every surveyed library defaults to it.

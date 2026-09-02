@@ -27,7 +27,7 @@ fn lists_options_and_results_order_through_ord() {
     let source = r#"
         use /std/{Str, Nat, List, Option, Result, Ordering, Ordered, Show, Bool};
         let none: Option(Nat) = Option/none();
-        let bad: Result(Nat, Str) = Result/failure("e");
+        let bad: Result(Str, Nat) = Result/failure("e");
         /std/print(Str/join(",", [
             Show/show(Ordered/cmp([1, 2], [1, 3])),
             Show/show(Ordered/cmp([1, 2], [1, 2])),
