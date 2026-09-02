@@ -8,7 +8,7 @@ This would touch the trusted base at its most consequential rule — conversion 
 
 ## Why it exists
 
-[Across the perimeter](../soundness/across-the-perimeter.md) already names the destination without linking anywhere: *"What is still missing is the model, not the reasoning … That is the first properly metatheoretic work this project would undertake, and it is what an observational-equality layer would rest on directly."* This specification is the location that sentence was pointing at.
+[Definitional proof irrelevance](../soundness/per-term-rules/definitional-proof-irrelevance.md) names the destination: *"What is still missing is the model, not the reasoning … That is the first properly metatheoretic work this project would undertake, and it is what an observational-equality layer would rest on directly."* This specification is the location that sentence was pointing at.
 
 Three separate things point the same way.
 
@@ -32,10 +32,10 @@ The neighbours were looked at and are not candidates. Cubical type theory reject
 
 The audit is why CC^obs rather than TT^obs, and why this is a layer rather than a rewrite of the sort structure.
 
-- **The sort structure is already CC^obs's.** A cumulative predicative `Type` hierarchy with algebraic inferred levels, beside a *separate impredicative* `Prop` with definitional proof irrelevance — `curios-core/src/universe.rs:3`, `curios-cert/src/kernel/module.rs:403`, and [Strict Prop under Type](../design/language/strict-prop-under-type.md). That is `(U_i, Ω)`, and the impredicativity is exactly what makes TT^obs the wrong target and CC^obs the right one.
+- **The sort structure is already CC^obs's.** A cumulative predicative `Type` hierarchy with algebraic inferred levels, beside a *separate impredicative* `Prop` with definitional proof irrelevance — `curios-core/src/universe.rs:3`, `curios-cert/src/kernel/module.rs:403`, and [`Prop` is strict, proof-irrelevant, and definitionally K](../design/language/prop-is-strict-proof-irrelevant-and-definitionally-k.md). That is `(U_i, Ω)`, and the impredicativity is exactly what makes TT^obs the wrong target and CC^obs the right one.
 - **The conversion apparatus OTT needs is in place.** Conversion is type-directed and carries the type at every goal; η fires at Π and at Σ; irrelevance is discharged at a `Prop`-sorted goal before either side is examined — `curios-cert/src/kernel/convert.rs:3` and `curios-elab/src/convert.rs:2064`. An inductive type-former's arguments are already compared at the declaration's own index telescope, which is what lets `Eq(@P, p, q)` at a `Prop`-sorted `P` convert with `Eq(@P, p, p)` (`curios-cert/src/kernel/convert.rs:19`).
 - **The piece an observational equality replaces is `curios-prelude-archive/std/Eq.crs`**: a `Prop`-valued inductive family with `refl`, and `sym`/`trans`/`cong`/`subst` derived by matching on it. Its large elimination into `Type` is admitted by the non-informativeness excuse in the [Large-elimination guard](../soundness/per-term-rules/large-elimination-guard.md), and that guard is what both recorded defects were found in.
-- **Erasure already deletes `Prop` wholesale**, and the argument is irrelevance itself — [Strict Prop under Type](../design/language/strict-prop-under-type.md). An `Ω`-valued observational equality erases by the same argument; what does *not* obviously erase is `cast`, which is question 11.
+- **Erasure already deletes `Prop` wholesale**, and the argument is irrelevance itself — [`Prop` is strict, proof-irrelevant, and definitionally K](../design/language/prop-is-strict-proof-irrelevant-and-definitionally-k.md). An `Ω`-valued observational equality erases by the same argument; what does *not* obviously erase is `cast`, which is question 11.
 - **Quotients do not exist**, and neither does any surface notion of a type carrying a chosen equality.
 
 ## What is read from source, and not probed
@@ -86,7 +86,7 @@ None of these is answered. Each records what constrains it and what turns on it,
 
 ### The two-checker seam
 
-**13. Do both checkers get `~` and `cast`, written separately?** [An independent kernel re-checks what the elaborator accepts](../design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md) says the rules are written twice on purpose. Conversion is already the rule [Across the perimeter](../soundness/across-the-perimeter.md) singles out as *not* held to a differential, and the first goal-level differential written for it found a real disagreement. Adding a type-directed cast to both copies raises the stake on that missing differential rather than lowering it.
+**13. Do both checkers get `~` and `cast`, written separately?** [An independent kernel re-checks what the elaborator accepts](../design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md) says the rules are written twice on purpose. Conversion is already the rule that decision singles out as *not* held to a differential, and the first goal-level differential written for it found a real disagreement. Adding a type-directed cast to both copies raises the stake on that missing differential rather than lowering it.
 
 **14. What becomes of the kernel's irrelevance rule?** It is presently *inert* — no conversion goal in `curios-cert` ever arrives at a `Prop`-sorted type, because proofs reach conversion in untyped child positions compared at `Type`. Under an observational equality the population of `Ω`-typed goals changes, and whether the rule stays inert, starts firing, or becomes load-bearing in the checker where it currently does nothing is a question the [Definitional proof irrelevance](../soundness/per-term-rules/definitional-proof-irrelevance.md) entry would have to be re-graded against.
 
@@ -98,13 +98,13 @@ None of these is answered. Each records what constrains it and what turns on it,
 
 ### Evidence and metatheory
 
-**17. Does an observational layer need the missing model first, or supply it?** [Across the perimeter](../soundness/across-the-perimeter.md) states that definitional proof irrelevance is *argued* and not modelled, and that the model needs `Prop` to be a genuine subsingleton with only total terms interpreted. CC^obs proves normalization for its impredicative irrelevant universe in plain MLTT. Whether that result can be *inherited* here — and what the gap is between its system and this one — is the first question a metatheory effort would ask, and answering it may be worth more than the implementation.
+**17. Does an observational layer need the missing model first, or supply it?** [Definitional proof irrelevance](../soundness/per-term-rules/definitional-proof-irrelevance.md) states that the rule is *argued* and not modelled, and that the model needs `Prop` to be a genuine subsingleton with only total terms interpreted. CC^obs proves normalization for its impredicative irrelevant universe in plain MLTT. Whether that result can be *inherited* here — and what the gap is between its system and this one — is the first question a metatheory effort would ask, and answering it may be worth more than the implementation.
 
 **18. What fixture pins that Curios lacks Werner's rule today?** The reading above is unprobed. A fixture that constructs Abel–Coquand's `Ω` in surface Curios and observes it stick rather than diverge would convert an audit into evidence, and would fail loudly if a future reduction change quietly introduced the rule. This is worth writing whether or not anything else here is ever picked up.
 
 ## Deliberately not decided here
 
-Whether [Across the perimeter](../soundness/across-the-perimeter.md)'s forward reference should be turned into a link to this file. It presently names an observational-equality layer and points nowhere, which is the decay the citation rule exists to prevent — but editing a soundness entry is a separate change from filing this one.
+Nothing: [Definitional proof irrelevance](../soundness/per-term-rules/definitional-proof-irrelevance.md)'s forward reference now links here.
 
 ## How to retake the counts
 

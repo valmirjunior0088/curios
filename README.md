@@ -14,7 +14,7 @@ Curios is a dependently typed programming language that compiles to WebAssembly.
 
 </div>
 
-> **Status:** Curios is early, experimental, and under active development — syntax, standard library, and compiler may all change without notice. An independent kernel re-checks every compilation from the finished terms alone; what it covers, and what each rule it applies rests on, is tracked in the [soundness perimeter](documentation/soundness.md).
+> **Status:** Curios is early, experimental, and under active development — syntax, standard library, and compiler may all change without notice. An independent kernel re-checks every compilation from the finished terms alone; what it covers, and what each rule it applies rests on, is tracked in the [soundness perimeter](documentation/soundness).
 
 ## A taste
 
@@ -58,6 +58,10 @@ type mismatch
 - Concepts and witnesses for ad-hoc polymorphism
 - A standard library for collections, formatting, IO, networking, tasks, time, randomness, arbitrary-precision integers, JSON, and TOML
 - One lowering pipeline from source to WebAssembly, whether you run it natively or in a browser tab
+
+## Where it is going
+
+Curios aims to be an ergonomic proof assistant and an ergonomic functional programming language at once, and the totality obligations are what let one language be both: general recursion stays unrestricted wherever a program uses it, and is removed from exactly the positions where erasure would turn it into a logical hole. Reduction is not strongly normalizing and values are not canonical — a program may diverge, while a proof may not. The long-term objective is a self-hosting compiler — every language-specific stage from source text to raw Wasm bytes written in Curios — running on the retained Rust host, which already serves the native product and the browser product from one backend.
 
 ## Try it
 
@@ -137,8 +141,8 @@ The resulting CLI is `target/release/curios`. The build has two stages — a sli
 
 - [Language reference](documentation/syntax.md) — the complete surface language, when you want to know what something means or how to spell it
 - [Usage](documentation/usage.md) — every subcommand, flag, and package concept the command line offers
-- [Design decisions](documentation/design.md) — one file per decision under [`design/`](documentation/design), when you want to know *why* Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
-- [Soundness perimeter](documentation/soundness.md) — every rule that can admit a term, what it assumes, and how far it has actually been checked
+- [Design decisions](documentation/design) — one file per decision, `language/` for what Curios is and `toolchain/` for how it is built and run, when you want to know *why* Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
+- [Soundness perimeter](documentation/soundness) — every rule that can admit a term, what it assumes, and how far it has actually been checked; [the claim it stands for](documentation/design/language/the-soundness-perimeter.md), and how to read a grade
 - [Development roadmap](documentation/roadmap.md) — what exists, what is pending, and the specifications for the pending half
 - [Benchmark methodology and results](benchmarks/README.md)
 

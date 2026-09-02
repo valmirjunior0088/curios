@@ -4,7 +4,7 @@
 
 //! End-to-end coverage for the soundness perimeter entries that nothing else guards.
 //!
-//! `design.md` states the consistency claim against an enumerated perimeter, and `soundness.md` is that perimeter: one entry per rule, each graded *probed*, *argued*, or *auditable only*. "Probed" is a claim about executable evidence, so it needs a test that fails when the rule stops holding — otherwise the grade records what someone once tried by hand and decays the moment nobody remembers doing it.
+//! The soundness perimeter is `documentation/soundness/`, one entry per rule, each graded *probed*, *argued*, or *auditable only* (see `documentation/design/language/the-soundness-perimeter.md`). "Probed" is a claim about executable evidence, so it needs a test that fails when the rule stops holding — otherwise the grade records what someone once tried by hand and decays the moment nobody remembers doing it.
 //!
 //! The entries with their own homes are not repeated here: strict positivity lives in `tests::positivity`, the two totality obligations in `tests::soundness`, and witness coherence in `tests::concepts`. What is left is the large-elimination guard, `Prop` non-informativeness, coverage, and the foreign wire contract — four rules the claim rests on that had no regression test at all.
 //!
@@ -566,7 +566,7 @@ pub(super) const A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE: &str = r#"
         /std/print(Nat/to_str(1))
         "#;
 
-/// The premise every rule above is stated over and no entry of `soundness.md` names: a type is a *pure* term. It used to be enforced by `reduce_intrinsic`, whose `Cell`, `CellGet`, `CellSet`, `Foreign` and `ProcExit` arms each refused type-level reduction, and this derivation was refused as `CellGet cannot appear at the type level` on that account alone, with no refinement in play. Those arms are gone — a description sitting at the type level is a value, not an error — and what refuses the program now is the scrutinee's own type. `Cell/get(c) : Io(Bool)` *describes* a read instead of being one, so it is not a `Bool`, not something `match` can eliminate, and not something `Eq` can be stated over. The cell is forced on the line above so that the refusal lands here and not on the binding.
+/// The premise every rule above is stated over and no entry under `documentation/soundness/` names: a type is a *pure* term. It used to be enforced by `reduce_intrinsic`, whose `Cell`, `CellGet`, `CellSet`, `Foreign` and `ProcExit` arms each refused type-level reduction, and this derivation was refused as `CellGet cannot appear at the type level` on that account alone, with no refinement in play. Those arms are gone — a description sitting at the type level is a value, not an error — and what refuses the program now is the scrutinee's own type. `Cell/get(c) : Io(Bool)` *describes* a read instead of being one, so it is not a `Bool`, not something `match` can eliminate, and not something `Eq` can be stated over. The cell is forced on the line above so that the refusal lands here and not on the binding.
 pub(super) const AN_EFFECTFUL_SCRUTINEE_IS_NOT_A_VALUE: &str = r#"
     use /std/{Cell, Eq, Bool, False, Str};
 
@@ -655,7 +655,7 @@ pub(super) const A_STUCK_APPLICATION_SCRUTINEE_STILL_REFINES: &str = r#"
 //
 // `fixes_no_value`'s cure was to ask a second question — does the walk read the body of every function the term would call — and refuse the equation when it does not. It worked and it was expensive in exactly the direction that matters: a *pure* opaque head stopped refining too, because nothing distinguished it. `(Bool) -> Bool` said nothing about purity, since the function space admitted `Cell/get`.
 //
-// Nothing is asked now, and the sentence that made the walk necessary is false. `(b) => Cell/get(c)` has type `(Bool) -> Io(Bool)`; it does not inhabit `(Bool) -> Bool`, so the *caller's argument* is refused and the derivation never reaches an arm, a refinement, or an equation. This is the entry `soundness.md` predicted when it said what removes the class is an effect discipline on the arrow rather than another clause in the walk — and [`a_parameter_headed_scrutinee_refines_again`] is what the walk was costing.
+// Nothing is asked now, and the sentence that made the walk necessary is false. `(b) => Cell/get(c)` has type `(Bool) -> Io(Bool)`; it does not inhabit `(Bool) -> Bool`, so the *caller's argument* is refused and the derivation never reaches an arm, a refinement, or an equation. What removes the class is an effect discipline on the arrow rather than another clause in the walk (see `documentation/soundness/per-term-rules/a-term-outside-io-performs-no-effect.md`) — and [`a_parameter_headed_scrutinee_refines_again`] is what the walk was costing.
 pub(super) const AN_EFFECT_CANNOT_INHABIT_A_PURE_ARROW: &str = r#"
     use /std/{Cell, Eq, Bool, False, Str};
 

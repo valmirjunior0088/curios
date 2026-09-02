@@ -280,7 +280,7 @@ pub(crate) fn rewrite_universe_levels<B: Bound, E: 'static>(
     rewrite_universe_levels_scoped(value, move |_, level| rewrite(level))
 }
 
-/// Structural implementation of universe erasure: nominal vectors, instances, and contexts are removed by their owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant payload is rebuilt with Core's private canonical ground representative. Two callers: the validated Core-to-Ersd projection, and goal-report display — the surface language has no spelling for an instance, so reports erase them.
+/// Structural implementation of universe erasure: nominal vectors, instances, and contexts are removed by their owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant payload is rebuilt with Core's private canonical ground representative. It is read two ways. As a projection into a world where levels are irrelevant — the Core-to-Ersd lowering, and goal-report display, since the surface language has no spelling for an instance — it is exact. As an equality key it is a quotient coarser than definitional equality, identifying `Type 0` with `Type 1`; that reading is sound only over `Nat` summands, where no level can reach a number, and `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` records the route it admits anywhere else.
 pub fn project_erased_universes<B: Bound>(value: &B) -> B {
     curios_profile::sample!("walk::project_erased_universes", 1);
     value.traverse(&mut Visit::erasing_universes(|_, _| None))

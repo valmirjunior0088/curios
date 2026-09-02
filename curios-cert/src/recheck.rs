@@ -4,7 +4,7 @@
 //!
 //! # Reading a disagreement
 //!
-//! A refusal here is *not* automatically an elaborator bug, and treating it as one would be the wrong reflex. The kernel is deliberately incomplete in several places — coverage is unverified, free-monoid elimination arms are unchecked, conversion compares some positions syntactically — and each of those refuses valid programs. So a disagreement is a question, and the two answers are "the kernel needs strengthening here" and "the elaborator admitted something it should not have". Both are worth knowing, which is why this runs at all.
+//! A refusal here is *not* automatically an elaborator bug, and treating it as one would be the wrong reflex. The kernel is deliberately incomplete in one place — conversion compares an application spine's arguments, a stuck elimination's motive and arms, and a struct type-former's parameters at `Type` rather than at their real types, forfeiting type-directed eta and goal-level irrelevance there — and that refuses valid programs. So a disagreement is a question, and the two answers are "the kernel needs strengthening here" and "the elaborator admitted something it should not have". Both are worth knowing, which is why this runs at all.
 //!
 //! What a disagreement is *never* is noise to be suppressed. If a rule here has to be weakened to make a real module pass, that weakening is a decision about the trusted base and belongs in a decision file of its own under `documentation/design/language/`, beside `an-independent-kernel-re-checks-what-the-elaborator-accepts.md`.
 //!
@@ -381,7 +381,7 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> V
         }
     }
 
-    // A registry entry is data that no judgment in this walk types. `check_arity` walks a constructor telescope's *domains* and stops at the terminal, so the index targets a constructor states reach index inversion and the arm rule without ever having been checked, and `check_induct_decl` leaves them to the `rec` group a declaration lowers to — a lowering nothing here confirms exists. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
+    // A registry entry is data that no judgment in this walk types; what it declares — a literal result sort, sized constructors, and each index target typed against the arity at the constructor's own parameters — is `check_induct_decl`'s to check, below. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
     for (name, declaration) in module.induct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Some(error) = induct_residue(declaration) {
             verdicts.push(Verdict {

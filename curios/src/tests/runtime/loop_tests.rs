@@ -15,7 +15,7 @@ fn accumulation_loops_are_linear_by_construction() {
     //
     // **The count moved from the historical 100 000 when the direct spelling returned**, because the spelling makes elaboration run the loop too, at a measured ~160 units an iteration across the two checkers — the historical count costs the type level sixteen million units and this one four, which keeps the test seconds while leaving a quadratic regression minutes. The discrimination the count exists for is unchanged.
     //
-    // `documentation/design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md` states the design this follows from.
+    // The design this follows from is `documentation/design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md`.
     assert_eq!(
         run(r#"
         use /std/{Handle, Bytes, Nat, Str};

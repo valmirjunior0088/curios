@@ -61,7 +61,7 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
 
 /// A constructor's index target may be a *proof*, and no judgment in the walk types it.
 ///
-/// Definitional proof irrelevance accepts without inspecting either term, and `documentation/soundness/across-the-perimeter.md` states plainly what makes that correct: every inhabitant of a proposition is total, which is (V)'s job. The premise that argument needs is that **(V) inspects every `Prop`-typed term in the accepted module** — and for the kernel's own (V), seeded from its own typing rather than from the elaborator's hook, that reduces to whether the walk types every such term.
+/// Definitional proof irrelevance accepts without inspecting either term, and what makes that correct is that every inhabitant of a proposition is total, which is (V)'s job (see `documentation/soundness/per-term-rules/definitional-proof-irrelevance.md`). The premise that argument needs is that **(V) inspects every `Prop`-typed term in the accepted module** — and for the kernel's own (V), seeded from its own typing rather than from the elaborator's hook, that reduces to whether the walk types every such term.
 ///
 /// For a time it did not, and a constructor's index target was the gap. `partial_definitions` iterates `module.items` and nothing else, and the module below has none; `derived_binder_floor` is the only other pass that reads a registry entry, and it collects free variables rather than partiality. Nor did the item walk reach these terms — the sizing check walks a constructor telescope's domains and stops at the terminal — so a target was typed by nothing, and `check_group`'s local gate, which refuses a proof-typed member whose group does not descend, never fired on a group no judgment met.
 ///

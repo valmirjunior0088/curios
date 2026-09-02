@@ -647,7 +647,7 @@ fn eta_at_unit_trusts_the_goal_type_label() {
     );
 }
 
-/// Two goals distinct under their binder types land on one history fingerprint — the missing test `documentation/soundness/per-term-rules/conversion-recurrence.md` named, attacked 2026-08-17.
+/// Two goals distinct under their binder types land on one history fingerprint; see `documentation/soundness/per-term-rules/conversion-recurrence.md`.
 ///
 /// `history_key` renames the openings a conversion minted to placeholders by mint order and records no local context, so the body goals two telescope walks open — one under a `Nat` binder, one under a `Bool` binder, minted apart — rename onto the same entry. The drain consults `in_history` before the structural dispatch, so when both arise in one run the second is *assumed* rather than compared. The goals here are built through the same `compare_func_type` walk the drain dispatches to, and while the hole was open to attack, the collision was confirmed to fire inside a real drain too: instrumenting the drain's history hit showed `a_goal_assumed_by_key_collision_cannot_move_the_verdict`'s `Bool`-bound goal skipped on the `Nat`-bound goal's entry, in both of that fixture's halves.
 ///

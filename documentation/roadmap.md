@@ -6,7 +6,7 @@ Specifications live under [roadmap/](roadmap). A campaign large enough to sequen
 
 An item's entry here is a summary and a link, never the specification in miniature. Name the capability and, for an unchecked item, what is wrong or missing today; leave rationale, mechanism, findings, and rejected alternatives to the owners named below.
 
-Unchecked items may link to working implementation specifications. Unchecked items whose design is not refined yet instead link a placeholder specification marked "Not refined yet", possibly an umbrella covering several related items; the placeholder only reserves the specification location until refinement replaces it. When an item lands completely, transfer every durable contract and invariant to its owning source, module or crate documentation and tests; record its design rationale and rejected alternatives in [design.md](design.md) when cross-cutting or in the owning crate's `README.md` when crate-scoped; update remaining specifications to depend on the landed API rather than the working document; replace the linked checkbox with a checked plain-text summary; verify that nothing still references the specification filename; and delete the specification.
+Unchecked items may link to working implementation specifications. Unchecked items whose design is not refined yet instead link a placeholder specification marked "Not refined yet", possibly an umbrella covering several related items; the placeholder only reserves the specification location until refinement replaces it. When an item lands completely, transfer every durable contract and invariant to its owning source, module or crate documentation and tests; record its design rationale and rejected alternatives under [`design/`](design) when cross-cutting or in the owning crate's `README.md` when crate-scoped; update remaining specifications to depend on the landed API rather than the working document; replace the linked checkbox with a checked plain-text summary; verify that nothing still references the specification filename; and delete the specification.
 
 ## Type System
 
@@ -160,12 +160,12 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] [A closed fold no longer costs what its data is long](design/toolchain/evaluating-a-closed-term-is-representation-not-judgment.md)
 - [x] [A variant collapses when nothing needs to distinguish it](design/toolchain/a-variant-collapses-when-nothing-needs-to-distinguish-it.md)
 - [x] [A variant travels as the fields of its widest constructor](design/toolchain/a-variant-travels-as-the-fields-of-its-widest-constructor.md)
-- [x] [A pure program rebuilds what an impure one would mutate](design/toolchain/the-heap-is-sized-ahead-of-its-churn.md)
+- [x] [A pure program rebuilds what an impure one would mutate](design/toolchain/a-pure-program-rebuilds-what-an-impure-one-would-mutate.md)
 - [ ] [The survivors are what cost](roadmap/collector-economics-spec.md) (the mechanism is settled; the route is not)
 - [x] [The map wall falls by classes, not by symptom](design/toolchain/the-map-wall-falls-by-classes-not-by-symptom.md)
 - [x] [A monomorphic field carries its own type](design/toolchain/a-field-is-declared-at-the-carrier-its-shape-names.md)
 - [x] The map's remaining distance is decomposed before it is spent
-- [x] [A closure carries its code as a table index](design/toolchain/a-closure-carries-its-code-as-a-table-index.md)
+- [x] [A closure carries its code as a table index](../curios-cont/README.md)
 - [x] [Recursion restored to the defunctionalized walks](design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)
 - [x] Wasm-emission optimizations
   - [x] `struct.new` construction with immutable fields

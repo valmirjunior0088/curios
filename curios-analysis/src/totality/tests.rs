@@ -1,6 +1,6 @@
 //! The size-change engine's own algebra: composition, join, idempotence, and the shape order.
 //!
-//! Pure functions of matrices and shapes, needing no checker. The probes that drive `group_totality` through a real `Env` — including the `Walk::walk` position differential `documentation/soundness.md` asks for — live in `curios-analysis/tests/driven.rs`; see that file's header for why they are an integration test rather than a module here.
+//! Pure functions of matrices and shapes, needing no checker. The probes that drive `group_totality` through a real `Env` — including the `Walk::walk` position differential (see `documentation/soundness/whole-module-passes/record_totality-t.md`) — live in `curios-analysis/tests/driven.rs`; see that file's header for why they are an integration test rather than a module here.
 
 use {
     super::*,

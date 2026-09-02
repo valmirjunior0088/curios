@@ -6,7 +6,7 @@ Researched, not designed. This specification records what is certain — read fr
 
 ## Why it exists
 
-[The heap is sized ahead of its churn](../design/toolchain/the-heap-is-sized-ahead-of-its-churn.md) closed the churn campaign by sizing the semi-space, and its limits paragraph is this specification's charter: a constant cannot serve a small-live churner and a large-live tree at once, and no engine hook chooses per program.
+[The heap is sized ahead of its churn](../../curios-runtime/README.md) closed the churn campaign by sizing the semi-space, and its limits paragraph is this specification's charter: a constant cannot serve a small-live churner and a large-live tree at once, and no engine hook chooses per program.
 
 The native engine's collector charges for what survives. A semi-space copier recopies its entire live set on every collection, and grows only when a single allocation still does not fit after one — so a program whose live set is large pays for that live set again at every cycle, and a constant initial size can only move where the paying starts. The browser half of this toolchain already runs under a generational, mark-compacting collector, so this is a native-only gap and closing it is a parity question rather than a new capability.
 

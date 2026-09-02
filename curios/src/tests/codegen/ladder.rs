@@ -192,7 +192,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 /// | `parse_digits` at N = 1 000 000 | 0.96 ×5 | 0.88 0.88 0.87 0.87 0.87 |
 /// | `parse_multibyte` at N = 300 000 | 0.78 0.77 0.77 0.77 0.78 | 0.65 0.65 0.68 0.65 0.65 |
 ///
-/// The digit walk lands *below* every figure this ladder has recorded for it, and the multi-byte walk gains about thirteen percent against its pre-campaign baseline. The scan rebuild remains — three arity-4 constructions, one per arm — and for a recorded reason: the loop's scan parameter mixes arity-1 interned constants with the resumes' arity-4 rebuilds, the variant-width shape no exact product describes, so its removal awaits either variant-aware splitting or a uniform-width variant lowering, each a measured decision `documentation/design/toolchain/a-value-costs-when-it-is-kept-not-when-it-is-named.md` records. The suffix view is M4's, and it is now the walk's dominant remaining obligation.
+/// The digit walk lands *below* every figure this ladder has recorded for it, and the multi-byte walk gains about thirteen percent against its pre-campaign baseline. The scan rebuild remains — three arity-4 constructions, one per arm — and for a recorded reason: the loop's scan parameter mixes arity-1 interned constants with the resumes' arity-4 rebuilds, the variant-width shape no exact product describes, so its removal awaits either variant-aware splitting or a uniform-width variant lowering, each a measured decision (see `documentation/design/toolchain/a-value-costs-when-it-is-kept-not-when-it-is-named.md`). The suffix view is M4's, and it is now the walk's dominant remaining obligation.
 ///
 /// ## After the suffix crossed as a window (M4, 2026-08-17)
 ///

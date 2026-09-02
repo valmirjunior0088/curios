@@ -124,7 +124,7 @@ Everything Curios's rows did in this interval is one campaign: the uniform-repre
 | Step | Decision | What its own probe measured, x86-64 in-process |
 | :--- | :--- | :--- |
 | Exact reads | [A tuple is read at its own final type](../documentation/design/toolchain/a-tuple-is-read-at-its-own-final-type.md) | `chain` −61.4%, `spines` −21.6%, against `lcg` +0.8%, `trees` +0.8%, `churn` +0.1% |
-| Typed dispatch tables | [A closure carries its code as a table index](../documentation/design/toolchain/a-closure-carries-its-code-as-a-table-index.md) | `monad_io` −24.9%, `parse_digits` −15.4%; all five harness workloads inside ±1.7% |
+| Typed dispatch tables | [A closure carries its code as a table index](../curios-cont/README.md) | `monad_io` −24.9%, `parse_digits` −15.4%; all five harness workloads inside ±1.7% |
 | Family keying | [A field is declared at the carrier its shape names](../documentation/design/toolchain/a-field-is-declared-at-the-carrier-its-shape-names.md) | `chain` −9.3/−10.8%, `trees` −7.3/−7.6%, `spines` −7.1/−7.5%, against `lcg` and `churn` inside 1.5% |
 | Typed slots | the same decision's second half | `spines` −7.7%, `trees` −7.2/−4.9%, `chain` −2.7/−2.8%, against `lcg`, `churn`, `state_monad` inside 1% |
 

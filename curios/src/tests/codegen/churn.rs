@@ -1,4 +1,6 @@
-//! Runtime measurements for the death-birth churn campaign, retired into `documentation/design/toolchain/the-heap-is-sized-ahead-of-its-churn.md`: the collection decomposition of `chain` behind lever A, and the pinned absence of allocation in `churn`'s threaded-record loop. Both hear the engine's own per-collection announcements through `curios-profile`'s log bridge, which is why this module lives behind the `profile` feature.
+//! Runtime measurements for the death-birth churn campaign, whose conclusion is `curios-runtime/README.md`'s decision "The heap is sized ahead of its churn": the collection decomposition of `chain` behind lever A, and the pinned absence of allocation in `churn`'s threaded-record loop. Both hear the engine's own per-collection announcements through `curios-profile`'s log bridge, which is why this module lives behind the `profile` feature.
+//!
+//! What the sixteen-mebibyte initial heap was measured to buy, three arms on one x86-64 box, same method, best of three — wasmtime 46 stock, 47 without the knob, 47 with it: the pin alone costs the allocation-heavy rows several percent (`chain` +10%, `spines` +7%, `churn` +5%) while `lcg` improves by 4%; the size then buys 2.7× on `chain` (831 → 311 ms at K = 1600) and 1.55× on `spines` (737 → 475 ms at N = 75 000), moves the allocation-free `churn` not at all — the empirical pin on its exit from the churn class — and gives `trees` only 3%, because an all-live tree must outgrow any constant.
 
 use {
     crate::to_cwasm,
@@ -155,7 +157,7 @@ fn collections(cwasm: &[u8], k: u64) -> (usize, Option<String>) {
 ///
 /// # Retaken under the sizing decision
 ///
-/// Same day, same box, wasmtime 47.0.3 with the sixteen-mebibyte default this measurement chose (see `the-heap-is-sized-ahead-of-its-churn.md`):
+/// Same day, same box, wasmtime 47.0.3 with the sixteen-mebibyte default this measurement chose (see `curios-runtime/README.md`):
 ///
 /// ```text
 /// == chain collection decomposition (K = 400)

@@ -1154,7 +1154,7 @@ fn surveys_the_fold_accumulator_region() {
     assert!(!regions.is_empty(), "the census still surveys the walk");
 }
 
-/// The death-birth tally for one program — the churn campaign's census instrument (its verdicts retired into `the-heap-is-sized-ahead-of-its-churn.md`), the sibling of [`survey`]. Within one function, a construction of some layout beside a value of matching layout whose every use takes it apart is the pairing Perceus turns into an in-place write and a tracing collector re-allocates. The classifier locates that population per substrate; it proves no pairing — order inside the function is deliberately not consulted, so every count is an upper bound on what a reuse mechanism could establish.
+/// The death-birth tally for one program — the churn campaign's census instrument (its verdicts retired into `documentation/design/toolchain/a-pure-program-rebuilds-what-an-impure-one-would-mutate.md`), the sibling of [`survey`]. Within one function, a construction of some layout beside a value of matching layout whose every use takes it apart is the pairing Perceus turns into an in-place write and a tracing collector re-allocates. The classifier locates that population per substrate; it proves no pairing — order inside the function is deliberately not consulted, so every count is an upper bound on what a reuse mechanism could establish.
 #[derive(Debug, Default)]
 struct Rebirth {
     /// Tuple constructions in the program.
