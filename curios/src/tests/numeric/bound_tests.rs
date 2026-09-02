@@ -286,3 +286,32 @@ fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
         b"2-2"
     );
 }
+
+// `Nat/Lt/strong` is course-of-values induction at a `Type`-valued motive, and cumulativity lets a `Prop`-valued claim ride it: `below` proves `Lt(n, n + 3)` through it and the proof discharges `Str/get`'s bound, an erased position. The second use computes: a step that reads the hypothesis two steps down is a recursion the successor's principle cannot express, and `strong` carries it as ordinary induction on the bound.
+//
+// The proof is consumed where erasure deletes it, deliberately: binding it by a value-level `let` runs `strong` with a step erased to `unit`, which is the erasure asymmetry `tests::erasure` pins as ignored.
+#[test]
+fn strong_induction_serves_a_proposition_and_a_computation() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, True, Char};
+        let below(n: Nat) -> Nat/Lt(n, n + 3) =
+            Nat/Lt/strong((k) => Nat/Lt(k, k + 3), (k, ih) => True/qed(), n);
+        let fib(n: Nat) -> Nat =
+            Nat/Lt/strong(
+                (k) => Nat,
+                (k, ih) =>
+                    match k
+                    | 0 => 0
+                    | kp + 1 =>
+                        match kp
+                        | 0 => 1
+                        | kpp + 1 => ih(kp, True/qed()) + ih(kpp, True/qed())
+                        end
+                    end,
+                n);
+        /std/print(Str/flatten([Str/of_char(Str/get("hello", 2, below(2))), Nat/to_str(fib(1)), ",", Nat/to_str(fib(10))]))
+        "#),
+        b"l1,55"
+    );
+}

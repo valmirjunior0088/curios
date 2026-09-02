@@ -51,3 +51,23 @@ pub let ind_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Ind(i + 1, n) =
 -- The same, decided: what a window opened just past a checked index demands.
 pub let le_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Nat/Le(i + 1, n) =
     Le/of_ind(ind_succ_of_lt(i, n, p));
+
+-- Course-of-values induction: the step may assume `P` at every `m` below `n`, not only at the predecessor. Proved by ordinary induction on a bound `k` under `n <= k`, which needs no new judgment: at `k = 0` the bound forces `n = 0` and nothing lies below it, and at `k + 1` a call on `m < n <= k + 1` descends to `m <= k` through `le_succ_of_lt`, `Le/trans` and the cancellation of the shared successor. One function at a `Type`-valued motive; a `Prop`-valued `P` is served through cumulativity. It lives under `Lt` because the hypothesis it hands the step is `Lt(m, n)` — the bound is the mechanism, not the principle.
+pub let strong(
+    P: (Nat) -> Type,
+    step: (n: Nat, ih: (m: Nat, lt: Lt(m, n)) -> P(m)) -> P(n),
+    n: Nat,
+) -> P(n) =
+    let go(k: Nat, n: Nat, le: Nat/Le(n, k)) -> P(n) =
+        match k
+        | 0 =>
+            step(
+                n,
+                (m, lt) =>
+                    match n
+                    | 0 => match lt end
+                    | np + 1 => match le end
+                    end)
+        | kp + 1 => step(n, (m, lt) => go(kp, m, Le/trans(le_succ_of_lt(m, n, lt), le)))
+        end;
+    go(n, n, Le/refl(n));

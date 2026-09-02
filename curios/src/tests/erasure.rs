@@ -308,3 +308,19 @@ fn a_function_of_only_proofs_is_called_with_nothing() {
         b"called\n"
     );
 }
+
+// The seam in the other direction, found on 2026-09-01 while landing `Nat/Lt/strong`. `app`'s declaration keeps `f`, whose declared type is `Type`-valued, but the call in `pf` instantiates `P` at a proposition, so the application side erases the lambda to `unit` as the proof it has become — and `app` applies `unit`. A proof bound in a statement position runs regardless of sort, so the trap is reachable from ordinary code. Ignored until the two sides agree on a `Prop` instantiation of a `Type`-valued parameter; the compiler-side fix is the item, and this is its acceptance check.
+#[test]
+#[ignore]
+fn a_prop_instantiation_of_a_type_valued_parameter_is_erased_on_both_sides() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, True};
+        let app(P: (Nat) -> Type, f: (k: Nat) -> P(k), n: Nat) -> P(n) = f(n);
+        let pf(n: Nat) -> Nat/Le(n, n) = app((k) => Nat/Le(k, k), (k) => True/qed(), n);
+        let _: Nat/Le(3, 3) = pf(3);
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}

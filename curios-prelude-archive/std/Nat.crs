@@ -48,6 +48,30 @@ pub let min(a: Nat, b: Nat) -> Nat =
 pub let max(a: Nat, b: Nat) -> Nat =
     match a < b | true => b | false => a end;
 
+-- Structural on the exponent, so a type may mention it.
+pub let pow(base: Nat, exp: Nat) -> Nat =
+    match exp | 0 => 1 | pred + 1; acc => acc * base end;
+
+-- Euclid's algorithm. The recursion is on a remainder, which nothing grades as a decrease: `gcd` is general recursion, classified partial and retained, and a type may not mention it. Casing on `b` rather than testing `b == 0` is what discharges the remainder's bound — `0 < bp + 1` is decided by the successor, where `b == 0 = false` says nothing the comparison can use.
+pub let gcd(a: Nat, b: Nat) -> Nat =
+    match b | 0 => a | bp + 1 => gcd(bp + 1, a % (bp + 1)) end;
+
+-- `lcm(0, 0)` is `0`, the one case whose divisor is zero.
+pub let lcm(a: Nat, b: Nat) -> Nat =
+    match gcd(a, b) | 0 => 0 | g + 1 => a * b / (g + 1) end;
+
+-- The exponent of the highest power of two not above `n`, with `log2(0)` answering `0` because the total spelling wants an answer. The recursion halves under a guard that rules zero out, which the arithmetic rung reads as a decrease, so unlike `gcd` and `sqrt` this one is total.
+pub let log2(n: Nat) -> Nat =
+    match n < 2 | true => 0 | false => log2(n / 2) + 1 end;
+
+-- The floor of the square root, found by counting up: a step per root rather than Newton's iteration, whose division by a computed value would owe a bound at every step. General recursion, so partial and retained.
+pub let sqrt(n: Nat) -> Nat =
+    let go(r: Nat) -> Nat = match (r + 1) * (r + 1) <= n | true => go(r + 1) | false => r end;
+    go(0);
+
+pub let is_even(n: Nat) -> Bool =
+    n % 2 == 0;
+
 pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
     match c >= lo | true => c <= hi | false => false end;
 

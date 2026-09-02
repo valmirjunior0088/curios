@@ -46,6 +46,16 @@ pub let abs(n: Int) -> Nat =
 pub let cmp(x: Int, y: Int) -> Order =
     choose | x < y => Order/lt() | x == y => Order/eq() | _ => Order/gt() end;
 
+pub let min(a: Int, b: Int) -> Int =
+    match a < b | true => a | false => b end;
+
+pub let max(a: Int, b: Int) -> Int =
+    match a < b | true => b | false => a end;
+
+-- `-1`, `+0` or `+1` by the sign of `n`.
+pub let sign(n: Int) -> Int =
+    choose | n < +0 => -1 | n == +0 => +0 | _ => +1 end;
+
 satisfy Eql(Int) {
     eql = eql,
     neq = neq,
