@@ -998,7 +998,7 @@ A derived `Spell` spells a value as its constructor, qualified by its type's own
 
 ### Witness premises
 
-A witness premise must be a concept applied only to variables bound by the witness's own telescope. This regularity restriction makes recursive resolution structurally decreasing.
+A witness premise must be a concept application strictly smaller than the witness's own: every variable in it is bound by the witness's telescope, no variable occurs more often in it than in the witness's concept application, and it has fewer nodes in all. A premise may therefore name a constant beside a binder — `use Lift(Io, M)` under `Lift(Io, (A: Type) => Try(M, E, A))` — while `use Show(A)` under `Show(A)` is refused. This is what makes recursive resolution structurally decreasing without fuel or tabling.
 
 ### Orphan rule
 

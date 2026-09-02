@@ -761,7 +761,7 @@ impl fmt::Display for Displayed<'_> {
                 let premise = premise.spelled(spelling);
                 write!(
                     f,
-                    "witness '{witness}' has a non-regular premise: {premise}\n  every 'use' premise must apply its concept to variables bound by the witness's own parameters"
+                    "witness '{witness}' has a non-regular premise: {premise}\n  every 'use' premise must be smaller than the witness's own concept application: its variables bound by the witness's parameters, none used more often than there, and fewer nodes in all"
                 )
             }
             Error::ExplicitWitnessParam { witness } => {

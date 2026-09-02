@@ -13,8 +13,8 @@ use {
         ShapeDiagnosis, Witness, WitnessKey, convert_outcome, reduce_with,
     },
     curios_core::{
-        ConceptDecl, Field, Free, Global, ImplicitOrigin, Level, Metavar, MetavarId, StructType,
-        Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
+        ConceptDecl, Enter, Field, Free, Global, ImplicitOrigin, Level, Metavar, MetavarId,
+        StructType, Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
     },
     curios_utilities::{Mount, Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
@@ -809,8 +809,9 @@ pub(crate) fn register_witness(
     }
     let key = WitnessKey(heads);
 
-    // Termination (Haskell-98-lite): every `use` premise applies a concept to *variables bound by this witness's own telescope* — resolution through it is then structurally decreasing, with no fuel or tabling.
+    // Termination (Paterson's conditions): every `use` premise is strictly smaller than the concept application it serves — its variables are this witness's own binders, none of them occurs more often than in the head, and it has fewer nodes in all — so resolution through it is structurally decreasing, with no fuel or tabling. A premise may name a constant beside a binder, `Lift(Io, M)` under a head `Lift(Io, (A) => Try(M, E, A))`, which the variables-only rule this replaced refused for nothing: the constant weighs one node and decreases like any other.
     let binder_names: BTreeSet<&Free> = binders.iter().map(|(_, n, _)| n).collect();
+    let (head_size, head_occurrences) = measure(params, &binder_names);
     for (plicity, _, type_) in &binders {
         if !matches!(plicity, Plicity::Witness) {
             continue;
@@ -833,13 +834,19 @@ pub(crate) fn register_witness(
                 premise.clone(),
             ));
         }
-        let regular = premise_args.iter().all(|arg| match &**arg {
-            Subterm::Var(var) => var
-                .as_free()
-                .is_some_and(|free| binder_names.contains(free)),
-            _ => false,
+        let bound = premise_args.iter().all(|arg| {
+            arg.free_vars_shared()
+                .iter()
+                .all(|free| matches!(free, Free::Global(_)) || binder_names.contains(free))
         });
-        if !regular {
+        let (premise_size, premise_occurrences) = measure(premise_args, &binder_names);
+        let decreasing = premise_size < head_size
+            && premise_occurrences.iter().all(|(free, count)| {
+                head_occurrences
+                    .get(free)
+                    .is_some_and(|in_head| count <= in_head)
+            });
+        if !(bound && decreasing) {
             return Err(Error::non_regular_witness_premise(
                 name.symbol(),
                 premise.clone(),
@@ -889,6 +896,48 @@ pub(crate) fn register_witness(
     }
 
     Ok(())
+}
+
+/// Paterson's measure of a concept application's arguments: their node count and how often each of the witness's own binders occurs in them, counted per path rather than per shared node so a subterm used twice weighs twice — the size a witness head must strictly exceed each of its premises in.
+fn measure(args: &[Term], binders: &BTreeSet<&Free>) -> (usize, BTreeMap<Free, usize>) {
+    let mut size = 0;
+    let mut occurrences = BTreeMap::new();
+
+    for arg in args {
+        let (arg_size, arg_occurrences) = arg.walk(
+            &mut (),
+            |_, _| Enter::<(usize, BTreeMap<Free, usize>)>::Descend,
+            |_, term, children| {
+                let mut size = 1;
+                let mut occurrences = BTreeMap::new();
+
+                for (child_size, child_occurrences) in children {
+                    size += child_size;
+
+                    for (free, count) in child_occurrences {
+                        *occurrences.entry(free).or_insert(0) += count;
+                    }
+                }
+
+                if let Subterm::Var(var) = &**term
+                    && let Some(free) = var.as_free()
+                    && binders.contains(free)
+                {
+                    *occurrences.entry(free.clone()).or_insert(0) += 1;
+                }
+
+                (size, occurrences)
+            },
+        );
+
+        size += arg_size;
+
+        for (free, count) in arg_occurrences {
+            *occurrences.entry(free).or_insert(0) += count;
+        }
+    }
+
+    (size, occurrences)
 }
 
 /// Validate the seeded concept registry: every superclass edge targets a registered, different concept, and the graph is acyclic.

@@ -510,3 +510,61 @@ fn a_missing_witness_over_a_nominal_type_spells_its_name() {
         "{report}"
     );
 }
+
+// A premise may name a constant beside a binder, `Lift(Io, M)` under a head `Lift(Io, (A) => Try(M, E, A))`: it is strictly smaller than the head, so resolution through it still decreases. The transformer's `Io` edge is then written once for every base, and here it resolves at base `Async` through the prelude's `Lift(Io, Async)`.
+#[test]
+fn a_premise_naming_a_constant_beside_a_binder_resolves_through_the_constant_edge() {
+    let source = r#"
+        use /std/{Monad, Lift, Result, Io, Async, Nat, Str, print};
+        pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type { M(Result(A, E)) }
+        let pure(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), a: A) -> Try(M, E, A) =
+            Try { Monad/pure(Result/success(a)) };
+        let bind(@M: (Type) -> Type, @E: Type, @A: Type, @B: Type, use Monad(M), m: Try(M, E, A), f: (A) -> Try(M, E, B)) -> Try(M, E, B) =
+            Try { Monad/bind(m.0, (r: Result(A, E)) => match r | success(a) => f(a).0 | failure(e) => Monad/pure(Result/failure(e)) end) };
+        satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Monad((A: Type) => Try(M, E, A)) {
+            pure(@A, a) = pure(a),
+            bind(@A, @B, m, f) = bind(m, f),
+        }
+        satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Io, M)) => Lift(Io, (A: Type) => Try(M, E, A)) {
+            lift(@A, m) = Try { Monad/bind(Lift/lift(m), (a: A) => Monad/pure(Result/success(a))) },
+        }
+        satisfy (@E: Type) => Lift(Async, (A: Type) => Try(Async, E, A)) {
+            lift(@A, m) = Try { Async/map(m, (a: A) => Result/success(a)) },
+        }
+        let body: Try(Async, Nat, Nat) =
+            let _ = print("a")!;
+            let _ = Async/yield_now!;
+            let _ = print("b")!;
+            pure(3);
+        let fiber: Async({}) =
+            let r = body.0!;
+            match r
+            | success(n) => Async/lift(print(Nat/to_str(n)))
+            | failure(_) => Async/lift(print("failed"))
+            end;
+        Async/run(fiber)
+        "#;
+
+    assert_eq!(run(source), b"ab3");
+}
+
+// A premise no smaller than the head would let resolution recurse into an equal goal forever, so it is refused where it is declared.
+#[test]
+fn a_premise_no_smaller_than_its_head_is_refused() {
+    let source = r#"
+        use /std/{Nat, Str, List};
+        pub concept Show(A : Type) : pub Type {
+            show(A) -> Str
+        }
+        satisfy (@A: Type, use Show(List(A))) => Show(List(A)) {
+            show(l) = Show/show(l)
+        }
+        /std/print("unreached")
+        "#;
+
+    let message = error(source);
+    assert!(
+        message.contains("non-regular premise"),
+        "expected the premise refusal, got: {message}"
+    );
+}
