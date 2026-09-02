@@ -46,6 +46,12 @@ fn accessors_are_exported_with_their_shapes() {
         ("bytes_set", 3, 0),
         ("bytes_load", 1, 1),
         ("bytes_store", 1, 1),
+        ("list_len", 1, 1),
+        ("list_get", 2, 1),
+        ("list_new", 1, 1),
+        ("list_set", 3, 0),
+        ("nat_box", 1, 1),
+        ("nat_unbox", 1, 1),
     ] {
         let export = module
             .exports()
@@ -101,6 +107,25 @@ fn bridge_accessors_roundtrip() {
             value
         );
     }
+}
+
+/// A list built through the bridge holds what was set in it: an i31-boxed `Nat` comes back through the unbox, and the length is what `list_new` was asked for — the shape `poll` builds its `revents` list in.
+#[test]
+fn list_accessors_roundtrip_an_i31_element() {
+    let mut bridge = bridge();
+
+    let list = call(&mut bridge, "list_new", &[GuestValue::from_i32(2)]);
+    assert_eq!(i32_of(call(&mut bridge, "list_len", &[list])), 2);
+
+    let boxed = call(&mut bridge, "nat_box", &[GuestValue::from_i32(5)]);
+    call_void(
+        &mut bridge,
+        "list_set",
+        &[list, GuestValue::from_i32(1), boxed],
+    );
+
+    let element = call(&mut bridge, "list_get", &[list, GuestValue::from_i32(1)]);
+    assert_eq!(i32_of(call(&mut bridge, "nat_unbox", &[element])), 5);
 }
 
 /// Every builtin host operation has an entry in `harness.js`'s `sys` import object — every `host_ops!` row, and `exit`, the one `sys` import that is not a row. The harness spells the wire names by hand, like any embedder — so without this check, a new `host_ops!` row keeps the workspace suite green while every browser program touching it dies with a `LinkError` only an actual browser can surface.

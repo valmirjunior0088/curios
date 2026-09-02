@@ -1,20 +1,20 @@
-//! The wire-ABI `Bytes` bridge: a tiny GC module giving JavaScript accessors over the compiler's `$bytes` heap type — the flat payload every object-language `Bytes` value crosses the host boundary as. JS cannot touch wasm-GC arrays directly, so the harness instantiates this module and reads/builds byte strings through its exports. It declares the compiler's own payload shape (`curios_cont::bytes_sub_type`) — wasm-GC canonicalizes structural types, so the refs it produces and consumes are interchangeable with a compiled program's, no matter that the two modules were instantiated separately.
+//! The wire-ABI bridge: a tiny GC module giving JavaScript accessors over the compiler's `$bytes` heap type — the flat payload every object-language `Bytes` value crosses the host boundary as — and over the uniform `$elems` list type a `List(T)` crosses as, with the i31 box a `Nat` element rides in. JS cannot touch wasm-GC arrays directly, so the harness instantiates this module and reads/builds byte strings and lists through its exports. It declares the compiler's own payload shapes (`curios_cont::bytes_sub_type`, `curios_cont::elems_sub_type`) — wasm-GC canonicalizes structural types, so the refs it produces and consumes are interchangeable with a compiled program's, no matter that the two modules were instantiated separately.
 
 use {
-    curios_cont::bytes_sub_type,
+    curios_cont::{bytes_sub_type, elems_sub_type},
     curios_wasm::{
-        AddressType, BlockType, CompType, Export, Expr, Func, FuncName, FuncType, HeapType, Instr,
-        LabelName, Limits, LocalName, MemArg, MemName, MemType, Module, NumType, RefType,
-        ResultType, SubType, TypeName, ValType, to_bytes,
+        AbsHeapType, AddressType, BlockType, CompType, Export, Expr, Func, FuncName, FuncType,
+        HeapType, Instr, LabelName, Limits, LocalName, MemArg, MemName, MemType, Module, NumType,
+        RefType, ResultType, SubType, TypeName, ValType, to_bytes,
     },
 };
 
-/// One accessor's name, parameters, outputs, and array op.
+/// One accessor's name, parameters, outputs, and the ops that follow its parameters' `local.get`s — one array op for most, a cast and an unbox for `nat_unbox`.
 type Accessor = (
     &'static str,
     Vec<(&'static str, ValType)>,
     Vec<ValType>,
-    Instr,
+    Vec<Instr>,
 );
 
 /// A `block $done (loop $continue ...)` pair whose body runs `step` for `i` from 0 to `len` (both preexisting locals): the copy loop shared by the two bulk transfers.
@@ -64,7 +64,7 @@ fn set(local: &LocalName) -> Instr {
     }
 }
 
-/// The type a bridge function is declared against: final, no supertypes, and the given signature. Every function this module adds is declared through this, so the six exports cannot end up built two ways.
+/// The type a bridge function is declared against: final, no supertypes, and the given signature. Every function this module adds is declared through this, so the exports cannot end up built two ways.
 fn func_type(
     inputs: impl IntoIterator<Item = ValType>,
     outputs: impl IntoIterator<Item = ValType>,
@@ -79,7 +79,7 @@ fn func_type(
     }
 }
 
-/// The bridge as a `curios_wasm::Module`: the canonical `bytes` type, the four accessor exports (`bytes_len`, `bytes_get`, `bytes_new`, `bytes_set` — each body its parameters' `local.get`s followed by one array op), and the bulk lane — a memory this module declares and exports, plus `bytes_load`/`bytes_store`, which copy a whole byte string between a `bytes` array and the memory at offset 0 so JS pays one boundary call per string instead of one per byte. The memory is declared here because it is this module's, and nothing in `curios-wasm` supplies one: a compiled program declares none and carries no memory section at all.
+/// The bridge as a `curios_wasm::Module`: the canonical `bytes` type with its four accessor exports (`bytes_len`, `bytes_get`, `bytes_new`, `bytes_set`), the canonical `elems` list type with its four (`list_len`, `list_get`, `list_new`, `list_set`) and the i31 box a `Nat` element crosses in (`nat_box`, `nat_unbox`) — each body its parameters' `local.get`s followed by its ops — and the bulk lane — a memory this module declares and exports, plus `bytes_load`/`bytes_store`, which copy a whole byte string between a `bytes` array and the memory at offset 0 so JS pays one boundary call per string instead of one per byte. The memory is declared here because it is this module's, and nothing in `curios-wasm` supplies one: a compiled program declares none and carries no memory section at all.
 pub(crate) fn bridge_module() -> Module {
     let mut module = Module::new("bridge");
 
@@ -94,28 +94,42 @@ pub(crate) fn bridge_module() -> Module {
 
     let i32_val = ValType::Num(NumType::I32);
 
-    let accessors: [Accessor; 4] = [
+    // The uniform list payload: `(mut (ref null any))` elements, the shape every `List(T)` crosses as whatever `T` is, matching the codegen's `list_type` and the native adapter's `anyref_array_type`.
+    let any_ref = ValType::Ref(RefType {
+        is_nullable: true,
+        heap_type: HeapType::Abstract(AbsHeapType::Any),
+    });
+    let elems = TypeName::from("elems");
+
+    module.add_type(elems.clone(), elems_sub_type(any_ref.clone()));
+
+    let elems_ref = ValType::Ref(RefType {
+        is_nullable: false,
+        heap_type: HeapType::Concrete(elems.clone()),
+    });
+
+    let accessors: [Accessor; 10] = [
         (
             "bytes_len",
             vec![("b", bytes_ref.clone())],
             vec![i32_val.clone()],
-            Instr::ArrayLen,
+            vec![Instr::ArrayLen],
         ),
         (
             "bytes_get",
             vec![("b", bytes_ref.clone()), ("i", i32_val.clone())],
             vec![i32_val.clone()],
-            Instr::ArrayGetU {
+            vec![Instr::ArrayGetU {
                 type_name: bytes.clone(),
-            },
+            }],
         ),
         (
             "bytes_new",
             vec![("n", i32_val.clone())],
             vec![bytes_ref.clone()],
-            Instr::ArrayNewDefault {
+            vec![Instr::ArrayNewDefault {
                 type_name: bytes.clone(),
-            },
+            }],
         ),
         (
             "bytes_set",
@@ -125,13 +139,68 @@ pub(crate) fn bridge_module() -> Module {
                 ("v", i32_val.clone()),
             ],
             vec![],
-            Instr::ArraySet {
+            vec![Instr::ArraySet {
                 type_name: bytes.clone(),
-            },
+            }],
+        ),
+        (
+            "list_len",
+            vec![("l", elems_ref.clone())],
+            vec![i32_val.clone()],
+            vec![Instr::ArrayLen],
+        ),
+        (
+            "list_get",
+            vec![("l", elems_ref.clone()), ("i", i32_val.clone())],
+            vec![any_ref.clone()],
+            vec![Instr::ArrayGet {
+                type_name: elems.clone(),
+            }],
+        ),
+        (
+            "list_new",
+            vec![("n", i32_val.clone())],
+            vec![elems_ref.clone()],
+            vec![Instr::ArrayNewDefault {
+                type_name: elems.clone(),
+            }],
+        ),
+        (
+            "list_set",
+            vec![
+                ("l", elems_ref.clone()),
+                ("i", i32_val.clone()),
+                ("v", any_ref.clone()),
+            ],
+            vec![],
+            vec![Instr::ArraySet {
+                type_name: elems.clone(),
+            }],
+        ),
+        // A `Nat` element crosses as an i31 inside the list's `anyref` slot; boxing and unboxing through the bridge keeps JS from relying on the JS API's own number-to-reference conversion for an `anyref` parameter.
+        (
+            "nat_box",
+            vec![("v", i32_val.clone())],
+            vec![any_ref.clone()],
+            vec![Instr::RefI31],
+        ),
+        (
+            "nat_unbox",
+            vec![("v", any_ref.clone())],
+            vec![i32_val.clone()],
+            vec![
+                Instr::RefCast {
+                    ref_type: RefType {
+                        is_nullable: false,
+                        heap_type: HeapType::Abstract(AbsHeapType::I31),
+                    },
+                },
+                Instr::I31GetU,
+            ],
         ),
     ];
 
-    for (name, params, outputs, array_op) in accessors {
+    for (name, params, outputs, ops) in accessors {
         let type_name = TypeName::from(name);
         let func_name = FuncName::from(name);
 
@@ -155,7 +224,7 @@ pub(crate) fn bridge_module() -> Module {
                         .map(|(param, _)| Instr::LocalGet {
                             local_name: LocalName::from(*param),
                         })
-                        .chain([array_op]),
+                        .chain(ops),
                 ),
             },
         );

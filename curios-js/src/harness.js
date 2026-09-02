@@ -125,7 +125,22 @@ export async function run(config) {
     tls_server_config: deniedHandle,
     start_tls_server: denied,
     set_reuseaddr: reuseaddr,
-    poll: unsupported("poll"),
+    // Readiness in the playground: the three standard streams are always ready — stdin is at its end, which reads at once, and the output streams accept everything — and no other handle exists here, so anything else reports nothing. The timeout is ignored, since nothing can become ready later; a fiber parked on stdin therefore resumes at once and reads `EOF`.
+    poll: (handles, events, _timeout) => {
+      const count = bridge.list_len(handles);
+      const ready = bridge.list_new(count);
+
+      for (let i = 0; i < count; i += 1) {
+        const token = tokenOf(bridge.list_get(handles, i));
+        const stdio =
+          token === config.stdio.STDIN || token === config.stdio.STDOUT || token === config.stdio.STDERR;
+        const bits = stdio ? bridge.nat_unbox(bridge.list_get(events, i)) : 0;
+
+        bridge.list_set(ready, i, bridge.nat_box(bits));
+      }
+
+      return ready;
+    },
     close: () => {},
     clock_wall: () => {
       const millis = Date.now();
@@ -162,7 +177,7 @@ export async function run(config) {
     // The playground has no terminal to switch or measure, so both tty rows are denied as `open` is.
     raw: denied,
     size: () => [config.status.PERMISSION_DENIED, 0, 0],
-    // No filesystem either: every filesystem row is denied as `open` is. `list` would answer a `List(Bytes)`, a shape the bridge has no encoder for — `resolve` and `args` are unsupported for the same reason — so it traps by name rather than returning a value it cannot build.
+    // No filesystem either: every filesystem row is denied as `open` is. `list` would answer a `List(Bytes)`, and `resolve` and `args` likewise, which nothing in the playground can fill — so they trap by name rather than returning an empty list a program would read as a fact.
     stat: () => [config.status.PERMISSION_DENIED, 0, 0, 0, 0, 0, 0],
     remove_file: denied,
     rename: denied,
