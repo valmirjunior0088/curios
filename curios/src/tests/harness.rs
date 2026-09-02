@@ -28,6 +28,27 @@ fn the_description_schedules_every_rung() {
 }
 
 #[test]
+fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
+    // `try`'s thunk is a `Try` region over `Io`: a fallible operation sequences bare, a success yields the inner test, and a raise is a failure carrying the error's `Show`.
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, Io, Try, Path, fs, Test};
+        let exists() -> Try(Io, Io/Error, Test) =
+            let here = fs/exists(Path/of_str("data"))!;
+            Try/pure(Test/check(here == false));
+        let missing() -> Try(Io, Io/Error, Test) =
+            let m = fs/stat(Path/of_str("nope"))!;
+            Try/pure(Test/check(true));
+        Test/main([
+            ("/tests/exists", () => Test/try(exists)),
+            ("/tests/missing", () => Test/try(missing)),
+        ])
+        "#),
+        b"/tests/exists: passed\n/tests/missing: failed\n  not_found\n"
+    );
+}
+
+#[test]
 fn an_index_argument_selects_one_test() {
     // The runner's protocol: argv[1] names the test to run, and only its line is printed.
     let (system, io) = MockHost::builder().args(["prog", "1"]).build();

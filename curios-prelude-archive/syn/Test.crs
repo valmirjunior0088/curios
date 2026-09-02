@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Str, Bytes, List, Option, Io, Eq, Equal, Spell, True, False, print, proc};
+use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Eq, Equal, Spell, Show, True, False,
+    print, proc};
 
 pub induct Verdict: pub Type
 | passed()
@@ -96,6 +97,16 @@ let conjoin(left: Test, right: Test) -> Test =
                 let inner = io!;
                 Io/pure(conjoin(inner, right)))
     end;
+
+-- The outcome of a fallible action as a test: the inner test when it succeeded, a failure spelling the error when it raised.
+let outcome(@E: Type, use Show(E), io: Io(Result(E, Test))) -> Io(Test) =
+    let r = io!;
+    Io/pure(
+        match r | success(t) => t | failure(e) => Test/verdict(Verdict/failed(Show/show(e))) end);
+
+-- `perform` for an action that can fail: the thunk's region is `Try` over `Io`, so a fallible operation sequences in it bare, and a raise is the test's failure with the error's `Show`. A thunk for the reason `perform` takes one.
+pub let try(@E: Type, use Show(E), thunk: () -> Try(Io, E, Test)) -> Test =
+    Test/action(outcome(Try/run(thunk())));
 
 let report(name: Str, t: Test) -> Io(Bool) =
     match t
