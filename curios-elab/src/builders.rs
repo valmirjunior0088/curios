@@ -6,7 +6,7 @@ use {
     crate::Context,
     curios_core::{
         Apply, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, NumLit, Scope,
-        Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Var,
+        Struct, StructEntry, StructType, Subterm, Telescope, Term, Transient, Tuple, Var,
     },
     curios_num::Natural,
     curios_utilities::{Grain, InfixOp, PackedBin, Plicity, Sign, Span, StringSyntax, SyntaxName},
@@ -54,7 +54,7 @@ impl ScheduledTest {
     }
 }
 
-/// The synthesized tail of a unit compiled as its own test program: `Test/main([("path", thunk), …])` over `tests` in declaration order, each pair the test's path as its `Global` renders it and its thunk. A nullary test is its own thunk — a `Var` at the declaration, already a `() -> Test`. A parameterized one is closed through `Test/property`: `() => Test/property(t)`, the application carrying the one witness goal, `Property((params…) -> Test)`, that the tail's check resolves as any authored tail's goals are — stamped with the declaration's span, so a parameter the roster cannot draw is reported at the declaration by the ordinary missing-witness report. The list's element type is one fresh hole minted here, solved bidirectionally from `Test/main`'s parameter exactly as a written literal's would be; no binder is minted, so the module's binder floor is untouched.
+/// The synthesized tail of a unit compiled as its own test program: `Test/main([("path", thunk), …])` over `tests` in declaration order, each pair the test's path as its `Global` renders it and its thunk. A nullary test is its own thunk — a `Var` at the declaration, already a `() -> Test`. A parameterized one is closed through `Test/property` over its explicit binders: `() => Test/property((x…) => t(x…))`, the application carrying the one witness goal, `Property((params…) -> Test)`, that the tail's check resolves as any authored tail's goals are — stamped with the declaration's span, so a parameter the roster cannot draw is reported at the declaration by the ordinary missing-witness report. The list's element type is one fresh hole minted here, solved bidirectionally from `Test/main`'s parameter exactly as a written literal's would be.
 ///
 /// Built by the elaborator itself, after the unit's items have been defined and before the entry is checked ([`Tail::Tests`](crate::Tail)): that is the one point with the elaborated definitions, the conversion oracle and fresh binders in reach, which the discharges a parameterized test can take all need.
 pub(crate) fn test_program_tail(context: &mut Context, tests: &[ScheduledTest]) -> Term {
@@ -68,7 +68,8 @@ pub(crate) fn test_program_tail(context: &mut Context, tests: &[ScheduledTest]) 
             let thunk = match test.arity() {
                 0 => declaration,
                 _ => {
-                    let property = syn_call(syntax.test.property, [declaration]);
+                    let closed = eta_over_explicit(context, test);
+                    let property = syn_call(syntax.test.property, [closed]);
                     let property = match &test.span {
                         Some(span) => Term::spanned(span.clone(), property),
                         None => property,
@@ -87,6 +88,88 @@ pub(crate) fn test_program_tail(context: &mut Context, tests: &[ScheduledTest]) 
             items,
         })],
     )
+}
+
+/// The declaration as a reference to it is elaborated: its universe scheme instantiated at fresh levels, the declared function type's telescope opened under fresh binders — one `(plicity, binder, domain)` per entry, later domains mentioning earlier binders — and the head to apply, an instance at those same levels, so the copied domains and the application agree on every universe. Read off the elaborated assumption, so the domains are the checked ones rather than the lowered spellings; `None` when the name has no function type, which a parameterized test always has.
+struct OpenedTest {
+    entries: Vec<(Plicity, Free, Term)>,
+    head: Term,
+}
+
+fn open_test(context: &mut Context, test: &ScheduledTest) -> Option<OpenedTest> {
+    let name = Free::from(&test.name);
+    let (type_, levels) = context.instantiate_assumption_universes(&name).ok()??;
+    let Subterm::FuncType(func_type) = &*type_ else {
+        return None;
+    };
+    let plicities = func_type.plicities().to_vec();
+    let mut telescope = func_type.telescope.clone();
+    let mut entries = Vec::with_capacity(plicities.len());
+    for plicity in plicities {
+        let Telescope::Cons(domain, rest) = telescope else {
+            return None;
+        };
+        let binder = context.fresh(rest.first_hint());
+        telescope = rest.open(&[&Term::free_var(&binder)]);
+        entries.push((plicity, binder, domain));
+    }
+    let head = match levels.is_empty() {
+        true => Term::free_var(&name),
+        false => Term::instance_of(&name, levels),
+    };
+
+    Some(OpenedTest { entries, head })
+}
+
+/// `(x…) => t(x…)` over the declaration's explicit binders alone. Elaborating the application inside inserts the telescope's hidden arguments — a `use` premise resolved, an implicit solved from what the explicit ones fix — so the `Property` goal keys on the explicit shape the roster covers whatever premises the telescope carries. An explicit domain is copied from the declared telescope, which is what keeps a dependent telescope's goal the missing-witness report it always was; one that mentions a hidden binder cannot be, and is a fresh hole exactly as an unannotated written lambda lowers, solved from the signature at the application. What the application leaves unconstrained, an implicit type nothing fixes, still fails — as a missing witness stamped with the declaration's span, which the application carries for that purpose.
+fn eta_over_explicit(context: &mut Context, test: &ScheduledTest) -> Term {
+    let (entries, head) = match open_test(context, test) {
+        Some(opened) => (opened.entries, opened.head),
+        None => (
+            test.plicities
+                .iter()
+                .map(|plicity| {
+                    (
+                        *plicity,
+                        context.fresh(None),
+                        Term::hole(context.mint_metavar()),
+                    )
+                })
+                .collect(),
+            Term::free_var(&Free::from(&test.name)),
+        ),
+    };
+    let hidden = entries
+        .iter()
+        .filter(|(plicity, _, _)| !matches!(plicity, Plicity::Explicit))
+        .map(|(_, binder, _)| binder.clone())
+        .collect::<Vec<_>>();
+    let params = entries
+        .iter()
+        .filter(|(plicity, _, _)| matches!(plicity, Plicity::Explicit))
+        .map(|(_, binder, domain)| {
+            let mentions_hidden = domain
+                .free_vars_shared()
+                .iter()
+                .any(|free| hidden.contains(free));
+            let domain = match mentions_hidden {
+                true => Term::hole(context.mint_metavar()),
+                false => domain.clone(),
+            };
+            (binder.clone(), domain)
+        })
+        .collect::<Vec<_>>();
+    let args = params
+        .iter()
+        .map(|(binder, _)| Term::free_var(binder))
+        .collect::<Vec<_>>();
+    let application = Term::apply(head, args);
+    let application = match &test.span {
+        Some(span) => Term::spanned(span.clone(), application),
+        None => application,
+    };
+
+    Term::func(params, application)
 }
 
 /// Constructors for [`Intrinsic`] operations no judgment ever builds.

@@ -271,6 +271,55 @@ fn a_parameter_without_a_draw_is_reported_at_its_declaration() {
     );
 }
 
+#[test]
+fn a_use_premise_in_the_telescope_is_resolved_at_the_tail() {
+    // The tail closes the declaration over its explicit binders, so the application inside inserts the premise as any call would and the `Property` goal keys on `(Nat, Nat) -> Test` — the shape the roster covers — while the counterexample spells the explicit arguments alone.
+    assert_eq!(
+        run_tests_program(
+            r#"
+        use /std/{Nat, Str, Io, Equal, Test};
+        test reflexive(use Equal(Nat), n: Nat) =
+            Test/check(n == n);
+        test small(use Equal(Nat), n: Nat, m: Nat) =
+            Test/check(n + m < 7);
+        /std/print("ran\n")
+        "#
+        ),
+        b"/reflexive: passed\n/small: failed\n  for 6, 6: the condition was false\n"
+    );
+}
+
+#[test]
+fn an_implicit_nothing_fixes_is_reported_at_the_declaration() {
+    // An implicit type parameter is solved from the explicit parameters that mention it, and here nothing does: the application leaves it a metavariable, so the premise on it — not the draw — is what cannot be resolved, and the report lands on the declaration rather than in the tail.
+    let entrypoint = r#"
+        use /std/{Nat, Str, Io, Spell, Test};
+        test drawn(@A: Type, use Test/Draw(A), use Spell(A), a: A) =
+            Test/check(true);
+        /std/print("ran\n")
+        "#
+    .parse::<Entrypoint>()
+    .expect("fixture parses");
+    let error = match compile_tests_with_units(
+        DEFAULT_STEP_BUDGET,
+        &[],
+        &entrypoint,
+        &RootSource::none(),
+        None,
+        EntryTail::Tests,
+        |_| {},
+        |_| {},
+    ) {
+        Ok(_) => panic!("the test program compiled"),
+        Err(error) => error.to_string(),
+    };
+    assert!(
+        error.contains("test drawn(@A: Type, use Test/Draw(A), use Spell(A), a: A)")
+            || error.contains("Test/check(true)"),
+        "the report does not point at the declaration: {error}"
+    );
+}
+
 // The two properties that pin `List/sort` as a program: its output is sorted under an adjacent-pairs check, and it holds every element as many times as its input did. The certified sort is a later item with a consumer; these are what the program version owes.
 #[test]
 fn sort_is_sorted_and_preserves_every_count() {
