@@ -2,7 +2,7 @@
 
 ## Status
 
-Researched and probed, not started. This file records a survey of seven serial-port libraries across seven languages, the distance between what they agree on and what the host and `/std` offer — read from source and probed through `wonder` on 2026-09-01, every claim marked *probed* elaborated through it, and *run* where it says so — the one host row and one module that close it, the test that pins each, the decisions taken, and the two still open. It is written as if the runtime prerequisites of [the indispensable tier](standard-library-indispensable-tier-spec.md) had landed, and it depends on nothing else in that campaign. The module keeps its own contract in `curios-prelude-archive/std/Serial.crs` once written, and nothing here restates one. Nothing is started.
+Researched and probed, not started. This file records a survey of seven serial-port libraries across seven languages, the distance between what they agree on and what the host and `/std` offer — read from source and probed through `wonder` on 2026-09-01, every claim marked *probed* elaborated through it, and *run* where it says so — the one host row and one module that close it, the test that pins each, the decisions taken, and the two still open. It is written over the runtime prerequisites the indispensable tier landed in `curios-runtime` — stdin read on the raw descriptor, a pipe kind the host makes non-blocking for real, and a codec carrying seven-slot rows and byte-string lists — and it depends on nothing else from that campaign. The module keeps its own contract in `curios-prelude-archive/std/Serial.crs` once written, and nothing here restates one. Nothing is started.
 
 ## Why it exists
 
