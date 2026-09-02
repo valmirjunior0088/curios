@@ -85,10 +85,8 @@ fn option_result_char_helpers() {
 
 #[test]
 fn clock_diff_of_two_distinct_now_readings() {
-    // Two scripted wall readings 30 s + 400 ns apart. `time/Instant/now` referenced twice must perform two *distinct* host calls (the nullary-effect distinctness the struct-head reduction relies on), so the diff is the gap between them, not zero.
-    let (system, io) = MockHost::builder()
-        .wall([(1, 100, 500), (1, 130, 900)])
-        .build();
+    // Two scripted monotonic readings 30 s + 400 ns apart. `time/Instant/now` referenced twice must perform two *distinct* host calls (the nullary-effect distinctness the struct-head reduction relies on), so the diff is the gap between them, not zero.
+    let (system, io) = MockHost::builder().mono([(100, 500), (130, 900)]).build();
     run_text(r#"
         let a = /std/time/Instant/now()!;
         let b = /std/time/Instant/now()!;
@@ -101,6 +99,36 @@ fn clock_diff_of_two_distinct_now_readings() {
     .expect("expected result");
 
     assert_eq!(io.output(), b"30");
+}
+
+// `Timestamp` is the moment with a meaning: it reads the wall clock, its limbs canonicalise on the way in — a second of nanoseconds carries into the seconds, a billion seconds into the high limb — and it shows as the epoch seconds with nine digits of fraction.
+#[test]
+fn a_timestamp_reads_the_wall_clock_canonicalises_and_shows_as_epoch_seconds() {
+    let (system, io) = MockHost::builder()
+        .wall([(1, 100, 500), (1, 130, 900)])
+        .build();
+    run_text(
+        r#"
+        use /std/{Str, Nat, Bool, Show};
+        use /std/time/{Timestamp, Duration};
+        let a = Timestamp/now()!;
+        let b = Timestamp/now()!;
+        /std/print(Str/join(" ", [
+            Nat/to_str(Duration/secs(Timestamp/diff(b, a))),
+            Show/show(a),
+            Show/show(Timestamp/of_unix(0, 1000000000, 1500000000)),
+            Bool/to_str(Timestamp/before(a, b)),
+            Bool/to_str(a == Timestamp/of_unix(0, 1000000100, 500))
+        ]))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    assert_eq!(
+        io.output(),
+        b"30 1000000100.000000500 1000000001.500000000 true true"
+    );
 }
 
 #[test]

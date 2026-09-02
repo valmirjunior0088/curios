@@ -1,37 +1,18 @@
-use /std/{Nat, Bool, Io};
+-- An opaque moment in time, read off the monotonic clock: two instants compare and subtract, and that is all they do. There is no calendar behind one and no way to build one but `now`, so every `Instant` in a program is a reading of the same clock and `diff` and `before` mean what they say. A moment that means something on its own — a file's modification time, a deadline to print — is a `Timestamp`, and the two do not convert.
+use /std/{Bool, Io};
 use /std/time/{Duration};
 
 pub struct Instant: Type {
-    secs_hi: Nat,
-    secs_lo: Nat,
-    nanos: Nat,
+    elapsed: Duration,
 }
 
--- An instant from the limbs a host row hands over — `clock/wall`'s, and `file/stat`'s modification time — which is the one way a sibling module builds one, the representation being this module's.
-pub let of_parts(secs_hi: Nat, secs_lo: Nat, nanos: Nat) -> Instant =
-    Instant { secs_hi = secs_hi, secs_lo = secs_lo, nanos = nanos };
-
 pub let now() -> Io(Instant) =
-    let r = /sys/clock/wall!;
-    Io/pure(of_parts(r.secs_hi, r.secs_lo, r.nanos));
+    let e = Duration/now()!;
+    Io/pure(Instant { elapsed = e });
 
-let sub_digit(x: Nat, y: Nat) -> {digit: Nat, borrow: Nat} =
-    match x < y
-    | true => (digit = x + 1000000000 - y, borrow = 1)
-    | false => (digit = x - y, borrow = 0)
-    end;
-
+-- `a - b`, and zero when `a` is not after `b`: a `Duration` has no sign.
 pub let diff(a: Instant, b: Instant) -> Duration =
-    let d_nanos = sub_digit(a.nanos, b.nanos);
-    let d_lo = sub_digit(a.secs_lo, b.secs_lo + d_nanos.borrow);
-    let r_hi = a.secs_hi - (b.secs_hi + d_lo.borrow);
-    Duration/of(r_hi * 1000000000 + d_lo.digit, d_nanos.digit);
+    Duration/sub(a.elapsed, b.elapsed);
 
 pub let before(a: Instant, b: Instant) -> Bool =
-    choose
-    | a.secs_hi < b.secs_hi => true
-    | a.secs_hi > b.secs_hi => false
-    | a.secs_lo < b.secs_lo => true
-    | a.secs_lo > b.secs_lo => false
-    | _ => a.nanos < b.nanos
-    end;
+    Duration/before(a.elapsed, b.elapsed);

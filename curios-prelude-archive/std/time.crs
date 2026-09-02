@@ -3,3 +3,6 @@ pub use Instant/{let Instant};
 
 pub mod Duration;
 pub use Duration/{let Duration};
+
+pub mod Timestamp;
+pub use Timestamp/{let Timestamp};

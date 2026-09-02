@@ -1,6 +1,6 @@
 -- The filesystem beyond a file's contents: what is at a path, the names in a directory, and making, moving and removing things. Every row carries `Bytes` paths as `file/open` does, and a listing and the working directory come back as the bytes the host holds — a name that is not UTF-8 is the caller's to decode or refuse, so nothing here decodes. The rows are synchronous and hold no handle, but the functions are `Async` as `File/open` is, so one region mixes them freely. The release targets are Linux and macOS, so the path functions at the end take `/` as the one separator.
 use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Handle, Async, Io, Eql, Show};
-use /std/time/{Instant};
+use /std/time/{Timestamp};
 
 pub induct Kind: pub Type
 | file()
@@ -29,11 +29,11 @@ let kind_of(code: Nat) -> Kind =
     | _ => Kind/other()
     end;
 
--- `size` is the pair of base-10⁹ limbs the row hands over: a `Nat` cannot hold a file size at runtime and `BigNat` is more than a size needs. `size_nat` reads it inside the envelope.
+-- `size` is the pair of base-10⁹ limbs the row hands over: a `Nat` cannot hold a file size at runtime and `BigNat` is more than a size needs. `size_nat` reads it inside the envelope. `mtime` is a `Timestamp`, a moment with a meaning, not an `Instant`, which is a reading of the monotonic clock and could not compare with one.
 pub struct Metadata: pub Type {
     kind: Kind,
     size: {hi: Nat, lo: Nat},
-    mtime: Instant,
+    mtime: Timestamp,
 }
 
 pub let size_nat(m: Metadata) -> Option(Nat) =
@@ -52,7 +52,7 @@ pub let stat(path: Str) -> Async(Result(Metadata, Handle/Error)) =
                 Metadata {
                     kind = kind_of(r.kind),
                     size = (hi = r.size_hi, lo = r.size_lo),
-                    mtime = Instant/of_parts(r.mtime_hi, r.mtime_lo, r.mtime_nanos),
+                    mtime = Timestamp/of_unix(r.mtime_hi, r.mtime_lo, r.mtime_nanos),
                 })
         end);
 

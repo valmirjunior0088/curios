@@ -1,0 +1,66 @@
+-- A specific moment in time: seconds since the Unix epoch, as the wall clock and a file's modification time report it, split base-10⁹ into two limbs so each fits the envelope. This is the type for *when* — it prints, compares and is stored — where `Instant` is an opaque reading of the monotonic clock, good for measuring only, and the two do not convert. The representation is private for its invariant, every limb below 10⁹, which `of_unix` establishes by carrying so that `before` and `diff` can compare limb by limb.
+use /std/{Nat, Bool, Str, Io, Eql, Show};
+use /std/time/{Duration};
+
+pub struct Timestamp: Type {
+    secs_hi: Nat,
+    secs_lo: Nat,
+    nanos: Nat,
+}
+
+-- Canonicalising: nanoseconds past 10⁹ carry into the seconds and seconds past 10⁹ into the high limb, so whatever limbs a host row or a program hands over become the one stored form.
+pub let of_unix(secs_hi: Nat, secs_lo: Nat, nanos: Nat) -> Timestamp =
+    let lo = secs_lo + nanos / 1000000000;
+    Timestamp {
+        secs_hi = secs_hi + lo / 1000000000,
+        secs_lo = lo % 1000000000,
+        nanos = nanos % 1000000000,
+    };
+
+pub let now() -> Io(Timestamp) =
+    let r = /sys/clock/wall!;
+    Io/pure(of_unix(r.secs_hi, r.secs_lo, r.nanos));
+
+-- The canonical limbs back: the seconds since the epoch, high and low, and the nanoseconds within the second.
+pub let to_unix(t: Timestamp) -> {secs_hi: Nat, secs_lo: Nat, nanos: Nat} =
+    (secs_hi = t.secs_hi, secs_lo = t.secs_lo, nanos = t.nanos);
+
+pub let before(a: Timestamp, b: Timestamp) -> Bool =
+    choose
+    | a.secs_hi < b.secs_hi => true
+    | a.secs_hi > b.secs_hi => false
+    | a.secs_lo < b.secs_lo => true
+    | a.secs_lo > b.secs_lo => false
+    | _ => a.nanos < b.nanos
+    end;
+
+let sub_digit(x: Nat, y: Nat) -> {digit: Nat, borrow: Nat} =
+    match x < y
+    | true => (digit = x + 1000000000 - y, borrow = 1)
+    | false => (digit = x - y, borrow = 0)
+    end;
+
+-- `a - b` as a duration, and zero when `a` is not after `b`: a `Duration` has no sign. Limb by limb with a borrow, as the representation is laid out.
+pub let diff(a: Timestamp, b: Timestamp) -> Duration =
+    match before(a, b)
+    | true => Duration/zero
+    | false =>
+        let d_nanos = sub_digit(a.nanos, b.nanos);
+        let d_lo = sub_digit(a.secs_lo, b.secs_lo + d_nanos.borrow);
+        let r_hi = a.secs_hi - (b.secs_hi + d_lo.borrow);
+        Duration/of(r_hi * 1000000000 + d_lo.digit, d_nanos.digit)
+    end;
+
+satisfy Eql(Timestamp);
+
+-- `secs.nanos`: the seconds unbroken, the nanoseconds padded to nine digits, so `1700000000.000000500` reads as the number it is.
+satisfy Show(Timestamp) {
+    show(t) =
+        let secs =
+            match t.secs_hi == 0
+            | true => Nat/to_str(t.secs_lo)
+            | false =>
+                Str/concat(Nat/to_str(t.secs_hi), Str/pad_start(Nat/to_str(t.secs_lo), 9, '0'))
+            end;
+        Str/flatten([secs, ".", Str/pad_start(Nat/to_str(t.nanos), 9, '0')]),
+}
