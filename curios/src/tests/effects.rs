@@ -258,6 +258,30 @@ fn a_try_region_over_async_takes_every_declared_edge() {
     assert_eq!(run(source), b"iastop");
 }
 
+/// `Try/run`'s declared result is `M(Result(E, A))` with `M` a binder, so the lift oracle reads the base off the argument's own declared shape: an `Io` outcome sequenced in an `Async` region lifts through `Lift(Io, Async)`, and the same spelling in a `Try(Io, ..)` region lifts through the identity edge rather than letting unification guess the region's base.
+#[test]
+fn running_a_try_lifts_by_the_base_its_argument_was_declared_over() {
+    let source = r#"
+        use /std/{Nat, Str, Result, Try, Async, Io, print};
+        pub let step: Try(Io, Str, Nat) =
+            let _ = print("s")!;
+            Try/pure(4);
+        pub let wrapped: Try(Io, Str, Nat) =
+            let outcome = Try/run(step)!;
+            let n = outcome!;
+            Try/pure(n + 1);
+        pub let fiber: Async({}) =
+            let r = Try/run(wrapped)!;
+            match r
+            | success(n) => print(Nat/to_str(n))
+            | failure(e) => print(e)
+            end;
+        Async/run(fiber)
+        "#;
+
+    assert_eq!(run(source), b"s5");
+}
+
 /// A plain `Result` value sequences in a `Result` region with nothing to convert: the constructors are the monad's own.
 #[test]
 fn a_result_value_sequences_in_a_result_region() {

@@ -639,19 +639,24 @@ fn region_flex(context: &Context, whnf: &Term) -> bool {
 /// The action's monad head, read without elaborating: peel the explicit application spine to a named head, read the head's *declared* type from the assumption store, and key the syntactic result behind its telescope. `None` on anything unreadable — an unnamed or computed head, a spine whose explicit-argument count differs from the declared telescope's, an alias-headed or computed result — so the oracle never wraps on a guess: reads only, no elaboration, no reduction, no instantiation, and a wrong abstention costs a message, never a solution.
 fn action_result_shape(context: &mut Context, action: &Term) -> Option<MonadShape> {
     let mut head = action;
-    let mut explicit_args = 0usize;
+    let mut explicit: Vec<Term> = Vec::new();
     loop {
         match &**head {
+            // The spine is peeled from the outside in, so an inner application's arguments go before the ones already collected.
             Subterm::Apply(apply) => {
-                explicit_args += apply
-                    .plicities()
-                    .filter(|plicity| matches!(plicity, Plicity::Explicit))
-                    .count();
+                let mut here: Vec<Term> = apply
+                    .params()
+                    .zip(apply.plicities())
+                    .filter(|(_, plicity)| matches!(plicity, Plicity::Explicit))
+                    .map(|(argument, _)| argument.clone())
+                    .collect();
+                here.append(&mut explicit);
+                explicit = here;
                 head = &apply.head;
             }
             Subterm::Var(var) => {
                 let declared = context.assumption(var.as_free()?)?.clone();
-                return declared_result_shape(context, &declared, explicit_args);
+                return declared_result_shape(context, &declared, &explicit);
             }
             _ => return None,
         }
@@ -662,37 +667,112 @@ fn action_result_shape(context: &mut Context, action: &Term) -> Option<MonadShap
 fn declared_result_shape(
     context: &mut Context,
     declared: &Term,
-    explicit_args: usize,
+    args: &[Term],
 ) -> Option<MonadShape> {
-    let result = match &**declared {
-        Subterm::FuncType(func_type) => {
-            let explicit_binders = func_type
-                .plicities()
-                .iter()
-                .filter(|plicity| matches!(plicity, Plicity::Explicit))
-                .count();
-            if explicit_binders != explicit_args {
-                return None;
-            }
-            let mut telescope = func_type.telescope.clone();
-            loop {
-                match telescope {
-                    Telescope::Cons(_, rest) => {
-                        let binder = context.fresh(rest.first_hint());
-                        telescope = rest.open(&[&Term::free_var(&binder)]);
+    // The declared type is peeled arrow by arrow until the spine's arguments are spent, each arrow's binders opened with fresh frees: a concept method wrapper is curried — `(@S: Type, use w: Read(S)) -> (S, Nat) -> Async(Chunk)` — so its explicit binders sit behind an arrow of hidden ones. An arrow with more explicit binders than arguments remain is a partial application, which is a function and not an action, and abstains. A zero-argument action (`Async/yield_now`) has the carrier itself as its declared type.
+    let mut whnf = reduce_with(context, declared).ok()?;
+    let mut remaining = args;
+    let mut explicit_binders = Vec::new();
+    while let Subterm::FuncType(func_type) = &*whnf {
+        let plicities = func_type.plicities().to_vec();
+        let explicit_count = plicities
+            .iter()
+            .filter(|plicity| matches!(plicity, Plicity::Explicit))
+            .count();
+        if explicit_count > remaining.len() {
+            return None;
+        }
+        remaining = &remaining[explicit_count..];
+        let mut telescope = func_type.telescope.clone();
+        let mut position = 0;
+        let result = loop {
+            match telescope {
+                Telescope::Cons(binder_type, rest) => {
+                    let binder = context.fresh(rest.first_hint());
+                    if matches!(plicities.get(position), Some(Plicity::Explicit)) {
+                        explicit_binders.push((binder.clone(), binder_type.clone()));
                     }
-                    Telescope::Done(result) => break (*result).clone(),
+                    position += 1;
+                    telescope = rest.open(&[&Term::free_var(&binder)]);
                 }
+                Telescope::Done(result) => break (*result).clone(),
+            }
+        };
+        whnf = reduce_with(context, &result).ok()?;
+    }
+    if !remaining.is_empty() {
+        return None;
+    }
+    if let Some(shape) = monad_shape(context, &whnf) {
+        return Some(shape);
+    }
+
+    // A result headed by one of the telescope's own binders — `M(Result(E, A))` under `(@M: (Type) -> Type, …, m: Try(M, E, A))` — is the base an argument fixes: the explicit parameter whose declared type mentions the binder is read against its argument's own declared shape, position for position, so `Try/run(t)!` lifts as the action `t` was declared over. Still a read: nothing elaborates, and an argument that keys on nothing at that position abstains as before.
+    let Subterm::Apply(apply) = &*whnf else {
+        return None;
+    };
+    let Subterm::Var(var) = &*apply.head else {
+        return None;
+    };
+    let base = var.as_free()?.clone();
+    let head = binder_key(context, &base, &explicit_binders, args)?;
+    let arguments: Vec<Term> = apply.params().cloned().collect();
+    let context_args = arguments
+        .split_last()
+        .map_or(&[][..], |(_, context)| context);
+    let context = context_args
+        .iter()
+        .map(|arg| {
+            reduce_with(context, arg)
+                .ok()
+                .and_then(|whnf| HeadKey::of_whnf(&whnf))
+        })
+        .collect();
+
+    Some(MonadShape { head, context })
+}
+
+/// The key `base`, a binder of the declared telescope, is fixed at by the explicit arguments: the first explicit parameter whose declared type applies `base` takes its argument's head, and one whose declared type is a nominal application with `base` in a context slot takes the key its argument's shape has there. `None` where no argument settles it.
+fn binder_key(
+    context: &mut Context,
+    base: &Free,
+    explicit_binders: &[(Free, Term)],
+    args: &[Term],
+) -> Option<HeadKey> {
+    let is_base = |term: &Term| matches!(&**term, Subterm::Var(var) if var.as_free() == Some(base));
+
+    for ((_, parameter_type), arg) in explicit_binders.iter().zip(args) {
+        let parameter = reduce_with(context, parameter_type).ok()?;
+        let positions: Vec<Term> = match &*parameter {
+            Subterm::Apply(apply) if is_base(&apply.head) => {
+                return action_result_shape(context, arg).map(|shape| shape.head);
+            }
+            Subterm::StructType(struct_type) => struct_type.params.clone(),
+            Subterm::InductType(induct_type) => induct_type.params.clone(),
+            _ => continue,
+        };
+        let Some(parameter_head) = HeadKey::of_whnf(&parameter) else {
+            continue;
+        };
+        let Some(shape) = action_result_shape(context, arg) else {
+            continue;
+        };
+        if shape.head != parameter_head {
+            continue;
+        }
+        let context_positions = positions
+            .split_last()
+            .map_or(&[][..], |(_, context)| context);
+        for (index, position) in context_positions.iter().enumerate() {
+            if is_base(position)
+                && let Some(Some(key)) = shape.context.get(index)
+            {
+                return Some(key.clone());
             }
         }
-        // A zero-argument action (`Async/yield_now`): the declared type is the carrier itself.
-        _ => match explicit_args {
-            0 => declared.clone(),
-            _ => return None,
-        },
-    };
-    let whnf = reduce_with(context, &result).ok()?;
-    monad_shape(context, &whnf)
+    }
+
+    None
 }
 
 /// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh operand-type metavar `?T` is pinned by the non-literal operands first (or, for an operator whose method returns its operand type, by the expected result type), then defaulted from the operand literals if nothing constrains it; only then are the literal operands checked — against a `?T` that is already concrete, so they never force it to their own default. That ordering is what lets `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch.
