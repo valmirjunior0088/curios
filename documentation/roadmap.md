@@ -239,6 +239,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Host-service modules (`std/time`, `std/proc`, `std/rand`)
 - [ ] [Command-line interfaces (`/std/Cli`)](roadmap/command-line-interface-spec.md) (nothing above `/std/proc/args` exists, so an executable walks its `List(Bytes)` by hand as `/syn/Test/main` does)
 - [ ] [A terminal program draws a screen and reads keys (`/std/Tui`)](roadmap/terminal-ui-spec.md)
+- [ ] [A program talks to a serial device (`/std/Serial`)](roadmap/serial-port-spec.md) (one host row and one module; written as if the indispensable tier's runtime prerequisites had landed)
 - [x] Arbitrary-precision naturals (`std/BigNat`, canonical and packed over `Bits`)
   - [x] Machine-checked additive, multiplicative, cancellation and order laws
 - [x] Certified strictly-positive arbitrary-precision naturals (`std/BigPos`)
