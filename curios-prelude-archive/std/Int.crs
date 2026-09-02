@@ -2,7 +2,9 @@ pub use /sys/{Int};
 pub use /syn/Int/{NonZero, NonNeg};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
     to_flt};
-use /std/{Nat, Str, Option, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord, True, False};
+use /std/{Nat, Str, Option, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Spell, Ord, True,
+    False};
+use /std/Test/{Draw, Seed};
 
 pub let to_str(n: Int) -> Str =
     let mag = Nat/to_str(abs(n));
@@ -94,6 +96,20 @@ satisfy Show(Int) {
     show = to_str,
 }
 
+-- `to_str` already writes an explicit sign, which is exactly what keeps the text `Int`-typed without context: a bare `3` would re-parse as `Nat`.
+satisfy Spell(Int) {
+    spell = to_str,
+}
+
 satisfy Ord(Int) {
     cmp = cmp,
+}
+
+-- A magnitude drawn as a `Nat`, and one more bit for the sign.
+satisfy Draw(Int) {
+    draw(seed, size) =
+        let (magnitude, after) = Draw/draw(@Nat, seed, size);
+        let (sign, rest) = Seed/next(after);
+        let value = Nat/to_int(magnitude);
+        (match Nat/and(sign, 1) == 1 | true => 0 - value | false => value end, rest),
 }

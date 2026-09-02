@@ -1,6 +1,7 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map};
-use /std/{Nat, Bool, Option, Eq, Eql, Str, Show, Monad, Order, Cmp, Ord};
+use /std/{Nat, Bool, Option, Eq, Eql, Str, Show, Spell, Monad, Order, Cmp, Ord};
+use /std/Test/{Draw, Seed};
 
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;
@@ -193,6 +194,10 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
     show(l) = Str/concat("[", Str/concat(Str/join(", ", map(l, (x) => Show/show(x))), "]")),
 }
 
+satisfy (@A: Type, use Spell(A)) => Spell(List(A)) {
+    spell(l) = Str/concat("[", Str/concat(Str/join(", ", map(l, (x) => Spell/spell(x))), "]")),
+}
+
 satisfy Monad(List) {
     pure(x) = [x],
     bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)]),
@@ -219,4 +224,19 @@ satisfy (@T: Type, use Ord(T)) => Cmp(List(T)) {
 
 satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
     cmp = cmp,
+}
+
+let elements(@A: Type, use Draw(A), seed: Seed, size: Nat, count: Nat) -> {List(A), Seed} =
+    match count
+    | 0 => ([], seed)
+    | more + 1; (acc, after) =>
+        let (value, rest) = Draw/draw(@A, after, size);
+        ([..acc, value], rest)
+    end;
+
+-- At most `size` elements, each drawn at the same size.
+satisfy (@A: Type, use Draw(A)) => Draw(List(A)) {
+    draw(seed, size) =
+        let (count, after) = Draw/draw(@Nat, seed, size);
+        elements(after, size, count),
 }

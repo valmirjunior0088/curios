@@ -3,7 +3,7 @@ pub use /syn/Flt/{FourBytes, Finite, NonNeg};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Order, BigNat, Eql, Cmp, Add, Sub,
-    Mul, Div, Rem, Show, Ord, True, False};
+    Mul, Div, Rem, Show, Spell, Ord, True, False};
 
 -- The two infinities are spelled by division rather than by their bit patterns, and that is a dependency fact rather than a style preference: `of_le_bytes` states a length precondition, so building an infinity from bytes would make these depend on the very operation whose bound wants naming an infinity. `div` states no precondition — `Flt` division is total, an IEEE infinity being a value rather than a failure — so this direction has no edge back.
 pub let pos_inf: Flt =
@@ -382,6 +382,30 @@ satisfy Rem(Flt) {
 
 satisfy Show(Flt) {
     show = to_str,
+}
+
+-- `to_str` writes `+2.5`, `+0`, `+inf` and `NaN`, none of which are literals as written: the sign is stripped, a missing point gains `.0`, and the non-finite values take their `/std/Flt` names, which no literal denotes. The non-finites are recognized from the rendered text, because `==` on `Flt` is IEEE and `NaN` never equals itself.
+satisfy Spell(Flt) {
+    spell(f) =
+        let raw = to_str(f);
+        choose
+        | Str/eql(raw, "NaN") => "/std/Flt/nan"
+        | Str/eql(raw, "+inf") => "/std/Flt/pos_inf"
+        | Str/eql(raw, "-inf") => "/std/Flt/neg_inf"
+        | _ =>
+            let unsigned =
+                match Str/try_get(raw, 0)
+                | some(head) =>
+                    match head == '+'
+                    | true => Str/slice(raw, 1, Str/len(raw) - 1)
+                    | false => raw
+                    end
+                | none() => raw
+                end;
+            let pointed = match Str/find(unsigned, '.') | some(_) => true | none() => false end;
+            let exponented = match Str/find(unsigned, 'e') | some(_) => true | none() => false end;
+            match pointed || exponented | true => unsigned | false => Str/concat(unsigned, ".0") end
+        end,
 }
 
 satisfy Ord(Flt) {

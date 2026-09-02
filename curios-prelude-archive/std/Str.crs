@@ -1,7 +1,8 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /syn/{True, False};
-use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Eql, Show, Order, Cmp, Ord};
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Eql, Show, Spell, Order, Cmp, Ord};
+use /std/Test/{Draw, Seed};
 
 -- The scan-witness machinery every operation below rests on.
 pub mod utf8;
@@ -291,6 +292,26 @@ satisfy Show(Str) {
     show(s) = s,
 }
 
+satisfy Spell(Str) {
+    spell(s) =
+        let body =
+            fold(
+                s,
+                "",
+                (c, acc) =>
+                    concat(
+                        acc,
+                        match Char/to_nat(c)
+                        | '\n' => "\\n"
+                        | '\t' => "\\t"
+                        | '\r' => "\\r"
+                        | '\\' => "\\\\"
+                        | '"' => "\\\""
+                        | _ => of_char(c)
+                        end));
+        concat("\"", concat(body, "\"")),
+}
+
 -- Code-point order without decoding: UTF-8 bytewise order is scalar-value order, so the comparison is `Bytes/cmp` over the storage and `sort` on strings means code-point order.
 pub let cmp(a: Str, b: Str) -> Order =
     Bytes/cmp(to_bytes(a), to_bytes(b));
@@ -304,4 +325,19 @@ satisfy Cmp(Str) {
 
 satisfy Ord(Str) {
     cmp = cmp,
+}
+
+let chars(seed: Seed, size: Nat, count: Nat) -> {Str, Seed} =
+    match count
+    | 0 => ("", seed)
+    | more + 1; (acc, after) =>
+        let (c, rest) = Draw/draw(@Char, after, size);
+        (concat(acc, of_char(c)), rest)
+    end;
+
+-- At most `size` characters, each drawn as a `Char`.
+satisfy Draw(Str) {
+    draw(seed, size) =
+        let (count, after) = Draw/draw(@Nat, seed, size);
+        chars(after, size, count),
 }

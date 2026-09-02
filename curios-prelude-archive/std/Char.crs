@@ -1,7 +1,8 @@
 -- Unicode scalar values are certified by /syn/Char. Classification and case conversion in this initial API are deliberately ASCII-only; Unicode database policy remains outside the foundational scalar type.
 pub use /syn/{Char};
 pub use /syn/Char/{Below, InRange, Scalar};
-use /std/{Nat, Byte, Bool, Bytes, Option, Order, Eq, True, Str, Eql, Cmp, Show, Ord};
+use /std/{Nat, Byte, Bool, Bytes, Option, Order, Eq, True, Str, Eql, Cmp, Show, Spell, Ord};
+use /std/Test/{Draw, Seed};
 
 pub let to_nat(c: Char) -> Nat =
     c.code;
@@ -125,9 +126,31 @@ satisfy Cmp(Char) {
 }
 
 satisfy Show(Char) {
-    show(c) = Option/unwrap_or(Str/of_bytes(to_utf8(c)), ""),
+    show(c) = Str/of_char(c),
+}
+
+-- Each escape arm is the character it stands for, dispatched on the scalar value: `to_nat` at the head makes the projection visible, and the literals in the arms are the escapes as written.
+satisfy Spell(Char) {
+    spell(c) =
+        let body =
+            match to_nat(c)
+            | '\n' => "\\n"
+            | '\t' => "\\t"
+            | '\r' => "\\r"
+            | '\\' => "\\\\"
+            | '\'' => "\\'"
+            | _ => Str/of_char(c)
+            end;
+        Str/concat("'", Str/concat(body, "'")),
 }
 
 satisfy Ord(Char) {
     cmp = cmp,
+}
+
+-- Printable ASCII, so a drawn character spells as itself and a drawn string reads as text. `of_nat` cannot refuse a code below 128, so the fallback is never reached.
+satisfy Draw(Char) {
+    draw(seed, size) =
+        let (n, rest) = Seed/next(seed);
+        (Option/unwrap_or(of_nat(32 + n % 95), ' '), rest),
 }

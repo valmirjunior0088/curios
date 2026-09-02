@@ -1,5 +1,6 @@
 pub use /sys/Bytes/{let Bytes, get, len, eql, slice};
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Eql, Show, Order, Cmp, Ord};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Eql, Show, Spell, Order, Cmp, Ord};
+use /std/Test/{Draw, Seed};
 
 pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
     match i < len(b) | true => Option/some(get(b, i)) | false => Option/none() end;
@@ -99,4 +100,24 @@ satisfy Show(Bytes) {
                         let lo = Char/to_utf8(Char/hex_digit(n % 0x10));
                         x[..acc, ..hi, ..lo])),
             ""),
+}
+
+satisfy Spell(Bytes) {
+    spell(b) =
+        let parts = fold(b, [], (byte, acc) => [..acc, Nat/to_str(Byte/to_nat(byte))]);
+        Str/concat("x[", Str/concat(Str/join(", ", parts), "]")),
+}
+
+let bytes(seed: Seed, count: Nat) -> {Bytes, Seed} =
+    match count
+    | 0 => (x[], seed)
+    | more + 1; (acc, after) =>
+        let (byte, rest) = Draw/draw(@Byte, after, 0);
+        (x[..acc, byte], rest)
+    end;
+
+satisfy Draw(Bytes) {
+    draw(seed, size) =
+        let (count, after) = Draw/draw(@Nat, seed, size);
+        bytes(after, count),
 }

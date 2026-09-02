@@ -1,4 +1,4 @@
--- The tooling-facing rendering concept: `spell(v)` is Curios source text that denotes `v` at its type — a literal or an absolute constructor path that re-parses wherever the names in it are visible. `Show` stays the human-facing display; the two coincide only where a value's display already is its literal. Declared here rather than in `/std` because a derived witness body names `spell` and the two renderers below, and a compiler-emitted name lives in `/syn`; `/std/Spell` is the facade programs import, beside the carrier witnesses.
+-- The tooling-facing rendering concept: `spell(v)` is Curios source text that denotes `v` at its type — a literal or an absolute constructor path that re-parses wherever the names in it are visible. `Show` stays the human-facing display; the two coincide only where a value's display already is its literal. Declared here rather than in `/std` because a derived witness body names `spell` and the two renderers below, and a compiler-emitted name lives in `/syn`; `/std/Spell` is the facade programs import, and each carrier's witness lives in the module that owns the carrier.
 use /std/{Str, List};
 
 pub concept Spell(A: Type): pub Type {

@@ -1,6 +1,7 @@
 pub use /sys/{Bool};
 pub use /sys/Bool/{and, or, xor, eql};
-use /std/{Str, Option, Eq, False, True, Eql, Or, And, Show, Order, Cmp, Ord};
+use /std/{Nat, Str, Option, Eq, False, True, Eql, Or, And, Show, Spell, Order, Cmp, Ord};
+use /std/Test/{Draw, Seed};
 
 pub let not(b: Bool) -> Bool =
     xor(b, true);
@@ -37,6 +38,10 @@ satisfy Show(Bool) {
     show = to_str,
 }
 
+satisfy Spell(Bool) {
+    spell = to_str,
+}
+
 -- `false` below `true`.
 pub let cmp(a: Bool, b: Bool) -> Order =
     match a
@@ -53,4 +58,10 @@ satisfy Cmp(Bool) {
 
 satisfy Ord(Bool) {
     cmp = cmp,
+}
+
+satisfy Draw(Bool) {
+    draw(seed, size) =
+        let (n, rest) = Seed/next(seed);
+        (Nat/and(n, 1) == 1, rest),
 }

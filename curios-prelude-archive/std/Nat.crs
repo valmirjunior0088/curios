@@ -1,7 +1,8 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr,
     to_int, to_flt, to_byte};
-use /std/{Str, Option, Char, Bool, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord};
+use /std/{Str, Option, Char, Bool, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Spell, Ord};
+use /std/Test/{Draw, Seed};
 
 let single_digit(d: Nat) -> Str =
     match d
@@ -116,8 +117,19 @@ satisfy Show(Nat) {
     show = to_str,
 }
 
+satisfy Spell(Nat) {
+    spell = to_str,
+}
+
 satisfy Ord(Nat) {
     cmp = cmp,
+}
+
+-- A number in `0 ..= size`: the size is the bound, so the first cases are the smallest numbers.
+satisfy Draw(Nat) {
+    draw(seed, size) =
+        let (n, rest) = Seed/next(seed);
+        (n % (size + 1), rest),
 }
 
 -- The two ordering propositions are facades: the module's namesake binding is the proposition and the laws about it nest underneath — `Nat/Lt` is the decided `a < b` and `Nat/Lt/try` the procedure that decides it, `Nat/Le` the decided `a <= b` and `Nat/Le/trans` its transitivity. `<=` has a second form beneath the first, `Nat/Le/Ind`, which is the same relation by induction; a path now says which of the two it is, where the old `Nat/Le`/`Nat/Le/Ind` pair said only that they were spelled differently.

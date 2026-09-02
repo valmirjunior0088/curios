@@ -1,7 +1,8 @@
 pub use /sys/{Byte};
 pub use /sys/Byte/{to_nat, eql, lt, le, gt, ge};
 use /sys/Bytes/{let Bytes, get};
-use /std/{Order, Eql, Cmp, Nat, Bool, Show, Ord};
+use /std/{Order, Eql, Cmp, Nat, Bool, Show, Spell, Ord};
+use /std/Test/{Draw, Seed};
 
 -- The 256 byte values in order, so a computed `Nat` becomes a `Byte` by indexing.
 let atoms: Bytes =
@@ -46,6 +47,17 @@ satisfy Show(Byte) {
     show(b) = Nat/to_str(to_nat(b)),
 }
 
+satisfy Spell(Byte) {
+    spell(b) = Nat/to_str(to_nat(b)),
+}
+
 satisfy Ord(Byte) {
     cmp = cmp,
+}
+
+-- `n % 256` is known to the reducer by its remainder bound, so `of_nat`'s precondition decides definitionally.
+satisfy Draw(Byte) {
+    draw(seed, size) =
+        let (n, rest) = Seed/next(seed);
+        (of_nat(n % 256), rest),
 }

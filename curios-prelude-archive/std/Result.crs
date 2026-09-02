@@ -1,4 +1,5 @@
-use /std/{Bool, Eql, Show, Str, Option, Order, Cmp, Ord};
+use /std/{Bool, Eql, Show, Spell, Str, Option, Order, Cmp, Ord};
+use /std/Test/{Draw, Seed};
 
 pub induct Result(A: Type, E: Type): pub Type
 | success(A)
@@ -50,6 +51,8 @@ satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(A, E)) {
         end,
 }
 
+satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(A, E));
+
 -- `failure` below `success`.
 pub let cmp(@A: Type, @E: Type, use Ord(A), use Ord(E), a: Result(A, E), b: Result(A, E)) -> Order =
     match a
@@ -66,4 +69,17 @@ satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Cmp(Result(A, E)) {
 
 satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(A, E)) {
     cmp = cmp,
+}
+
+satisfy (@A: Type, @E: Type, use Draw(A), use Draw(E)) => Draw(Result(A, E)) {
+    draw(seed, size) =
+        let (n, after) = Seed/next(seed);
+        match n % 4 == 0
+        | true =>
+            let (failure, rest) = Draw/draw(@E, after, size);
+            (Result/failure(failure), rest)
+        | false =>
+            let (value, rest) = Draw/draw(@A, after, size);
+            (Result/success(value), rest)
+        end,
 }

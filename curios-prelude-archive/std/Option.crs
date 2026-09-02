@@ -1,4 +1,5 @@
-use /std/{Bool, Eql, Show, Str, Monad, Result, True, False, Order, Cmp, Ord};
+use /std/{Bool, Eql, Show, Spell, Str, Monad, Result, True, False, Order, Cmp, Ord};
+use /std/Test/{Draw, Seed};
 
 pub induct Option(A: Type): pub Type
 | some(A)
@@ -63,6 +64,8 @@ satisfy (@A: Type, use Show(A)) => Show(Option(A)) {
         end,
 }
 
+satisfy (@A: Type, use Spell(A)) => Spell(Option(A));
+
 satisfy Monad(Option) {
     pure = some,
     bind = bind,
@@ -84,4 +87,16 @@ satisfy (@A: Type, use Ord(A)) => Cmp(Option(A)) {
 
 satisfy (@A: Type, use Ord(A)) => Ord(Option(A)) {
     cmp = cmp,
+}
+
+-- `none` one case in four, so a drawn option is usually inhabited and the empty case still turns up early.
+satisfy (@A: Type, use Draw(A)) => Draw(Option(A)) {
+    draw(seed, size) =
+        let (n, after) = Seed/next(seed);
+        match n % 4 == 0
+        | true => (Option/none(), after)
+        | false =>
+            let (value, rest) = Draw/draw(@A, after, size);
+            (Option/some(value), rest)
+        end,
 }

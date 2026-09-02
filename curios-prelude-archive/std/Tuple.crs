@@ -1,9 +1,10 @@
--- Show, Spell, Eql and Ord for the anonymous products programs write. A tuple type is keyed by its shape — the label at each position — so each shape is its own witness and its own table entry, and `{Nat, Bool}`, `{a: Nat, b: Bool}` and `{x: Nat, y: Bool}` are three of them because they are three types.
+-- Show, Spell, Eql, Ord and Draw for the anonymous products programs write. A tuple type is keyed by its shape — the label at each position — so each shape is its own witness and its own table entry, and `{Nat, Bool}`, `{a: Nat, b: Bool}` and `{x: Nat, y: Bool}` are three of them because they are three types.
 --
 -- Only positional shapes are written. Labels are open-ended, and the labeled product with an owner is a `struct`, which is where a program wanting these on `{x: Nat, y: Bool}` is pointed.
 --
--- The ceiling is eight, past which a labeled `struct` is the readable type. Because a tuple shape is owned by no module, the orphan rule leaves `/std` the only root that may key a witness on one for a `/std` concept, so the ceiling is a promise rather than a default and was chosen with room: raising it is adding lines and nothing else. `Spell` stops at three for now — a derived witness reaches it through a tuple payload, and no consumer has asked past that — and raising it is the same kind of edit.
+-- The ceiling is eight, past which a labeled `struct` is the readable type. Because a tuple shape is owned by no module, the orphan rule leaves `/std` the only root that may key a witness on one for a `/std` concept, so the ceiling is a promise rather than a default and was chosen with room: raising it is adding lines and nothing else. `Spell` stops at three for now — a derived witness reaches it through a tuple payload, and no consumer has asked past that — and `Draw` at three beside it, since a drawn argument is spelled when it is reported; raising either is the same kind of edit.
 use /std/{Show, Spell, Eql, Ord, Order, Str, Bool, List};
+use /std/Test/{Draw};
 
 -- A tuple shows as its literal is written, so the rendering is source text as the carriers' renderings are. The one-field literal keeps the trailing comma that separates it from a parenthesized term, so it is written out rather than joined.
 let parens(parts: List(Str)) -> Str =
@@ -423,4 +424,30 @@ satisfy (
                                                         then(
                                                             Ord/cmp(a.6, b.6),
                                                             (u) => Ord/cmp(a.7, b.7)))))))),
+}
+
+-- A tuple is drawn by drawing each field in turn, threading the seed left to right.
+satisfy Draw({}) {
+    draw(seed, size) = ((), seed),
+}
+
+satisfy (@A: Type, use Draw(A)) => Draw({A}) {
+    draw(seed, size) =
+        let (a, rest) = Draw/draw(@A, seed, size);
+        ((a,), rest),
+}
+
+satisfy (@A: Type, @B: Type, use Draw(A), use Draw(B)) => Draw({A, B}) {
+    draw(seed, size) =
+        let (a, after) = Draw/draw(@A, seed, size);
+        let (b, rest) = Draw/draw(@B, after, size);
+        ((a, b), rest),
+}
+
+satisfy (@A: Type, @B: Type, @C: Type, use Draw(A), use Draw(B), use Draw(C)) => Draw({A, B, C}) {
+    draw(seed, size) =
+        let (a, first) = Draw/draw(@A, seed, size);
+        let (b, second) = Draw/draw(@B, first, size);
+        let (c, rest) = Draw/draw(@C, second, size);
+        ((a, b, c), rest),
 }
