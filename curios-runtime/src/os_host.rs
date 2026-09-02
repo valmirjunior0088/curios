@@ -50,8 +50,8 @@ enum OsResource {
         done: OwnedFd,
         slot: Slot,
     },
-    /// One end of a pipe — a child's piped stream, filed by `spawn`. Unlike a file it is made non-blocking for real: `set_nonblocking` applies `O_NONBLOCK` through `fcntl`, so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, and `read`, `write`, `poll` and `close` serve it as they serve a file.
-    Pipe(OwnedFd),
+    /// A bare owned descriptor — one end of a pipe to a child, filed by `spawn`, and the shape a serial device takes. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is made non-blocking for real: `set_nonblocking` applies `O_NONBLOCK` through `fcntl`, so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, while `read`, `write`, `poll` and `close` serve it as they serve a file.
+    Descriptor(OwnedFd),
     /// A running child minted by `spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the exit, `wait` drains it, `kill` addresses its pid, and `stream` hands out the handles of its piped standard streams — filed as `Pipe`s at spawn time and boxed here so a child costs the table no more than a socket does.
     Child {
         running: Running,
@@ -109,7 +109,7 @@ impl OsHost {
             Handle::Stderr => Some(apply(stderr().as_fd())),
             Handle::Other(_) => match self.table.lock().unwrap().get(handle)? {
                 OsResource::File(file) => Some(apply(file.as_fd())),
-                OsResource::Pipe(fd) => Some(apply(fd.as_fd())),
+                OsResource::Descriptor(fd) => Some(apply(fd.as_fd())),
                 _ => None,
             },
         }
@@ -164,7 +164,7 @@ impl OsHost {
                 // A file, a pipe, a child, a config token, and an in-flight lookup have no socket options: record nothing. A pipe's one settable flag, `O_NONBLOCK`, is `set_nonblocking`'s to apply before it reaches here.
                 Some(
                     OsResource::File(_)
-                    | OsResource::Pipe(_)
+                    | OsResource::Descriptor(_)
                     | OsResource::Child { .. }
                     | OsResource::TlsConfig(_)
                     | OsResource::Resolving { .. },
@@ -438,7 +438,7 @@ impl HostOps for OsHost {
 
     fn set_nonblocking(&self, io: Handle, on: u32) -> Status {
         // A pipe has no socket options but does take `O_NONBLOCK`, and it has to: a child's output is drained by a fiber, and a blocking read on one pipe while the child writes the other is the deadlock every process library documents. The socket kinds go through `socket2` as before.
-        if let Some(OsResource::Pipe(fd)) = self.table.lock().unwrap().get(&io) {
+        if let Some(OsResource::Descriptor(fd)) = self.table.lock().unwrap().get(&io) {
             let flags = fcntl_getfl(fd).map(|flags| match on != 0 {
                 true => flags | OFlags::NONBLOCK,
                 false => flags - OFlags::NONBLOCK,
@@ -496,7 +496,7 @@ impl HostOps for OsHost {
                     OsResource::Listener(socket) => Some(socket.as_fd()),
                     // The lookup's pipe read end: `READ`-ready once the worker has written its wakeup byte, which is the completion signal.
                     OsResource::Resolving { done, .. } => Some(done.as_fd()),
-                    OsResource::Pipe(fd) => Some(fd.as_fd()),
+                    OsResource::Descriptor(fd) => Some(fd.as_fd()),
                     // The reaper's pipe read end: `READ`-ready once the child has exited, which is when `wait` answers.
                     OsResource::Child { running, .. } => Some(running.done.as_fd()),
                     // TLS record readiness is not socket readiness (rustls buffers records, and an app read can require a socket write), so a TLS stream is not polled at the socket layer under the sync model; the config token has no fd. Both report as unrecognized — an `empty()` revents slot.
@@ -555,7 +555,7 @@ impl HostOps for OsHost {
                     Some(OsResource::Connected(socket)) => socket,
                     Some(OsResource::ClientTls(tls)) => &mut **tls,
                     Some(OsResource::ServerTls(tls)) => &mut **tls,
-                    Some(OsResource::Pipe(fd)) => {
+                    Some(OsResource::Descriptor(fd)) => {
                         let result = rustix::io::read(&*fd, &mut buffer[..]);
 
                         return read_outcome(result.map_err(std::io::Error::from), buffer);
@@ -605,7 +605,7 @@ impl HostOps for OsHost {
             Some(OsResource::Connected(socket)) => socket,
             Some(OsResource::ClientTls(tls)) => &mut **tls,
             Some(OsResource::ServerTls(tls)) => &mut **tls,
-            Some(OsResource::Pipe(fd)) => {
+            Some(OsResource::Descriptor(fd)) => {
                 return match rustix::io::write(&*fd, bytes) {
                     Ok(written) => (Status::Ok, written as u32),
                     Err(errno) => (status_from_error(std::io::Error::from(errno)), 0),
@@ -811,9 +811,9 @@ impl HostOps for OsHost {
                 stdout,
                 stderr,
             }) => {
-                // An unpiped stream is the empty handle a failed `open` returns; a piped one is filed as a `Pipe`, the kind `set_nonblocking` acts on.
+                // An unpiped stream is the empty handle a failed `open` returns; a piped one is filed as a `Descriptor`, the kind `set_nonblocking` acts on.
                 let file = |fd: Option<OwnedFd>| match fd {
-                    Some(fd) => self.mint(OsResource::Pipe(fd)),
+                    Some(fd) => self.mint(OsResource::Descriptor(fd)),
                     None => Handle::Other(Vec::new()),
                 };
                 let streams = Box::new([file(stdin), file(stdout), file(stderr)]);

@@ -112,7 +112,7 @@ Three, and each names its file.
 
 ## Decisions to take
 
-1. **The name of the tier's owned-descriptor kind**, which is being written now. Recommended: `Descriptor`, holding the `OwnedFd`, with its doc comment naming pipes and serial devices as what is filed there — named by what it holds, as `File` and `Listener` are, and saying the one thing that separates it from `File`. `Stream` collides with the TLS variants, and `Pipe` is the name that needs a rename the day the second consumer arrives.
+1. **The name of the tier's owned-descriptor kind** — settled as `Descriptor`, holding the `OwnedFd`, in `curios-runtime/src/os_host.rs`: named by what it holds, as `File` and `Listener` are, and saying the one thing that separates it from `File`, that `set_nonblocking` applies `O_NONBLOCK` to it for real. `Stream` would collide with the TLS variants, and `Pipe`, its first spelling, would have needed this rename the day the second consumer arrived.
 2. **The device the hardware test names.** Recommended: a USB-to-serial adapter with a loopback jumper, since it has no firmware and tests exactly the byte path; an Arduino running an echo sketch as the second test, which adds a real line for `read_until`, the reset-on-open that DTR causes, and `discard_input` after the boot noise.
 
 ## Findings that are not this specification's

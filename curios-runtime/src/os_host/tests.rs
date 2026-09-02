@@ -54,7 +54,7 @@ fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_report_enotty() {
 fn a_pipe_end_becomes_non_blocking_and_reads_what_arrives() {
     let host = OsHost::with_args(vec![]);
     let (reader, mut writer) = std::io::pipe().expect("a pipe");
-    let handle = host.mint(OsResource::Pipe(OwnedFd::from(reader)));
+    let handle = host.mint(OsResource::Descriptor(OwnedFd::from(reader)));
 
     assert!(matches!(
         host.set_nonblocking(handle.clone(), 1),
