@@ -44,6 +44,68 @@ fn a_chunked_endpoint_serves_one_chunk_then_would_blocks_until_polled() {
 }
 
 #[test]
+fn a_pending_connect_settles_through_poll_and_finish_connect() {
+    let (host, _io) = MockHost::builder()
+        .net([("example.com:80", "pong")])
+        .connect_pending()
+        .build();
+
+    // A scripted endpoint: pending, then writable, then connected and serving.
+    let (_, handle) = host.socket(b"example.com:80");
+    assert!(matches!(
+        host.connect(handle.clone(), b"example.com:80"),
+        Status::WouldBlock
+    ));
+    assert!(matches!(
+        host.finish_connect(handle.clone()),
+        Status::WouldBlock
+    ));
+    let ready = host.poll(
+        std::slice::from_ref(&handle),
+        &[Poll::from_bits(poll::WRITE)],
+        -1,
+    );
+    assert_eq!(ready[0].bits() & poll::WRITE, poll::WRITE);
+    assert!(matches!(host.finish_connect(handle.clone()), Status::Ok));
+    assert!(matches!(host.read(handle, 8), (Status::Ok, bytes) if bytes == b"pong"));
+
+    // An unscripted endpoint: the refusal is deferred to the settle, and the handle is gone afterwards.
+    let (_, stray) = host.socket(b"nowhere:1");
+    assert!(matches!(
+        host.connect(stray.clone(), b"nowhere:1"),
+        Status::WouldBlock
+    ));
+    host.poll(
+        std::slice::from_ref(&stray),
+        &[Poll::from_bits(poll::WRITE)],
+        -1,
+    );
+    assert!(matches!(
+        host.finish_connect(stray.clone()),
+        Status::ConnectionRefused
+    ));
+    assert!(matches!(host.read(stray, 8), (Status::NotFound, _)));
+}
+
+#[test]
+fn a_chunked_endpoint_ends_readable() {
+    let (host, _io) = MockHost::builder().net([("example.com:80", "")]).build();
+    let (_, handle) = host.socket(b"example.com:80");
+    assert!(matches!(
+        host.connect(handle.clone(), b"example.com:80"),
+        Status::Ok
+    ));
+
+    // A stream at its end reads `Eof`, and a poll still reports it readable, as an OS reports a closed peer.
+    assert!(matches!(
+        host.read(handle.clone(), 8),
+        (Status::Eof, bytes) if bytes.is_empty()
+    ));
+    let ready = host.poll(&[handle], &[Poll::from_bits(poll::READ)], -1);
+    assert_eq!(ready[0].bits() & poll::READ, poll::READ);
+}
+
+#[test]
 fn use_after_close_on_a_handle_is_a_loud_miss_not_an_alias() {
     let (host, _io) = MockHost::builder().build();
 

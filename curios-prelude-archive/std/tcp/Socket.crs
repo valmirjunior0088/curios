@@ -1,6 +1,5 @@
-use /std/{Bytes, Str, Nat, Bool, Handle, Result, Option, Async, Io};
+use /std/{Bytes, Str, Nat, Bool, Handle, Result, Async, Io};
 use /std/tcp/{Settings, resolve};
-use /std/time/{Duration};
 
 pub struct Socket: Type {
     Handle,
@@ -16,54 +15,66 @@ pub let read(c: Socket, n: Nat) -> Async(Handle/Read) =
 pub let write(c: Socket, b: Bytes) -> Async(Result({}, Handle/Error)) =
     Async/write(c.0, b);
 
-let configure(h: Handle, settings: Settings) -> Io({}) =
-    let _ =
-        /sys/socket/set_recv_timeout(
-            h,
-            Option/unwrap_or(Option/map(settings.read_timeout, Duration/to_millis), 0))!;
-    let _ =
-        /sys/socket/set_send_timeout(
-            h,
-            Option/unwrap_or(Option/map(settings.write_timeout, Duration/to_millis), 0))!;
-    Io/pure(());
-
 let upgrade(h: Handle, host: Str, tls: Bool) -> Io(Nat) =
     match tls
     | true => /sys/tls/start(h, Str/to_bytes(host))
     | false => Io/pure(/sys/status/ok)
     end;
 
--- Every step here is a syscall and none of them suspends, so this is an `Io` chain the caller lifts into a single `Async` step rather than a fiber that could yield partway through connecting.
-let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Io(Result(Socket, Handle/Error)) =
+-- Every step up to the connect is a syscall that answers at once; the connect itself is where a peer decides, so the host may hand the wait back: a non-blocking socket answers `would_block` for any peer that is not local, which `settle` turns into a park on `WRITE` until the kernel has settled it.
+let open_and_connect(addr: Bytes) -> Io(Result({Handle, Bool}, Handle/Error)) =
     let s = /sys/socket/open(addr)!;
     match Handle/error_of(s.status)
     | some(e) => Io/pure(Result/failure(e))
     | none() =>
-        let _ = configure(s.handle, settings)!;
         let status = /sys/socket/connect(s.handle, addr)!;
-        match Handle/error_of(status)
-        | some(e) =>
-            let _ = /sys/Handle/close(s.handle)!;
-            Io/pure(Result/failure(e))
-        | none() =>
-            let upgraded = upgrade(s.handle, host, settings.tls)!;
-            match Handle/error_of(upgraded)
+        choose
+        | status == /sys/status/would_block => Io/pure(Result/success((s.handle, true)))
+        | _ =>
+            match Handle/error_of(status)
             | some(e) =>
                 let _ = /sys/Handle/close(s.handle)!;
                 Io/pure(Result/failure(e))
-            -- A TLS stream is driven by rustls, not polled at the socket layer, so it is left blocking on purpose.
-            | none() =>
-                match settings.tls
-                | true => Io/pure(Result/success(Socket { s.handle }))
-                | false =>
-                    let nb = Async/nonblocking(s.handle)!;
-                    match nb
-                    | failure(e) =>
-                        let _ = /sys/Handle/close(s.handle)!;
-                        Io/pure(Result/failure(e))
-                    | success(_) => Io/pure(Result/success(Socket { s.handle }))
-                    end
-                end
+            | none() => Io/pure(Result/success((s.handle, false)))
+            end
+        end
+    end;
+
+-- A pending connect settles once the socket polls writable, and `finish_connect` reads the outcome; an honest early answer of `would_block` parks again.
+let settle(h: Handle, pending: Bool) -> Async(Result({}, Handle/Error)) =
+    match pending
+    | false => Async/pure(Result/success(()))
+    | true =>
+        let _ = Async/wait(h, /sys/poll/write)!;
+        let status = /sys/socket/finish_connect(h)!;
+        choose
+        | status == /sys/status/would_block => settle(h, true)
+        | _ =>
+            Async/pure(
+                match Handle/error_of(status)
+                | some(e) => Result/failure(e)
+                | none() => Result/success(())
+                end)
+        end
+    end;
+
+let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Async(Result(Socket, Handle/Error)) =
+    let opened = open_and_connect(addr)!;
+    match opened
+    | failure(e) => Async/pure(Result/failure(e))
+    | success((h, pending)) =>
+        let settled = settle(h, pending)!;
+        match settled
+        | failure(e) =>
+            let _ = /sys/Handle/close(h)!;
+            Async/pure(Result/failure(e))
+        | success(_) =>
+            let upgraded = upgrade(h, host, settings.tls)!;
+            match Handle/error_of(upgraded)
+            | some(e) =>
+                let _ = /sys/Handle/close(h)!;
+                Async/pure(Result/failure(e))
+            | none() => Async/pure(Result/success(Socket { h }))
             end
         end
     end;
@@ -76,7 +87,7 @@ let connect_socket(
     let resolved = resolve(host, port)!;
     match resolved
     | failure(e) => Async/pure(Result/failure(e))
-    | success(addr) => Async/lift(connect_addr(settings, host, addr))
+    | success(addr) => connect_addr(settings, host, addr)
     end;
 
 pub let connect(settings: Settings, host: Str, port: Nat) -> Async(Result(Socket, Handle/Error)) =

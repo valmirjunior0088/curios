@@ -311,6 +311,11 @@ enum MockResource {
     Sink,
     /// A finished name lookup minted by `lookup`, holding the resolved address blobs `resolve` drains. The scripted host resolves synchronously, so the handle is ready the moment it is minted.
     Resolved(Vec<Vec<u8>>),
+    /// A scripted connect under way: what `finish_connect` will answer — the response to serve, or the refusal — once a `poll` has marked it due.
+    Connecting {
+        outcome: Result<Chunked, Status>,
+        due: bool,
+    },
     /// A live *outbound* connection: the scripted response. Writes to it are accepted and discarded.
     Outbound(Chunked),
     Inbound(MockServer),
@@ -334,6 +339,8 @@ pub struct MockHost {
     endpoints: HashMap<Vec<u8>, Vec<Vec<u8>>>,
     /// Scripted inbound requests as chunk lists, one served per `accept` (FIFO).
     inbound: Mutex<VecDeque<Vec<Vec<u8>>>>,
+    /// Whether `connect` answers `WouldBlock` and settles through `poll` and `finish_connect`, as a connect to a remote peer does, rather than at once as loopback does.
+    connect_pending: bool,
     /// Captured server responses: one entry per accepted connection, the concatenation of its writes. Shared with [`MockIo::captures`].
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
     /// Scripted wall-clock readings, served in order by `clock_wall`.
@@ -440,17 +447,59 @@ impl HostOps for MockHost {
             }
         }
 
-        let response = match self.endpoints.get(addr) {
-            Some(response) => response.clone(),
-            None => return Status::ConnectionRefused,
+        let outcome = match self.endpoints.get(addr) {
+            Some(response) => Ok(Chunked::new(response.clone())),
+            None => Err(Status::ConnectionRefused),
         };
 
-        self.table
-            .lock()
-            .unwrap()
-            .insert(&io, MockResource::Outbound(Chunked::new(response)));
+        // A pending connect defers its outcome, refusal included, to `finish_connect` after a poll, as the OS reports a refusal through `SO_ERROR`; a synchronous one answers here, as loopback does.
+        if self.connect_pending {
+            self.table.lock().unwrap().insert(
+                &io,
+                MockResource::Connecting {
+                    outcome,
+                    due: false,
+                },
+            );
 
-        Status::Ok
+            return Status::WouldBlock;
+        }
+
+        match outcome {
+            Ok(response) => {
+                self.table
+                    .lock()
+                    .unwrap()
+                    .insert(&io, MockResource::Outbound(response));
+
+                Status::Ok
+            }
+            Err(status) => status,
+        }
+    }
+
+    fn finish_connect(&self, io: Handle) -> Status {
+        let mut table = self.table.lock().unwrap();
+
+        match table.get(&io) {
+            Some(MockResource::Connecting { due: false, .. }) => Status::WouldBlock,
+            Some(MockResource::Connecting { due: true, .. }) => {
+                let Some(MockResource::Connecting { outcome, .. }) = table.remove(&io) else {
+                    unreachable!("the slot was just read");
+                };
+
+                match outcome {
+                    Ok(response) => {
+                        table.insert(&io, MockResource::Outbound(response));
+
+                        Status::Ok
+                    }
+                    Err(status) => status,
+                }
+            }
+            Some(MockResource::Outbound(_)) => Status::Ok,
+            _ => Status::NotFound,
+        }
     }
 
     fn start_tls(&self, io: Handle, _sni: &[u8]) -> Status {
@@ -526,18 +575,6 @@ impl HostOps for MockHost {
         )
     }
 
-    fn set_nonblocking(&self, _io: Handle, _on: u32) -> Status {
-        Status::Ok
-    }
-
-    fn set_recv_timeout(&self, _io: Handle, _ms: u32) -> Status {
-        Status::Ok
-    }
-
-    fn set_send_timeout(&self, _io: Handle, _ms: u32) -> Status {
-        Status::Ok
-    }
-
     fn set_reuseaddr(&self, _io: Handle, _on: u32) -> Status {
         Status::Ok
     }
@@ -565,6 +602,11 @@ impl HostOps for MockHost {
                             conn.bytes.arm();
 
                             readable
+                        }
+                        Some(MockResource::Connecting { due, .. }) => {
+                            *due = true;
+
+                            Poll::from_bits(poll::WRITE)
                         }
                         Some(_) => requested,
                         None => Poll::empty(),
@@ -895,6 +937,7 @@ pub struct MockHostBuilder {
     files: HashMap<Vec<u8>, Vec<u8>>,
     endpoints: HashMap<Vec<u8>, Vec<Vec<u8>>>,
     inbound: VecDeque<Vec<Vec<u8>>>,
+    connect_pending: bool,
     clock_wall_seq: VecDeque<(u32, u32, u32)>,
     clock_mono_seq: VecDeque<(u32, u32)>,
     args: Vec<Vec<u8>>,
@@ -1016,6 +1059,13 @@ impl MockHostBuilder {
         self
     }
 
+    /// Make every `connect` pend: it answers `WouldBlock`, a `poll` marks the socket writable, and `finish_connect` then answers what a synchronous connect would have — the way a connect to a remote peer settles.
+    pub fn connect_pending(mut self) -> Self {
+        self.connect_pending = true;
+
+        self
+    }
+
     /// Script the inbound requests served by `accept`, one per accepted connection (FIFO), each served whole and ready at once. An exhausted queue makes `accept` fail, which ends a `serve` loop (a real blocking `accept` would park there).
     pub fn inbound<R: AsRef<[u8]>, I: IntoIterator<Item = R>>(self, requests: I) -> Self {
         self.inbound_chunks(requests.into_iter().map(|request| vec![request]))
@@ -1090,6 +1140,7 @@ impl MockHostBuilder {
             table: Mutex::new(Table::new()),
             endpoints: self.endpoints,
             inbound: Mutex::new(self.inbound),
+            connect_pending: self.connect_pending,
             captures,
             clock_wall_seq: Mutex::new(self.clock_wall_seq),
             clock_mono_seq: Mutex::new(self.clock_mono_seq),

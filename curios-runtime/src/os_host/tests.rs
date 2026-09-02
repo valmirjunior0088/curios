@@ -14,20 +14,12 @@ fn a_table_entry_does_not_carry_a_tls_connection_inline() {
     );
 }
 
-/// The standard streams are never in the handle table, so a setter that asked the table would call them closed. `Async/read`/`write` begin with `set_nonblocking`, so that verdict would fail every asynchronous use of stdio on the real host while the mock — which answers `Ok` for any handle — lets the suite pass.
+/// The standard streams are never in the handle table, so a setter that asked the table would call them closed; like a file, they record nothing and answer `Ok`, which is what the mock answers for any handle.
 #[test]
-fn a_standard_stream_takes_the_socket_setters_like_a_file() {
+fn a_standard_stream_takes_set_reuseaddr_like_a_file() {
     let host = OsHost::with_args(vec![]);
 
     for handle in [Handle::Stdin, Handle::Stdout, Handle::Stderr] {
-        assert!(matches!(
-            host.set_nonblocking(handle.clone(), 1),
-            Status::Ok
-        ));
-        assert!(matches!(
-            host.set_recv_timeout(handle.clone(), 10),
-            Status::Ok
-        ));
         assert!(matches!(host.set_reuseaddr(handle, 1), Status::Ok));
     }
 }
@@ -49,43 +41,163 @@ fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_report_enotty() {
     host.close(handle);
 }
 
-/// A pipe end is the one non-socket resource `set_nonblocking` acts on: with `O_NONBLOCK` applied an empty pipe answers `WouldBlock` instead of blocking the caller, bytes written at the other end come back through `read`, and the writer's close is `Eof`. The child streams `spawn` files as this kind are what let a fiber's drain yield instead of stalling the scheduler.
+/// A piped child stream is filed non-blocking by `spawn`: before the child writes, a read answers `WouldBlock` instead of blocking the caller; bytes it echoes come back through `read` once `poll` reports them; closing its stdin ends it, its stdout reads `Eof`, and `wait` reaps it. These streams are what let a fiber's drain yield instead of stalling the scheduler.
 #[test]
-fn a_pipe_end_becomes_non_blocking_and_reads_what_arrives() {
+fn a_piped_child_stream_is_filed_non_blocking() {
     let host = OsHost::with_args(vec![]);
-    let (reader, mut writer) = std::io::pipe().expect("a pipe");
-    let handle = host.mint(OsResource::Descriptor(OwnedFd::from(reader)));
+    let (status, child) = host.spawn(
+        &[b"/bin/cat".to_vec()],
+        b"",
+        &[],
+        curios_abi::stdio_mode::PIPE,
+        curios_abi::stdio_mode::PIPE,
+        curios_abi::stdio_mode::NULL,
+    );
+    assert!(matches!(status, Status::Ok));
+    let (status, stdin) = host.stream(child.clone(), 0);
+    assert!(matches!(status, Status::Ok));
+    let (status, stdout) = host.stream(child.clone(), 1);
+    assert!(matches!(status, Status::Ok));
 
     assert!(matches!(
-        host.set_nonblocking(handle.clone(), 1),
-        Status::Ok
-    ));
-    assert!(matches!(
-        host.read(handle.clone(), 8),
+        host.read(stdout.clone(), 8),
         (Status::WouldBlock, bytes) if bytes.is_empty()
     ));
-
-    writer
-        .write_all(b"abc")
-        .expect("the pipe takes three bytes");
+    assert!(matches!(host.write(stdin.clone(), b"abc"), (Status::Ok, 3)));
+    let ready = host.poll(
+        std::slice::from_ref(&stdout),
+        &[Poll::from_bits(curios_abi::poll::READ)],
+        5_000,
+    );
+    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
     assert!(matches!(
-        host.read(handle.clone(), 8),
+        host.read(stdout.clone(), 8),
         (Status::Ok, bytes) if bytes == b"abc"
     ));
 
     // Another test's child may have been forked while this write end was open and hold it until its `exec`, so the end of the stream may arrive a few reads late as `WouldBlock`.
-    drop(writer);
-    let mut outcome = host.read(handle.clone(), 8);
+    host.close(stdin);
+    let mut outcome = host.read(stdout.clone(), 8);
     for _ in 0..100 {
         if !matches!(outcome, (Status::WouldBlock, _)) {
             break;
         }
-        std::thread::sleep(Duration::from_millis(10));
-        outcome = host.read(handle.clone(), 8);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        outcome = host.read(stdout.clone(), 8);
     }
     assert!(matches!(outcome, (Status::Eof, bytes) if bytes.is_empty()));
 
-    host.close(handle);
+    let ready = host.poll(
+        std::slice::from_ref(&child),
+        &[Poll::from_bits(curios_abi::poll::READ)],
+        5_000,
+    );
+    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    assert!(matches!(host.wait(child), (Status::Ok, 0, 0)));
+
+    host.close(stdout);
+}
+
+/// The canonical `ip:port` blob `resolve` mints, for a loopback port nothing listens on: bound once at port zero to learn a free one, then released.
+fn free_loopback_address() -> Vec<u8> {
+    let probe = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port");
+    let port = probe.local_addr().expect("a bound address").port();
+    drop(probe);
+
+    format!("127.0.0.1:{port}").into_bytes()
+}
+
+/// A listener never blocks: `accept` with nothing pending answers `WouldBlock`. A connect to it answers at once on loopback or goes pending and settles through `poll` and `finish_connect`, which is idempotent on a settled socket. Both ends are non-blocking, so a read before any write answers `WouldBlock` and one after `poll` serves the bytes.
+#[test]
+fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
+    let host = OsHost::with_args(vec![]);
+    let blob = free_loopback_address();
+
+    let (status, listener) = host.socket(&blob);
+    assert!(matches!(status, Status::Ok));
+    assert!(matches!(
+        host.set_reuseaddr(listener.clone(), 1),
+        Status::Ok
+    ));
+    assert!(matches!(host.bind(listener.clone(), &blob), Status::Ok));
+    assert!(matches!(host.listen(listener.clone(), 1), Status::Ok));
+    assert!(matches!(
+        host.accept(listener.clone()),
+        (Status::WouldBlock, _)
+    ));
+
+    let (status, client) = host.socket(&blob);
+    assert!(matches!(status, Status::Ok));
+    match host.connect(client.clone(), &blob) {
+        Status::Ok => {}
+        Status::WouldBlock => {
+            let ready = host.poll(
+                std::slice::from_ref(&client),
+                &[Poll::from_bits(curios_abi::poll::WRITE)],
+                5_000,
+            );
+            assert_ne!(ready[0].bits() & curios_abi::poll::WRITE, 0);
+            assert!(matches!(host.finish_connect(client.clone()), Status::Ok));
+        }
+        other => panic!("connect answered status code {}", other.code()),
+    }
+    assert!(matches!(host.finish_connect(client.clone()), Status::Ok));
+
+    let ready = host.poll(
+        std::slice::from_ref(&listener),
+        &[Poll::from_bits(curios_abi::poll::READ)],
+        5_000,
+    );
+    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    let (status, server) = host.accept(listener.clone());
+    assert!(matches!(status, Status::Ok));
+
+    assert!(matches!(
+        host.read(server.clone(), 8),
+        (Status::WouldBlock, bytes) if bytes.is_empty()
+    ));
+    assert!(matches!(
+        host.write(client.clone(), b"ping"),
+        (Status::Ok, 4)
+    ));
+    let ready = host.poll(
+        std::slice::from_ref(&server),
+        &[Poll::from_bits(curios_abi::poll::READ)],
+        5_000,
+    );
+    assert_ne!(ready[0].bits() & curios_abi::poll::READ, 0);
+    assert!(matches!(
+        host.read(server.clone(), 8),
+        (Status::Ok, bytes) if bytes == b"ping"
+    ));
+
+    host.close(server);
+    host.close(client);
+    host.close(listener);
+}
+
+/// A connect nobody listens for is refused — at once, or through `finish_connect` once the pending connect has settled — and the socket is gone either way.
+#[test]
+fn a_refused_connect_reports_and_drops_the_socket() {
+    let host = OsHost::with_args(vec![]);
+    let blob = free_loopback_address();
+
+    let (status, client) = host.socket(&blob);
+    assert!(matches!(status, Status::Ok));
+    let outcome = match host.connect(client.clone(), &blob) {
+        Status::WouldBlock => {
+            let ready = host.poll(
+                std::slice::from_ref(&client),
+                &[Poll::from_bits(curios_abi::poll::WRITE)],
+                5_000,
+            );
+            assert_ne!(ready[0].bits() & curios_abi::poll::WRITE, 0);
+            host.finish_connect(client.clone())
+        }
+        other => other,
+    };
+    assert!(matches!(outcome, Status::ConnectionRefused));
+    assert!(matches!(host.read(client, 8), (Status::NotFound, _)));
 }
 
 /// A real child end to end: `echo` is spawned with its output piped, its handle becomes readable once the reaper has recorded the exit, `wait` reports a clean zero, and the piped output is what it wrote. The unpiped stdin comes back as the empty handle.

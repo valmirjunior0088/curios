@@ -17,7 +17,7 @@ use super::{
 macro_rules! host_ops {
     ($callback:ident) => {
         $callback! {
-            /// Read up to `n` bytes from `h`, blocking until at least one is available. `(status, bytes)`: `Ok` with 1..n bytes, `Eof` with none, or an error status.
+            /// Read up to `n` bytes from `h`. `(status, bytes)`: `Ok` with 1..n bytes, `Eof` with none, or an error status. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `poll` is where the wait happens; a regular file is read synchronously, since the disk answers it.
             read as Handle/read [h: Handle, n: Nat] [status: Status, bytes: Bytes];
 
             /// Write `b` to `h`, returning `(status, written)` — the bytes accepted this call. A non-blocking handle may take only a prefix (so the caller resends the tail without duplicating); `WouldBlock` reports `written` 0, the blocking std streams the full length.
@@ -32,19 +32,22 @@ macro_rules! host_ops {
             /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it. `(status, addresses)`; non-empty on `Ok`, each blob the host's private encoding the guest only shuttles back into `socket`/`bind`/`connect`. `WouldBlock` before readiness.
             resolve as dns/resolve [handle: Handle] [status: Status, addresses: ListBytes];
 
-            /// Create an unconnected socket for the address family encoded in `addr`. `(status, handle)` like `open`; configured via the setters, then transitioned by `bind`/`connect`/`listen`.
+            /// Create an unconnected, non-blocking socket for the address family encoded in `addr`. `(status, handle)` like `open`; transitioned by `bind`/`connect`/`listen`.
             socket as socket/open [addr: Bytes] [status: Status, handle: Handle];
 
             /// Bind socket `h` to the local address `addr`.
             bind as socket/bind [h: Handle, addr: Bytes] [status: Status];
 
-            /// Connect socket `h` to the resolved address `addr`. On `Ok` the handle is an ordinary byte stream `read`/`write`/`close` serve.
+            /// Start connecting socket `h` to the resolved address `addr`. `Ok` when the kernel completed it at once, on which the handle is an ordinary byte stream `read`/`write`/`close` serve; `WouldBlock` while it is under way, on which `poll` reports `h` `WRITE`-ready once it has settled and `finish_connect` reads the outcome; a refusal otherwise, on which the socket drops.
             connect as socket/connect [h: Handle, addr: Bytes] [status: Status];
+
+            /// Complete a `connect` that answered `WouldBlock`, once `poll` reports `h` `WRITE`-ready. `Ok` re-files `h` as a connected byte stream; a refusal or other failure reports its status and drops the socket; `WouldBlock` while the connect is still pending. `Ok` on a connect that never went pending.
+            finish_connect as socket/finish_connect [h: Handle] [status: Status];
 
             /// Mark bound socket `h` as listening with accept-queue depth `backlog` (OS-clamped to `somaxconn`).
             listen as socket/listen [h: Handle, backlog: Nat] [status: Status];
 
-            /// Pull the next connection from listener `h`, blocking until one arrives. `(status, handle)`; an ordinary byte stream like a connected socket.
+            /// Pull the next connection from listener `h`: `WouldBlock` when none is pending, else `(Ok, handle)`, a non-blocking byte stream like a connected socket.
             accept as socket/accept [h: Handle] [status: Status, handle: Handle];
 
             /// Upgrade connected socket `h` to a TLS client stream in place, running the handshake inline. `sni` is the server name to present and verify against; on failure the connection drops with `TlsError`.
@@ -55,15 +58,6 @@ macro_rules! host_ops {
 
             /// Upgrade accepted socket `h` to a TLS server stream in place using configuration handle `cfg`, running the handshake inline.
             start_tls_server as tls/start_server [h: Handle, cfg: Handle] [status: Status];
-
-            /// Set socket `h`'s non-blocking flag. A no-op on a file handle.
-            set_nonblocking as socket/set_nonblocking [h: Handle, on: Bool] [status: Status];
-
-            /// Set socket `h`'s receive timeout to `ms` milliseconds (`0` clears).
-            set_recv_timeout as socket/set_recv_timeout [h: Handle, ms: Nat] [status: Status];
-
-            /// Set socket `h`'s send timeout to `ms` milliseconds (`0` clears).
-            set_send_timeout as socket/set_send_timeout [h: Handle, ms: Nat] [status: Status];
 
             /// Set socket `h`'s `SO_REUSEADDR` flag; set before `bind`.
             set_reuseaddr as socket/set_reuseaddr [h: Handle, on: Bool] [status: Status];
@@ -119,7 +113,7 @@ macro_rules! host_ops {
             /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. `(status, child)`: the child handle becomes `READ`-ready when the child exits, which is when `wait` answers, and its piped streams are fetched one at a time through `stream`, because a row carries at most one reference result and it is the last.
             spawn as proc/spawn [argv: ListBytes, cwd: Bytes, env: ListBytes, stdin: Nat, stdout: Nat, stderr: Nat] [status: Status, child: Handle];
 
-            /// One of `child`'s piped streams, `which` being the [`stdio`](crate::stdio) index of the stream (`0` stdin, `1` stdout, `2` stderr). `(status, handle)`: a piped stream is a handle `read`, `write`, `poll`, `close` and `set_nonblocking` serve; an unpiped one is the empty handle a failed `open` returns.
+            /// One of `child`'s piped streams, `which` being the [`stdio`](crate::stdio) index of the stream (`0` stdin, `1` stdout, `2` stderr). `(status, handle)`: a piped stream is a non-blocking handle `read`, `write`, `poll` and `close` serve; an unpiped one is the empty handle a failed `open` returns.
             stream as proc/stream [child: Handle, which: Nat] [status: Status, handle: Handle];
 
             /// How `child` ended, once its handle is readable: `(status, code, signal)`, `signal` nonzero when a signal ended it and `code` the exit code otherwise. `WouldBlock` while it still runs; consumes the handle.

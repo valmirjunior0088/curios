@@ -195,6 +195,12 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
         move |(handle, addr): (Handle, Vec<u8>)| host.connect(handle, &addr)
     });
 
+    impls.define("finish_connect", {
+        let host = host.clone();
+
+        move |handle: Handle| host.finish_connect(handle)
+    });
+
     impls.define("start_tls", {
         let host = host.clone();
 
@@ -247,24 +253,6 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
         let host = host.clone();
 
         move |(handle, addr): (Handle, Vec<u8>)| host.bind(handle, &addr)
-    });
-
-    impls.define("set_nonblocking", {
-        let host = host.clone();
-
-        move |(handle, on): (Handle, u32)| host.set_nonblocking(handle, on)
-    });
-
-    impls.define("set_recv_timeout", {
-        let host = host.clone();
-
-        move |(handle, ms): (Handle, u32)| host.set_recv_timeout(handle, ms)
-    });
-
-    impls.define("set_send_timeout", {
-        let host = host.clone();
-
-        move |(handle, ms): (Handle, u32)| host.set_send_timeout(handle, ms)
     });
 
     impls.define("set_reuseaddr", {

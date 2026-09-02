@@ -53,7 +53,7 @@ satisfy Show(Exit) {
 let env_entry(entry: {Str, Str}) -> Bytes =
     x[..Str/to_bytes(entry.0), '=', ..Str/to_bytes(entry.1)];
 
--- A piped stream is fetched from the child by its `stdio` index, made non-blocking and acquired with `close` as its finalizer, as `File/open` does, so a task that ends releases the pipe with everything else it held. An unpiped stream has no handle to keep, so the row is not asked.
+-- A piped stream is fetched from the child by its `stdio` index — the host files it non-blocking — and acquired with `close` as its finalizer, as `File/open` does, so a task that ends releases the pipe with everything else it held. An unpiped stream has no handle to keep, so the row is not asked.
 let keep(child: Handle, which: Nat, mode: Stdio) -> Async(Result(Option(Handle), Handle/Error)) =
     match mode
     | piped() =>
@@ -61,13 +61,8 @@ let keep(child: Handle, which: Nat, mode: Stdio) -> Async(Result(Option(Handle),
         match Handle/error_of(s.status)
         | some(e) => Async/pure(Result/failure(e))
         | none() =>
-            let nb = Async/nonblocking(s.handle)!;
-            match nb
-            | failure(e) => Async/pure(Result/failure(e))
-            | success(_) =>
-                let _ = Async/acquire(s.handle, /sys/Handle/close(s.handle))!;
-                Async/pure(Result/success(Option/some(s.handle)))
-            end
+            let _ = Async/acquire(s.handle, /sys/Handle/close(s.handle))!;
+            Async/pure(Result/success(Option/some(s.handle)))
         end
     | _ => Async/pure(Result/success(Option/none()))
     end;

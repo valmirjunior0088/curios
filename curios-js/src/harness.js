@@ -92,8 +92,8 @@ export async function run(config) {
 
   const denied = () => config.status.PERMISSION_DENIED;
 
-  // The standard streams take the socket setters like a file — recording nothing and answering OK, as OsHost and MockHost do — so `Async/read`/`write`, whose first step is `set_nonblocking`, serve them; no other handle exists in the browser, so anything else stays denied.
-  const settable = (handle) => {
+  // The standard streams take `SO_REUSEADDR` like a file — recording nothing and answering OK, as OsHost and MockHost do; no other handle exists in the browser, so anything else stays denied.
+  const reuseaddr = (handle) => {
     switch (tokenOf(handle)) {
       case config.stdio.STDIN:
       case config.stdio.STDOUT:
@@ -118,15 +118,13 @@ export async function run(config) {
     socket: deniedHandle,
     bind: denied,
     connect: denied,
+    finish_connect: denied,
     listen: denied,
     accept: deniedHandle,
     start_tls: denied,
     tls_server_config: deniedHandle,
     start_tls_server: denied,
-    set_nonblocking: settable,
-    set_recv_timeout: settable,
-    set_send_timeout: settable,
-    set_reuseaddr: settable,
+    set_reuseaddr: reuseaddr,
     poll: unsupported("poll"),
     close: () => {},
     clock_wall: () => {

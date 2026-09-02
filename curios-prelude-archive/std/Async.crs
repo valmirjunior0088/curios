@@ -102,88 +102,65 @@ pub let go(body: Fiber) -> Async({}) =
     let c = Cell/new(false)!;
     fork_with(body, Token { c });
 
--- Failing to clear O_NONBLOCK is not cosmetic: the handle stays blocking and the next read stalls the whole single-threaded scheduler, so the status is reported rather than dropped.
-pub let nonblocking(h: Handle) -> Io(Result({}, Handle/Error)) =
-    let status = /sys/socket/set_nonblocking(h, true)!;
-    Io/pure(
-        match Handle/error_of(status)
-        | some(e) => Result/failure(e)
-        | none() => Result/success(())
-        end);
-
+-- The host never waits on a peer: a handle a peer decides on is non-blocking from the moment it is minted, so a read that cannot progress answers `would_block` and the fiber parks on the handle until `poll` reports it readable.
 pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
-    let nb = nonblocking(h)!;
-    match nb
-    | failure(e) => pure(Handle/Read/error(e))
-    | success(_) =>
-        let go() -> Async(Handle/Read) =
-            let r = /sys/Handle/read(h, n)!;
-            match r.status == /sys/status/would_block
-            | true =>
-                let _ = wait(h, /sys/poll/read)!;
-                go()
-            | false =>
-                match Handle/error_of(r.status)
-                | some(e) => pure(Handle/Read/error(e))
-                | none() =>
-                    match r.status == /sys/status/eof
-                    | true => pure(Handle/Read/eof())
-                    | false => pure(Handle/Read/chunk(r.bytes))
-                    end
+    let go() -> Async(Handle/Read) =
+        let r = /sys/Handle/read(h, n)!;
+        match r.status == /sys/status/would_block
+        | true =>
+            let _ = wait(h, /sys/poll/read)!;
+            go()
+        | false =>
+            match Handle/error_of(r.status)
+            | some(e) => pure(Handle/Read/error(e))
+            | none() =>
+                match r.status == /sys/status/eof
+                | true => pure(Handle/Read/eof())
+                | false => pure(Handle/Read/chunk(r.bytes))
                 end
-            end;
-        go()
-    end;
+            end
+        end;
+    go();
 
 pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
-    let nb = nonblocking(h)!;
-    match nb
-    | failure(e) => pure(Result/failure(e))
-    | success(_) =>
-        let go(rest: Bytes) -> Async(Result({}, Handle/Error)) =
-            let r = /sys/Handle/write(h, rest)!;
-            match r.status == /sys/status/would_block
-            | true =>
-                let _ = wait(h, /sys/poll/write)!;
-                go(rest)
-            | false =>
-                match Handle/error_of(r.status)
-                | some(e) => pure(Result/failure(e))
-                | none() =>
-                    match r.written < Bytes/len(rest)
-                    | true =>
-                        let _ = wait(h, /sys/poll/write)!;
-                        go(
-                            Bytes/drop(
-                                rest,
-                                r.written,
-                                @Nat/Lt/le_of_lt(r.written, Bytes/len(rest), True/qed())))
-                    | false => pure(Result/success(()))
-                    end
+    let go(rest: Bytes) -> Async(Result({}, Handle/Error)) =
+        let r = /sys/Handle/write(h, rest)!;
+        match r.status == /sys/status/would_block
+        | true =>
+            let _ = wait(h, /sys/poll/write)!;
+            go(rest)
+        | false =>
+            match Handle/error_of(r.status)
+            | some(e) => pure(Result/failure(e))
+            | none() =>
+                match r.written < Bytes/len(rest)
+                | true =>
+                    let _ = wait(h, /sys/poll/write)!;
+                    go(
+                        Bytes/drop(
+                            rest,
+                            r.written,
+                            @Nat/Lt/le_of_lt(r.written, Bytes/len(rest), True/qed())))
+                | false => pure(Result/success(()))
                 end
-            end;
-        go(b)
-    end;
+            end
+        end;
+    go(b);
 
 pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
-    let nb = nonblocking(l)!;
-    match nb
-    | failure(e) => pure(Result/failure(e))
-    | success(_) =>
-        let go() -> Async(Result(Handle, Handle/Error)) =
-            let r = /sys/socket/accept(l)!;
-            match r.status == /sys/status/would_block
-            | true =>
-                let _ = wait(l, /sys/poll/read)!;
-                go()
-            | false =>
-                match Handle/error_of(r.status)
-                | some(e) => pure(Result/failure(e))
-                | none() => pure(Result/success(r.handle))
-                end
-            end;
-        go()
-    end;
+    let go() -> Async(Result(Handle, Handle/Error)) =
+        let r = /sys/socket/accept(l)!;
+        match r.status == /sys/status/would_block
+        | true =>
+            let _ = wait(l, /sys/poll/read)!;
+            go()
+        | false =>
+            match Handle/error_of(r.status)
+            | some(e) => pure(Result/failure(e))
+            | none() => pure(Result/success(r.handle))
+            end
+        end;
+    go();
 
 -- `eof` is the stream's orderly terminator; an `error` means it ended without one, so the accumulated prefix is not the content and is dropped rather than passed off as complete.
 pub let drain(read: (Nat) -> Async(Handle/Read)) -> Async(Result(Bytes, Handle/Error)) =

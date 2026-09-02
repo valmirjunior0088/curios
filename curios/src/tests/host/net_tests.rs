@@ -61,6 +61,39 @@ fn call_to_an_unscripted_endpoint_is_refused() {
     assert_eq!(run(source), b"refused");
 }
 
+// A connect to a remote peer goes pending: the fiber parks on the socket's writability, `finish_connect` reads the outcome once `poll` has reported it, and only then is the request sent. A refusal arrives the same way, deferred to the settle, and decodes to `refused()` as a synchronous one does.
+#[test]
+fn a_pending_connect_is_awaited_before_the_request_is_sent() {
+    let source = r#"
+        use /std/{Handle, Str, Async};
+        use /std/tcp/{Settings, Socket};
+        let _ = (match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))!
+        | failure(_) => Handle/write(Handle/stdout, /std/Str/to_bytes("deadlock"))
+        | success(outcome) =>
+            match outcome
+            | success(response) => Handle/write(Handle/stdout, response)
+            | failure(e) =>
+                match e : (_) => /std/Io(/std/Result({}, Handle/Error))
+                | refused() => Handle/write(Handle/stdout, Str/to_bytes("refused"))
+                | _ => Handle/write(Handle/stdout, Str/to_bytes("error"))
+                end
+            end
+        end)!;
+        /std/Io/pure(())
+        "#;
+
+    let (system, io) = MockHost::builder()
+        .net([("example.com:80", "pong")])
+        .connect_pending()
+        .build();
+    run_text(source, system).expect("expected result");
+    assert_eq!(io.output(), b"pong");
+
+    let (system, io) = MockHost::builder().connect_pending().build();
+    run_text(source, system).expect("expected result");
+    assert_eq!(io.output(), b"refused");
+}
+
 // A custom `Config` with an optional `Duration` timeout flows through the bracket; `Socket/read` pulls bytes from the socket the body is handed.
 #[test]
 fn net_with_custom_timeout_config_reads_response() {

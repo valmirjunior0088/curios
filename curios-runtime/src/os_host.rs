@@ -4,6 +4,7 @@ use {
     rustix::{
         event::{PollFd, Timespec, poll},
         fs::{OFlags, fcntl_getfl, fcntl_setfl},
+        io::Errno,
         termios::{OptionalActions, Termios, tcgetattr, tcgetwinsize, tcsetattr},
     },
     rustls::{
@@ -22,7 +23,7 @@ use {
             unix::ffi::{OsStrExt, OsStringExt},
         },
         sync::{Arc, LazyLock, Mutex, OnceLock},
-        time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+        time::{Instant, SystemTime, UNIX_EPOCH},
     },
     webpki_roots::TLS_SERVER_ROOTS,
 };
@@ -42,7 +43,9 @@ static CLIENT_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
     )
 });
 
-/// A non-stdio handle in [`OsHost`]'s unified table, tracking the BSD lifecycle with one concrete type per state: `open` files a `File`; `socket` mints an `Unconnected` socket, `connect` turns it into a `Connected` one (as does `accept`), and `listen` turns it into a `Listener`. `start_tls` / `start_tls_server` upgrade a `Connected` socket in place to a `ClientTls` / `ServerTls` stream; `tls_server_config` files a host-owned `TlsConfig` token. `read`/`write` serve `File`, `Connected`, and both TLS streams alike (all are `Read + Write`); `close` drops any kind, releasing its descriptor.
+/// A non-stdio handle in [`OsHost`]'s unified table, tracking the BSD lifecycle with one concrete type per state: `open` files a `File`; `socket` mints an `Unconnected` socket, `connect` turns it into a `Connected` one at once or into a `Connecting` one that `finish_connect` settles (`accept` mints a `Connected` one directly), and `listen` turns it into a `Listener`. `start_tls` / `start_tls_server` upgrade a `Connected` socket in place to a `ClientTls` / `ServerTls` stream; `tls_server_config` files a host-owned `TlsConfig` token. `read`/`write` serve `File`, `Connected`, and both TLS streams alike (all are `Read + Write`); `close` drops any kind, releasing its descriptor.
+///
+/// Every kind on which a peer decides — a socket in any state, an accepted stream, a pipe to a child — is filed non-blocking at the moment it is minted, so no row waits on a peer: a `read`, `write`, `connect` or `accept` that cannot progress answers `WouldBlock` and `poll` is the one place the host sleeps. A regular file is synchronous, since the disk rather than a peer answers it.
 enum OsResource {
     File(File),
     /// An in-flight asynchronous name lookup minted by `lookup`. `done` is the read end of a pipe a worker thread writes one byte to once it has filled `slot` with the `getaddrinfo` result; that write makes `done` poll-`READ` readable, waking the scheduler. `resolve` then drains `slot` and drops the handle (closing `done`). `poll` watches `done` like any other fd.
@@ -50,7 +53,7 @@ enum OsResource {
         done: OwnedFd,
         slot: Slot,
     },
-    /// A bare owned descriptor — one end of a pipe to a child, filed by `spawn`, and the shape a serial device takes. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is made non-blocking for real: `set_nonblocking` applies `O_NONBLOCK` through `fcntl`, so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, while `read`, `write`, `poll` and `close` serve it as they serve a file.
+    /// A bare owned descriptor — one end of a pipe to a child, filed by `spawn`, and the shape a serial device takes. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one applies `O_NONBLOCK` through `fcntl` first, so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, while `read`, `write`, `poll` and `close` serve it as they serve a file.
     Descriptor(OwnedFd),
     /// A running child minted by `spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the exit, `wait` drains it, `kill` addresses its pid, and `stream` hands out the handles of its piped standard streams — filed as `Pipe`s at spawn time and boxed here so a child costs the table no more than a socket does.
     Child {
@@ -59,8 +62,10 @@ enum OsResource {
     },
     Connected(Socket),
     Unconnected(Socket),
-    /// A listening socket, held behind an `Arc` so `accept` can share it out and drop the table lock across the blocking wait with a cheap refcount bump instead of a per-call `dup`/`close`.
-    Listener(Arc<Socket>),
+    /// A non-blocking `connect` under way: `EINPROGRESS` filed it, `poll` watches its descriptor for `WRITE`, and `finish_connect` settles it into `Connected` or reports what refused it.
+    Connecting(Socket),
+    /// A listening socket. It never blocks, so `accept` runs under the table lock like any other row.
+    Listener(Socket),
     /// A client-side TLS stream: the encrypted conduit a `Connected` socket became under `start_tls`, serving the same `read`/`write`/`close`.
     ///
     /// Boxed, and so is [`OsResource::ServerTls`], because an enum is as large as its largest variant and a `rustls` connection carries its record buffers inline — around a kilobyte each. Unboxed they set the size of *every* entry in the handle table, so an open file or a plain socket paid a kilobyte for TLS state it does not have.
@@ -120,7 +125,7 @@ impl OsHost {
         self.table.lock().unwrap().mint(resource)
     }
 
-    /// Pull an unconnected socket out of the table by handle, leaving any other resource (or none) in place. Lets `connect`/`listen` transition a handle without holding the lock across the blocking syscall.
+    /// Pull an unconnected socket out of the table by handle, leaving any other resource (or none) in place. Lets `connect`/`listen` transition a handle in place.
     fn take_unconnected(&self, handle: &Handle) -> Option<Socket> {
         self.table
             .lock()
@@ -142,7 +147,7 @@ impl OsHost {
             })
     }
 
-    /// Apply a `socket2` setter to a configurable handle. Every socket kind — unconnected, connected, or listening — exposes its typed setters directly; a `File` has no socket options, so that path records nothing and succeeds.
+    /// Apply a `socket2` setter to a configurable handle. Every socket kind — unconnected, connecting, connected, or listening — exposes its typed setters directly; a `File` has no socket options, so that path records nothing and succeeds.
     ///
     /// The match selects a socket rather than answering, so the failure contract — a setter error is a [`status_from_error`], never a quiet `Ok` — is written once instead of once per kind. A resource added later picks its socket or returns; there is no copy of that contract for it to get wrong.
     fn with_socket<F>(&self, handle: &Handle, apply: F) -> Status
@@ -152,16 +157,19 @@ impl OsHost {
         let table = self.table.lock().unwrap();
 
         let socket = match handle {
-            // The standard streams are the process's, shared with everything else on the terminal or pipe: no socket option applies to them, and a non-blocking flag set on fd 0/1/2 would change every other user of the descriptor. So, like a file, they record nothing and succeed — which is what lets `Async/read`/`write`, whose first step is `set_nonblocking`, serve them; their reads then block the scheduler as a file's do. They are never in the table, so asking it would answer `NotFound`, the verdict for a closed handle.
+            // The standard streams are the process's, shared with everything else on the terminal or pipe: no socket option applies to them, so, like a file, they record nothing and succeed. They are never in the table, so asking it would answer `NotFound`, the verdict for a closed handle.
             Handle::Stdin | Handle::Stdout | Handle::Stderr => return Status::Ok,
             Handle::Other(_) => match table.get(handle) {
-                Some(OsResource::Unconnected(socket) | OsResource::Connected(socket)) => socket,
-                // The listener is `Arc`-held, and an arm's value position is not a coercion site the way the old `apply(socket)` call argument was.
-                Some(OsResource::Listener(socket)) => socket.as_ref(),
-                // A TLS stream forwards setters to its underlying socket, so a timeout set after the upgrade still takes effect.
+                Some(
+                    OsResource::Unconnected(socket)
+                    | OsResource::Connecting(socket)
+                    | OsResource::Connected(socket)
+                    | OsResource::Listener(socket),
+                ) => socket,
+                // A TLS stream forwards setters to its underlying socket.
                 Some(OsResource::ClientTls(stream)) => &stream.sock,
                 Some(OsResource::ServerTls(stream)) => &stream.sock,
-                // A file, a pipe, a child, a config token, and an in-flight lookup have no socket options: record nothing. A pipe's one settable flag, `O_NONBLOCK`, is `set_nonblocking`'s to apply before it reaches here.
+                // A file, a pipe, a child, a config token, and an in-flight lookup have no socket options: record nothing.
                 Some(
                     OsResource::File(_)
                     | OsResource::Descriptor(_)
@@ -264,7 +272,11 @@ impl HostOps for OsHost {
             Err(_) => return (Status::NotFound, Handle::Other(Vec::new())),
         };
 
-        match Socket::new(Domain::for_address(address), Type::STREAM, None) {
+        // Non-blocking from birth: a peer decides when this socket progresses, so `connect`, `read` and `write` on it answer `WouldBlock` rather than wait, and `poll` is where the wait happens. `Socket::new` then `set_nonblocking` is the spelling both release targets share.
+        let created = Socket::new(Domain::for_address(address), Type::STREAM, None)
+            .and_then(|socket| socket.set_nonblocking(true).map(|()| socket));
+
+        match created {
             Ok(socket) => (Status::Ok, self.mint(OsResource::Unconnected(socket))),
             Err(error) => (status_from_error(error), Handle::Other(Vec::new())),
         }
@@ -293,12 +305,12 @@ impl HostOps for OsHost {
             Err(_) => return Status::NotFound,
         };
 
-        // Take the socket out so the blocking connect runs without the table lock held; re-file the connected socket as a byte stream on success.
         let socket = match self.take_unconnected(&io) {
             Some(socket) => socket,
             None => return Status::NotFound,
         };
 
+        // A non-blocking connect answers at once: `Ok` when the kernel completed it synchronously, as loopback often does, `EINPROGRESS` when it is under way — the socket is re-filed as connecting for `poll` to watch and `finish_connect` to settle — and its refusal otherwise, on which the socket drops. `EINPROGRESS` and `EALREADY` have no `ErrorKind`, so they are matched by errno; an interrupted connect continues asynchronously by POSIX and is filed the same way.
         match socket.connect(&SockAddr::from(address)) {
             Ok(()) => {
                 self.table
@@ -308,7 +320,62 @@ impl HostOps for OsHost {
 
                 Status::Ok
             }
+            Err(error) if is_errno(&error, Errno::ISCONN) => {
+                self.table
+                    .lock()
+                    .unwrap()
+                    .insert(&io, OsResource::Connected(socket));
+
+                Status::Ok
+            }
+            Err(error)
+                if is_errno(&error, Errno::INPROGRESS)
+                    || is_errno(&error, Errno::ALREADY)
+                    || error.kind() == ErrorKind::Interrupted =>
+            {
+                self.table
+                    .lock()
+                    .unwrap()
+                    .insert(&io, OsResource::Connecting(socket));
+
+                Status::WouldBlock
+            }
             Err(error) => status_from_error(error),
+        }
+    }
+
+    fn finish_connect(&self, io: Handle) -> Status {
+        let mut table = self.table.lock().unwrap();
+        let socket = match table.take_if(&io, |resource| match resource {
+            OsResource::Connecting(socket) => Ok(socket),
+            other => Err(other),
+        }) {
+            Some(socket) => socket,
+            // A connect that completed synchronously was never pending, so settling it is a no-op rather than a fault.
+            None => {
+                return match table.get(&io) {
+                    Some(OsResource::Connected(_)) => Status::Ok,
+                    _ => Status::NotFound,
+                };
+            }
+        };
+
+        // `SO_ERROR` is zero both while the connect is pending and after it succeeded, so a clean report is followed by asking for the peer: `ENOTCONN` is the pending answer, and the socket goes back as connecting for another poll. Neither call blocks, so the lock is held across them.
+        match socket.take_error() {
+            Ok(Some(error)) | Err(error) => status_from_error(error),
+            Ok(None) => match socket.peer_addr() {
+                Ok(_) => {
+                    table.insert(&io, OsResource::Connected(socket));
+
+                    Status::Ok
+                }
+                Err(error) if is_errno(&error, Errno::NOTCONN) => {
+                    table.insert(&io, OsResource::Connecting(socket));
+
+                    Status::WouldBlock
+                }
+                Err(error) => status_from_error(error),
+            },
         }
     }
 
@@ -415,7 +482,7 @@ impl HostOps for OsHost {
                 self.table
                     .lock()
                     .unwrap()
-                    .insert(&io, OsResource::Listener(Arc::new(socket)));
+                    .insert(&io, OsResource::Listener(socket));
 
                 Status::Ok
             }
@@ -424,47 +491,17 @@ impl HostOps for OsHost {
     }
 
     fn accept(&self, io: Handle) -> (Status, Handle) {
-        // `accept` blocks until a connection arrives, so share the `Arc`-held listener out and drop the table lock before the wait — never hold it across one. The `Arc` clone is a refcount bump, not a `dup` syscall.
-        let listener = match self.table.lock().unwrap().get(&io) {
-            Some(OsResource::Listener(socket)) => Arc::clone(socket),
+        // The listener is non-blocking, so the accept answers at once under the lock: `WouldBlock` with nothing pending, else the stream. `accept4` hands the stream over blocking whatever the listener's flag, so it is switched here, since a fiber will drain it.
+        let mut table = self.table.lock().unwrap();
+        let accepted = match table.get(&io) {
+            Some(OsResource::Listener(socket)) => socket.accept(),
             _ => return (Status::NotFound, Handle::Other(Vec::new())),
         };
 
-        match listener.accept() {
-            Ok((stream, _)) => (Status::Ok, self.mint(OsResource::Connected(stream))),
+        match accepted.and_then(|(stream, _)| stream.set_nonblocking(true).map(|()| stream)) {
+            Ok(stream) => (Status::Ok, table.mint(OsResource::Connected(stream))),
             Err(error) => (status_from_error(error), Handle::Other(Vec::new())),
         }
-    }
-
-    fn set_nonblocking(&self, io: Handle, on: u32) -> Status {
-        // A pipe has no socket options but does take `O_NONBLOCK`, and it has to: a child's output is drained by a fiber, and a blocking read on one pipe while the child writes the other is the deadlock every process library documents. The socket kinds go through `socket2` as before.
-        if let Some(OsResource::Descriptor(fd)) = self.table.lock().unwrap().get(&io) {
-            let flags = fcntl_getfl(fd).map(|flags| match on != 0 {
-                true => flags | OFlags::NONBLOCK,
-                false => flags - OFlags::NONBLOCK,
-            });
-
-            return match flags.and_then(|flags| fcntl_setfl(fd, flags)) {
-                Ok(()) => Status::Ok,
-                Err(errno) => status_from_error(std::io::Error::from(errno)),
-            };
-        }
-
-        self.with_socket(&io, |socket| socket.set_nonblocking(on != 0))
-    }
-
-    fn set_recv_timeout(&self, io: Handle, ms: u32) -> Status {
-        // `0` ms clears the timeout (`None`); any other value is a duration.
-        self.with_socket(&io, |socket| {
-            socket.set_read_timeout((ms != 0).then(|| Duration::from_millis(ms.into())))
-        })
-    }
-
-    fn set_send_timeout(&self, io: Handle, ms: u32) -> Status {
-        // `0` ms clears the timeout (`None`); any other value is a duration.
-        self.with_socket(&io, |socket| {
-            socket.set_write_timeout((ms != 0).then(|| Duration::from_millis(ms.into())))
-        })
     }
 
     fn set_reuseaddr(&self, io: Handle, on: u32) -> Status {
@@ -489,11 +526,11 @@ impl HostOps for OsHost {
                 Handle::Stderr => Some(err_handle.as_fd()),
                 Handle::Other(_) => table.get(handle).and_then(|resource| match resource {
                     OsResource::File(file) => Some(file.as_fd()),
-                    OsResource::Connected(socket) | OsResource::Unconnected(socket) => {
-                        Some(socket.as_fd())
-                    }
-                    // `&Arc<Socket>` deref-coerces for the `as_fd` method call.
-                    OsResource::Listener(socket) => Some(socket.as_fd()),
+                    // A connecting socket is watched for `WRITE`, which is what the kernel reports once the connect has settled either way.
+                    OsResource::Connected(socket)
+                    | OsResource::Connecting(socket)
+                    | OsResource::Unconnected(socket)
+                    | OsResource::Listener(socket) => Some(socket.as_fd()),
                     // The lookup's pipe read end: `READ`-ready once the worker has written its wakeup byte, which is the completion signal.
                     OsResource::Resolving { done, .. } => Some(done.as_fd()),
                     OsResource::Descriptor(fd) => Some(fd.as_fd()),
@@ -811,9 +848,12 @@ impl HostOps for OsHost {
                 stdout,
                 stderr,
             }) => {
-                // An unpiped stream is the empty handle a failed `open` returns; a piped one is filed as a `Descriptor`, the kind `set_nonblocking` acts on.
+                // An unpiped stream is the empty handle a failed `open` returns; a piped one is filed as a `Descriptor` with `O_NONBLOCK` applied, since a fiber drains it and a read that blocked on one pipe while the child filled the other is the deadlock every process library documents. A flag that cannot be set leaves that stream as the empty handle with the child running; `wait` and `kill` still reach it.
                 let file = |fd: Option<OwnedFd>| match fd {
-                    Some(fd) => self.mint(OsResource::Descriptor(fd)),
+                    Some(fd) => match nonblocking(&fd) {
+                        Ok(()) => self.mint(OsResource::Descriptor(fd)),
+                        Err(_) => Handle::Other(Vec::new()),
+                    },
                     None => Handle::Other(Vec::new()),
                 };
                 let streams = Box::new([file(stdin), file(stdout), file(stderr)]);
@@ -865,6 +905,18 @@ impl HostOps for OsHost {
             _ => Status::NotFound,
         }
     }
+}
+
+/// Apply `O_NONBLOCK` to `fd` through `fcntl`, the one flag a pipe end takes.
+fn nonblocking(fd: &OwnedFd) -> std::io::Result<()> {
+    let flags = fcntl_getfl(fd)?;
+
+    fcntl_setfl(fd, flags | OFlags::NONBLOCK).map_err(std::io::Error::from)
+}
+
+/// Whether `error` carries the OS errno `errno` — the read for the connect statuses that have no `ErrorKind`.
+fn is_errno(error: &std::io::Error, errno: Errno) -> bool {
+    error.raw_os_error() == Some(errno.raw_os_error())
 }
 
 /// A status-only row's reply: the failure's status, or `Ok`.
