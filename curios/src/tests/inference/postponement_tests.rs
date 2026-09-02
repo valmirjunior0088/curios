@@ -27,6 +27,32 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
 }
 
 #[test]
+fn a_tuple_pattern_in_a_later_parameter_waits_for_the_accumulator() {
+    // `fold`'s initial accumulator is a tuple literal parked against `?A`, and the step lambda projects its *second* parameter, whose domain is that same `?A`: the lambda is postponed like one whose first domain is stuck, the force tier settles the tuple first, and the projection meets a product.
+    let source = r#"
+        use /std/{Nat, List, Str};
+        let counted: {Nat, Nat} =
+            List/fold([3, 4, 5], (0, 0), (n, (sum, count)) => (sum + n, count + 1));
+        let (sum, count) = counted;
+        /std/print(Str/concat(Nat/to_str(sum), Str/concat(" ", Nat/to_str(count))))
+        "#;
+
+    assert_eq!(run(source), b"12 3");
+}
+
+#[test]
+fn a_list_of_tuples_settles_before_the_lambda_that_projects_them() {
+    // The literal's tuples park against the element metavariable and nothing would wake them before the lambda's body projects the element, so the literal itself is postponed and settled at the force tier, ahead of the lambda in slot order.
+    let source = r#"
+        use /std/{Nat, List, Str};
+        let sums: List(Nat) = List/map([(1, 2), (3, 4)], ((a, b)) => a + b);
+        /std/print(Str/join(", ", List/map(sums, Nat/to_str)))
+        "#;
+
+    assert_eq!(run(source), b"3, 7");
+}
+
+#[test]
 fn parked_constraints_still_reject_the_unsolvable() {
     // An undecidable-at-first constraint that never resolves must still fail — at the item drain, attributed to its origin. `refl` forces both indices equal; `2` and `3` are not.
     let source = r#"

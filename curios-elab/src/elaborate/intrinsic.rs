@@ -1,6 +1,6 @@
 use {
     super::{Context, Error, Mode, elaborate, expect},
-    crate::{exhausted_bound, reduce_with},
+    crate::{SettleTier, exhausted_bound, reduce_with, settle_against},
     curios_core::{Intrinsic, Operand, Produced, Subterm, Term, Var, Visit},
 };
 
@@ -69,18 +69,23 @@ fn synth_intrinsic(
 
         let operand = operands[done.len()].clone();
         done.push(match demand {
-            // A directly written bound: the same re-report the implicit fill in `apply.rs` makes, since a subject that does not terminate is refused by name either way.
+            // A directly written bound: the same re-report the implicit fill in `apply.rs` makes, since a subject that does not terminate is refused by name either way. A written tuple or list literal whose demand has no structure yet — `List/map`'s list at `List(?T)` before anything pins `?T` — settles to its own product here rather than parking: an intrinsic has no turnaround an outer expectation can send element structure through, its later operands (the lambda that projects the element) need that structure, and this loop is the one place they would otherwise never get it.
             Operand::At(type_) => {
-                elaborate(context, &operand, Mode::Check(type_.clone()))
-                    .map_err(|error| {
-                        exhausted_bound(
-                            context,
-                            error,
-                            type_,
-                            format!("the bound of '{}'", Term::intrinsic(current.clone())),
-                        )
-                    })?
-                    .0
+                match settle_against(context, &operand, type_, SettleTier::Force)? {
+                    Some(settled) => settled,
+                    None => {
+                        elaborate(context, &operand, Mode::Check(type_.clone()))
+                            .map_err(|error| {
+                                exhausted_bound(
+                                    context,
+                                    error,
+                                    type_,
+                                    format!("the bound of '{}'", Term::intrinsic(current.clone())),
+                                )
+                            })?
+                            .0
+                    }
+                }
             }
             Operand::IsType => crate::check_is_sort(context, &operand)?.0,
             Operand::Function { domain, codomain } => {

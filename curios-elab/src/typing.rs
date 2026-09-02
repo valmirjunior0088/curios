@@ -252,13 +252,21 @@ pub(crate) fn settle_against(
     tier: SettleTier,
 ) -> Result<Option<Term>, Error> {
     let settleable = matches!(&**term, Subterm::Tuple(tuple) if !tuple.fields.is_empty())
+        || matches!(&**term, Subterm::Intrinsic(Intrinsic::List { items, .. }) if !items.is_empty())
         || (tier == SettleTier::Drain && matches!(&**term, Subterm::Func(_)));
     if !settleable {
         return Ok(None);
     }
 
+    // A list literal's expectation is structured only once its *element* type is: `List(?T)` has decided nothing about the tuples inside the brackets, which parked against `?T` and have nothing to wake them before a sibling lambda projects the element.
     let structured = match &*reduce_with(context, expected)? {
         Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_some(),
+        Subterm::Intrinsic(Intrinsic::ListType(element))
+            if matches!(&**term, Subterm::Intrinsic(Intrinsic::List { .. })) =>
+        {
+            let element = reduce_with(context, element)?;
+            !stuck_on_metavar(context, &element)
+        }
         _ => true,
     };
     if structured {
@@ -273,7 +281,7 @@ pub(crate) fn settle_against(
     Ok(Some(rebuilt))
 }
 
-/// Whether `arg` is a checked-only introduction form (tuple, lambda, list literal) that cannot be elaborated yet because the type structure it needs is an unsolved metavar — a tuple or list literal whose whole expected type, or a lambda whose expected *domain*, reduces to one. (A lambda only needs its domain known: the body, which may project the parameter, can't be checked against an unknown domain; its codomain may stay a metavar. A list literal borrows its element type from `expected`, so it needs the expected head — `List _` — to be known.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification.
+/// Whether `arg` is a checked-only introduction form (tuple, lambda, list literal) that cannot be elaborated yet because the type structure it needs is an unsolved metavar — a tuple or list literal whose whole expected type, a lambda one of whose expected *domains*, or a list literal of such forms whose expected *element* type, reduces to one. (A lambda only needs its domains known: the body, which may project any parameter, can't be checked against an unknown domain; its codomain may stay a metavar. A list literal borrows its element type from `expected`, so it needs the expected head — `List _` — to be known, and an element that is itself such a form needs the element type known too, since it would park with nothing to wake it before a sibling lambda projects the element.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification.
 pub(crate) fn blocked_on_metavar(
     context: &mut Context,
     arg: &Term,
@@ -293,20 +301,48 @@ pub(crate) fn blocked_on_metavar(
         return Ok(true);
     }
     Ok(match &*reduced {
-        Subterm::FuncType(FuncType { telescope, .. }) if is_lambda => match telescope {
-            Telescope::Cons(domain, _) => {
-                // A lambda whose expected *domain* is stuck: its body may need the domain's structure (to project the parameter), so postpone it until a sibling argument (e.g. `p : Parse(A)`) pins the domain.
-                let reduced_domain = reduce_with(context, domain)?;
-                let domain_blocked = stuck_on_metavar(context, &reduced_domain);
-                // ...or a lambda whose *codomain* still carries an unsolved metavar that the result type will pin: postpone until `expect(output, expected)` solves it, so the body is checked against the refined codomain. This is the `let !`-continuation case — `(x) => …` checked against `?dom => Parse(?B)`, where `?dom` is already pinned by the bind's action but `?B` (the bind's own result type) is solved only by the turnaround. Gating on `result_metavars` keeps it to metavars `expect` will address; gating on `expected_ground` ensures that turnaround actually grounds `?B` (vs. a flex-flex alias that the eager body must ground instead).
-                domain_blocked
-                    || (expected_ground
-                        && reduced.metavars().iter().any(|id| {
-                            result_metavars.contains(id) && context.metavar_solution(*id).is_none()
-                        }))
+        Subterm::FuncType(FuncType { telescope, .. }) if is_lambda => {
+            // A lambda one of whose expected *domains* is stuck: its body may need that domain's structure (to project the parameter), so postpone it until a sibling argument (e.g. `p : Parse(A)`, or the fold's initial accumulator) pins the domain. Every binder the lambda itself has is looked at, not the first alone — `(t, (acc, i)) => …` projects its second parameter — each opened under a fresh variable so a later domain's dependency on an earlier binder is a stuck reduction rather than a bound index.
+            let arity = match &**arg {
+                Subterm::Func(func) => func.telescope.len(),
+                _ => 0,
+            };
+            let mut walk = telescope.clone();
+            let mut domain_blocked = false;
+            for _ in 0..arity {
+                let Telescope::Cons(domain, rest) = walk else {
+                    break;
+                };
+                let reduced_domain = reduce_with(context, &domain)?;
+                if stuck_on_metavar(context, &reduced_domain) {
+                    domain_blocked = true;
+                    break;
+                }
+                walk = rest.open(&[&Term::free_var(&context.fresh(rest.first_hint()))]);
             }
-            Telescope::Done(_) => false,
-        },
+            // ...or a lambda whose *codomain* still carries an unsolved metavar that the result type will pin: postpone until `expect(output, expected)` solves it, so the body is checked against the refined codomain. This is the `let !`-continuation case — `(x) => …` checked against `?dom => Parse(?B)`, where `?dom` is already pinned by the bind's action but `?B` (the bind's own result type) is solved only by the turnaround. Gating on `result_metavars` keeps it to metavars `expect` will address; gating on `expected_ground` ensures that turnaround actually grounds `?B` (vs. a flex-flex alias that the eager body must ground instead).
+            domain_blocked
+                || (expected_ground
+                    && reduced.metavars().iter().any(|id| {
+                        result_metavars.contains(id) && context.metavar_solution(*id).is_none()
+                    }))
+        }
+        Subterm::Intrinsic(Intrinsic::ListType(element)) if is_list => {
+            // A list of tuples, lambdas or lists against `List(?T)`: the elements would park against `?T`, and only this apply's force tier can settle them, so the literal waits for it.
+            let Subterm::Intrinsic(Intrinsic::List { items, .. }) = &**arg else {
+                unreachable!("is_list");
+            };
+            let needs_structure = items.iter().any(|item| {
+                matches!(
+                    &**item,
+                    Subterm::Tuple(_)
+                        | Subterm::Func(_)
+                        | Subterm::Intrinsic(Intrinsic::List { .. })
+                )
+            });
+            let element = reduce_with(context, element)?;
+            needs_structure && stuck_on_metavar(context, &element)
+        }
         _ => false,
     })
 }
