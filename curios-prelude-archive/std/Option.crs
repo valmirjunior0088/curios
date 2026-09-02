@@ -1,4 +1,5 @@
-use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, Compare, Ordered, List};
+use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, Compare, Ordered,
+    List};
 use /std/Test/{Draw, Seed};
 
 pub induct Option(A: Type): pub Type

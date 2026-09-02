@@ -44,7 +44,8 @@ let first_failure(verdicts: List(Verdict)) -> Verdict =
         (here, acc) => match acc | passed() => here | failed(_) => acc end);
 
 -- A roster past this many cases is as good as none: nothing would enumerate it, and keeping every factor at or below the ceiling is what keeps a product of two inside the i31 envelope before it is compared.
-let ceiling: Nat = 1024;
+let ceiling: Nat =
+    1024;
 
 let bounded(n: Nat) -> Option(Nat) =
     match n <= ceiling | true => Option/some(n) | false => Option/none() end;
@@ -59,8 +60,7 @@ let product(a: Option(Nat), b: Option(Nat)) -> Option(Nat) =
         (x) =>
             Option/bind(
                 b,
-                (y) =>
-                    match y <= ceiling | true => bounded(x * y) | false => Option/none() end));
+                (y) => match y <= ceiling | true => bounded(x * y) | false => Option/none() end));
 
 -- Every value of the roster, or nothing when there is none: what `exhaust` walks, and consulted only under an extent that fits.
 let values(@A: Type, use Draw(A)) -> List(A) =
@@ -83,10 +83,7 @@ satisfy (@A: Type, @R: Type, use Draw(A), use Spell(A), use Property(R)) => Prop
     exhaust(prop) =
         List/concat_map(
             values(@A),
-            (a) =>
-                List/map(
-                    Property/exhaust(prop(a)),
-                    (v) => counterexample([Spell/spell(a)], v))),
+            (a) => List/map(Property/exhaust(prop(a)), (v) => counterexample([Spell/spell(a)], v))),
 }
 
 satisfy (

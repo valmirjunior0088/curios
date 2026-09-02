@@ -73,14 +73,13 @@ let case(index: Nat, t: Test) -> Test =
         | failed(message) =>
             Test/verdict(
                 Verdict/failed(
-                    Str/concat(
-                        "case ",
-                        Str/concat(Nat/to_str(index), Str/concat(": ", message)))))
+                    Str/concat("case ", Str/concat(Nat/to_str(index), Str/concat(": ", message)))))
         end
     | action(io) =>
-        perform(() =>
-            let inner = io!;
-            Io/pure(case(index, inner)))
+        perform(
+            () =>
+                let inner = io!;
+                Io/pure(case(index, inner)))
     end;
 
 -- The rung of two descriptions: a failure on the left is final and nothing to its right runs; a theorem contributes nothing; a pass is a pass unless the right says otherwise; an action on the left performs before the right is consulted.
@@ -93,9 +92,10 @@ let conjoin(left: Test, right: Test) -> Test =
         | failed(_) => left
         end
     | action(io) =>
-        perform(() =>
-            let inner = io!;
-            Io/pure(conjoin(inner, right)))
+        perform(
+            () =>
+                let inner = io!;
+                Io/pure(conjoin(inner, right)))
     end;
 
 let report(name: Str, t: Test) -> Io(Bool) =
