@@ -202,6 +202,62 @@ fn a_raise_short_circuits_the_region() {
     assert_eq!(run(source), b"60");
 }
 
+// === `/std/Try`: the error channel over a base monad, and its edges. ====
+
+/// A `Try(Io, ..)` region sequences an `Io` action through the one generic `Io` edge, whose premise `Lift(Io, M)` is met by the identity edge at `M = Io`, and a bare `Result` through the `Result` edge; `raise` stops the region and `rescue` handles it, and `run` hands the outcome back as data at the boundary.
+#[test]
+fn a_try_region_over_io_sequences_io_actions_and_results() {
+    let source = r#"
+        use /std/{Nat, Str, Result, Try, Io, print};
+        pub let step(n: Nat) -> Try(Io, Str, Nat) =
+            let _ = print("s")!;
+            let m = Result/success(n + 1)!;
+            match m == 3
+            | true => Try/raise("three")
+            | false => Try/pure(m)
+            end;
+        pub let twice: Try(Io, Str, Nat) =
+            let a = step(1)!;
+            let b = step(a)!;
+            Try/pure(b);
+        let outcome = Try/run(Try/rescue(twice, (e) => Try/pure(Str/len(e))))!;
+        match outcome
+        | success(n) => print(Nat/to_str(n))
+        | failure(e) => print(e)
+        end
+        "#;
+
+    // Two steps print `s` each; the second raises at 3, and the rescue answers the error's length, 5.
+    assert_eq!(run(source), b"ss5");
+}
+
+/// A `Try(Async, ..)` region takes every edge at once: an `Io` action, an `Async` action, a bare `Result`, and a `Try` over `Io` embedded through `Lift(Io, Async)`.
+#[test]
+fn a_try_region_over_async_takes_every_declared_edge() {
+    let source = r#"
+        use /std/{Nat, Str, Result, Try, Io, Async, print};
+        pub let sync(n: Nat) -> Try(Io, Str, Nat) =
+            let _ = print("i")!;
+            Try/pure(n * 2);
+        pub let body: Try(Async, Str, Nat) =
+            let a = sync(2)!;
+            let _ = Async/yield_now!;
+            let _ = print("a")!;
+            let b = Result/success(a + 1)!;
+            let _ = Result/raise(@Str, @{}, "stop")!;
+            Try/pure(b);
+        pub let fiber: Async({}) =
+            let outcome = Try/run(body)!;
+            match outcome
+            | success(n) => print(Nat/to_str(n))
+            | failure(e) => print(e)
+            end;
+        Async/run(fiber)
+        "#;
+
+    assert_eq!(run(source), b"iastop");
+}
+
 /// A plain `Result` value sequences in a `Result` region with nothing to convert: the constructors are the monad's own.
 #[test]
 fn a_result_value_sequences_in_a_result_region() {

@@ -85,6 +85,9 @@ pub use Char/{let Char};
 pub mod Result;
 pub use Result/{let Result};
 
+pub mod Try;
+pub use Try/{let Try};
+
 pub mod Option;
 pub use Option/{let Option};
 

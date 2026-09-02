@@ -1,8 +1,13 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad};
+use /std/{Monad, Lift};
 
 satisfy Monad(Io) {
     pure = pure,
     bind = bind,
+}
+
+-- The identity edge. A `!` never consults it — equal keys are never wrapped — but a witness whose premise is `Lift(Io, M)` needs it at `M = Io`, which is how `/std/Try`'s one `Io` edge serves `Try(Io, E)`.
+satisfy Lift(Io, Io) {
+    lift(@A, m) = m,
 }

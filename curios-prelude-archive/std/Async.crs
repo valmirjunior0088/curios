@@ -122,8 +122,8 @@ pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
         end;
     go();
 
-pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
-    let go(rest: Bytes) -> Async(Result({}, Handle/Error)) =
+pub let write(h: Handle, b: Bytes) -> Async(Result(Handle/Error, {})) =
+    let go(rest: Bytes) -> Async(Result(Handle/Error, {})) =
         let r = /sys/Handle/write(h, rest)!;
         match r.status == /sys/status/would_block
         | true =>
@@ -147,8 +147,8 @@ pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
         end;
     go(b);
 
-pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
-    let go() -> Async(Result(Handle, Handle/Error)) =
+pub let accept(l: Handle) -> Async(Result(Handle/Error, Handle)) =
+    let go() -> Async(Result(Handle/Error, Handle)) =
         let r = /sys/socket/accept(l)!;
         match r.status == /sys/status/would_block
         | true =>
@@ -163,8 +163,8 @@ pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
     go();
 
 -- `eof` is the stream's orderly terminator; an `error` means it ended without one, so the accumulated prefix is not the content and is dropped rather than passed off as complete.
-pub let drain(read: (Nat) -> Async(Handle/Read)) -> Async(Result(Bytes, Handle/Error)) =
-    let go(acc: Bytes) -> Async(Result(Bytes, Handle/Error)) =
+pub let drain(read: (Nat) -> Async(Handle/Read)) -> Async(Result(Handle/Error, Bytes)) =
+    let go(acc: Bytes) -> Async(Result(Handle/Error, Bytes)) =
         let r = read(4096)!;
         match r
         | chunk(bytes) => go(x[..acc, ..bytes])
@@ -513,7 +513,7 @@ let root_job(@A: Type, root: Async(A), answer: Cell(Option(A)), token: Token) ->
     };
 
 -- The scheduler loop: serve whatever is runnable, and when nothing is, either wait for the host or report that nothing ever will be.
-let drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(A, Deadlock)) =
+let drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(Deadlock, A)) =
     let finished = Cell/get(answer)!;
     match finished
     | some(a) =>
@@ -541,7 +541,7 @@ let drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(A, Deadlock
         end
     end;
 
-pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
+pub let block_on(@A: Type, root: Async(A)) -> Io(Result(Deadlock, A)) =
     let runq: Cell(List(Job)) = Cell/new([])!;
     let blocked: Cell(List(Parked)) = Cell/new([])!;
     let sleeping: Cell(List(Sleeper)) = Cell/new([])!;
@@ -642,4 +642,9 @@ satisfy Monad(Async) {
 
 satisfy Lift(Io, Async) {
     lift = lift,
+}
+
+-- The identity edge, for a witness whose premise is `Lift(Async, M)` at `M = Async`, as `/std/Io`'s is for `Lift(Io, M)`.
+satisfy Lift(Async, Async) {
+    lift(@A, m) = m,
 }
