@@ -112,6 +112,9 @@ pub use Map/{let Map};
 pub mod Set;
 pub use Set/{let Set};
 
+pub mod WellFounded;
+pub use WellFounded/{let WellFounded};
+
 pub mod Eq;
 pub use Eq/{let Eq};
 

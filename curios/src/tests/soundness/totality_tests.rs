@@ -521,3 +521,16 @@ fn a_call_through_a_parameter_bound_function_does_not_descend() {
         "#,
     );
 }
+
+// The library form of the fixture above: `/std/WellFounded` declares the accessibility predicate, `recurse` is the fixpoint and `lt` proves `<` on `Nat` well-founded, so a proposition recursing along `<` is written once against the library and accepted for the reason the inline fixture is. The proof is consumed in `Str/get`'s erased bound, so nothing about it runs.
+#[test]
+fn the_library_well_founded_recursion_serves_a_proof() {
+    let source = r#"
+        use /std/{Nat, Str, True, WellFounded, Char};
+        let two_more(n: Nat) -> Nat/Lt(n, n + 2) =
+            WellFounded/recurse((k) => Nat/Lt(k, k + 2), (k, ih) => True/qed(), n, WellFounded/lt(n));
+        let lt_is_well_founded: WellFounded((a: Nat, b: Nat) => Nat/Lt(a, b)) = WellFounded/lt;
+        /std/print(Str/of_char(Str/get("abc", 1, two_more(1))))
+        "#;
+    assert_eq!(run(source), b"b");
+}
