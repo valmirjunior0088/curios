@@ -19,6 +19,32 @@ fn task_scheduler_parks_polls_and_resumes() {
     );
 }
 
+// A response scripted in two chunks reaches the reader only through the park-poll-resume path: the first read spends chunk one, the second answers would-block and parks the fiber on the socket, `poll` arms chunk two and wakes it, and the drain runs on to the end. A host that is always ready never takes that path, which is why the chunked script exists.
+#[test]
+fn a_read_parks_and_resumes_across_a_chunk_boundary() {
+    let (system, io) = MockHost::builder()
+        .net_chunks([("example.com:80", vec!["ab", "cd"])])
+        .build();
+    run_text(
+        r#"
+        use /std/{Handle, Str, Async};
+        use /std/tcp/{Settings, Socket};
+        let _ = (match Async/block_on(Socket/call(Settings/default, "example.com", 80, Str/to_bytes("GET /\r\n\r\n")))!
+        | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("deadlock"))
+        | success(outcome) =>
+            match outcome
+            | success(response) => Handle/write(Handle/stdout, response)
+            | failure(_) => Handle/write(Handle/stdout, Str/to_bytes("error"))
+            end
+        end)!;
+        /std/Io/pure(())
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"abcd");
+}
+
 #[test]
 fn task_bind_reads_and_echoes() {
     // The monad surface: a `with`-bind do-block over `Async/bind`, sequencing the `read` leaf (which completes without parking under the mock) into `write`, driven to its value by `block_on`. Exercises `bind`, the leaf actions, and do-notation against the new module.

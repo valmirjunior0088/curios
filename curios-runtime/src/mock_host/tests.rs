@@ -1,4 +1,47 @@
-use super::{super::host::*, MockHost};
+//! The scripted host's contract: handles miss loudly after close, and a chunked stream hands the wait back to its reader between chunks.
+
+use {
+    super::{super::host::*, MockHost},
+    curios_abi::poll,
+};
+
+#[test]
+fn a_chunked_endpoint_serves_one_chunk_then_would_blocks_until_polled() {
+    let (host, _io) = MockHost::builder()
+        .net_chunks([("example.com:80", vec!["ab", "cd"])])
+        .build();
+
+    let (status, handle) = host.socket(b"example.com:80");
+    assert!(matches!(status, Status::Ok));
+    assert!(matches!(
+        host.connect(handle.clone(), b"example.com:80"),
+        Status::Ok
+    ));
+
+    // The first chunk is due from the start; spending it disarms the stream.
+    assert!(matches!(host.read(handle.clone(), 8), (Status::Ok, bytes) if bytes == b"ab"));
+    assert!(matches!(
+        host.read(handle.clone(), 8),
+        (Status::WouldBlock, bytes) if bytes.is_empty()
+    ));
+
+    // A poll arms the next chunk and reports the handle readable, and only then does the read serve it.
+    let ready = host.poll(
+        std::slice::from_ref(&handle),
+        &[Poll::from_bits(poll::READ)],
+        -1,
+    );
+    assert_eq!(ready[0].bits() & poll::READ, poll::READ);
+    assert!(matches!(host.read(handle.clone(), 8), (Status::Ok, bytes) if bytes == b"cd"));
+
+    // Past the last chunk the stream is at its end, which a poll still reports as readable.
+    assert!(matches!(
+        host.read(handle.clone(), 8),
+        (Status::Eof, bytes) if bytes.is_empty()
+    ));
+    let ready = host.poll(&[handle], &[Poll::from_bits(poll::READ)], -1);
+    assert_eq!(ready[0].bits() & poll::READ, poll::READ);
+}
 
 #[test]
 fn use_after_close_on_a_handle_is_a_loud_miss_not_an_alias() {

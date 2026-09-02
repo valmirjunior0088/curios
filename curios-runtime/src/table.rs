@@ -57,10 +57,6 @@ impl<T> Table<T> {
             }
         }
     }
-
-    pub(crate) fn contains(&self, handle: &Handle) -> bool {
-        self.map.contains_key(&handle.bytes())
-    }
 }
 
 impl<T> Default for Table<T> {
