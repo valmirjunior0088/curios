@@ -332,6 +332,27 @@ fn an_executable_over_the_library_header_is_refused() {
     assert!(refusal.contains("library header"), "{refusal}");
 }
 
+/// The stem-space refusals compare a row's path by spelling, so a spelling that names the same file another way — `./lib.crs`, `app/../lib.crs`, an absolute path — is refused where the row is read rather than walked past to a parse error inside the header.
+#[test]
+fn an_executable_path_that_is_not_plain_is_refused() {
+    for path in ["./lib.crs", "app/../lib.crs", "/tmp/app.crs", "./app.crs"] {
+        let refusal = refuse(&format!(
+            r#"
+                name = "json"
+
+                [[executables]]
+                name = "app"
+                path = "{path}"
+            "#,
+        ));
+
+        assert!(
+            refusal.contains("no plain relative path"),
+            "{path}: {refusal}"
+        );
+    }
+}
+
 #[test]
 fn a_dangling_default_is_refused() {
     let refusal = refuse(

@@ -114,7 +114,7 @@ name = "serve"
 path = "tools/serve.crs"  # unless the row says otherwise
 ```
 
-A row always wins over the file, so `[[executables]] name = "hello"` with a `path` overrides the `exe.crs` convention for the package's own program.
+A row always wins over the file, so `[[executables]] name = "hello"` with a `path` overrides the `exe.crs` convention for the package's own program. A `path` is spelled plainly, relative to the manifest: no `.`, `..` or leading `/`, since the stem-space checks compare it as written.
 
 With more than one executable and no `default`, a bare `curios run` refuses rather than guessing:
 

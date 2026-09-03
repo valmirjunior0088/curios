@@ -14,7 +14,7 @@ use {
     std::{
         collections::BTreeMap,
         fmt, fs,
-        path::{Path, PathBuf},
+        path::{Component, Path, PathBuf},
         str::FromStr,
     },
 };
@@ -394,6 +394,18 @@ impl ExecutableRow {
             || PathBuf::from(format!("{name}.{EXTENSION}")),
             PathBuf::from,
         );
+
+        // A row names a file inside its package by the path the package spells, plainly: every check below compares that spelling, and `./lib.crs` or `app/../lib.crs` would walk past the two refusals under it to fail later as a parse error inside the header (law 4). Resolving the spelling instead would resolve `..` lexically through symlinks the package cannot see.
+        if let Some(component) = path
+            .components()
+            .find(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(format!(
+                "the executable {name:?} is compiled from {}, whose `{}` is no plain relative path; a row names a file inside the package by its path from the manifest, with no `.`, `..` or leading `/`",
+                path.display(),
+                component.as_os_str().to_string_lossy()
+            ));
+        }
 
         if let Some(previous) = declared.iter().find(|executable| executable.name == name) {
             return Err(format!(
