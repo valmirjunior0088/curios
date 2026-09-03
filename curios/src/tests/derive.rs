@@ -325,6 +325,20 @@ fn an_ineligible_key_is_refused_by_its_shape() {
         report.contains("cannot derive '/syn/Spell/Spell' for Holder\n  payload #1 of 'Holder/holds' is a type, which no value spells; write the body"),
         "{report}"
     );
+
+    // A key the refusal must *name*: an unparameterized family whose own constructors mention it unfolds to its recursion block, and the site printed three lines of `rec #0: Type = R; #0` where the author wrote `R`. The struct and parameterized cases above never showed it, because neither reduces to one.
+    let recursive = r#"
+        use /std/{Str, Spell};
+        induct R: pub Type | node(R, Type) | leaf() end
+        satisfy Spell(R);
+        /std/print("")
+        "#;
+    let report = error(recursive);
+    assert!(
+        report.contains("cannot derive '/syn/Spell/Spell' for R\n  payload #2 of 'R/node' is a type, which no value spells; write the body"),
+        "{report}"
+    );
+    assert!(!report.contains("rec #0"), "{report}");
 }
 
 #[test]

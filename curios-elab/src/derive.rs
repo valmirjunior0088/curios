@@ -79,6 +79,8 @@ pub(crate) fn elaborate_derive(
         .first()
         .cloned()
         .expect("a derivable concept takes the type it is derived for as its first parameter");
+    // Reduced once, here, because this is the term every refusal *prints*. Reducing the whole concept application above unfolds a nullary inductive's name into its recursive definition, so `satisfy Spell(T);` refused with three lines of `rec #0: Type = T; #0` where the author wrote `T` — while a struct key (already a `StructType`) and a parameterized one (an `Apply` with a nominal head) printed their names. One more reduction reaches the `InductType` all three share, which is the form every other diagnostic in the compiler prints. `subject` used to take this step itself.
+    let key = reduce_with(context, &key)?;
     let site = Site {
         concept: name,
         key: &key,
@@ -95,6 +97,7 @@ pub(crate) fn elaborate_derive(
 /// The declaration a derivation is writing for: the concept, the key it is derived at, and the span every refusal and goal reports at.
 struct Site<'a> {
     concept: &'a Global,
+    /// Reduced when the site was built, which is what makes it printable: an unreduced nullary inductive key is its recursion block, not its name. Every consumer wants that same form — [`subject`] classifies it, a body types its value at it, and a refusal prints it.
     key: &'a Term,
     span: Option<Span>,
 }
@@ -128,9 +131,7 @@ enum Subject {
 }
 
 fn subject(context: &mut Context, site: &Site<'_>) -> Result<Subject, Error> {
-    let reduced = reduce_with(context, site.key)?;
-
-    match &*reduced {
+    match &**site.key {
         Subterm::InductType(InductType {
             name,
             universes,
