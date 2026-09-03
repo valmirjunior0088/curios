@@ -713,7 +713,7 @@ impl HostOps for OsHost {
     }
 
     fn env(&self, name: &[u8]) -> (Status, Vec<u8>) {
-        match env::var_os(String::from_utf8_lossy(name).as_ref()) {
+        match env::var_os(OsStr::from_bytes(name)) {
             Some(value) => (Status::Ok, value.into_encoded_bytes()),
             None => (Status::NotFound, vec![]),
         }
