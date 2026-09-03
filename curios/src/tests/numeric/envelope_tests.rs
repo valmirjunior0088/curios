@@ -292,3 +292,49 @@ fn the_two_zeros_stay_distinct_terms_while_comparing_equal() {
         "the two zeros are not the same term"
     );
 }
+
+/// The first of the three boundaries: a written numeral narrows into the erased carriers at *erasure*, and refuses what it cannot represent.
+///
+/// A `Nat` literal in a term already did. A **dispatch case** did not, because `curios-text` narrowed the key to `u32` in the parser — four stages above this boundary — and, worse, the failure backtracked: a digit run is an identifier, so an oversized case fell past every `Nat` leaf to a plain `Binder`. `match n | 4294967296 => 7 end` compiled to `let 4294967296 = n; 7`, a match that dispatches on nothing and takes its one arm for every input, and printed `7` for `f(0)`. Core now keys the switch by its unbounded value and the width is chosen here alone — see [Numeric carriers narrow by refusing, never by changing a value](../../../../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md).
+#[test]
+fn a_numeral_past_the_erased_carrier_refuses_at_the_erase_boundary() {
+    let refusal = |source: &str| {
+        typecheck(source)
+            .expect_err("a numeral past the erased carrier is refused")
+            .to_string()
+    };
+
+    // A literal in an ordinary term: the boundary that already held.
+    assert!(
+        refusal(
+            r#"
+        use /std/{Nat, Bool};
+        let f(n : Nat) -> Bool = n == 4294967296;
+        /std/print("unreachable")
+        "#
+        )
+        .contains("overflows u32 at the erase boundary")
+    );
+
+    // The same numeral as a dispatch case, which used to become a binder instead.
+    assert!(
+        refusal(
+            r#"
+        use /std/{Nat};
+        let f(n : Nat) -> Nat = match n | 0 => 1 | 4294967296 => 2 | _ => 0 end;
+        /std/print(Nat/to_str(f(0)))
+        "#
+        )
+        .contains("overflows u32 at the erase boundary")
+    );
+
+    // A dispatch at the very top of the carrier still compiles and answers.
+    assert_eq!(
+        run(r#"
+        use /std/{Nat};
+        let f(n : Nat) -> Nat = match n | 4294967295 => 7 | _ => 0 end;
+        /std/print(Nat/to_str(f(4294967295)))
+        "#),
+        b"7"
+    );
+}

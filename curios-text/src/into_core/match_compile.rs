@@ -5,6 +5,7 @@ use {
         BinPattern, Choose, ChooseArm, ChooseTest, Error, ListPattern, Match, MatchPattern,
         MatrixArm, NatPattern, Pattern, PatternField, Term,
     },
+    curios_num::Natural,
     curios_utilities::{Grain, Plicity},
     std::{collections::BTreeMap, mem},
 };
@@ -542,15 +543,17 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
         let mut zero_rows = Vec::new();
         let mut succ_rows: Vec<(String, Option<Pattern>, MatrixRow<'_>)> = Vec::new();
-        let mut lit_rows: Vec<(u32, MatrixRow<'_>)> = Vec::new();
+        let mut lit_rows: Vec<(Natural, MatrixRow<'_>)> = Vec::new();
         for mut row in rows {
             match row.patterns.remove(0) {
                 MatchPattern::Nat(NatPattern::Zero) => zero_rows.push(row),
                 MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
                     succ_rows.push((pred_label.clone(), ih.clone(), row))
                 }
-                MatchPattern::Nat(NatPattern::Lit(value)) => lit_rows.push((*value, row)),
-                MatchPattern::Char(character) => lit_rows.push((*character as u32, row)),
+                MatchPattern::Nat(NatPattern::Lit(value)) => lit_rows.push((value.clone(), row)),
+                MatchPattern::Char(character) => {
+                    lit_rows.push((Natural::from(*character as u32), row))
+                }
                 _ => unreachable!("every row classified as Nat"),
             }
         }
@@ -562,9 +565,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             let Some(default) = self.default.clone() else {
                 return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Nat" });
             };
-            let mut groups: BTreeMap<u32, Vec<MatrixRow<'_>>> = BTreeMap::new();
+            let mut groups: BTreeMap<Natural, Vec<MatrixRow<'_>>> = BTreeMap::new();
             for row in zero_rows {
-                groups.entry(0).or_default().push(row);
+                groups.entry(Natural::zero()).or_default().push(row);
             }
             for (value, row) in lit_rows {
                 groups.entry(value).or_default().push(row);

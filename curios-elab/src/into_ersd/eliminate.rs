@@ -261,7 +261,12 @@ impl Lowering {
         let mut nat_cases = Vec::with_capacity(cases.len());
         for (value, body) in cases {
             // Where the case key stops being unbounded. Core dispatches on a `Natural`; `curios-ersd`'s `NatCase` is a `u32`, and a key past it is refused here rather than wrapped — the discipline of [Numeric carriers narrow by refusing, never by changing a value](../../../../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md), and the same narrowing every `Nat` literal takes.
-            let key = narrow_nat(value)?;
+            //
+            // Located at the arm's body, which is the only span the arm has: `walk` would otherwise attach the enclosing `Match`'s, and a synthesized match has none at all.
+            let key = narrow_nat(value).map_err(|error| match body.span() {
+                Some(span) => error.at(span),
+                None => error,
+            })?;
             let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
             let block = self.refined_arm(context, head, &literal, motive, body)?;
             nat_cases.push(curios_ersd::NatCase { key, block });

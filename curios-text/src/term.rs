@@ -339,7 +339,9 @@ pub enum NatPattern {
         ih: Option<Pattern>,
     },
     /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, lowered to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (see `into_core::match_compile`'s `compile_nat`).
-    Lit(u32),
+    ///
+    /// Carries the numeral, not the erased carrier's `u32`. Narrowing here chose `curios-ersd`'s width in the parser, four stages above the erase boundary that owns it, and — because a digit run *is* an identifier — an oversized numeral did not even refuse: it fell past every leaf to [`MatchPattern::Binder`], so `match n | 4294967296 => 7 end` compiled to `let 4294967296 = n; 7`, a match that dispatches on nothing and takes its one arm for every input. The width is now `curios-elab`'s alone, and it refuses rather than wraps — see [Numeric carriers narrow by refusing, never by changing a value](../../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md).
+    Lit(Natural),
 }
 
 /// The two shapes a nested `List` leaf can take — see [`MatchPattern::List`].

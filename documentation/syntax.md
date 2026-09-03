@@ -638,7 +638,7 @@ end
 
 Induction arms and literal-dispatch arms cannot be mixed in one match.
 
-A dispatch literal is a numeric literal or a character literal — the latter matching its scalar value, so `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, with the conversion visible at the head. A dispatch literal must fit in 32 bits; a larger numeral is a parse error, even though `Nat` itself is unbounded.
+A dispatch literal is a numeric literal or a character literal — the latter matching its scalar value, so `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, with the conversion visible at the head. `Nat` is unbounded and a dispatch literal is written whole, but the compiled carrier is 32 bits wide: a case past it is refused where every numeral narrows, with the arm named, rather than changing what the program means.
 
 ### List fold and case split
 

@@ -1,6 +1,6 @@
 //! Inductive and matrix matches, motives, patterns, and `choose`.
 
-use {crate::*, curios_utilities::Plicity};
+use {crate::*, curios_num::Natural, curios_utilities::Plicity};
 
 use super::test_support::*;
 use curios_utilities::Sign;
@@ -362,5 +362,27 @@ fn a_choose_condition_arm_still_calls_a_qualified_name() {
         "choose | Option/is_some(o) => 1 | _ => 0 end"
             .parse::<Term>()
             .is_ok()
+    );
+}
+
+/// A dispatch case keeps its numeral whole, however wide it is: the width the erased carrier has is chosen at the erase boundary, not here.
+///
+/// Narrowing to `u32` in the parser did not merely refuse a wide case early — the failure backtracked, and a digit run *is* an identifier, so the arm fell past every `Nat` leaf to a plain `Binder`. The match then dispatched on nothing and took its one arm for every input.
+#[test]
+fn a_dispatch_case_keeps_a_numeral_wider_than_the_erased_carrier() {
+    let term = "match n | 4294967296 => 1 | _ => 0 end"
+        .parse::<Term>()
+        .expect("a wide dispatch case parses");
+    let Subterm::Match(matched) = term.as_subterm() else {
+        panic!("expected a match, got {term}");
+    };
+    let [first, ..] = matched.arms.as_slice() else {
+        panic!("expected arms");
+    };
+    assert_eq!(
+        first.pattern,
+        MatchPattern::Nat(NatPattern::Lit(
+            Natural::parse_bytes(b"4294967296", 10).expect("a decimal numeral")
+        ))
     );
 }

@@ -80,16 +80,6 @@ pub(super) fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
         .and_drop(parse_whitespace())
 }
 
-pub(super) fn parse_nat_literal_u32<'a>() -> Parser<'a, u32> {
-    parse_nat_digits().flat_map(|lit| {
-        let NatLiteral(n, _) = lit;
-        match n.to_u32() {
-            Some(k) => pure(k),
-            None => fail("nat literal too large for u32"),
-        }
-    })
-}
-
 pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
     catch(
         catch(take_exact("-"))

@@ -231,12 +231,16 @@ pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     })
 }
 
-// The literal-dispatch leaf `k` of a `Nat` match-arm pattern (`| 5 =>`, `| 0x90 =>`). Reuses `parse_nat_literal_u32`, so hex literals dispatch by value; a column of these (with no `pred + 1; ih` arm) lowers to a `switch`. `0` is rejected here: it is always the `Zero` leaf (tried earlier in `parse_match_pattern`), keeping one canonical leaf per value. Tried before the generic `Binder` fallback, which would otherwise swallow a bare digit as an identifier.
+// The literal-dispatch leaf `k` of a `Nat` match-arm pattern (`| 5 =>`, `| 0x90 =>`). Reads the numeral by value, so hex literals dispatch by value; a column of these (with no `pred + 1; ih` arm) lowers to a `switch`. `0` is rejected here: it is always the `Zero` leaf (tried earlier in `parse_match_pattern`), keeping one canonical leaf per value. Tried before the generic `Binder` fallback, which would otherwise swallow a bare digit as an identifier.
+//
+// The numeral is kept whole. Narrowing it to the erased `u32` here made the parser choose `curios-ersd`'s width, and the failure was caught along with "this is not a numeral" — so an oversized dispatch case fell through to `Binder`, a digit run being an identifier, rather than refusing. Where that width is chosen is `curios-elab`'s erase boundary, which refuses what it cannot represent.
 pub(super) fn parse_nat_lit_match_pattern<'a>() -> Parser<'a, MatchPattern> {
-    catch(parse_nat_literal_u32().flat_map(|k| match k {
-        0 => fail("0 is the Nat zero pattern, not a literal-dispatch case"),
-        k => pure(MatchPattern::Nat(NatPattern::Lit(k))),
-    }))
+    catch(
+        parse_nat_digits().flat_map(|NatLiteral(value, _)| match value.is_zero() {
+            true => fail("0 is the Nat zero pattern, not a literal-dispatch case"),
+            false => pure(MatchPattern::Nat(NatPattern::Lit(value))),
+        }),
+    )
 }
 
 // A character literal leaf — a `Nat` dispatch case spelled by its scalar value, compiled exactly as the numeral it denotes.
