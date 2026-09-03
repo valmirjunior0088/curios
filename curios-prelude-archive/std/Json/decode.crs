@@ -151,7 +151,7 @@ let is_num_start(byte: Byte) -> Bool =
     match Byte/to_nat(byte) | 45 => true | _ => Nat/in_range(Byte/to_nat(byte), 0x30, 0x39) end;
 
 -- The dispatch reads the first byte without consuming it, so each arm parses the value whole -- including the byte that selected it.
-pub let decode: Parse(Json) =
+let value: Parse(Json) =
     let _ = ws!;
     let byte = Parse/peek_byte!;
     match Byte/to_nat(byte)
@@ -164,7 +164,7 @@ pub let decode: Parse(Json) =
     | _ => match is_num_start(byte) | true => parse_num | false => Parse/fail("expected value") end
     end
 and parse_arr: Parse(Json) =
-    Parse/map(bracketed(0x5B, decode, 0x5D, "expected ',' or ']'"), (elems) => Json/arr(elems))
+    Parse/map(bracketed(0x5B, value, 0x5D, "expected ',' or ']'"), (elems) => Json/arr(elems))
 and parse_obj: Parse(Json) =
     Parse/map(bracketed(0x7B, parse_pair, 0x7D, "expected ',' or '}'"), (pairs) => Json/obj(pairs))
 -- A key commits to its colon and value: past `"a"`, the input is a member or malformed, never something else.
@@ -174,5 +174,12 @@ and parse_pair: Parse({Str, Json}) =
     Parse/commit(member_value(key))
 and member_value(key: Str) -> Parse({Str, Json}) =
     let _ = symbol(0x3A)!;
-    let val = decode!;
+    let val = value!;
     Parse/pure((key, val));
+
+-- A whole document, which is what the module's two entry points are a pair for: `value` is composable and reads one value, and past it `nulll`, `truex`, `1 garbage` and `"a""b"` each read as their prefix and the rest went unmentioned -- `Parse/run` hands back no position, so a caller could not even learn a prefix had been taken. `Toml/decode` reaches its own end the same way. `ws` first, since every value parser consumes only the trivia *before* it.
+pub let decode: Parse(Json) =
+    let parsed = value!;
+    let _ = ws!;
+    let _ = Parse/eof!;
+    Parse/pure(parsed);

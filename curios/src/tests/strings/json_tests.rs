@@ -70,6 +70,42 @@ fn structural_refusals_name_what_was_expected() {
     );
 }
 
+/// A document is the whole input: a value followed by anything is refused, not read as its prefix.
+///
+/// `decode` used to be the bare value parser, and `Parse/run` hands back no position — so `nulll` decoded as `null`, `truex` as `true`, and `"a""b"` as `"a"`, with the rest discarded and no way for a caller to learn it. `tru` refusing while `truex` succeeded is the shape of it: the incomplete keyword was structural and the keyword with junk glued on was not. `Toml/decode` reaches its own end the same way.
+#[test]
+fn a_document_is_refused_when_anything_follows_the_value() {
+    let source = r#"
+        use /std/{Json, Parse, Result, Str, Handle};
+        let decoded(input : Str) -> Str =
+            match Parse/run(Json/decode, Str/to_bytes(input)) : (_) => Str
+            | success(value) => Json/encode(value)
+            | failure(msg) => msg
+            end;
+        /std/print(Str/join("|", [
+            decoded("nulll"),
+            decoded("truex"),
+            decoded("1 garbage"),
+            decoded("[1,2] junk"),
+            decoded("{} }}}"),
+            decoded("\"a\"\"b\""),
+            decoded("  { \"a\" : 1 }  \n"),
+            decoded("[]")
+        ]))
+        "#;
+
+    // The last two are the control: trivia on either side of a document is still trivia, since the value parsers consume only what precedes them.
+    assert_eq!(
+        run(source),
+        concat!(
+            "expected end of input|expected end of input|expected end of input|",
+            "expected end of input|expected end of input|expected end of input|",
+            "{\"a\":1}|[]"
+        )
+        .as_bytes()
+    );
+}
+
 #[test]
 fn character_literals_do_not_coerce_to_numeric_domains() {
     for source in [
