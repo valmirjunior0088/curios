@@ -53,14 +53,15 @@ pub(super) fn parse_usize_raw<'a>() -> Parser<'a, usize> {
     })
 }
 
+// `tag` takes the digit count, so the written width rides along with the base — see [`Radix`].
 pub(super) fn parse_radix<'a>(
     prefix: &'static str,
     radix: u32,
-    tag: Radix,
+    tag: fn(usize) -> Radix,
 ) -> Parser<'a, NatLiteral> {
     take_exact(prefix).and_keep(take_while(move |char: char| char.is_digit(radix)).flat_map(
         move |digits| match Natural::parse_bytes(digits.as_bytes(), radix) {
-            Some(value) => pure(NatLiteral(value, tag)),
+            Some(value) => pure(NatLiteral(value, tag(digits.len()))),
             None => fail(format!("expected base-{radix} digits after '{prefix}'")),
         },
     ))
@@ -72,7 +73,7 @@ pub(super) fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
         .or(
             take_while(|char: char| char.is_ascii_digit()).flat_map(|digits| {
                 match Natural::parse_bytes(digits.as_bytes(), 10) {
-                    Some(value) => pure(NatLiteral(value, Radix::Dec)),
+                    Some(value) => pure(NatLiteral(value, Radix::Dec(digits.len()))),
                     None => fail("expected nat"),
                 }
             }),

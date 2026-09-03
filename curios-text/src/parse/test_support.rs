@@ -4,10 +4,11 @@
 
 use crate::*;
 
+// The radix carries the written width, so a fixture numeral takes the width its own decimal spelling has — which is what the parser reads back for it.
 pub(super) fn num_lit(magnitude: u32, sign: curios_utilities::Sign) -> Term {
     Subterm::NumLit(NumLit {
         magnitude: magnitude.into(),
-        radix: Radix::Dec,
+        radix: Radix::Dec(magnitude.to_string().len()),
         sign,
     })
     .into()

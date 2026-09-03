@@ -459,11 +459,12 @@ fn print_field(param: TupleTypeParam) -> Printer {
     }
 }
 
+// Zero-padded to the width the literal was written at. A `digits` of `0` — a numeral the compiler minted — asks for no minimum, which is the natural width.
 fn format_radix(n: &Natural, radix: Radix) -> String {
     match radix {
-        Radix::Dec => format!("{n}"),
-        Radix::Hex => format!("0x{n:X}"),
-        Radix::Bin => format!("0b{n:b}"),
+        Radix::Dec(digits) => format!("{n:0digits$}"),
+        Radix::Hex(digits) => format!("0x{n:0digits$X}"),
+        Radix::Bin(digits) => format!("0b{n:0digits$b}"),
     }
 }
 

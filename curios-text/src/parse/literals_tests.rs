@@ -116,7 +116,7 @@ fn hex_literal_is_num_lit() {
         "0xC2".parse::<Term>().unwrap(),
         Subterm::NumLit(NumLit {
             magnitude: 194usize.into(),
-            radix: Radix::Hex,
+            radix: Radix::Hex(2),
             sign: Sign::Unmarked,
         })
         .into()
@@ -129,7 +129,7 @@ fn bin_literal_is_num_lit() {
         "0b1010".parse::<Term>().unwrap(),
         Subterm::NumLit(NumLit {
             magnitude: 10usize.into(),
-            radix: Radix::Bin,
+            radix: Radix::Bin(4),
             sign: Sign::Unmarked,
         })
         .into()
@@ -139,6 +139,24 @@ fn bin_literal_is_num_lit() {
 #[test]
 fn nat_radix_round_trips_through_the_printer() {
     for source in ["0xC2", "0xF4", "0b1010", "127"] {
+        assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
+    }
+}
+
+/// A numeral's written *width* round-trips with its base, so a padded literal prints back as written.
+///
+/// The width used to be dropped, and every literal printed at its natural one: `0x00` came back as `0x0`. What that costs is a table — `x[0x00, 0x48, 0x69]` is bytes in columns, and `curios format` silently narrowed it to `x[0x0, 0x48, 0x69]`.
+#[test]
+fn a_padded_numeral_keeps_the_width_it_was_written_at() {
+    for source in [
+        "0x00",
+        "0x0A",
+        "0x00FF",
+        "0b0001",
+        "007",
+        "x[0x00, 0x48, 0x69, 0x0A]",
+        "b[0, 1, 1]",
+    ] {
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
     }
 }
@@ -206,7 +224,7 @@ fn list_literal_spread_entries() {
     let nat = |n: usize| -> Term {
         Subterm::NumLit(NumLit {
             magnitude: n.into(),
-            radix: Radix::Dec,
+            radix: Radix::Dec(n.to_string().len()),
             sign: Sign::Unmarked,
         })
         .into()
