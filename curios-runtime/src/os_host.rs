@@ -55,7 +55,7 @@ enum OsResource {
     },
     /// A bare owned descriptor — one end of a pipe to a child, filed by `spawn`, and the shape a serial device takes. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one applies `O_NONBLOCK` through `fcntl` first, so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, while `read`, `write`, `poll` and `close` serve it as they serve a file.
     Descriptor(OwnedFd),
-    /// A running child minted by `spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the exit, `wait` drains it, `kill` addresses its pid, and `stream` hands out the handles of its piped standard streams — filed as `Pipe`s at spawn time and boxed here so a child costs the table no more than a socket does.
+    /// A running child minted by `spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the exit, `wait` drains it, `kill` addresses its pid, and `stream` hands out the handles of its piped standard streams — filed as `Descriptor`s at spawn time and boxed here so a child costs the table no more than a socket does.
     Child {
         running: Running,
         streams: Box<[Handle; 3]>,
