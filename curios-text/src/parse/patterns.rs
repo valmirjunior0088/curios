@@ -181,6 +181,23 @@ pub(super) fn parse_ctor_match_pattern<'a>() -> Parser<'a, MatchPattern> {
         )
 }
 
+// A match pattern written with a qualified head, refused by name.
+//
+// A constructor pattern names its constructor *bare*: the tag is resolved against the scrutinee's type rather than looked up, so the namespace is never spelled. Left to fall through, `Option/some(n)` parsed `Option` as a `Binder` and the arm then reported `Expected '=>'` against the `/` — with a `=>` plainly written four columns along.
+//
+// **Tried first, and guarded by the one form that may carry a path.** A struct head *is* a path (`parse_struct_match_pattern`, documentary and unresolved), so `not_ahead` hands `Name/Sub { … }` back; nothing else in this grammar begins with one, since `parse_qualified_name` rejects a single segment and so never reaches the `Binder` case. First is what makes the refusal stick: [`Parser::or`] consults the *first* alternative's fatality but picks between two failures on offset alone, and the struct alternative fails at exactly this one's offset — both stop at the delimiter that is not a `{` — so from any later position the tie would keep the vaguer error.
+//
+// The failure is past the choice point and so fatal, which is what carries it out of the arm. `parse_bind_arm` catches it back, so a `choose` condition arm beginning the same way still re-parses as a term.
+pub(super) fn parse_qualified_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(parse_qualified_name().and_drop(not_ahead("{"))).flat_map(|name| {
+        fail(format!(
+            "a constructor pattern names its constructor bare: write `{}` rather than `{}`, since the scrutinee's type supplies the namespace",
+            name.last(),
+            name.join(),
+        ))
+    })
+}
+
 // A nested `Bool` leaf: `true` or `false`. Tried as dedicated keywords before the generic `Binder` fallback in `parse_match_pattern` — `parse_binder` doesn't itself reject keyword text, mirroring the same precedent already used for `Bool` literals at term level (see the `Subterm::Intrinsic(Intrinsic::Bool)` case above).
 pub(super) fn parse_bool_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_keyword("false"))
@@ -293,13 +310,14 @@ fn parse_bin_cons_match_pattern<'a>(
     })
 }
 
-// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat`/`List`/`Bits`/`Bytes` literal leaves — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `b[`, `x[`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for `NatSucc` specifically, before `Binder` (see its own doc comment). The packed cons leaf is tried before the packed empty leaf so `b[` commits to the longer form and backtracks to `b[]` only when no binder follows.
+// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat`/`List`/`Bits`/`Bytes` literal leaves — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `b[`, `x[`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for `NatSucc` specifically, before `Binder` (see its own doc comment). The packed cons leaf is tried before the packed empty leaf so `b[` commits to the longer form and backtracks to `b[]` only when no binder follows. A qualified head is refused ahead of all of them, for the reason `parse_qualified_match_pattern` states.
 pub(super) fn parse_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     memoize(MEMO_MATCH_PATTERN, parse_match_pattern_inner())
 }
 
 fn parse_match_pattern_inner<'a>() -> Parser<'a, MatchPattern> {
-    parse_bin_byte_match_pattern()
+    parse_qualified_match_pattern()
+        .or(parse_bin_byte_match_pattern())
         .or(parse_bin_end_match_pattern())
         .or(parse_struct_match_pattern())
         .or(parse_ctor_match_pattern())

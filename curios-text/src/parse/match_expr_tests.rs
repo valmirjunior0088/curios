@@ -325,3 +325,42 @@ fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
             .is_err()
     );
 }
+
+/// A constructor pattern names its constructor bare, and the refusal says so rather than blaming the token the fall-through reached.
+///
+/// The tag is resolved against the scrutinee's type, so the namespace is never spelled. Written anyway, the head used to parse as a `Binder` and the arm reported `Expected '=>'` against the `/` — with a `=>` plainly written further along the same line.
+#[test]
+fn a_qualified_constructor_pattern_is_refused_by_name() {
+    for source in [
+        "match o | Option/some(n) => n | none() => 0 end",
+        "match o | some(Option/some(n)) => n | _ => 0 end",
+        "match o | /std/Option/some(n) => n | _ => 0 end",
+        "match o | Option/none => 0 | _ => 1 end",
+    ] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(
+            report.contains("names its constructor bare"),
+            "{source:?} reported {report}"
+        );
+    }
+}
+
+/// The one match pattern that may carry a path keeps it: a struct head is documentary, resolved by nothing.
+#[test]
+fn a_struct_match_pattern_keeps_its_qualified_head() {
+    assert!(
+        "match p | Whatever/P { x, y } => x | _ => y end"
+            .parse::<Term>()
+            .is_ok()
+    );
+}
+
+/// A `choose` condition arm is a term, so one beginning with a qualified call is not a pattern that went wrong.
+#[test]
+fn a_choose_condition_arm_still_calls_a_qualified_name() {
+    assert!(
+        "choose | Option/is_some(o) => 1 | _ => 0 end"
+            .parse::<Term>()
+            .is_ok()
+    );
+}
