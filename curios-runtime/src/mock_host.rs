@@ -7,12 +7,18 @@ use {
     },
 };
 
-/// The in-memory disk: files as `path → contents` and the set of directories. Seeding a file implies every directory above it, so a seeded tree can be walked, listed and removed as a real one is.
+/// The in-memory disk: files as `path → contents` and the set of directories. Seeding a file implies every directory above it, so a seeded tree can be walked, listed and removed as a real one is. The root is not in the set: it always exists, spelled [`ROOT`] when named and as the empty parent `parent_of` gives an absolute path's first component, so an absolute path is filed and found as a relative one is.
 #[derive(Default)]
 struct MockDisk {
     files: HashMap<Vec<u8>, Vec<u8>>,
     dirs: BTreeSet<Vec<u8>>,
 }
+
+/// The root directory as a path names it. Its children have the empty parent, since the separator before them is the whole of it.
+const ROOT: &[u8] = b"/";
+
+/// `EBUSY`, the errno `rmdir(2)` reports on the root — `16` on both release targets, Linux and macOS.
+const EBUSY: u32 = 16;
 
 /// The path above `path` — the bytes before its last `/` — or `None` for a bare name.
 fn parent_of(path: &[u8]) -> Option<&[u8]> {
@@ -34,13 +40,22 @@ impl MockDisk {
         }
     }
 
-    /// Whether `path` names something under a directory that is not there — the refusal `create_dir` and a writing `open` share, since the OS answers both with `not_found`. A bare name has no parent to miss.
+    /// Whether `path` is a directory: the root, or one recorded.
+    fn is_dir(&self, path: &[u8]) -> bool {
+        path == ROOT || self.dirs.contains(path)
+    }
+
+    /// Whether `path` names something under a directory that is not there — the refusal `create_dir` and a writing `open` share, since the OS answers both with `not_found`. A bare name has no parent to miss, and an empty parent is the root, which is always there.
     fn parent_missing(&self, path: &[u8]) -> bool {
-        parent_of(path).is_some_and(|parent| !self.dirs.contains(parent))
+        parent_of(path).is_some_and(|parent| !parent.is_empty() && !self.dirs.contains(parent))
     }
 
     /// The names directly inside directory `dir`, files and directories alike, in byte order.
     fn children(&self, dir: &[u8]) -> Vec<Vec<u8>> {
+        let dir = match dir == ROOT {
+            true => &[][..],
+            false => dir,
+        };
         let name_in = |path: &[u8]| -> Option<Vec<u8>> {
             (parent_of(path) == Some(dir)).then(|| path[dir.len() + 1..].to_vec())
         };
@@ -139,10 +154,7 @@ impl MockFileSystem {
 
         match disk.files.get(path) {
             Some(contents) => Some((file_kind::FILE, contents.len())),
-            None => disk
-                .dirs
-                .contains(path)
-                .then_some((file_kind::DIRECTORY, 0)),
+            None => disk.is_dir(path).then_some((file_kind::DIRECTORY, 0)),
         }
     }
 
@@ -151,7 +163,7 @@ impl MockFileSystem {
 
         match disk.files.remove(path) {
             Some(_) => Status::Ok,
-            None if disk.dirs.contains(path) => Status::IsDirectory,
+            None if disk.is_dir(path) => Status::IsDirectory,
             None => Status::NotFound,
         }
     }
@@ -199,7 +211,7 @@ impl MockFileSystem {
 
         match () {
             () if disk.files.contains_key(path) => (Status::NotDirectory, vec![]),
-            () if !disk.dirs.contains(path) => (Status::NotFound, vec![]),
+            () if !disk.is_dir(path) => (Status::NotFound, vec![]),
             () => (Status::Ok, disk.children(path)),
         }
     }
@@ -208,9 +220,7 @@ impl MockFileSystem {
         let mut disk = self.inner.lock().unwrap();
 
         match () {
-            () if disk.files.contains_key(path) || disk.dirs.contains(path) => {
-                Status::AlreadyExists
-            }
+            () if disk.files.contains_key(path) || disk.is_dir(path) => Status::AlreadyExists,
             () if disk.parent_missing(path) => Status::NotFound,
             () => {
                 disk.dirs.insert(path.to_vec());
@@ -225,8 +235,10 @@ impl MockFileSystem {
 
         match () {
             () if disk.files.contains_key(path) => Status::NotDirectory,
-            () if !disk.dirs.contains(path) => Status::NotFound,
+            () if !disk.is_dir(path) => Status::NotFound,
             () if !disk.children(path).is_empty() => Status::NotEmpty,
+            // The root cannot be removed even when empty, as `rmdir(2)` reports it.
+            () if path == ROOT => Status::Other(EBUSY),
             () => {
                 disk.dirs.remove(path);
 

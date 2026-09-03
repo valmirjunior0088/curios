@@ -1,7 +1,7 @@
 //! The scripted host's contract: handles miss loudly after close, and a chunked stream hands the wait back to its reader between chunks.
 
 use {
-    super::{super::host::*, MockHost},
+    super::{super::host::*, EBUSY, MockHost},
     curios_abi::event,
 };
 
@@ -162,4 +162,29 @@ fn a_writing_open_under_a_missing_directory_is_refused_until_the_directory_exist
         host.open(b"a/b.txt", Mode::Append),
         (Status::Ok, _)
     ));
+}
+
+/// The root exists without being seeded: a directory is made and a file written under `/`, the root stats and lists as a directory holding them, remaking it is `AlreadyExists`, and removing it is refused — `NotEmpty` while it holds anything, `EBUSY` once it is bare, as `rmdir(2)` answers.
+#[test]
+fn the_root_directory_exists_holds_absolute_paths_and_cannot_be_removed() {
+    let (host, _io) = MockHost::builder().build();
+
+    assert!(matches!(host.create_dir(b"/x"), Status::Ok));
+    let (status, handle) = host.open(b"/x/f", Mode::Write);
+    assert!(matches!(status, Status::Ok));
+    host.close(handle);
+
+    assert!(matches!(
+        host.stat(b"/"),
+        (Status::Ok, kind, ..) if kind == curios_abi::file_kind::DIRECTORY
+    ));
+    assert!(matches!(host.list(b"/"), (Status::Ok, names) if names == [b"x".to_vec()]));
+    assert!(matches!(host.list(b"/x"), (Status::Ok, names) if names == [b"f".to_vec()]));
+    assert!(matches!(host.create_dir(b"/"), Status::AlreadyExists));
+    assert!(matches!(host.remove_file(b"/"), Status::IsDirectory));
+    assert!(matches!(host.remove_dir(b"/"), Status::NotEmpty));
+
+    assert!(matches!(host.remove_file(b"/x/f"), Status::Ok));
+    assert!(matches!(host.remove_dir(b"/x"), Status::Ok));
+    assert!(matches!(host.remove_dir(b"/"), Status::Other(EBUSY)));
 }
