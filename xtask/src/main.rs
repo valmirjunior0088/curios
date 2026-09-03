@@ -4,7 +4,7 @@
 //!
 //! **The launcher's isolation is the spawn.** `runtime` builds `curios-runtime` in its own `cargo` invocation, exactly as the recipe it replaced did, so workspace feature unification cannot reach it — `curios` enables `curios-runtime/cranelift`, and a launcher built beside it would carry a compiler. `curios/build.rs` embeds what this recipe copies to `curios/.artifacts/<triple>` and refuses to build without it.
 //!
-//! **A recipe that needs the launcher runs `runtime` first, unconditionally.** `build` and `profile` both do, because the compiler they build embeds it. What makes that free to repeat is that `runtime` costs nothing when nothing changed: cargo decides whether the launcher needs rebuilding, and [`file()`](helpers::file) skips the copy when the filed bytes are already the built ones, so a repeated run neither rebuilds nor touches the file `curios/build.rs` watches.
+//! **A recipe that needs the launcher runs `runtime` first, unconditionally.** `build` and `profile` both do, because the compiler they build embeds it. What makes that free to repeat is that `runtime` costs nothing when nothing changed: cargo decides whether the launcher needs rebuilding, and [`file_with_inputs()`](helpers::file_with_inputs) skips the copy when the filed bytes are already the built ones, so a repeated run neither rebuilds nor touches the file `curios/build.rs` watches. It files the launcher's inputs beside it — cargo's dep-info and the lock file — which is what that build script compares the launcher against, and it refreshes the launcher's timestamp when a listed input is newer while the bytes stayed the same, so the staleness warning never outlives the command it names.
 //!
 //! **The bindings generator is a dependency.** `js` calls `wasm-bindgen-cli-support`, the crate the `wasm-bindgen` command line wraps; why, and what keeps its version honest, is the README's decision.
 //!
@@ -13,10 +13,10 @@
 //! The command line is clap's, in `curios`'s own convention — a `Parser` root over a `Subcommand` of recipes — so the help is derived from the definitions and cannot fall out of step with them. Each recipe below is its steps and nothing else; the verbs they share live in [`helpers`].
 
 mod helpers;
+use helpers::*;
 
 use {
     clap::{Parser, Subcommand},
-    helpers::{artifact, bindgen_web, built, cargo, file, root, run, run_in},
     std::{
         path::{Path, PathBuf},
         process::{Command, ExitCode},
@@ -24,7 +24,10 @@ use {
 };
 
 /// The triple this tool was built for: the host, which is the one triple every recipe builds for.
-const HOST: &str = env!("CURIOS_HOST_TRIPLE");
+const HOST_TRIPLE: &str = env!("CURIOS_HOST_TRIPLE");
+
+/// The triple the browser bundle is built for: the bare Wasm target `wasm-bindgen` binds, which no host is.
+const BROWSER_TRIPLE: &str = "wasm32-unknown-unknown";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -134,6 +137,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(message) => {
             eprintln!("{message}");
+
             ExitCode::FAILURE
         }
     }
@@ -148,11 +152,15 @@ fn runtime() -> Result<(), String> {
             "--package",
             "curios-runtime",
             "--target",
-            HOST,
+            HOST_TRIPLE,
         ],
     )?;
 
-    file(&built(HOST, "curios-runtime"), &artifact("curios", HOST))?;
+    file_with_inputs(
+        &built(HOST_TRIPLE, "curios-runtime"),
+        &artifact("curios", HOST_TRIPLE),
+        &inputs("curios", HOST_TRIPLE),
+    )?;
 
     Ok(())
 }
@@ -166,8 +174,6 @@ fn build() -> Result<(), String> {
 }
 
 fn js() -> Result<(), String> {
-    const TARGET: &str = "wasm32-unknown-unknown";
-
     run(
         cargo(),
         &[
@@ -176,13 +182,13 @@ fn js() -> Result<(), String> {
             "--package",
             "curios-js",
             "--target",
-            TARGET,
+            BROWSER_TRIPLE,
         ],
     )?;
 
     bindgen_web(
-        &built(TARGET, "curios_js.wasm"),
-        &artifact("curios-js", TARGET),
+        &built(BROWSER_TRIPLE, "curios_js.wasm"),
+        &artifact("curios-js", BROWSER_TRIPLE),
     )?;
 
     Ok(())

@@ -6,32 +6,24 @@
 
 use std::{env, fs, path::Path, path::PathBuf, time::SystemTime};
 
-/// The newest modification time under `path`, or `None` if nothing there can be read.
+/// When `path` was last modified, or `None` if it cannot be read.
 ///
 /// Used to decide whether the launcher predates the sources it was built from. Read failures answer `None` rather than panicking: this drives a *warning*, and a build script that cannot stat a file has no business failing a build over it.
-fn newest_modification(path: &Path) -> Option<SystemTime> {
-    let metadata = fs::metadata(path).ok()?;
-
-    if metadata.is_file() {
-        return metadata.modified().ok();
-    }
-
-    fs::read_dir(path)
-        .ok()?
-        .filter_map(|entry| newest_modification(&entry.ok()?.path()))
-        .max()
+fn modified(path: &Path) -> Option<SystemTime> {
+    fs::metadata(path).ok()?.modified().ok()
 }
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     let target_triple = env::var("TARGET").unwrap();
-    let launcher = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join(".artifacts")
-        .join(&target_triple);
+    let artifacts = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join(".artifacts");
+    let launcher = artifacts.join(&target_triple);
+    let inputs = artifacts.join(format!("{target_triple}.inputs"));
 
     // The triple is the *file name* so two cross-target builds in one checkout cannot overwrite each other. A launcher of the wrong architecture passes both of `bundle.rs`'s guards — it is slim and carries no backend marker — so the failure would reach a user as a bundled executable that does not run, rather than as a build error here.
     println!("cargo:rerun-if-changed={}", launcher.display());
+    println!("cargo:rerun-if-changed={}", inputs.display());
 
     // `cargo::error` needs the *two*-colon form. `cargo:error` is parsed as an unknown metadata key and discarded without a word, so the single-colon spelling everywhere else in this file is not a style this line may be made to match.
     if !launcher.is_file() {
@@ -43,35 +35,33 @@ fn main() {
 
     // Nothing rebuilds the launcher when its sources change, because it is produced by a separate Cargo invocation this build cannot trigger. Without this check that staleness is *silent*: the file is unchanged, so this script does not re-run, and the old bytes are embedded again. The guards do not catch it either — a stale launcher is still slim and still marker-free.
     //
-    // The sources are every workspace crate the launcher embeds, not `curios-runtime` alone: the wire contract is `curios-abi`'s, and an edit there that the runtime crate never touched is exactly the drift between `run` and a bundled executable this check exists to name. The list is `cargo tree -p curios-runtime --edges normal` restricted to the workspace; a crate that joins the launcher joins it here.
+    // The sources are what `cargo x runtime` filed beside the launcher: cargo's dep-info for the binary — every file rustc read for it, across every workspace crate it embeds, and nothing rustc did not read — and the lock file, for a dependency bump. A list this script kept by hand named whole crates, so an edit to a runtime *test* file left a warning that `cargo x runtime` could not clear, having nothing to rebuild; the recipe now refreshes the launcher's timestamp in exactly that case, which is why the comparison below is against the listed files and the recipe's, and not some third set.
     let workspace = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
         .expect("the workspace root is this crate's parent")
         .to_path_buf();
-    let crates = [
-        "curios-runtime",
-        "curios-abi",
-        "curios-archive",
-        "curios-archive-derive",
-        "curios-num",
-    ]
-    .map(|name| workspace.join(name));
-
-    for krate in &crates {
-        for input in ["src", "Cargo.toml"] {
-            println!("cargo:rerun-if-changed={}", krate.join(input).display());
-        }
+    let Ok(listed) = fs::read_to_string(&inputs) else {
+        println!(
+            "cargo::warning=the {target_triple} runtime launcher's inputs are not filed beside it; run `cargo x runtime` to file them"
+        );
+        println!("cargo:rustc-env=CURIOS_RUNTIME_BIN={}", launcher.display());
+        return;
+    };
+    let sources = listed
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(|line| workspace.join(line))
+        .collect::<Vec<_>>();
+    for source in &sources {
+        println!("cargo:rerun-if-changed={}", source.display());
     }
 
-    let built = newest_modification(&launcher);
-    let sources = crates
-        .iter()
-        .filter_map(|krate| newest_modification(krate))
-        .max();
+    let built = modified(&launcher);
+    let newest = sources.iter().filter_map(|source| modified(source)).max();
 
     // A warning rather than an error, because modification times are approximate — a fresh checkout or a `touch` can order these wrongly, and refusing the build on that would be worse than the staleness it guards against. The direction that matters is that a real edit stops being invisible.
-    if let (Some(built), Some(sources)) = (built, sources)
-        && built < sources
+    if let (Some(built), Some(newest)) = (built, newest)
+        && built < newest
     {
         println!(
             "cargo::warning=the {target_triple} runtime launcher is older than the sources it embeds; run `cargo x runtime` to rebuild it"
