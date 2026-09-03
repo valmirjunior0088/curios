@@ -485,10 +485,16 @@ fn the_signature_refusals_fire_on_a_body_less_witness_as_on_a_written_one() {
         satisfy Ordered(Bool);
         /std/print("")
         "#;
-    assert!(error(orphan).ends_with(
-        "orphan witness of '/std/Ordered/Ordered' for head 'Bool', declared in the entry module\n  \
-         a witness may only be declared where the concept or a type in its head is already declared"
-    ));
+    let rendered = error(orphan);
+    assert!(
+        rendered.contains(
+            "orphan witness of '/std/Ordered/Ordered' for head 'Bool', declared in the entry module\n  \
+             a witness may only be declared where the concept or a type in its head is already declared"
+        ),
+        "{rendered}"
+    );
+    // Located at the written concept application, exactly as the written form is: a body-less declaration has the same declared type.
+    assert!(rendered.contains("satisfy Ordered(Bool);"), "{rendered}");
 
     let duplicate = r#"
         use /std/{Nat, Str};
@@ -501,11 +507,16 @@ fn the_signature_refusals_fire_on_a_body_less_witness_as_on_a_written_one() {
         satisfy Show(Nat);
         /std/print("")
         "#;
-    assert!(error(duplicate).ends_with(
-        "duplicate witness of '/Show' for head 'Nat'\n  \
-         one is declared in the entry module, another in the entry module\n  \
-         every concept-head pair has at most one witness, program-wide"
-    ));
+    let rendered = error(duplicate);
+    assert!(
+        rendered.contains(
+            "duplicate witness of '/Show' for head 'Nat'\n  \
+             one is declared in the entry module, another in the entry module\n  \
+             every concept-head pair has at most one witness, program-wide"
+        ),
+        "{rendered}"
+    );
+    assert!(rendered.contains("satisfy Show(Nat);"), "{rendered}");
 }
 
 // A parameterized family is a type constructor, not a type, and the head refuses before any body is reached — with the written form's exact report, the telescope form `(@A: Type, …) => C(Tree(A))` being what to write instead.
