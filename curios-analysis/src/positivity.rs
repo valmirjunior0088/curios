@@ -496,12 +496,15 @@ impl<E: Env> Walk<'_, E> {
     ///
     /// Forces a `rec` head rather than leaving it stuck, because a mutually recursive `induct` group lowers its *type constructors* into a top-level `rec`: `Pause` inside `step(pause : Pause, …)` elaborates to a universe instance of a projection, and without forcing it the whole `Pause`/`Async` group reads as `Mixed` and is rejected.
     ///
-    /// Declines in two cases, both of which leave the term to be treated as opaque, which is conservative. [`forceable`] owns the first — a head that cannot move, or a term still under enclosing binders. And a reduction the driver refuses (an exhausted budget on a type-level `rec` that will not converge) reports nothing rather than failing the analysis.
-    fn forced(&mut self, term: &Term) -> Term {
+    /// Declines in two cases, both of which leave the term to be treated as opaque, which is conservative. [`forceable`] owns the first — a head that cannot move, or a term still under enclosing binders. And a reduction the driver refuses (an exhausted budget on a type-level `rec` that will not converge) reports nothing rather than failing the analysis — and says so, because [`Walk::walk`] then follows the term's definitions at `Mixed` itself: a refused name would otherwise stand as a bare `Var` that records nothing, and a payload type the driver could not read would be admitted through.
+    fn forced(&mut self, term: &Term) -> (Term, bool) {
         if !forceable(term) {
-            return term.clone();
+            return (term.clone(), false);
         }
-        self.env.force(term).unwrap_or_else(|_| term.clone())
+        match self.env.force(term) {
+            Ok(reduced) => (reduced, false),
+            Err(_) => (term.clone(), true),
+        }
     }
 
     /// Open one telescope binder against a fresh assumption, so the rest of the telescope holds free occurrences rather than dangling indices and can be reduced. The binder is never assumed a type: the walk reads structure, not sorts.
@@ -558,11 +561,16 @@ impl<E: Env> Walk<'_, E> {
 
     /// Follow the definitions of an unreducible term's free variables.
     ///
-    /// `any_child_term` visits scope bodies closed, so a child that still sits under a binder is one `forced` refused to reduce — and a definition mentioned there would otherwise hide whatever its body names. Walking each such definition's body (which is closed, hence safe to reduce) at `Mixed` closes that gap. `unfolded` keeps a definition that is mentioned many times, or that mentions itself, from being followed twice.
+    /// `any_child_term` visits scope bodies closed, so a child that still sits under a binder is one `forced` refused to reduce — and a definition mentioned there would otherwise hide whatever its body names. Walking each such definition's body (which is closed, hence safe to reduce) at `Mixed` closes that gap. A term under no binder was forced, so it needs no following here; the one that was forced and refused is [`Walk::definitions`]'s, from `walk`.
     fn blocked(&mut self, term: &Term) {
         if term.reach() == 0 {
             return;
         }
+        self.definitions(term);
+    }
+
+    /// Walk the body of every definition `term` names, at `Mixed`. `unfolded` keeps a definition that is mentioned many times, or that mentions itself, from being followed twice.
+    fn definitions(&mut self, term: &Term) {
         for name in term.free_vars() {
             if !self.unfolded.insert(name.clone()) {
                 continue;
@@ -588,10 +596,15 @@ impl<E: Env> Walk<'_, E> {
         let cyclic = member
             .as_ref()
             .is_some_and(|member| self.forcing.contains(member));
-        let term = match cyclic {
-            true => term.clone(),
+        let (term, refused) = match cyclic {
+            true => (term.clone(), false),
             false => self.forced(term),
         };
+
+        // A reduction the driver refused leaves the term as written, and what it names is then read here rather than lost: a bare name would fall to the `Var` arm below and record nothing, which admitted `c(f : D)` with `D` an alias of `(Bad) -> False` whenever unfolding `D` ran out of budget. Following its definitions at `Mixed` is what `opaque` does for every other stuck shape, and it keeps a refusal in the refusing direction.
+        if refused {
+            self.definitions(&term);
+        }
         let entered = match (cyclic, member) {
             (false, Some(member)) => {
                 self.forcing.push(member);

@@ -274,6 +274,50 @@ fn a_negative_self_occurrence_is_refused() {
     assert_eq!(refusal.name, bad_name);
 }
 
+/// The same route to `False` behind an alias the driver cannot unfold: `Bad`'s constructor takes `D`, a definition standing for `(Bad) -> False`, and the kernel is given no budget to unfold it. A refused reduction has to leave the analysis in the refusing direction — the walk follows what the name defines at `Mixed` — where a bare name that recorded nothing admitted the declaration outright.
+#[test]
+fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
+    let mut kernel = Kernel::new(0, SYNTAX);
+    kernel.set_local_floor(1_000);
+
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let bad_name = Global::Authored(Qualifier::from(["Bad"]));
+    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let bad_type = Term::induct_type(bad_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    let alias = Free::local(1, Some("D"));
+    kernel.define(
+        &alias,
+        &Term::type_ground(),
+        &Term::func_type([(Free::local(2, Some("x")), bad_type)], false_type),
+        &UniverseContext::default(),
+    );
+
+    let mut inducts = BTreeMap::new();
+    inducts.insert(
+        false_name.clone(),
+        InductDecl {
+            constructors: Vec::new(),
+            ..single_payload(Term::type_ground(), Term::prop())
+        },
+    );
+    inducts.insert(
+        bad_name.clone(),
+        single_payload(Term::free_var(&alias), Term::type_ground()),
+    );
+    for (name, entry) in &inducts {
+        kernel.declare_induct(name, entry);
+    }
+
+    let refusal = positivity_vectors(
+        &mut kernel,
+        Declarations::of(&inducts, &BTreeMap::new()),
+        Coverage::Complete,
+    )
+    .expect_err("an alias the driver cannot unfold is followed, not admitted");
+    assert_eq!(refusal.name, bad_name);
+}
+
 /// A strictly positive self-occurrence — the payload *is* the family — is the ordinary recursive datatype and is admitted.
 #[test]
 fn a_strict_self_occurrence_is_admitted() {
