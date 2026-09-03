@@ -231,11 +231,12 @@ fn run_selected(
     *matched_any = true;
 
     step(Heading::Testing, subject);
-    let argv0 = entry.to_string_lossy().into_owned();
+    // argv[0] is the entry as `run` passes it: the path's bytes, since `/std/proc/args` promises opaque byte strings.
+    let argv0 = entry.as_os_str().as_encoded_bytes().to_vec();
     let mut unit = Totals::default();
 
     for (index, record) in selected {
-        let arguments = vec![argv0.clone().into_bytes(), index.to_string().into_bytes()];
+        let arguments = vec![argv0.clone(), index.to_string().into_bytes()];
         // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
         let outcome = unsafe {
             run_bytes(
