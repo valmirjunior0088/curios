@@ -47,7 +47,7 @@ use {
     super::*,
     curios_abi::ForeignStore,
     curios_core::Bound,
-    curios_utilities::{Entropy, Mount, Plicity, Qualifier, RootKind, SyntaxRegistry},
+    curios_utilities::{Entropy, Mount, Plicity, Qualifier, RootKind, Span, SyntaxRegistry},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -312,13 +312,23 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
 }
 
 // The surface concept application `C(args)` for a witness's declared type: the witnessed concept applied to the annotation's arguments (as written, so explicit).
+//
+// **Spanned over the written `C(args)`, because this is the only thing a `satisfy` refusal can point at.** A witness is anonymous, so nothing else in its declaration names it: `elaborate_module_let` locates a registration failure with `error.at_opt(def.type_.span())`, and this synthesized node is that type. Left spanless, every duplicate, orphan, unkeyable and irregular-premise refusal arrived with no line at all — and a duplicate between two witnesses of one module named that module twice and nothing else, which a reader cannot act on. The head name and each argument carry the spans this joins; `Term::with_span` keeps an innermost span already present, so the arguments are untouched.
 fn witness_concept_application(concept: &Name, args: &[Term]) -> Term {
     let head: Term = Subterm::Name(concept.clone()).into();
+    let written = |head: Term, last: Option<&Span>| match (concept.span(), last) {
+        (Some(open), Some(close)) => {
+            head.with_span(Span::new(open.source.clone(), open.start, close.end))
+        }
+        (Some(open), None) => head.with_span(open.clone()),
+        (None, _) => head,
+    };
+
     if args.is_empty() {
-        return head;
+        return written(head, None);
     }
 
-    Subterm::Apply(Apply {
+    let applied: Term = Subterm::Apply(Apply {
         head,
         arguments: args
             .iter()
@@ -328,7 +338,10 @@ fn witness_concept_application(concept: &Name, args: &[Term]) -> Term {
             })
             .collect(),
     })
-    .into()
+    .into();
+
+    // The last argument's own span closes the range. An argument the parser gave none — a desugar's product — leaves the head's span alone, which still names the declaration.
+    written(applied, args.last().and_then(Term::span))
 }
 
 impl Term {
@@ -1110,6 +1123,8 @@ fn process_items(
                             }
                         };
 
+                        // Kept across the move into the signature: under a telescope the declared type is a `FuncType` built here, and a refusal about the *witness* — duplicate, orphan, unkeyable, irregular premise — belongs on the concept application it wraps rather than nowhere.
+                        let declared = concept_app.span().cloned();
                         let signature = if witness.params.is_empty() {
                             LetSignature::Name {
                                 type_: Some(concept_app),
@@ -1123,12 +1138,18 @@ fn process_items(
                             }
                         };
 
+                        // A no-op without a telescope, where `type_()` hands back the already-spanned application: `with_span` keeps the innermost span.
+                        let declared_type = match declared {
+                            Some(span) => signature.type_().with_span(span),
+                            None => signature.type_(),
+                        };
+
                         let lower = Lowerer::new(context);
                         let item = FlatLet {
                             kind: curios_core::DefinitionKind::Witness,
                             name: name.clone(),
                             island: context.island(),
-                            type_: lower.term(&signature.type_())?,
+                            type_: lower.term(&declared_type)?,
                             body: lower.value(&signature.body())?,
                         };
                         witnesses.insert(name);

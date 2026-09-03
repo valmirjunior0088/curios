@@ -20,12 +20,18 @@ fn duplicate_witness_is_an_error() {
         /std/print(Show/show(n))
         "#;
 
-    // Both the concept and the declaring module are pinned, not just the word "witness". Witnesses are anonymous, so the module is the only coordinate the report can give a reader — and it comes from each definition's `island`, not from splitting the compiler-minted `witness@N` name. Matched on the message body: the `while elaborating …` prefix names the minted `witness@N`, which Phase C of the name-identity work replaces.
-    assert!(error(source).ends_with(
-        "duplicate witness of '/Show' for head 'Nat'\n  \
-         one is declared in the entry module, another in the entry module\n  \
-         every concept-head pair has at most one witness, program-wide"
-    ));
+    // Both the concept and the declaring module are pinned, not just the word "witness". The module is the *coarse* coordinate the report gives, and it comes from each definition's `island` rather than from splitting the compiler-minted `witness@N` name; the caret below is what locates the declaration itself, which a module cannot when it holds several. Matched on the message body: the `while elaborating …` prefix names the minted `witness@N`, which Phase C of the name-identity work replaces.
+    let rendered = error(source);
+    assert!(
+        rendered.contains(
+            "duplicate witness of '/Show' for head 'Nat'\n  \
+             one is declared in the entry module, another in the entry module\n  \
+             every concept-head pair has at most one witness, program-wide"
+        ),
+        "{rendered}"
+    );
+    // Located at the second declaration's written concept application, which is the only thing in an anonymous declaration a caret can point at.
+    assert!(rendered.contains("satisfy Show(Nat) {"), "{rendered}");
 }
 
 // The declaring module of a nested-module witness renders as that module, which the entry-module cases above cannot distinguish from a bug that always reports the root.
@@ -49,11 +55,15 @@ fn duplicate_witness_reports_its_declaring_module() {
         /std/Io/pure(())
         "#;
 
-    assert!(error(source).ends_with(
-        "duplicate witness of '/M/C' for head '/M/T'\n  \
-         one is declared in module '/M', another in module '/M'\n  \
-         every concept-head pair has at most one witness, program-wide"
-    ));
+    let rendered = error(source);
+    assert!(
+        rendered.contains(
+            "duplicate witness of '/M/C' for head '/M/T'\n  \
+             one is declared in module '/M', another in module '/M'\n  \
+             every concept-head pair has at most one witness, program-wide"
+        ),
+        "{rendered}"
+    );
 }
 
 // The orphan rule: a witness may be declared only where the concept it witnesses, or a type in its key, is already declared. `Ordered` and `Bool` are both `/std`/`/sys`-owned and the entry program owns neither, so `Ordered(Bool)` (not already witnessed anywhere in the standard library) is rejected.
@@ -68,10 +78,15 @@ fn orphan_witness_is_rejected() {
         n
         "#;
 
-    assert!(error(source).ends_with(
-        "orphan witness of '/std/Ordered/Ordered' for head 'Bool', declared in the entry module\n  \
-         a witness may only be declared where the concept or a type in its head is already declared"
-    ));
+    let rendered = error(source);
+    assert!(
+        rendered.contains(
+            "orphan witness of '/std/Ordered/Ordered' for head 'Bool', declared in the entry module\n  \
+             a witness may only be declared where the concept or a type in its head is already declared"
+        ),
+        "{rendered}"
+    );
+    assert!(rendered.contains("satisfy Ordered(Bool) {"), "{rendered}");
 }
 
 // The user's most natural attempt at incoherence, and the one the fixtures above leave out. `orphan_witness_is_rejected` deliberately picks `Ordered(Bool)`, a pair the standard library does *not* witness, so nothing yet pins what happens when the entry program re-declares a witness the prelude already holds. `/std/Bool` witnesses `Show(Bool)`, and the answer must be a refusal — otherwise a program could silently replace a standard-library instance at every site that resolves it, which is exactly the incoherence "one witness per key, program-wide" exists to exclude.
@@ -87,10 +102,14 @@ fn a_standard_library_witness_cannot_be_shadowed() {
         /std/print(Show/show(true))
         "#;
 
-    assert!(error(source).ends_with(
-        "orphan witness of '/std/Show/Show' for head 'Bool', declared in the entry module\n  \
-         a witness may only be declared where the concept or a type in its head is already declared"
-    ));
+    let rendered = error(source);
+    assert!(
+        rendered.contains(
+            "orphan witness of '/std/Show/Show' for head 'Bool', declared in the entry module\n  \
+             a witness may only be declared where the concept or a type in its head is already declared"
+        ),
+        "{rendered}"
+    );
 }
 
 // The sanctioned counterpart: a user's own type is legal to `satisfy` a standard-library concept for, since the declaring root (the entry program) owns the key's type even though it doesn't own the concept.
@@ -280,4 +299,35 @@ fn a_function_witness_for_an_entry_concept_registers() {
         "#;
 
     assert_eq!(run(source), b"mine");
+}
+
+/// A witness refusal is located at the concept application the author wrote, under a telescope as without one.
+///
+/// A `satisfy` block has no name, so its declared type is the only thing a caret can point at — and that type is synthesized during lowering (`witness_concept_application`), which left it spanless. Every duplicate, orphan, unkeyable and irregular-premise refusal therefore arrived with no line at all, naming only a module that may hold a dozen witnesses. Under a telescope the declared type is a `FuncType` built around the application, so it carries the span too.
+#[test]
+fn a_witness_refusal_is_located_at_its_concept_application() {
+    let telescoped = error(
+        r#"
+        use /std/{Str, Show, List};
+        satisfy (@A : Type, use Show(A)) => Show(List(A)) {
+            show(v) = "l"
+        }
+        /std/Io/pure(())
+        "#,
+    );
+    assert!(telescoped.contains("orphan witness"), "{telescoped}");
+    assert!(telescoped.contains("=> Show(List(A)) {"), "{telescoped}");
+
+    // The nullary form, whose declared type *is* the application.
+    let bare = error(
+        r#"
+        use /std/{Str, Show, Nat};
+        satisfy Show(Nat) {
+            show(n) = "n"
+        }
+        /std/Io/pure(())
+        "#,
+    );
+    assert!(bare.contains("orphan witness"), "{bare}");
+    assert!(bare.contains("satisfy Show(Nat) {"), "{bare}");
 }
