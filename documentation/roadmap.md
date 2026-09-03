@@ -119,7 +119,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Elaboration and per-node memoization bounded by written binder nesting, never data length
 - [x] Elaboration transients grouped under one core variant (`Transient`), refused at the kernel
 - [x] [Names as identity only](design/toolchain/one-naming-scheme-for-compiler-identities.md) — nothing branches on a name's spelling
-- [x] [Totality of everything erasure deletes](design/language/totality-of-the-erased-program.md), so nothing inhabits `/syn/False`
+- [x] [Totality of everything erasure deletes](design/language/totality-of-the-erased-program.md), so nothing inhabits `/std/False`
 - [x] Crate-boundary split separating the term representation from the elaborator (`curios-core`)
 - [x] [Independent kernel in `curios-cert` re-checking what the elaborator accepts](design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md)
 - [x] Crate-boundary split separating the rules both checkers run (`curios-analysis`)
