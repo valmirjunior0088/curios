@@ -56,7 +56,7 @@ let settle(h: Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
     match pending
     | false => Try/pure(())
     | true =>
-        let _ = Async/wait(h, /sys/event/write)!;
+        let _ = Async/raw/wait(h, /sys/event/write)!;
         let status = /sys/socket/finish_connect(h)!;
         choose | status == /sys/status/would_block => settle(h, true) | _ => ok(status) end
     end;
@@ -93,7 +93,7 @@ pub let with(
     body: (Socket) -> Try(Async, Io/Error, A),
 ) -> Try(Async, Io/Error, A) =
     let c = open!;
-    let outcome = Async/using(c.0, close(c), Try/run(body(c)))!;
+    let outcome = Async/using(close(c), Try/run(body(c)))!;
     let a = outcome!;
     Try/pure(a);
 

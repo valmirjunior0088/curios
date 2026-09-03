@@ -6,7 +6,7 @@ use crate::tests::run;
 fn atom_splice_builds_the_written_sequence() {
     // `\.` splices one generator into a packed literal, between literal runs and adjacent to another atom. `i` and `bang` are symbolic, so the run is genuinely spliced rather than folded at parse time.
     let source = r#"
-        use /std/{Handle, Str, Byte, Bytes, Io};
+        use /std/{Str, Byte, Bytes, Io};
         let i : Byte = 0x69;
         let bang : Byte = 0x21;
         let _ = Io/write(Io/stdout, x[0x48, i, bang])!;
@@ -19,7 +19,7 @@ fn atom_splice_builds_the_written_sequence() {
 fn atom_splices_are_the_cons_and_append_spellings() {
     // An atom leading a spread lowers to the cons spelling `curios_elab`'s packed-match refinement builds — the singleton `append(x[], h)` concatenated with the tail — so a literal written that way is the cons spine, not merely equal to one. Stated for SYMBOLIC operands through `len` and `get`, the two observations that reduce across that spine, so nothing here is reached by folding literals.
     let source = r#"
-        use /std/{Handle, Str, Eq, Byte, Bytes, Bool, Bits, Nat, Option, Io};
+        use /std/{Str, Eq, Byte, Bytes, Bool, Bits, Nat, Option, Io};
         let cons_len(h : Byte, t : Bytes)
             -> Eq(Bytes/len(x[h, ..t]), Nat/add(1, Bytes/len(t))) = Eq/refl();
         let cons_head(h : Byte, t : Bytes)
@@ -59,7 +59,7 @@ fn vec_cons_with_nat_succ() {
 fn indexed_vec_append_executes() {
     // Rung A of the indexed-inductive ladder, *executed*: `append`'s motive binds the length index (`(v : Vec(T, k)) => Vec(T, Nat/add(k, m))`), the `cons` arm meets it through the definitional successor-peeling of `Nat/add`, and the implicit index arguments of the recursive call are solved to the arm's *first* binder. Running (not just compiling) guards the zonk realignment of multi-binder arm scopes: with the in-group order flipped, the solved indices silently referenced the wrong binder and the program trapped at runtime.
     let source = r#"
-        use /std/{Nat, Bytes, Handle, Io};
+        use /std/{Nat, Bytes, Io};
         induct Vec(T : Type) : (n : Nat) -> Type
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
@@ -87,7 +87,7 @@ fn indexed_vec_append_executes() {
 #[test]
 fn list_fold_sums_elements() {
     let source = r#"
-        use /std/{Handle, Str, Nat, List, Io};
+        use /std/{Str, Nat, List, Io};
         let xs : List(Nat) = [10, 20, 30];
         let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(List/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))!;
         /std/Io/pure(())
@@ -98,7 +98,7 @@ fn list_fold_sums_elements() {
 #[test]
 fn bin_fold_sums_bytes() {
     let source = r#"
-        use /std/{Handle, Str, Nat, Byte, Bytes, Io};
+        use /std/{Str, Nat, Byte, Bytes, Io};
         let b = x[0x0a, 0x14, 0x1e];
         let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(Bytes/fold(b, 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))))))!;
         /std/Io/pure(())

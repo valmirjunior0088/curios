@@ -42,6 +42,6 @@ pub let with_raw(@A: Type, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
 -- The same bracket inside a fiber, registered with the scheduler through `Async/using`: a cancelled task restores the mode it switched, and the body may park.
 pub let with_raw_async(@A: Type, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
     let _ = raw(true)!;
-    let outcome = Async/using(/sys/Handle/stdin, restore, Try/run(body))!;
+    let outcome = Async/using(restore, Try/run(body))!;
     let a = outcome!;
     Try/pure(a);

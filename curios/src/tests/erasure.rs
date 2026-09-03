@@ -9,7 +9,7 @@ use {
 fn prop_irrelevance_equates_distinct_proofs() {
     // Definitional proof irrelevance: `Le` is a strict proposition, so any two proofs of `Le(a, b)` are convertible — `refl` checks at `Eq(p, q)` even though `p` and `q` are distinct binders. Without the `Prop` short-circuit in `convert`, `refl : Eq(p, p)` would not check against `Eq(p, q)`.
     let source = r#"
-        use /std/{Handle, Str, Eq, Nat, Io};
+        use /std/{Str, Eq, Nat, Io};
         let irrelevant(a : Nat, b : Nat, p : Nat/Le/Ind(a, b), q : Nat/Le/Ind(a, b))
             -> Eq(p, q) =
             Eq/refl();
@@ -23,7 +23,7 @@ fn prop_irrelevance_equates_distinct_proofs() {
 fn data_is_not_proof_irrelevant() {
     // The bound on irrelevance: `Nat` is data, not a proposition, so distinct values are never equated — `refl` at `Eq(x, y)` for unequal `x`, `y` is rejected. Guards the `Prop` short-circuit against over-firing on non-props.
     let source = r#"
-        use /std/{Handle, Str, Eq, Nat, Io};
+        use /std/{Str, Eq, Nat, Io};
         let bad(x : Nat, y : Nat) -> Eq(x, y) = Eq/refl();
         let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
@@ -35,7 +35,7 @@ fn data_is_not_proof_irrelevant() {
 fn let_bound_unit_effect_survives_erasure() {
     // `{}` is unit, not a prop, so it is kept — a unit-typed effect must run after erasure. `/std/print` returns `{}`; binding its first call to an unused `let` must not drop the "a" write. Guards that the empty tuple stays runtime content (the `Sort::of` empty-tuple-is-`Type` rule).
     let source = r#"
-        use /std/{Handle, Io};
+        use /std/{Io};
         let first = /std/print("a")!;
         /std/print("b")
         "#;
@@ -46,7 +46,7 @@ fn let_bound_unit_effect_survives_erasure() {
 fn large_elimination_of_a_prop_is_rejected() {
     // The large-elimination guard: `Le` is a multi-constructor proposition, so matching it into `Nat` (data) would observe which constructor it was, breaking irrelevance — rejected. The permitted cases (empty `False` via `absurd`, singleton `Eq` via `subst`, and prop→prop) are exercised by std.
     let source = r#"
-        use /std/{Handle, Str, Nat, Io};
+        use /std/{Str, Nat, Io};
         let bad(a : Nat, b : Nat, p : Nat/Le/Ind(a, b)) -> Nat =
             match p : (_) => Nat
             | z(_) => 0
@@ -62,7 +62,7 @@ fn large_elimination_of_a_prop_is_rejected() {
 fn erased_param_unused_is_accepted() {
     // A type-valued parameter erases (sort-driven), yet at runtime the call still behaves normally — the dropped argument never affects the relevant result.
     let source = r#"
-        use /std/{Handle, Str, Nat, Io};
+        use /std/{Str, Nat, Io};
         let f : (T : Type, m : Nat) -> Nat = (T, m) => m;
         let r : Nat = f(Nat, 3);
         let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))!;
@@ -75,7 +75,7 @@ fn erased_param_unused_is_accepted() {
 fn erased_param_is_dropped_at_runtime() {
     // Sort-driven erasure drops type/proof binders and their arguments. `g`'s type-valued `n` does not exist at runtime, yet `g` passes it to `h`'s type-valued `m`. This runs ONLY if both the parameter and the argument are dropped — otherwise `h(n)` would reference a variable that erase removed from `g`, a dangling runtime reference.
     let source = r#"
-        use /std/{Handle, Str, Nat, Io};
+        use /std/{Str, Nat, Io};
         let h : (m : Type) -> Nat = (m) => 0;
         let g : (n : Type) -> Nat = (n) => h(n);
         let r : Nat = g(Nat);
@@ -89,7 +89,7 @@ fn erased_param_is_dropped_at_runtime() {
 fn erased_struct_field_collapses_to_bare_value() {
     // A record with a type-valued field is a newtype — the erasable field is dropped and the struct collapses to its single relevant field (bare `Nat` here). `make` fills the erasable `ghost` with its own type-valued `n`, which only works if both are dropped. Projecting `.val` off the collapsed record must still yield `val`, not `ghost`.
     let source = r#"
-        use /std/{Handle, Str, Nat, Io};
+        use /std/{Str, Nat, Io};
         struct Wrap : pub Type { val : Nat, ghost : Type }
         let make : (n : Type) -> Wrap = (n) => Wrap { val = 5, ghost = n };
         let r : Nat = make(Nat).val;
@@ -136,7 +136,7 @@ fn char_and_str_certificates_erase_to_their_existing_carriers() {
 fn erased_tuple_field_is_a_subset_type() {
     // The anonymous Σ form of the same idea: `(val : Nat, Type)` is a subset type whose type-valued witness is dropped, collapsing to the bare relevant field. Here `make` puts its type-valued `n` in the erasable second field.
     let source = r#"
-        use /std/{Handle, Str, Nat, Io};
+        use /std/{Str, Nat, Io};
         let make : (n : Type) -> { val : Nat, Type } = (n) => (5, n);
         let r : Nat = make(Nat).0;
         let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(r)))!;
@@ -149,7 +149,7 @@ fn erased_tuple_field_is_a_subset_type() {
 fn erased_definition_param_is_dropped_at_runtime() {
     // The def-form sugar `let f(n : Type) -> R = body`: `g`'s type-valued `n` is dropped and passed to `h`'s type-valued `m` (runs only if both are dropped).
     let source = r#"
-        use /std/{Handle, Str, Nat, Io};
+        use /std/{Str, Nat, Io};
         let h(m : Type) -> Nat = 0;
         let g(n : Type) -> Nat = h(n);
         let r : Nat = g(Nat);
@@ -163,7 +163,7 @@ fn erased_definition_param_is_dropped_at_runtime() {
 fn erased_inductive_payload_is_dropped_at_runtime() {
     // A type-valued constructor payload field erases — dropped from the runtime variant tuple. `make` fills the erasable `ghost` with its own type-valued `n` (runs only if both are dropped); the match binds only the relevant `val`, so its projection must skip the absent field.
     let source = r#"
-        use /std/{Handle, Str, Nat, Io};
+        use /std/{Str, Nat, Io};
         induct Boxed : Type
         | box(ghost : Type, val : Nat)
         end
@@ -182,7 +182,7 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
 #[test]
 fn erased_void_discharges_to_relevant_result() {
     let source = r#"
-        use /std/{False, Handle, Io};
+        use /std/{False, Io};
         let absurd(@A : Type, c : False) -> A = match c end;
         let direct(@A : Type, c : False) -> A = match c : (_) => A end;
         let via_absurd(@A : Type, c : False) -> A = absurd(c);
@@ -196,7 +196,7 @@ fn erased_void_discharges_to_relevant_result() {
 fn erased_indexed_relevant_repro() {
     // A type-indexed inductive whose payload is type-valued (sort-erased): the index binder `m : Type` is dropped, yet `Box(m)` stays a well-formed type.
     let source = r#"
-        use /std/{Nat, Handle, Io};
+        use /std/{Nat, Io};
         induct Box : (n : Type) -> Type
         | mk(x : Type) : (x)
         end
@@ -217,7 +217,7 @@ fn erased_indexed_relevant_repro() {
 #[test]
 fn erased_index_in_type_valued_arg() {
     let source = r#"
-        use /std/{Nat, False, Handle, Io};
+        use /std/{Nat, False, Io};
         induct Box : (n : Type) -> Type
         | mk(x : Type) : (x)
         end
@@ -234,7 +234,7 @@ fn erased_index_in_type_valued_arg() {
 #[test]
 fn proof_bound_as_a_statement_does_not_run_its_certificate() {
     let source = r#"
-        use /std/{BigNat, Nat, Str, Eq, Handle, Io};
+        use /std/{BigNat, Nat, Str, Eq, Io};
         let a : BigNat = BigNat/of_nat(6);
         let b : BigNat = BigNat/of_nat(7);
         let p : Eq(BigNat/add(a, b), BigNat/add(b, a)) = BigNat/add/comm(a, b);
@@ -247,7 +247,7 @@ fn proof_bound_as_a_statement_does_not_run_its_certificate() {
 #[test]
 fn proof_in_an_erased_position_is_not_evaluated() {
     let source = r#"
-        use /std/{BigNat, Nat, Str, Eq, Handle, Io};
+        use /std/{BigNat, Nat, Str, Eq, Io};
         let a : BigNat = BigNat/of_nat(6);
         let b : BigNat = BigNat/of_nat(7);
         let consume(x : BigNat, y : BigNat, p : Eq(BigNat/add(x, y), BigNat/add(y, x))) -> Nat = 42;

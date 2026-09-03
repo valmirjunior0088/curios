@@ -1,12 +1,16 @@
 -- The loops that turn a raw handle's `would_block` into a park: the seam every stream type's `Read` and `Write` witness is written over, and where an accepted connection is pulled. The host never waits on a peer, so a read, write or accept that cannot progress answers `would_block` here and the fiber parks on the handle until `poll` reports it ready. Public so `File`, `tcp`, a child's pipes and `Io`'s standard streams reach it from their own modules; a program holds no raw handle, so it has nothing to hand these.
 use /std/{Handle, Bytes, Nat, Result, Io, Async, True, stream};
 
+-- The park itself, for a module that waits on a handle of its own — a child's exit, a resolver, a pending connect — rather than through one of the loops below. `Async` keeps the suspension private and this is its one public spelling.
+pub let wait(h: Handle, ev: Nat) -> Async({}) =
+    Async/wait(h, ev);
+
 pub let read(h: Handle, n: Nat) -> Async(stream/Chunk) =
     let go() -> Async(stream/Chunk) =
         let r = /sys/Handle/read(h, n)!;
         match r.status == /sys/status/would_block
         | true =>
-            let _ = Async/wait(h, /sys/event/read)!;
+            let _ = wait(h, /sys/event/read)!;
             go()
         | false =>
             match Io/Error/error_of(r.status)
@@ -25,7 +29,7 @@ pub let write(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
         let r = /sys/Handle/write(h, rest)!;
         match r.status == /sys/status/would_block
         | true =>
-            let _ = Async/wait(h, /sys/event/write)!;
+            let _ = wait(h, /sys/event/write)!;
             go(rest)
         | false =>
             match Io/Error/error_of(r.status)
@@ -33,7 +37,7 @@ pub let write(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
             | none() =>
                 match r.written < Bytes/len(rest)
                 | true =>
-                    let _ = Async/wait(h, /sys/event/write)!;
+                    let _ = wait(h, /sys/event/write)!;
                     go(
                         Bytes/drop(
                             rest,
@@ -50,7 +54,7 @@ pub let accept(l: Handle) -> Async(Result(Io/Error, Handle)) =
         let r = /sys/socket/accept(l)!;
         match r.status == /sys/status/would_block
         | true =>
-            let _ = Async/wait(l, /sys/event/read)!;
+            let _ = wait(l, /sys/event/read)!;
             go()
         | false =>
             match Io/Error/error_of(r.status)

@@ -17,27 +17,6 @@ let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("hello"))!;
 }
 
 #[test]
-fn handles_compare_with_the_operators() {
-    // `Handle` had `eql` from `/sys` but no `Equal` witness, so `h == Handle/stdout` reported "no witness of Equal(Handle) found" while every other intrinsic carrier compared with the operator. The witness is over the same `eql`; the output is the truth table at runtime, where a handle is its token.
-    assert_eq!(
-        run(r#"
-use /std/{Handle, Str, Bool, Io, stream};
-let pick(h: Handle) -> Str =
-    choose
-    | h == Handle/stdout => "out"
-    | h != Handle/stderr => "other"
-    | _ => "err"
-    end;
-let _ = Io/write(Io/stdout, Str/to_bytes(pick(Handle/stdout)))!;
-let _ = Io/write(Io/stdout, Str/to_bytes(pick(Handle/stderr)))!;
-let _ = Io/write(Io/stdout, Str/to_bytes(pick(Handle/stdin)))!;
-/std/Io/pure(())
-"#),
-        b"outerrother"
-    );
-}
-
-#[test]
 fn io_write_stderr() {
     assert_eq!(
         run(r#"

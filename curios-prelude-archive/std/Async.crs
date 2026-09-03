@@ -1,4 +1,5 @@
-use /std/{Handle, Bytes, Nat, Int, Bool, List, Option, Result, Cell, Monad, Lift, Io, True, stream};
+use /std/{Handle, Bytes, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io, True,
+    stream};
 use /std/time/{Duration};
 
 -- Both are scheduler plumbing: their operations exist so this module and its descendants can drive a fiber, not so a program can complete someone else's future. The modules stay private and only the two type names are re-exported, which leaves `Future/fulfill` and friends reachable within `/std/Async` alone.
@@ -8,7 +9,7 @@ pub use Waker/{let Waker};
 mod Future;
 pub use Future/{let Future};
 
--- The would-block loops over a raw handle, public so a stream type's witness reaches them from its own module.
+-- The would-block loops over a raw handle, public so a stream type's witness reaches them from its own module; it is also where `wait` stays reachable for the modules that park on a handle of their own.
 pub mod raw;
 
 struct Token: Type {
@@ -21,8 +22,9 @@ let cancel_token(t: Token) -> Io({}) =
 let is_cancelled(t: Token) -> Io(Bool) =
     Cell/get(t.0);
 
+-- A finalizer and whether it has run. The flag, not a key, is what makes a release idempotent: the first to reach the guard — the fiber's own `using` on its way out, or the scheduler reclaiming a fiber that never came back — runs the finalizer and marks it, and every later reach is a no-op. Nothing identifies a guard from outside, so a program brackets a resource without holding anything the scheduler could be handed.
 struct Guard: Type {
-    handle: Handle,
+    done: Cell(Bool),
     release: Io({}),
 }
 
@@ -34,8 +36,7 @@ induct Pause: Type
 | sleep(Duration)
 | fork(child: Io(Step({})), token: Token)
 | park((Waker) -> Io({}))
-| acquire(handle: Handle, release: Io({}))
-| release(Handle)
+| acquire(Guard)
 | yield_now()
 and Step(A: Type): Type
 | done(A)
@@ -74,31 +75,32 @@ pub let lift(@A: Type, action: Io(A)) -> Async(A) =
 let suspend(p: Pause) -> Async({}) =
     Async { Io/pure(Step/step(p, Io/pure(Step/done(())))) };
 
-pub let wait(h: Handle, ev: Nat) -> Async({}) =
+-- Park until `h` polls ready for `ev`. Private: a program holds no handle, and `/std`'s own stream modules reach it through `raw`.
+let wait(h: Handle, ev: Nat) -> Async({}) =
     suspend(Pause/wait(h, ev));
 
 pub let sleep(d: Duration) -> Async({}) =
     suspend(Pause/sleep(d));
 
-pub let park(register: (Waker) -> Io({})) -> Async({}) =
+let park(register: (Waker) -> Io({})) -> Async({}) =
     suspend(Pause/park(register));
 
 pub let yield_now: Async({}) =
     suspend(Pause/yield_now());
 
-pub let acquire(h: Handle, fin: Io({})) -> Async({}) =
-    suspend(Pause/acquire(h, fin));
-
-pub let release(h: Handle) -> Async({}) =
-    suspend(Pause/release(h));
+let acquire(g: Guard) -> Async({}) =
+    suspend(Pause/acquire(g));
 
 let fork_with(child: Fiber, t: Token) -> Async({}) =
     suspend(Pause/fork(child.0, t));
 
-pub let using(@A: Type, h: Handle, fin: Io({}), body: Async(A)) -> Async(A) =
-    let _ = acquire(h, fin)!;
+-- `body` with `fin` registered as what runs when it is over: on the way out here, or by the scheduler when the task is cancelled, dropped at the root's end, or found parked at a deadlock — both exits, exactly once.
+pub let using(@A: Type, fin: Io({}), body: Async(A)) -> Async(A) =
+    let done = Cell/new(false)!;
+    let g = Guard { done = done, release = fin };
+    let _ = acquire(g)!;
     let a = body!;
-    let _ = release(h)!;
+    let _ = run_guard(g)!;
     pure(a);
 
 pub let go(body: Fiber) -> Async({}) =
@@ -149,26 +151,31 @@ struct Sleeper: Type {
     guards: List(Guard),
 }
 
+let run_guard(g: Guard) -> Io({}) =
+    let done = Cell/get(g.done)!;
+    match done
+    | true => Io/pure(())
+    | false =>
+        let _ = Cell/set(g.done, true)!;
+        g.release
+    end;
+
 let run_guards(gs: List(Guard)) -> Io({}) =
     match gs
     | [] => Io/pure(())
     | [g, ..more] =>
-        let _ = g.release!;
+        let _ = run_guard(g)!;
         run_guards(more)
     end;
 
-let release_guard(h: Handle, gs: List(Guard)) -> Io(List(Guard)) =
+-- The guards not yet run, so a fiber that brackets in a loop does not carry every guard it has already released.
+let live_guards(gs: List(Guard)) -> Io(List(Guard)) =
     match gs
     | [] => Io/pure([])
     | [g, ..more] =>
-        match /sys/Handle/eql(g.handle, h)
-        | true =>
-            let _ = g.release!;
-            Io/pure(more)
-        | false =>
-            let rest = release_guard(h, more)!;
-            Io/pure([g, ..rest])
-        end
+        let done = Cell/get(g.done)!;
+        let rest = live_guards(more)!;
+        Io/pure(match done | true => rest | false => [g, ..rest] end)
     end;
 
 let drain_jobs(js: List(Job)) -> Io({}) =
@@ -320,8 +327,10 @@ let expire_sleepers(sleeping: List(Sleeper)) -> Io({List(Job), List(Sleeper)}) =
         end;
     walk(sleeping, [], []);
 
--- No runnable job, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. Nominal and empty — it records that the fact occurred, and leaves room to carry a diagnostic later without changing how callers match.
-pub struct Deadlock: pub Type {}
+-- No runnable job, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. `parked` is how many fibers were waiting on a waker nothing will fire — the one place a fiber can still be at that point, so the number that says what was stuck.
+pub struct Deadlock: pub Type {
+    parked: Nat,
+}
 
 -- The scheduler's four work queues, named together rather than threaded as loose cells through one closure. The root's result cell is deliberately *not* a field: it is the only piece that knows the answer type, so keeping it out leaves every function that merely moves fibers around monomorphic.
 struct Queues: Type {
@@ -403,14 +412,10 @@ and resume_after(q: Queues, job: Job, pause: Pause, next: Io(Step({}))) -> Io({}
         let _ = enqueue(q, Job { resume = Async { child }, token = child_token, guards = [] })!;
         enqueue(q, resumed)
     | park(register) => park_on_waker(q, resumed, register)
-    -- Acquiring and releasing a guard are bookkeeping, not suspension: the fiber is served again immediately rather than going back through the queue.
-    | acquire(h, release) =>
-        serve(
-            q,
-            Job { ..resumed, guards = [Guard { handle = h, release = release }, ..job.guards] })
-    | release(h) =>
-        let remaining = release_guard(h, job.guards)!;
-        serve(q, Job { ..resumed, guards = remaining })
+    -- Acquiring a guard is bookkeeping, not suspension: the fiber is served again immediately rather than going back through the queue. The guards it already released are dropped on the way.
+    | acquire(g) =>
+        let kept = live_guards(job.guards)!;
+        serve(q, Job { ..resumed, guards = [g, ..kept] })
     | yield_now() => enqueue(q, resumed)
     end;
 
@@ -471,8 +476,9 @@ let drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(Deadlock, A
             match stalled
             -- Reported to the caller rather than fatal: terminating the process is `run`'s decision, not the scheduler's.
             | true =>
+                let slots = Cell/get(q.parked)!;
                 let _ = release_everything(q)!;
-                Io/pure(Result/failure(Deadlock {}))
+                Io/pure(Result/failure(Deadlock { parked = List/len(slots) }))
             | false =>
                 let _ = wake_ready(q)!;
                 drive(q, answer)
@@ -499,8 +505,14 @@ pub let run(main: Async({})) -> Io({}) =
     let outcome = block_on(main)!;
     match outcome
     | success(_) => Io/pure(())
-    | failure(_) =>
-        let _ = /std/print_err("async: deadlocked, no runnable work remains\n")!;
+    | failure(d) =>
+        let _ =
+            /std/print_err(
+                Str/flatten(
+                    [
+                        "async: deadlocked, no runnable work remains and ",
+                        Nat/to_str(d.parked),
+                        " fiber(s) wait on a waker nothing will fire\n"]))!;
         /sys/proc/exit(1)
     end;
 

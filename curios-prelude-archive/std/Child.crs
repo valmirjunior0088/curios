@@ -61,7 +61,7 @@ pub let kill(c: Child) -> Io({}) =
 
 -- Wait for the child to end. Its handle becomes readable when it does, so the fiber parks on it and reaps at once. The pipes are closed with the child, so read what it wrote before waiting for it — `Command/run` drains both outputs first for that reason.
 pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
-    let _ = Async/wait(c.handle, /sys/event/read)!;
+    let _ = Async/raw/wait(c.handle, /sys/event/read)!;
     let r = /sys/proc/wait(c.handle)!;
     let _ = close_pipes(c)!;
     match Io/Error/error_of(r.status)
@@ -76,6 +76,6 @@ pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
 
 -- `body` under the child's guard, registered with the scheduler: however the task ends — done, failed or cancelled — `kill` runs, so a child never outlives the bracket it was started in. `Async` releases what a task acquired on both exits, and a child outliving the task that spawned it is the one thing that rule cannot mean.
 pub let with(@A: Type, c: Child, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
-    let outcome = Async/using(c.handle, kill(c), Try/run(body))!;
+    let outcome = Async/using(kill(c), Try/run(body))!;
     let a = outcome!;
     Try/pure(a);

@@ -232,9 +232,9 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `map`, and `sleep`/`timeout`
   - [x] Concurrent `race`/`select`, and `join_all` over a list of tasks
   - [x] Fibers (`go`) and tasks (`spawn`/`join`/`cancel`), over `Future`/`await`
-  - [x] Wakers and parking (`park`, `yield_now`), driven by the poll-based run loop (`block_on`/`run`)
-  - [x] Scoped handle ownership (`using`/`acquire`/`release`), released on both exits
-  - [x] Deadlock detection (no runnable job, nothing blocked on a handle, no sleeper — reported rather than hung)
+  - [x] Parking on a handle, a timer or a waker, and `yield_now`, driven by the poll-based run loop (`block_on`/`run`); the handle and waker parks are the library's own, reached by a program through the stream types, `sleep` and `join`
+  - [x] Scoped resource ownership (`using`), a finalizer run exactly once on both exits
+  - [x] Deadlock detection (no runnable job, nothing blocked on a handle, no sleeper — reported with how many fibers wait on a waker nothing will fire, rather than hung)
 - [x] Purity through an opaque `Io` monad (three intrinsics: `Io(T)`, `pure`, `bind`)
   - [x] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness)
   - [x] Stage 2: the flip — `/std` retyped and the certifier's purity analysis deleted

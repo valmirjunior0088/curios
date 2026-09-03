@@ -81,7 +81,7 @@ pub let with_async(
     body: (File) -> Try(Async, Io/Error, A),
 ) -> Try(Async, Io/Error, A) =
     let f = open(path, mode)!;
-    let outcome = Async/using(f.0, close(f), Try/run(body(f)))!;
+    let outcome = Async/using(close(f), Try/run(body(f)))!;
     let a = outcome!;
     Try/pure(a);
 
