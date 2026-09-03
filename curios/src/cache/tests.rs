@@ -191,6 +191,34 @@ fn a_slot_answers_for_a_dependency_both_projects_read() {
     fs::remove_dir_all(theirs).unwrap();
 }
 
+/// A record vouches for the bytes it was written beside and for no others. Two projects holding a package of one name address one slot, and the slot is two files written without a lock, so two compilers filing it at once can leave one's record beside the other's unit; a record that named only its files would find them unchanged and hand one project the other's library.
+#[test]
+fn a_record_does_not_vouch_for_a_unit_it_was_not_written_beside() {
+    let mine = project("mine-torn");
+    let theirs = project("theirs-torn");
+
+    write(&theirs, "shape/lib.crs", &library("theirs"));
+    reused(&theirs);
+    reused(&mine);
+
+    // Their unit under my record, in the one slot both address.
+    let (from, into) = (theirs.join(".curios/unit"), mine.join(".curios/unit"));
+    for slot in fs::read_dir(&from).expect("a store with units in it") {
+        let slot = slot.unwrap().path();
+        let name = slot.file_name().unwrap();
+        assert!(into.join(name).is_dir(), "both projects address one slot");
+        fs::copy(slot.join(STORED), into.join(name).join(STORED)).unwrap();
+    }
+
+    assert!(
+        !reused(&mine),
+        "my record does not vouch for bytes it was not written beside"
+    );
+
+    fs::remove_dir_all(mine).unwrap();
+    fs::remove_dir_all(theirs).unwrap();
+}
+
 /// The store holds one slot per unit rather than one per compile — the property the address exists to have, and the one the previous scheme lost.
 #[test]
 fn compiling_repeatedly_files_one_slot() {

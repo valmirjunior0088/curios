@@ -6,7 +6,7 @@
 //!
 //! **Taking a unit from here is believing a verdict this compiler reached earlier.** That is a change to what the compiler believes rather than a faster way to do what it already did, and the argument for it is in [Cached verdicts](../../documentation/soundness/admission-without-judgment/cached-verdicts.md). Everything below is the mechanism the argument is about. The payload family in [`payload`] is that same argument one level up, with [Reused payloads](../../documentation/soundness/admission-without-judgment/reused-payloads.md) stating what it adds.
 //!
-//! **A slot is addressed, and a hit is verified.** The address ([`unit_slot`]) names a place — these mounts, this compiler, this predecessor chain — and holds no file contents at all, so a project has as many slots as it has units rather than one per compile. What the unit was compiled *from* rides in a [`Record`] beside it and is checked when the slot is opened: every file the compilation read, by the text it read, plus what each predecessor contained.
+//! **A slot is addressed, and a hit is verified.** The address ([`unit_slot`]) names a place — these mounts, this compiler, this predecessor chain — and holds no file contents at all, so a project has as many slots as it has units rather than one per compile. What the unit was compiled *from* rides in a [`Record`] beside it and is checked when the slot is opened: every file the compilation read, by the text it read, plus what each predecessor contained, plus what the slot itself holds — so a record vouches for the bytes it was written beside and for no others.
 //!
 //! That split is deliberate, and the previous scheme is why. It hashed the unit's whole source directory into the address — a directory that, for a package's own library, *contains this store*. Filing a unit therefore changed the address it would next be looked for under, so a package's own code never hit and `unit/` grew a directory per compile. The lesson is not "exclude the store from the walk": a key derived from a belief about what the inputs are goes wrong silently the day the belief does, and it goes wrong in the direction that hands back a stale unit. Here the inputs are not believed but recorded, at the one seam every module read passes through (`RootSource::reads`), so a compilation that reads something new records it without anything here being taught to expect it.
 
@@ -46,6 +46,8 @@ struct Record {
     reads: Vec<(String, String)>,
     /// What each predecessor contained, in fold order — the digest of the bytes its own slot holds. Ordered for the same reason the address orders their slots: two orders of one set are two lowerings.
     predecessors: Vec<String>,
+    /// The stored unit's own digest, so the record vouches for the bytes it was written beside and for no others. Two projects with one package name and one chain address one slot, and `replace` is two writes with no lock between them, so two compilers filing one slot at once can leave one's record beside the other's unit; without this the record's files agree, the unit deserializes, and a project is handed another project's library. It is also what makes a damaged unit that still deserializes a miss rather than a belief, as the payload family's own digest does for its artifact.
+    unit: String,
 }
 
 /// One unit's place in the chain a compilation builds.
@@ -129,7 +131,7 @@ impl Verdicts {
             let bytes = fs::read(directory.join(STORED)).ok()?;
             let record = curios_archive::from_bytes::<Record>(&recorded).ok()?;
 
-            if !agrees(source, &record, &placed) {
+            if !agrees(source, &record, &placed, &bytes) {
                 return None;
             }
 
@@ -190,7 +192,7 @@ impl Cache for Verdicts {
         // A stored unit that will not read back is a store to ignore, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
         let record = curios_archive::from_bytes::<Record>(&recorded).ok()?;
 
-        if !agrees(source, &record, &self.placed.borrow()) {
+        if !agrees(source, &record, &self.placed.borrow(), &bytes) {
             return None;
         }
 
@@ -209,9 +211,12 @@ impl Cache for Verdicts {
             return;
         };
 
-        let filed = curios_archive::to_bytes(&recorded(source, &self.placed.borrow()))
-            .map_err(io::Error::other)
-            .and_then(|record| replace(&self.store.unit(&placed.slot), STORED, &bytes, &record));
+        let filed =
+            curios_archive::to_bytes(&recorded(source, &self.placed.borrow(), &placed.contained))
+                .map_err(io::Error::other)
+                .and_then(|record| {
+                    replace(&self.store.unit(&placed.slot), STORED, &bytes, &record)
+                });
 
         // Best effort: a store that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit enters the chain below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.
         if let Err(error) = filed {
@@ -244,23 +249,28 @@ fn replace(directory: &Path, stored: &str, bytes: &[u8], record: &[u8]) -> io::R
     fs::write(directory.join(RECORD), record).map_err(at)
 }
 
-/// Whether `record` still describes the world: every file it names still holds the text it was read as, and every predecessor still contains what it did.
+/// Whether `record` still describes the world: the slot holds the bytes it was written beside, every file it names still holds the text it was read as, and every predecessor still contains what it did.
+///
+/// The slot's own digest comes first, as the payload family orders its check: it decides a torn or damaged slot before any file is opened.
 ///
 /// A file that has since vanished, changed, or become unreadable is a disagreement like any other. So is a shorter or longer read list, which is what catches a module added or removed — though that alone never has to catch it, since a module can only join a unit through a `mod` in a header that is itself on this list.
 ///
 /// **A recorded file must also be one `source` could itself have read**, and that clause is what keeps a *shared* store from admitting across projects. The address carries no file contents, so two projects that each hold a package of one name, compiled by one compiler after one chain, address the same slot; without this, the second opens the first's record, finds the first's files unchanged on disk because nothing touched them, and is handed a unit compiled from source it has never seen. Checking containment rather than re-deriving the read set keeps the check exact: a git dependency is materialized once under the shared store and read from that same path by every project, so genuine sharing survives.
-fn agrees(source: &UnitSource<'_>, record: &Record, placed: &[Placed]) -> bool {
-    chained(&record.predecessors, placed) && read_within(&source.directories(), &record.reads)
+fn agrees(source: &UnitSource<'_>, record: &Record, placed: &[Placed], bytes: &[u8]) -> bool {
+    record.unit == digest(bytes)
+        && chained(&record.predecessors, placed)
+        && read_within(&source.directories(), &record.reads)
 }
 
-/// What `source` read after `placed`, as the record of it.
-fn recorded(source: &UnitSource<'_>, placed: &[Placed]) -> Record {
+/// What `source` read after `placed`, as the record of it, beside a unit whose bytes digest to `contained`.
+fn recorded(source: &UnitSource<'_>, placed: &[Placed], contained: &str) -> Record {
     Record {
         reads: digested(source.reads()),
         predecessors: placed
             .iter()
             .map(|placed| placed.contained.clone())
             .collect(),
+        unit: contained.to_string(),
     }
 }
 
