@@ -202,7 +202,9 @@ fn tests_payload(
     let (module, _foreigns, records) = compiled?;
     let cwasm = to_cwasm(&module).map_err(CompileError::failure)?;
 
-    store.payload_put(&program, &sources, &encode(&records, &cwasm));
+    if let Some(bytes) = encode(&records, &cwasm) {
+        store.payload_put(&program, &sources, bytes.as_ref());
+    }
 
     Ok((records, cwasm))
 }
@@ -285,52 +287,35 @@ fn body(record: &TestRecord) {
     }
 }
 
-/// `records ++ cwasm` as one stored payload: a count, then each record length-prefixed, then the machine code — all little-endian `u32` lengths, an internal format scoped to this compiler build exactly as the store's other artifacts are.
-fn encode(records: &[TestRecord], cwasm: &[u8]) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    bytes.extend(
-        u32::try_from(records.len())
-            .expect("a test count fits")
-            .to_le_bytes(),
-    );
-    for record in records {
-        for field in [&record.path, &record.body] {
-            bytes.extend(
-                u32::try_from(field.len())
-                    .expect("a record field fits")
-                    .to_le_bytes(),
-            );
-            bytes.extend(field.as_bytes());
-        }
-    }
-    bytes.extend(cwasm);
-
-    bytes
+/// What the store files for one test program: its records as `(path, body)` pairs beside the machine code, one archive as every other artifact in the store is. A corrupt or foreign payload fails to decode and is a miss, never an error.
+// `always`: a product that reads and writes archives unconditionally has no `archive` feature for a `cfg_attr` to gate on.
+#[curios_archive::archived(always)]
+struct TestPayload {
+    records: Vec<(String, String)>,
+    cwasm: Vec<u8>,
 }
 
-/// The inverse of [`encode`], `None` on any malformation — a corrupt or foreign payload is a store miss, not an error.
+/// `records` and `cwasm` as the bytes the store files — `None` when they will not serialize, on which the record is withheld exactly as a unit's is.
+fn encode(records: &[TestRecord], cwasm: &[u8]) -> Option<curios_archive::Serialized> {
+    let payload = TestPayload {
+        records: records
+            .iter()
+            .map(|record| (record.path.clone(), record.body.clone()))
+            .collect(),
+        cwasm: cwasm.to_vec(),
+    };
+
+    curios_archive::to_bytes(&payload).ok()
+}
+
+/// The inverse of [`encode`], `None` on any malformation.
 fn decode(bytes: &[u8]) -> Option<(Vec<TestRecord>, Vec<u8>)> {
-    fn take<'a>(rest: &mut &'a [u8], n: usize) -> Option<&'a [u8]> {
-        let (head, tail) = rest.split_at_checked(n)?;
-        *rest = tail;
+    let payload = curios_archive::from_bytes::<TestPayload>(bytes).ok()?;
+    let records = payload
+        .records
+        .into_iter()
+        .map(|(path, body)| TestRecord { path, body })
+        .collect();
 
-        Some(head)
-    }
-
-    fn field(rest: &mut &[u8]) -> Option<String> {
-        let length = u32::from_le_bytes(take(rest, 4)?.try_into().expect("four bytes")) as usize;
-
-        String::from_utf8(take(rest, length)?.to_vec()).ok()
-    }
-
-    let mut rest = bytes;
-    let count = u32::from_le_bytes(take(&mut rest, 4)?.try_into().expect("four bytes")) as usize;
-    let mut records = Vec::with_capacity(count);
-    for _ in 0..count {
-        let path = field(&mut rest)?;
-        let body = field(&mut rest)?;
-        records.push(TestRecord { path, body });
-    }
-
-    Some((records, rest.to_vec()))
+    Some((records, payload.cwasm))
 }
