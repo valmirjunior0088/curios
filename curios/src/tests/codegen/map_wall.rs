@@ -34,7 +34,9 @@ pub(super) fn cwasm_of(source: &str) -> Vec<u8> {
 pub(super) fn run(cwasm: &[u8], n: u64) -> (f64, Vec<u8>) {
     let (host, io) = MockHost::builder().stdin_lines([n.to_string()]).build();
     let start = Instant::now();
-    let code = run_bytes(cwasm, host, ForeignBindings::empty()).expect("the workload runs");
+    // SAFETY: the caller precompiled `cwasm` in this process.
+    let code =
+        unsafe { run_bytes(cwasm, host, ForeignBindings::empty()) }.expect("the workload runs");
     let elapsed = start.elapsed().as_secs_f64() * 1000.0;
     assert_eq!(code, 0, "the workload exits cleanly");
 

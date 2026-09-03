@@ -25,9 +25,10 @@ fn main() -> ExitCode {
     // argv crosses to the guest via `/std/proc/args` as the bytes the OS handed over, argv[0] being this executable; `env::args` would panic on an argument that is not UTF-8, which the row promises to carry.
     let args = env::args_os().map(OsString::into_encoded_bytes).collect();
 
-    match payload()
-        .and_then(|payload| run_bytes(&payload, OsHost::with_args(args), ForeignBindings::empty()))
-    {
+    // SAFETY: the payload is what this executable's own footer carries, appended by the compiler that embedded this launcher.
+    match payload().and_then(|payload| unsafe {
+        run_bytes(&payload, OsHost::with_args(args), ForeignBindings::empty())
+    }) {
         Ok(0) => ExitCode::SUCCESS,
         Ok(code) => process::exit(code),
         Err(error) => {

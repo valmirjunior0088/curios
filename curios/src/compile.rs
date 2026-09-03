@@ -45,5 +45,8 @@ pub fn run_wasm<H: curios_runtime::HostOps + Send + Sync + 'static>(
     host: H,
     bindings: curios_runtime::ForeignBindings,
 ) -> Result<i32, String> {
-    curios_runtime::run_bytes(&to_cwasm(module)?, host, bindings)
+    let cwasm = to_cwasm(module)?;
+
+    // SAFETY: the payload was precompiled on the line above, by the engine that deserializes it.
+    unsafe { curios_runtime::run_bytes(&cwasm, host, bindings) }
 }

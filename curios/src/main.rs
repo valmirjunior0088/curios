@@ -85,15 +85,18 @@ fn dispatch() -> Result<(), Failure> {
 
             step(Heading::Running, &subject);
 
-            let code = run_bytes(
-                &cwasm,
-                OsHost::with_args(
-                    iter::once(entry)
-                        .chain(args.into_iter().map(OsString::into_encoded_bytes))
-                        .collect(),
-                ),
-                ForeignBindings::empty(),
-            )?;
+            // SAFETY: `payload_of` precompiled the payload in this process or read it back from the project's own store, where a compilation of this compiler filed it.
+            let code = unsafe {
+                run_bytes(
+                    &cwasm,
+                    OsHost::with_args(
+                        iter::once(entry)
+                            .chain(args.into_iter().map(OsString::into_encoded_bytes))
+                            .collect(),
+                    ),
+                    ForeignBindings::empty(),
+                )
+            }?;
 
             if code != 0 {
                 process::exit(code);

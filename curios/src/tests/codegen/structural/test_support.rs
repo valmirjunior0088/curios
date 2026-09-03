@@ -421,7 +421,8 @@ pub(super) fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
         .expect("raw module validates and Cranelift-compiles without Binaryen");
 
     let (system, io) = MockHost::builder().args(args).build();
-    run_bytes(&cwasm, system, ForeignBindings::empty()).expect("raw module executes");
+    // SAFETY: `cwasm` was precompiled just above, in this process.
+    unsafe { run_bytes(&cwasm, system, ForeignBindings::empty()) }.expect("raw module executes");
     io.output()
 }
 
@@ -431,6 +432,8 @@ pub(super) fn run_binaryen(source: &str, args: &[&str]) -> Vec<u8> {
     let cwasm = crate::to_cwasm(&module).expect("binaryen path precompiles");
 
     let (system, io) = MockHost::builder().args(args).build();
-    run_bytes(&cwasm, system, ForeignBindings::empty()).expect("optimized module executes");
+    // SAFETY: `cwasm` was precompiled just above, in this process.
+    unsafe { run_bytes(&cwasm, system, ForeignBindings::empty()) }
+        .expect("optimized module executes");
     io.output()
 }

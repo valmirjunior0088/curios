@@ -236,11 +236,15 @@ fn run_selected(
 
     for (index, record) in selected {
         let arguments = vec![argv0.clone().into_bytes(), index.to_string().into_bytes()];
-        match run_bytes(
-            cwasm,
-            OsHost::with_args(arguments),
-            ForeignBindings::empty(),
-        ) {
+        // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
+        let outcome = unsafe {
+            run_bytes(
+                cwasm,
+                OsHost::with_args(arguments),
+                ForeignBindings::empty(),
+            )
+        };
+        match outcome {
             // The guest printed `path: proved` or `path: passed` and returned.
             Ok(0) => unit.passed += 1,
             // The guest printed `path: failed` and its report, then exited 1; the body as written is what only the records know.

@@ -414,17 +414,17 @@ impl Error for ExitTrap {}
 
 /// Run a precompiled module — `.cwasm` bytes produced by `Engine::precompile_module` for this exact wasmtime version and engine configuration — returning the process exit code (`0` when `main` returns normally, otherwise the code passed to `proc/exit`).
 ///
-/// # Safety contract
+/// # Safety
 ///
-/// `payload` must be unmodified output of `precompile_module` for this engine. Provenance is guaranteed by callers: the launcher reads it from its own trusted footer, and `curios` produces it in-process. `Module::deserialize` performs only light validation, so a foreign blob could execute arbitrary code.
-pub fn run_bytes<H: HostOps + Send + Sync + 'static>(
+/// `payload` must be unmodified output of [`precompile`](super::precompile) for this engine: `Module::deserialize` performs only light validation, so a foreign blob could execute arbitrary code. The keyword is what carries that obligation to each caller, which names its provenance where it takes it on — the launcher its own footer, the compiler what it just compiled or filed in the project's store.
+pub unsafe fn run_bytes<H: HostOps + Send + Sync + 'static>(
     payload: &[u8],
     host: H,
     bindings: ForeignBindings,
 ) -> Result<i32, String> {
     let engine = shared_engine();
 
-    // SAFETY: see the contract above — `payload` is our own precompiled output.
+    // SAFETY: the caller's, restated in this function's contract — `payload` is our own precompiled output.
     let module = unsafe { Module::deserialize(engine, payload) }
         .map_err(|error| format!("failed to load wasm module: {error}"))?;
 

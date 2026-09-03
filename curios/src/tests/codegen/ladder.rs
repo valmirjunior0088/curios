@@ -489,7 +489,8 @@ fn walk_mirror_attribution_measurements() {
         for (kind, cwasm) in [("raw", &raw), ("binaryen", &optimized)] {
             let (system, io) = MockHost::builder().stdin_lines([input]).build();
             let start = Instant::now();
-            run_bytes(cwasm, system, ForeignBindings::empty()).expect("mirror executes");
+            // SAFETY: both payloads were precompiled above, in this process.
+            unsafe { run_bytes(cwasm, system, ForeignBindings::empty()) }.expect("mirror executes");
             let elapsed = start.elapsed().as_secs_f64();
             let printed = String::from_utf8_lossy(&io.output()).trim().to_string();
             println!("{label:12} {kind:9} {elapsed:.3}s prints {printed}");
