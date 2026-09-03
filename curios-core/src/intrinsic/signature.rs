@@ -127,7 +127,6 @@ impl Intrinsic {
             ByteEql(..) | ByteLt(..) | ByteLe(..) => bin_op(byte_type(), bool_type()),
             IntEql(..) | IntNeq(..) | IntLt(..) | IntLe(..) => bin_op(int_type(), bool_type()),
             FltEql(..) | FltNeq(..) | FltLt(..) | FltLe(..) => bin_op(flt_type(), bool_type()),
-            HandleEql(..) => bin_op(handle_type(), bool_type()),
 
             // Arithmetic and bitwise: closed on their carrier.
             BoolAnd(..) | BoolOr(..) | BoolXor(..) => bin_op(bool_type(), bool_type()),

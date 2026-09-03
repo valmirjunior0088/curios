@@ -115,10 +115,6 @@ pub fn reduce_intrinsic(
             },
             Intrinsic::nat_eql,
         ),
-        // Handles are opaque runtime tokens with no compile-time literal form, so this only ever reduces its operands and rebuilds — it never folds.
-        Intrinsic::HandleEql(left, right) => {
-            reduce_nat_binary(reducer, left, right, |_, _| None, Intrinsic::HandleEql)
-        }
         Intrinsic::NatNeq(left, right) => reduce_nat_compare(
             reducer,
             left,

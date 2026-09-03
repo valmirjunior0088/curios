@@ -244,7 +244,7 @@ impl Semantics {
             | IntShl | IntShr | FltAdd | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq
             | FltLt | FltLe | FltMin | FltMax | FltCopysign | FltNeg | FltAbs | FltSqrt
             | FltFloor | FltCeil | FltTrunc | FltNearest | NatToInt | NatToFlt | IntToNat
-            | IntToFlt | FltToLeBytes | HandleEql => LocalBehavior::pure(),
+            | IntToFlt | FltToLeBytes => LocalBehavior::pure(),
         }
     }
 
@@ -348,10 +348,6 @@ impl Semantics {
             Some(Constant::Bool(value)) => Some(*value),
             _ => None,
         };
-        let io = |index: usize| match operands.get(index) {
-            Some(Constant::Handle(value)) => Some(*value),
-            _ => None,
-        };
         let bin_x = |index: usize| match operands.get(index) {
             Some(Constant::Bin(Grain::X, value)) => Some(value),
             _ => None,
@@ -440,8 +436,6 @@ impl Semantics {
                 FltNeq => Constant::Bool(flt(0)?.neq(flt(1)?)),
                 FltLt => Constant::Bool(flt(0)?.lt(flt(1)?)),
                 FltLe => Constant::Bool(flt(0)?.le(flt(1)?)),
-
-                HandleEql => Constant::Bool(io(0)? == io(1)?),
 
                 NatToInt => return Some(scalar_result(nat_to_int(nat(0)?), Constant::Int)),
                 NatToFlt => Constant::Flt(Floating::of_natural(&Natural::from(nat(0)?))),

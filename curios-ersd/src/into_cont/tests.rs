@@ -699,19 +699,18 @@ fn io_constants_ride_the_binary_carrier() {
     let mut builder = ErsdBuilder::new();
     builder.open_block();
     let stdout = builder.constant(Constant::Handle(1));
-    let stderr = builder.constant(Constant::Handle(2));
-    let same = builder.let_value(
+    let width = builder.let_value(
         None,
-        Rhs::Operation {
-            operation: Operation::HandleEql,
-            operands: vec![Atom::Constant(stdout), Atom::Constant(stderr)],
+        Rhs::Sequence {
+            operation: SequenceOp::BinLen(Grain::X),
+            operands: vec![Atom::Constant(stdout)],
         },
     );
-    let entry = builder.seal_block(Terminator::Return(Atom::Value(same)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(width)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
     let printed = lowered(&module);
-    assert!(printed.contains("BinEql"), "{printed}");
+    assert!(printed.contains("BinLen"), "{printed}");
 }
 
 #[test]

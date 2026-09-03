@@ -2,12 +2,9 @@
 //!
 //! A total table, one arm per [`Operation`], plus the three small families the sequence operations fan out into by grain. Nothing here reduces or decides: the erased roster and the Cont roster are two spellings of the same set, and this is the translation between them, kept apart from the lowering so that adding an operation is an edit to a table rather than to a walk.
 
-use {
-    super::{CellOperation, Operation, SequenceGrain, SequenceOp},
-    curios_utilities::Grain,
-};
+use super::{CellOperation, Operation, SequenceGrain, SequenceOp};
 
-/// The Cont intrinsic of a scalar [`Operation`]. `Bool` operations run on the `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit) and `Byte` comparisons on the `Nat` carrier; `HandleEql` is packed-binary equality at byte grain. The `Byte` conversions are handled before this table.
+/// The Cont intrinsic of a scalar [`Operation`]. `Bool` operations run on the `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit) and `Byte` comparisons on the `Nat` carrier. The `Byte` conversions are handled before this table.
 pub(super) fn operation_intrinsic(operation: Operation) -> curios_cont::CpsIntrinsic {
     use Operation as O;
     match operation {
@@ -74,7 +71,6 @@ pub(super) fn operation_intrinsic(operation: Operation) -> curios_cont::CpsIntri
         O::FltToInt => curios_cont::CpsIntrinsic::FltToInt,
         O::FltToLeBytes => curios_cont::CpsIntrinsic::FltToLeBytes,
         O::FltOfLeBytes => curios_cont::CpsIntrinsic::FltOfLeBytes,
-        O::HandleEql => curios_cont::CpsIntrinsic::BinEql(Grain::X),
         O::ByteToNat | O::NatToByte => {
             unreachable!("Byte conversions are lowered before the intrinsic table")
         }

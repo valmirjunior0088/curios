@@ -157,7 +157,6 @@ impl Sort {
                 | Intrinsic::FltToNat { .. }
                 | Intrinsic::FltTrunc(..)
                 | Intrinsic::Handle(..)
-                | Intrinsic::HandleEql(..)
                 | Intrinsic::Int(..)
                 | Intrinsic::IntAdd(..)
                 | Intrinsic::IntAnd(..)

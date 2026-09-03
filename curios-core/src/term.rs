@@ -607,7 +607,6 @@ impl Term {
                 Intrinsic::FltLt(..) => Some(HeadTag::Intrinsic("intrinsic:FltLt")),
                 Intrinsic::FltLe(..) => Some(HeadTag::Intrinsic("intrinsic:FltLe")),
                 Intrinsic::BinEql(..) => Some(HeadTag::Intrinsic("intrinsic:BinEql")),
-                Intrinsic::HandleEql(..) => Some(HeadTag::Intrinsic("intrinsic:HandleEql")),
                 _ => None,
             },
             _ => None,

@@ -209,8 +209,6 @@ pub enum Intrinsic {
     },
     HandleType,
     Handle(u32),
-    // (a, b) -> Bool: identity of two handles. The one pure operation on `Handle` -- handles are opaque i31 tokens, so this erases to the `Nat` equality op.
-    HandleEql(Term, Term),
     // `(Nat) -> Io({})`: end the process. Like every host operation it denotes an inert description here and becomes a host call only at erasure.
     //
     // The description's payload is the unit type, not the caller's choice. `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — it is the forgery that is the problem, not the non-return. At `{}` there is nothing to forge, which is the same property `Foreign` has for free by reading its result off an ABI row.
@@ -579,8 +577,7 @@ impl Intrinsic {
             | Intrinsic::IoType(t)
             | Intrinsic::ProcExit(t) => visit(t),
 
-            Intrinsic::HandleEql(a, b)
-            | Intrinsic::ByteEql(a, b)
+            Intrinsic::ByteEql(a, b)
             | Intrinsic::ByteLt(a, b)
             | Intrinsic::ByteLe(a, b)
             | Intrinsic::NatEql(a, b)
@@ -851,7 +848,6 @@ impl Intrinsic {
                 Intrinsic::Nat(Nat::Succ(spine.clone(), visit.visit_subterm(inner)))
             }
             Intrinsic::NatEql(l, r) => traverse_binary(l, r, visit, Intrinsic::NatEql),
-            Intrinsic::HandleEql(l, r) => traverse_binary(l, r, visit, Intrinsic::HandleEql),
             Intrinsic::NatNeq(l, r) => traverse_binary(l, r, visit, Intrinsic::NatNeq),
             Intrinsic::NatAdd(l, r) => traverse_binary(l, r, visit, Intrinsic::NatAdd),
             Intrinsic::NatSub(l, r) => traverse_binary(l, r, visit, Intrinsic::NatSub),

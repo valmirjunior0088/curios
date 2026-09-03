@@ -840,9 +840,6 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::Handle(stdio::STDOUT) => pure("Handle/stdout"),
         Intrinsic::Handle(stdio::STDERR) => pure("Handle/stderr"),
         Intrinsic::Handle(token) => pure(format!("Handle({token})")),
-        Intrinsic::HandleEql(left, right) => {
-            print_intrinsic_call("Handle/eql", vec![], vec![left, right])
-        }
         Intrinsic::ProcExit(code) => print_intrinsic_call("proc/exit", vec![], vec![code]),
         Intrinsic::CellType(elem) => print_intrinsic_call("Cell", vec![], vec![elem]),
         Intrinsic::Cell {

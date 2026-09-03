@@ -845,12 +845,6 @@ fn handle_ops(mut host: Vec<TopItem>) -> Vec<TopItem> {
             handle(),
             intrinsic(Intrinsic::Handle(stdio::STDERR)),
         ),
-        pub_fn(
-            "eql",
-            vec![("a", handle()), ("b", handle())],
-            bool_(),
-            intrinsic(Intrinsic::HandleEql(name("a"), name("b"))),
-        ),
     ];
 
     items.append(&mut host);

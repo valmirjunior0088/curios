@@ -190,7 +190,6 @@ pub enum Intrinsic {
     },
     HandleType,
     Handle(u32),
-    HandleEql(Term, Term),
     ProcExit(Term),
     CellType(Term),
     Cell {

@@ -238,12 +238,6 @@ fn settled_over(context: &mut Context, params: Vec<(Free, Term)>, application: T
 
 /// Constructors for [`Intrinsic`] operations no judgment ever builds.
 pub trait IntrinsicBuilders {
-    /// A `HandleEql` node — handle identity, the one pure `Handle` operation — from anything term-shaped.
-    fn handle_eql<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>;
-
     /// A `NatDiv` node from anything term-shaped.
     fn nat_div<F, S, P>(left: F, right: S, non_zero: P) -> Self
     where
@@ -474,14 +468,6 @@ pub trait IntrinsicBuilders {
 }
 
 impl IntrinsicBuilders for Intrinsic {
-    fn handle_eql<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::HandleEql(left.into(), right.into())
-    }
-
     fn nat_div<F, S, P>(left: F, right: S, non_zero: P) -> Self
     where
         F: Into<Term>,

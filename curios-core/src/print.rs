@@ -550,8 +550,7 @@ fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
         | Intrinsic::IntEql(..)
         | Intrinsic::FltEql(..)
         | Intrinsic::BoolEql(..)
-        | Intrinsic::BinEql(..)
-        | Intrinsic::HandleEql(..) => "==",
+        | Intrinsic::BinEql(..) => "==",
         Intrinsic::NatNeq(..)
         | Intrinsic::IntNeq(..)
         | Intrinsic::FltNeq(..)
@@ -676,7 +675,6 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             ]),
         },
         Intrinsic::NatEql(l, r) => print_infix("==", l, r, frame),
-        Intrinsic::HandleEql(l, r) => print_infix("==", l, r, frame),
         Intrinsic::NatNeq(l, r) => print_infix("!=", l, r, frame),
         Intrinsic::NatAdd(l, r) => print_infix("+", l, r, frame),
         Intrinsic::NatSub(l, r) => print_infix("-", l, r, frame),

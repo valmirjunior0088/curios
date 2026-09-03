@@ -44,10 +44,6 @@ fn bin_type(grain: Grain) -> Term {
     Term::intrinsic(Intrinsic::BinType(grain))
 }
 
-fn handle_type() -> Term {
-    Term::intrinsic(Intrinsic::HandleType)
-}
-
 fn list_type(element: Term) -> Term {
     Term::intrinsic(Intrinsic::ListType(element))
 }
@@ -466,7 +462,6 @@ pub(super) fn erase_intrinsic(
         }
 
         &Intrinsic::Handle(token) => Ok(lowering.constant(curios_ersd::Constant::Handle(token))),
-        Intrinsic::HandleEql(l, r) => op!(curios_ersd::Operation::HandleEql, handle_type, l, r),
         // Every operation the host performs is typed `Io`, so every one erases to a thunk: the operands are computed where the description is *built*, and the operation itself happens only when the description is forced. Nothing below changes what the host call is — only where it sits relative to the closure boundary.
 
         // A process exit never yields a value, so the thunk's block is sealed by the terminator rather than by a return. Code after the *force* is dead; code after the construction is not.

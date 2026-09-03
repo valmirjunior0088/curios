@@ -1180,9 +1180,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::NatToInt(inner) => curios_core::Intrinsic::nat_to_int(self.term(inner)?),
             Intrinsic::HandleType => curios_core::Intrinsic::HandleType,
             Intrinsic::Handle(token) => curios_core::Intrinsic::Handle(*token),
-            Intrinsic::HandleEql(left, right) => {
-                curios_core::Intrinsic::handle_eql(self.term(left)?, self.term(right)?)
-            }
             Intrinsic::ProcExit(code) => curios_core::Intrinsic::ProcExit(self.term(code)?),
             Intrinsic::NatToFlt(inner) => curios_core::Intrinsic::nat_to_flt(self.term(inner)?),
             Intrinsic::IntToNat { int, non_neg } => {
