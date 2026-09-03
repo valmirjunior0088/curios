@@ -152,7 +152,7 @@ impl Status {
     }
 }
 
-/// The open mode of `/sys/file/open`, mirrored by `/std/File`'s `Mode` inductive. Its `0`/`1`/`2` tag is [`mode`](crate::mode)'s; lifting a tag is the native adapter's (`curios-runtime`'s `Lift`), which is where an out-of-range one is refused.
+/// The open mode of `/sys/file/open`, mirrored by `/std/File`'s `Mode` inductive. Its `0`/`1`/`2` tag is [`open_mode`](crate::open_mode)'s; lifting a tag is the native adapter's (`curios-runtime`'s `Lift`), which is where an out-of-range one is refused.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
     Read,
