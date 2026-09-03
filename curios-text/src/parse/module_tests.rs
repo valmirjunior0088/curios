@@ -301,3 +301,17 @@ fn a_malformed_pub_item_is_reported_in_a_program_too() {
         );
     }
 }
+
+/// A keyword mismatch is reported against the word, not against wherever the whitespace after it ended.
+///
+/// `end` and `and` are habitually written line-final, so reading the word *and* its trailing whitespace before failing put the caret on the next line — the innocent declaration below, or the blank line past the end of the file.
+#[test]
+fn a_misspelled_keyword_is_reported_against_the_word() {
+    let source = "pub let f : /std/Nat =\n    match n\n    | 0 => 0\n    | p + 1; ih => ih\n    ends\n\npub let g : /std/Nat = 1;\n";
+    let error = source.parse::<Module>().unwrap_err();
+    let report = error.format();
+    assert!(report.contains("obtained 'ends'"), "{report}");
+    // The word sits on line 5; the declaration the caret used to land on is line 7.
+    assert!(report.contains("5 |"), "{report}");
+    assert!(!report.contains("7 |"), "{report}");
+}

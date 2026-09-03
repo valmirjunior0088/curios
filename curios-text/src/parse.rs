@@ -164,11 +164,16 @@ fn parse_qualified_name<'a>() -> Parser<'a, Name> {
     }))
 }
 
+// The word is read *raw* and the whitespace after it consumed only once it matched, so a mismatch is reported against the word rather than wherever that whitespace ended — which for a line-final keyword is the next line, or past the end of the file. `end` and `and` are habitually written line-final, so a misspelled one used to put its caret on the innocent declaration below it. `parse_top_item` reads its head raw for the same reason.
+//
+// Commitment is unchanged: `parse_identifier_raw` rejects an empty run, so a mismatch has consumed at least one character and stays fatal past the choice point, while the empty case fails *at* the choice point either way.
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
-    parse_identifier().flat_map(move |obtained| match expected == obtained {
-        true => pure(()),
-        false => fail(format!(
-            "Expected keyword '{expected}', obtained '{obtained}'"
-        )),
-    })
+    parse_identifier_raw()
+        .flat_map(move |obtained| match expected == obtained {
+            true => pure(()),
+            false => fail(format!(
+                "Expected keyword '{expected}', obtained '{obtained}'"
+            )),
+        })
+        .and_drop(parse_whitespace())
 }
