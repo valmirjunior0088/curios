@@ -83,7 +83,7 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
         signature
             .results
             .iter()
-            .map(|(_, wire_type)| val_type(wire_type, true))
+            .map(|(_, wire_type)| val_type(&wire_type, true))
             .collect::<Vec<_>>(),
     )
 }

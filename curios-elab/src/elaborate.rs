@@ -144,7 +144,8 @@ fn elaborate_subterm(
                 elaborated.push(elaborate(context, arg, Mode::Check(wire_term(wire_type)))?.0);
             }
 
-            let result = match signature.results.as_slice() {
+            let results = signature.results.iter().collect::<Vec<_>>();
+            let result = match results.as_slice() {
                 [] => Term::tuple_type_unit(),
                 [(_, wire_type)] => wire_term(wire_type),
                 results => Term::tuple_type(

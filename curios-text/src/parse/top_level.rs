@@ -96,11 +96,11 @@ pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
             .enumerate()
             .map(|(index, type_)| (format!("a{index}"), type_))
             .collect(),
-        results: vec![("_".to_string(), output)],
+        results: WireResults::single("_".to_string(), output),
     })
     .or(parse_wire_type().map(|output| WireSignature {
         params: vec![],
-        results: vec![("_".to_string(), output)],
+        results: WireResults::single("_".to_string(), output),
     }))
 }
 

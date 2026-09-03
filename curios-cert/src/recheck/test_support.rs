@@ -8,7 +8,7 @@
 
 use {
     crate::{Globals, Kernel, Verdict},
-    curios_abi::{ForeignFunction, Namespace, WireSignature, WireType},
+    curios_abi::{ForeignFunction, Namespace, WireResults, WireSignature, WireType},
     curios_core::{
         Atom, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global, InductDecl,
         InductParam, Intrinsic, Item, Level, Many, Module, Nat, RecGroup, RecMemberScopes, Scope,
@@ -909,7 +909,7 @@ pub(super) fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
         label: "forged".to_string(),
         signature: WireSignature {
             params: Vec::new(),
-            results: vec![("value".to_string(), WireType::Nat)],
+            results: WireResults::single("value".to_string(), WireType::Nat),
         },
     });
 

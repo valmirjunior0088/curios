@@ -148,7 +148,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     signature
                         .results
                         .iter()
-                        .map(|(_, wire_type)| self.wire_result_type(wire_type)),
+                        .map(|(_, wire_type)| self.wire_result_type(&wire_type)),
                 ),
             );
         }

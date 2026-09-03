@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_abi::{ForeignFunction, Namespace, WireSignature, WireType},
+    curios_abi::{ForeignFunction, Namespace, WireResults, WireSignature, WireType},
 };
 
 /// rec count(n) = switch-nat n { 0 => 0, default => count(n - 1) + 1 }; entry: count(k) with k a runtime-ish parameterless alias (kept opaque by referencing the function itself so evaluation cannot close it).
@@ -61,7 +61,7 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
         label: "poll".into(),
         signature: WireSignature {
             params: vec![],
-            results: vec![("r".into(), WireType::Nat)],
+            results: WireResults::single("r".into(), WireType::Nat),
         },
     });
     let foreign = builder.foreign(row);

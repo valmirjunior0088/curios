@@ -2,13 +2,13 @@
 //!
 //! `host_ops!` is the one place a builtin operation is written. It is an X-macro: invoked with the name of a callback macro, it expands to that callback applied to the whole table, so each generated projection comes from this single source and cannot drift. `curios-abi` generates two — the `host_ops` wire store and the typed [`HostOps`] trait; the native adapter's codec bindings (`curios-runtime`'s `sys_impls`) are *hand-written* against that pair and cross-checked, as the macro doc below details.
 //!
-//! Each operand and result is one of a closed vocabulary of slot kinds (`Handle`, `Nat`, `Bool`, `Int`, `Bytes`, `Mode`, `Status`, `ListBytes`, `ListHandle`, `ListPoll`), each a fixed `(wire type, trait parameter, trait result)` triple the `*_of!` helpers below encode. Result arity fixes the guest-facing shape exactly as the prelude's `host_fn` reads it: `0` results is the unit value, `1` the bare result, `2..` a record of the named fields. If an operation ever needs an eleventh slot kind, reconsider the vocabulary before extending it. `exit` is deliberately absent from the list — it traps rather than returns, so no results row could describe it — and so from both projections; its import name is [`EXIT`](super::EXIT).
+//! Each operand and result is one of a closed vocabulary of slot kinds (`Handle`, `Nat`, `Bool`, `Int`, `Bytes`, `Mode`, `Status`, `ListBytes`, `ListHandle`, `ListPoll`), each a fixed `(wire type, trait parameter, trait result)` triple the `*_of!` helpers below encode. Result arity fixes the guest-facing shape exactly as the prelude's `host_fn` reads it: `0` results is the unit value, `1` the bare result, `2..` a record of the named fields. A reference result (`Handle`, `Bytes`, a list) may only be the last: `results_of!` has no arm for one earlier, so such a row does not expand, and [`WireResults`] cannot hold it — the shape codegen's embed step and the runtime's lowering both rest on. If an operation ever needs an eleventh slot kind, reconsider the vocabulary before extending it. `exit` is deliberately absent from the list — it traps rather than returns, so no results row could describe it — and so from both projections; its import name is [`EXIT`](super::EXIT).
 //!
 //! Each row also states where the guest surfaces it, as `wire_name as Subject/label`. The wire name is the ABI and never moves; the `Subject/label` pair is the `/sys` placement, and it is a column of this table rather than a lookup beside it so a new row cannot acquire a placement nothing checks. A subject capitalized names a type module the operation joins (`Handle`), a lowercase one a module of operations alone (`socket`, `clock`).
 
 use super::{
-    ForeignFunction, ForeignStore, Handle, Mode, Namespace, Poll, Status, WireLeaf, WireSignature,
-    WireType,
+    ForeignFunction, ForeignStore, Handle, Mode, Namespace, Poll, Status, WireLeaf, WireReference,
+    WireResults, WireScalar, WireShape, WireSignature, WireType,
 };
 
 /// The one authored list of builtin host operations. Invoked with the name of a callback macro (`host_ops!(my_callback)`), it applies that callback to the whole table so every projection comes off this single source. Each row is `method as Subject/label [param: Slot, …] [result: Slot, …];` — the method name is both the wasm import name and the [`HostOps`] method, `Subject/label` is where the guest surfaces it under `/sys`, and each `Slot` is one of the closed vocabulary the `*_of!` helpers map to concrete types.
@@ -159,6 +159,60 @@ macro_rules! wire_of {
     };
 }
 
+/// One slot kind → the [`WireScalar`] a result before the last crosses as. A reference kind has no arm here on purpose: a row spelling one anywhere but last fails to expand, which is the table's half of what [`WireResults`] makes unrepresentable.
+macro_rules! scalar_of {
+    (Nat) => {
+        WireScalar::Nat
+    };
+    (Bool) => {
+        WireScalar::Bool
+    };
+    (Int) => {
+        WireScalar::Int
+    };
+    (Status) => {
+        WireScalar::Nat
+    };
+}
+
+/// One slot kind → what the last result slot holds: the row's one reference, or a scalar like any before it.
+macro_rules! last_of {
+    (Handle) => {
+        WireShape::Reference(WireReference::Handle)
+    };
+    (Bytes) => {
+        WireShape::Reference(WireReference::Bytes)
+    };
+    (ListBytes) => {
+        WireShape::Reference(WireReference::List(WireLeaf::Bytes))
+    };
+    (ListHandle) => {
+        WireShape::Reference(WireReference::List(WireLeaf::Handle))
+    };
+    (ListPoll) => {
+        WireShape::Reference(WireReference::List(WireLeaf::Nat))
+    };
+    ($scalar:ident) => {
+        WireShape::Scalar(scalar_of!($scalar))
+    };
+}
+
+/// A row's result slots → its [`WireResults`]: every slot before the last through `scalar_of!`, the last through `last_of!`.
+macro_rules! results_of {
+    () => {
+        WireResults::none()
+    };
+    (@scalars [$($done:expr,)*] $r:ident : $rs:ident) => {
+        WireResults::ending(vec![$($done,)*], stringify!($r).to_string(), last_of!($rs))
+    };
+    (@scalars [$($done:expr,)*] $r:ident : $rs:ident, $($rest:tt)+) => {
+        results_of!(@scalars [$($done,)* (stringify!($r).to_string(), scalar_of!($rs)),] $($rest)+)
+    };
+    ($($slots:tt)+) => {
+        results_of!(@scalars [] $($slots)+)
+    };
+}
+
 /// One slot kind → the Rust type it takes as a [`HostOps`] method parameter. The list/bytes kinds borrow; the scalars and handle are owned.
 macro_rules! trait_param_of {
     (Handle) => {
@@ -235,7 +289,7 @@ macro_rules! declare_host_store {
                     label: stringify!($label).to_string(),
                     signature: WireSignature {
                         params: vec![$((stringify!($p).to_string(), wire_of!($ps))),*],
-                        results: vec![$((stringify!($r).to_string(), wire_of!($rs))),*],
+                        results: results_of!($($r : $rs),*),
                     },
                 });
             )*

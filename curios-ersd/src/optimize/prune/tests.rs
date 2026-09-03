@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_abi::{ForeignFunction, Namespace, WireSignature, WireType},
+    curios_abi::{ForeignFunction, Namespace, WireResults, WireSignature, WireType},
 };
 
 /// items: pure_unused = NatAdd(1,1); used = 2; effectful = Foreign(...); entry returns used. The pure unused item drops; the others stay.
@@ -24,7 +24,7 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
         label: "beep".into(),
         signature: WireSignature {
             params: vec![],
-            results: vec![("r".into(), WireType::Nat)],
+            results: WireResults::single("r".into(), WireType::Nat),
         },
     });
     let foreign = builder.foreign(row);

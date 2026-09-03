@@ -6,7 +6,7 @@ use {
         LocalData, Table,
     },
     crate::{CpsSlot, Repr},
-    curios_abi::{WireLeaf, WireType},
+    curios_abi::{WireLeaf, WireReference, WireType},
     curios_utilities::{Entropy, Grain},
     std::{
         collections::{BTreeMap, HashMap},
@@ -724,11 +724,10 @@ impl<'a, 'b> Context<'a, 'b> {
         vec![curios_wasm::Instr::Call { func_name: force }]
     }
 
-    /// The wire→rope step for one host result: a reference re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `List(Bytes)`, whose elements the host lowered as raw `$bytes`. A `Bytes` or `Handle` result is then normalised, so a small host answer enters the guest world already canonical. A handle is not exempt: its token is the minimal little-endian bytes of its `Natural` (`Handle::encode` in `curios-abi`), one byte for every token below 256, so it packs into the i31 exactly as a small `Bytes` does, and a producer that skipped this call would leave two spellings of one handle in the guest world.
-    fn wire_embed_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
-        let embed = match wire_type {
-            WireType::Nat | WireType::Bool | WireType::Int => return vec![],
-            WireType::Bytes | WireType::Handle => {
+    /// The wire→rope step for a host call's reference result: it re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `List(Bytes)`, whose elements the host lowered as raw `$bytes`. A `Bytes` or `Handle` result is then normalised, so a small host answer enters the guest world already canonical. A handle is not exempt: its token is the minimal little-endian bytes of its `Natural` (`Handle::encode` in `curios-abi`), one byte for every token below 256, so it packs into the i31 exactly as a small `Bytes` does, and a producer that skipped this call would leave two spellings of one handle in the guest world.
+    fn wire_embed_instrs(&self, reference: WireReference) -> Vec<curios_wasm::Instr> {
+        let embed = match reference {
+            WireReference::Bytes | WireReference::Handle => {
                 return vec![
                     curios_wasm::Instr::Call {
                         func_name: self.table().bytes_embed_func(),
@@ -738,7 +737,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 ];
             }
-            WireType::List(inner) => match inner {
+            WireReference::List(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_embed_func(),
                 WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int => self.table().list_embed_func(),
             },
@@ -775,17 +774,9 @@ impl<'a, 'b> Context<'a, 'b> {
                     func_name: self.table().host_func(function),
                 });
 
-                // Embed a reference result back into a rope. Only the *final* result may be a reference: an earlier one would sit under later stack values, and embedding it would need juggling through locals. Every host signature keeps references last.
-                for (_, wire_type) in signature.results.iter().rev().skip(1) {
-                    debug_assert!(
-                        matches!(wire_type, WireType::Nat | WireType::Bool | WireType::Int),
-                        "{} carries a reference result before its last",
-                        function.name
-                    );
-                }
-
-                if let Some((_, wire_type)) = signature.results.last() {
-                    output.extend(self.wire_embed_instrs(wire_type));
+                // Embed the reference result back into a rope. It is the last to cross — `WireResults` can hold it nowhere else — which is what lets it be embedded with nothing above it on the stack; an earlier one would need juggling through locals.
+                if let Some((_, reference)) = signature.results.reference() {
+                    output.extend(self.wire_embed_instrs(reference));
                 }
 
                 match signature.results.len() {

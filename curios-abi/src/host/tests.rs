@@ -1,5 +1,8 @@
 use {
-    super::{ForeignFunction, Namespace, Status, WireSignature, host_ops},
+    super::{
+        ForeignFunction, Namespace, Status, WireReference, WireResults, WireSignature, WireType,
+        host_ops,
+    },
     crate::status,
     std::collections::BTreeSet,
 };
@@ -104,7 +107,7 @@ fn result_records_keep_their_labels() {
             .signature
             .results
             .iter()
-            .map(|(label, _)| label.clone())
+            .map(|(label, _)| label.to_string())
             .collect()
     };
 
@@ -139,7 +142,7 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels("wait"), ["status", "code", "signal"]);
 }
 
-/// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature. Nothing asserts that `List` does not nest — [`WireLeaf`](super::WireLeaf) makes a nested one unrepresentable.
+/// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature. Nothing asserts that `List` does not nest, nor that a reference result comes last — [`WireLeaf`](super::WireLeaf) and [`WireResults`] make both unrepresentable.
 #[test]
 fn signatures_are_well_formed() {
     for function in host_ops().iter() {
@@ -155,6 +158,35 @@ fn signatures_are_well_formed() {
     }
 }
 
+/// A single result is well-formed whatever its type, and results cross scalars first and the reference last — the order a user `foreign` declaration's one result and the table's rows both read back in.
+#[test]
+fn results_cross_scalars_first_and_the_reference_last() {
+    let single = WireResults::single("_".to_string(), WireType::Bytes);
+    assert_eq!(single.len(), 1);
+    assert_eq!(single.reference(), Some(("_", WireReference::Bytes)));
+    assert_eq!(single.iter().collect::<Vec<_>>(), [("_", WireType::Bytes)]);
+
+    let store = host_ops();
+    let read = store.get("read").expect("host_ops defines read");
+    assert_eq!(
+        read.signature.results.iter().collect::<Vec<_>>(),
+        [("status", WireType::Nat), ("bytes", WireType::Bytes)]
+    );
+    assert_eq!(
+        read.signature.results.reference(),
+        Some(("bytes", WireReference::Bytes))
+    );
+    assert!(
+        store
+            .get("clock_wall")
+            .expect("host_ops defines clock_wall")
+            .signature
+            .results
+            .reference()
+            .is_none()
+    );
+}
+
 /// The import name is the identity every stage links on, so a second row with the same name is a construction bug.
 #[test]
 #[should_panic(expected = "already registered")]
@@ -168,7 +200,7 @@ fn register_rejects_a_duplicate_name() {
         label: "read_again".to_string(),
         signature: WireSignature {
             params: vec![],
-            results: vec![],
+            results: WireResults::none(),
         },
     });
 }
@@ -193,7 +225,7 @@ fn equality_is_the_import_pair() {
         label: label.to_string(),
         signature: WireSignature {
             params: vec![],
-            results: vec![],
+            results: WireResults::none(),
         },
     };
 

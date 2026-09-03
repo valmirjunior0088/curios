@@ -47,7 +47,7 @@ use {
         TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
         WitnessField,
     },
-    curios_abi::{WireLeaf, WireSignature, WireType},
+    curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
     curios_num::{Floating, Natural},
     curios_parse::{
         Mark, Parser, catch, commit, fail, lazy, many0, many1, mark, memoize, not_ahead,

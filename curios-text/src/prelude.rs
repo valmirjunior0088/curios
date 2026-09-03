@@ -234,13 +234,14 @@ fn wire_type(type_: &WireType) -> Term {
 fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
     let signature = &function.signature;
 
-    let result = match signature.results.as_slice() {
+    let results = signature.results.iter().collect::<Vec<_>>();
+    let result = match results.as_slice() {
         [] => unit(),
         [(_, result)] => wire_type(result),
         results => record(
             results
                 .iter()
-                .map(|(label, result)| (label.as_str(), wire_type(result)))
+                .map(|(label, result)| (*label, wire_type(result)))
                 .collect(),
         ),
     };

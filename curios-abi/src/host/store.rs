@@ -53,12 +53,138 @@ impl From<WireLeaf> for WireType {
     }
 }
 
-/// The signature of one foreign function: named operands and named results. The result count fixes the guest-facing shape — `0` is the unit value, `1` is the bare result forwarded through, `2..` is a record of the named fields (the labels are load-bearing: the standard library projects `.status`, `.secs_hi`, …).
+/// A wire type that crosses as a raw scalar: unboxed to an `i32` on the way out, re-boxed as an i31 on the way back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum WireScalar {
+    Nat,
+    Int,
+    Bool,
+}
+
+/// A wire type that crosses as a reference: a flat payload the guest forces on the way out and embeds back into a rope on the way in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum WireReference {
+    Bytes,
+    Handle,
+    List(WireLeaf),
+}
+
+/// A wire type by how it crosses: the two halves of [`WireType`], which every consumer that lowers or lifts a value tells apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WireShape {
+    Scalar(WireScalar),
+    Reference(WireReference),
+}
+
+impl WireType {
+    /// How this type crosses the boundary.
+    pub fn shape(self) -> WireShape {
+        match self {
+            WireType::Nat => WireShape::Scalar(WireScalar::Nat),
+            WireType::Int => WireShape::Scalar(WireScalar::Int),
+            WireType::Bool => WireShape::Scalar(WireScalar::Bool),
+            WireType::Bytes => WireShape::Reference(WireReference::Bytes),
+            WireType::Handle => WireShape::Reference(WireReference::Handle),
+            WireType::List(leaf) => WireShape::Reference(WireReference::List(leaf)),
+        }
+    }
+}
+
+impl From<WireScalar> for WireType {
+    fn from(scalar: WireScalar) -> Self {
+        match scalar {
+            WireScalar::Nat => WireType::Nat,
+            WireScalar::Int => WireType::Int,
+            WireScalar::Bool => WireType::Bool,
+        }
+    }
+}
+
+impl From<WireReference> for WireType {
+    fn from(reference: WireReference) -> Self {
+        match reference {
+            WireReference::Bytes => WireType::Bytes,
+            WireReference::Handle => WireType::Handle,
+            WireReference::List(leaf) => WireType::List(leaf),
+        }
+    }
+}
+
+/// The named results of one foreign function, in the order they cross: any number of scalars, then at most one reference, last.
+///
+/// **The shape is the type's, so a row cannot spell a reference anywhere else.** Codegen embeds only the final result back into a rope — an earlier reference would sit under later stack values and need juggling through locals — and the runtime lowers references on the same assumption; `README.md` states the decision. The count fixes the guest-facing shape — `0` is the unit value, `1` the bare result forwarded through, `2..` a record of the named fields, whose labels are load-bearing: the standard library projects `.status`, `.secs_hi`, ….
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct WireResults {
+    scalars: Vec<(String, WireScalar)>,
+    reference: Option<(String, WireReference)>,
+}
+
+impl WireResults {
+    /// No results: the unit value.
+    pub fn none() -> Self {
+        Self {
+            scalars: Vec::new(),
+            reference: None,
+        }
+    }
+
+    /// One result of any wire type — a user `foreign` declaration's shape, well-formed whatever the type.
+    pub fn single(label: String, wire_type: WireType) -> Self {
+        Self::ending(Vec::new(), label, wire_type.shape())
+    }
+
+    /// `scalars` followed by `last`, which is the one slot a reference may take.
+    pub fn ending(mut scalars: Vec<(String, WireScalar)>, label: String, last: WireShape) -> Self {
+        let reference = match last {
+            WireShape::Scalar(scalar) => {
+                scalars.push((label, scalar));
+
+                None
+            }
+            WireShape::Reference(reference) => Some((label, reference)),
+        };
+
+        Self { scalars, reference }
+    }
+
+    /// How many results cross — the count the guest-facing shape is read off.
+    pub fn len(&self) -> usize {
+        self.scalars.len() + usize::from(self.reference.is_some())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Every result by label and wire type, in the order they cross: the scalars, then the reference when there is one.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, WireType)> + '_ {
+        self.scalars
+            .iter()
+            .map(|(label, scalar)| (label.as_str(), WireType::from(*scalar)))
+            .chain(
+                self.reference
+                    .iter()
+                    .map(|(label, reference)| (label.as_str(), WireType::from(*reference))),
+            )
+    }
+
+    /// The reference result, when there is one — always the last to cross, which is what lets codegen embed it with nothing above it on the stack.
+    pub fn reference(&self) -> Option<(&str, WireReference)> {
+        self.reference
+            .as_ref()
+            .map(|(label, reference)| (label.as_str(), *reference))
+    }
+}
+
+/// The signature of one foreign function: named operands and named results, the results shaped as [`WireResults`] states.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WireSignature {
     pub params: Vec<(String, WireType)>,
-    pub results: Vec<(String, WireType)>,
+    pub results: WireResults,
 }
 
 /// The wasm import namespace a foreign function links under — the closed pair both ends agree on. `Sys` is the fixed builtin substrate, consumable only by the standard library; `Ffi` is a user's own `foreign` declaration.

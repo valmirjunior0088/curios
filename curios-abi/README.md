@@ -24,6 +24,14 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 **Rationale.** Codegen's host-boundary force and embed steps handle exactly one level of nesting, and the runtime's uniform `List` load cannot distinguish layers, so a second level would silently hand the host rope structs where flat arrays belong. Making the shape unwritable is cheaper than checking for it in each of three consumers.
 
+### A reference result is the last, and the type holds it
+
+**Decision.** `WireResults` is a list of scalar results and at most one reference result, which crosses last; `WireSignature` carries that rather than a plain list. The table's projection spells the same rule: a row with a reference anywhere but its final result slot does not expand.
+
+**Rationale.** Codegen embeds only the final result back into a rope, because an earlier reference would sit under later stack values and need juggling through locals, and the runtime lowers references on the same assumption. That rested on a debug assertion at the one call site, which a new row would meet only when a program first called it — in a release build, as a module that fails wasm validation, naming the emitter. The rule belongs to the table, and a type that cannot hold the wrong shape is the cheapest place to keep it.
+
+**Rejected.** A test over `host_ops()` beside the table. It pins the builtin rows and nothing else, and a user `foreign` declaration's single result was already well-formed by construction, so the test would have guarded exactly the rows a type guards better.
+
 ### A row's identity is its import pair, and the namespace is an enum
 
 **Decision.** A `ForeignFunction` compares and hashes by `(namespace, name)` alone, and `Namespace` is a two-variant enum rather than a `&'static str`.

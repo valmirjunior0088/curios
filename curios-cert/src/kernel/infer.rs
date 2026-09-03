@@ -88,7 +88,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
             let results = signature
                 .results
                 .iter()
-                .map(|(label, wire)| (label.clone(), wire_term(wire)))
+                .map(|(label, wire)| (label.to_string(), wire_term(&wire)))
                 .collect::<Vec<_>>();
 
             Ok(Term::intrinsic(Intrinsic::io_type(

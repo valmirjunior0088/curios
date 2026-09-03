@@ -1372,11 +1372,7 @@ fn print_wire_type(type_: WireType) -> Printer {
 // `parse_wire_signature` only ever produces exactly one, unnamed (`_`) result — `foreign` has no surface syntax for `/sys/Handle`'s named-record results — so the sole result is always present.
 fn print_wire_signature(signature: WireSignature) -> Printer {
     let WireSignature { params, results } = signature;
-    let output = results
-        .into_iter()
-        .next()
-        .expect("foreign has one result")
-        .1;
+    let output = results.iter().next().expect("foreign has one result").1;
 
     if params.is_empty() {
         return print_wire_type(output);

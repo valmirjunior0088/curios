@@ -1,7 +1,7 @@
 //! Foreign declarations: the store they populate and the import names they take across modules.
 
 use crate::{Entrypoint, RootSource};
-use curios_abi::WireType;
+use curios_abi::{WireResults, WireType};
 
 use super::test_support::*;
 
@@ -27,7 +27,7 @@ fn declaration_populates_the_store() {
     );
     assert_eq!(
         function.signature.results,
-        vec![("_".to_string(), WireType::Nat)]
+        WireResults::single("_".to_string(), WireType::Nat)
     );
 }
 

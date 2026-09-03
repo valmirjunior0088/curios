@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_abi::{WireLeaf, WireSignature, WireType},
+    curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
     curios_utilities::Plicity,
 };
 
@@ -36,7 +36,7 @@ fn top_foreign_without_pub() {
                     ("a0".to_string(), WireType::Nat),
                     ("a1".to_string(), WireType::Bytes)
                 ],
-                results: vec![("_".to_string(), WireType::Nat)],
+                results: WireResults::single("_".to_string(), WireType::Nat),
             },
         })]
     );
@@ -57,7 +57,7 @@ fn top_foreign_with_pub() {
                     ("a0".to_string(), WireType::Nat),
                     ("a1".to_string(), WireType::Bytes)
                 ],
-                results: vec![("_".to_string(), WireType::Nat)],
+                results: WireResults::single("_".to_string(), WireType::Nat),
             },
         })]
     );
@@ -72,7 +72,7 @@ fn top_foreign_zero_arg() {
             label: "clock".to_string(),
             signature: WireSignature {
                 params: vec![],
-                results: vec![("_".to_string(), WireType::Nat)],
+                results: WireResults::single("_".to_string(), WireType::Nat),
             },
         })]
     );
@@ -104,7 +104,7 @@ fn top_foreign_list_of_leaf() {
                     ("a0".to_string(), WireType::List(WireLeaf::Bytes)),
                     ("a1".to_string(), WireType::List(WireLeaf::Handle))
                 ],
-                results: vec![("_".to_string(), WireType::List(WireLeaf::Nat))],
+                results: WireResults::single("_".to_string(), WireType::List(WireLeaf::Nat)),
             },
         })]
     );
