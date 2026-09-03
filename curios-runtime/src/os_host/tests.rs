@@ -115,29 +115,38 @@ fn readable_now_follows_a_pipe_end_as_its_writer_fills_and_closes_it() {
     assert!(readable_now(reader.as_fd()));
 }
 
-/// The canonical `ip:port` blob `resolve` mints, for a loopback port nothing listens on: bound once at port zero to learn a free one, then released.
-fn free_loopback_address() -> Vec<u8> {
-    let probe = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port");
-    let port = probe.local_addr().expect("a bound address").port();
-    drop(probe);
+/// A listener bound and listening through the host at a loopback port the kernel picked, with the canonical `ip:port` blob `resolve` would mint for it.
+///
+/// Bound at port zero and read back, never probed and released: a released port is free only until the next probe takes it, and the two tests that need one run in parallel, so the earlier probe-and-release helper had the second test bind the port the first was about to — measured 2026-09-03 at three failures in fifteen runs of this module.
+fn loopback_listener(host: &OsHost) -> (Handle, Vec<u8>) {
+    let any = b"127.0.0.1:0";
+    let (status, listener) = host.socket(any);
+    assert!(matches!(status, Status::Ok));
+    assert!(matches!(
+        host.set_reuseaddr(listener.clone(), 1),
+        Status::Ok
+    ));
+    assert!(matches!(host.bind(listener.clone(), any), Status::Ok));
+    assert!(matches!(host.listen(listener.clone(), 1), Status::Ok));
 
-    format!("127.0.0.1:{port}").into_bytes()
+    let port = match host.table.lock().unwrap().get(&listener) {
+        Some(OsResource::Listener(socket)) => socket
+            .local_addr()
+            .expect("a bound address")
+            .as_socket()
+            .expect("an IP address")
+            .port(),
+        _ => panic!("the listener is filed as one"),
+    };
+
+    (listener, format!("127.0.0.1:{port}").into_bytes())
 }
 
 /// A listener never blocks: `accept` with nothing pending answers `WouldBlock`. A connect to it answers at once on loopback or goes pending and settles through `poll` and `finish_connect`, which is idempotent on a settled socket. Both ends are non-blocking, so a read before any write answers `WouldBlock` and one after `poll` serves the bytes.
 #[test]
 fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
     let host = OsHost::with_args(vec![]);
-    let blob = free_loopback_address();
-
-    let (status, listener) = host.socket(&blob);
-    assert!(matches!(status, Status::Ok));
-    assert!(matches!(
-        host.set_reuseaddr(listener.clone(), 1),
-        Status::Ok
-    ));
-    assert!(matches!(host.bind(listener.clone(), &blob), Status::Ok));
-    assert!(matches!(host.listen(listener.clone(), 1), Status::Ok));
+    let (listener, blob) = loopback_listener(&host);
     assert!(matches!(
         host.accept(listener.clone()),
         (Status::WouldBlock, _)
@@ -195,15 +204,7 @@ fn a_loopback_connect_settles_and_both_ends_would_block_before_data() {
 
 /// A connected loopback pair: a listener, a client settled through `poll` and `finish_connect` where the kernel made it pend, and the accepted server end.
 fn loopback_pair(host: &OsHost) -> (Handle, Handle, Handle) {
-    let blob = free_loopback_address();
-    let (status, listener) = host.socket(&blob);
-    assert!(matches!(status, Status::Ok));
-    assert!(matches!(
-        host.set_reuseaddr(listener.clone(), 1),
-        Status::Ok
-    ));
-    assert!(matches!(host.bind(listener.clone(), &blob), Status::Ok));
-    assert!(matches!(host.listen(listener.clone(), 1), Status::Ok));
+    let (listener, blob) = loopback_listener(host);
 
     let (status, client) = host.socket(&blob);
     assert!(matches!(status, Status::Ok));
