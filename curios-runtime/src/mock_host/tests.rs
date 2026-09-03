@@ -144,7 +144,7 @@ fn a_writing_open_under_a_missing_directory_is_refused_until_the_directory_exist
     for mode in [Mode::Write, Mode::Append] {
         assert!(matches!(
             host.open(b"a/b.txt", mode),
-            (Status::NotFound, handle) if handle.bytes().is_empty()
+            (Status::NotFound, handle) if handle.is_none()
         ));
     }
     assert!(matches!(host.stat(b"a"), (Status::NotFound, ..)));

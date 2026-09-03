@@ -417,7 +417,7 @@ impl HostOps for MockHost {
         };
 
         if !matches!(status, Status::Ok) {
-            return (status, Handle::Other(Vec::new()));
+            return (status, Handle::none());
         }
 
         (
@@ -578,13 +578,13 @@ impl HostOps for MockHost {
             self.table.lock().unwrap().get(&io),
             Some(MockResource::Listener)
         ) {
-            return (Status::NotFound, Handle::Other(Vec::new()));
+            return (Status::NotFound, Handle::none());
         }
 
         // Pull the next scripted request. An exhausted queue fails the accept, ending the serve loop (a real blocking accept would park forever).
         let request = match self.inbound.lock().unwrap().pop_front() {
             Some(request) => request,
-            None => return (Status::NotFound, Handle::Other(Vec::new())),
+            None => return (Status::NotFound, Handle::none()),
         };
 
         let capture = {
@@ -844,26 +844,24 @@ impl HostOps for MockHost {
         stdout: u32,
         stderr: u32,
     ) -> (Status, Handle) {
-        let empty = || Handle::Other(Vec::new());
-
         // An unscripted program is one the host cannot find, as an unknown path is to `open`; the script is keyed by `argv[0]`.
         let Some(script) = argv
             .first()
             .and_then(|program| self.children.get(program))
             .cloned()
         else {
-            return (Status::NotFound, empty());
+            return (Status::NotFound, Handle::none());
         };
         let program = &argv[0];
 
         // Each stream is filed only where the guest asked for a pipe; the scripted child has already written everything it ever will.
         let piped = |mode: u32, bytes: Vec<u8>| match mode == stdio_mode::PIPE {
             true => self.mint(MockResource::Piped(Chunked::new(vec![bytes]))),
-            false => empty(),
+            false => Handle::none(),
         };
         let stdin = match stdin == stdio_mode::PIPE {
             true => self.mint(MockResource::Sink),
-            false => empty(),
+            false => Handle::none(),
         };
         let streams = [
             stdin,
@@ -884,9 +882,9 @@ impl HostOps for MockHost {
         match self.table.lock().unwrap().get(&child) {
             Some(MockResource::Child(running)) => match running.streams.get(which as usize) {
                 Some(handle) => (Status::Ok, handle.clone()),
-                None => (Status::NotFound, Handle::Other(Vec::new())),
+                None => (Status::NotFound, Handle::none()),
             },
-            _ => (Status::NotFound, Handle::Other(Vec::new())),
+            _ => (Status::NotFound, Handle::none()),
         }
     }
 

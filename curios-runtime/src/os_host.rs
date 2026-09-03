@@ -220,7 +220,7 @@ impl HostOps for OsHost {
 
         match options.open(path) {
             Ok(file) => (Status::Ok, self.mint(OsResource::File(file))),
-            Err(error) => (status_from_error(error), Handle::Other(Vec::new())),
+            Err(error) => (status_from_error(error), Handle::none()),
         }
     }
 
@@ -241,8 +241,8 @@ impl HostOps for OsHost {
                     slot: pending.slot,
                 }),
             ),
-            Ok(None) => (Status::WouldBlock, Handle::Other(Vec::new())),
-            Err(status) => (status, Handle::Other(Vec::new())),
+            Ok(None) => (Status::WouldBlock, Handle::none()),
+            Err(status) => (status, Handle::none()),
         }
     }
 
@@ -269,7 +269,7 @@ impl HostOps for OsHost {
         // The address blob is the canonical "ip:port" string `resolve` minted.
         let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
             Ok(address) => address,
-            Err(_) => return (Status::NotFound, Handle::Other(Vec::new())),
+            Err(_) => return (Status::NotFound, Handle::none()),
         };
 
         // Non-blocking from birth: a peer decides when this socket progresses, so `connect`, `read` and `write` on it answer `WouldBlock` rather than wait, and `poll` is where the wait happens. `Socket::new` then `set_nonblocking` is the spelling both release targets share.
@@ -278,7 +278,7 @@ impl HostOps for OsHost {
 
         match created {
             Ok(socket) => (Status::Ok, self.mint(OsResource::Unconnected(socket))),
-            Err(error) => (status_from_error(error), Handle::Other(Vec::new())),
+            Err(error) => (status_from_error(error), Handle::none()),
         }
     }
 
@@ -410,12 +410,12 @@ impl HostOps for OsHost {
     fn tls_server_config(&self, mut cert: &[u8], mut key: &[u8]) -> (Status, Handle) {
         let certs = match rustls_pemfile::certs(&mut cert).collect::<Result<Vec<_>, _>>() {
             Ok(certs) if !certs.is_empty() => certs,
-            _ => return (Status::TlsError, Handle::Other(Vec::new())),
+            _ => return (Status::TlsError, Handle::none()),
         };
 
         let key = match rustls_pemfile::private_key(&mut key) {
             Ok(Some(key)) => key,
-            _ => return (Status::TlsError, Handle::Other(Vec::new())),
+            _ => return (Status::TlsError, Handle::none()),
         };
 
         let config = match ServerConfig::builder_with_provider(Arc::new(ring::default_provider()))
@@ -425,7 +425,7 @@ impl HostOps for OsHost {
             .with_single_cert(certs, key)
         {
             Ok(config) => Arc::new(config),
-            Err(_) => return (Status::TlsError, Handle::Other(Vec::new())),
+            Err(_) => return (Status::TlsError, Handle::none()),
         };
 
         (Status::Ok, self.mint(OsResource::TlsConfig(config)))
@@ -481,12 +481,12 @@ impl HostOps for OsHost {
         let mut table = self.table.lock().unwrap();
         let accepted = match table.get(&io) {
             Some(OsResource::Listener(socket)) => socket.accept(),
-            _ => return (Status::NotFound, Handle::Other(Vec::new())),
+            _ => return (Status::NotFound, Handle::none()),
         };
 
         match accepted.and_then(|(stream, _)| stream.set_nonblocking(true).map(|()| stream)) {
             Ok(stream) => (Status::Ok, table.mint(OsResource::Connected(stream))),
-            Err(error) => (status_from_error(error), Handle::Other(Vec::new())),
+            Err(error) => (status_from_error(error), Handle::none()),
         }
     }
 
@@ -875,9 +875,9 @@ impl HostOps for OsHost {
                 let file = |fd: Option<OwnedFd>| match fd {
                     Some(fd) => match nonblocking(&fd) {
                         Ok(()) => self.mint(OsResource::Descriptor(fd)),
-                        Err(_) => Handle::Other(Vec::new()),
+                        Err(_) => Handle::none(),
                     },
-                    None => Handle::Other(Vec::new()),
+                    None => Handle::none(),
                 };
                 let streams = Box::new([file(stdin), file(stdout), file(stderr)]);
 
@@ -889,7 +889,7 @@ impl HostOps for OsHost {
                     }),
                 )
             }
-            Err(error) => (status_from_error(error), Handle::Other(Vec::new())),
+            Err(error) => (status_from_error(error), Handle::none()),
         }
     }
 
@@ -897,9 +897,9 @@ impl HostOps for OsHost {
         match self.table.lock().unwrap().get(&child) {
             Some(OsResource::Child { streams, .. }) => match streams.get(which as usize) {
                 Some(handle) => (Status::Ok, handle.clone()),
-                None => (Status::NotFound, Handle::Other(Vec::new())),
+                None => (Status::NotFound, Handle::none()),
             },
-            _ => (Status::NotFound, Handle::Other(Vec::new())),
+            _ => (Status::NotFound, Handle::none()),
         }
     }
 

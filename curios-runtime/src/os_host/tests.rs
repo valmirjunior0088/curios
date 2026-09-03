@@ -333,7 +333,7 @@ fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
     assert!(matches!(status, Status::Ok));
     let (status, stdin) = host.stream(child.clone(), 0);
     assert!(matches!(status, Status::Ok));
-    assert!(matches!(&stdin, Handle::Other(token) if token.is_empty()));
+    assert!(stdin.is_none());
     let (status, stdout) = host.stream(child.clone(), 1);
     assert!(matches!(status, Status::Ok));
 

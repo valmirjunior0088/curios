@@ -31,6 +31,16 @@ impl Handle {
         token.to_bytes_le()
     }
 
+    /// No handle: the empty token, which no host mints. It is what a `(status, handle)` row hands back beside a status other than `Ok`, and what `proc/stream` answers for a stream that was not piped — the guest never inspects it, and `close` on it is the no-op closing any unknown handle is.
+    pub fn none() -> Self {
+        Handle::Other(Vec::new())
+    }
+
+    /// Whether this is [`none`](Self::none) — the empty token rather than a stream or a minted handle.
+    pub fn is_none(&self) -> bool {
+        matches!(self, Handle::Other(bytes) if bytes.is_empty())
+    }
+
     /// The raw wire token bytes: the stdio encodings, or the minted handle.
     pub fn bytes(&self) -> Vec<u8> {
         match self {
