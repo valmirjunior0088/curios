@@ -2,8 +2,8 @@ mod signature;
 pub use signature::*;
 
 use {
-    super::{Bound, Nat, Subterm, Term, Var, Visit},
-    curios_abi::WireType,
+    super::{Bound, Free, Nat, Subterm, Term, Var, Visit},
+    curios_abi::{ResultShape, WireResults, WireType},
     curios_num::{Floating, Integer},
     curios_utilities::{Grain, PackedBin},
     std::collections::BTreeSet,
@@ -21,6 +21,20 @@ pub fn wire_term(wire_type: &WireType) -> Term {
     };
 
     Subterm::Intrinsic(intrinsic).into()
+}
+
+/// The core type a row's results denote, as [`wire_term`] reads one wire type: the unit type for no result, the bare type for one, and a record of the named fields otherwise, each label bound by a binder `fresh` mints. The one reading of a row's guest-facing shape — the elaborator and the kernel both build the type of a host call through it, so the two cannot come to different answers about what a call yields, and the arity rule itself is `WireResults`'s to state.
+pub fn wire_results_term(results: &WireResults, mut fresh: impl FnMut(&str) -> Free) -> Term {
+    match results.shape() {
+        ResultShape::Unit => Term::tuple_type_unit(),
+        ResultShape::Single(wire_type) => wire_term(&wire_type),
+        ResultShape::Record(fields) => Term::tuple_type(
+            fields
+                .into_iter()
+                .map(|(label, wire_type)| (fresh(label), wire_term(&wire_type)))
+                .collect::<Vec<_>>(),
+        ),
+    }
 }
 
 /// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `ListType`, `HandleType`, `CellType`, `IoType`), their literals, and the operator families over them, plus `ProcExit`. A host call is *not* here: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full [`Term`]s, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.

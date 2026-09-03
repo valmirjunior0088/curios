@@ -177,6 +177,25 @@ impl WireResults {
             .as_ref()
             .map(|(label, reference)| (label.as_str(), *reference))
     }
+
+    /// The shape the guest sees these results in, read off their count — the one statement of the arity rule the prelude's declaration, the elaborator's and the kernel's types are all built from.
+    pub fn shape(&self) -> ResultShape<'_> {
+        let mut results = self.iter();
+
+        match (results.next(), results.next()) {
+            (None, _) => ResultShape::Unit,
+            (Some((_, wire_type)), None) => ResultShape::Single(wire_type),
+            (Some(_), Some(_)) => ResultShape::Record(self.iter().collect()),
+        }
+    }
+}
+
+/// How a row's results reach the guest: no result is the unit value, one is the bare value forwarded through, two or more a record of the named fields — whose labels are load-bearing, since the standard library projects `.status`, `.secs_hi`, ….
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResultShape<'a> {
+    Unit,
+    Single(WireType),
+    Record(Vec<(&'a str, WireType)>),
 }
 
 /// The signature of one foreign function: named operands and named results, the results shaped as [`WireResults`] states.

@@ -37,7 +37,7 @@ use {
         InstanceHead, Intrinsic, Let, Metavar, MetavarId, MetavarOrigin, Nat, NumLit, One, Proj,
         Rec, Scope, Struct, StructDecl, StructEntry, StructType, Subterm, Telescope, Term,
         Transient, Tuple, TupleType, Variant, WitnessOrigin, instantiate_universe_levels_scoped,
-        wire_term,
+        wire_results_term, wire_term,
     },
     curios_num::{Floating, Integer},
     curios_utilities::{InfixOp, Plicity, recurse},
@@ -144,19 +144,7 @@ fn elaborate_subterm(
                 elaborated.push(elaborate(context, arg, Mode::Check(wire_term(wire_type)))?.0);
             }
 
-            let results = signature.results.iter().collect::<Vec<_>>();
-            let result = match results.as_slice() {
-                [] => Term::tuple_type_unit(),
-                [(_, wire_type)] => wire_term(wire_type),
-                results => Term::tuple_type(
-                    results
-                        .iter()
-                        .map(|(label, wire_type)| {
-                            (context.fresh(Some(label)), wire_term(wire_type))
-                        })
-                        .collect::<Vec<_>>(),
-                ),
-            };
+            let result = wire_results_term(&signature.results, |label| context.fresh(Some(label)));
 
             (
                 Term::foreign(Arc::clone(function), elaborated),

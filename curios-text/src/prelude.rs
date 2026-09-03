@@ -5,8 +5,8 @@ use {
         TopLet, TopMod, TopUse, TupleType, TupleTypeParam, UseGroup,
     },
     curios_abi::{
-        ForeignFunction, ForeignStore, Namespace, WireType, event, file_kind, open_mode, status,
-        stdio, stdio_mode,
+        ForeignFunction, ForeignStore, Namespace, ResultShape, WireType, event, file_kind,
+        open_mode, status, stdio, stdio_mode,
     },
     curios_utilities::{Grain, Plicity, SyntaxName, SyntaxRegistry},
     std::sync::Arc,
@@ -234,14 +234,13 @@ fn wire_type(type_: &WireType) -> Term {
 fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
     let signature = &function.signature;
 
-    let results = signature.results.iter().collect::<Vec<_>>();
-    let result = match results.as_slice() {
-        [] => unit(),
-        [(_, result)] => wire_type(result),
-        results => record(
-            results
-                .iter()
-                .map(|(label, result)| (*label, wire_type(result)))
+    let result = match signature.results.shape() {
+        ResultShape::Unit => unit(),
+        ResultShape::Single(result) => wire_type(&result),
+        ResultShape::Record(fields) => record(
+            fields
+                .into_iter()
+                .map(|(label, result)| (label, wire_type(&result)))
                 .collect(),
         ),
     };

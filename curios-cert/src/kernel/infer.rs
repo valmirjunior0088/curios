@@ -39,7 +39,7 @@ use {
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Free, FuncType, InductType, Instance, InstanceHead,
         Intrinsic, Let, Many, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, Variant, wire_term,
+        Telescope, Term, Tuple, TupleType, Variant, wire_results_term, wire_term,
     },
     curios_utilities::{Grain, PackedBin, recurse},
 };
@@ -85,23 +85,10 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
                 check(kernel, argument, &wire_term(wire))?;
             }
 
-            let results = signature
-                .results
-                .iter()
-                .map(|(label, wire)| (label.to_string(), wire_term(&wire)))
-                .collect::<Vec<_>>();
-
-            Ok(Term::intrinsic(Intrinsic::io_type(
-                match results.as_slice() {
-                    [] => Term::tuple_type_unit(),
-                    [(_, result)] => result.clone(),
-                    many => Term::tuple_type(
-                        many.iter()
-                            .map(|(label, result)| (kernel.fresh(Some(label)), result.clone()))
-                            .collect::<Vec<_>>(),
-                    ),
-                },
-            )))
+            Ok(Term::intrinsic(Intrinsic::io_type(wire_results_term(
+                &signature.results,
+                |label| kernel.fresh(Some(label)),
+            ))))
         }
 
         // A variable has the type it was bound or declared at. There is no fallback: an unbound name in a finished term is a broken term.

@@ -1,7 +1,7 @@
 use {
     super::{
-        ForeignFunction, Namespace, Status, WireReference, WireResults, WireSignature, WireType,
-        host_ops,
+        ForeignFunction, Namespace, ResultShape, Status, WireReference, WireResults, WireSignature,
+        WireType, host_ops,
     },
     crate::status,
     std::collections::BTreeSet,
@@ -184,6 +184,27 @@ fn results_cross_scalars_first_and_the_reference_last() {
             .results
             .reference()
             .is_none()
+    );
+}
+
+/// The guest-facing shape is read off the count and nothing else: `close` answers the unit value, `random` its bytes bare, `read` a record of its two labelled results.
+#[test]
+fn the_guest_shape_is_read_off_the_result_count() {
+    let store = host_ops();
+    let shape = |name: &str| {
+        store
+            .get(name)
+            .expect("a host_ops row")
+            .signature
+            .results
+            .shape()
+    };
+
+    assert_eq!(shape("close"), ResultShape::Unit);
+    assert_eq!(shape("random"), ResultShape::Single(WireType::Bytes));
+    assert_eq!(
+        shape("read"),
+        ResultShape::Record(vec![("status", WireType::Nat), ("bytes", WireType::Bytes)])
     );
 }
 
