@@ -73,6 +73,24 @@ fn indexed_field_store_fuses_to_flat_build() {
     assert_eq!(run(source), b"9\n");
 }
 
+/// An anonymous tuple's row is shared by every tuple of its width, so the census keys none of its fields: the list in one triple's first field is measured by index, the scalar in another's is never read, and the scalar is stored as it is rather than settled as a list — which trapped, `wasm unreachable`, where the program has an answer.
+#[test]
+fn a_shared_tuple_field_settles_nothing() {
+    let source = r#"
+        use /std/{Nat, List, proc};
+
+        let n = List/len(proc/args!);
+        let a: {List(Nat), Nat, Nat} = ([n, 2, 3], 0, 0);
+        let b: {Nat, Nat, Nat} = (7, n, 0);
+        /std/print(Nat/to_str(List/len(a.0) + b.1))
+        "#;
+
+    let dump = cont_optm(source);
+    assert!(!dump.contains("ListSettle"), "{dump}");
+
+    assert_eq!(run(source), b"3");
+}
+
 /// The builder idiom is protected: a field whose values are re-grown — the accumulator spelling `[..items, x]` — is poisoned by the census, so no settle is inserted and no flat build fires, and the loop keeps its O(1) append steps.
 #[test]
 fn regrown_field_store_stays_lazy() {

@@ -1,5 +1,7 @@
 //! The sequence-usage census behind the door's settle insertion: which constructor and product fields hold values that are only ever *indexed* — read by position, length, window, fold, or map — and never re-grown or moved somewhere the census cannot see. The fact is recorded here, over the arena, because this is the last stage at which family and product identity exist: at Cont a variant is an anonymous tuple, so a per-field fact keyed there would be cross-poisoned by every unrelated tuple of the same width. The door spends the fact by settling the stores into a marked field, which is what lets a map's child arrays be flat without any library spelling; see the eagerness-by-demand record in `documentation/design/toolchain/the-map-wall-falls-by-classes-not-by-symptom.md`.
 //!
+//! **A shared product schema is no field at all.** Erasure interns one anonymous tuple row per width, `shared`, and every tuple of that arity answers to it whatever its fields hold — so a key over it is the cross-poisoning the paragraph above describes, one stage up: a `(List, Nat, Nat)` read by index at one site and a `(Nat, Nat, Nat)` stored at another meet at `(schema, 0)`, and the settle a shared verdict inserted wrapped the scalar and trapped. A projection out of a shared row therefore records no read, and a store into one poisons the value stored, as every other place the census cannot follow per type does.
+//!
 //! The census follows exactly three shapes of indirection and no others: a computation-free alias; an argument of a saturated known call, which fares as the receiving parameter fares — without which every read would be poisoned, since the surface reaches `ListGet` through the `/sys/List/get` wrapper and an `Apply` is what a read looks like at this level — and a store back into a constructor or product field, which is safe exactly when that field is safe, because a persistent rebuild reads a field and stores it unchanged into the fresh construction, and poisoning that move would unmark every functional update in the program. The field dependencies resolve by a greatest fixpoint: every field starts safe, a hard poison demotes its field, and demotion propagates to the fields whose reads flow there, so a value escaping the safe system demotes everything on its path. Everything else — a closure call, a return, a scrutinee — poisons outright, because following it would be the interprocedural demand analysis this fact deliberately is not. Recursion is read coinductively: a value revisited during classification is assumed to hold, the same greatest-fixpoint reading. A field is settled only when it is safe *and* at least one of its own reads carries *list* evidence — a `List`-shaped use — so a field the program never reads, or one holding a packed binary, is never wrapped in a list operation it cannot carry.
 
 use {
@@ -138,10 +140,12 @@ pub(crate) fn sequence_census(module: &Module) -> SequenceFacts {
                 field,
             } => {
                 record(product, UseKind::Poison);
-                product_reads
-                    .entry((*schema, *field as usize))
-                    .or_default()
-                    .push(*result);
+                if !shared(module, *schema) {
+                    product_reads
+                        .entry((*schema, *field as usize))
+                        .or_default()
+                        .push(*result);
+                }
             }
             // A construction stores each atom into a field of the built value; the store is judged by the receiving field's own verdict.
             Rhs::Construct {
@@ -157,7 +161,11 @@ pub(crate) fn sequence_census(module: &Module) -> SequenceFacts {
             }
             Rhs::Product { schema, fields } => {
                 for (field, atom) in fields.iter().enumerate() {
-                    record(atom, UseKind::Stored(FieldKey::Product(*schema, field)));
+                    let kind = match shared(module, *schema) {
+                        true => UseKind::Poison,
+                        false => UseKind::Stored(FieldKey::Product(*schema, field)),
+                    };
+                    record(atom, kind);
                 }
             }
             // Every other occurrence — a scalar operation, a cell, a foreign call, a dispatch scrutinee — moves the value somewhere this census does not follow.
@@ -230,6 +238,11 @@ pub(crate) fn sequence_census(module: &Module) -> SequenceFacts {
         }
     }
     facts
+}
+
+/// Whether `schema` is the anonymous row every tuple of its width shares — the one product whose field keys name no type.
+fn shared(module: &Module, schema: ProductId) -> bool {
+    module.product(schema).is_some_and(|schema| schema.shared)
 }
 
 /// How a value fares as operand `position` of `operation`: the carrier positions of the read forms are indexing-shaped, growth and construction poison every position, and a position a list could never occupy by typing is poisoned rather than reasoned about.

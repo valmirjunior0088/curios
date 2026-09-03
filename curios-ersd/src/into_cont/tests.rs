@@ -472,6 +472,79 @@ fn a_collapsed_nullary_constructor_is_the_interned_zero() {
     assert!(!printed.contains("switch"), "{printed}");
 }
 
+/// The anonymous tuple row is shared by every tuple of its width, so its fields name no type: a list read by length out of one pair and a scalar stored into another meet at the same field key, and a settle inserted on that verdict would wrap the scalar. Neither construction settles.
+#[test]
+fn a_shared_tuple_field_is_never_settled() {
+    let mut builder = ErsdBuilder::new();
+    let pair = builder.product(ProductSchema {
+        debug_name: None,
+        fields: vec![Field::opaque(None); 2],
+        shared: true,
+    });
+
+    builder.open_block();
+    let one = nat(&mut builder, 1);
+    let list = builder.let_value(
+        None,
+        Rhs::Sequence {
+            operation: SequenceOp::ListBuild,
+            operands: vec![one],
+        },
+    );
+    let zero = nat(&mut builder, 0);
+    let listed = builder.let_value(
+        None,
+        Rhs::Product {
+            schema: pair,
+            fields: vec![Atom::Value(list), zero],
+        },
+    );
+    let seven = nat(&mut builder, 7);
+    let scalar = builder.let_value(
+        None,
+        Rhs::Product {
+            schema: pair,
+            fields: vec![seven, zero],
+        },
+    );
+    let head = builder.let_value(
+        None,
+        Rhs::Project {
+            schema: pair,
+            product: Atom::Value(listed),
+            field: 0,
+        },
+    );
+    let length = builder.let_value(
+        None,
+        Rhs::Sequence {
+            operation: SequenceOp::ListLen,
+            operands: vec![Atom::Value(head)],
+        },
+    );
+    let other = builder.let_value(
+        None,
+        Rhs::Project {
+            schema: pair,
+            product: Atom::Value(scalar),
+            field: 1,
+        },
+    );
+    let total = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(length), Atom::Value(other)],
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(total)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+
+    let printed = lowered(&module);
+    assert!(!printed.contains("ListSettle"), "{printed}");
+}
+
 #[test]
 fn folds_lower_to_accumulator_loops() {
     let mut builder = ErsdBuilder::new();
