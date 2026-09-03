@@ -135,3 +135,31 @@ fn use_after_close_on_a_handle_is_a_loud_miss_not_an_alias() {
     assert!(matches!(host.write(handle, b"z"), (Status::NotFound, 0)));
     assert!(matches!(host.write(fresh, b"ok"), (Status::Ok, 2)));
 }
+
+/// A writing `open` under a directory that is not there answers `NotFound`, as the OS does, rather than filing a file whose parent `stat` would then deny; once the directory is made, the same open succeeds and the parent stats as a directory.
+#[test]
+fn a_writing_open_under_a_missing_directory_is_refused_until_the_directory_exists() {
+    let (host, _io) = MockHost::builder().build();
+
+    for mode in [Mode::Write, Mode::Append] {
+        assert!(matches!(
+            host.open(b"a/b.txt", mode),
+            (Status::NotFound, handle) if handle.bytes().is_empty()
+        ));
+    }
+    assert!(matches!(host.stat(b"a"), (Status::NotFound, ..)));
+
+    assert!(matches!(host.create_dir(b"a"), Status::Ok));
+    let (status, handle) = host.open(b"a/b.txt", Mode::Write);
+    assert!(matches!(status, Status::Ok));
+    assert!(matches!(host.write(handle.clone(), b"x"), (Status::Ok, 1)));
+    host.close(handle);
+    assert!(matches!(
+        host.stat(b"a"),
+        (Status::Ok, kind, ..) if kind == curios_abi::file_kind::DIRECTORY
+    ));
+    assert!(matches!(
+        host.open(b"a/b.txt", Mode::Append),
+        (Status::Ok, _)
+    ));
+}

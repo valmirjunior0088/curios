@@ -34,6 +34,11 @@ impl MockDisk {
         }
     }
 
+    /// Whether `path` names something under a directory that is not there — the refusal `create_dir` and a writing `open` share, since the OS answers both with `not_found`. A bare name has no parent to miss.
+    fn parent_missing(&self, path: &[u8]) -> bool {
+        parent_of(path).is_some_and(|parent| !self.dirs.contains(parent))
+    }
+
     /// The names directly inside directory `dir`, files and directories alike, in byte order.
     fn children(&self, dir: &[u8]) -> Vec<Vec<u8>> {
         let name_in = |path: &[u8]| -> Option<Vec<u8>> {
@@ -79,23 +84,30 @@ impl MockFileSystem {
         self.inner.lock().unwrap().files.contains_key(path)
     }
 
-    /// Reset `path` to empty, creating it if absent — `open` in write mode.
-    fn truncate(&self, path: &[u8]) {
-        self.inner
-            .lock()
-            .unwrap()
-            .files
-            .insert(path.to_vec(), vec![]);
+    /// Reset `path` to empty, creating it if absent — `open` in write mode. `NotFound` under a directory that is not there, as the OS answers.
+    fn truncate(&self, path: &[u8]) -> Status {
+        let mut disk = self.inner.lock().unwrap();
+
+        if disk.parent_missing(path) {
+            return Status::NotFound;
+        }
+
+        disk.files.insert(path.to_vec(), vec![]);
+
+        Status::Ok
     }
 
-    /// Create `path` empty if absent, leaving any existing contents — `open` in append mode.
-    fn ensure(&self, path: &[u8]) {
-        self.inner
-            .lock()
-            .unwrap()
-            .files
-            .entry(path.to_vec())
-            .or_default();
+    /// Create `path` empty if absent, leaving any existing contents — `open` in append mode. `NotFound` under a directory that is not there, as `truncate` answers.
+    fn ensure(&self, path: &[u8]) -> Status {
+        let mut disk = self.inner.lock().unwrap();
+
+        if disk.parent_missing(path) {
+            return Status::NotFound;
+        }
+
+        disk.files.entry(path.to_vec()).or_default();
+
+        Status::Ok
     }
 
     /// Append `bytes` to `path`, creating it if absent.
@@ -199,9 +211,7 @@ impl MockFileSystem {
             () if disk.files.contains_key(path) || disk.dirs.contains(path) => {
                 Status::AlreadyExists
             }
-            () if parent_of(path).is_some_and(|parent| !disk.dirs.contains(parent)) => {
-                Status::NotFound
-            }
+            () if disk.parent_missing(path) => Status::NotFound,
             () => {
                 disk.dirs.insert(path.to_vec());
 
@@ -385,14 +395,17 @@ impl MockHost {
 
 impl HostOps for MockHost {
     fn open(&self, path: &[u8], mode: Mode) -> (Status, Handle) {
-        match mode {
-            Mode::Read => {
-                if !self.files.contains(path) {
-                    return (Status::NotFound, Handle::Other(Vec::new()));
-                }
-            }
+        let status = match mode {
+            Mode::Read => match self.files.contains(path) {
+                true => Status::Ok,
+                false => Status::NotFound,
+            },
             Mode::Write => self.files.truncate(path),
             Mode::Append => self.files.ensure(path),
+        };
+
+        if !matches!(status, Status::Ok) {
+            return (status, Handle::Other(Vec::new()));
         }
 
         (
