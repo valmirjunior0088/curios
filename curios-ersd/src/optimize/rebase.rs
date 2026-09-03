@@ -8,7 +8,7 @@
 //!      rec w(x, acc) = … w(t, acc ⊕ k) …   (base arms return acc ⊕ v)
 //! ```
 //!
-//! This is a correctness transform, not an optimization — without it the deferred-context corpus overflows the native stack — and it is sound-but-incomplete: outside the recognized envelope it is a no-op, never a miscompile. The envelope, structural in ANF: a leaf tail block ends in exactly `[…, a = f(args), b = ⊕(a, k)]` returning `b` (the addend defined before the call, so moving only the *pure combine* across the recursion reorders nothing observable), a bare tail self-call, or a base; one uniform registered monoid; a non-commutative monoid only with the recursion on the right.
+//! This is a correctness transform, not an optimization — without it the deferred-context corpus overflows the native stack — and it is sound-but-incomplete: outside the recognized envelope it is a no-op, never a miscompile. The envelope, structural in ANF: a leaf tail block ends in exactly `[…, a = f(args), b = ⊕(a, k)]` returning `b` (the addend defined before the call, so moving only the *pure combine* across the recursion reorders nothing observable), a bare tail self-call, or a base; one uniform registered monoid, every row of which commutes, so the recursion may sit on either side of the combine.
 //!
 //! **Associativity is not on its own the licence, and believing it was is what let a wrong row in.** The rewrite reverses the order the addends are combined in — the written recursion folds them innermost-out, `((v ⊕ kₙ) ⊕ …) ⊕ k₁`, and the worker threads them `k₁` first — so the *partial* results differ even though the total does not. On these carriers that is observable: the erased scalars refuse rather than wrap (`curios-num`'s `scalar`) and the emitter traps on a result leaving the i31 envelope, so `⊕` is partial, and a partial operation can be associative wherever both sides are defined while differing in *where* it is defined. What the reassociation consumes is therefore associativity, an erasure-stable identity, and **monotone definedness**: no partial of any association may fall outside the carrier when the total is inside it. The registered rows are exactly those that have it — see the table below for the three that do not.
 
@@ -30,6 +30,8 @@ use {
 /// **No `NatMul`, `IntMul` or `IntAdd` row, and each is excluded for a demonstrated reason rather than caution.** Multiplication has an annihilator: one zero factor makes the total `0` while a partial of the reversed order is the product of everything else, so `((1 * 0) * 2¹⁶) * 2¹⁶` computes and its reversal traps. Signed addition cancels: `MAX + MAX + MIN` is representable and `(MAX + MAX)` is not. Each turns a program that computed into one that traps — which is what the reversal costs when the row is not monotone, and it is not something a later row may be added without answering.
 ///
 /// No `And` row: boolean and bitwise `and` share an erased operator with different identities, so no single seed is sound for both. No append rows: `BinAppend`/`ListAppend` append an *element* to a sequence — heterogeneous, so the accumulator rewrite's carriers do not line up (the legacy engine's append rows fired on shapes this corpus does not contain; the gate below is the arbiter if one ever appears).
+///
+/// **Every row commutes, and `recognize` relies on it**: the combine is accepted with the recursion on either side. A future non-commutative row — an append over one carrier — must re-introduce the placement rule beside its registration: the recursion only on the right, the addend folded as `acc ⊕ k`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Monoid {
     NatAdd,
@@ -75,12 +77,6 @@ impl Monoid {
             Monoid::NatAdd | Monoid::NatOr => Constant::Nat(0),
             Monoid::IntOr => Constant::Int(0),
         }
-    }
-
-    /// Every registered monoid commutes. A future non-commutative row (an append over one carrier) must re-introduce the placement rule: the recursion only on the right, the addend folded as `acc ⊕ k`.
-    fn commutative(self) -> bool {
-        let _ = self;
-        true
     }
 
     /// `left ⊕ right`.
@@ -415,10 +411,6 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Mo
             let left_self = left == call_atom;
             let right_self = right == call_atom;
             if left_self ^ right_self {
-                if !found.commutative() && left_self {
-                    // `f(rest) ++ k` needs a difference list; out of scope.
-                    return None;
-                }
                 match monoid {
                     None => monoid = Some(found),
                     Some(previous) if previous == found => {}
