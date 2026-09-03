@@ -269,6 +269,24 @@ impl fmt::Display for Displayed<'_> {
                     "wrong number of arguments: expected {expected}, got {got}"
                 )
             }
+            Error::SurplusFuncBinders { surplus, slots } => {
+                let binders = match surplus {
+                    1 => "1 binder that claims no parameter".to_string(),
+                    surplus => format!("{surplus} binders that claim no parameter"),
+                };
+                let claimed = match slots {
+                    0 => "the expected type has no parameters".to_string(),
+                    1 => "the expected type's only parameter is already claimed".to_string(),
+                    slots => {
+                        format!("all {slots} of the expected type's parameters are already claimed")
+                    }
+                };
+
+                write!(
+                    f,
+                    "this function writes {binders}: each binder claims the next parameter carrying its own mark, and {claimed}"
+                )
+            }
             Error::BinderPlicityMismatch {
                 position,
                 expected,

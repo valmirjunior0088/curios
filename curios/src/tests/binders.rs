@@ -130,8 +130,62 @@ fn lambda_plain_binder_never_binds_a_hidden_slot() {
         let bad : (@A : Type, x : A) -> A = (a, x) => x;
         /std/print(Nat/to_str(bad(5)))
         "#;
-    // The implicit is inserted before `a`, so `a` binds `x` and `x` is surplus.
-    assert!(error(source).contains("arguments"), "{}", error(source));
+    // The implicit is inserted before `a`, so `a` binds `x` and `x` is surplus, which is what the refusal says — a count would say `2, 2`.
+    assert!(
+        error(source).contains("claims no parameter"),
+        "{}",
+        error(source)
+    );
+}
+
+// The surplus refusal names the surplus, because no count pair can name this fault.
+//
+// Alignment is positional by plicity, so a lambda and its expected type can agree on their totals *and* on their explicit counts and still fail to align. Comparing totals reported `expected 3, got 3` for the first of these — self-contradictory, and silent about the rule that decided it.
+#[test]
+fn a_lambda_binder_that_claims_no_parameter_is_named_as_surplus() {
+    let surplus = |source: &str| {
+        let rendered = error(source);
+        assert!(
+            rendered.contains("claims no parameter") || rendered.contains("claim no parameter"),
+            "{rendered}"
+        );
+        rendered
+    };
+
+    // syntax.md's own refused spelling: `A` binds the sole explicit slot and the rest are surplus.
+    surplus(
+        r#"
+        use /std/{Str, Show};
+        let bad : (@A : Type, use Show(A), value : A) -> Str = (A, show, value) => Show/show(value);
+        /std/print(bad(5))
+        "#,
+    );
+
+    // One explicit parameter, one explicit binder, and still a surplus: `@A` claims nothing.
+    surplus(
+        r#"
+        use /std/{Nat};
+        let bad : (x : Nat) -> Nat = (x, @A) => x;
+        /std/print(Nat/to_str(bad(5)))
+        "#,
+    );
+}
+
+// A lambda short of an explicit parameter counts the explicit ones, which are the only parameters it may write.
+//
+// Counting the total said `expected 3` for a type with two explicit parameters, and acting on it means writing the third — the spelling refused just above.
+#[test]
+fn a_lambda_short_of_a_parameter_counts_the_explicit_ones() {
+    let source = r#"
+        use /std/{Nat};
+        let bad : (@A : Type, x : Nat, y : Nat) -> Nat = (x) => x;
+        /std/print(Nat/to_str(bad(5, 6)))
+        "#;
+    assert!(
+        error(source).contains("expected 2, got 1"),
+        "{}",
+        error(source)
+    );
 }
 
 // A marked binder that reaches an explicit slot is a plicity mismatch: writing `@x` for a plain parameter is rejected, naming the required spelling.

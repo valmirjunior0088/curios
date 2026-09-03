@@ -930,6 +930,14 @@ pub(super) fn elaborate_func_check(
         _ => return Err(Error::not_a_function_type(expected.clone())),
     };
 
+    // How many of these slots a lambda must write. The hidden ones are inserted from the expected type, so they are the parameters an arity refusal may not count.
+    fn explicit(plicities: &[Plicity]) -> usize {
+        plicities
+            .iter()
+            .filter(|plicity| **plicity == Plicity::Explicit)
+            .count()
+    }
+
     // Assume an inserted or consumed binder into the ordinary scope, joining the witness scope when the *expected* slot is a `use` binder so resolution in later domains and the body finds it there.
     fn assume_slot(context: &mut Context, name: &Free, plicity: Plicity, type_: &Term) {
         match plicity {
@@ -954,9 +962,10 @@ pub(super) fn elaborate_func_check(
                 (Telescope::Done(body), Telescope::Cons(domain, rest)) => {
                     let plicity = e_plicities[e_idx];
                     if plicity == Plicity::Explicit {
+                        // Explicit slots against explicit binders, not the totals: the hidden slots are inserted rather than written, so a total names a count the author may not write — and did, pointing at the very spelling the surplus arm below refuses.
                         break Err(Error::wrong_number_of_arguments(
-                            e_plicities.len(),
-                            telescope.len(),
+                            explicit(&e_plicities),
+                            explicit(written_plicities),
                         ));
                     }
                     let name = context.fresh(None);
@@ -967,11 +976,11 @@ pub(super) fn elaborate_func_check(
                     expected_tele = rest.open(&[&x]);
                     e_idx += 1;
                 }
-                // A written binder remains but the expected telescope ended: too many parameters.
+                // Written binders remain but the expected telescope ended: every parameter is claimed and these claim nothing. No count pair says that — `(x, @A) => …` against `(x: Nat) -> Nat` agrees on totals *and* on explicit counts — so the surplus itself is the diagnosis.
                 (Telescope::Cons(..), Telescope::Done(_)) => {
-                    break Err(Error::wrong_number_of_arguments(
+                    break Err(Error::surplus_func_binders(
+                        telescope.len() - w_idx,
                         e_plicities.len(),
-                        telescope.len(),
                     ));
                 }
                 (Telescope::Cons(w_domain, w_rest), Telescope::Cons(e_domain, e_rest)) => {

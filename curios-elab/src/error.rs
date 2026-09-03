@@ -205,9 +205,17 @@ pub enum Error {
         grain: Grain,
         head_type: Box<Term>,
     },
+    /// A call, literal or lambda supplies the wrong number of arguments for a telescope whose slots are all written. At a lambda this counts *explicit* slots and *explicit* binders alone, because the hidden ones are inserted rather than written — see [`Error::SurplusFuncBinders`] for why a total would name a number the author may not write.
     WrongNumberOfArguments {
         expected: usize,
         got: usize,
+    },
+    /// A lambda writes binders that claim no parameter of the expected function type.
+    ///
+    /// **Not a count mismatch, which is why it is not [`Error::WrongNumberOfArguments`].** Alignment is positional *by plicity* — each written binder claims the next expected parameter carrying its own mark, and every hidden parameter skipped on the way is inserted — so a lambda and a type with the same number of parameters can still fail to align, and one whose explicit counts agree can too. `(x, @A) => …` against `(x: Nat) -> Nat` has one explicit parameter and one explicit binder; what is wrong is that `@A` claims nothing. `surplus` is how many binders were left unclaimed, never zero, and `slots` how many parameters the expected type has.
+    SurplusFuncBinders {
+        surplus: usize,
+        slots: usize,
     },
     /// A written function binder claims a slot whose plicity it does not match. `position` is the binder's 1-based position among the written binders, `expected` the plicity of the expected slot it aligned with, and `written` the mark it carries. Under automatic hidden-binder insertion this fires when a marked (`@`/`use`) binder reaches an *explicit* expected slot — an explicit slot is never skipped and never marked.
     BinderPlicityMismatch {
@@ -684,6 +692,10 @@ impl Error {
 
     pub(crate) fn wrong_number_of_arguments(expected: usize, got: usize) -> Self {
         Self::WrongNumberOfArguments { expected, got }
+    }
+
+    pub(crate) fn surplus_func_binders(surplus: usize, slots: usize) -> Self {
+        Self::SurplusFuncBinders { surplus, slots }
     }
 
     pub(crate) fn unknown_match_constructor(type_name: String, tag: String) -> Self {
