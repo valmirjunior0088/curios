@@ -13,6 +13,8 @@ enum Use {
     Applied,
     /// Kept, so the closure is a value and the member is inadmissible.
     Stored,
+    /// Applied at arity one where it arrives, and applied again inside a function defined below that application — a use no walk that stops at the `LetFun` sees.
+    Captured,
     /// Not called from outside the class at all, so nothing observes a width for it directly.
     Unobserved,
 }
@@ -104,6 +106,51 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
                     callee: CpsCallee::Closure(received),
                     args: vec![CpsAtom::Value(argument)],
                     return_to: after,
+                })
+            }
+            Use::Captured => {
+                // The visible half is `Applied`'s shape exactly; the hidden half is a nested function that applies the closure again and escapes into a tuple, so it is neither dead nor inlined away.
+                let ignored = module.add_value(Some("ignored".into()));
+                let nested = module.reserve_function();
+                let nested_sentinel = module.reserve_continuation();
+                let nested_body = module.add_node(CpsNode::ApplyFun {
+                    callee: CpsCallee::Closure(received),
+                    args: vec![CpsAtom::Value(argument)],
+                    return_to: nested_sentinel,
+                });
+                module.define_function(
+                    nested,
+                    CpsFunction {
+                        debug_name: Some("nested".into()),
+                        params: vec![],
+                        return_cont: nested_sentinel,
+                        body: nested_body,
+                    },
+                );
+                let kept = module.add_value(Some("kept".into()));
+                let keep = module.add_node(CpsNode::LetValue {
+                    result: kept,
+                    value: CpsValueExpr::Tuple(vec![CpsAtom::Fun(nested)]),
+                    next,
+                });
+                let define = module.add_node(CpsNode::LetFun {
+                    functions: vec![nested],
+                    body: keep,
+                });
+                // Bound inside the resume rather than beside it, since the nested function names the resume's parameter — the `LetCont`-then-site shape `Resume::Jump` is written for.
+                let after = module.add_continuation(CpsContinuation {
+                    debug_name: None,
+                    params: vec![ignored],
+                    body: define,
+                });
+                let apply = module.add_node(CpsNode::ApplyFun {
+                    callee: CpsCallee::Closure(received),
+                    args: vec![CpsAtom::Value(argument)],
+                    return_to: after,
+                });
+                module.add_node(CpsNode::LetCont {
+                    continuations: vec![after],
+                    body: apply,
                 })
             }
             Use::Unobserved => unreachable!("an unobserved member is given no caller at all"),
@@ -266,6 +313,42 @@ fn a_chain_declines_when_either_member_cannot() {
             widths(&module, leader, forwarder),
             (1, 1),
             "{label}: and the admissible member is left alone with it",
+        );
+    }
+}
+
+/// A closure the caller applies once and also captures in a function defined below the application is a value that outlives the site, and the member is inadmissible — at either end of the chain, since the class path plans the declined member on its class-mate's width and has to see the hidden application too.
+///
+/// It was admitted: the admission walk stopped at the `LetFun`, saw one application, and the nested function went on applying the absorbed answer.
+#[test]
+fn a_closure_captured_by_a_nested_function_declines_uncurrying() {
+    for (label, uses) in [
+        (
+            "the leader's caller captures it",
+            (Use::Captured, Use::Applied),
+        ),
+        (
+            "the forwarder's caller captures it",
+            (Use::Applied, Use::Captured),
+        ),
+    ] {
+        let (mut module, leader, forwarder) = chain(uses.0, uses.1);
+        let captured = match uses.0 {
+            Use::Captured => leader,
+            _ => forwarder,
+        };
+        assert!(
+            !uncurryable(&module).contains_key(&captured),
+            "{label}: the capture is a use the site cannot absorb",
+        );
+        assert!(
+            !uncurry_returns(&mut module),
+            "{label}: so the class declines"
+        );
+        assert_eq!(
+            widths(&module, leader, forwarder),
+            (1, 1),
+            "{label}: and neither member is rewritten",
         );
     }
 }

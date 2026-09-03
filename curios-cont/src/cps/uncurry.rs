@@ -104,7 +104,9 @@ fn returns_functions(module: &CpsModule, function: CpsFunId) -> bool {
     true
 }
 
-/// The one arity every use of `value` beneath `body` applies it at, or `None` when any use does anything else — including appearing as an ordinary operand, which would dangle once the callee returns the answer instead of the closure.
+/// The one arity every use of `value` beneath `body` applies it at, or `None` when any use does anything else — including appearing as an ordinary operand, which would dangle once the callee returns the answer instead of the closure, and including any mention inside a function defined beneath `body`, which captures the closure and outlives the site.
+///
+/// The capture rule is what [`free_values`](super::analysis::free_values) warns a pass about to remove a binding of: [`nodes_from`] enters a `LetFun`'s continuation and not its members, so a lambda defined below the application that applied the closure again was invisible here. The site was admitted on its one visible application, the callee absorbed it, and the lambda went on applying what was by then the applied answer — a trap where the program printed a number.
 fn locally_applied_at(module: &CpsModule, body: CpsNodeId, value: CpsValueId) -> Option<usize> {
     let mut width = None;
     for node_id in nodes_from(module, body) {
@@ -113,6 +115,13 @@ fn locally_applied_at(module: &CpsModule, body: CpsNodeId, value: CpsValueId) ->
             if matches!(atom, CpsAtom::Value(used) if *used == value) {
                 return None;
             }
+        }
+        if let CpsNode::LetFun { functions, .. } = node
+            && functions
+                .iter()
+                .any(|function| mentioned_in(module, *function, value))
+        {
+            return None;
         }
         if let CpsNode::ApplyFun {
             callee: CpsCallee::Closure(callee),
@@ -129,6 +138,42 @@ fn locally_applied_at(module: &CpsModule, body: CpsNodeId, value: CpsValueId) ->
         }
     }
     width
+}
+
+/// Whether `function` mentions `value` anywhere in its region — as an operand, as a closure callee, or inside a function it defines in turn.
+fn mentioned_in(module: &CpsModule, function: CpsFunId, value: CpsValueId) -> bool {
+    region_nodes(module, module.function(function).unwrap().body)
+        .into_iter()
+        .any(|node_id| match module.node(node_id).unwrap() {
+            CpsNode::ApplyFun {
+                callee: CpsCallee::Closure(callee),
+                ..
+            } if *callee == value => true,
+            node => atoms(node)
+                .into_iter()
+                .any(|atom| matches!(atom, CpsAtom::Value(used) if *used == value)),
+        })
+}
+
+/// Every node beneath `body`, the bodies of the functions defined beneath it included, transitively — the whole region a site's rewrite reaches, where [`nodes_from`] stops at a nested function.
+fn region_nodes(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> {
+    let mut nodes = BTreeSet::new();
+    let mut work = vec![body];
+    while let Some(body) = work.pop() {
+        for node_id in nodes_from(module, body) {
+            if nodes.insert(node_id)
+                && let CpsNode::LetFun { functions, .. } = module.node(node_id).unwrap()
+            {
+                work.extend(
+                    functions
+                        .iter()
+                        .filter_map(|function| module.function(*function))
+                        .map(|function| function.body),
+                );
+            }
+        }
+    }
+    nodes.into_iter().collect()
 }
 
 /// The values a continuation's own body binds — what the call site above it cannot see.
@@ -384,13 +429,13 @@ fn reached_directly(module: &CpsModule, body: CpsNodeId, site: CpsNodeId) -> boo
     }
 }
 
-/// Where `callee` is applied beneath `body`, and with what.
+/// Where `callee` is applied beneath `body`, and with what — the functions defined beneath it included, so a class member whose site was declined by [`locally_applied_at`] and is planned on its class-mates' width still shows the application a nested function hides.
 fn application_sites(
     module: &CpsModule,
     body: CpsNodeId,
     callee: CpsValueId,
 ) -> Vec<(CpsNodeId, Vec<CpsAtom>)> {
-    nodes_from(module, body)
+    region_nodes(module, body)
         .into_iter()
         .filter_map(|node_id| match module.node(node_id).unwrap() {
             CpsNode::ApplyFun {

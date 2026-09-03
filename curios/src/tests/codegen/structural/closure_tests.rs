@@ -110,6 +110,19 @@ fn direct_and_escaping_uses_coexist() {
 /// The `call_indirect` exemption is `main`'s and the `$io/` thunks', following [`trees_hot_arithmetic_has_no_indirect_calls`]: a program *is* a description now, so forcing one is structurally an indirect call. It goes through [`user_functions_with`] rather than [`user_allocations`] because the instruction names the table and the closure *type* it calls through and never the callee, leaving the enclosing function as the only thing that says whose call it is.
 ///
 /// **The environment goes with the closure, and that is lowering's doing rather than this transform's.** A free value reaches a directly-called function as a lifted parameter and an escaping one as an environment field — one decision, taken in `machine::lower` — so absorbing the application moves `walk`'s captured `n` from the second case to the first for free. The emitted pair takes it as a parameter and allocates nothing.
+/// A returned closure the caller also captures keeps being a closure. Absorbing the application handed the capturing lambda the applied answer in the closure's place: this program trapped inside the lambda with no argument and inside `mk` with three, until the admission walk entered the lambda.
+#[test]
+fn a_returned_closure_the_caller_also_captures_is_not_absorbed() {
+    for args in [&[][..], &["a", "b", "c"][..]] {
+        assert_eq!(run_raw(UNCURRY_CAPTURED, args), b"2 10", "raw, {args:?}");
+        assert_eq!(
+            run_binaryen(UNCURRY_CAPTURED, args),
+            b"2 10",
+            "optimized, {args:?}"
+        );
+    }
+}
+
 #[test]
 fn a_returned_closure_every_caller_applies_is_absorbed() {
     let wat = wat(UNCURRY);

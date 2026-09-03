@@ -162,6 +162,25 @@ pub(super) const UNCURRY: &str = r#"
     /std/print(Nat/to_str(walk(n)(1)))
     "#;
 
+/// [`UNCURRY`]'s admissible shape with one difference: the caller applies the returned closure once *and* captures it in a lambda defined below the application, which escapes into a `List/map` so it is neither inlined nor dead. `mk` is recursive and `n` tainted so nothing folds the closure away, every return edge carries a closure, and the direct application is the resume's only *visible* use.
+pub(super) const UNCURRY_CAPTURED: &str = r#"
+    use /std/{Nat, List, Str, proc};
+    let mk(n : Nat) -> (Nat) -> Nat =
+        match n : (_) => (Nat) -> Nat
+        | 0 => (m) => m
+        | p + 1 =>
+            let f = mk(p);
+            let w = f(0);
+            (m) => f(m) + w
+        end;
+    let taint = List/len(proc/args!);
+    let n : Nat = taint;
+    let c = mk(n);
+    let v = c(2);
+    let ws = List/map([0], (z) => c(z + 10));
+    /std/print(Str/concat(Nat/to_str(v), Str/concat(" ", Nat/to_str(List/fold(ws, 0, (w, acc) => w + acc)))))
+    "#;
+
 /// A capture-free closure selected and applied inside a loop — the constant-closure interning shape. Each iteration picks one of two lambdas by a runtime condition, so the call stays genuinely unknown (the parameter joins two closures, exactly [`HIGHER_ORDER`]'s conflict), but neither lambda captures anything: with the code field an ordinary `i32`, both are constant aggregates, so the loop must reference two module consts rather than construct an environment per iteration.
 pub(super) const LOOPED_PICK: &str = r#"
     use /std/{Handle, Nat, Bool, List, proc};
