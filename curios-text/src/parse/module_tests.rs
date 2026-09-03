@@ -275,3 +275,29 @@ fn a_top_level_let_without_a_type_falls_through_to_the_tail() {
             .is_ok()
     );
 }
+
+/// A `pub` removes the fall-through, so the item's own diagnosis reaches the reader in a program as it does in a module.
+///
+/// The recoverable arms exist so a failed item may still be a program's tail, and no term begins with `pub`. Left recoverable anyway, every mistake inside a `pub` item was discarded by the entrypoint grammar and replaced by the local `let` the tail parser tried at the `pub` itself.
+#[test]
+fn a_malformed_pub_item_is_reported_in_a_program_too() {
+    for (source, expected) in [
+        ("pub let a : /std/Nat = 1 +;\n()", "Expected ';'"),
+        (
+            "pub satisfy /std/Equal(/std/Nat) { }\n()",
+            "a witness is never `pub`",
+        ),
+        ("pub test t() = 1;\n()", "a test is never `pub`"),
+        ("pub wibble x = 1;\n()", "Expected a top-level item"),
+    ] {
+        let report = source.parse::<Entrypoint>().unwrap_err().format();
+        assert!(
+            report.contains(expected),
+            "{source:?} reported {report}, wanted {expected:?}"
+        );
+        assert!(
+            !report.contains("obtained 'pub'"),
+            "{source:?} fell through to the tail's local `let`: {report}"
+        );
+    }
+}

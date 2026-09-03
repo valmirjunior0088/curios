@@ -582,10 +582,18 @@ const NOT_A_TOP_LEVEL_ITEM: &str = "Expected a top-level item: one of 'mod', 'us
 /// **A head commits when it is reserved and cannot begin a term**, which is exactly `mod`, `use`, `induct`, `struct` and `foreign`. Nothing else may be written in their place, so once one is read its arm owns the error and [`commit`] stops an enclosing choice from backtracking into a vaguer one.
 ///
 /// **The other four are [`catch`]ed back to recoverable, and the language decides which.** The head is already consumed when the arm runs, so without it a failure inside one of them is fatal by progress alone and would abort the item loop instead of falling through. `concept`, `satisfy` and `test` are contextual words — `documentation/syntax.md` keeps them ordinary identifiers outside a declaration position, so one of them here may really be a program's tail calling a function of that name. `let` is reserved but shared with the term grammar: a top-level `let` requires an annotation, and `let x = 1; tail` has to fall through to a local `let`. An unrecognized head is recoverable for the same reason — it is how the item loop terminates before a program's tail begins.
+///
+/// **A `pub` in front makes every arm commit, because it removes the fall-through the `catch` exists for.** `pub` is a keyword, so no term begins with one: after reading it there is no tail for a failed item to become, and an unrecognized head after it names no item rather than ending the item loop. Leaving those arms recoverable threw the diagnosis away wherever it mattered most. A module recovers it — `Module::parse_items_end` re-runs the item parser once input remains — but an entrypoint's grammar runs `parse_term` instead, which tries a local `let` at the `pub`, fails one token in, and wins [`Parser::or`]'s furthest-failure tie-break over the real error the `catch` had just made backtrackable. Every mistake inside a `pub let` in a program therefore reported `Expected keyword 'let', obtained 'pub'` against the `let`, and the refusals `parse_top_witness` and `parse_top_test` write by hand for a `pub` they cannot accept never reached a reader at all.
 pub(crate) fn parse_top_item<'a>() -> Parser<'a, TopItem> {
     mark()
         .and(catch(parse_pub().and(parse_identifier_raw())))
         .flat_map(|(start, (vis_pub, head))| {
+            // Recoverable only where a failed item may still be a program's tail, which a `pub` rules out.
+            let fallible = |parser| match vis_pub {
+                true => commit(parser),
+                false => catch(parser),
+            };
+
             // The head is read *raw*, so an unrecognized one is reported against the word itself rather than wherever the whitespace after it ended — which for a one-word line is the next line, or end of input. Every arm therefore consumes that whitespace itself.
             let body = match head {
                 "mod" => commit(parse_top_mod(vis_pub, start)),
@@ -593,11 +601,11 @@ pub(crate) fn parse_top_item<'a>() -> Parser<'a, TopItem> {
                 "induct" => commit(parse_top_induct(vis_pub)),
                 "struct" => commit(parse_top_struct(vis_pub)),
                 "foreign" => commit(parse_top_foreign(vis_pub)),
-                "concept" => catch(parse_top_concept(vis_pub)),
-                "satisfy" => catch(parse_top_witness(vis_pub)),
-                "test" => catch(parse_top_test(vis_pub)),
-                "let" => catch(parse_top_let(vis_pub)),
-                _ => return catch(fail(NOT_A_TOP_LEVEL_ITEM)),
+                "concept" => fallible(parse_top_concept(vis_pub)),
+                "satisfy" => fallible(parse_top_witness(vis_pub)),
+                "test" => fallible(parse_top_test(vis_pub)),
+                "let" => fallible(parse_top_let(vis_pub)),
+                _ => return fallible(fail(NOT_A_TOP_LEVEL_ITEM)),
             };
 
             parse_whitespace().and_keep(body)
