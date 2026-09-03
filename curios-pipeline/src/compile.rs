@@ -339,7 +339,11 @@ where
     Ok((module, core_type, user_foreigns, records))
 }
 
-/// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, and judged by the kernel, with a refusal from either checker reported as the compile path reports it. What a question about a program's correctness is answered by — the stages below this one produce the program, and change no verdict.
+/// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, judged by the kernel, and **erased**, with a refusal from any of them reported as the compile path reports it. What a question about a program's correctness is answered by.
+///
+/// **Erasure is a verdict, which is why the line is drawn under it rather than under the kernel.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the kernel made `wonder diagnostics` report a clean program that `run` then refused, which is the one thing that query may not do. Below here nothing decides: [`lower_from_ersd`] returns no `Result` at all.
+///
+/// The erased module is discarded. Producing it is the whole cost, and the caller wants the Core module.
 pub fn check_entrypoint(
     budget: u64,
     scope: Prefix<'_>,
@@ -348,8 +352,31 @@ pub fn check_entrypoint(
     loader: &RootSource,
     tail: EntryTail,
 ) -> Result<curios_core::Module, CompileError> {
-    check_observed(budget, scope, syntax, entrypoint, loader, tail, &mut |_| {})
-        .map(|(module, _core_type, _foreigns, _records)| module.into_module())
+    let (module, core_type, _foreigns, _records) =
+        check_observed(budget, scope, syntax, entrypoint, loader, tail, &mut |_| {})?;
+    erase_checked(budget, scope, syntax, &module, &core_type)?;
+
+    Ok(module.into_module())
+}
+
+/// The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
+fn erase_checked(
+    budget: u64,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+    module: &curios_core::Zonked<curios_core::Module>,
+    core_type: &Term,
+) -> Result<curios_ersd::Module, CompileError> {
+    let cores = scope.cores();
+
+    erase_unit(
+        &mut Context::new(budget, *syntax),
+        Resumed::of(&cores, scope.arena()),
+        module,
+        Some(core_type),
+    )
+    .map(|erased| erased.into_module())
+    .map_err(|error| CompileError::Failure(error.reports_with(module.as_module(), &cores)))
 }
 
 /// [`check_entrypoint`] with the stages it passes observed, and the entry's type and foreign rows kept for the lowering that follows it.
@@ -628,16 +655,7 @@ where
         tail,
         &mut observe,
     )?;
-    let cores = scope.cores();
-
-    let ersd_module = erase_unit(
-        &mut Context::new(budget, *syntax),
-        Resumed::of(&cores, scope.arena()),
-        &module,
-        Some(&core_type),
-    )
-    .map(|erased| erased.into_module())
-    .map_err(|error| CompileError::Failure(error.reports_with(module.as_module(), &cores)))?;
+    let ersd_module = erase_checked(budget, scope, syntax, &module, &core_type)?;
 
     // Every unit's rows, not the entry's alone: an embedder binds one registry, and a dependency that declares a `foreign` row has to reach it. Disjoint by mount, so the union cannot collide.
     let mut all_foreigns = scope.foreigns();
