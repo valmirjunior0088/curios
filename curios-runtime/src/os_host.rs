@@ -208,7 +208,7 @@ impl Drop for OsHost {
 
 impl HostOps for OsHost {
     fn open(&self, path: &[u8], mode: Mode) -> (Status, Handle) {
-        let path = String::from_utf8_lossy(path).into_owned();
+        let path = OsStr::from_bytes(path);
 
         let mut options = OpenOptions::new();
 
@@ -218,7 +218,7 @@ impl HostOps for OsHost {
             Mode::Append => options.append(true).create(true),
         };
 
-        match options.open(&path) {
+        match options.open(path) {
             Ok(file) => (Status::Ok, self.mint(OsResource::File(file))),
             Err(error) => (status_from_error(error), Handle::Other(Vec::new())),
         }

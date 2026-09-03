@@ -351,3 +351,29 @@ fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
 
     host.close(stdout);
 }
+
+/// A path is the bytes the host holds, never decoded on the way: a name `list` hands back that is not UTF-8 opens as the file it names, exactly as `stat` finds it. The file is made with the standard library on the raw bytes, so the row under test is the only one asked to read them back.
+#[test]
+fn open_takes_a_listed_name_that_is_not_utf8() {
+    let host = OsHost::with_args(vec![]);
+    let dir = std::env::temp_dir().join(format!("curios-open-{}", std::process::id()));
+    fs::create_dir(&dir).expect("a fresh temporary directory");
+    let name = b"\xffname.txt";
+    fs::write(dir.join(OsStr::from_bytes(name)), b"x").expect("a file under the raw name");
+
+    let (status, names) = host.list(dir.as_os_str().as_bytes());
+    assert!(matches!(status, Status::Ok));
+    assert_eq!(names, vec![name.to_vec()]);
+
+    let path = dir.join(OsStr::from_bytes(&names[0]));
+    let (status, handle) = host.open(path.as_os_str().as_bytes(), Mode::Read);
+    assert!(
+        matches!(status, Status::Ok),
+        "open answered {}",
+        status.code()
+    );
+    assert!(matches!(host.read(handle.clone(), 8), (Status::Ok, bytes) if bytes == b"x"));
+
+    host.close(handle);
+    fs::remove_dir_all(&dir).expect("the temporary directory is removed");
+}
