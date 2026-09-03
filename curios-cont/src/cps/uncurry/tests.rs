@@ -15,6 +15,8 @@ enum Use {
     Stored,
     /// Applied at arity one where it arrives, and applied again inside a function defined below that application — a use no walk that stops at the `LetFun` sees.
     Captured,
+    /// Applied at arity one where it arrives, and kept in a tuple below that application — one visible application beside a use that is not one.
+    AppliedAndStored,
     /// Not called from outside the class at all, so nothing observes a width for it directly.
     Unobserved,
 }
@@ -153,6 +155,29 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
                     body: apply,
                 })
             }
+            Use::AppliedAndStored => {
+                let ignored = module.add_value(Some("ignored".into()));
+                let kept = module.add_value(Some("kept".into()));
+                let keep = module.add_node(CpsNode::LetValue {
+                    result: kept,
+                    value: CpsValueExpr::Tuple(vec![CpsAtom::Value(received)]),
+                    next,
+                });
+                let after = module.add_continuation(CpsContinuation {
+                    debug_name: None,
+                    params: vec![ignored],
+                    body: keep,
+                });
+                let apply = module.add_node(CpsNode::ApplyFun {
+                    callee: CpsCallee::Closure(received),
+                    args: vec![CpsAtom::Value(argument)],
+                    return_to: after,
+                });
+                module.add_node(CpsNode::LetCont {
+                    continuations: vec![after],
+                    body: apply,
+                })
+            }
             Use::Unobserved => unreachable!("an unobserved member is given no caller at all"),
             // A tuple field is a use the lattice cannot call an application, which is exactly what makes the member inadmissible.
             Use::Stored => {
@@ -240,7 +265,7 @@ fn a_tail_forwarded_chain_is_uncurried_together() {
     let admissible = uncurryable(&module);
     assert_eq!(
         (admissible.get(&leader), admissible.get(&forwarder)),
-        (Some(&1), Some(&1)),
+        (Some(&Some(1)), Some(&Some(1))),
         "both members are admissible at width one",
     );
     assert!(uncurry_returns(&mut module), "the class is admissible");
@@ -300,10 +325,14 @@ fn a_chain_declines_when_either_member_cannot() {
         ("the leader's caller keeps it", (Use::Stored, Use::Applied)),
     ] {
         let (mut module, leader, forwarder) = chain(uses.0, uses.1);
-        assert!(
-            !uncurryable(&module).contains_key(&leader)
-                || !uncurryable(&module).contains_key(&forwarder),
-            "{label}: one member is inadmissible",
+        let kept = match uses.0 {
+            Use::Stored => leader,
+            _ => forwarder,
+        };
+        assert_eq!(
+            uncurryable(&module).get(&kept),
+            Some(&None),
+            "{label}: the member is inadmissible, which is not the same as unobserved",
         );
         assert!(
             !uncurry_returns(&mut module),
@@ -337,9 +366,47 @@ fn a_closure_captured_by_a_nested_function_declines_uncurrying() {
             Use::Captured => leader,
             _ => forwarder,
         };
-        assert!(
-            !uncurryable(&module).contains_key(&captured),
+        assert_eq!(
+            uncurryable(&module).get(&captured),
+            Some(&None),
             "{label}: the capture is a use the site cannot absorb",
+        );
+        assert!(
+            !uncurry_returns(&mut module),
+            "{label}: so the class declines"
+        );
+        assert_eq!(
+            widths(&module, leader, forwarder),
+            (1, 1),
+            "{label}: and neither member is rewritten",
+        );
+    }
+}
+
+/// A caller that applies the closure once and also keeps it is inadmissible, and its class-mate's observed width must not overrule that.
+///
+/// It did: admission and planning were two walks with two lists of conditions, the member's refusal lived only in the first, and the second — asked to plan the class on the class-mate's width — counted one application site and rewrote the member, so the tuple that held the closure held the applied answer.
+#[test]
+fn a_closure_applied_and_also_kept_declines_the_class() {
+    for (label, uses) in [
+        (
+            "the leader's caller keeps it",
+            (Use::AppliedAndStored, Use::Applied),
+        ),
+        (
+            "the forwarder's caller keeps it",
+            (Use::Applied, Use::AppliedAndStored),
+        ),
+    ] {
+        let (mut module, leader, forwarder) = chain(uses.0, uses.1);
+        let kept = match uses.0 {
+            Use::AppliedAndStored => leader,
+            _ => forwarder,
+        };
+        assert_eq!(
+            uncurryable(&module).get(&kept),
+            Some(&None),
+            "{label}: one visible application does not make the closure's other use disappear",
         );
         assert!(
             !uncurry_returns(&mut module),
@@ -442,8 +509,9 @@ fn a_forwarded_application_declines_uncurrying() {
     );
     module.set_entry(caller);
 
-    assert!(
-        !uncurryable(&module).contains_key(&producer),
+    assert_eq!(
+        uncurryable(&module).get(&producer),
+        Some(&None),
         "an application behind a forwarding jump is not one the transform can move",
     );
 }

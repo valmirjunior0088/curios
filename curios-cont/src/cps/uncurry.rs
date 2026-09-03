@@ -11,12 +11,12 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// A function whose returned closure every caller applies, and the arity it is applied at.
+/// Each function some caller observes, with the width every one of its call sites is admitted at — or `None` where a site refuses.
 ///
-/// Absence means one of two different things, and [`uncurry_returns`] needs them apart: a function with non-tail callers that do something else with what it returns is *inadmissible*, while one reached only by a class-mate's tail call is merely *unobserved* — it has no callers of its own to disagree, and takes its width from the class. [`rewritable`] is the half of admissibility that does not depend on having been observed.
-pub(super) fn uncurryable(module: &CpsModule) -> BTreeMap<CpsFunId, usize> {
+/// The three answers are three different things, and [`uncurry_returns`] needs them apart: `Some(width)` is a function whose every non-tail caller applies what it returns, at that one width; `None` is one with a caller that does something else, which no class-mate's width may overrule; and absence is a function reached only by a class-mate's tail call — *unobserved*, with no caller of its own to disagree, taking its width from the class. Both halves of a verdict are [`admit_site`]'s, per site, and [`rewritable`]'s, per function; nothing here judges a site a second way.
+pub(super) fn uncurryable(module: &CpsModule) -> BTreeMap<CpsFunId, Option<usize>> {
     let calls = analyze_calls(module);
-    let mut arity = BTreeMap::<CpsFunId, Option<usize>>::new();
+    let mut verdicts = BTreeMap::<CpsFunId, Option<usize>>::new();
 
     for owner in module.functions.live_ids().collect::<Vec<_>>() {
         let sentinel = module.function(owner).unwrap().return_cont;
@@ -29,48 +29,25 @@ pub(super) fn uncurryable(module: &CpsModule) -> BTreeMap<CpsFunId, usize> {
             else {
                 continue;
             };
+            // A tail call forwards the caller's own return, and is a class edge rather than an observation.
             if *return_to == sentinel {
                 continue;
             }
-            let entry = arity.entry(*callee).or_insert(Some(usize::MAX));
-            let Some(resume) = module.continuation(*return_to) else {
-                *entry = None;
-                continue;
-            };
-            let [result] = resume.params.as_slice() else {
-                *entry = None;
-                continue;
-            };
-            // The application has to be the *only* use, and at one arity. The demand lattice stopped answering that when it went interprocedural: `Applied` there may now be earned by a forwarded application in a later continuation, while this transform moves the application it finds *here* — so the sole-local-application fact is recomputed syntactically where it is spent.
-            let Some(width) = locally_applied_at(module, resume.body, *result) else {
-                *entry = None;
-                continue;
-            };
-            // And its arguments must already exist where the call is, not be computed inside the continuation that receives the closure — otherwise moving the application above the call moves a computation with it.
-            let bound = values_bound_in(module, resume.body);
-            let escapes_scope = applied_arguments(module, resume.body, *result)
-                .iter()
-                .any(|atom| matches!(atom, CpsAtom::Value(value) if bound.contains(value)));
-            if escapes_scope {
-                *entry = None;
-                continue;
-            }
-            *entry = match *entry {
-                Some(usize::MAX) => Some(width),
-                Some(seen) if seen == width => Some(width),
+            let observed = admit_site(module, *return_to).map(|site| site.passed.len());
+            let verdict = verdicts.entry(*callee).or_insert(observed);
+            *verdict = match (*verdict, observed) {
+                (Some(seen), Some(width)) if seen == width => Some(width),
                 _ => None,
             };
         }
     }
 
-    arity
-        .into_iter()
-        .filter_map(|(function, width)| {
-            // A width of zero is a different transform wearing this one's clothes. There is no argument to absorb, so the closure is a *thunk* and the rewrite only decides when it runs — which for an `Io` description is the one thing its meaning rests on.
-            let width = width.filter(|width| *width != usize::MAX && *width > 0)?;
-            rewritable(module, &calls, function).then_some((function, width))
-        })
-        .collect()
+    for (function, verdict) in &mut verdicts {
+        if !rewritable(module, &calls, *function) {
+            *verdict = None;
+        }
+    }
+    verdicts
 }
 
 /// Whether `function` could be rewritten at all, on grounds that have nothing to do with what its callers do.
@@ -104,11 +81,64 @@ fn returns_functions(module: &CpsModule, function: CpsFunId) -> bool {
     true
 }
 
-/// The one arity every use of `value` beneath `body` applies it at, or `None` when any use does anything else — including appearing as an ordinary operand, which would dangle once the callee returns the answer instead of the closure, and including any mention inside a function defined beneath `body`, which captures the closure and outlives the site.
+/// One call site the rewrite can absorb: what the callee takes over, and how the site resumes without the closure.
+struct Site {
+    passed: Vec<CpsAtom>,
+    resume: Resume,
+}
+
+/// Judge one call site by the continuation it resumes at: the application the callee would absorb, or `None` where the site cannot be rewritten.
+///
+/// **Every condition on a site is here, and nowhere else.** Admission ([`uncurryable`]) and planning ([`plan_class`]) each walked the resume with a list of their own, and each list had a clause the other lacked — the plan counted application sites and never asked whether the closure was also kept, so a member the admission had refused was planned on its class-mate's width and rewritten, and the tuple that had held the closure held the applied answer. One judgment consumed twice cannot disagree with itself.
+///
+/// The conditions: the resume receives the one value the tuple protocol delivers; that value's only use is a single application, which [`sole_application`] establishes over the whole region, nested functions included; the application's arguments exist where the call is rather than being bound inside the resume, or moving the application above the call would move a computation with it; and the application is reached from the resume's head through `LetCont`s alone, which is what [`Resume`] needs. A width of zero is refused because it is a different transform wearing this one's clothes: with no argument to absorb, the closure is a *thunk* and the rewrite would only decide when it runs — which for an `Io` description is the one thing its meaning rests on.
+fn admit_site(module: &CpsModule, return_to: CpsContId) -> Option<Site> {
+    let resume = module.continuation(return_to)?;
+    let [result] = resume.params.as_slice() else {
+        return None;
+    };
+    let (site, passed) = sole_application(module, resume.body, *result)?;
+    if passed.is_empty() {
+        return None;
+    }
+    let bound = values_bound_in(module, resume.body);
+    if passed
+        .iter()
+        .any(|atom| matches!(atom, CpsAtom::Value(value) if bound.contains(value)))
+    {
+        return None;
+    }
+    if !reached_directly(module, resume.body, site) {
+        return None;
+    }
+    let CpsNode::ApplyFun {
+        return_to: after, ..
+    } = *module.node(site).unwrap()
+    else {
+        unreachable!("an application site is an application")
+    };
+    // Both forms are correct rewrites of this site, and the cheap one is available wherever losing it would cost: a call whose stack depth matters is in tail position, so the application that follows it is too, and a continuation holding nothing but that application is what [`Resume::Retarget`] asks for.
+    let resume = if resume.body == site {
+        Resume::Retarget(after)
+    } else {
+        Resume::Jump {
+            site,
+            result: *result,
+            after,
+        }
+    };
+    Some(Site { passed, resume })
+}
+
+/// The one application of `value` beneath `body`, with its arguments, when that application is the value's only use — or `None` when any use does anything else: a second application, an ordinary operand, which would dangle once the callee returns the answer instead of the closure, or any mention inside a function defined beneath `body`, which captures the closure and outlives the site.
 ///
 /// The capture rule is what [`free_values`](super::analysis::free_values) warns a pass about to remove a binding of: [`nodes_from`] enters a `LetFun`'s continuation and not its members, so a lambda defined below the application that applied the closure again was invisible here. The site was admitted on its one visible application, the callee absorbed it, and the lambda went on applying what was by then the applied answer — a trap where the program printed a number.
-fn locally_applied_at(module: &CpsModule, body: CpsNodeId, value: CpsValueId) -> Option<usize> {
-    let mut width = None;
+fn sole_application(
+    module: &CpsModule,
+    body: CpsNodeId,
+    value: CpsValueId,
+) -> Option<(CpsNodeId, Vec<CpsAtom>)> {
+    let mut found = None;
     for node_id in nodes_from(module, body) {
         let node = module.node(node_id).unwrap();
         for atom in atoms(node) {
@@ -130,14 +160,13 @@ fn locally_applied_at(module: &CpsModule, body: CpsNodeId, value: CpsValueId) ->
         } = node
             && *callee == value
         {
-            match width {
-                None => width = Some(args.len()),
-                Some(seen) if seen == args.len() => {}
-                Some(_) => return None,
+            if found.is_some() {
+                return None;
             }
+            found = Some((node_id, args.clone()));
         }
     }
-    width
+    found
 }
 
 /// Whether `function` mentions `value` anywhere in its region — as an operand, as a closure callee, or inside a function it defines in turn.
@@ -197,23 +226,6 @@ fn values_bound_in(module: &CpsModule, body: CpsNodeId) -> BTreeSet<CpsValueId> 
     bound
 }
 
-/// The arguments the application of `callee` passes, wherever it occurs beneath `body`.
-fn applied_arguments(module: &CpsModule, body: CpsNodeId, callee: CpsValueId) -> Vec<CpsAtom> {
-    let mut found = Vec::new();
-    for node_id in nodes_from(module, body) {
-        if let CpsNode::ApplyFun {
-            callee: CpsCallee::Closure(value),
-            args,
-            ..
-        } = module.node(node_id).unwrap()
-            && *value == callee
-        {
-            found.extend(args.iter().cloned());
-        }
-    }
-    found
-}
-
 /// How a call site resumes once the callee hands back the answer instead of the closure that produced it.
 enum Resume {
     /// Resume where the *application* did, bypassing the continuation that received the closure.
@@ -230,21 +242,21 @@ enum Resume {
     },
 }
 
-/// Absorb the application, for every class [`uncurryable`] admits.
+/// Absorb the application, for the first class every one of whose sites [`admit_site`] admits.
 ///
 /// Each member takes the applied arguments as extra parameters; each return edge `jump k[Fun(g)]` becomes the tail call `apply Known(g)` on them; and each call site passes them and resumes by whichever [`Resume`] form its shape admits.
 pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
-    let widths = uncurryable(module);
-    if widths.is_empty() {
+    let verdicts = uncurryable(module);
+    if !verdicts.values().any(Option::is_some) {
         return false;
     }
     let calls = analyze_calls(module);
     // A class that cannot be planned is declined, not fatal: aborting here would leave every later class untried, and one unrewritable site would silently disable the whole pass.
     let Some((members, width, plan)) = tail_classes(module).into_iter().find_map(|members| {
-        // Tail-forwarding makes one return stream of the whole class, so a width observed anywhere in it is the width of all of it — and a member with no caller of its own has nothing to disagree with. What every member must satisfy is [`rewritable`], which its width says nothing about.
-        let mut observed = members.iter().filter_map(|member| widths.get(member));
-        let width = *observed.next()?;
-        observed.all(|other| *other == width).then_some(())?;
+        // Tail-forwarding makes one return stream of the whole class, so a width observed anywhere in it is the width of all of it, and a member with no caller of its own has nothing to disagree with — while a member whose caller refused is refused whatever its class-mates observed. What every member must satisfy is [`rewritable`], which its width says nothing about.
+        let mut widths = members.iter().filter_map(|member| verdicts.get(member));
+        let width = (*widths.next()?)?;
+        widths.all(|other| *other == Some(width)).then_some(())?;
         members
             .iter()
             .all(|member| rewritable(module, &calls, *member))
@@ -316,7 +328,7 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
         }
     }
 
-    for (node_id, passed, resume) in plan {
+    for (node_id, Site { passed, resume }) in plan {
         let Some(CpsNode::ApplyFun {
             callee,
             args,
@@ -356,13 +368,10 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
     true
 }
 
-/// Every call site the rewrite must change, or `None` if any of them cannot be.
+/// Every call site the rewrite must change, each with what [`admit_site`] admitted at it, or `None` if any of them refuses.
 ///
-/// Parameters are added to a whole class at once, so a site discovered later to be unrewritable would leave a callee expecting an argument nobody passes. The transform has to be decided before it is begun.
-fn plan_class(
-    module: &CpsModule,
-    members: &[CpsFunId],
-) -> Option<Vec<(CpsNodeId, Vec<CpsAtom>, Resume)>> {
+/// Parameters are added to a whole class at once, so a site discovered later to be unrewritable would leave a callee expecting an argument nobody passes. The transform has to be decided before it is begun — and it is decided by the same judgment that observed the widths, so nothing a site refused can be planned on its class-mates' account.
+fn plan_class(module: &CpsModule, members: &[CpsFunId]) -> Option<Vec<(CpsNodeId, Site)>> {
     let mut plan = Vec::new();
     for node_id in module.nodes.live_ids().collect::<Vec<_>>() {
         let Some(CpsNode::ApplyFun {
@@ -377,38 +386,10 @@ fn plan_class(
             continue;
         }
         // A tail call between members forwards the caller's own parameters, and is rewritten with the member rather than here.
-        let Some(resume) = module.continuation(*return_to) else {
+        if module.continuation(*return_to).is_none() {
             continue;
-        };
-        let [result] = resume.params.as_slice() else {
-            return None;
-        };
-        let applications = application_sites(module, resume.body, *result);
-        let [(site, passed)] = applications.as_slice() else {
-            return None;
-        };
-        let CpsNode::ApplyFun {
-            return_to: after, ..
-        } = *module.node(*site).unwrap()
-        else {
-            unreachable!("an application site is an application")
-        };
-        if !reached_directly(module, resume.body, *site) {
-            return None;
         }
-        // Both forms are correct rewrites of this site, and the cheap one is available wherever losing it would cost: a call whose stack depth matters is in tail position, so the application that follows it is too, and a continuation holding nothing but that application is what [`Resume::Retarget`] asks for.
-        plan.push(match resume.body == *site {
-            true => (node_id, passed.clone(), Resume::Retarget(after)),
-            false => (
-                node_id,
-                passed.clone(),
-                Resume::Jump {
-                    site: *site,
-                    result: *result,
-                    after,
-                },
-            ),
-        });
+        plan.push((node_id, admit_site(module, *return_to)?));
     }
     Some(plan)
 }
@@ -427,25 +408,6 @@ fn reached_directly(module: &CpsModule, body: CpsNodeId, site: CpsNodeId) -> boo
             _ => return false,
         }
     }
-}
-
-/// Where `callee` is applied beneath `body`, and with what — the functions defined beneath it included, so a class member whose site was declined by [`locally_applied_at`] and is planned on its class-mates' width still shows the application a nested function hides.
-fn application_sites(
-    module: &CpsModule,
-    body: CpsNodeId,
-    callee: CpsValueId,
-) -> Vec<(CpsNodeId, Vec<CpsAtom>)> {
-    region_nodes(module, body)
-        .into_iter()
-        .filter_map(|node_id| match module.node(node_id).unwrap() {
-            CpsNode::ApplyFun {
-                callee: CpsCallee::Closure(value),
-                args,
-                ..
-            } if *value == callee => Some((node_id, args.clone())),
-            _ => None,
-        })
-        .collect()
 }
 
 /// The undirected connected components of the tail-call graph, which a shared return obliges to decide together.
