@@ -31,7 +31,7 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
     let module = compile(
         r#"
             foreign frobnicate : (Nat) -> Nat;
-            let _ = /std/Handle/write(/std/Handle/stdout, x[0x00])!;
+            let _ = /std/Io/write(/std/Io/stdout, x[0x00])!;
             let n = frobnicate(5)!;
             /std/print(/std/Nat/to_str(n))
         "#,

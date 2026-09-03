@@ -37,9 +37,9 @@ fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
     let source = r#"
         use /std/{Result};
         use /std/{Nat};
-        let f(a : Nat) -> Result({ Nat, Nat }, Nat) =
+        let f(a : Nat) -> Result(Nat, { Nat, Nat }) =
             Result/success((a, a));
-        let r : Result({ Nat, Nat }, Nat) = f(7);
+        let r : Result(Nat, { Nat, Nat }) = f(7);
         0
     "#;
 
@@ -134,7 +134,7 @@ fn new_style_inductive_match_lowers_end_to_end() {
     let source = r#"
         use /std/{Result};
         use /std/{Nat, Bytes};
-        let f(r : Result(Nat, Bytes)) -> Nat =
+        let f(r : Result(Bytes, Nat)) -> Nat =
             match r : (_) => Nat
             | success(value) => value
             | failure(_) => 0

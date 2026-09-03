@@ -138,6 +138,8 @@ pub struct Context {
     syntax: SyntaxRegistry,
     // Conversions the item drain gave up on because written goals alone held them up — what each such `?` must make true, carried to the goal batch rather than reported as an error. See `Context::note_goal_obligation`.
     goal_obligations: Vec<GoalObligation>,
+    // Where each written goal `?` was written, recorded as it is born: a report that names a goal names it by this span, since an occurrence of the goal inside a type may carry the span of the binder it was substituted for — a declaration's, not the `?`'s.
+    goal_spans: BTreeMap<MetavarId, Span>,
     // What the unit's `use` declarations brought into scope, where, and under which spelling — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals, as they always did.
     imports: Imports,
 }
@@ -181,7 +183,18 @@ impl Context {
             syntax,
             imports: Imports::default(),
             goal_obligations: Vec::new(),
+            goal_spans: BTreeMap::new(),
         }
+    }
+
+    /// Record where the written goal `id` was written, at its birth.
+    pub(crate) fn note_goal_span(&mut self, id: MetavarId, span: Span) {
+        self.goal_spans.entry(id).or_insert(span);
+    }
+
+    /// Where the written goal `id` was written, if elaboration reached it.
+    pub(crate) fn goal_span(&self, id: MetavarId) -> Option<&Span> {
+        self.goal_spans.get(&id)
     }
 
     /// Record a conversion the drain dropped because the written goals in `goals` were all that held it up, with its two sides already in display form. A program holding a goal never compiles, so nothing is lost by not deciding it; what is kept is the constraint the hole must satisfy, which the goal's report shows beside its type.

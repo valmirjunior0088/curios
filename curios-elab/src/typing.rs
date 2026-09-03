@@ -616,11 +616,14 @@ fn watched_blockers(
                     origin.binder, origin.func
                 )
             }
-            Some((MetavarOrigin::Goal, Some(span))) => {
-                let (line, column) = span.line_column();
-                format!("the written goal `?` at {line}:{column}")
-            }
-            Some((MetavarOrigin::Goal, None)) => "a written goal `?`".to_string(),
+            // Named by the span the goal was born with, never by an occurrence's: substituted into a declaration's type, the goal rides the span of the binder it replaced, which would name the declaration rather than the `?`.
+            Some((MetavarOrigin::Goal, _)) => match context.goal_span(*id) {
+                Some(span) => {
+                    let (line, column) = span.line_column();
+                    format!("the written goal `?` at {line}:{column}")
+                }
+                None => "a written goal `?`".to_string(),
+            },
             Some((MetavarOrigin::Domain(binder), _)) => {
                 format!("the type of parameter '{binder}'")
             }

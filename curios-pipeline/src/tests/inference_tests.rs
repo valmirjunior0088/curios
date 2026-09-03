@@ -200,7 +200,7 @@ fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
         "unexpected error: {error}"
     );
     assert!(
-        error.contains("never solved: a written goal `?`, the implicit argument 'A' of"),
+        error.contains("never solved: the written goal `?` at 4:"),
         "unexpected error: {error}"
     );
     assert!(!mentions_metavar_id(&error), "id leaked: {error}");
