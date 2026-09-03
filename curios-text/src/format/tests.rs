@@ -33,6 +33,13 @@ fn a_derived_witness_stays_a_declaration() {
     assert_eq!(formatted(source), source);
 }
 
+/// A `foreign` declaration prints as it was written: every wire type, both list forms, a zero-argument constant and a `pub` one. The formatter's guard refuses output that does not reparse to the same program, so this pins the one thing it cannot see — a rendering that reparses to a different declaration and would rewrite every foreign row in a project.
+#[test]
+fn foreign_declarations_are_canonical_as_written() {
+    let source = "foreign clock: Nat;\n\nforeign frobnicate: (Nat, Bytes) -> Int;\n\npub foreign log: (Bytes) -> Bool;\n\nforeign scan: (List(Bytes), Handle) -> List(Handle);\n\nforeign poll: (List(Nat), Int) -> List(Nat);\n\n/std/print(\"x\")\n";
+    assert_eq!(formatted(source), source);
+}
+
 #[test]
 fn formatting_is_idempotent() {
     let source = "use /std/{Nat};\n\nlet double(n : Nat) -> Nat =\n    n + n;\n\ndouble(21)\n";
