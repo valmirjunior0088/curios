@@ -4,8 +4,11 @@
 //!
 //! **The project is decided from the file's own location, never from the working directory.** An editor asks about documents all over a tree; the manifest that governs a file is the nearest one above it, and `--manifest` overrides that as it overrides everything else.
 
+#[cfg(test)]
+mod tests;
+
 use {
-    crate::{Governing, LIBRARY, MANIFEST, order},
+    crate::{Governing, LIBRARY, MANIFEST, Manifest, order},
     curios_text::{RootSource, identity},
     std::path::{Path, PathBuf},
 };
@@ -36,7 +39,11 @@ impl Membership {
         let governing = match manifest {
             Some(manifest) => Governing::at(manifest)?,
             None => match nearest_manifest(&file) {
-                Some(directory) => Governing::of(&directory)?,
+                // The nearest manifest is read before anything is asked to govern, because an umbrella is the one manifest `Governing::of` refuses and the one answer a question has for it: an umbrella declares no units, and being the nearest means no package's directory lies between it and the file — so nothing declares the file, and it is standalone exactly as a file under no manifest at all is.
+                Some(directory) => match Manifest::from_path(&directory.join(MANIFEST))? {
+                    Manifest::Umbrella(_) => return Ok(Self::Standalone),
+                    Manifest::Package(_) => Governing::of(&directory)?,
+                },
                 None => return Ok(Self::Standalone),
             },
         };
