@@ -110,7 +110,7 @@ impl Walk<'_> {
         name: &str,
         row: &Dependency,
     ) -> Result<(), String> {
-        // The snapshot is read off the row, before anything is located: two dependents disagreeing about one name is refused whether or not either has been materialized, which is what "before any of the three elaborates" has to mean.
+        // The snapshot is read off the row, before anything is located: once the first dependent's pin is placed — which locates it, so its tree has to be there — a second dependent disagreeing about the name is refused whether or not its own tree has been materialized, which is what "before any of the three elaborates" has to mean.
         let snapshot = self.pinned(name, row);
 
         // Asked before anything else, because a name on the walk's own stack is a cycle *whether or not* it has already been placed. Checking it second let `b → c → b` past: `b` was placed on the way in, so the agreement branch below returned early and the walk emitted `c` before the `b` it depends on — a wrong fold order rather than a refusal, which is the shape a cycle takes when nobody looks for it.
