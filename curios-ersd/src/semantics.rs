@@ -409,9 +409,9 @@ impl Semantics {
                 IntOr => Constant::Int(int(0)? | int(1)?),
                 IntXor => Constant::Int(int(0)? ^ int(1)?),
                 IntShl => {
-                    return Some(scalar_result(int_shl(int(0)?, int(1)?)?, Constant::Int));
+                    return Some(scalar_result(int_shl(int(0)?, nat(1)?), Constant::Int));
                 }
-                IntShr => Constant::Int(int_shr(int(0)?, int(1)?)?),
+                IntShr => Constant::Int(int_shr(int(0)?, nat(1)?)),
                 IntEql => Constant::Bool(int(0)? == int(1)?),
                 IntNeq => Constant::Bool(int(0)? != int(1)?),
                 IntLt => Constant::Bool(int(0)? < int(1)?),

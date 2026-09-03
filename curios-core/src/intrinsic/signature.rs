@@ -132,8 +132,14 @@ impl Intrinsic {
             BoolAnd(..) | BoolOr(..) | BoolXor(..) => bin_op(bool_type(), bool_type()),
             NatAdd(..) | NatSub(..) | NatMul(..) | NatAnd(..) | NatOr(..) | NatXor(..)
             | NatShl(..) | NatShr(..) => bin_op(nat_type(), nat_type()),
-            IntAdd(..) | IntSub(..) | IntMul(..) | IntAnd(..) | IntOr(..) | IntXor(..)
-            | IntShl(..) | IntShr(..) => bin_op(int_type(), int_type()),
+            IntAdd(..) | IntSub(..) | IntMul(..) | IntAnd(..) | IntOr(..) | IntXor(..) => {
+                bin_op(int_type(), int_type())
+            }
+            // A shift count is a natural on both carriers: a signed count would leave `Int/shr(v, -1)` — `⌊v / 2^-1⌋` — for the theory to define, and it never did.
+            IntShl(..) | IntShr(..) => sig(
+                vec![Operand::At(int_type()), Operand::At(nat_type())],
+                int_type(),
+            ),
             FltAdd(..) | FltSub(..) | FltMul(..) | FltDiv(..) | FltRem(..) | FltMin(..)
             | FltMax(..) | FltCopysign(..) => bin_op(flt_type(), flt_type()),
             FltNeg(..) | FltAbs(..) | FltSqrt(..) | FltFloor(..) | FltCeil(..) | FltTrunc(..)

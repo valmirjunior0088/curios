@@ -31,16 +31,16 @@ impl Integer {
         self.value.to_biguint().map(Natural::new)
     }
 
-    /// `self << amount` as `self * 2^amount`, and `self >> amount` as the arithmetic (floor) shift `num-bigint` provides — both unbounded. `None` when `amount` is negative or too large to be a shift count, leaving the op a neutral term rather than fabricating a value.
-    pub fn checked_shl(self, amount: Self) -> Option<Self> {
+    /// `self << amount` as `self * 2^amount`, and `self >> amount` as the arithmetic (floor) shift `num-bigint` provides — both unbounded. The count is a [`Natural`], as `/sys`'s `Int/shl` and `Int/shr` declare it, so there is no negative count to decline; `None` only when it is too large to be a shift count, leaving the op a neutral term rather than fabricating a value.
+    pub fn checked_shl(self, amount: Natural) -> Option<Self> {
         Some(Self {
-            value: self.value << amount.value.to_usize()?,
+            value: self.value << amount.to_usize()?,
         })
     }
 
-    pub fn checked_shr(self, amount: Self) -> Option<Self> {
+    pub fn checked_shr(self, amount: Natural) -> Option<Self> {
         Some(Self {
-            value: self.value >> amount.value.to_usize()?,
+            value: self.value >> amount.to_usize()?,
         })
     }
 

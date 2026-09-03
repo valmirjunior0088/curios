@@ -96,8 +96,8 @@ fn int_bitwise_ops_execute() {
             Int/to_str(Int/and(x, +15)), ",",
             Int/to_str(Int/or(x, +128)), ",",
             Int/to_str(Int/xor(x, +255)), ",",
-            Int/to_str(Int/shl(x, +20)), ",",
-            Int/to_str(Int/shr(neg, +1)), ",",
+            Int/to_str(Int/shl(x, 20)), ",",
+            Int/to_str(Int/shr(neg, 1)), ",",
             Int/to_str(Int/not(x))
         ]);
         let _ = Io/write(Io/stdout, Str/to_bytes(r))!;

@@ -20,18 +20,17 @@ fn a_left_shift_refuses_every_product_past_the_carrier() {
             "nat_shl({value}, {shift})"
         );
     }
-    for (value, shift) in [(1_i32 << 29, 35_i32), (-(1 << 29), 35), (1 << 29, 40)] {
+    for (value, shift) in [(1_i32 << 29, 35_u32), (-(1 << 29), 35), (1 << 29, 40)] {
         assert_eq!(
             int_shl(value, shift),
-            Some(Err(ScalarTrap::Overflow)),
+            Err(ScalarTrap::Overflow),
             "int_shl({value}, {shift})"
         );
     }
 
-    // The clamp decides only what had already left the carrier: zero is zero at every count, an in-range product still folds, and a negative count is still the theory's silence.
+    // The clamp decides only what had already left the carrier: zero is zero at every count, and an in-range product still folds.
     assert_eq!(nat_shl(0, 40), Ok(0));
     assert_eq!(nat_shl(3, 29), Ok(3 << 29));
-    assert_eq!(int_shl(0, 40), Some(Ok(0)));
-    assert_eq!(int_shl(-1, 31), Some(Ok(i32::MIN)));
-    assert_eq!(int_shl(1, -1), None);
+    assert_eq!(int_shl(0, 40), Ok(0));
+    assert_eq!(int_shl(-1, 31), Ok(i32::MIN));
 }

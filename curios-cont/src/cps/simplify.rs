@@ -228,12 +228,13 @@ fn identity_fold(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<IdentityFold> {
                 None
             }
         }
-        CpsIntrinsic::NatSub | CpsIntrinsic::NatShl | CpsIntrinsic::NatShr => {
-            (nat(right) == Some(0)).then(|| operand(left)).flatten()
-        }
-        CpsIntrinsic::IntSub | CpsIntrinsic::IntShl | CpsIntrinsic::IntShr => {
-            (int(right) == Some(0)).then(|| operand(left)).flatten()
-        }
+        // A shift count is a `Nat` on both carriers.
+        CpsIntrinsic::NatSub
+        | CpsIntrinsic::NatShl
+        | CpsIntrinsic::NatShr
+        | CpsIntrinsic::IntShl
+        | CpsIntrinsic::IntShr => (nat(right) == Some(0)).then(|| operand(left)).flatten(),
+        CpsIntrinsic::IntSub => (int(right) == Some(0)).then(|| operand(left)).flatten(),
         CpsIntrinsic::NatMul => {
             if nat(right) == Some(1) {
                 operand(left)

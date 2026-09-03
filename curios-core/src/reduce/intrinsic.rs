@@ -376,12 +376,25 @@ pub fn reduce_intrinsic(
             |left, right| Some(Intrinsic::Int(left ^ right)),
             Intrinsic::IntXor,
         ),
-        Intrinsic::IntShl(left, right) => reduce_int_shl(reducer, left, right),
-        Intrinsic::IntShr(left, right) => reduce_int_binary(
+        Intrinsic::IntShl(left, right) => reduce_int_shift(
             reducer,
             left,
             right,
-            |left, right| left.checked_shr(right).map(Intrinsic::Int),
+            shift_bound,
+            |value, amount| value.checked_shl(amount),
+            Intrinsic::IntShl,
+        ),
+        Intrinsic::IntShr(left, right) => reduce_int_shift(
+            reducer,
+            left,
+            right,
+            |value, amount| {
+                operand_bound(
+                    value,
+                    amount.map_or(0, |amount| u64::from(u64::BITS - amount.leading_zeros())),
+                )
+            },
+            |value, amount| value.checked_shr(amount),
             Intrinsic::IntShr,
         ),
         Intrinsic::FltType => Ok(Subterm::Intrinsic(Intrinsic::FltType)),

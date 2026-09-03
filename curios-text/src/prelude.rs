@@ -479,12 +479,22 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         binary("gt", int(), bool_(), |a, b| Intrinsic::IntLt(b, a)),
         binary("le", int(), bool_(), Intrinsic::IntLe),
         binary("ge", int(), bool_(), |a, b| Intrinsic::IntLe(b, a)),
-        // Bitwise ops on the signed i31 carrier. `and`/`or`/`xor` are exact bit ops; `shl` truncates into the carrier like `Nat/shl`; `shr` is arithmetic (sign-preserving). `not` is `/std/Int`'s `xor(x, -1)`.
+        // Bitwise ops on the signed i31 carrier. `and`/`or`/`xor` are exact bit ops; `shl` refuses a result past the carrier like `Nat/shl`; `shr` is arithmetic (sign-preserving). Both shifts count in `Nat`, as `Nat/shl` does, so a negative count — which the theory never defined — cannot be written. `not` is `/std/Int`'s `xor(x, -1)`.
         binary("and", int(), int(), Intrinsic::IntAnd),
         binary("or", int(), int(), Intrinsic::IntOr),
         binary("xor", int(), int(), Intrinsic::IntXor),
-        binary("shl", int(), int(), Intrinsic::IntShl),
-        binary("shr", int(), int(), Intrinsic::IntShr),
+        pub_fn(
+            "shl",
+            vec![("a", int()), ("b", nat())],
+            int(),
+            intrinsic(Intrinsic::IntShl(name("a"), name("b"))),
+        ),
+        pub_fn(
+            "shr",
+            vec![("a", int()), ("b", nat())],
+            int(),
+            intrinsic(Intrinsic::IntShr(name("a"), name("b"))),
+        ),
         guarded_unary(
             "to_nat",
             int(),

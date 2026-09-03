@@ -26,8 +26,8 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
         "Int/to_str(Int/mul(-3, Int/add(+7, i)))",
         "Int/to_str(Int/div(Int/add(-7, i), +2))",
         "Int/to_str(Int/rem(Int/add(-7, i), +2))",
-        "Int/to_str(Int/shl(Int/add(-3, i), +20))",
-        "Int/to_str(Int/shr(Int/add(-65, i), +1))",
+        "Int/to_str(Int/shl(Int/add(-3, i), 20))",
+        "Int/to_str(Int/shr(Int/add(-65, i), 1))",
         // Carrier reinterpretations inside both envelopes.
         "Int/to_str(Nat/to_int(1000000000 + n))",
         // Guarded on `>= +0`, the comparison `/sys/Int/to_nat`'s precondition is decided on: `i` is runtime-tainted, so nothing settles the sign statically and the narrowing demands evidence. Both arms fold identically at the literal `i`, so the differential still compares the conversion rather than the guard.
@@ -101,9 +101,9 @@ fn overflowing_computations_trap_at_the_backend_boundary() {
         "Nat/to_str(Nat/shl(1073741824 + n, 15))",
         // A count Wasm would reduce modulo the operand width, turning `<< 40` into `<< 8`.
         "Nat/to_str(Nat/shl(1 + n, 40))",
-        "Int/to_str(Int/shl(Int/add(+1, i), +40))",
+        "Int/to_str(Int/shl(Int/add(+1, i), 40))",
         // The signed envelope is `[-2^30, 2^30)`, so one place short of the unsigned one.
-        "Int/to_str(Int/shl(Int/add(+1, i), +30))",
+        "Int/to_str(Int/shl(Int/add(+1, i), 30))",
     ]);
 }
 
@@ -116,7 +116,7 @@ fn overflowing_computations_trap_at_the_backend_boundary() {
 fn a_shift_past_the_widened_intermediate_traps_folded_and_executed() {
     let rows = [
         "Nat/to_str(Nat/shl(1073741824 + n, 40))",
-        "Int/to_str(Int/shl(Int/add(+536870912, i), +35))",
+        "Int/to_str(Int/shl(Int/add(+536870912, i), 35))",
     ];
 
     for tainted in [false, true] {
@@ -145,9 +145,9 @@ fn a_shift_past_the_carrier_width_answers_the_arithmetic() {
         ("Nat/to_str(Nat/shr(1024 + n, 11))", "0"),
         ("Nat/to_str(Nat/shr(1024 + n, 3))", "128"),
         ("Nat/to_str(Nat/shl(0 + n, 40))", "0"),
-        ("Int/to_str(Int/shr(Int/add(-65, i), +40))", "-1"),
-        ("Int/to_str(Int/shr(Int/add(+1024, i), +40))", "+0"),
-        ("Int/to_str(Int/shl(Int/add(+0, i), +40))", "+0"),
+        ("Int/to_str(Int/shr(Int/add(-65, i), 40))", "-1"),
+        ("Int/to_str(Int/shr(Int/add(+1024, i), 40))", "+0"),
+        ("Int/to_str(Int/shl(Int/add(+0, i), 40))", "+0"),
     ];
     let bodies = rows.iter().map(|(body, _)| *body).collect::<Vec<_>>();
     for ((body, expected), executed) in rows.iter().zip(folded_matches_runtime(&bodies)) {

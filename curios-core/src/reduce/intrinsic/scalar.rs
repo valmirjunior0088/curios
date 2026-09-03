@@ -4,8 +4,8 @@
 
 use {
     super::*,
-    crate::{Intrinsic, ReduceError, Reducer, Subterm, Term},
-    curios_num::{Floating, Integer},
+    crate::{Cost, Intrinsic, ReduceError, Reducer, Subterm, Term},
+    curios_num::{Floating, Integer, Natural},
 };
 
 /// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when it is still symbolic or too large to fit. The shared decode behind the `Bin`/`List` `get`/`slice` bounds.
@@ -53,30 +53,30 @@ pub(super) fn reduce_byte_binary(
     }))
 }
 
-/// `Int/shl`, the signed twin of [`reduce_nat_shl`].
-pub(super) fn reduce_int_shl(
+/// `Int/shl` and `Int/shr`: a signed value over a `Nat` count, the signed twins of [`reduce_nat_shl`] and its right shift. `cost` is what the fold may construct from the value's width and the count — [`shift_bound`] for a left shift, whose result grows by the count, and [`operand_bound`] for a right shift, whose result never does — and `fold` declines only a count too large to be a shift count at all.
+pub(super) fn reduce_int_shift(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
+    cost: impl FnOnce(u64, Option<u64>) -> Cost,
+    fold: impl FnOnce(Integer, Natural) -> Option<Integer>,
+    rebuild: impl FnOnce(Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
 
-    let folded = match (left.as_int(), right.as_int()) {
+    let folded = match (left.as_int(), right.as_nat().and_then(|n| n.to_natural())) {
         (Some(value), Some(amount)) => {
-            reducer.spend(shift_bound(
-                value.bits(),
-                amount.to_natural().and_then(|amount| amount.to_u64()),
-            ))?;
+            reducer.spend(cost(value.bits(), amount.to_u64()))?;
 
-            value.checked_shl(amount).map(Intrinsic::Int)
+            fold(value, amount).map(Intrinsic::Int)
         }
         _ => None,
     };
 
     Ok(Subterm::Intrinsic(match folded {
         Some(intrinsic) => intrinsic,
-        None => Intrinsic::IntShl(left, right),
+        None => rebuild(left, right),
     }))
 }
 

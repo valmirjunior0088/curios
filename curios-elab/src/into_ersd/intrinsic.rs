@@ -256,8 +256,18 @@ pub(super) fn erase_intrinsic(
         Intrinsic::IntAnd(l, r) => op!(curios_ersd::Operation::IntAnd, int_type, l, r),
         Intrinsic::IntOr(l, r) => op!(curios_ersd::Operation::IntOr, int_type, l, r),
         Intrinsic::IntXor(l, r) => op!(curios_ersd::Operation::IntXor, int_type, l, r),
-        Intrinsic::IntShl(l, r) => op!(curios_ersd::Operation::IntShl, int_type, l, r),
-        Intrinsic::IntShr(l, r) => op!(curios_ersd::Operation::IntShr, int_type, l, r),
+        Intrinsic::IntShl(l, r) => lowering.operation(
+            context,
+            curios_ersd::Operation::IntShl,
+            &[(l, int_type()), (r, nat_type())],
+            hint,
+        ),
+        Intrinsic::IntShr(l, r) => lowering.operation(
+            context,
+            curios_ersd::Operation::IntShr,
+            &[(l, int_type()), (r, nat_type())],
+            hint,
+        ),
 
         &Intrinsic::Flt(value) => Ok(lowering.constant(curios_ersd::Constant::Flt(value))),
         Intrinsic::FltAdd(l, r) => op!(curios_ersd::Operation::FltAdd, flt_type, l, r),

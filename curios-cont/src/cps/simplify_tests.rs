@@ -386,7 +386,7 @@ fn identity_folds_forward_the_surviving_operand() {
         (CpsIntrinsic::IntAdd, CpsLiteral::Int(0), false),
         (CpsIntrinsic::IntSub, CpsLiteral::Int(0), true),
         (CpsIntrinsic::IntMul, CpsLiteral::Int(1), true),
-        (CpsIntrinsic::IntShr, CpsLiteral::Int(0), true),
+        (CpsIntrinsic::IntShr, CpsLiteral::Nat(0), true),
     ];
     for (op, literal, literal_on_right) in cases {
         let x = CpsValueId(0);

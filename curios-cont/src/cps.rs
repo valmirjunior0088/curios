@@ -194,6 +194,8 @@ impl CpsIntrinsic {
             (IsImmediate | ImmediateGet, _) => Repr::Ref,
             (ListConcat(_) | ListLen | ListSettle | ListFlat(_), _) => Repr::List,
             (TupleGet(_) | RowGet(..), _) => Repr::Ref,
+            // A shift count is a `Nat` on both carriers; only the shifted value is signed.
+            (IntShl | IntShr, 1) => Repr::Nat,
 
             (
                 NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatLe

@@ -2,7 +2,7 @@
 //!
 //! Only operations with semantic freedom live here — saturating-versus-refusing choices, trap conditions, fold-decline conditions. Comparisons and plain bitwise operations have exactly one meaning and stay as native operators at their use sites.
 //!
-//! **What a signature here says.** `Result<_, ScalarTrap>` is an operation the program can trap on, and `Err` means it does at this argument: an answer the theory has that the carrier cannot hold, or an operand the operation's proof precondition excludes — which only an unsound proof delivers, and the runtime refuses. A folder must record that rather than decline. `Option` is an operation the theory leaves undefined at a *well-typed* argument — a negative shift count, which `Integer::checked_shl` also declines — so a folder must stay silent and leave the term alone. A bare return is total. `curios-core` folds the same operations over unbounded `Natural`/`Integer` and over `Floating`'s binary32 model, and is the oracle for every one of them: what is stated here must be Core's answer or a refusal, never a third value. That is why the `Flt` narrowings below compute through the model and add only the carrier's own width — the semantics is not consulted about `u32`, and the carrier is not consulted about what a float means.
+//! **What a signature here says.** `Result<_, ScalarTrap>` is an operation the program can trap on, and `Err` means it does at this argument: an answer the theory has that the carrier cannot hold, or an operand the operation's proof precondition excludes — which only an unsound proof delivers, and the runtime refuses. A folder must record that rather than decline. A bare return is total. Nothing here is undefined at a well-typed argument: a shift count is a `Nat` on both carriers, so the negative count the theory would have had to leave silent cannot be written. `curios-core` folds the same operations over unbounded `Natural`/`Integer` and over `Floating`'s binary32 model, and is the oracle for every one of them: what is stated here must be Core's answer or a refusal, never a third value. That is why the `Flt` narrowings below compute through the model and add only the carrier's own width — the semantics is not consulted about `u32`, and the carrier is not consulted about what a float means.
 
 #[cfg(test)]
 mod tests;
@@ -89,28 +89,24 @@ pub fn int_mul(left: i32, right: i32) -> Result<i32, ScalarTrap> {
     left.checked_mul(right).ok_or(ScalarTrap::Overflow)
 }
 
-/// `Int` left shift — `value · 2^shift` — refusing a result past the carrier, and declining a negative count.
+/// `Int` left shift — `value · 2^shift` — refusing a result past the carrier. The count is a `Nat`, as on the unsigned twin.
 ///
-/// The outer `None` is the theory's silence rather than a trap: `Integer::checked_shl` converts its amount through `to_usize`, which fails on a negative, so `curios-core` leaves such a term unfolded and this must too. Widened *and clamped* for the reasons [`nat_shl`] gives, and signed, so `-1 · 2^31` is `i32::MIN` and stays representable where the unsigned twin would refuse.
-pub fn int_shl(value: i32, shift: i32) -> Option<Result<i32, ScalarTrap>> {
-    let shift = u32::try_from(shift).ok()?;
-
-    Some(match value {
+/// Widened *and clamped* for the reasons [`nat_shl`] gives, and signed, so `-1 · 2^31` is `i32::MIN` and stays representable where the unsigned twin would refuse.
+pub fn int_shl(value: i32, shift: u32) -> Result<i32, ScalarTrap> {
+    match value {
         0 => Ok(0),
         value => i64::from(value)
             .checked_shl(shift.min(i32::BITS))
             .and_then(|widened| i32::try_from(widened).ok())
             .ok_or(ScalarTrap::Overflow),
-    })
+    }
 }
 
-/// `Int` arithmetic right shift — `⌊value / 2^shift⌋` — never a trap, and declining a negative count for the reason [`int_shl`] gives.
+/// `Int` arithmetic right shift — `⌊value / 2^shift⌋` — total, and never a trap, for the reason [`nat_shr`] gives.
 ///
 /// A count of 32 or more answers the sign rather than reducing modulo 32: shifting an `i32` right by 40 leaves `0` above zero and `-1` below it, which is what the bignum shift in `curios-core` answers.
-pub fn int_shr(value: i32, shift: i32) -> Option<i32> {
-    let shift = u32::try_from(shift).ok()?;
-
-    Some(value.checked_shr(shift).unwrap_or(value >> 31))
+pub fn int_shr(value: i32, shift: u32) -> i32 {
+    value.checked_shr(shift).unwrap_or(value >> 31)
 }
 
 /// `Int` division; traps on a zero divisor and on `i32::MIN / -1`.
