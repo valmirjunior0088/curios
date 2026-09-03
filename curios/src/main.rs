@@ -27,6 +27,7 @@ use {
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::Formatted,
     std::{
+        ffi::OsString,
         fs, iter,
         path::Path,
         process::{self, ExitCode},
@@ -74,10 +75,10 @@ fn dispatch() -> Result<(), Failure> {
     match mode {
         Mode::Run { target, args } => {
             let target = Target::here(target.as_deref(), manifest.as_deref())?;
-            // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by.
+            // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by. Every argument crosses as the bytes the OS holds, since `/std/proc/args` promises opaque byte strings and a path or an argument need not be UTF-8.
             let entry = target.entry().map_or_else(
-                || Target::STDIN.to_string(),
-                |path| path.to_string_lossy().into_owned(),
+                || Target::STDIN.as_bytes().to_vec(),
+                |path| path.as_os_str().as_encoded_bytes().to_vec(),
             );
             let subject = subject_of(&target);
             let cwasm = payload_of(budget, &units, target)?;
@@ -87,8 +88,8 @@ fn dispatch() -> Result<(), Failure> {
             let code = run_bytes(
                 &cwasm,
                 OsHost::with_args(
-                    iter::once(entry.into_bytes())
-                        .chain(args.into_iter().map(String::into_bytes))
+                    iter::once(entry)
+                        .chain(args.into_iter().map(OsString::into_encoded_bytes))
                         .collect(),
                 ),
                 ForeignBindings::empty(),

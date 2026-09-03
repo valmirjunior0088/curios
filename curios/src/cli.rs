@@ -3,7 +3,7 @@
 use {
     clap::{Parser, Subcommand},
     curios_pipeline::Stage,
-    std::{path::PathBuf, sync::LazyLock},
+    std::{ffi::OsString, path::PathBuf, sync::LazyLock},
 };
 
 /// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder stage`'s help text.
@@ -32,7 +32,7 @@ pub(crate) enum Mode {
             value_name = "ARGS",
             help = "Arguments passed to the program (read via /std/proc/args)"
         )]
-        args: Vec<String>,
+        args: Vec<OsString>,
     },
 
     /// The same four forms `run` dispatches, through the same code, so the two cannot drift apart.

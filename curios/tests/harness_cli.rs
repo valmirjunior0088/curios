@@ -1,7 +1,10 @@
 //! What `curios test` does at the command line: the governing package compiled as test programs, one instantiation per test, the guest's outcome lines joined by what only the runner knows — the failing body, the count line, the exit code — plus the filter, the store round trip, and `run`'s indifference to it all.
 
 use std::{
-    env, fs,
+    env,
+    ffi::OsStr,
+    fs,
+    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     process::{self, Command, Output},
     time::{SystemTime, UNIX_EPOCH},
@@ -171,6 +174,33 @@ fn a_filter_matching_nothing_exits_one_naming_it() {
         "stderr: {}",
         stderr(&output)
     );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// `/std/proc/args` promises opaque byte strings, so an argument that is not UTF-8 reaches the program as its bytes rather than being refused at the command line; the program spells each argument in hex through `Show` on `Bytes`.
+#[test]
+fn run_forwards_an_argument_that_is_not_utf8_as_its_bytes() {
+    let root = temporary("args");
+    write(
+        &root,
+        "args.crs",
+        "use /std/{Str, Bytes, List, Show, Io, proc};\nlet args = proc/args!;\nlet rest: List(Bytes) = match args | [] => [] | [first, ..tail] => tail end;\n/std/print(Str/join(\" \", List/map(rest, (a: Bytes) => Show/show(a))))\n",
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .current_dir(&root)
+        .args(["run", "args.crs", "plain"])
+        .arg(OsStr::from_bytes(b"\xff"))
+        .output()
+        .unwrap();
+
+    assert_eq!(
+        stdout(&output),
+        "706c61696e ff",
+        "stderr: {}",
+        stderr(&output)
+    );
+    assert_eq!(output.status.code(), Some(0));
 
     fs::remove_dir_all(root).unwrap();
 }

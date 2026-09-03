@@ -3,7 +3,9 @@
 use {
     curios_runtime::{ForeignBindings, OsHost, extract_payload, run_bytes},
     std::{
-        env, fs,
+        env,
+        ffi::OsString,
+        fs,
         process::{self, ExitCode},
     },
 };
@@ -20,8 +22,8 @@ fn payload() -> Result<Vec<u8>, String> {
 }
 
 fn main() -> ExitCode {
-    // argv crosses to the guest via `/std/proc/args`; argv[0] is this executable.
-    let args = env::args().map(String::into_bytes).collect();
+    // argv crosses to the guest via `/std/proc/args` as the bytes the OS handed over, argv[0] being this executable; `env::args` would panic on an argument that is not UTF-8, which the row promises to carry.
+    let args = env::args_os().map(OsString::into_encoded_bytes).collect();
 
     match payload()
         .and_then(|payload| run_bytes(&payload, OsHost::with_args(args), ForeignBindings::empty()))
