@@ -330,3 +330,64 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
     fs::remove_dir_all(measured).unwrap();
     fs::remove_dir_all(origin).unwrap();
 }
+
+/// A tree pinned through two mirrors is one acquisition: `app` pins `shape` through its origin and `app`'s path dependency `mid` pins the same snapshot through a bare clone of it, and `curate` fetches it once and reports it once. The set of acquisitions tells the two apart by `url`, so this is the loop's own dedup under test, not the set's.
+#[test]
+#[ignore = "shells out to git; the remote is local, so this needs no network"]
+fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
+    let files = &[
+        ("curios.toml", "name = \"shape\"\n"),
+        ("lib.crs", "pub let message : /std/Str = \"shape\";"),
+    ];
+    let measured = tree("curate-mirrors-expected", files);
+    let expected = TreeHash::of(&measured).unwrap();
+    let (origin, revision) = origin("curate-mirrors-origin", files);
+    let mirror = origin.with_extension("mirror");
+    git(
+        &origin,
+        &[
+            "clone",
+            "--quiet",
+            "--bare",
+            ".",
+            &mirror.display().to_string(),
+        ],
+    )
+    .expect("a bare clone on this machine");
+
+    let pin = |remote: &Path| {
+        format!(
+            "shape = {{ source = \"git\", url = \"file://{}\", rev = \"{revision}\", hash = \"{expected}\" }}\n",
+            remote.display()
+        )
+    };
+    let root = tree(
+        "curate-mirrors",
+        &[
+            (
+                "app/curios.toml",
+                &format!(
+                    "name = \"app\"\n\n[dependencies]\n{}mid = {{ source = \"path\", path = \"../mid\" }}\n",
+                    pin(&origin)
+                ),
+            ),
+            ("app/lib.crs", ""),
+            (
+                "mid/curios.toml",
+                &format!("name = \"mid\"\n\n[dependencies]\n{}", pin(&mirror)),
+            ),
+            ("mid/lib.crs", ""),
+        ],
+    );
+
+    let governing = Governing::of(&root.join("app")).unwrap();
+    let fetched = curate(&governing).expect("a snapshot both mirrors serve");
+
+    assert_eq!(fetched.len(), 1, "{fetched:?}");
+    assert!(governing.store().src(&expected).join("lib.crs").is_file());
+
+    fs::remove_dir_all(measured).unwrap();
+    fs::remove_dir_all(origin).unwrap();
+    fs::remove_dir_all(mirror).unwrap();
+    fs::remove_dir_all(root).unwrap();
+}

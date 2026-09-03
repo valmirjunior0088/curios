@@ -64,7 +64,13 @@ pub fn curate(governing: &Governing) -> Result<Vec<Acquisition>, String> {
             return Ok(fetched);
         }
 
+        // Two dependents pinning one tree through two mirrors are one acquisition's worth of difference, as `Acquisition` states: the tree is fetched once, from the first transport named for it, and reported once. The set above tells them apart by `url`, and the filter ran before anything landed, so this is where the second one learns the first already placed it.
+        let mut placed = BTreeSet::new();
         for acquisition in absent {
+            if !placed.insert(acquisition.hash().clone()) {
+                continue;
+            }
+
             fetch(&store, &acquisition)?;
             fetched.push(acquisition);
         }
