@@ -719,11 +719,19 @@ impl fmt::Display for Displayed<'_> {
                     1 => "head",
                     _ => "key",
                 };
+                // One clause when both sit in the same module, which is the common case while a program is being written: naming that module twice reads as two coordinates and is one. The carets on each declaration are what separate them.
+                let where_ = match first == second {
+                    true => format!("both are declared in {}", declaring_module(first)),
+                    false => format!(
+                        "one is declared in {}, another in {}",
+                        declaring_module(first),
+                        declaring_module(second)
+                    ),
+                };
+
                 write!(
                     f,
-                    "duplicate witness of '{concept}' for {noun} '{key}'\n  one is declared in {}, another in {}\n  every concept-{noun} pair has at most one witness, program-wide",
-                    declaring_module(first),
-                    declaring_module(second)
+                    "duplicate witness of '{concept}' for {noun} '{key}'\n  {where_}\n  every concept-{noun} pair has at most one witness, program-wide"
                 )
             }
             Error::OrphanWitness {

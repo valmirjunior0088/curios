@@ -525,7 +525,7 @@ fn the_signature_refusals_fire_on_a_body_less_witness_as_on_a_written_one() {
     assert!(
         rendered.contains(
             "duplicate witness of '/Show' for head 'Nat'\n  \
-             one is declared in the entry module, another in the entry module\n  \
+             both are declared in the entry module\n  \
              every concept-head pair has at most one witness, program-wide"
         ),
         "{rendered}"

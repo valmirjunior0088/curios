@@ -25,7 +25,7 @@ fn duplicate_witness_is_an_error() {
     assert!(
         rendered.contains(
             "duplicate witness of '/Show' for head 'Nat'\n  \
-             one is declared in the entry module, another in the entry module\n  \
+             both are declared in the entry module\n  \
              every concept-head pair has at most one witness, program-wide"
         ),
         "{rendered}"
@@ -59,7 +59,42 @@ fn duplicate_witness_reports_its_declaring_module() {
     assert!(
         rendered.contains(
             "duplicate witness of '/M/C' for head '/M/T'\n  \
-             one is declared in module '/M', another in module '/M'\n  \
+             both are declared in module '/M'\n  \
+             every concept-head pair has at most one witness, program-wide"
+        ),
+        "{rendered}"
+    );
+}
+
+// Two *different* declaring modules, the branch the same-module collapse above must not swallow: with one witness in each, the report names both. `/B` owns neither the concept nor the type, so the orphan rule would refuse it too — the duplicate insert is reached first only because `/A` declared the pair, and the fixture keeps `/B` importing them rather than declaring its own.
+#[test]
+fn a_duplicate_across_two_modules_names_both() {
+    let source = r#"
+        mod A
+            pub induct T : pub Type
+            | t()
+            end
+            pub concept C(X : Type) : pub Type {
+                f(X) -> X
+            }
+            satisfy C(T) {
+                f(x) = x
+            }
+        end
+        mod B
+            use /A/{T, C};
+            satisfy C(T) {
+                f(x) = x
+            }
+        end
+        /std/Io/pure(())
+        "#;
+
+    let rendered = error(source);
+    assert!(
+        rendered.contains(
+            "duplicate witness of '/A/C' for head '/A/T'\n  \
+             one is declared in module '/A', another in module '/B'\n  \
              every concept-head pair has at most one witness, program-wide"
         ),
         "{rendered}"
