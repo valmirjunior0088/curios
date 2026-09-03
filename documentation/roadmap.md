@@ -177,19 +177,19 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 ## IO
 
-- [x] `Handle` unified byte-stream abstraction
+- [x] Streams: `stream/Read` and `stream/Write` over `File`, `tcp/Socket`, a child's `Pipe` and the standard streams under `Io`; a program never holds a raw handle
 - [x] Terminal
 - [x] File
 - [x] Client network (TCP)
 - [x] Server network (TCP)
 - [x] TLS (https) for client and server sockets
-- [x] Non-blocking IO & concurrent connection handling
+- [x] Non-blocking IO & concurrent connection handling: the host never waits on a peer — every peer-facing handle is non-blocking at creation, a pending connect settles through `finish_connect`, a TLS session is driven by the reads and writes that follow, and standard input is gated by a zero-timeout poll
 - [x] Never-reused fd handle tokens (monotonic mint counter, use-after-close hardening)
 - [x] Clock & randomness
 - [x] Process IO
-- [x] Terminal raw mode and window size (`/sys/tty`, wrapped by `std/tty` with a restoring bracket; the native host restores the terminal when it is dropped)
-- [x] Filesystem (`stat`, listing, making, moving and removing over `Bytes` paths, wrapped by `std/fs`; the browser denies every row)
-- [x] Subprocesses (`spawn`, `wait` and `kill`, a child reaped on a thread that signals a polled pipe, wrapped by `std/proc`'s `Command`, `run` and `status`)
+- [x] Terminal raw mode and window size (`/sys/tty`, wrapped by `std/tty` on the terminal behind standard input with a restoring bracket in `Io` and one registered with the scheduler; the native host restores the terminal when it is dropped)
+- [x] Filesystem (`stat`, listing, making, moving and removing over `Path`, wrapped by `std/fs` in `Try` over `Io`; the browser denies every row)
+- [x] Subprocesses (`spawn`, `wait` and `kill`, a child reaped on a thread that signals a polled pipe, wrapped by `std/Command`'s synchronous `spawn` and its `run` and `status` brackets, and `std/Child` with its pipes as streams and `with` as the bracket that kills what a task started)
 
 ## Host Interface (FFI)
 
@@ -217,6 +217,9 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Foundational sum types (`std/Option`, `std/Result`)
 - [x] Pure state threading (`std/State`; no `Lift(Io, State(S))` edge, so a region performs nothing)
 - [x] Short-circuiting failure (`std/Result` is its own monad, error first; `!` as checked early return)
+- [x] The error channel over any monad (`std/Try`: `Try(M, E, A)` over `M(Result(E, A))`, with `raise`, `rescue`, `attempt` and `run`, and one `Lift` edge per kind of action written once with a premise on the base)
+- [x] The host's failure vocabulary under `Io` (`std/Io/Error`) and paths as the bytes the host holds (`std/Path`)
+- [x] The effect tier retyped: every host module `Io` unless it suspends and `Try` where it can fail, brackets in both tiers, and `Test/try` for a fallible test
 - [x] Core collections (`std/List` and its helpers, length-indexed `std/Vec`)
 - [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys)
 - [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`, over packed `Bytes`)

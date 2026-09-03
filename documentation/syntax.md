@@ -428,6 +428,17 @@ once                            -- prints "x" twice in total
 
 `Io` is not matchable: it has no constructors to enumerate, so a `match` over one is rejected.
 
+A host operation that can fail is declared `Try(M, E, A)` over its base monad — `Try(Io, Io/Error, File)` for `File/open`, `Try(Async, Io/Error, Socket)` for `tcp/Socket/connect` — and a `Try` region sequences a `Try` over the same base, a bare `Result` as early return, an action of the base, and an `Io` action wherever the base admits one, each through a declared edge. `Try/raise` stops the region, `Try/rescue` handles the stop, and `Try/run` hands the outcome back as an `M(Result(E, A))` at the boundary.
+
+```crs
+use /std/{File, Path, Bytes, Try, Io};
+let contents: Try(Io, Io/Error, Bytes) =
+    let f = File/open(Path/of_str("notes.txt"), File/Mode/read())!;
+    let text = File/read_all(Path/of_str("notes.txt"))!;
+    let _ = File/close(f)!;
+    Try/pure(text);
+```
+
 ### Lifting between monads
 
 `/syn/Lift(M, N)` declares the canonical embedding of monad `M` into monad `N`: one method, `lift`, taking an `M(A)` to an `N(A)`, with `Monad` witnesses for both sides as superclasses — so an embedding between non-monads cannot be declared. Like every witness, one `Lift` witness may occupy each ordered pair of monads program-wide, so which embedding runs is a fact about the program, never about a call site.
