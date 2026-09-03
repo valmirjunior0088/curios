@@ -41,25 +41,40 @@ fn main() {
         return;
     }
 
-    // Nothing rebuilds the launcher when `curios-runtime` changes, because it is produced by a separate Cargo invocation this build cannot trigger. Without this check that staleness is *silent*: the file is unchanged, so this script does not re-run, and the old bytes are embedded again. The guards do not catch it either — a stale launcher is still slim and still marker-free.
-    let runtime = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+    // Nothing rebuilds the launcher when its sources change, because it is produced by a separate Cargo invocation this build cannot trigger. Without this check that staleness is *silent*: the file is unchanged, so this script does not re-run, and the old bytes are embedded again. The guards do not catch it either — a stale launcher is still slim and still marker-free.
+    //
+    // The sources are every workspace crate the launcher embeds, not `curios-runtime` alone: the wire contract is `curios-abi`'s, and an edit there that the runtime crate never touched is exactly the drift between `run` and a bundled executable this check exists to name. The list is `cargo tree -p curios-runtime --edges normal` restricted to the workspace; a crate that joins the launcher joins it here.
+    let workspace = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
         .expect("the workspace root is this crate's parent")
-        .join("curios-runtime");
+        .to_path_buf();
+    let crates = [
+        "curios-runtime",
+        "curios-abi",
+        "curios-archive",
+        "curios-archive-derive",
+        "curios-num",
+    ]
+    .map(|name| workspace.join(name));
 
-    for input in ["src", "Cargo.toml"] {
-        println!("cargo:rerun-if-changed={}", runtime.join(input).display());
+    for krate in &crates {
+        for input in ["src", "Cargo.toml"] {
+            println!("cargo:rerun-if-changed={}", krate.join(input).display());
+        }
     }
 
     let built = newest_modification(&launcher);
-    let sources = newest_modification(&runtime);
+    let sources = crates
+        .iter()
+        .filter_map(|krate| newest_modification(krate))
+        .max();
 
     // A warning rather than an error, because modification times are approximate — a fresh checkout or a `touch` can order these wrongly, and refusing the build on that would be worse than the staleness it guards against. The direction that matters is that a real edit stops being invisible.
     if let (Some(built), Some(sources)) = (built, sources)
         && built < sources
     {
         println!(
-            "cargo::warning=the {target_triple} runtime launcher is older than `curios-runtime`'s sources; run `cargo x runtime` to rebuild it"
+            "cargo::warning=the {target_triple} runtime launcher is older than the sources it embeds; run `cargo x runtime` to rebuild it"
         );
     }
 
