@@ -335,8 +335,12 @@ pub enum Cases {
     /// Dependent elimination of `Bool`: a false arm and a true arm.
     Bool { false_case: Term, true_case: Term },
     /// Sparse dispatch on specific `Nat` values with a default arm.
+    ///
+    /// **Keyed by [`Natural`], not by the erased carrier's `u32`.** `Nat` is unbounded here and narrows at the erase boundary, which *refuses* a key it cannot represent rather than wrapping it — see [Numeric carriers narrow by refusing, never by changing a value](../../../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md). A `u32` here wrote `curios-ersd`'s width into the representation a proof is stated over, three stages above the boundary that owns it.
+    ///
+    /// A sequence rather than a `BTreeMap`, for the reason [`Cases::Induct`]'s arms are one: this enum is archived, and `Natural`'s archived form is its little-endian bytes, whose collation is not its numeric order. Rather than teach the archived form an ordering it does not have, the keys are held **strictly ascending** — the invariant every constructor establishes and every rebuild preserves, and the one that makes term identity independent of the order arms were written in.
     Switch {
-        cases: BTreeMap<u32, Term>,
+        cases: Vec<(Natural, Term)>,
         default: Term,
     },
     /// The intrinsic eliminator of a nominal inductive: one arm per constructor, each arm's arity equal to that constructor's payload arity. `default` is the optional catch-all arm (`| _ =>`, mirroring [`Cases::Switch`]'s): present iff the surface match ended in a bare `_`. It binds nothing and stands in for every constructor tag absent from `cases`; `None` means the arms structurally cover every constructor (a true elimination). The enumerated arms are checked at their own case target indices and the default at the scrutinee's actual ones, so a catch-all is legal on an indexed family too.

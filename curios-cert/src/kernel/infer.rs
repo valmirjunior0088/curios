@@ -563,7 +563,7 @@ fn check_cases(
             }
 
             for (key, body) in cases {
-                let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(*key as usize)));
+                let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(key.clone())));
                 at(kernel, literal, body)?;
             }
 

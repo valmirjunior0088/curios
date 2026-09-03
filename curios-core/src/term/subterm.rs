@@ -256,8 +256,8 @@ impl Subterm {
                     }
                     Cases::Switch { cases, default } => {
                         cases
-                            .values()
-                            .for_each(|b| b.collect_construction_names(names));
+                            .iter()
+                            .for_each(|(_, b)| b.collect_construction_names(names));
                         default.collect_construction_names(names);
                     }
                     Cases::Induct { cases, default } => {
@@ -362,7 +362,7 @@ impl Subterm {
                             true_case,
                         } => pred(false_case) || pred(true_case),
                         Cases::Switch { cases, default } => {
-                            cases.values().any(&mut *pred) || pred(default)
+                            cases.iter().any(|(_, b)| pred(b)) || pred(default)
                         }
                         Cases::Induct { cases, default } => {
                             cases.iter().any(|(_, s)| pred(s.body.body()))
@@ -669,7 +669,7 @@ impl Bound for Subterm {
                     Cases::Switch { cases, default } => Cases::Switch {
                         cases: cases
                             .iter()
-                            .map(|(&n, body)| (n, visit.visit_subterm(body)))
+                            .map(|(n, body)| (n.clone(), visit.visit_subterm(body)))
                             .collect(),
                         default: visit.visit_subterm(default),
                     },
@@ -851,7 +851,9 @@ impl Bound for Subterm {
                     false_case,
                     true_case,
                 } => false_case.reach().max(true_case.reach()),
-                Cases::Switch { cases, default } => max_reach(cases.values()).max(default.reach()),
+                Cases::Switch { cases, default } => {
+                    max_reach(cases.iter().map(|(_, b)| b)).max(default.reach())
+                }
                 Cases::Induct { cases, default } => cases
                     .iter()
                     .map(|(_, s)| s.reach())

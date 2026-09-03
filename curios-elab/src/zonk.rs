@@ -1176,7 +1176,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                 Cases::Switch { cases, default } => Cases::Switch {
                     cases: cases
                         .iter()
-                        .map(|(n, body)| Ok((*n, zonk_term(context, body)?)))
+                        .map(|(n, body)| Ok((n.clone(), zonk_term(context, body)?)))
                         .collect::<Result<_, Error>>()?,
                     default: zonk_term(context, default)?,
                 },

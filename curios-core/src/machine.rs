@@ -821,9 +821,10 @@ impl Machine {
 
                 match Nat::is_zero(&inner) {
                     true => Ok(Step::Eval(
-                        value
-                            .to_u32()
-                            .and_then(|key| cases.get(&key))
+                        cases
+                            .iter()
+                            .find(|(key, _)| key == &value)
+                            .map(|(_, body)| body)
                             .unwrap_or(&default)
                             .clone(),
                         demand,

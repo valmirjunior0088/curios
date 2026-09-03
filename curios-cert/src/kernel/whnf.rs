@@ -433,15 +433,16 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
             }))),
         },
 
-        // A literal `Nat` is a floor over a `Zero` inner, so a zero inner is exactly "this is a concrete `k`". A literal takes its case, or the default when no case names it (including a value past the `u32` keys); anything symbolic rebuilds the neutral switch.
+        // A literal `Nat` is a floor over a `Zero` inner, so a zero inner is exactly "this is a concrete `k`". A literal takes its case, or the default when no case names it; anything symbolic rebuilds the neutral switch.
         Cases::Switch { cases, default } => {
             let (value, inner) = Nat::decompose(&forced);
 
             match Nat::is_zero(&inner) {
                 true => Step::Continue(
-                    value
-                        .to_u32()
-                        .and_then(|key| cases.get(&key))
+                    cases
+                        .iter()
+                        .find(|(key, _)| key == &value)
+                        .map(|(_, body)| body)
                         .unwrap_or(&default)
                         .clone(),
                 ),

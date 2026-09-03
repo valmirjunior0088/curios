@@ -8,7 +8,10 @@ use {
     curios_utilities::Grain,
 };
 
-fn narrow_nat(value: &Natural) -> Result<u32, Error> {
+/// The `Nat` half of the Core border: an unbounded type-level numeral to the erased `u32`, refusing what it cannot represent rather than wrapping it.
+///
+/// `pub(super)` because it is not this module's alone — `eliminate`'s switch narrows its case keys through it. Core keys a `Cases::Switch` by `Natural`, so the width is chosen here, at the one boundary that owns it, and every literal reaching Ersd is narrowed by the same routine.
+pub(super) fn narrow_nat(value: &Natural) -> Result<u32, Error> {
     value
         .to_u32()
         .ok_or_else(|| Error::nat_overflow(value.clone()))

@@ -8,11 +8,12 @@ use {
     super::{
         Atom, Carrier, Cases, Context, Error, InductArm, InductDecl, InductType, Intrinsic,
         IntrinsicHead, Lowering, Many, Match, Nat, Outcome, Scope, Subterm, Telescope, Term, Three,
-        Two, emitted, expect_intrinsic_head, infer, is_erasable, reduce_with, refine_head,
+        Two, emitted, expect_intrinsic_head, infer, is_erasable, narrow_nat, reduce_with,
+        refine_head,
     },
     curios_core::{Free, Level},
+    curios_num::Natural,
     curios_utilities::{Grain, PackedBin},
-    std::collections::BTreeMap,
 };
 
 /// The `List`/`Bin` carrier a sequence fold eliminates: the carrier-specific reads, so the fold erasure stays carrier-agnostic.
@@ -250,7 +251,7 @@ impl Lowering {
         context: &mut Context,
         head: &Term,
         motive: &Scope<Many>,
-        cases: &BTreeMap<u32, Term>,
+        cases: &[(Natural, Term)],
         default: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
@@ -258,9 +259,11 @@ impl Lowering {
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let mut nat_cases = Vec::with_capacity(cases.len());
-        for (&key, body) in cases {
-            let value = Term::intrinsic(Intrinsic::Nat(Nat::new(key)));
-            let block = self.refined_arm(context, head, &value, motive, body)?;
+        for (value, body) in cases {
+            // Where the case key stops being unbounded. Core dispatches on a `Natural`; `curios-ersd`'s `NatCase` is a `u32`, and a key past it is refused here rather than wrapped — the discipline of [Numeric carriers narrow by refusing, never by changing a value](../../../../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md), and the same narrowing every `Nat` literal takes.
+            let key = narrow_nat(value)?;
+            let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
+            let block = self.refined_arm(context, head, &literal, motive, body)?;
             nat_cases.push(curios_ersd::NatCase { key, block });
         }
 

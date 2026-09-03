@@ -43,6 +43,7 @@ mod eliminate;
 mod recursion;
 
 mod intrinsic;
+use intrinsic::narrow_nat;
 
 #[cfg(test)]
 mod tests;

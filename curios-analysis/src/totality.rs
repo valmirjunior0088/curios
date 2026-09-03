@@ -613,12 +613,12 @@ impl<E: Env> Walk<'_, E> {
 
             Cases::Switch { cases, default } => {
                 for (value, body) in cases {
-                    let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(*value)));
+                    let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
                     let shape = self.shape_of(&literal);
                     self.scoped(refine(scrutinee.clone(), shape), None, Vec::new(), body);
                 }
                 // The default arm stands for every value *not* enumerated, so it refines the scrutinee to nothing — but enumerating zero is exactly what rules zero out everywhere else.
-                let atom = scrutinee.filter(|_| cases.contains_key(&0));
+                let atom = scrutinee.filter(|_| cases.iter().any(|(key, _)| key.is_zero()));
                 self.scoped(None, atom, Vec::new(), default);
             }
 

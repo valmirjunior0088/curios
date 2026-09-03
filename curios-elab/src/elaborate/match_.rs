@@ -6,8 +6,9 @@ use {
         Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic, IntrinsicHead,
         Many, Match, Nat, Scope, Subterm, Telescope, Term, Three, Two,
     },
+    curios_num::Natural,
     curios_utilities::{Grain, PackedBin},
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeSet,
 };
 
 /// Infer and rebuild a match scrutinee, requiring its reduced type to be the given intrinsic type. The authoritative analogue of `expect_intrinsic_head` (kept for `erase`): it returns the rebuilt head alongside its reduced type.
@@ -304,7 +305,7 @@ fn elaborate_switch(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,
-    cases: &BTreeMap<u32, Term>,
+    cases: &[(Natural, Term)],
     default: &Term,
     term: &Term,
     mode: Mode,
@@ -322,21 +323,22 @@ fn elaborate_switch(
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
-    let mut cases_elaborated = BTreeMap::new();
+    // The arms keep the order they arrived in, which `Cases::Switch` states is strictly ascending — elaborating an arm rewrites its body, never its key.
+    let mut cases_elaborated = Vec::with_capacity(cases.len());
     for (n, body) in cases {
         let body = context.with_frame(|context| {
             refine_head(
                 context,
                 &head_elaborated,
-                &Subterm::Intrinsic(Intrinsic::Nat(Nat::new(*n))).into(),
+                &Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n.clone()))).into(),
             )?;
             check(
                 context,
                 body,
-                motive.open(&[&Subterm::Intrinsic(Intrinsic::Nat(Nat::new(*n))).into()]),
+                motive.open(&[&Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n.clone()))).into()]),
             )
         })?;
-        cases_elaborated.insert(*n, body);
+        cases_elaborated.push((n.clone(), body));
     }
 
     let default_elaborated = check(context, default, motive.open(&[&head_elaborated]))?;

@@ -455,14 +455,15 @@ fn reduce_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Reduce {
 
         Cases::Switch { cases, default } => {
             let scrutinee = forced;
-            // A literal `Nat` is the kernel's spine floor over a `Zero` inner, so `is_zero` on the peeled inner is exactly "is this a concrete `k`?" — the same spine view the arithmetic family reads. A literal dispatches to its case, or the default when none matches (including a value beyond the `u32` case keys); a symbolic scrutinee rebuilds the neutral switch.
+            // A literal `Nat` is the kernel's spine floor over a `Zero` inner, so `is_zero` on the peeled inner is exactly "is this a concrete `k`?" — the same spine view the arithmetic family reads. A literal dispatches to its case, or the default when none matches; a symbolic scrutinee rebuilds the neutral switch.
             let (value, inner) = Nat::decompose(&scrutinee);
 
             match Nat::is_zero(&inner) {
                 true => {
-                    let body = value
-                        .to_u32()
-                        .and_then(|k| cases.get(&k))
+                    let body = cases
+                        .iter()
+                        .find(|(key, _)| key == &value)
+                        .map(|(_, body)| body)
                         .unwrap_or(&default);
 
                     Reduce::Continue(body.clone())

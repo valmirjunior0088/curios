@@ -537,10 +537,11 @@ impl Term {
     }
 
     /// [`Term::switch`] over an already-built motive scope.
-    pub fn switch_scoped<H, I, B, D>(head: H, motive: Scope<Many>, cases: I, default: D) -> Self
+    pub fn switch_scoped<H, I, K, B, D>(head: H, motive: Scope<Many>, cases: I, default: D) -> Self
     where
         H: Into<Term>,
-        I: IntoIterator<Item = (u32, B)>,
+        K: Into<Natural>,
+        I: IntoIterator<Item = (K, B)>,
         B: Into<Term>,
         D: Into<Term>,
     {
@@ -548,7 +549,13 @@ impl Term {
             head.into(),
             motive,
             Cases::Switch {
-                cases: cases.into_iter().map(|(n, b)| (n, b.into())).collect(),
+                // Through a `BTreeMap` so the arms come out strictly ascending whatever order the caller enumerated them in — the canonical form [`Cases::Switch`] states.
+                cases: cases
+                    .into_iter()
+                    .map(|(n, b)| (n.into(), b.into()))
+                    .collect::<BTreeMap<_, _>>()
+                    .into_iter()
+                    .collect(),
                 default: default.into(),
             },
         )
@@ -1131,7 +1138,7 @@ impl Term {
     }
 
     /// Build a [`Cases::Switch`] match: sparse dispatch on specific literal `Nat` values with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], this is a case split, not induction.
-    pub fn switch<H, M, I, B, D>(
+    pub fn switch<H, M, I, K, B, D>(
         head: H,
         motive_binder: Option<&Free>,
         motive: M,
@@ -1141,7 +1148,8 @@ impl Term {
     where
         H: Into<Term>,
         M: Into<Term>,
-        I: IntoIterator<Item = (u32, B)>,
+        K: Into<Natural>,
+        I: IntoIterator<Item = (K, B)>,
         B: Into<Term>,
         D: Into<Term>,
     {
