@@ -111,7 +111,7 @@ impl Walk<'_> {
         row: &Dependency,
     ) -> Result<(), String> {
         // The snapshot is read off the row, before anything is located: two dependents disagreeing about one name is refused whether or not either has been materialized, which is what "before any of the three elaborates" has to mean.
-        let snapshot = row.snapshot();
+        let snapshot = self.pinned(name, row);
 
         // Asked before anything else, because a name on the walk's own stack is a cycle *whether or not* it has already been placed. Checking it second let `b → c → b` past: `b` was placed on the way in, so the agreement branch below returned early and the walk emitted `c` before the `b` it depends on — a wrong fold order rather than a refusal, which is the shape a cycle takes when nobody looks for it.
         if self.open.iter().any(|open| open == name) {
@@ -198,6 +198,20 @@ impl Walk<'_> {
         self.order.push(source);
 
         Ok(())
+    }
+
+    /// The snapshot `row` pins — read through a `catalog` marker to the umbrella's row it names, so a catalogued pin and a direct one disagreeing about a name are refused as the two pins they are, before either is located, rather than as two store paths once both are. A marker nothing answers pins nothing here; [`Walk::point`] is where it is refused, naming what is missing.
+    fn pinned(&self, name: &str, row: &Dependency) -> Option<Snapshot> {
+        match row {
+            Dependency::Catalog => self
+                .governing
+                .umbrella
+                .as_ref()?
+                .catalog
+                .get(name)?
+                .snapshot(),
+            row => row.snapshot(),
+        }
     }
 
     /// Where `row` points, as the filesystem names it.

@@ -251,6 +251,74 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A pin reached through the catalog is a pin: a member drawing `http` from the umbrella's `[catalog]` and a member pinning it directly at another revision are refused naming both pins, before the direct one's tree exists — where reading the snapshot off the marker itself found none, sent the reader to `curate`, and after it reported two store paths.
+#[test]
+fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
+    let root = tree(
+        "graph-catalog-conflict",
+        &[
+            ("app/lib.crs", ""),
+            ("left/lib.crs", ""),
+            ("right/lib.crs", ""),
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\nleft = { source = \"member\" }\nright = { source = \"member\" }\n",
+            ),
+            (
+                "left/curios.toml",
+                "name = \"left\"\n\n[dependencies]\nhttp = { source = \"catalog\" }\n",
+            ),
+        ],
+    );
+
+    // The catalogued delivery, in the store under the hash it hashes to; the direct pin's never arrives.
+    let delivered = root.join("delivered");
+    fs::create_dir_all(&delivered).unwrap();
+    fs::write(delivered.join("curios.toml"), "name = \"http\"\n").unwrap();
+    fs::write(delivered.join("lib.crs"), "").unwrap();
+    let hash = TreeHash::of(&delivered).unwrap();
+    let placed = crate::Store::at(root.clone()).src(&hash);
+    fs::create_dir_all(placed.parent().unwrap()).unwrap();
+    fs::rename(&delivered, &placed).unwrap();
+    let absent = TreeHash::parse(&format!("c1:{}", "e".repeat(64))).unwrap();
+
+    let row = |rev: &str, hash: &TreeHash| {
+        format!(
+            "http = {{ source = \"git\", url = \"https://example/http\", rev = \"{rev}\", hash = \"{hash}\" }}"
+        )
+    };
+    fs::write(
+        root.join("curios.toml"),
+        format!(
+            "members = [\"app\", \"left\", \"right\"]\n\n[catalog]\n{}\n",
+            row("abc123", &hash)
+        ),
+    )
+    .unwrap();
+    fs::write(
+        root.join("right/curios.toml"),
+        format!(
+            "name = \"right\"\n\n[dependencies]\n{}\n",
+            row("def456", &absent)
+        ),
+    )
+    .unwrap();
+
+    let refusal =
+        mounts(&root.join("app")).expect_err("one name, a catalogued pin and a direct one");
+    assert!(refusal.contains("pinned two ways"), "{refusal}");
+    assert!(
+        refusal.contains("abc123") && refusal.contains("def456"),
+        "{refusal}"
+    );
+    assert!(
+        refusal.contains("\"left\"") && refusal.contains("\"right\""),
+        "both dependents are named: {refusal}"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// **The cycle.** A dependency cycle is refused naming the chain.
 #[test]
 fn a_dependency_cycle_is_refused() {
