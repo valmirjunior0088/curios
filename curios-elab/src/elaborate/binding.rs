@@ -534,16 +534,18 @@ pub(super) fn elaborate_bang(
         _ => bang.action.clone(),
     };
 
-    // The bind's monad is the region's, supplied before any action is checked. Left to the wrapper's own inference, `M` is pinned by whichever side unifies first — the action's type, since arguments elaborate before the result meets the expected type — so an action of another monad the oracle could not read would fix the region to *its* monad, and the mismatch would surface at the outermost `!` of the region, against an action that was never wrong. A region the imitation cannot read keeps the wrapper's inference, as before.
-    let monad = region_monad(context, &region, term.span());
+    // The bind's monad is the region's, supplied before any action is checked. Left to the wrapper's own inference, `M` is pinned by whichever side unifies first — the action's type, since arguments elaborate before the result meets the expected type — so an action of another monad the oracle could not read would fix the region to *its* monad, and the mismatch would surface at the outermost `!` of the region, against an action that was never wrong.
+    //
+    // **A rigid region the imitation cannot read is refused here, not left to the wrapper.** The region is already reduced and not flex, so its head is a former, a variable or an atom; a variable-headed region — `M(Nat)` under a `use Monad(M)` premise — is exactly what the imitation solves. `None` therefore means the head applies to nothing, `?M(?B)` can never meet it, and the wrapper's inference had only one outcome: `no witness of Monad(?) found`, against a premise of a call the author never wrote, showing a hole where the region's own type was already known. Acceptance is unchanged; what the reader is told is not.
+    let Some(monad) = region_monad(context, &region, term.span()) else {
+        return Err(Error::bang_region_not_a_monad(region).at_opt(term.span()));
+    };
     let head = Term::free_var(&Free::global(context.syntax().monad.bind.qualifier()));
-    let arguments = monad
-        .map(|monad| (Plicity::Implicit, monad))
-        .into_iter()
-        .chain([
-            (Plicity::Explicit, action),
-            (Plicity::Explicit, bang.continuation.clone()),
-        ]);
+    let arguments = [
+        (Plicity::Implicit, monad),
+        (Plicity::Explicit, action),
+        (Plicity::Explicit, bang.continuation.clone()),
+    ];
     let app = Term::apply_marked(head, arguments);
     let app = match term.span() {
         Some(span) => Term::spanned(span, app),

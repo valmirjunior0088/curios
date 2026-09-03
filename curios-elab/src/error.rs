@@ -369,6 +369,12 @@ pub enum Error {
     },
     /// A postfix `!` whose region's monad can never be determined: an inference-position region, or one whose expected type stayed an unsolved metavariable through every retry. Strict postponement reads the monad from the region's type and never infers it from the action, so a region that never names one cannot sequence.
     BangRegionUndetermined,
+    /// A postfix `!` in a region whose type is *known* and is no monad — the rigid twin of [`Error::BangRegionUndetermined`], and the case `documentation/syntax.md` states as "a `(Str, Bool) -> Bool` has nowhere to sequence one".
+    ///
+    /// Raised where `elaborate_bang` finds the region rigid and still cannot read a monad from it, which means its head applies to nothing: the `?M(?B)` imitation can never solve, so leaving it to `/syn/Monad/bind`'s own inference reported `no witness of Monad(?) found` against a premise of a call the author never wrote, with a hole where the answer was already in hand. Acceptance is unchanged — that path always failed — and `region` is the type the reader must look at.
+    BangRegionNotAMonad {
+        region: Box<Term>,
+    },
     /// An overloaded infix operator applied at an operand type with no matching scalar intrinsic — `%` on `Flt`, `!=` on `Bool`, `+` on `Bool`, etc. The `symbol` is the operator's spelling; `type_` is the resolved operand type.
     OperatorUndefined {
         symbol: String,
@@ -599,6 +605,12 @@ impl Error {
 
     pub(crate) fn bang_region_undetermined() -> Self {
         Self::BangRegionUndetermined
+    }
+
+    pub(crate) fn bang_region_not_a_monad<U: Into<Term>>(region: U) -> Self {
+        Self::BangRegionNotAMonad {
+            region: Box::new(region.into()),
+        }
     }
 
     pub(crate) fn not_a_function<U: Into<Term>>(head_type: U) -> Self {

@@ -594,6 +594,56 @@ fn a_bang_in_an_inference_position_region_is_refused() {
     );
 }
 
+/// A region whose type is known and is no monad names that type, rather than reporting the wrapper's unsolved hole.
+///
+/// The rigid twin of the refusal above. `elaborate_bang` reads the monad from the region, and when a *rigid* region yields none its head applies to nothing, so `?M(?B)` can never meet it — the wrapper's own inference then reported `no witness of Monad(?) found`, blaming a premise of `/syn/Monad/bind`, a call the author never wrote, and printing a hole where the region's type was already in hand. `documentation/syntax.md` writes the first of these programs out with the intended reading beside it.
+#[test]
+fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
+    for (source, region) in [
+        (
+            r#"
+        use /std/{Str, Bool, print};
+        let probe(tag : Str, r : Bool) -> Bool =
+            let _ = print(tag)!;
+            r;
+        /std/Io/pure(())
+        "#,
+            "Bool",
+        ),
+        (
+            r#"
+        use /std/{Nat, List, print};
+        let f(xs : List(Nat)) -> Nat = List/fold(xs, 0, (x, acc) => print("x")!);
+        /std/Io/pure(())
+        "#,
+            "Nat",
+        ),
+    ] {
+        let error = typecheck(source).expect_err("a non-monadic region must refuse");
+        assert!(
+            error.contains(&format!(
+                "this region's type is {region}, which is no monad"
+            )),
+            "{error}"
+        );
+        assert!(!error.contains("Monad/bind"), "{error}");
+    }
+}
+
+/// A region whose monad is a telescope binder still sequences: the imitation reads a variable head, so the refusal above cannot fire on one.
+#[test]
+fn a_bang_sequences_in_a_region_whose_monad_is_a_parameter() {
+    let source = r#"
+        use /std/{Nat, Monad};
+        let f(@M : (Type) -> Type, use Monad(M), a : M(Nat)) -> M(Nat) =
+            let x = a!;
+            Monad/pure(x + 1);
+        /std/Io/pure(())
+        "#;
+
+    typecheck(source).expect("a parameterized monad region sequences");
+}
+
 #[test]
 fn a_long_sequencing_chain_compiles_and_runs() {
     // Regression: `inline_known_calls` used to leave each inlined callee's dead body standing between sweeps, so its call sites kept counting, callees turned multi-site, and a `!` chain's continuations duplicated exponentially — 16 sequenced actions did not finish compiling. Pruning once per sweep (the shape its sibling pass always had) makes the chain linear.

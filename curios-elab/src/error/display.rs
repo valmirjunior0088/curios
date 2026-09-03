@@ -573,6 +573,14 @@ impl fmt::Display for Displayed<'_> {
                     "the monad of this region was never determined\n  a '!' sequences in its region's monad, which is read from the region's type\n  annotate the enclosing result type to fix the monad"
                 )
             }
+            Error::BangRegionNotAMonad { region } => {
+                let region = region.spelled(spelling);
+
+                write!(
+                    f,
+                    "this region's type is {region}, which is no monad\n  a '!' sequences in its region's monad, which is read from the region's type\n  a function whose result is not a monad has nowhere to sequence one"
+                )
+            }
             Error::OperatorUndefined { symbol, type_ } => {
                 let type_ = type_.spelled(spelling);
                 write!(f, "operator '{symbol}' is not defined for type {type_}")
