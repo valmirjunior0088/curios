@@ -799,11 +799,14 @@ fn scrutinee_retention_measurements() {
 
 /// **The guard [`combinator_sharing_measurements`] cannot be**, because a probe is ignored and nothing runs it.
 ///
-/// What it holds is the growth *law* rather than a number: a combinator application written inside a `!` continuation must cost what the identical application written as a top-level item costs. The two spellings denote the same grammar, and before a replacement's residual group was bound at item level they differed by an order of magnitude at this size and by fourteen times at sixteen rules — `n² + 2` copies against `n + 2`.
+/// What it holds is the growth *law* rather than a number: a combinator application written inside a `!` continuation must cost what the identical application written as a top-level item costs — and what not writing it at all costs, since a shared residual group is bound once and reused. The spellings denote the same grammar, and before that group was bound at item level the first differed from the others by an order of magnitude at this size and by fourteen times at sixteen rules — `n²` copies against `n`.
 ///
-/// Eight rules rather than sixteen because this one is not ignored: the quadratic is already 66 against 10 here, and the assertion is the shape rather than the size.
+/// **The baseline is measured, never written down.** A count here is the grammar's `n` plus whatever `/std/Parse` and its own users spell, and that second term is no part of this claim. Written as a literal it said `10`, ordinary standard-library growth carried it to `23`, and a test about sharing then failed for a reason that has nothing to do with sharing. [`Inner::None`] *is* that term, taken at the same size and in the same run, so the library may grow — it moves all three counts together — while a spelling that stopped sharing still stands out at once: quadratic is 66 against 23 at eight rules.
+///
+/// Eight rules rather than sixteen because this one is not ignored.
 #[test]
 fn an_application_inside_a_continuation_is_shared_like_one_at_item_level() {
+    let absent = copies(&ersd_optm(&grammar(8, Inner::None)), "/std/Parse/bind");
     let inside = copies(&ersd_optm(&grammar(8, Inner::InBlock)), "/std/Parse/bind");
     let hoisted = copies(&ersd_optm(&grammar(8, Inner::Hoisted)), "/std/Parse/bind");
 
@@ -811,5 +814,8 @@ fn an_application_inside_a_continuation_is_shared_like_one_at_item_level() {
         inside, hoisted,
         "where a combinator application is written must not decide what it costs"
     );
-    assert_eq!(inside, 10, "eight rules cost `n + 2` copies, not `n² + 2`");
+    assert_eq!(
+        inside, absent,
+        "a shared application must add no copy over not writing it at all"
+    );
 }
