@@ -1,5 +1,5 @@
 use /std/{Nat, Bool, Bits, Str, Char, Option, Ordering, Eq, False, True, Equal, Compare, Add,
-    Subtract, Multiply, Show, Ordered};
+    Subtract, Multiply, Show, Ordered, Spell};
 use /std/Bool/{false_neq_true};
 use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, of_nat, view, zero, mod add, mod cmp, mod mul,
@@ -72,6 +72,11 @@ satisfy Multiply(BigNat) {
 
 satisfy Show(BigNat) {
     show = to_str,
+}
+
+-- The call that rebuilds the value from the digits `to_str` writes. The bound is decided at a literal, so the text re-parses exactly as it is written.
+satisfy Spell(BigNat) {
+    spell(a) = Str/flatten(["BigNat/of_decimal(", Spell/spell(to_str(a)), ")"]),
 }
 
 satisfy Ordered(BigNat) {
