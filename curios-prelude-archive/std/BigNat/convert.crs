@@ -45,10 +45,7 @@ pub let of_decimal(s: Str, @ok: Decimal(s)) -> BigNat =
 
 -- The fallible form, spelled as its peers `Nat/of_str` and `Int/of_str` are; the guard is what discharges `of_decimal`'s bound.
 pub let of_str(s: Str) -> Option(BigNat) =
-    match is_decimal(s)
-    | true => Option/some(of_decimal(s))
-    | false => Option/none()
-    end;
+    match is_decimal(s) | true => Option/some(of_decimal(s)) | false => Option/none() end;
 
 satisfy Equal(BigNat) {
     eql = cmp/eql,

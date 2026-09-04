@@ -1,6 +1,6 @@
 -- Arbitrary-precision integers: a sign tag over a strictly-positive `BigPos` magnitude (or the distinguished `zero`). Every operation dispatches on the sign constructors and delegates the magnitude arithmetic to `BigPos`/`BigNat`. Signed subtraction (`pos_sub`) reads the sign straight off `non_zero_cmp` and takes the truncating `BigNat/sub` of the larger minus the smaller magnitude, so no borrow/compare bridge is needed. The algebraic lemma corpus is deferred until a consumer needs it (see documentation/roadmap/big-flt-dyadic-proofs/01-big-int-laws-spec.md).
-use /std/{Nat, Int, Bool, Str, Option, True, False, Ordering, BigNat, BigPos, Equal, Compare,
-    Add, Subtract, Multiply, Show, Ordered, Spell};
+use /std/{Nat, Int, Bool, Str, Option, True, False, Ordering, BigNat, BigPos, Equal, Compare, Add,
+    Subtract, Multiply, Show, Ordered, Spell};
 
 pub induct BigInt: pub Type
 | neg(BigPos)
@@ -139,10 +139,7 @@ pub let of_decimal(s: Str, @ok: Decimal(s)) -> BigInt =
 
 -- The fallible form, spelled as its peers are; the guard is what discharges `of_decimal`'s bound.
 pub let of_str(s: Str) -> Option(BigInt) =
-    match is_decimal(s)
-    | true => Option/some(of_decimal(s))
-    | false => Option/none()
-    end;
+    match is_decimal(s) | true => Option/some(of_decimal(s)) | false => Option/none() end;
 
 satisfy Equal(BigInt) {
     eql = eql,
