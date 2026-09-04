@@ -384,15 +384,21 @@ satisfy Show(Flt) {
     show = to_str,
 }
 
--- `to_str` writes `+2.5`, `+0`, `+inf` and `NaN`, none of which are literals as written: the sign is stripped, a missing point gains `.0`, and the non-finite values take their `/std/Flt` names, which no literal denotes. The non-finites are recognized from the rendered text, because `==` on `Flt` is IEEE and `NaN` never equals itself.
+-- `to_str` writes `+2.5`, `+0`, `+inf` and `NaN`, none of which are literals as written: the sign is stripped, a missing point gains `.0`, and the non-finite values take their `/std/Flt` names, which no literal denotes.
+--
+-- **The four cases are told apart by value, not by `to_str`'s text.** Matching the rendered `"NaN"`, `"+inf"` and `"-inf"` made this witness's one obligation -- that its text re-parses -- rest on three string constants agreeing with a rendering six lines above, which no type holds together and which a change as small as writing `nan` for TOML's spelling would break silently. `is_finite` is the same ordered pair it always was, and the sign then separates the two infinities: a NaN fails both comparisons, since every IEEE comparison with one is false, so it falls through with no `f == f` idiom.
 satisfy Spell(Flt) {
     spell(f) =
-        let raw = to_str(f);
         choose
-        | Str/eql(raw, "NaN") => "/std/Flt/nan"
-        | Str/eql(raw, "+inf") => "/std/Flt/pos_inf"
-        | Str/eql(raw, "-inf") => "/std/Flt/neg_inf"
+        | Bool/not(is_finite(f)) =>
+            choose
+            | f > +0.0 => "/std/Flt/pos_inf"
+            | f < +0.0 => "/std/Flt/neg_inf"
+            | _ => "/std/Flt/nan"
+            end
         | _ =>
+            -- Rendered only on the arm that reads it, now that no case is decided from the text.
+            let raw = to_str(f);
             let unsigned =
                 match Str/try_get(raw, 0)
                 | some(head) =>
