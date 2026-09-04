@@ -33,6 +33,7 @@ mod soundness;
 mod strings;
 mod structs;
 mod toml;
+mod tui;
 mod unfolding;
 mod universes;
 mod wasm_conformance;

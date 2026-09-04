@@ -1,0 +1,34 @@
+-- A terminal colour, in the four forms every terminal understands: the default it was configured with, one of the sixteen the SGR palette names, one of the 256-colour cube's entries, and a direct 24-bit triple. Which of them a terminal actually honours is the terminal's business; the renderer emits the escape and says nothing about the result.
+--
+-- The sixteen are one constructor under a bound rather than sixteen constructors. `ansi(n)` states `Nat/Lt(n, 16)` as a decided proposition, so a literal spelling discharges it by reduction and nothing outside the palette can be built, while a computed index reaches the same constructor through `try` exactly as `Str/get` is reached. The names below are ordinary values, which keeps `Color/red` as readable as a constructor would be and leaves the renderer one arm to match instead of sixteen.
+use /std/{Nat, Byte, Equal};
+use /std/Nat/{Lt};
+
+pub induct Color: pub Type
+| default()
+| ansi(n: Nat, @ok: Lt(n, 16))
+| indexed(Byte)
+| rgb(Byte, Byte, Byte)
+end
+
+pub use Color/*;
+
+-- The proof payload is irrelevant, so the derived comparison is the index comparison.
+satisfy Equal(Color);
+
+pub let black: Color = Color/ansi(0);
+pub let red: Color = Color/ansi(1);
+pub let green: Color = Color/ansi(2);
+pub let yellow: Color = Color/ansi(3);
+pub let blue: Color = Color/ansi(4);
+pub let magenta: Color = Color/ansi(5);
+pub let cyan: Color = Color/ansi(6);
+pub let white: Color = Color/ansi(7);
+pub let bright_black: Color = Color/ansi(8);
+pub let bright_red: Color = Color/ansi(9);
+pub let bright_green: Color = Color/ansi(10);
+pub let bright_yellow: Color = Color/ansi(11);
+pub let bright_blue: Color = Color/ansi(12);
+pub let bright_magenta: Color = Color/ansi(13);
+pub let bright_cyan: Color = Color/ansi(14);
+pub let bright_white: Color = Color/ansi(15);

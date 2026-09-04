@@ -1,0 +1,71 @@
+-- How wide a string is on a terminal, and the two operations written over that measurement.
+--
+-- **The width is approximate, deliberately, and this is the only place that approximation lives.** There is no exact answer: `wcwidth` is per code point while a terminal renders grapheme clusters, an emoji sequence's width depends on whether the terminal joins it, and Mode 2027 exists precisely because terminals disagree. So this is a table of twenty-one ranges — zero for the combining marks, the Hangul jamo tails, the zero-width space family and the variation selectors; two for the East Asian Wide and Fullwidth blocks and the two emoji planes; one otherwise — and a program that needs the terminal's own answer asks the terminal, which no protocol in this tier speaks. A table that is wrong about one glyph misplaces one column, which `Tui/Image/fit` then crops or pads; it never corrupts a frame.
+--
+-- The ranges are merged where merging costs at most a handful of code points: `0x2E80-0x33FF` sweeps up `0x303F`, and `0x3400-0x9FFF` the hexagram block, both of which are narrow. Splitting them would buy accuracy no terminal agrees on at the cost of a table nobody can read.
+use /std/{Nat, Bool, Str, Char, List};
+
+let in_any(n: Nat, ranges: List({Nat, Nat})) -> Bool =
+    List/any(ranges, (r) => Nat/in_range(n, r.0, r.1));
+
+let zero_ranges: List({Nat, Nat}) =
+    [
+        (0x0000, 0x001F),
+        (0x007F, 0x009F),
+        (0x0300, 0x036F),
+        (0x1160, 0x11FF),
+        (0x200B, 0x200F),
+        (0x20D0, 0x20FF),
+        (0xFE00, 0xFE0F),
+        (0xFE20, 0xFE2F),
+        (0xE0100, 0xE01EF),
+    ];
+
+let wide_ranges: List({Nat, Nat}) =
+    [
+        (0x1100, 0x115F),
+        (0x2E80, 0x33FF),
+        (0x3400, 0x9FFF),
+        (0xA000, 0xA4CF),
+        (0xAC00, 0xD7A3),
+        (0xF900, 0xFAFF),
+        (0xFE30, 0xFE6F),
+        (0xFF00, 0xFF60),
+        (0xFFE0, 0xFFE6),
+        (0x1F300, 0x1F64F),
+        (0x1F900, 0x1F9FF),
+        (0x20000, 0x3FFFD),
+    ];
+
+-- How many columns one scalar occupies. A control character is zero rather than one: it prints nothing, and counting it would shift every column after it.
+pub let char_width(c: Char) -> Nat =
+    let n = Char/to_nat(c);
+    choose
+    | in_any(n, zero_ranges) => 0
+    | in_any(n, wide_ranges) => 2
+    | _ => 1
+    end;
+
+-- How many columns `s` occupies, which is neither its scalar count (`Str/len`) nor its byte count.
+pub let width(s: Str) -> Nat =
+    Str/fold(s, 0, (c, total) => total + char_width(c));
+
+-- The longest prefix of `s` that fits `w` columns. A double-width scalar that would straddle the boundary is dropped whole rather than half-drawn, so the result is never wider than `w` and may be one column narrower.
+pub let truncate(s: Str, w: Nat) -> Str =
+    Str/fold(s, ("", 0), (c, acc) =>
+        let taken = acc.1 + char_width(c);
+        choose
+        | taken <= w => (Str/concat(acc.0, Str/of_char(c)), taken)
+        | _ => acc
+        end).0;
+
+-- Break `s` into lines no wider than `w`, at spaces. A word wider than `w` on its own becomes its own over-wide line rather than being split mid-word: `Tui/Image/fit` crops it at the pane, which is the one coercion this library has, and a hyphenation rule is a choice no library should make for a program.
+pub let wrap(s: Str, w: Nat) -> List(Str) =
+    let packed =
+        List/fold(Str/split(s, " "), ([], ""), (word, acc) =>
+            choose
+            | Str/is_empty(acc.1) => (acc.0, word)
+            | width(acc.1) + 1 + width(word) <= w => (acc.0, Str/flatten([acc.1, " ", word]))
+            | _ => ([acc.1, ..acc.0], word)
+            end);
+    List/reverse([packed.1, ..packed.0]);

@@ -172,6 +172,8 @@ pub mod fs;
 
 pub mod stream;
 
+pub mod Tui;
+
 pub let print(s: Str) -> Io({}) =
     Io/write(Io/stdout, Str/to_bytes(s));
 
