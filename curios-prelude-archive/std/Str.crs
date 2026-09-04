@@ -245,7 +245,7 @@ pub let split_once(s: Str, sep: Str) -> Option({Str, Str}) =
 pub let contains(s: Str, needle: Str) -> Bool =
     Option/is_some(split_once(s, needle));
 
--- The pieces between occurrences of `sep`, the separators dropped; an empty separator splits into scalars.
+-- The pieces between occurrences of `sep`, the separators dropped; an empty separator splits into scalars, which is the guard's answer rather than the search's -- `split_once` finds an empty needle at once and forever, so walking one would never advance.
 pub let split(s: Str, sep: Str) -> List(Str) =
     match is_empty(sep)
     | true => List/map(to_list(s), of_char)
@@ -256,7 +256,9 @@ pub let split(s: Str, sep: Str) -> List(Str) =
         end
     end;
 
--- Every occurrence of `from` replaced by `to`, left to right and without rescanning what `to` inserted. An empty `from` occurs nowhere, so `s` comes back unchanged.
+-- Every occurrence of `from` replaced by `to`, left to right and without rescanning what `to` inserted.
+--
+-- An empty `from` comes back unchanged, and the guard is what says so rather than the search: `split_once` finds an empty needle *at once*, before the first scalar, which is why `contains(s, "")` is true -- so the recursion below would split at position zero forever. `split` takes the same guard to the other answer, scalars, because there the walk has one; here it does not, and the identity is the only terminating reading.
 pub let replace(s: Str, from: Str, to: Str) -> Str =
     match is_empty(from)
     | true => s
