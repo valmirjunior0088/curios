@@ -226,3 +226,15 @@ fn scripted_stdin_lines_are_one_chunk_that_never_waits() {
         (Status::Eof, bytes) if bytes.is_empty()
     ));
 }
+
+#[test]
+fn stderr_is_readable_apart_from_the_concatenation_of_both_streams() {
+    let (host, io) = MockHost::builder().build();
+
+    host.write(Handle::Stdout, b"out ");
+    host.write(Handle::Stderr, b"err ");
+    host.write(Handle::Stdout, b"more");
+
+    assert_eq!(io.output(), b"out err more");
+    assert_eq!(io.errors(), b"err ");
+}

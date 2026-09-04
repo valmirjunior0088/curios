@@ -354,8 +354,10 @@ enum MockResource {
 pub struct MockHost {
     /// Scripted stdin, served chunk by chunk as the terminal or the pipe behind it delivers: `read(Handle::Stdin, …)` drains the front chunk, answers `Status::WouldBlock` until a `poll` arms the next one, and reports `Status::Eof` once the script is spent. A script of lines is one chunk, armed from the start, so it reads the way it always did; a multi-chunk script is what puts a fiber's park-poll-resume path over standard input under test, which a host that is always ready never could.
     input: Mutex<Chunked>,
-    /// Every byte written to stdout and stderr, concatenated in write order — the streams are not distinguished. Shared with [`MockIo::output`].
+    /// Every byte written to stdout and stderr, concatenated in write order. Shared with [`MockIo::output`], which is what a fixture reads when it only cares that something was written.
     output: Arc<Mutex<Vec<u8>>>,
+    /// The stderr half alone, written beside `output` rather than instead of it. Shared with [`MockIo::errors`]: a program that reports a failure on one stream and its result on the other is only pinned by a fixture that can tell them apart.
+    errors: Arc<Mutex<Vec<u8>>>,
     /// The in-memory filesystem backing `open`/`read`/`write`/`close`. Shared with [`MockIo::file`].
     files: MockFileSystem,
     /// One table for every non-stdio handle, keyed by token bytes: open files, outbound/inbound connections, and unconnected/listening sockets. The BSD lifecycle transitions a handle in place (`socket` → `connect`/`listen` → `accept`) and `close` releases any kind uniformly — the scripted mirror of `OsHost`'s real-resource table.
@@ -693,6 +695,10 @@ impl HostOps for MockHost {
             Handle::Stdout | Handle::Stderr => {
                 self.output.lock().unwrap().extend_from_slice(bytes);
 
+                if matches!(io, Handle::Stderr) {
+                    self.errors.lock().unwrap().extend_from_slice(bytes);
+                }
+
                 return (Status::Ok, full);
             }
             Handle::Other(_) => {}
@@ -919,6 +925,7 @@ fn serve_from(contents: &[u8], position: &mut usize, count: u32) -> (Status, Vec
 /// The inspectable side of a [`MockHost`]: the shared buffers the run writes into. The host is moved into the runner, so a test holds this handle to read stdout, files, and server captures back out afterwards.
 pub struct MockIo {
     output: Arc<Mutex<Vec<u8>>>,
+    errors: Arc<Mutex<Vec<u8>>>,
     files: MockFileSystem,
     captures: Arc<Mutex<Vec<Vec<u8>>>>,
     raw_modes: Arc<Mutex<Vec<bool>>>,
@@ -926,9 +933,14 @@ pub struct MockIo {
 }
 
 impl MockIo {
-    /// Every byte the guest wrote to stdout and stderr, concatenated in write order. The two streams are not distinguished.
+    /// Every byte the guest wrote to stdout and stderr, concatenated in write order.
     pub fn output(&self) -> Vec<u8> {
         self.output.lock().unwrap().clone()
+    }
+
+    /// The stderr half of [`output`](Self::output) alone, in write order. Reading both is how a fixture shows which stream a byte went to — a diagnostic belongs on this one and a result on the other, and the concatenation cannot tell them apart.
+    pub fn errors(&self) -> Vec<u8> {
+        self.errors.lock().unwrap().clone()
     }
 
     /// The contents of `path` in the in-memory filesystem after the run, or `None` if it was never seeded or written.
@@ -1150,6 +1162,7 @@ impl MockHostBuilder {
     /// Wrap the seeded values into a live host and its [`MockIo`] inspection handle: the host is moved into the runner, the handle stays behind.
     pub fn build(self) -> (MockHost, MockIo) {
         let output = Arc::new(Mutex::new(Vec::new()));
+        let errors = Arc::new(Mutex::new(Vec::new()));
         let files = MockFileSystem::new(self.files, self.dirs);
         let captures = Arc::new(Mutex::new(Vec::new()));
         let raw_modes = Arc::new(Mutex::new(Vec::new()));
@@ -1157,6 +1170,7 @@ impl MockHostBuilder {
 
         let io = MockIo {
             output: output.clone(),
+            errors: errors.clone(),
             files: files.clone(),
             captures: captures.clone(),
             raw_modes: raw_modes.clone(),
@@ -1166,6 +1180,7 @@ impl MockHostBuilder {
         let host = MockHost {
             input: Mutex::new(Chunked::new(stdin_script(self.input, self.input_chunks))),
             output,
+            errors,
             files,
             table: Mutex::new(Table::new()),
             endpoints: self.endpoints,
