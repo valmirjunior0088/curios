@@ -1,5 +1,4 @@
-//! UTF-8, the `Str` surface, and the JSON codec over them, end to end.
+//! What certifies UTF-8, and what a `Str` literal costs. The `Str` surface, the decompositions and the JSON codec are the corpus's `/strings`.
 
-mod json_tests;
 mod str_tests;
 mod utf8_tests;

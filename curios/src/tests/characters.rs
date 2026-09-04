@@ -145,3 +145,16 @@ fn a_character_dispatch_requires_a_default() {
     );
     assert!(!report.is_empty(), "{report}");
 }
+
+// A character literal realizes at `Nat`, `Byte`, `Int` and `Char`, and at nothing else: none of these four coercions exists, so each is refused rather than silently reading a code point where a value of another type was written.
+#[test]
+fn character_literals_do_not_coerce_to_numeric_domains() {
+    for source in [
+        "use /std/{Nat}; let n : Nat = 'a'; n",
+        "use /std/{Byte}; let b : Byte = 'a'; b",
+        "use /std/{Char, Nat}; let c : Char = 'a'; c == 97",
+        "use /std/{Char, Byte}; let c : Char = 'a'; c == (0x61 : Byte)",
+    ] {
+        error(source);
+    }
+}

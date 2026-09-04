@@ -88,47 +88,6 @@ fn slice_proof_aligns_with_byte_walk() {
     assert_eq!(run(source), b"ok");
 }
 
-#[test]
-fn str_of_bytes_accepts_multibyte_utf8() {
-    let source = r#"
-        use /std/{Str, Handle, Io};
-        match Str/of_bytes(x[0xc3, 0xa9]) : (_) => /std/Io({})
-        | some(s) => /std/print(s)
-        | none() => /std/print("bad")
-        end
-        "#;
-
-    assert_eq!(run(source), [0xc3, 0xa9]);
-}
-
-// An invalid lead byte fails `is_utf8`, so `Str/of_bytes` returns `none`.
-#[test]
-fn str_of_bytes_rejects_invalid_utf8() {
-    let source = r#"
-        use /std/{Str, Handle, Io};
-        match Str/of_bytes(x[0xff]) : (_) => /std/Io({})
-        | some(s) => /std/print(s)
-        | none() => /std/print("rejected")
-        end
-        "#;
-
-    assert_eq!(run(source), b"rejected");
-}
-
-// A truncated multi-byte sequence (a 2-byte lead with no continuation) fails the continuation-byte check, so `of_bin` returns `none`.
-#[test]
-fn str_of_bytes_rejects_truncated_multibyte() {
-    let source = r#"
-        use /std/{Str, Handle, Io};
-        match Str/of_bytes(x[0xc3]) : (_) => /std/Io({})
-        | some(s) => /std/print(s)
-        | none() => /std/print("rejected")
-        end
-        "#;
-
-    assert_eq!(run(source), b"rejected");
-}
-
 // The UTF-8 decode certification lemmas: naming them forces their bodies to elaborate (demand-driven checking). `cont_len` is the one that exercises the comparison intrinsic — `step` only reduces in `cont` state because `eql(succ(succ k''), 1)` now folds to `false`. `peel_byte`/`count_scalars`/ `decode_head` are the cursor-free decode core: `peel_byte` advances the (prop) validity witness one byte without ever large-eliminating it, `count_scalars` is the codepoint count `len` is built on, and `decode_head` reads the head codepoint from the relevant bytes under that witness.
 #[test]
 fn decode_lemmas_type_check() {
@@ -140,22 +99,6 @@ fn decode_lemmas_type_check() {
         "#;
 
     assert_eq!(run(source), b"ok");
-}
-
-#[test]
-fn char_of_nat_accepts_exact_unicode_scalar_boundaries() {
-    let source = r#"
-        use /std/{Char, Nat, Str, Option, List, Handle, Io};
-        let render(n : Nat) -> Str =
-            match Char/of_nat(n)
-            | some(c) => Nat/to_str(Char/to_nat(c))
-            | none() => "x"
-            end;
-        /std/print(Str/join(",", List/map(
-            [0, 0xD7FF, 0xD800, 0xDFFF, 0xE000, 0x10FFFF, 0x110000], render)))
-        "#;
-
-    assert_eq!(run(source), b"0,55295,x,x,57344,1114111,x");
 }
 
 #[test]
@@ -183,24 +126,6 @@ fn char_to_utf8_matches_rust_across_widths_and_boundaries() {
         })
         .collect::<Vec<_>>();
     assert_eq!(run(source), expected);
-}
-
-#[test]
-fn str_rejects_every_invalid_utf8_shape() {
-    let source = r#"
-        use /std/{Str, Bool, List, Bytes, Handle, Io};
-        let rejected(bytes : Bytes) -> Bool =
-            match Str/of_bytes(bytes)
-            | some(_) => false
-            | none() => true
-            end;
-        /std/print(Bool/to_str(List/fold([
-            x[0xc0, 0xaf], x[0xe0, 0x80, 0x80], x[0xed, 0xa0, 0x80], x[0xf4, 0x90, 0x80, 0x80],
-            x[0x80], x[0xc2], x[0xe2, 0x82], x[0xf0, 0x9f, 0x98]
-        ], true, (bytes, ok) => ok && rejected(bytes))))
-        "#;
-
-    assert_eq!(run(source), b"true");
 }
 
 // A *non-productive* inner `rec` forced in a type position must degrade to the reduce budget (an error), never hang or panic — the regression guard for inner-`rec` reduction at the type level (a `Subterm::Rec` demanded by an eliminator is now forced, not left stuck).

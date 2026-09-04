@@ -1,0 +1,46 @@
+-- UTF-8 validity, and the scalar boundaries `Char` admits.
+use /std/{Str, Char, Nat, Bool, Bytes, List, Option, Test};
+
+-- Whether `of_bytes` refuses these bytes, which is what every rejection below asks.
+let rejected(bytes: Bytes) -> Bool =
+    match Str/of_bytes(bytes) | some(_) => false | none() => true end;
+
+test of_bytes_accepts_multibyte_utf8() =
+    match Str/of_bytes(x[0xc3, 0xa9]): (_) => Test
+    | some(s) => Test/equal(s, "é")
+    | none() => Test/check(false)
+    end;
+
+-- An invalid lead byte fails `is_utf8`, so `of_bytes` answers `none`.
+test of_bytes_rejects_an_invalid_lead_byte() =
+    Test/check(rejected(x[0xff]));
+
+-- A truncated sequence — a two-byte lead with no continuation — fails the continuation check.
+test of_bytes_rejects_a_truncated_multibyte() =
+    Test/check(rejected(x[0xc3]));
+
+-- Overlong encodings, a surrogate, a scalar past `U+10FFFF`, a bare continuation byte, and three truncations: every shape the automaton must refuse.
+test of_bytes_rejects_every_invalid_shape() =
+    Test/check(
+        List/fold(
+            [
+                x[0xc0, 0xaf],
+                x[0xe0, 0x80, 0x80],
+                x[0xed, 0xa0, 0x80],
+                x[0xf4, 0x90, 0x80, 0x80],
+                x[0x80],
+                x[0xc2],
+                x[0xe2, 0x82],
+                x[0xf0, 0x9f, 0x98]],
+            true,
+            (bytes, ok) => ok && rejected(bytes)));
+
+-- The surrogate range and everything above `U+10FFFF` are excluded, and the scalars either side of each boundary are admitted.
+test char_of_nat_accepts_exact_unicode_scalar_boundaries() =
+    let render(n: Nat) -> Str =
+        match Char/of_nat(n) | some(c) => Nat/to_str(Char/to_nat(c)) | none() => "x" end;
+    Test/equal(
+        Str/join(
+            ",",
+            List/map([0, 0xD7FF, 0xD800, 0xDFFF, 0xE000, 0x10FFFF, 0x110000], render)),
+        "0,55295,x,x,57344,1114111,x");
