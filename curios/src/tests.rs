@@ -21,7 +21,6 @@ mod matching;
 mod numeric;
 mod operators;
 mod packages;
-mod path;
 mod perimeter;
 mod positivity;
 mod property;

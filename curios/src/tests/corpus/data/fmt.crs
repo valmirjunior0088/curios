@@ -1,0 +1,27 @@
+-- `/std/Fmt`: what a `%` slot shows, read through `render` so the claim is about the rendering rather than about the write that carries it.
+use /std/{Fmt, Nat, Str, Option, List, Ordered, Test};
+
+-- A bare `%` is the generic show-slot: each argument renders through its own `Show` witness, so one format string mixes types freely.
+test percent_slot_shows_each_argument_through_its_witness() =
+    Test/equal(Fmt/render("% / % / %")(42)(true)(3.5), "42 / true / +3.5");
+
+-- `Show(Str)` is the identity, so a `Str` argument renders verbatim.
+test percent_slot_shows_a_string_verbatim() =
+    Test/equal(Fmt/render("hello, %!")("world"), "hello, world!");
+
+-- `\%` escapes a literal percent, and — because the escape lead character differs from the placeholder — composes unambiguously next to a slot in either order.
+test escaped_percent_renders_literally() =
+    Test/all(
+        [
+            Test/equal(Fmt/render("%\\% off")(50), "50% off"),
+            Test/equal(Fmt/render("\\%%")(50), "%50")]);
+
+-- The scalar `Show` witnesses — `Byte` as decimal, `Bytes` as lowercase hex, `Ordering` by constructor — render through the same slot.
+test percent_slot_shows_scalar_witnesses() =
+    Test/equal(
+        Fmt/render("byte=% bytes=% ord=%")(Nat/to_byte(65))(Str/to_bytes("ABC"))(Ordered/cmp(9, 4)),
+        "byte=65 bytes=414243 ord=gt");
+
+-- The container `Show` witnesses render structurally, recursing through the element witness resolved from their `use Show(A)` premise.
+test percent_slot_shows_containers() =
+    Test/equal(Fmt/render("list=% opt=%")([1, 2, 3])(Option/some(7)), "list=[1, 2, 3] opt=some(7)");

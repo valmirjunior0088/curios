@@ -1,0 +1,139 @@
+-- `/std/BigNat` and `/std/BigInt`: arbitrary-precision arithmetic over a limb spine. Each expectation is written as the decimal it stands for, so a failure spells both sides as `of_decimal` calls rather than as limbs.
+use /std/{Str, Nat, Bool, Option, Ordering, BigNat, BigInt, Test};
+
+-- === `BigNat`, unsigned. =========================================================
+
+-- `add` propagates carry along the binary numeral: 99_999_999 ends in eight set bits, so adding 1 ripples the carry through all of them — the `pos_add`/`pos_add_c` twin recursion — before it lands.
+test big_nat_add_ripples_carry() =
+    Test/equal(
+        BigNat/add(BigNat/of_decimal("99999999"), BigNat/of_nat(1)),
+        BigNat/of_decimal("100000000"));
+
+-- `sub` runs the mask-based borrow recursion: 100_000_000 ends in eight clear bits, so subtracting 1 borrows through all of them. The result is canonical by construction — no trailing-zero cleanup exists to get wrong.
+test big_nat_sub_borrows() =
+    Test/equal(
+        BigNat/sub(BigNat/of_decimal("100000000"), BigNat/of_nat(1)),
+        BigNat/of_decimal("99999999"));
+
+-- `mul/small` is `mul` against a decoded native operand: 9999 * 99999 crosses well past both inputs' bit widths, so every carry of the shift-and-add recursion has to land.
+test big_nat_mul_small_propagates_carry() =
+    Test/equal(
+        BigNat/mul/small(BigNat/of_nat(9999), 99999),
+        BigNat/of_decimal("999890001"));
+
+-- Full big-by-big `mul`: the product needs 57 bits, so a correct result proves it lives in the numeral itself and never in a fixed-width intermediate.
+test big_nat_mul_crosses_word_width() =
+    Test/equal(
+        BigNat/mul(BigNat/of_decimal("123456789"), BigNat/of_decimal("987654321")),
+        BigNat/of_decimal("121932631112635269"));
+
+-- `mul/pow2` doubles past every fixed-width integer: 2^40 far exceeds the 31-bit `Nat` carrier, so a correct result proves each doubling is a low-bit prepend on the numeral rather than native arithmetic.
+test big_nat_mul_pow2_builds_large_powers() =
+    Test/equal(BigNat/mul/pow2(BigNat/of_nat(1), 40), BigNat/of_decimal("1099511627776"));
+
+-- `div2` drops the low bit in O(1) and `is_even` reads it: 101 is odd and floor-halves to 50, which is even.
+test big_nat_div2_and_parity() =
+    let n = BigNat/of_nat(101);
+    Test/all(
+        [
+            Test/equal(BigNat/div2(n), BigNat/of_nat(50)),
+            Test/check(Bool/not(BigNat/is_even(n))),
+            Test/check(BigNat/is_even(BigNat/div2(n)))]);
+
+-- `bit_len` is the numeral's length: zero has no bits, 1 is a single bit, and the 255 → 256 step is where the count grows from 8 to 9.
+test big_nat_bit_len_counts_binary_digits() =
+    Test/equal(
+        [
+            BigNat/bit_len(BigNat/zero),
+            BigNat/bit_len(BigNat/of_nat(1)),
+            BigNat/bit_len(BigNat/of_nat(255)),
+            BigNat/bit_len(BigNat/of_nat(256))],
+        [0, 1, 8, 9]);
+
+-- `cmp` lets the high bits decide — the recursion on the numeral tails — breaking ties on the low bit only afterward, so two values differing only in the lowest bit still order correctly.
+test big_nat_cmp_orders_by_magnitude() =
+    let a = BigNat/of_nat(12345678);
+    let b = BigNat/of_nat(12345679);
+    Test/equal(
+        [BigNat/cmp(a, b), BigNat/cmp(a, a), BigNat/cmp(b, a)],
+        [Ordering/lt(), Ordering/eq(), Ordering/gt()]);
+
+-- Zero is its own constructor, which `to_str` renders as "0" and not the empty string, and a value with clear low bits round-trips through the binary long division that produces the decimal digits.
+test big_nat_zero_renders_and_roundtrips() =
+    Test/equal(
+        Str/join("/", [BigNat/to_str(BigNat/zero), BigNat/to_str(BigNat/of_nat(70000))]),
+        "0/70000");
+
+-- The decimal parser is the inverse of the renderer on everything the renderer writes, well past any native width.
+test big_nat_of_str_inverts_to_str() =
+    let big = BigNat/mul(BigNat/of_decimal("123456789"), BigNat/of_decimal("987654321"));
+    Test/all(
+        [
+            Test/equal(BigNat/of_str(BigNat/to_str(big)), Option/some(big)),
+            Test/equal(BigNat/of_str(BigNat/to_str(BigNat/zero)), Option/some(BigNat/zero)),
+            Test/equal(BigNat/of_str(""), Option/none()),
+            Test/equal(BigNat/of_str("12x"), Option/none())]);
+
+-- === `BigInt`, signed. ===========================================================
+
+-- Mixed-sign `add` routes through `pos_sub`, which reads the sign straight off `cmp`: the same magnitudes flipped land exactly on the other side of zero, and equal magnitudes land on zero itself — which has its own constructor, so "-0" cannot even be produced.
+test bigint_add_crosses_zero_in_both_directions() =
+    Test/equal(
+        [
+            BigInt/add(BigInt/of_int(-70000), BigInt/of_int(+99999)),
+            BigInt/add(BigInt/of_int(+70000), BigInt/of_int(-99999)),
+            BigInt/add(BigInt/of_int(-70000), BigInt/of_int(+70000))],
+        [BigInt/of_decimal("+29999"), BigInt/of_decimal("-29999"), BigInt/zero]);
+
+-- Unlike `BigNat/sub`, the signed `sub` never truncates: subtracting a larger value produces the genuine negative difference.
+test bigint_sub_is_total() =
+    Test/equal(
+        BigInt/sub(BigInt/of_nat(1), BigInt/of_decimal("+100000000")),
+        BigInt/of_decimal("-99999999"));
+
+-- The sign of a product is the product of the signs, and the magnitude rides `BigNat`'s numeral past any fixed width.
+test bigint_mul_multiplies_signs() =
+    Test/equal(
+        [
+            BigInt/mul(BigInt/of_int(-99999), BigInt/of_int(-99999)),
+            BigInt/mul(BigInt/of_int(+99999), BigInt/of_int(-99999)),
+            BigInt/mul(BigInt/of_int(-99999), BigInt/zero)],
+        [BigInt/of_decimal("+9999800001"), BigInt/of_decimal("-9999800001"), BigInt/zero]);
+
+-- `cmp` decides by sign first and only then by magnitude, where the negative stratum orders reversed: -2 < -1 even though 2 > 1.
+test bigint_cmp_orders_across_signs() =
+    let m2 = BigInt/of_int(-2);
+    let m1 = BigInt/of_int(-1);
+    let p1 = BigInt/of_int(+1);
+    Test/equal(
+        [BigInt/cmp(m2, m1), BigInt/cmp(m1, p1), BigInt/cmp(p1, m1), BigInt/cmp(m1, m1)],
+        [Ordering/lt(), Ordering/lt(), Ordering/gt(), Ordering/eq()]);
+
+-- `of_int` decodes a native `Int` sign-and-magnitude: the largest magnitude whose negation also fits the i31 carrier round-trips in both signs. The carrier minimum itself is out of reach, since `Int/abs(-2^30)` has no i31 representation.
+test bigint_of_int_crosses_the_i31_boundary() =
+    Test/equal(
+        [BigInt/of_int(+1073741823), BigInt/of_int(-1073741823), BigInt/of_int(+0)],
+        [BigInt/of_decimal("+1073741823"), BigInt/of_decimal("-1073741823"), BigInt/zero]);
+
+-- `neg` is an involution that `abs` collapses, and `is_even`/`div2` read the magnitude: -101 is odd and halves toward zero to -50.
+test bigint_neg_abs_and_parity() =
+    let n = BigInt/of_int(-101);
+    Test/all(
+        [
+            Test/equal(BigInt/neg(n), BigInt/of_decimal("+101")),
+            Test/equal(BigInt/abs(n), BigInt/of_decimal("+101")),
+            Test/equal(BigInt/div2(n), BigInt/of_decimal("-50")),
+            Test/check(Bool/not(BigInt/is_even(n))),
+            Test/check(BigInt/is_even(BigInt/div2(n)))]);
+
+-- The `/std` facades carry `Add`, `Subtract`, `Multiply`, `Equal` and `Compare` witnesses for `BigInt`, so the operator syntax resolves on it like on any native numeric type.
+test bigint_operators_dispatch_through_concepts() =
+    let a = BigInt/of_int(-6);
+    let b = BigInt/of_int(+2);
+    Test/all(
+        [
+            Test/equal(a + b, BigInt/of_decimal("-4")),
+            Test/equal(a - b, BigInt/of_decimal("-8")),
+            Test/equal(a * b, BigInt/of_decimal("-12")),
+            Test/check(Bool/not(a == b)),
+            Test/check(a < b)]);
