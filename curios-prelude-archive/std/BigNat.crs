@@ -248,4 +248,4 @@ mod parity;
 pub use parity/{is_even, div2};
 
 mod convert;
-pub use convert/{to_str, bit_len};
+pub use convert/{to_str, bit_len, is_decimal, Decimal, of_decimal, of_str};

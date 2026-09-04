@@ -1,6 +1,6 @@
 -- Arbitrary-precision integers: a sign tag over a strictly-positive `BigPos` magnitude (or the distinguished `zero`). Every operation dispatches on the sign constructors and delegates the magnitude arithmetic to `BigPos`/`BigNat`. Signed subtraction (`pos_sub`) reads the sign straight off `non_zero_cmp` and takes the truncating `BigNat/sub` of the larger minus the smaller magnitude, so no borrow/compare bridge is needed. The algebraic lemma corpus is deferred until a consumer needs it (see documentation/roadmap/big-flt-dyadic-proofs/01-big-int-laws-spec.md).
-use /std/{Nat, Int, Bool, Str, Ordering, BigNat, BigPos, Equal, Compare, Add, Subtract, Multiply,
-    Show, Ordered};
+use /std/{Nat, Int, Bool, Str, Option, True, False, Ordering, BigNat, BigPos, Equal, Compare,
+    Add, Subtract, Multiply, Show, Ordered};
 
 pub induct BigInt: pub Type
 | neg(BigPos)
@@ -116,6 +116,32 @@ pub let to_str(a: BigInt) -> Str =
     | neg(p) => Str/concat("-", BigNat/to_str(p.value))
     | zero() => "+0"
     | pos(p) => Str/concat("+", BigNat/to_str(p.value))
+    end;
+
+-- The magnitude of `s`, any leading sign dropped. Both the bound and the parser read `s` through this one split, so the two cannot disagree about where the digits start.
+let digits(s: Str) -> Str =
+    match Str/starts_with(s, "+") || Str/starts_with(s, "-")
+    | true => Str/slice(s, 1, Str/len(s) - 1)
+    | false => s
+    end;
+
+-- What `of_decimal` accepts: an optional sign on a nonempty run of decimal digits, which is what `to_str` above writes.
+pub let is_decimal(s: Str) -> Bool =
+    BigNat/is_decimal(digits(s));
+
+-- The bound `of_decimal` carries, on the same terms as `BigNat/Decimal`.
+pub let Decimal(s: Str) -> Prop =
+    match is_decimal(s) | true => True | false => False end;
+
+-- The inverse of `to_str`: the sign is read off the head and the magnitude delegated, as every operation here delegates it. `ok` discharges the magnitude's own bound because the two are the same claim.
+pub let of_decimal(s: Str, @ok: Decimal(s)) -> BigInt =
+    signed(Str/starts_with(s, "-"), BigNat/of_decimal(digits(s), @ok));
+
+-- The fallible form, spelled as its peers are; the guard is what discharges `of_decimal`'s bound.
+pub let of_str(s: Str) -> Option(BigInt) =
+    match is_decimal(s)
+    | true => Option/some(of_decimal(s))
+    | false => Option/none()
     end;
 
 satisfy Equal(BigInt) {

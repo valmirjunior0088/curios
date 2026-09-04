@@ -1,8 +1,9 @@
-use /std/{Nat, Bool, Bits, Str, Ordering, Eq, False, True, Equal, Compare, Add, Subtract, Multiply,
-    Show, Ordered};
+use /std/{Nat, Bool, Bits, Str, Char, Option, Ordering, Eq, False, True, Equal, Compare, Add,
+    Subtract, Multiply, Show, Ordered};
 use /std/Bool/{false_neq_true};
 use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
-use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, view, zero, mod add, mod cmp, mod mul, mod sub};
+use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, of_nat, view, zero, mod add, mod cmp, mod mul,
+    mod sub};
 
 pub let bit_len(a: BigNat) -> Nat =
     match view(a) | zero() => 0 | succ(_, tail) => bit_len(tail) + 1 end;
@@ -26,6 +27,28 @@ let to_str_go(a: BigNat, acc: Str) -> Str =
 
 pub let to_str(a: BigNat) -> Str =
     match is_zero(a) | true => "0" | false => to_str_go(a, "") end;
+
+-- What `of_decimal` accepts: a nonempty run of decimal digits, which is what `to_str` above writes and what `Nat/of_str` accepts, leading zeros included.
+pub let is_decimal(s: Str) -> Bool =
+    match Str/is_empty(s)
+    | true => false
+    | false => Str/fold(s, true, (cp, acc) => acc && Char/is_digit(cp))
+    end;
+
+-- The bound `of_decimal` carries, decided rather than proved. Written as a match on `is_decimal` it reduces away wherever that call does, so a literal argument discharges it by evaluation and a guarded call by refinement, both with nothing written. Spelled `Eq(is_decimal(s), true)` it would need `Eq/refl()` supplied by hand at every call: an omitted implicit is solved by unification and never by constructing a proof, which is why every decided bound in `/std` takes this shape.
+pub let Decimal(s: Str) -> Prop =
+    match is_decimal(s) | true => True | false => False end;
+
+-- The inverse of `to_str`, total on a string the bound admits. Each digit shifts the accumulator one decimal place, so the value is bounded by the numeral it is written as rather than by any native width.
+pub let of_decimal(s: Str, @ok: Decimal(s)) -> BigNat =
+    Str/fold(s, zero, (cp, acc) => add/add(mul/small(acc, 10), of_nat(Char/to_nat(cp) - 0x30)));
+
+-- The fallible form, spelled as its peers `Nat/of_str` and `Int/of_str` are; the guard is what discharges `of_decimal`'s bound.
+pub let of_str(s: Str) -> Option(BigNat) =
+    match is_decimal(s)
+    | true => Option/some(of_decimal(s))
+    | false => Option/none()
+    end;
 
 satisfy Equal(BigNat) {
     eql = cmp/eql,
