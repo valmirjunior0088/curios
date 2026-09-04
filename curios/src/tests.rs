@@ -4,6 +4,7 @@ mod binders;
 mod characters;
 mod codegen;
 mod concepts;
+mod corpus;
 mod derive;
 mod effects;
 mod erasure;

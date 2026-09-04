@@ -1,0 +1,2 @@
+-- UTF-8, the `Str` surface, and the JSON codec over them: the library claims that used to be one compiled program apiece in `curios/src/tests/strings/`.
+mod str;

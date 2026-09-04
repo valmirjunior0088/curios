@@ -1,0 +1,16 @@
+-- The `Str` surface: indexing, slicing and trimming at codepoint boundaries.
+use /std/{Str, Char, Nat, Option, Test};
+
+-- `Str/len` and `Str/try_get` count and index by codepoint, not byte. The string is `a€😀` — a 1-byte, a 3-byte and a 4-byte scalar — so its length is 3 and the codepoints decode to U+0061, U+20AC and U+1F600.
+test get_indexes_codepoints_of_every_width() =
+    match Str/of_bytes(x[0x61, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]): (_) => Test
+    | some(s) =>
+        Test/equal(
+            Str/flatten([
+                Nat/to_str(Str/len(s)), ",",
+                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/try_get(s, 0), '?'))), ",",
+                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/try_get(s, 1), '?'))), ",",
+                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/try_get(s, 2), '?')))]),
+            "3,97,8364,128512")
+    | none() => Test/check(false)
+    end;
