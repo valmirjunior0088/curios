@@ -380,10 +380,11 @@ pub enum Error {
         symbol: String,
         type_: Box<Term>,
     },
-    /// An inserted implicit argument that unification never pinned. Carries the insertion provenance (the applied function and the binder it filled) so the report names the hole instead of a bare metavar id.
+    /// An inserted implicit argument that unification never pinned. Carries the insertion provenance (the applied function and the binder it filled) so the report names the hole instead of a bare metavar id, and the binder's instantiated type — the `bound` nothing discharged — because naming the slot says where the refusal is and naming its type says what was asked for. A decided proposition is the case that needs both: `Has(layout, "sidebr")` is the whole of why the call was refused, and the binder alone reports a refusal the reader cannot act on.
     UninferredImplicit {
         func: String,
         binder: String,
+        bound: Box<Term>,
     },
     /// A settle-synthesized lambda's domain that nothing ever pinned — not the body, not anything the settled type met. Carries only the binder's name: the metavariable is elaboration state the reader cannot see, and the parameter is what they can annotate.
     DomainNeverDetermined {
@@ -908,8 +909,12 @@ impl Error {
         }
     }
 
-    pub(crate) fn uninferred_implicit(func: String, binder: String) -> Self {
-        Self::UninferredImplicit { func, binder }
+    pub(crate) fn uninferred_implicit(func: String, binder: String, bound: Term) -> Self {
+        Self::UninferredImplicit {
+            func,
+            binder,
+            bound: Box::new(bound),
+        }
     }
 
     pub(crate) fn domain_never_determined(binder: String) -> Self {
@@ -1353,6 +1358,7 @@ impl Error {
             Self::InformativePropStruct { field_type, .. } => out.push(field_type),
             Self::NotStrictlyPositive { site_type, .. } => out.push(site_type),
             Self::OperatorUndefined { type_, .. } => out.push(type_),
+            Self::UninferredImplicit { bound, .. } => out.push(bound),
             Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),
             Self::MatchCaseMissing { term, .. } => out.push(term),
             Self::UnboundVariable { term } => out.push(term),

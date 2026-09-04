@@ -926,7 +926,17 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
                 // An unsolved metavariable the *elaborator* minted (an omitted implicit or witness argument) is reported by the binder it filled — the provenance rides on the node itself — not as a bare hole: the user never wrote this metavariable, so a generic "cannot infer" would point at nothing they can see.
                 let error = match origin {
                     MetavarOrigin::Implicit(origin) => {
-                        Error::uninferred_implicit(origin.func.clone(), origin.binder.clone())
+                        // The birth record's `result` is the binder's instantiated type — the bound nothing discharged; display it through whatever solutions landed, keeping the raw spelling if holes survive, exactly as the witness branch below does with its goal.
+                        let bound = context
+                            .metavar_entry(*id)
+                            .map(|entry| entry.result.clone())
+                            .unwrap_or_else(Term::type_ground);
+                        let bound = zonk_term(context, &bound).unwrap_or(bound);
+                        Error::uninferred_implicit(
+                            origin.func.clone(),
+                            origin.binder.clone(),
+                            bound,
+                        )
                     }
                     MetavarOrigin::Witness(origin) => {
                         // The birth record's `result` is the goal type; display it through whatever solutions landed, keeping the raw spelling if holes survive.

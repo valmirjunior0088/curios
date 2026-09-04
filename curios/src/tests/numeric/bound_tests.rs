@@ -315,3 +315,22 @@ fn strong_induction_serves_a_proposition_and_a_computation() {
         b"l1,55"
     );
 }
+
+// A refused bound names what nothing discharged, not only the slot it would have filled. The binder says *where* the refusal is; the proposition says what was asked for, which is the whole of why the call was refused — and for a decided proposition keyed by a written name, `Has(layout, "sidebr")` and its kind, the binder alone reports something a reader cannot act on. The birth record carries the binder's instantiated type all along (`Context::insert_implicit`), and the witness branch beside this one has always rendered its goal; this pins that the implicit branch renders its bound too.
+#[test]
+fn an_undischarged_bound_is_named_in_the_refusal() {
+    let error = typecheck(
+        r#"
+        use /std/{Handle, Str, Bytes, Nat};
+        let unguarded(b : Bytes, k : Nat) -> Bytes =
+            Bytes/slice(b, 2, k);
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("nothing discharges the window bound");
+
+    assert!(
+        error.contains("nothing discharged Nat/Le(2 + k, Bytes/len(b))"),
+        "expected the refusal to name the bound, got: {error}"
+    );
+}

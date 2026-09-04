@@ -585,10 +585,15 @@ impl fmt::Display for Displayed<'_> {
                 let type_ = type_.spelled(spelling);
                 write!(f, "operator '{symbol}' is not defined for type {type_}")
             }
-            Error::UninferredImplicit { func, binder } => {
+            Error::UninferredImplicit {
+                func,
+                binder,
+                bound,
+            } => {
+                let bound = bound.spelled(spelling);
                 write!(
                     f,
-                    "implicit argument '{binder}' of '{func}' was not inferred; supply it explicitly: {func}(@...)"
+                    "implicit argument '{binder}' of '{func}' was not inferred\n  nothing discharged {bound}\n  supply it explicitly: {func}(@...)"
                 )
             }
             Error::DomainNeverDetermined { binder } => {
