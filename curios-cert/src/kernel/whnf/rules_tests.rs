@@ -1,7 +1,7 @@
 //! Beta, delta, zeta, iota, projection, eta and the switch arms — one reduction rule each.
 
 use {
-    super::unfold_rec,
+    super::{unfold_rec, unfold_rec_apply},
     crate::whnf,
     curios_core::{Apply, Free, Global, Intrinsic, Level, Reducer, Subterm, Term},
     curios_utilities::Qualifier,
@@ -331,5 +331,38 @@ fn a_stuck_left_operand_leaves_the_right_as_written() {
         whnf(&mut kernel, open),
         Ok(literal(true)),
         "a literal left reads the right and folds"
+    );
+}
+
+#[test]
+fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
+    let mut kernel = kernel();
+    let n = binder(0, "n");
+    let unused = binder(1, "unused");
+    let value = binder(2, "value");
+    let identity = Term::func([(n.clone(), nat_type())], Term::free_var(&n));
+
+    // The elaborator's twin, put to the kernel: a group whose member never mentions itself has no
+    // fixed point to keep, so opening its tail reduces past the projection and leaves the member's
+    // own `Func`. Declining every head that is not still a projection kept the folded spelling with
+    // that `Func` in hand, and the two checkers then read one declaration two ways.
+    let term: Term = Term::apply(
+        Term::rec(
+            [(
+                unused,
+                Term::func_type([(n, nat_type())], nat_type()),
+                identity.clone(),
+            )],
+            identity,
+        ),
+        [Term::free_var(&value)],
+    );
+    let Subterm::Apply(apply) = Term::unwrap_or_clone(term) else {
+        unreachable!()
+    };
+
+    assert_eq!(
+        unfold_rec_apply(&mut kernel, apply),
+        Ok(Some(Term::free_var(&value)))
     );
 }

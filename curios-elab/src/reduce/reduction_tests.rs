@@ -86,6 +86,41 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
 }
 
 #[test]
+fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let unused = context.fresh(Some("unused"));
+    let value = context.fresh(Some("value"));
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let identity = Term::func([(n.clone(), nat_type.clone())], Term::free_var(&n));
+
+    // A group whose member never mentions itself has no fixed point to keep, so opening its tail
+    // reduces past the projection to the member's own value and `expose_rec_tail` leaves a `Func`.
+    // Taking the step only on a projection declined here with that `Func` in hand, and the caller
+    // then kept the folded spelling -- which the positivity walk reads at `Mixed`, so an `induct`'s
+    // type constructor reached through this spelling stopped composing.
+    let term: Term = Term::apply(
+        Term::rec(
+            [(
+                unused,
+                Term::func_type([(n, nat_type)], Term::intrinsic(Intrinsic::NatType)),
+                identity.clone(),
+            )],
+            identity,
+        ),
+        [Term::free_var(&value)],
+    );
+    let Subterm::Apply(apply) = Term::unwrap_or_clone(term) else {
+        unreachable!()
+    };
+
+    assert_eq!(
+        unfold_rec_apply(&mut context, apply),
+        Ok(Some(Term::free_var(&value)))
+    );
+}
+
+#[test]
 fn inductive_match_selects_case_and_projects_payload() {
     let mut context = context();
     let m = context.fresh(Some("m"));

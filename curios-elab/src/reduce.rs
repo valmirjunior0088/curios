@@ -144,12 +144,16 @@ pub(crate) fn unfold_rec_apply(
         .collect::<Vec<_>>();
     let head = reduce(context, head)?;
     let head = expose_rec_tail(context, head)?;
-    let Some((group, index)) = head.as_rec_proj() else {
-        return Ok(None);
-    };
 
-    let body = reduce(context, group.member_body(index))?;
-    let body = force_rec(context, body)?;
+    // A projection is the shape a *recursive* member keeps: opening the group's tail over its own members reproduces it, which is where `expose_rec_tail` stops. A member that does not occur in its own body has no fixed point to keep, so the same opening reduces past the projection to the member's value, and the applicable term is then the exposed head itself. Both are the one beta step this function exists to take, and taking only the first left the other spelling folded with its answer in hand — an `induct`'s type constructor lowers into a `rec` whatever its arity, so a caller that reached the unfolded spelling saw a nominal type and one that reached the folded spelling saw a stuck application, and a checker reading the two disagreed about the same declaration.
+    let body = match head.as_rec_proj() {
+        Some((group, index)) => {
+            let body = reduce(context, group.member_body(index))?;
+
+            force_rec(context, body)?
+        }
+        None => head,
+    };
     let Subterm::Func(Func { telescope, .. }) = Term::unwrap_or_clone(body) else {
         return Ok(None);
     };

@@ -654,12 +654,15 @@ fn unfold_rec_apply(kernel: &mut Kernel, apply: Apply) -> Result<Option<Term>, R
     let head = whnf(kernel, head)?;
     let head = expose_rec_tail(kernel, head)?;
 
-    let Some((group, index)) = head.as_rec_proj() else {
-        return Ok(None);
-    };
+    // A projection is the shape a *recursive* member keeps: opening the group's tail over its own members reproduces it, which is where `expose_rec_tail` stops. A member that does not occur in its own body has no fixed point to keep, so the same opening reduces past the projection to the member's value, and the applicable term is then the exposed head itself. Both are the one beta step this function exists to take, and the elaborator's twin takes them the same way — an `induct`'s type constructor lowers into a `rec` whatever its arity, so a caller that reached the unfolded spelling saw a nominal type where one reaching the folded spelling saw a stuck application.
+    let body = match head.as_rec_proj() {
+        Some((group, index)) => {
+            let body = whnf(kernel, group.member_body(index))?;
 
-    let body = whnf(kernel, group.member_body(index))?;
-    let body = force(kernel, body)?;
+            force(kernel, body)?
+        }
+        None => head,
+    };
 
     let Subterm::Func(Func { telescope, .. }) = Term::unwrap_or_clone(body) else {
         return Ok(None);

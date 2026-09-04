@@ -236,8 +236,30 @@ fn the_closed_machine_agrees_with_the_strategy() {
         unfold_rec(rec)
     };
 
+    // A group whose one member never mentions itself: opening its tail reduces past the projection to
+    // the member's own value, so what the head exposes is a `Func` and the application is ordinary
+    // beta. The machine takes it from the apply arm; the strategy reaches it through the branch that
+    // used to demand a projection and decline everything else.
+    let dissolved_group = {
+        let (n, unused) = (binder(0, "n"), binder(1, "unused"));
+        let identity = Term::func([(n.clone(), nat_type())], Term::free_var(&n));
+
+        Term::apply(
+            Term::rec(
+                [(
+                    unused,
+                    Term::func_type([(n, nat_type())], nat_type()),
+                    identity.clone(),
+                )],
+                identity,
+            ),
+            [nat(2)],
+        )
+    };
+
     for term in [
         chain(64),
+        dissolved_group,
         ih_fold,
         tail_fold,
         countdown,
