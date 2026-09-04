@@ -92,8 +92,7 @@ let int_str(n: Int) -> Str =
 -- The four cases are told apart the way `/std/Flt`'s own `Spell` tells them apart: `is_finite` is one ordered pair between the infinities, and the sign then separates those two, with a NaN failing both comparisons because every IEEE comparison with one is false. This used to re-decode `to_le_bytes` into exponent and mantissa fields -- `Flt/to_str`'s own first four lines, with the mantissa test spelled differently -- so the same fact was written twice from the bit layout and could drift apart in either place.
 let flt_str(f: Flt) -> Str =
     choose
-    | Bool/not(Flt/is_finite(f)) =>
-        choose | f > +0.0 => "inf" | f < +0.0 => "-inf" | _ => "nan" end
+    | Bool/not(Flt/is_finite(f)) => choose | f > +0.0 => "inf" | f < +0.0 => "-inf" | _ => "nan" end
     | _ =>
         let raw = Flt/to_str(f);
         let unsigned =

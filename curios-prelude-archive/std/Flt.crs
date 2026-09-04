@@ -396,8 +396,8 @@ satisfy Spell(Flt) {
             | f < +0.0 => "/std/Flt/neg_inf"
             | _ => "/std/Flt/nan"
             end
+        -- Rendered only on the arm that reads it, now that no case is decided from the text.
         | _ =>
-            -- Rendered only on the arm that reads it, now that no case is decided from the text.
             let raw = to_str(f);
             let unsigned =
                 match Str/try_get(raw, 0)

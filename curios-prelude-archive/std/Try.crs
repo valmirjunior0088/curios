@@ -94,6 +94,7 @@ satisfy (
     @E: Type,
     use Monad(M),
     use Monad(N),
-    use Lift(M, N)) => Lift((A: Type) => Try(M, E, A), (A: Type) => Try(N, E, A)) {
+    use Lift(M, N),
+) => Lift((A: Type) => Try(M, E, A), (A: Type) => Try(N, E, A)) {
     lift(@A, m) = Try { Lift/lift(m.0) },
 }

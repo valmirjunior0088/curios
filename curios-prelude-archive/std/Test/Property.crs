@@ -94,7 +94,8 @@ satisfy (
     use Draw(B),
     use Spell(A),
     use Spell(B),
-    use Property(R)) => Property((A, B) -> R) {
+    use Property(R),
+) => Property((A, B) -> R) {
     probe(prop, seed, size) =
         let (a, s1) = Draw/draw(@A, seed, size);
         let (b, rest) = Draw/draw(@B, s1, size);
@@ -123,7 +124,8 @@ satisfy (
     use Spell(A),
     use Spell(B),
     use Spell(C),
-    use Property(R)) => Property((A, B, C) -> R) {
+    use Property(R),
+) => Property((A, B, C) -> R) {
     probe(prop, seed, size) =
         let (a, s1) = Draw/draw(@A, seed, size);
         let (b, s2) = Draw/draw(@B, s1, size);
@@ -164,7 +166,8 @@ satisfy (
     use Spell(B),
     use Spell(C),
     use Spell(D),
-    use Property(R)) => Property((A, B, C, D) -> R) {
+    use Property(R),
+) => Property((A, B, C, D) -> R) {
     probe(prop, seed, size) =
         let (a, s1) = Draw/draw(@A, seed, size);
         let (b, s2) = Draw/draw(@B, s1, size);
@@ -219,7 +222,8 @@ satisfy (
     use Spell(C),
     use Spell(D),
     use Spell(E),
-    use Property(R)) => Property((A, B, C, D, E) -> R) {
+    use Property(R),
+) => Property((A, B, C, D, E) -> R) {
     probe(prop, seed, size) =
         let (a, s1) = Draw/draw(@A, seed, size);
         let (b, s2) = Draw/draw(@B, s1, size);
@@ -286,7 +290,8 @@ satisfy (
     use Spell(D),
     use Spell(E),
     use Spell(F),
-    use Property(R)) => Property((A, B, C, D, E, F) -> R) {
+    use Property(R),
+) => Property((A, B, C, D, E, F) -> R) {
     probe(prop, seed, size) =
         let (a, s1) = Draw/draw(@A, seed, size);
         let (b, s2) = Draw/draw(@B, s1, size);
@@ -370,7 +375,8 @@ satisfy (
     use Spell(E),
     use Spell(F),
     use Spell(G),
-    use Property(R)) => Property((A, B, C, D, E, F, G) -> R) {
+    use Property(R),
+) => Property((A, B, C, D, E, F, G) -> R) {
     probe(prop, seed, size) =
         let (a, s1) = Draw/draw(@A, seed, size);
         let (b, s2) = Draw/draw(@B, s1, size);
@@ -465,7 +471,8 @@ satisfy (
     use Spell(F),
     use Spell(G),
     use Spell(H),
-    use Property(R)) => Property((A, B, C, D, E, F, G, H) -> R) {
+    use Property(R),
+) => Property((A, B, C, D, E, F, G, H) -> R) {
     probe(prop, seed, size) =
         let (a, s1) = Draw/draw(@A, seed, size);
         let (b, s2) = Draw/draw(@B, s1, size);
