@@ -106,6 +106,24 @@ fn listed_block(open: impl Into<String>, items: Vec<Printer>, close: &'static st
     ]))
 }
 
+/// A parenthesized **binder telescope** — a `let`, `satisfy`, `struct`, `concept` or `induct` parameter list: flat with no padding (`(a: Nat, b: Nat)`), and broken with a trailing comma and the closer on a line of its own.
+///
+/// [`listed_block`]'s shape rather than [`listed`]'s, for [`listed_block`]'s reason and one of its own. A telescope is a thing that *grows*: with the closer riding, adding a parameter is a two-line change, because the line above has to give the bracket up and take a comma. And where the declaration that follows opens a brace body — every one of these but `let` — a riding closer leaves the last parameter and the first field at one indent, with only the `)` buried mid-line to say which is which.
+///
+/// No enclosing `group`, because the extent of the group is the caller's: a `let` measures the telescope together with its `-> output` so the parameters break first and the return type gets a fresh line, while the others measure the parentheses alone.
+fn telescope(items: Vec<Printer>) -> Printer {
+    flat([
+        pure("("),
+        indent(flat([
+            soft_line(),
+            sep_flat(items, || flat([pure(","), line()])),
+            if_break("", ","),
+        ])),
+        soft_line(),
+        pure(")"),
+    ])
+}
+
 /// The wrapping counterpart to [`listed`], for a bracketed run of short interchangeable atoms: the items begin on the opening delimiter's own line and wrap across as many lines as they need, each continuation at the next indent.
 ///
 /// [`listed`] is the right shape for a structure — when one part needs its own line they all take one. A run of names is not a structure, and giving an import that treatment spends a line per name.
@@ -1246,18 +1264,7 @@ fn print_let_signature(signature: LetSignature, top: bool) -> Printer {
                 .collect::<Vec<_>>();
             let signature = match items.is_empty() {
                 true => flat([pure("()"), pure(" -> "), print_term(output)]),
-                false => group(flat([
-                    pure("("),
-                    indent(flat([
-                        soft_line(),
-                        sep_flat(items, || flat([pure(","), line()])),
-                        if_break("", ","),
-                    ])),
-                    soft_line(),
-                    pure(")"),
-                    pure(" -> "),
-                    print_term(output),
-                ])),
+                false => group(flat([telescope(items), pure(" -> "), print_term(output)])),
             };
             flat([signature, bound(body)])
         }
@@ -1477,8 +1484,7 @@ fn print_top_induct_params(params: Vec<(Plicity, String, Term)>) -> Printer {
         return pure("");
     }
 
-    listed(
-        "(",
+    group(telescope(
         params
             .into_iter()
             .map(|(plicity, name, ty)| {
@@ -1490,8 +1496,7 @@ fn print_top_induct_params(params: Vec<(Plicity, String, Term)>) -> Printer {
                 ])
             })
             .collect(),
-        ")",
-    )
+    ))
 }
 
 /// The head's arity after the name: the (mandatory) result sort, preceded by an index telescope when the inductive is indexed. `: Sort` for a plain type, `: (indices) -> Sort` for an indexed one — the spellings `parse_induct_arity` accepts, so a printed declaration round-trips.
@@ -1740,14 +1745,12 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
     } else {
         flat([
             pure(" "),
-            listed(
-                "(",
+            group(telescope(
                 item.params
                     .into_iter()
                     .map(print_func_sugar_param)
                     .collect(),
-                ")",
-            ),
+            )),
             pure(" =>"),
         ])
     };

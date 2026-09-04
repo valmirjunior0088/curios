@@ -332,3 +332,41 @@ fn replacing(lines: &[&str], index: usize, replacement: &str) -> String {
 
     format!("{}\n", out.join("\n"))
 }
+
+/// A telescope that overflows breaks the way a `let`'s already did: one binder per line, a trailing comma, and the closer dedented to the declaration's own column.
+///
+/// The closer used to ride the last binder, which left it and the first field of the brace body at one indent with only a mid-line `)` between them. `satisfy`, `struct`, `concept` and `induct` all took that shape; this pins all four against the `let` they now share it with.
+#[test]
+fn an_overflowing_telescope_dedents_its_closer() {
+    let source = concat!(
+        "use /std/{Show, Str};\n\n",
+        "pub concept Rendering(Alphabet: Type, Beta: Type, Gamma: Type, Delta: Type, Epsilon: Type, Zeta: Type): pub Type {\n",
+        "    render(Alphabet) -> Str,\n",
+        "}\n\n",
+        "pub concept Renderable(Alphabet: Type): pub Type {\n",
+        "    render(Alphabet) -> Str,\n",
+        "}\n\n",
+        "pub struct Holder(Alphabet: Type, Beta: Type, Gamma: Type, Delta: Type, Epsilon: Type, Zeta: Type): pub Type {\n",
+        "    first: Alphabet,\n",
+        "}\n\n",
+        "pub induct Choice(Alphabet: Type, Beta: Type, Gamma: Type, Delta: Type, Epsilon: Type, Zeta: Type): pub Type\n",
+        "| only(Alphabet)\n",
+        "end\n\n",
+        "satisfy (@Alphabet: Type, @Beta: Type, use Show(Alphabet), use Show(Beta), use Show(Str), use Show(Alphabet)) => Renderable(Alphabet) {\n",
+        "    render(a) = Show/show(a),\n",
+        "}\n",
+    );
+    let output = formatted(source);
+
+    for closer in [
+        "\n): pub Type {\n    render(Alphabet) -> Str,",
+        "\n): pub Type {\n    first: Alphabet,",
+        "\n): pub Type\n| only(Alphabet)",
+        "\n) => Renderable(Alphabet) {",
+    ] {
+        assert!(output.contains(closer), "missing {closer:?} in:\n{output}");
+    }
+    // Every broken telescope ends in a trailing comma, which is what keeps adding a binder a one-line change.
+    assert_eq!(output.matches("Zeta: Type,\n)").count(), 3);
+    assert_eq!(formatted(&output), output, "and the shape is idempotent");
+}
