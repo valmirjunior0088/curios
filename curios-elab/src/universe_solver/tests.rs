@@ -614,3 +614,28 @@ fn both_checkers_decide_universe_context_validity_alike() {
         "no context in the table is invalid",
     );
 }
+
+/// A declaration is generalized over a level its signature mentions, however far conversion aliased it.
+///
+/// The two sets [`UniverseSolver::finalize`] partitions are computed syntactically — the interface from the declaration's type, the internal levels from its body. Conversion aliases one meta onto another whenever two spellings of a level are forced equal, and the direction is not the signature's to choose, so the interface set can name metas that were solved away while the ones still carrying the level are reached by the body walk instead. Left on the internal side they are minimized, and the declaration comes back at a ground level rather than generalized over its own parameter — which every polymorphic caller is then refused for, by the kernel, for supplying a parameter where the callee demands a constant.
+///
+/// Measured rather than supposed: elaborating a function over a struct carrying a `Type` field put the chain at three links, with the representative in the body's set and the declaration finalizing at zero parameters. One link of following is not enough, which is what this pins — the meta a link lands on may itself be solved.
+#[test]
+fn an_interface_level_is_generalized_through_a_chain_of_aliases() {
+    let mut solver = UniverseSolver::new(0);
+    let signature = solver.fresh(UniverseRole::Generalizable, None);
+    let middle = solver.fresh(UniverseRole::Generalizable, None);
+    let carrier = solver.fresh(UniverseRole::Generalizable, None);
+
+    // The chain conversion leaves behind: the signature's meta solved onward, twice.
+    solver.assign(signature, Level::meta(middle)).unwrap();
+    solver.assign(middle, Level::meta(carrier)).unwrap();
+
+    // The body mentions the level too, so the walk that collects internal levels reaches the carrier.
+    let context = solver.finalize([signature], [carrier]).unwrap();
+
+    assert_eq!(
+        context.parameter_count, 1,
+        "the level the signature mentions is the declaration's parameter, however far it was aliased"
+    );
+}

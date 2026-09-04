@@ -1187,7 +1187,24 @@ impl UniverseSolver {
         internal: impl IntoIterator<Item = UniverseMetaId>,
     ) -> Result<UniverseContext, UniverseError> {
         curios_profile::profile!("universe::finalize");
-        let interface = interface.into_iter().collect::<BTreeSet<_>>();
+        // Follow each interface level to the metas that actually carry it. Conversion aliases one meta onto another whenever two spellings of a level are forced equal, and the direction is not the signature's to choose -- so the set the caller computed from the declaration's type can name metas that were solved away, several links back from the ones still standing. Those representatives are then reached by `universe_metas_in(&body)` instead and land on the internal side, where `minimize` takes least solutions for them; the declaration comes back at a ground level rather than generalized over a level its own signature mentions, and every polymorphic caller is refused by the kernel for supplying a parameter where it demands a constant. Following one link is not enough, because the meta a link lands on may itself be solved.
+        let mut interface = interface.into_iter().collect::<BTreeSet<_>>();
+        loop {
+            let mut followed = BTreeSet::new();
+            for meta in &interface {
+                match self.solution(*meta) {
+                    // A level solved to a constant carries no meta and needs no parameter.
+                    Some(level) => followed.extend(level.metas()),
+                    None => {
+                        followed.insert(*meta);
+                    }
+                }
+            }
+            if followed == interface {
+                break;
+            }
+            interface = followed;
+        }
         let internal = internal
             .into_iter()
             .filter(|meta| !interface.contains(meta))
