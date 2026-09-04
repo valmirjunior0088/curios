@@ -154,3 +154,34 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
         b"hi.."
     );
 }
+
+// An implicit born inside a match arm that generalizes a hypothesis over the scrutinee. `Sizes(s)` computes the size record by matching on the shape, so `z : Sizes(s)` mentions the scrutinee and `check_generalized_arm` re-assumes it under the case-specialized `{Sizes(a), Sizes(b)}` — under its *original* name, shadowing the ambient binder. `local` then held `z` twice, and every metavariable born in the arm inherited a spine with a repeated argument: `Convert::solve`'s inversion cannot invert a name reachable through two slots, so the scope check refused `Total(a, z.0)` for mentioning a hypothesis plainly in scope and `Vec/append`'s length never solved. A birth telescope keeps one entry per name, at its innermost binding.
+#[test]
+fn an_implicit_solves_in_an_arm_that_specializes_the_hypothesis_it_names() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Vec, Handle};
+
+        induct Shape: Type
+        | leaf() | node(a: Shape, b: Shape)
+        end
+
+        let Sizes(s: Shape) -> Type =
+            match s | leaf() => Nat | node(a, b) => {Sizes(a), Sizes(b)} end;
+
+        let Total(s: Shape, z: Sizes(s)) -> Nat =
+            match s | leaf() => z | node(a, b) => Total(a, z.0) + Total(b, z.1) end;
+
+        let build(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =
+            match s
+            | leaf() => Vec/replicate(z, 0)
+            | node(a, b) => Vec/append(build(a, z.0), build(b, z.1))
+            end;
+
+        let tree: Shape = Shape/node(Shape/leaf(), Shape/node(Shape/leaf(), Shape/leaf()));
+
+        /std/print(Nat/to_str(Vec/len(build(tree, (2, (3, 4))))))
+        "#),
+        b"9"
+    );
+}

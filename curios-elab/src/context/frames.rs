@@ -500,7 +500,23 @@ impl Frames {
             return (telescope.clone(), spine.clone());
         }
 
-        let telescope = Rc::new(self.local[self.base_locals()..].to_vec());
+        // One entry per name, at its innermost binding. `check_generalized_arm` re-`assume`s a generalized hypothesis under its case-specialized type and its *original* name, deliberately shadowing the ambient binder, so `local` can hold the same `Free` twice. Γ is a context rather than a stack of bindings: a shadowed entry is unreachable by construction, and leaving it in gives every metavariable born in such an arm a spine with a repeated argument — which `Convert::solve`'s inversion cannot invert, since a name reachable through two slots is not provably determined. The candidate is then refused by the scope check for mentioning a hypothesis that is plainly in scope, and the implicit surfaces as never solved.
+        //
+        // Keeping the *last* occurrence keeps the telescope well-scoped: everything a generalized hypothesis's type can mention was itself generalized — that is what the generalization set is — so every mentioner is re-assumed after it, and no surviving entry refers to the occurrence that was dropped.
+        let locals = &self.local[self.base_locals()..];
+        let telescope = Rc::new({
+            let mut innermost = HashMap::with_capacity(locals.len());
+            for (index, (name, _)) in locals.iter().enumerate() {
+                innermost.insert(name, index);
+            }
+
+            locals
+                .iter()
+                .enumerate()
+                .filter(|(index, (name, _))| innermost[name] == *index)
+                .map(|(_, entry)| entry.clone())
+                .collect::<Vec<_>>()
+        });
 
         let spine = Rc::new(
             telescope
