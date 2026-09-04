@@ -564,8 +564,41 @@ fn region_monad(context: &mut Context, region: &Term, span: Option<Span>) -> Opt
     let applied = Term::apply(monad.clone(), [value]);
     match convert(context, &sort, &applied, region) {
         Ok(true) => Some(monad),
-        _ => None,
+        _ => abstracted_monad(context, region, &sort),
     }
+}
+
+/// The region's monad read off the application directly, by abstracting its final argument — the fallback for a region whose *value slot* is still unsolved.
+///
+/// **Which is not the same as a region with no monad, and reporting it as one refused a program the language accepts.** A lambda handed to `File/with` checks against `(File) -> Try(Io, Io/Error, A)` with `A` the caller's implicit, so its region is `Try(Io, Io/Error, ?)`: head rigid, both context arguments rigid, only the slot the `!` itself will solve still open. Asking [`convert`] for it leaves both the abstracted slot and the argument flexible and it declines, so `Try(Io, Io/Error, ?), which is no monad` was reported at the `!` — and annotating the enclosing type, which changes nothing about the monad, made the same program compile.
+///
+/// The rule is the one `documentation/syntax.md` already states for witness resolution — "an under-applied shape such as `M(A) = State(S, Nat)` infers `M` right-biasedly, as `(A) => State(S, A)`: the final argument is the abstracted one". This applies it where conversion could not guess it.
+///
+/// Reached only after conversion has failed, so it turns refusals into readings and never changes a region that already elaborates. The head must be keyable — [`monad_shape`]'s own condition — so a flexible or computed head still declines here rather than abstracting something that names no monad; whether what is abstracted *is* a monad stays witness resolution's answer, reported as the missing `Monad` witness it is.
+fn abstracted_monad(context: &mut Context, region: &Term, sort: &Term) -> Option<Term> {
+    monad_shape(context, region)?;
+    let binder = context.fresh(None);
+    let slot = Term::free_var(&binder);
+
+    // The value slot is the last *parameter*, which is where [`monad_shape`] reads the context arguments from too — so the two agree about which argument a right-biased abstraction takes, by reading the same field.
+    let body = match &**region {
+        Subterm::StructType(struct_type) => {
+            let mut struct_type = struct_type.clone();
+            *struct_type.params.last_mut()? = slot;
+            Term::from(Subterm::StructType(struct_type))
+        }
+        Subterm::InductType(induct_type) => {
+            let mut induct_type = induct_type.clone();
+            *induct_type.params.last_mut()? = slot;
+            Term::from(Subterm::InductType(induct_type))
+        }
+        _ => return None,
+    };
+
+    Some(Term::func_marked(
+        [(Plicity::Explicit, binder, sort.clone())],
+        body,
+    ))
 }
 
 /// `action` wrapped in `/syn/Lift`'s `lift`, whose `use` slot resolves the declared embedding into the region or reports the missing edge; the wrapper takes the action's own span, or `fallback`, so the report anchors where the action was written.

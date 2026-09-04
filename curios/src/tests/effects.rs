@@ -2,7 +2,7 @@
 //!
 //! What each vocabulary *is* stays with its own section below. What they share is the shape these tests pin: a region's monad is read from its expected type, never inferred from the action, and an embedding across monads exists only where a `/syn/Lift` witness declares one.
 
-use super::{run, typecheck};
+use super::{error, run, typecheck};
 
 // === The `Io` vocabulary: constructing, sequencing, and forcing descriptions. ====
 
@@ -653,4 +653,51 @@ fn a_long_sequencing_chain_compiles_and_runs() {
     }
     source.push_str("print(\"done\\n\")");
     assert_eq!(run(&source), format!("{}done\n", "x".repeat(24)).as_bytes());
+}
+
+/// A `!` reads its region's monad from a type whose *value slot* is still open, which is what a lambda checked against a caller's signature always has.
+///
+/// The region here is `Try(Io, Io/Error, ?)`: rigid head, rigid context arguments, and only the slot the `!` itself solves left open. It was refused as `which is no monad` — a message that was wrong twice, since the type is one whose monad is plainly `(X) => Try(Io, Io/Error, X)` and it was the reading, not the monad, that was missing. Annotating the enclosing result type, which changes nothing about the monad, made the identical program compile. `/std/File/with` and `/std/tcp/Socket/with` are spelled exactly this way, so no bracket body could sequence without an annotation.
+#[test]
+fn a_bang_reads_its_monad_where_only_the_value_slot_is_open() {
+    let source = r#"
+        use /std/{Try, Io, Nat, Str};
+        let take(@A: Type, body: (Nat) -> Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
+            body(1);
+        let outcome = Try/run(take((n) =>
+            let a = Try/pure(@Io, @Io/Error, n)!;
+            Try/pure(a + 1)))!;
+        match outcome
+        | success(v) => /std/print(Nat/to_str(v))
+        | failure(_) => /std/print("error")
+        end
+        "#;
+    assert_eq!(run(source), b"2");
+}
+
+/// The two refusals the reading above must not have swallowed: a region whose type can never name a monad, and one whose type is never determined at all.
+#[test]
+fn a_region_that_names_no_monad_is_still_refused() {
+    let rigid = error(
+        r#"
+        use /std/{Bool, Str, print};
+        let probe(tag: Str, r: Bool) -> Bool =
+            let _ = print(tag)!;
+            r;
+        /std/print("x")
+        "#,
+    );
+    assert!(rigid.contains("no monad"), "unexpected error: {rigid}");
+
+    let undetermined = error(
+        r#"
+        use /std/{Try, Io, Nat};
+        let go = Try/run((() => let a = Try/pure(@Io, @Io/Error, 1)!; Try/pure(a + 1))())!;
+        /std/print("ok")
+        "#,
+    );
+    assert!(
+        undetermined.contains("never determined"),
+        "unexpected error: {undetermined}"
+    );
 }
