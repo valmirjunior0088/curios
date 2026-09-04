@@ -1,9 +1,9 @@
 use {
     super::{
         Context, EmissionClosure, EmissionClosureName, EmissionData, EmissionFunction,
-        EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter, RopeEmitter, Table,
-        bytes_sub_type, cell_sub_type, elems_sub_type, flt_sub_type, rope_base_sub_type,
-        rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
+        EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter, ImmediateLayout,
+        RopeEmitter, Table, bytes_sub_type, cell_sub_type, elems_sub_type, flt_sub_type,
+        rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
     },
     crate::CpsSlot,
     curios_abi::{ENTRY, EXIT, Namespace, WireType},
@@ -420,21 +420,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_let_bin_data(&mut self, name: &'a EmissionValueName, grain: Grain, value: &PackedBin) {
-        // A small packed constant is its canonical immediate — a self-contained constant initializer, no data segment, no start-function code — exactly as the inline literal path emits it. Leaving this path on the leaf would mint the one non-canonical small value in the program, and the immediate equality would answer false against it.
-        let envelope = match grain {
-            Grain::X => 3,
-            Grain::B => 26,
-        };
-        if value.len(grain) <= envelope {
-            let len_shift = match grain {
-                Grain::X => 29,
-                Grain::B => 26,
-            };
-            let bytes = value.to_packed_bytes();
-            let packed = bytes.iter().enumerate().fold(
-                (value.len(grain) as i32) << len_shift,
-                |packed, (index, &byte)| packed | (byte as i32) << (8 * index),
-            );
+        // A small packed constant is its canonical immediate — a self-contained constant initializer, no data segment, no start-function code — exactly as the inline literal path emits it. Leaving this path on the leaf would mint the one non-canonical small value in the program, and the immediate equality would answer false against it, which is why both paths pack through one layout.
+        let layout = ImmediateLayout::of(grain);
+        if layout.holds(value.len(grain)) {
+            let packed = layout.pack(value.len(grain), &value.to_packed_bytes());
             let mut init_expr: curios_wasm::Expr = Default::default();
             init_expr.push(curios_wasm::Instr::I32Const { value: packed });
             init_expr.push(curios_wasm::Instr::RefI31);

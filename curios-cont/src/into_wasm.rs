@@ -35,6 +35,9 @@ use expr_emitter::*;
 mod hoist;
 use hoist::*;
 
+mod immediate;
+use immediate::*;
+
 mod module_emitter;
 use module_emitter::*;
 

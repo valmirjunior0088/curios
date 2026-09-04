@@ -1,8 +1,8 @@
 use {
     super::{
         BlockData, CodeEmitter, Context, EmissionArg, EmissionBlockName, EmissionBody,
-        EmissionData, EmissionValue, EmissionValueName, Frame, LayoutItem, LoadAs, LocalData,
-        region_layout, slot_zero_instrs,
+        EmissionData, EmissionValue, EmissionValueName, Frame, ImmediateLayout, LayoutItem, LoadAs,
+        LocalData, region_layout, slot_zero_instrs,
     },
     curios_utilities::{Grain, recurse},
     std::collections::{BTreeMap, HashMap, HashSet},
@@ -142,21 +142,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 });
             }
             EmissionData::Bin(grain, value) => {
-                // A small packed literal is its canonical immediate, computed here at compile time: the byte grain's length in the top 2 payload bits over up to 3 bytes, the bit grain's in the top 5 over up to 26 bits, both LSB-first.
-                let envelope = match grain {
-                    Grain::X => 3,
-                    Grain::B => 26,
-                };
-                if value.len(*grain) <= envelope {
-                    let len_shift = match grain {
-                        Grain::X => 29,
-                        Grain::B => 26,
-                    };
-                    let bytes = value.to_packed_bytes();
-                    let packed = bytes.iter().enumerate().fold(
-                        (value.len(*grain) as i32) << len_shift,
-                        |packed, (index, &byte)| packed | (byte as i32) << (8 * index),
-                    );
+                // A small packed literal is its canonical immediate, computed here at compile time rather than through the `norm` helper the emitted code would call.
+                let layout = ImmediateLayout::of(*grain);
+                if layout.holds(value.len(*grain)) {
+                    let packed = layout.pack(value.len(*grain), &value.to_packed_bytes());
                     self.emit_instrs([
                         curios_wasm::Instr::I32Const { value: packed },
                         curios_wasm::Instr::RefI31,

@@ -1,5 +1,8 @@
 use {
-    super::{Context, EmissionCode, EmissionValueName, LoadAs, RopeData, Table, box_instr},
+    super::{
+        Context, EmissionCode, EmissionValueName, ImmediateLayout, LoadAs, RopeData, Table,
+        box_instr,
+    },
     crate::{CpsIntrinsic, CpsSlot, Repr},
     curios_utilities::Grain,
 };
@@ -526,10 +529,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
     /// Lower a packed length with the immediate split: an i31 answers its length field's shift, a rope its length struct field. The test replaces the box call a helper entry would pay, and no memory is touched on the immediate arm.
     fn emit_bin_len(&mut self, grain: Grain, carrier: &'a EmissionValueName) {
-        let len_shift = match grain {
-            Grain::X => 29,
-            Grain::B => 26,
-        };
+        let len_shift = ImmediateLayout::of(grain).len_shift;
         let rope = self.context.table().bin_rope();
         self.emit_instrs(self.context.load_value_instrs(carrier, LoadAs::NonNull));
         self.emit_instr(curios_wasm::Instr::RefTest {
@@ -570,10 +570,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         carrier: &'a EmissionValueName,
         index: &'a EmissionValueName,
     ) {
-        let len_shift = match grain {
-            Grain::X => 29,
-            Grain::B => 26,
-        };
+        let len_shift = ImmediateLayout::of(grain).len_shift;
         let rope = self.context.table().bin_rope();
         let read = match grain {
             Grain::X => self.context.table().bytes_read_func(),
@@ -763,10 +760,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         carrier: &'a EmissionValueName,
         elem_instrs: Vec<curios_wasm::Instr>,
     ) {
-        let (len_shift, payload_mask, envelope, elem_mask) = match grain {
-            Grain::X => (29, 0x00FF_FFFF, 3, 0xFF),
-            Grain::B => (26, 0x03FF_FFFF, 26, 1),
-        };
+        let layout = ImmediateLayout::of(grain);
+        let (len_shift, payload_mask, envelope, elem_mask) = (
+            layout.len_shift,
+            layout.payload_mask(),
+            layout.envelope,
+            layout.elem_mask(),
+        );
         let rope = self.context.table().bin_rope();
         let boxf = match grain {
             Grain::X => self.context.table().bytes_box_func(),
@@ -1619,11 +1619,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsic::BinChunk(grain, arity) => {
                 let rope = self.context.table().bin_rope();
                 // A small chunk is its immediate, built by ORing each (wrapped) element at its constant slot — no allocation, no call. The envelope and the slot stride are the grain's.
-                let (envelope, len_shift, elem_mask, stride) = match grain {
-                    Grain::X => (3, 29, 0xFF, 8),
-                    Grain::B => (26, 26, 1, 1),
-                };
-                if arity <= envelope {
+                let layout = ImmediateLayout::of(grain);
+                let (len_shift, elem_mask, stride) =
+                    (layout.len_shift, layout.elem_mask(), layout.stride());
+                if layout.holds(arity) {
                     self.emit_instr(curios_wasm::Instr::I32Const {
                         value: (arity as i32) << len_shift,
                     });

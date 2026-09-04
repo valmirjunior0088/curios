@@ -17,7 +17,7 @@ mod shorthand;
 use shorthand::*;
 
 use {
-    super::{RopeData, Table},
+    super::{ImmediateLayout, RopeData, Table},
     curios_utilities::Grain,
 };
 
@@ -1257,7 +1257,13 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
     /// `$bytes/box` / `$bits/box (ref null any) -> (ref $rope/bin)`: a small-canonical packed value as a rope. An immediate — the byte grain's length in the top 2 payload bits over up to 3 bytes, the bit grain's in the top 5 over up to 26 bits, both LSB-first — is materialised into a fresh exact leaf; anything else casts to the rope it must be, trapping on null exactly as the cast this call replaced did. The payload is masked before byte extraction so the length field can never bleed into a stored byte.
     pub(crate) fn emit_box_func(&mut self, grain: Grain, func_name: curios_wasm::FuncName) {
-        let (len_shift, payload_mask, slots, unit) = immediate_layout(grain);
+        let layout = ImmediateLayout::of(grain);
+        let (len_shift, payload_mask, slots, unit) = (
+            layout.len_shift,
+            layout.payload_mask(),
+            layout.slots(),
+            layout.unit(),
+        );
         let rope = self.table.bin_rope();
         let r = curios_wasm::LocalName::from("r");
         let v = curios_wasm::LocalName::from("v");
@@ -1542,11 +1548,13 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         func_name: curios_wasm::FuncName,
         force_func: curios_wasm::FuncName,
     ) {
-        let (len_shift, _, slots, unit) = immediate_layout(grain);
-        let envelope = match grain {
-            Grain::X => 3,
-            Grain::B => 26,
-        };
+        let layout = ImmediateLayout::of(grain);
+        let (len_shift, slots, unit, envelope) = (
+            layout.len_shift,
+            layout.slots(),
+            layout.unit(),
+            layout.envelope,
+        );
         let rope = self.table.bin_rope();
         let r = curios_wasm::LocalName::from("r");
         let p = curios_wasm::LocalName::from("p");

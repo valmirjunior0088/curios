@@ -1,8 +1,6 @@
-//! The shorthands the rope emitters write wasm in: the two reference-type constructors, the local get/set pair, the cast, the struct field accessors, the immediate layout, and the typed null.
+//! The shorthands the rope emitters write wasm in: the two reference-type constructors, the local get/set pair, the cast, the struct field accessors, and the typed null.
 //!
 //! Nothing here decides anything — each is one `curios_wasm` value spelled in one line instead of four. They live apart from the emitters only so the emitters read as the instruction sequences they are.
-
-use curios_utilities::Grain;
 
 pub(super) fn concrete_ref(
     type_name: curios_wasm::TypeName,
@@ -56,14 +54,6 @@ pub(super) fn field_set(
     curios_wasm::Instr::StructSet {
         type_name: type_name.clone(),
         field_name: field_name.clone(),
-    }
-}
-
-/// One packed grain's immediate layout: where the length lives, what masks the payload, how many payload bytes can be occupied, and how many length units one byte holds.
-pub(super) fn immediate_layout(grain: Grain) -> (i32, i32, i32, i32) {
-    match grain {
-        Grain::X => (29, 0x00FF_FFFF, 3, 1),
-        Grain::B => (26, 0x03FF_FFFF, 4, 8),
     }
 }
 
