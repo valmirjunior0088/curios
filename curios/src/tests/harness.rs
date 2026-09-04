@@ -278,7 +278,11 @@ fn a_bare_bang_in_a_test_body_is_refused() {
         /std/print("ran\n")
         "#,
     );
-    assert!(error.contains("Monad"), "unexpected error: {error}");
+    // By the fault it names — the region's type, and that the type is no monad — rather than by the concept's spelling: the diagnostic says "no monad" in prose, and pinning the capitalized name made a reworded sentence read as a missing refusal.
+    assert!(
+        error.contains("Test") && error.contains("no monad"),
+        "unexpected error: {error}"
+    );
 }
 
 /// Whether any optimized function's debug name starts with `needle` — presence of a definition in the arena, by the name erasure stamped.
