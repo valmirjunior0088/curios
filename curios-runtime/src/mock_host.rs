@@ -352,8 +352,8 @@ enum MockResource {
 
 /// The scripted, in-memory `Host` used by the test suite — the mirror of `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and read what the run produced through the [`MockIo`] handle `build` returns.
 pub struct MockHost {
-    /// Scripted stdin, pre-joined and newline-terminated; `read(Handle::Stdin, …)` drains its front and reports `Status::Eof` once it runs dry.
-    input: Mutex<VecDeque<u8>>,
+    /// Scripted stdin, served chunk by chunk as the terminal or the pipe behind it delivers: `read(Handle::Stdin, …)` drains the front chunk, answers `Status::WouldBlock` until a `poll` arms the next one, and reports `Status::Eof` once the script is spent. A script of lines is one chunk, armed from the start, so it reads the way it always did; a multi-chunk script is what puts a fiber's park-poll-resume path over standard input under test, which a host that is always ready never could.
+    input: Mutex<Chunked>,
     /// Every byte written to stdout and stderr, concatenated in write order — the streams are not distinguished. Shared with [`MockIo::output`].
     output: Arc<Mutex<Vec<u8>>>,
     /// The in-memory filesystem backing `open`/`read`/`write`/`close`. Shared with [`MockIo::file`].
@@ -608,7 +608,7 @@ impl HostOps for MockHost {
     }
 
     fn poll(&self, handles: &[Handle], events: &[Poll], _: i32) -> Vec<Poll> {
-        // Readiness is what the script says is due, and never a wait: the standard streams and files mirror the requested interest, a scripted stream is armed for its next chunk and reported readable (its end counts as readable, as an OS reports a closed peer) plus writable where asked, and an unknown handle reports nothing. Arming here is what makes one `poll` one chunk of progress, so a scheduler's park-poll-resume path is taken exactly once per chunk boundary.
+        // Readiness is what the script says is due, and never a wait: the write ends and files mirror the requested interest, standard input and a scripted stream are armed for their next chunk and reported readable (a stream's end counts as readable, as an OS reports a closed peer) plus writable where asked, and an unknown handle reports nothing. Arming here is what makes one `poll` one chunk of progress, so a scheduler's park-poll-resume path is taken exactly once per chunk boundary.
         let mut table = self.table.lock().unwrap();
 
         handles
@@ -619,7 +619,13 @@ impl HostOps for MockHost {
                 let readable = Poll::from_bits(event::READ | (requested.bits() & event::WRITE));
 
                 match handle {
-                    Handle::Stdin | Handle::Stdout | Handle::Stderr => requested,
+                    // Standard input is armed like a scripted stream, so one `poll` is one chunk of progress and a fiber parked on `WouldBlock` resumes into the next chunk. The write ends have nothing to arm.
+                    Handle::Stdin => {
+                        self.input.lock().unwrap().arm();
+
+                        requested
+                    }
+                    Handle::Stdout | Handle::Stderr => requested,
                     Handle::Other(_) => match table.get_mut(handle) {
                         Some(MockResource::Outbound(stream) | MockResource::Piped(stream)) => {
                             stream.arm();
@@ -650,18 +656,8 @@ impl HostOps for MockHost {
 
     fn read(&self, io: Handle, count: u32) -> (Status, Vec<u8>) {
         match &io {
-            Handle::Stdin => {
-                // Scripted stdin is one pre-joined buffer; serve up to `count` of its front and report EOF once it is drained (the sender is fixed at build time, so a dry buffer is end-of-input, never a wait).
-                let mut input = self.input.lock().unwrap();
-
-                if input.is_empty() {
-                    return (Status::Eof, vec![]);
-                }
-
-                let served = input.len().min(count as usize);
-
-                return (Status::Ok, input.drain(..served).collect());
-            }
+            // Standard input is a scripted stream like any other: the front chunk, `WouldBlock` between chunks, `Eof` once the script is spent. `OsHost` gates its own stdin read by a zero-timeout poll and answers `WouldBlock` when nothing is there, so a script that hands the wait back is the faithful mirror rather than a convenience.
+            Handle::Stdin => return self.input.lock().unwrap().read(count),
             Handle::Other(_) => {}
             // stdout/stderr are not readable.
             _ => return (Status::Eof, vec![]),
@@ -960,6 +956,7 @@ impl MockIo {
 #[derive(Default)]
 pub struct MockHostBuilder {
     input: Vec<u8>,
+    input_chunks: Vec<Vec<u8>>,
     files: HashMap<Vec<u8>, Vec<u8>>,
     endpoints: HashMap<Vec<u8>, Vec<Vec<u8>>>,
     inbound: VecDeque<Vec<Vec<u8>>>,
@@ -1030,11 +1027,18 @@ impl MockHostBuilder {
         self
     }
 
-    /// Append several newline-terminated lines to scripted stdin, in order.
+    /// Append several newline-terminated lines to scripted stdin, in order. However many calls write them, the lines are one chunk and are due from the start, so a reader of them never waits.
     pub fn stdin_lines<L: AsRef<[u8]>, I: IntoIterator<Item = L>>(mut self, lines: I) -> Self {
         for line in lines {
             self = self.stdin_line(line);
         }
+
+        self
+    }
+
+    /// Append the chunks standard input delivers, verbatim: nothing is terminated for you, and each chunk is served only once a `poll` has armed it, so a reader parks between them. This is how a raw-mode program's keystrokes are scripted — one chunk per burst, `x[0x1b, 0x5b, 0x41]` for an arrow key — and the only way a read of standard input that waits is put under test. Whatever [`stdin_lines`](Self::stdin_lines) wrote precedes these, as the one chunk it is.
+    pub fn stdin_chunks<C: AsRef<[u8]>>(mut self, chunks: Vec<C>) -> Self {
+        self.input_chunks.extend(chunk_list(chunks));
 
         self
     }
@@ -1160,7 +1164,7 @@ impl MockHostBuilder {
         };
 
         let host = MockHost {
-            input: Mutex::new(self.input.into()),
+            input: Mutex::new(Chunked::new(stdin_script(self.input, self.input_chunks))),
             output,
             files,
             table: Mutex::new(Table::new()),
@@ -1183,6 +1187,19 @@ impl MockHostBuilder {
 
         (host, io)
     }
+}
+
+/// The chunk script standard input serves: the newline-terminated lines first, as the single armed chunk they have always been, then each scripted chunk in its own right. An empty prefix contributes nothing, so a chunk script begins at its own first chunk.
+fn stdin_script(lines: Vec<u8>, chunks: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+    let mut script = Vec::with_capacity(chunks.len() + 1);
+
+    if !lines.is_empty() {
+        script.push(lines);
+    }
+
+    script.extend(chunks);
+
+    script
 }
 
 /// The owned chunk list a script's borrowed chunks become.

@@ -1,4 +1,4 @@
-//! The scripted host's contract: handles miss loudly after close, and a chunked stream hands the wait back to its reader between chunks.
+//! The scripted host's contract: handles miss loudly after close, and a chunked stream — standard input among them — hands the wait back to its reader between chunks.
 
 use {
     super::{super::host::*, EBUSY, MockHost},
@@ -187,4 +187,42 @@ fn the_root_directory_exists_holds_absolute_paths_and_cannot_be_removed() {
     assert!(matches!(host.remove_file(b"/x/f"), Status::Ok));
     assert!(matches!(host.remove_dir(b"/x"), Status::Ok));
     assert!(matches!(host.remove_dir(b"/"), Status::Other(EBUSY)));
+}
+
+#[test]
+fn scripted_stdin_serves_one_chunk_then_would_blocks_until_polled() {
+    let (host, _io) = MockHost::builder()
+        .stdin_chunks(vec![b"\x1b[A".as_slice(), b"q".as_slice()])
+        .build();
+
+    // The first chunk is due from the start, and it is the bytes the script wrote — no terminator was added to a key.
+    assert!(matches!(host.read(Handle::Stdin, 8), (Status::Ok, bytes) if bytes == b"\x1b[A"));
+    assert!(matches!(
+        host.read(Handle::Stdin, 8),
+        (Status::WouldBlock, bytes) if bytes.is_empty()
+    ));
+
+    // A poll arms the next chunk and reports standard input readable, and only then does the read serve it: the park-poll-resume path a keystroke arriving later takes.
+    let ready = host.poll(&[Handle::Stdin], &[Poll::from_bits(event::READ)], -1);
+    assert_eq!(ready[0].bits() & event::READ, event::READ);
+    assert!(matches!(host.read(Handle::Stdin, 8), (Status::Ok, bytes) if bytes == b"q"));
+
+    // Past the last chunk the script is spent, which is end-of-input.
+    assert!(matches!(
+        host.read(Handle::Stdin, 8),
+        (Status::Eof, bytes) if bytes.is_empty()
+    ));
+}
+
+#[test]
+fn scripted_stdin_lines_are_one_chunk_that_never_waits() {
+    let (host, _io) = MockHost::builder().stdin_lines(["one", "two"]).build();
+
+    // Lines are the one armed chunk they have always been, so a reader crosses from one to the next without a poll between them.
+    assert!(matches!(host.read(Handle::Stdin, 4), (Status::Ok, bytes) if bytes == b"one\n"));
+    assert!(matches!(host.read(Handle::Stdin, 4), (Status::Ok, bytes) if bytes == b"two\n"));
+    assert!(matches!(
+        host.read(Handle::Stdin, 4),
+        (Status::Eof, bytes) if bytes.is_empty()
+    ));
 }
