@@ -13,10 +13,12 @@ pub struct Cell: pub Type {
 
 satisfy Equal(Cell);
 
-pub let blank: Cell = Cell { symbol = " ", style = Style/plain };
+pub let blank: Cell =
+    Cell { symbol = " ", style = Style/plain };
 
 -- The second half of a double-width symbol: no text, so the renderer emits nothing for it and the column the wide symbol already covered is not written twice.
-pub let continuation: Cell = Cell { symbol = "", style = Style/plain };
+pub let continuation: Cell =
+    Cell { symbol = "", style = Style/plain };
 
 -- One cell of `s` in `style`. Nothing here checks that `s` is one symbol wide; `Tui/Image/text` is where a string becomes cells and is where the measurement happens.
 pub let of_str(style: Style, s: Str) -> Cell =

@@ -16,19 +16,50 @@ pub use Color/*;
 -- The proof payload is irrelevant, so the derived comparison is the index comparison.
 satisfy Equal(Color);
 
-pub let black: Color = Color/ansi(0);
-pub let red: Color = Color/ansi(1);
-pub let green: Color = Color/ansi(2);
-pub let yellow: Color = Color/ansi(3);
-pub let blue: Color = Color/ansi(4);
-pub let magenta: Color = Color/ansi(5);
-pub let cyan: Color = Color/ansi(6);
-pub let white: Color = Color/ansi(7);
-pub let bright_black: Color = Color/ansi(8);
-pub let bright_red: Color = Color/ansi(9);
-pub let bright_green: Color = Color/ansi(10);
-pub let bright_yellow: Color = Color/ansi(11);
-pub let bright_blue: Color = Color/ansi(12);
-pub let bright_magenta: Color = Color/ansi(13);
-pub let bright_cyan: Color = Color/ansi(14);
-pub let bright_white: Color = Color/ansi(15);
+pub let black: Color =
+    Color/ansi(0);
+
+pub let red: Color =
+    Color/ansi(1);
+
+pub let green: Color =
+    Color/ansi(2);
+
+pub let yellow: Color =
+    Color/ansi(3);
+
+pub let blue: Color =
+    Color/ansi(4);
+
+pub let magenta: Color =
+    Color/ansi(5);
+
+pub let cyan: Color =
+    Color/ansi(6);
+
+pub let white: Color =
+    Color/ansi(7);
+
+pub let bright_black: Color =
+    Color/ansi(8);
+
+pub let bright_red: Color =
+    Color/ansi(9);
+
+pub let bright_green: Color =
+    Color/ansi(10);
+
+pub let bright_yellow: Color =
+    Color/ansi(11);
+
+pub let bright_blue: Color =
+    Color/ansi(12);
+
+pub let bright_magenta: Color =
+    Color/ansi(13);
+
+pub let bright_cyan: Color =
+    Color/ansi(14);
+
+pub let bright_white: Color =
+    Color/ansi(15);
