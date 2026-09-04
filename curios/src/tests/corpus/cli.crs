@@ -1,4 +1,8 @@
--- `/std/Cli`: the specification a program declares, the record computed from it, and the grammar a line is read by, and the screens it answers with.
+-- `/std/Cli`: the specification a program declares, the record computed from it, the grammar a line is read by, the screens it answers with, and how a subcommand is chosen.
 mod spec;
 
 mod parse;
+
+mod render;
+
+mod subcommand;
