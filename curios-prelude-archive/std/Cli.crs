@@ -523,3 +523,124 @@ pub let parse(spec: List(Arg), argv: List(Str), versioned: Bool) -> Outcome(spec
             end
         end
     end;
+
+-- The placeholder an entry stands behind in the usage line and the option rows: a positional is its own name shouted, an option is its reader's metavariable, and a flag has none.
+let shout(s: Str) -> Str =
+    Str/flatten(List/map(Str/to_list(s), (c) => Str/of_char(Char/to_ascii_upper(c))));
+
+let metavar_of(k: Kind) -> Option(Str) =
+    match k
+    | flag() => Option/none()
+    | option(v, _) => Option/some(v.metavar)
+    | many(v) => Option/some(v.metavar)
+    | positional(v) => Option/none()
+    | rest(v) => Option/none()
+    end;
+
+-- `Usage: name [OPTIONS] <ROOT> [REST]...`, with the bracket telling required from collected.
+let placeholder(a: Arg) -> Option(Str) =
+    match a.kind
+    | positional(_) => Option/some(Str/flatten(["<", shout(a.long), ">"]))
+    | rest(_) => Option/some(Str/flatten(["[", shout(a.long), "]..."]))
+    | _ => Option/none()
+    end;
+
+-- Walked by hand rather than through `List/filter_map` and `List/map`: those carry two type parameters, and `Arg` sits a universe above `Str` because it reaches a `Type` through `Kind` and `Value`. The elaborator leaves one of the two instance levels generalized where the argument's is concrete, and the kernel refuses the instance it cannot verify; a written walk commits to none. `List/any` below is fine -- it has one parameter and nothing to leave undecided.
+let placeholders(spec: List(Arg)) -> List(Str) =
+    match spec
+    | [] => []
+    | [a, ..more] =>
+        match placeholder(a)
+        | some(p) => [p, ..placeholders(more)]
+        | none() => placeholders(more)
+        end
+    end;
+
+let positional_rows(spec: List(Arg)) -> List({Str, Str}) =
+    match spec
+    | [] => []
+    | [a, ..more] =>
+        match placeholder(a)
+        | some(p) => [(p, a.help), ..positional_rows(more)]
+        | none() => positional_rows(more)
+        end
+    end;
+
+let option_rows(spec: List(Arg)) -> List({Str, Str}) =
+    match spec
+    | [] => []
+    | [a, ..more] =>
+        match is_positional(a.kind) || is_rest(a.kind)
+        | true => option_rows(more)
+        | false => [(option_head(a), a.help), ..option_rows(more)]
+        end
+    end;
+
+let command_rows(subs: List(Cli)) -> List({Str, Str}) =
+    match subs | [] => [] | [c, ..more] => [(c.name, c.about), ..command_rows(more)] end;
+
+let has_options(spec: List(Arg)) -> Bool =
+    List/any(spec, (a) => Bool/not(is_positional(a.kind) || is_rest(a.kind)));
+
+pub let usage(cli: Cli) -> Str =
+    let head =
+        match has_options(cli.args) | true => [cli.name, "[OPTIONS]"] | false => [cli.name] end;
+    let tail = placeholders(cli.args);
+    let commands = match cli.commands | [] => [] | [_, .._] => ["<COMMAND>"] end;
+    Str/flatten(["Usage: ", Str/join(" ", List/flatten([head, tail, commands]))]);
+
+-- One option row's left column: `-v, --verbose`, or four spaces where there is no short, so the long names line up whether or not their neighbours have one.
+let option_head(a: Arg) -> Str =
+    let short =
+        match a.short | some(c) => Str/flatten(["-", Str/of_char(c), ", "]) | none() => "    " end;
+    let value =
+        match metavar_of(a.kind) | some(m) => Str/flatten([" <", m, ">"]) | none() => "" end;
+    Str/flatten([short, "--", a.long, value]);
+
+-- A section is its rows padded to the widest left column in *that* section, two spaces before the help. Per section rather than across all three: a lone `<ROOT>` beside a long option row would otherwise carry the option column's padding into a heading it has nothing to do with. An empty section prints nothing at all rather than a bare heading.
+let widest(rows: List({Str, Str})) -> Nat =
+    List/fold(rows, 0, ((left, _), so_far) => Nat/max(Str/len(left), so_far));
+
+let section(heading: Str, rows: List({Str, Str})) -> List(Str) =
+    match rows
+    | [] => []
+    | [_, .._] =>
+        let width = widest(rows);
+        let render(row: {Str, Str}) -> Str =
+            Str/flatten(["  ", Str/pad_end(row.0, width, ' '), "  ", row.1, "\n"]);
+        List/flatten([[heading, "\n"], List/map(rows, render), ["\n"]])
+    end;
+
+-- The two rows every command answers, whatever it declares. They are in the help because `main` answers them, and `WellFormed` reserves their names so nothing can collide with them.
+let builtin_rows(cli: Cli) -> List({Str, Str}) =
+    let help_row: {Str, Str} = ("-h, --help", "Print help");
+    match cli.version
+    | none() => [help_row]
+    | some(_) => [help_row, ("    --version", "Print version")]
+    end;
+
+pub let help(cli: Cli) -> Str =
+    let arguments = positional_rows(cli.args);
+    let options = List/flatten([option_rows(cli.args), builtin_rows(cli)]);
+    let commands = command_rows(cli.commands);
+    Str/flatten(
+        List/flatten(
+            [
+                [cli.about, "\n\n", usage(cli), "\n\n"],
+                section("Arguments:", arguments),
+                section("Options:", options),
+                section("Commands:", commands)]));
+
+let complaint(f: Failure) -> Str =
+    match f
+    | unknown_option(t) => Str/flatten(["unexpected argument '", t, "'"])
+    | missing_value(n) => Str/flatten(["a value is required for '--", n, "'"])
+    | missing_required(n) => Str/flatten(["the argument '", shout(n), "' is required"])
+    | unexpected(t) => Str/flatten(["unexpected argument '", t, "'"])
+    | bad_value(n, r) => Str/flatten(["invalid value for '--", n, "': ", r])
+    end;
+
+pub let report(cli: Cli, f: Failure) -> Str =
+    Str/flatten(
+        ["error: ", complaint(f), "\n\n", usage(cli), "\n\nFor more information, try '--help'.\n"]);
+-- There is no `main` yet, and the gap is deliberate rather than forgotten: an entry handing `parse(cli.args, ...)` to `cli.run` is refused by the kernel, which reads the instance levels of a specification-indexed function applied to a `Type`-carrying field as constants where the caller supplies its own parameters. Until the elaborator settles which of a declaration's interface levels may be minimized and which must be generalized, a program spells the six lines itself over `parse`, `help` and `report`.
