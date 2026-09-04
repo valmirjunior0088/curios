@@ -1,5 +1,5 @@
 use {
-    super::{error, run},
+    super::{cont_optm, error, run},
     curios_pipeline::Stage,
     curios_pipeline::compile_with_prelude,
     curios_text::{Entrypoint, RootSource},
@@ -322,4 +322,28 @@ fn a_prop_instantiation_of_a_type_valued_parameter_is_erased_on_both_sides() {
         "#),
         b"ok"
     );
+}
+
+/// A program pays only for what it names: the standard library's parser web reaches a trivial entry not at all.
+///
+/// **Pruning is what stands between a program and the whole prelude**, and it was defeated by one spelling. `/std/Json/decode/decode` is a top-level `apply` whose callee is an *alias* of `/std/Parse/bind` rather than a bare function atom, so the effect summary took its conservative top, pruning read the item as observably effectful and kept it — and with it the recursive parser group it names and the entire `Json`/`Parse`/`Flt/of_str` web. Every program carried it: this entry optimized to 3723 lines of Cont, and to 80 once the alias resolves.
+///
+/// Asserted on the *optimized* Cont, which is the last place anything could still drop it, and by name rather than by size, so the reason a regression fails here is legible.
+#[test]
+fn a_trivial_program_retains_none_of_the_parser_web() {
+    let cont = cont_optm(r#"/std/print("hi\n")"#);
+
+    for absent in [
+        "/std/Json/",
+        "/std/Parse/",
+        "/std/Toml/",
+        "/std/Fmt/",
+        "/std/Flt/of_str",
+    ] {
+        assert!(
+            !cont.contains(absent),
+            "{absent} reaches an entry that names nothing of it:\n{}",
+            &cont[..cont.len().min(4000)]
+        );
+    }
 }

@@ -7,7 +7,7 @@
 use {
     super::{
         Analysis, Atom, BlockId, FunctionId, Intrinsic, LocalBehavior, Module, Rhs, Semantics,
-        Statement,
+        Statement, ValueId,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -16,11 +16,14 @@ use {
 #[derive(Debug, Clone, Default)]
 pub struct Summary {
     functions: BTreeMap<FunctionId, LocalBehavior>,
+    /// What each [`Rhs::Alias`] rebinds, so a callee spelled as an alias of a function is judged as that function rather than as an unknown — see [`resolve_callee`].
+    aliases: BTreeMap<ValueId, Atom>,
 }
 
 impl Summary {
     /// Compute the summary to a fixed point over a verified module and its analysis.
     pub fn analyze(module: &Module, analysis: &Analysis) -> Self {
+        let aliases = alias_bindings(module);
         // Seed: a recursive component's members may diverge; everything else starts pure. The seed persists because updates join the previous summary in (the lattice only grows).
         let mut current = BTreeMap::<FunctionId, LocalBehavior>::new();
         for id in module.function_ids() {
@@ -44,7 +47,7 @@ impl Summary {
             let mut next = current.clone();
             for id in module.function_ids() {
                 let function = module.function(id).expect("live function");
-                let composed = region_behavior(module, vec![function.body], &current);
+                let composed = region_behavior(module, vec![function.body], &current, &aliases);
                 let updated = current[&id].join(composed);
                 if updated != current[&id] {
                     changed = true;
@@ -57,14 +60,22 @@ impl Summary {
             }
         }
 
-        Self { functions: current }
+        Self {
+            functions: current,
+            aliases,
+        }
     }
 
     /// The total behavior of evaluating a right-hand side: its own operation, its callee or callback, and every sub-block it evaluates.
     pub fn rhs_behavior(&self, module: &Module, rhs: &Rhs) -> LocalBehavior {
         Semantics::local_behavior(rhs)
-            .join(call_behavior(rhs, &self.functions))
-            .join(region_behavior(module, rhs.sub_blocks(), &self.functions))
+            .join(call_behavior(rhs, &self.functions, &self.aliases))
+            .join(region_behavior(
+                module,
+                rhs.sub_blocks(),
+                &self.functions,
+                &self.aliases,
+            ))
     }
 
     /// The total behavior of executing a statement: a `Let` evaluates its right-hand side; binding functions performs nothing (dormancy), and so does binding a recursive group, whose computed members are forced by need — an initializer runs when something reads its member, and the verifier holds it to performing no effect, so what it can contribute then is a trap or divergence the language does not owe a program that never forces it.
@@ -81,6 +92,7 @@ fn region_behavior(
     module: &Module,
     seeds: Vec<BlockId>,
     summaries: &BTreeMap<FunctionId, LocalBehavior>,
+    aliases: &BTreeMap<ValueId, Atom>,
 ) -> LocalBehavior {
     let mut behavior = LocalBehavior::pure();
     let mut seen = BTreeSet::new();
@@ -97,7 +109,7 @@ fn region_behavior(
                 Some(Statement::Let { rhs, .. }) => {
                     behavior = behavior
                         .join(Semantics::local_behavior(rhs))
-                        .join(call_behavior(rhs, summaries));
+                        .join(call_behavior(rhs, summaries, aliases));
                     work.extend(rhs.sub_blocks());
                 }
                 Some(Statement::Rec { .. } | Statement::Functions { .. }) | None => {}
@@ -111,23 +123,31 @@ fn region_behavior(
 }
 
 /// What a right-hand side inherits from the function it calls or the callback it runs: a known function contributes its summary; an unknown callee or callback the conservative top.
-fn call_behavior(rhs: &Rhs, summaries: &BTreeMap<FunctionId, LocalBehavior>) -> LocalBehavior {
+fn call_behavior(
+    rhs: &Rhs,
+    summaries: &BTreeMap<FunctionId, LocalBehavior>,
+    aliases: &BTreeMap<ValueId, Atom>,
+) -> LocalBehavior {
     match rhs {
-        Rhs::Apply { callee, .. } => callee_behavior(*callee, summaries),
+        Rhs::Apply { callee, .. } => callee_behavior(*callee, summaries, aliases),
         Rhs::Intrinsic {
             intrinsic: Intrinsic::ListMap,
             operands,
         } => operands
             .get(1)
             .map_or_else(LocalBehavior::unknown, |&mapper| {
-                callee_behavior(mapper, summaries)
+                callee_behavior(mapper, summaries, aliases)
             }),
         _ => LocalBehavior::pure(),
     }
 }
 
-fn callee_behavior(atom: Atom, summaries: &BTreeMap<FunctionId, LocalBehavior>) -> LocalBehavior {
-    match atom {
+fn callee_behavior(
+    atom: Atom,
+    summaries: &BTreeMap<FunctionId, LocalBehavior>,
+    aliases: &BTreeMap<ValueId, Atom>,
+) -> LocalBehavior {
+    match resolve_callee(atom, aliases) {
         // The seed covers every live function and a verified module references only live functions, so a miss is a broken snapshot discipline, never a program property.
         Atom::Function(function) => summaries
             .get(&function)
@@ -135,4 +155,40 @@ fn callee_behavior(atom: Atom, summaries: &BTreeMap<FunctionId, LocalBehavior>) 
             .expect("a live callee has a summary"),
         _ => LocalBehavior::unknown(),
     }
+}
+
+/// Follow a callee atom through the [`Rhs::Alias`] rebindings that stand between it and the function it names.
+///
+/// **An alias is computation-free, so a call through one is a call to what it rebinds** — and reading it as an unknown callee costs the whole conservative top. That is not a missed refinement but a retention bug with a price: `/std/Json/decode/decode` is a top-level `apply` whose callee is an alias of `/std/Parse/bind`, so pruning judged its eager evaluation observable, kept it, and through it kept the recursive parser group and the entire `Json`/`Parse` web — in *every* program, `/std/print("hi")` included.
+///
+/// The walk is bounded by the map, not by trust: a verified module's aliases form a dag, and the visited set is what makes that an assumption this function does not have to make.
+fn resolve_callee(atom: Atom, aliases: &BTreeMap<ValueId, Atom>) -> Atom {
+    let mut atom = atom;
+    let mut seen = BTreeSet::new();
+    while let Atom::Value(value) = atom {
+        if !seen.insert(value) {
+            break;
+        }
+        match aliases.get(&value) {
+            Some(&next) => atom = next,
+            None => break,
+        }
+    }
+    atom
+}
+
+/// Every value an [`Rhs::Alias`] rebinds, module-wide. Scanned from the statement arena rather than walked per region, because a callee's alias is frequently bound at top level while the call sits inside a nested body.
+fn alias_bindings(module: &Module) -> BTreeMap<ValueId, Atom> {
+    module
+        .statements()
+        .iter()
+        .flatten()
+        .filter_map(|statement| match statement {
+            Statement::Let {
+                result,
+                rhs: Rhs::Alias(atom),
+            } => Some((*result, *atom)),
+            _ => None,
+        })
+        .collect()
 }
