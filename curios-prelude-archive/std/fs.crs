@@ -40,11 +40,11 @@ pub let size_nat(m: Metadata) -> Option(Nat) =
     match m.size.hi == 0 | true => Option/some(m.size.lo) | false => Option/none() end;
 
 let outcome(status: Nat) -> Try(Io, Io/Error, {}) =
-    match Io/Error/error_of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+    match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
 pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
     let r = /sys/file/stat(Path/to_bytes(path))!;
-    match Io/Error/error_of(r.status)
+    match Io/Error/of(r.status)
     | some(e) => Try/raise(e)
     | none() =>
         Try/pure(
@@ -75,7 +75,7 @@ pub let is_dir(path: Path) -> Try(Io, Io/Error, Bool) =
 -- The entries' names, each a `Path` that `Path/join` puts back under `path`.
 pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
     let r = /sys/dir/list(Path/to_bytes(path))!;
-    match Io/Error/error_of(r.status)
+    match Io/Error/of(r.status)
     | some(e) => Try/raise(e)
     | none() => Try/pure(List/map(r.names, Path/of_bytes))
     end;
@@ -98,7 +98,7 @@ pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
 
 pub let cwd: Try(Io, Io/Error, Path) =
     let r = /sys/proc/cwd!;
-    match Io/Error/error_of(r.status)
+    match Io/Error/of(r.status)
     | some(e) => Try/raise(e)
     | none() => Try/pure(Path/of_bytes(r.path))
     end;

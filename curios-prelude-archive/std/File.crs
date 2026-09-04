@@ -20,7 +20,7 @@ pub let of_mode(mode: Mode) -> Nat =
 
 pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
     let r = /sys/file/open(Path/to_bytes(path), of_mode(mode))!;
-    match Io/Error/error_of(r.status)
+    match Io/Error/of(r.status)
     | some(e) => Try/raise(e)
     | none() => Try/pure(File { r.handle })
     end;
@@ -36,7 +36,7 @@ pub let read(f: File, n: Nat) -> Io(stream/Chunk) =
 -- The whole of `b`, a short write resent.
 pub let write(f: File, b: Bytes) -> Try(Io, Io/Error, {}) =
     let r = /sys/Handle/write(f.0, b)!;
-    match Io/Error/error_of(r.status)
+    match Io/Error/of(r.status)
     | some(e) => Try/raise(e)
     | none() =>
         match r.written < Bytes/len(b)

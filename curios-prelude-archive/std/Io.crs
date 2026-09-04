@@ -42,7 +42,7 @@ pub let read(i: In, n: Nat) -> Io(stream/Chunk) =
         read(i, n)
     | _ =>
         Io/pure(
-            match Error/error_of(r.status)
+            match Error/of(r.status)
             | some(e) => stream/Chunk/error(e)
             | none() =>
                 match r.status == /sys/status/eof

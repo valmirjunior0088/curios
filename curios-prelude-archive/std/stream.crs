@@ -9,7 +9,7 @@ end
 
 -- One read row's answer as a chunk: `eof` at the end of the stream, an `error` for a failure status, and the bytes otherwise. A `would_block` status is a failure here — the synchronous reads that reach this never wait, and `Async/raw` parks on it before decoding.
 pub let of_status(status: Nat, bytes: Bytes) -> Chunk =
-    match Io/Error/error_of(status)
+    match Io/Error/of(status)
     | some(e) => Chunk/error(e)
     | none() =>
         match status == /sys/status/eof | true => Chunk/eof() | false => Chunk/chunk(bytes) end

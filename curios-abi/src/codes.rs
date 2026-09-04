@@ -24,7 +24,7 @@ pub mod status {
     pub const IS_DIRECTORY: u32 = 9;
     /// A directory operation applied to something that is not one (`ErrorKind::NotADirectory`).
     pub const NOT_DIRECTORY: u32 = 10;
-    /// The errno passthrough lane: `Status::Other(errno)` lowers as `OTHER_BASE + errno`, one past the last named code, so a raw OS errno — EIO is 5, ENXIO is 6 — can never masquerade as `OK` or a named failure. The guest's `error_of` subtracts it back out.
+    /// The errno passthrough lane: `Status::Other(errno)` lowers as `OTHER_BASE + errno`, one past the last named code, so a raw OS errno — EIO is 5, ENXIO is 6 — can never masquerade as `OK` or a named failure. The guest's `Io/Error/of` subtracts it back out.
     pub const OTHER_BASE: u32 = NOT_DIRECTORY + 1;
 }
 

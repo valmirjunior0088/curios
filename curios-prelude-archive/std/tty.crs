@@ -14,11 +14,11 @@ satisfy Show(Size) {
 
 pub let raw(on: Bool) -> Try(Io, Io/Error, {}) =
     let status = /sys/tty/raw(/sys/Handle/stdin, on)!;
-    match Io/Error/error_of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+    match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
 pub let size: Try(Io, Io/Error, Size) =
     let r = /sys/tty/size(/sys/Handle/stdin)!;
-    match Io/Error/error_of(r.status)
+    match Io/Error/of(r.status)
     | some(e) => Try/raise(e)
     | none() => Try/pure(Size { cols = r.cols, rows = r.rows })
     end;

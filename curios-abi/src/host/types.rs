@@ -118,7 +118,7 @@ impl Poll {
     }
 }
 
-/// The status contract of failable host ops, mirrored by `/std/Io/Error`'s `error_of`. Each named status has a fixed wire code; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).
+/// The status contract of failable host ops, mirrored by `/std/Io/Error`'s `of`. Each named status has a fixed wire code; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).
 #[derive(Clone, Copy)]
 pub enum Status {
     Ok,

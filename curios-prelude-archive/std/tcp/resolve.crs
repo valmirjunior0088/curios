@@ -5,7 +5,7 @@ use /std/{Str, Nat, Bytes, Handle, Result, Option, List, Try, Async, Io};
 let resolved_address(h: Handle) -> Async(Result(Io/Error, Bytes)) =
     let _ = Async/raw/wait(h, /sys/event/read)!;
     let a = /sys/dns/resolve(h)!;
-    match Io/Error/error_of(a.status)
+    match Io/Error/of(a.status)
     | some(e) => Async/pure(Result/failure(e))
     | none() => Async/pure(Result/success(Option/unwrap_or(List/try_get(a.addresses, 0), x[])))
     end;
@@ -13,7 +13,7 @@ let resolved_address(h: Handle) -> Async(Result(Io/Error, Bytes)) =
 -- The first address `host` resolves to, with `port`, as the bytes the socket rows take. The lookup parks the fiber until the resolver answers.
 pub let resolve(host: Str, port: Nat) -> Try(Async, Io/Error, Bytes) =
     let r = /sys/dns/lookup(Str/to_bytes(host), port)!;
-    match Io/Error/error_of(r.status)
+    match Io/Error/of(r.status)
     | some(e) => Try/raise(e)
     | none() =>
         let a = Async/using(/sys/Handle/close(r.handle), resolved_address(r.handle))!;

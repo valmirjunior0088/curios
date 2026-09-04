@@ -41,7 +41,7 @@ let pipe(child: Handle, which: Nat, mode: Stdio) -> Try(Io, Io/Error, Option(Han
     match mode
     | piped() =>
         let s = /sys/proc/stream(child, which)!;
-        match Io/Error/error_of(s.status)
+        match Io/Error/of(s.status)
         | some(e) => Try/raise(e)
         | none() => Try/pure(Option/some(s.handle))
         end
@@ -58,7 +58,7 @@ pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
             stdio_of(cmd.stdin),
             stdio_of(cmd.stdout),
             stdio_of(cmd.stderr))!;
-    match Io/Error/error_of(r.status)
+    match Io/Error/of(r.status)
     | some(e) => Try/raise(e)
     | none() =>
         let stdin = pipe(r.child, 0, cmd.stdin)!;

@@ -64,7 +64,7 @@ pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
     let _ = Async/raw/wait(c.handle, /sys/event/read)!;
     let r = /sys/proc/wait(c.handle)!;
     let _ = close_pipes(c)!;
-    match Io/Error/error_of(r.status)
+    match Io/Error/of(r.status)
     | some(e) => Try/raise(e)
     | none() =>
         Try/pure(

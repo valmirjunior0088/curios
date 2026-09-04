@@ -28,7 +28,7 @@ pub let close(c: Socket) -> Io({}) =
     /sys/Handle/close(c.0);
 
 let ok(status: Nat) -> Try(Io, Io/Error, {}) =
-    match Io/Error/error_of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+    match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
 -- The handle closed and the failure passed on: what a connect that got as far as a socket does with a failure after it. Written over `Io` and lifted where the failing step parks.
 let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
@@ -43,7 +43,7 @@ let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
     choose
     | status == /sys/status/would_block => Try/pure((s.handle, true))
     | _ =>
-        match Io/Error/error_of(status)
+        match Io/Error/of(status)
         | some(e) =>
             let _ = /sys/Handle/close(s.handle)!;
             Try/raise(e)

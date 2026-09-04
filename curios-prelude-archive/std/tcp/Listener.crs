@@ -7,7 +7,7 @@ pub struct Listener: Type {
 }
 
 let ok(status: Nat) -> Try(Io, Io/Error, {}) =
-    match Io/Error/error_of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+    match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
 let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
     let _ = /sys/Handle/close(h)!;

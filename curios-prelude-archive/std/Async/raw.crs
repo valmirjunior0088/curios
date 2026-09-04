@@ -13,7 +13,7 @@ pub let read(h: Handle, n: Nat) -> Async(stream/Chunk) =
             let _ = wait(h, /sys/event/read)!;
             go()
         | false =>
-            match Io/Error/error_of(r.status)
+            match Io/Error/of(r.status)
             | some(e) => Async/pure(stream/Chunk/error(e))
             | none() =>
                 match r.status == /sys/status/eof
@@ -32,7 +32,7 @@ pub let write(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
             let _ = wait(h, /sys/event/write)!;
             go(rest)
         | false =>
-            match Io/Error/error_of(r.status)
+            match Io/Error/of(r.status)
             | some(e) => Async/pure(Result/failure(e))
             | none() =>
                 match r.written < Bytes/len(rest)
@@ -57,7 +57,7 @@ pub let accept(l: Handle) -> Async(Result(Io/Error, Handle)) =
             let _ = wait(l, /sys/event/read)!;
             go()
         | false =>
-            match Io/Error/error_of(r.status)
+            match Io/Error/of(r.status)
             | some(e) => Async/pure(Result/failure(e))
             | none() => Async/pure(Result/success(r.handle))
             end
