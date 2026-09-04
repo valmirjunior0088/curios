@@ -1,6 +1,6 @@
 //! The `Str` surface: indexing, slicing and trimming at codepoint boundaries.
 
-use crate::tests::run;
+use crate::tests::{run, typecheck};
 
 #[test]
 fn literal_prints_its_bytes() {
@@ -157,4 +157,23 @@ fn logical_operations_use_certified_chars() {
         "#;
 
     assert_eq!(run(source), "a€😀|€|1|2|😀|true|false|3|€".as_bytes());
+}
+
+// A literal in a report spells as the literal. A `Str` is its bytes beside the scan witness certifying them, and a report that spells one structurally — `Str { x[0x62, 0x6F, 0x64, 0x79], of_scan_eq(…) }` for `"body"` — buries the one thing the author wrote under the representation that certifies it, which is what makes a decided proposition keyed by a written name unreadable at the moment it refuses one. Axis (f) of `Spelling`, whose identity for `Str` comes from the syntax registry rather than from a name this side of the prelude may spell.
+#[test]
+fn a_string_literal_spells_as_itself_in_a_report() {
+    let source = r#"
+        use /std/{Str, True, False};
+
+        let Named(name: Str) -> Prop =
+            match Str/eql(name, "body") | true => True | false => False end;
+
+        let evidence: Named("body") = ?;
+
+        /std/print("unreachable\n")
+        "#;
+
+    let error = typecheck(source).expect_err("a program with a written goal never compiles");
+    assert!(error.contains(r#"Named("body")"#), "{error}");
+    assert!(!error.contains("of_scan_eq"), "{error}");
 }

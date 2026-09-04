@@ -439,7 +439,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     };
 
     assert_eq!(
-        refusal.format_with(&module, &[]),
+        refusal.format_with(&module, &[], &crate::SYNTAX),
         "expected `Nat`, found `Box(@Nat)`"
     );
     // The faithful rendering keeps the qualified path and drops the mark, which is what makes the axes worth supplying.

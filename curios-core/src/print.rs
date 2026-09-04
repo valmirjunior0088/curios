@@ -46,6 +46,8 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 //
 // axis (e) — unsolved metavariables: a flag spelling every metavariable as a bare `?`. An id such as `?2677` is elaboration state — a counter a reader cannot decode and the surface cannot write — and a diagnostic carrying one reads as three placeholders competing with the disagreement they surround: the transcript case is `inferred: Prop, expected: Eq(@?2677, ?2679, ?2680)`, where `Eq(@?, ?, ?)` says what the reader needs, that *some* equality was expected. Two distinct metavariables rendering alike is not the hazard it is for levels: a mismatch is reported between rigid structure, and two unsolved metavariables facing each other unify rather than mismatch, so no diagnostic hinges on telling them apart. Diagnostics set it; `wonder stage`'s dumps do not, for axis (c)'s reason.
 //
+// axis (f) — string literals: the identity of the certified `Str` declaration, so a literal spells as the text it stands for rather than as the struct over its bytes. A `Str` is bytes beside a scan witness certifying them, and a report that spells one structurally — `Str { x[0x62, 0x6F, 0x64, 0x79], of_scan_eq(x[0x62, 0x6F, 0x64, 0x79], refl_scan(x[0x62, 0x6F, 0x64, 0x79])) }` for `"body"` — buries the one thing the reader wrote under the representation that certifies it. The identity is supplied rather than spelled: this crate sits below `curios-prelude-archive`, so it may not name a `/syn` declaration and takes the one the syntax registry names instead. Diagnostics and goal reports set it; `wonder stage`'s dumps do not, for axis (c)'s reason.
+//
 // `Spelling::label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
 /// How a term is spelled for a reader. The default spells nothing differently, which is what a bare `Display` uses.
@@ -61,6 +63,8 @@ pub struct Spelling {
     nominal_plicities: Option<Rc<BTreeMap<Global, Vec<Plicity>>>>,
     /// axis (e) — whether every metavariable spells as a bare `?`.
     anonymous_metavars: bool,
+    /// axis (f) — the certified-string declaration, so a `Str` literal spells as its own text.
+    string_literal: Option<Global>,
 }
 
 impl Spelling {
@@ -93,6 +97,12 @@ impl Spelling {
     /// Spell every metavariable as a bare `?` (axis (e)).
     pub fn with_anonymous_metavars(mut self) -> Self {
         self.anonymous_metavars = true;
+        self
+    }
+
+    /// Spell a certified string literal as its own text (axis (f)). `name` is the `Str` declaration a literal's head carries — [`SyntaxRegistry`](curios_utilities::SyntaxRegistry)'s, since this crate may not spell it.
+    pub fn with_string_literals(mut self, name: Global) -> Self {
+        self.string_literal = Some(name);
         self
     }
 
@@ -476,6 +486,36 @@ fn print_packed(grain: Grain, entries: Vec<Printer>) -> Printer {
         },
         entries,
     )
+}
+
+/// A certified string as the literal it stands for — `"body"` in place of the struct over its bytes and the witness certifying them (axis (f)). `None` unless the spelling was told which declaration that is and the head is it, and `None` for a `Str` whose bytes are not one constant — a concatenation, a slice, a binder's — or are not text, each of which has nothing shorter to say than its own spelling.
+fn string_literal(name: &Global, fields: &[Term], spelling: &Rc<Spelling>) -> Option<String> {
+    if spelling.string_literal.as_ref() != Some(name) {
+        return None;
+    }
+
+    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, packed)) = &**fields.first()? else {
+        return None;
+    };
+
+    Some(format!(
+        "\"{}\"",
+        escaped(&String::from_utf8(packed.to_bytes()?).ok()?)
+    ))
+}
+
+/// A string's characters under the surface's escapes, so a rendered literal reads back as the one it came from.
+fn escaped(text: &str) -> String {
+    text.chars()
+        .map(|character| match character {
+            '\\' => "\\\\".to_string(),
+            '"' => "\\\"".to_string(),
+            '\n' => "\\n".to_string(),
+            '\t' => "\\t".to_string(),
+            '\r' => "\\r".to_string(),
+            other => other.to_string(),
+        })
+        .collect()
 }
 
 /// The constant atoms of a packed literal, spelled as the surface writes them — `0`/`1` for bits, hexadecimal numerals for bytes.
@@ -1168,22 +1208,25 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 )
             }
         }
-        // Prints as the brace literal, instantiated type params hidden — `Pair { 0, "" }`.
+        // Prints as the brace literal, instantiated type params hidden — `Pair { 0, "" }` — except a certified string, which prints as the literal it stands for (axis (f)).
         Subterm::Struct(Struct {
             name,
             universes,
             fields,
             ..
-        }) => listed(
-            format!(
-                "{}{} {{",
-                frame.spelling.symbol(&name),
-                universe_suffix(&universes, frame.spelling)
+        }) => match string_literal(&name, &fields, frame.spelling) {
+            Some(literal) => pure(literal),
+            None => listed(
+                format!(
+                    "{}{} {{",
+                    frame.spelling.symbol(&name),
+                    universe_suffix(&universes, frame.spelling)
+                ),
+                true,
+                fields.into_iter().map(|f| sub(f, frame)).collect(),
+                "}",
             ),
-            true,
-            fields.into_iter().map(|f| sub(f, frame)).collect(),
-            "}",
-        ),
+        },
         Subterm::Match(Match {
             head,
             motive,

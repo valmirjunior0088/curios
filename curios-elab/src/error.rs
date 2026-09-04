@@ -8,7 +8,7 @@ use {
         UniverseConstraintOrigin, UniverseError, build_rename, build_shorten, display_names,
     },
     curios_num::{Integer, Natural},
-    curios_utilities::{Grain, Plicity, Qualifier, Report, Span},
+    curios_utilities::{Grain, Plicity, Qualifier, Report, Span, SyntaxRegistry},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         fmt,
@@ -1141,13 +1141,23 @@ impl Error {
     }
 
     /// Render this error with source-style names, shortening global names against `module`'s symbols together with `scope`'s (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here, so all three axes are set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
-    pub fn format_with(&self, module: &Module, scope: &[&Module]) -> String {
-        Report::render_all(&self.reports_with(module, scope))
+    pub fn format_with(
+        &self,
+        module: &Module,
+        scope: &[&Module],
+        syntax: &SyntaxRegistry,
+    ) -> String {
+        Report::render_all(&self.reports_with(module, scope, syntax))
     }
 
     /// [`Error::format_with`] as data: one [`Report`] per thing said, located. See [`Error::reports_with_hints`].
-    pub fn reports_with(&self, module: &Module, scope: &[&Module]) -> Vec<Report> {
-        self.reports_with_hints(module, scope, &BTreeMap::new(), &Imports::default())
+    pub fn reports_with(
+        &self,
+        module: &Module,
+        scope: &[&Module],
+        syntax: &SyntaxRegistry,
+    ) -> Vec<Report> {
+        self.reports_with_hints(module, scope, syntax, &BTreeMap::new(), &Imports::default())
     }
 
     /// [`Error::format_with`], with two tables of the text stage's. `unbound` is what each unresolved bare name could have meant — keyed by the binder the name lowered to, valued by the absolute paths of the public bindings in scope that carry it; an `unbound variable` report whose binder the table knows gets a line per candidate, and every other error ignores it. `imports` is what the unit's `use` declarations brought into scope, with the spelling each resolves under; a global the table knows displays under its shortest such spelling rather than its shortest unambiguous suffix, since the suffix is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported) while the written path is by construction — which is what makes a suggested imported candidate pasteable. Both tables are the text stage's because only it sees re-exports — `/std/Bool` is a `pub use`, and Core holds the `/sys/Bool/Bool` it stands for — and they arrive here rather than on the error because the error records what was written and nothing about where.
@@ -1155,10 +1165,11 @@ impl Error {
         &self,
         module: &Module,
         scope: &[&Module],
+        syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
         imports: &Imports,
     ) -> String {
-        Report::render_all(&self.reports_with_hints(module, scope, unbound, imports))
+        Report::render_all(&self.reports_with_hints(module, scope, syntax, unbound, imports))
     }
 
     /// [`Error::format_with_hints`] as data, and the primitive it renders: every error is one report at its innermost span, except a goal batch, which is one report *per goal* at that goal's own occurrence — a goal's identity is its source location, and a consumer placing each where it was written needs them apart. Rendering the list is exactly the text the compile path prints, so the located form and the printed form cannot drift.
@@ -1166,6 +1177,7 @@ impl Error {
         &self,
         module: &Module,
         scope: &[&Module],
+        syntax: &SyntaxRegistry,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
         imports: &Imports,
     ) -> Vec<Report> {
@@ -1192,7 +1204,8 @@ impl Error {
                 .with_short_names(shorten)
                 .with_nominal_plicities(Rc::new(plicities))
                 .with_erased_universes()
-                .with_anonymous_metavars(),
+                .with_anonymous_metavars()
+                .with_string_literals(Global::Authored(syntax.string.string.qualifier())),
         );
         let suggestion = self.unbound_suggestion(unbound, &spelling);
         self.reports(&spelling, suggestion)

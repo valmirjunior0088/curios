@@ -181,7 +181,12 @@ impl KernelError {
     /// Render this refusal with global names shortened against `module`'s symbol table and a nominal family's implicit parameters marked — the two axes a reader needs to recognize the types they wrote.
     ///
     /// Universe instances are deliberately *not* suppressed here, unlike an elaboration diagnostic. A kernel refusal is often *about* the universes: `convert.rs` records one reading "a ground `Type` against a `Type.{u}`", and erasing the instance would reduce that to `Type` against `Type`. The same call `wonder stage`'s dumps make, for the same reason — a reader looking at the checker wants the levels the checker is arguing about.
-    pub fn format_with(&self, module: &Module, scope: &[&Module]) -> String {
+    pub fn format_with(
+        &self,
+        module: &Module,
+        scope: &[&Module],
+        syntax: &SyntaxRegistry,
+    ) -> String {
         // See `curios_elab::Error::format_with`: a module carries only its own declarations, so *both* halves of the spelling have to be told what its environment put in scope — the shortening table and the plicity marks alike.
         let mut symbols = module.module_symbols();
         let mut plicities = module.nominal_plicities();
@@ -195,7 +200,8 @@ impl KernelError {
         let spelling = Rc::new(
             Spelling::default()
                 .with_short_names(Rc::new(build_shorten(&symbols)))
-                .with_nominal_plicities(Rc::new(plicities)),
+                .with_nominal_plicities(Rc::new(plicities))
+                .with_string_literals(Global::Authored(syntax.string.string.qualifier())),
         );
         Displayed(self, spelling).to_string()
     }

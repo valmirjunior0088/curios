@@ -158,13 +158,13 @@ pub fn typecheck_measured(
     .map_err(|error| {
         CompileError::of(
             &error,
-            error.reports_with_hints(&lowered, &cores, &unbound, &imports),
+            error.reports_with_hints(&lowered, &cores, syntax, &unbound, &imports),
         )
     })?;
 
     let obligations = obligations
         .into_iter()
-        .map(|error| error.format_with_hints(&lowered, &cores, &unbound, &imports))
+        .map(|error| error.format_with_hints(&lowered, &cores, syntax, &unbound, &imports))
         .collect();
 
     Ok((
@@ -327,7 +327,7 @@ where
     .map_err(|error| {
         CompileError::of(
             &error,
-            error.reports_with_hints(&lowered, &cores, &unbound, &imports),
+            error.reports_with_hints(&lowered, &cores, syntax, &unbound, &imports),
         )
     })?;
 
@@ -376,7 +376,7 @@ fn erase_checked(
         Some(core_type),
     )
     .map(|erased| erased.into_module())
-    .map_err(|error| CompileError::Failure(error.reports_with(module.as_module(), &cores)))
+    .map_err(|error| CompileError::Failure(error.reports_with(module.as_module(), &cores, syntax)))
 }
 
 /// [`check_entrypoint`] with the stages it passes observed, and the entry's type and foreign rows kept for the lowering that follows it.
@@ -413,7 +413,7 @@ where
         if let Some(verdict) = recheck(&module, budget, scope, syntax).into_iter().next() {
             let refusal = verdict
                 .error
-                .format_with(module.as_module(), &scope.cores());
+                .format_with(module.as_module(), &scope.cores(), syntax);
             return Err(CompileError::failure(match &verdict.name {
                 Some(name) => format!("the kernel refused {name}: {refusal}"),
                 None => format!("the kernel refused the entrypoint: {refusal}"),
@@ -483,7 +483,13 @@ pub fn compile_unit(
     .map_err(|error| {
         CompileError::of(
             &error,
-            error.reports_with_hints(lowered.core(), &cores, lowered.unbound(), lowered.imports()),
+            error.reports_with_hints(
+                lowered.core(),
+                &cores,
+                syntax,
+                lowered.unbound(),
+                lowered.imports(),
+            ),
         )
     })?;
 
@@ -491,7 +497,7 @@ pub fn compile_unit(
         .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
     if let Some(verdict) = recheck(&core, budget, scope, syntax).into_iter().next() {
-        let refusal = verdict.error.format_with(core.as_module(), &cores);
+        let refusal = verdict.error.format_with(core.as_module(), &cores, syntax);
         return Err(CompileError::failure(match &verdict.name {
             Some(name) => format!("the kernel refused {name}: {refusal}"),
             None => format!("the kernel refused a unit: {refusal}"),
@@ -504,7 +510,7 @@ pub fn compile_unit(
         &core,
         None,
     )
-    .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores)))?;
+    .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores, syntax)))?;
 
     let core = core.into_module();
     let binder_floor = derived_binder_floor(&core);
