@@ -264,3 +264,262 @@ let sound(cli: Cli) -> Bool =
 -- Decided by reduction and demanded by `main`, so a specification that could never be parsed unambiguously is refused where it is written rather than at the first run that trips over it.
 pub let WellFormed(cli: Cli) -> Prop =
     match sound(cli) | true => True | false => False end;
+
+-- Why a line was refused. Each carries what the report needs to name the offender and nothing more; `usage` renders them.
+pub induct Failure: pub Type
+| unknown_option(token: Str)
+| missing_value(name: Str)
+| missing_required(name: Str)
+| unexpected(token: Str)
+| bad_value(name: Str, reason: Str)
+end
+
+-- What a line came to. `parse` answers one of these and performs nothing; `main` is what turns each into a stream and an exit status.
+pub induct Outcome(spec: List(Arg)): pub Type
+| parsed(Values(spec))
+| help()
+| version()
+| failure(Failure)
+end
+
+-- Every entry gathers the same shape -- the raw strings the line supplied for it, in order -- and `field` decides what that shape means at each kind. A flag gathers its own name once per occurrence, so "was it written" is "is this list nonempty", and an option written twice keeps its last because `field` reads the last.
+let no_occurrences: List(Str) =
+    [];
+
+let empty_slots(spec: List(Arg)) -> List(List(Str)) =
+    List/replicate(List/len(spec), no_occurrences);
+
+let push_at(slots: List(List(Str)), i: Nat, s: Str) -> List(List(Str)) =
+    match slots
+    | [] => []
+    | [head, ..tail] =>
+        match i | 0 => [[..head, s], ..tail] | j + 1 => [head, ..push_at(tail, j, s)] end
+    end;
+
+let takes_value(k: Kind) -> Bool =
+    match k
+    | flag() => false
+    | option(_, _) => true
+    | many(_) => true
+    | positional(_) => false
+    | rest(_) => false
+    end;
+
+let long_index(spec: List(Arg), name: Str) -> Option(Nat) =
+    List/find_index(spec, (a) => Str/eql(a.long, name));
+
+let short_index(spec: List(Arg), c: Char) -> Option(Nat) =
+    List/find_index(spec, (a) => match a.short | some(d) => Char/eql(c, d) | none() => false end);
+
+-- Read by a direct match rather than through `Option/map`: `Arg` carries a `Kind`, which carries a `Value`, which carries a `Type`, so the element type sits a universe above the ground one -- and the elaborator leaves `Option/map`'s instance level generalized where the argument's is concretely one, which the kernel then refuses as an instance it cannot verify. The match commits to no instance and needs none.
+let name_at(spec: List(Arg), i: Nat) -> Str =
+    match List/try_get(spec, i) | some(a) => a.long | none() => "" end;
+
+let wants_a_value(spec: List(Arg), i: Nat) -> Bool =
+    match List/try_get(spec, i) | some(a) => takes_value(a.kind) | none() => false end;
+
+-- The indices of the positional entries in declaration order: the order bare tokens fill them.
+let positional_indices(spec: List(Arg)) -> List(Nat) =
+    let walk(rest: List(Arg), at: Nat) -> List(Nat) =
+        match rest
+        | [] => []
+        | [a, ..more] =>
+            match is_positional(a.kind)
+            | true => [at, ..walk(more, at + 1)]
+            | false => walk(more, at + 1)
+            end
+        end;
+    walk(spec, 0);
+
+let rest_index(spec: List(Arg)) -> Option(Nat) =
+    List/find_index(spec, (a) => is_rest(a.kind));
+
+-- `-h`, `--help`, or an `h` inside a short cluster. `WellFormed` reserves `h` and `help`, so an `h` in a cluster is never a program's own flag -- which is what lets help be decided before the line is understood at all, and so before any failure in it can be reported.
+let wants_help(argv: List(Str)) -> Bool =
+    List/any(
+        argv,
+        (t) =>
+            Str/eql(t, "--help")
+                || Str/starts_with(t, "-") && Bool/not(Str/starts_with(t, "--"))
+                    && Str/contains(t, "h"));
+
+let wants_version(argv: List(Str)) -> Bool =
+    List/any(argv, (t) => Str/eql(t, "--version"));
+
+-- What the token walk threads: what each entry has gathered, how many positional entries are filled, and whether `--` has been seen.
+struct Walk: Type {
+    slots: List(List(Str)),
+    filled: Nat,
+    literal: Bool,
+}
+
+-- What a short cluster left behind. `needs` is the last character asking for the following token, which the caller supplies: the walk cannot fetch it itself and stay structural, since the list it would then recurse on is a value rather than a payload of the list it is matching.
+induct Cluster: Type
+| settled(w: Walk)
+| needs(w: Walk, at: Nat, name: Str)
+| broke(f: Failure)
+end
+
+-- One bare token: the next unfilled positional in declaration order, then `rest`, and otherwise a refusal naming it.
+let place(spec: List(Arg), w: Walk, token: Str) -> Result(Failure, Walk) =
+    match List/try_get(positional_indices(spec), w.filled)
+    | some(i) =>
+        Result/success(Walk { ..w, slots = push_at(w.slots, i, token), filled = w.filled + 1 })
+    | none() =>
+        match rest_index(spec)
+        | some(i) => Result/success(Walk { ..w, slots = push_at(w.slots, i, token) })
+        | none() => Result/failure(Failure/unexpected(token))
+        end
+    end;
+
+let run_cluster(spec: List(Arg), w: Walk, chars: List(Char), whole: Str) -> Cluster =
+    match chars
+    | [] => Cluster/settled(w)
+    | [c, ..more] =>
+        match short_index(spec, c)
+        | none() => Cluster/broke(Failure/unknown_option(whole))
+        | some(i) =>
+            let name = name_at(spec, i);
+            match wants_a_value(spec, i)
+            | false =>
+                run_cluster(spec, Walk { ..w, slots = push_at(w.slots, i, name) }, more, whole)
+            | true =>
+                match more
+                | [] => Cluster/needs(w, i, name)
+                | [_, .._] =>
+                    Cluster/settled(
+                        Walk {
+                            ..w,
+                            slots = push_at(w.slots, i, Str/flatten(List/map(more, Str/of_char))),
+                        })
+                end
+            end
+        end
+    end;
+
+-- The token walk. Every recursive call is on the tail of the list being matched, the two that consume a following token as a value included -- which is why `run_cluster` reports `needs` rather than fetching that token itself.
+let step(spec: List(Arg), w: Walk, tokens: List(Str)) -> Result(Failure, List(List(Str))) =
+    match tokens
+    | [] => Result/success(w.slots)
+    | [t, ..more] =>
+        match w.literal
+        | true => Result/bind(place(spec, w, t), (w2) => step(spec, w2, more))
+        | false =>
+            match Str/eql(t, "--")
+            | true => step(spec, Walk { ..w, literal = true }, more)
+            | false =>
+                match Str/starts_with(t, "--")
+                | true =>
+                    let body = Str/slice(t, 2, Str/len(t));
+                    match Str/split_once(body, "=")
+                    | some((name, value)) =>
+                        match long_index(spec, name)
+                        | none() => Result/failure(Failure/unknown_option(t))
+                        | some(i) =>
+                            match wants_a_value(spec, i)
+                            | false =>
+                                Result/failure(Failure/bad_value(name, "this flag takes no value"))
+                            | true =>
+                                step(spec, Walk { ..w, slots = push_at(w.slots, i, value) }, more)
+                            end
+                        end
+                    | none() =>
+                        match long_index(spec, body)
+                        | none() => Result/failure(Failure/unknown_option(t))
+                        | some(i) =>
+                            match wants_a_value(spec, i)
+                            | false =>
+                                step(spec, Walk { ..w, slots = push_at(w.slots, i, body) }, more)
+                            | true =>
+                                match more
+                                | [] => Result/failure(Failure/missing_value(body))
+                                | [v, ..rest2] =>
+                                    step(spec, Walk { ..w, slots = push_at(w.slots, i, v) }, rest2)
+                                end
+                            end
+                        end
+                    end
+                | false =>
+                    match Str/starts_with(t, "-") && Nat/lt(1, Str/len(t))
+                    | true =>
+                        match run_cluster(spec, w, Str/to_list(Str/slice(t, 1, Str/len(t))), t)
+                        | broke(f) => Result/failure(f)
+                        | settled(w2) => step(spec, w2, more)
+                        | needs(w2, i, name) =>
+                            match more
+                            | [] => Result/failure(Failure/missing_value(name))
+                            | [v, ..rest2] =>
+                                step(spec, Walk { ..w2, slots = push_at(w2.slots, i, v) }, rest2)
+                            end
+                        end
+                    | false => Result/bind(place(spec, w, t), (w2) => step(spec, w2, more))
+                    end
+                end
+            end
+        end
+    end;
+
+-- One field of the parsed record, at the type its kind decides. The motive is over the *kind* -- what the match refines -- which is why `KindCarrier` is stated there rather than over the whole entry.
+let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCarrier(k)) =
+    let last_of = List/last(occurrences);
+    let read_with(v: Value, s: Str) -> Result(Failure, v.A) =
+        Result/map_failure(v.read(s), (reason) => Failure/bad_value(name, reason));
+    match k: (k2) => Result(Failure, KindCarrier(k2))
+    | flag() => Result/success(match occurrences | [] => false | [_, .._] => true end)
+    | option(v, presence) =>
+        match presence: (p) =>
+            Result(
+                Failure,
+                match p | required() => v.A | optional() => Option(v.A) | default(_) => v.A end)
+        | required() =>
+            match last_of
+            | none() => Result/failure(Failure/missing_required(name))
+            | some(s) => read_with(v, s)
+            end
+        | optional() =>
+            match last_of
+            | none() => Result/success(Option/none())
+            | some(s) => Result/map_success(read_with(v, s), (a) => Option/some(a))
+            end
+        | default(fallback) =>
+            match last_of | none() => Result/success(fallback) | some(s) => read_with(v, s) end
+        end
+    | many(v) => List/traverse(occurrences, (s) => read_with(v, s))
+    | positional(v) =>
+        match last_of
+        | none() => Result/failure(Failure/missing_required(name))
+        | some(s) => read_with(v, s)
+        end
+    | rest(v) => List/traverse(occurrences, (s) => read_with(v, s))
+    end;
+
+-- The specification and the gathered slots walked in lockstep. `spec` carries the motive because it is what the answer is indexed by; the slots are an ordinary list beside it, and the two are the same length by construction -- `empty_slots` made one per entry and `push_at` never changes the length.
+let fill(spec: List(Arg), slots: List(List(Str))) -> Result(Failure, Values(spec)) =
+    match spec: (s) => Result(Failure, Values(s))
+    | [] => Result/success(Values/nil())
+    | [a, ..more] =>
+        let here = Option/unwrap_or(List/try_get(slots, 0), no_occurrences);
+        let later = match slots | [] => [] | [_, ..tail] => tail end;
+        Result/bind(
+            field(a.long, a.kind, here),
+            (head) => Result/map_success(fill(more, later), (tail) => Values/cons(head, tail)))
+    end;
+
+-- The pure core: a line in, an outcome out, nothing performed. Help wins over every other reading of the line, and a version is answered only where the command declares one.
+pub let parse(spec: List(Arg), argv: List(Str), versioned: Bool) -> Outcome(spec) =
+    match wants_help(argv)
+    | true => Outcome/help()
+    | false =>
+        match versioned && wants_version(argv)
+        | true => Outcome/version()
+        | false =>
+            match step(spec, Walk { slots = empty_slots(spec), filled = 0, literal = false }, argv)
+            | failure(f) => Outcome/failure(f)
+            | success(slots) =>
+                match fill(spec, slots)
+                | failure(f) => Outcome/failure(f)
+                | success(v) => Outcome/parsed(v)
+                end
+            end
+        end
+    end;
