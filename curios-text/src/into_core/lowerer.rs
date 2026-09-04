@@ -313,7 +313,18 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// Desugars `term` as a single **region**. A region is a stretch of a value body that shares one continuation; each `!` in it hoists to the top of the region, never past a boundary (lambda body, match arm, recursive-group member). Boundaries re-root a region. Every hoisted action is sequenced through `/syn/Monad/bind` — see `wrap`.
+    ///
+    /// Span stamping happens here for the reason [`Self::collect`] states, and for the arms that are not spines: `Let`, `Match`, `Choose` and `Func` each *rebuild* their node below, so a value body rooted at a whole-term form reached elaboration with no span — its errors unlocated, and the `test` declaration's recorded body empty, since the runner slices that body from this very span. `with_span` is innermost-wins, so the spine arm keeps the one [`Self::collect`] already stamped.
     pub(super) fn region(&self, term: &Term) -> Result<curios_core::Term, Error> {
+        let lowered = self.region_root(term)?;
+
+        Ok(match term.span() {
+            Some(span) => lowered.with_span(span.clone()),
+            None => lowered,
+        })
+    }
+
+    fn region_root(&self, term: &Term) -> Result<curios_core::Term, Error> {
         match term.as_subterm() {
             // A `let`'s bound expression evaluates in place (its bangs hoist to this region); the tail continues the same region (a bang there hoists after `x` is bound, not above the `let`).
             Subterm::Let(let_) => self.lower_let_region(&let_.groups, &let_.tail),

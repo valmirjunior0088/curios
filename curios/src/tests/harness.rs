@@ -2,7 +2,9 @@
 
 use {
     super::{error, ersd_optm, ersd_optm_tests, run, run_tests_program, run_text},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, compile_tests_with_units},
     curios_runtime::MockHost,
+    curios_text::{Entrypoint, RootSource},
 };
 
 #[test]
@@ -330,4 +332,45 @@ fn the_ordinary_program_prunes_what_the_test_program_keeps() {
         "#;
     assert!(!survives(&ersd_optm(source), "/the_answer_holds"));
     assert!(survives(&ersd_optm_tests(source), "/the_answer_holds"));
+}
+
+#[test]
+fn a_body_written_as_a_whole_term_form_is_recorded() {
+    // The runner slices a test's body from the span its lowered lambda carries, and `Lowerer::region` used to stamp that span on its spine arm alone: a body rooted at `match`, `let`, `choose` or a lambda rebuilt its node and reached Core unspanned, so `curios test` reported those failures with no body under them — the three forms below all printed an empty line where the source belongs. The same gap left an elaboration error at such a root unlocated.
+    let entrypoint = r#"
+        use /std/{Nat, Str, Bool, Io, Test};
+        test application() =
+            Test/check(1 + 1 == 2);
+        test matching() =
+            match 1 + 1 == 2 : (_) => Test | true => Test/check(true) | false => Test/check(false) end;
+        test binding() =
+            let x = 1 + 1;
+            Test/check(x == 2);
+        /std/print("ran\n")
+        "#
+    .parse::<Entrypoint>()
+    .expect("fixture parses");
+    let (_module, _foreigns, records) = compile_tests_with_units(
+        DEFAULT_STEP_BUDGET,
+        &[],
+        &entrypoint,
+        &RootSource::none(),
+        None,
+        EntryTail::Tests,
+        |_| {},
+        |_| {},
+    )
+    .expect("fixture compiles as a test program");
+
+    assert_eq!(
+        records
+            .iter()
+            .map(|record| record.body.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "Test/check(1 + 1 == 2)",
+            "match 1 + 1 == 2 : (_) => Test | true => Test/check(true) | false => Test/check(false) end",
+            "let x = 1 + 1;\n            Test/check(x == 2)",
+        ]
+    );
 }
