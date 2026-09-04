@@ -1,6 +1,4 @@
-//! The `Flt` codec and its narrowings, which answer their partiality with an `Option`.
-//!
-//! These were filed under `big_nat`, whose subject is an arbitrary-precision magnitude rather than a fixed-width float.
+//! The `Flt` codec against Rust's own encoding: the little-endian round trip byte-for-byte, and the decimal round trip over runtime-tainted values so the pair runs in emitted Wasm rather than folding. The narrowings that answer partiality with an `Option` are the corpus's `/numeric`.
 
 use crate::tests::run;
 
@@ -46,29 +44,4 @@ fn flt_of_le_bytes_roundtrips_raw_bytes() {
         "#;
 
     assert_eq!(run(source), 1.5f32.to_le_bytes());
-}
-
-#[test]
-fn narrowings_answer_their_partiality_with_an_option() {
-    // `Flt/to_nat` and `Flt/to_int` are the one bounded-looking pair in the prelude that states no precondition, because `curios-core` folds no `Flt` operation and a decided bound over one could never reduce — so the partiality is answered here, by a `try_` form, and the raw operations keep trapping.
-    //
-    // The interval is open at both infinities rather than closed on the finite extremes, and every non-finite input is checked because each fails for a different reason: `+inf` by the upper bound, `-inf` by the lower, a NaN by both (every IEEE comparison with one is false). `try_to_nat` needs no lower bound at all — `f >= +0.0` has already rejected the NaN and `-inf`.
-    //
-    // `-0.0` is the case that pins which equality this follows. IEEE says `-0.0 >= +0.0`, so it converts to `0` rather than being rejected as negative — correct, since `i32.trunc_f32_u` does not trap on it — even though `Flt`'s own identity is bitwise and holds the two zeros apart.
-    let source = r#"
-        use /std/{Handle, Str, Nat, Int, Flt, Option, List, Io};
-        let n(o : Option(Nat)) -> Str = Nat/to_str(Option/unwrap_or(o, 9));
-        let i(o : Option(Int)) -> Str = Nat/to_str(Int/abs(Option/unwrap_or(o, +9)));
-        /std/print(Str/join("|", [
-            n(Flt/try_to_nat(+1.5)),
-            n(Flt/try_to_nat(-1.5)),
-            n(Flt/try_to_nat(-0.0)),
-            n(Flt/try_to_nat(Flt/pos_inf)),
-            n(Flt/try_to_nat(Flt/nan)),
-            i(Flt/try_to_int(-1.5)),
-            i(Flt/try_to_int(Flt/neg_inf)),
-            i(Flt/try_to_int(Flt/nan))]))
-        "#;
-
-    assert_eq!(run(source), b"1|9|0|9|9|1|9|9");
 }
