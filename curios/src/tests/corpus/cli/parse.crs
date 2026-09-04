@@ -15,6 +15,8 @@ let why(f: Cli/Failure) -> Str =
     | missing_required(n) => Str/flatten(["missing ", n])
     | unexpected(t) => Str/flatten(["unexpected ", t])
     | bad_value(n, r) => Str/flatten(["bad ", n, ": ", r])
+    -- The subcommand refusals are `select`'s, never `parse`'s: a specification with children declares no arguments of its own.
+    | _ => "not this parser's"
     end;
 
 -- One rendering for every outcome, so a row's expectation is one string whichever way the line went.

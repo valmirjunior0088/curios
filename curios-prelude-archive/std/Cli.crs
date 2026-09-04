@@ -272,6 +272,8 @@ pub induct Failure: pub Type
 | missing_required(name: Str)
 | unexpected(token: Str)
 | bad_value(name: Str, reason: Str)
+| unknown_command(name: Str, known: List(Str))
+| missing_command(known: List(Str))
 end
 
 -- What a line came to. `parse` answers one of these and performs nothing; `main` is what turns each into a stream and an exit status.
@@ -638,9 +640,51 @@ let complaint(f: Failure) -> Str =
     | missing_required(n) => Str/flatten(["the argument '", shout(n), "' is required"])
     | unexpected(t) => Str/flatten(["unexpected argument '", t, "'"])
     | bad_value(n, r) => Str/flatten(["invalid value for '--", n, "': ", r])
+    | unknown_command(n, known) =>
+        Str/flatten(["unrecognized subcommand '", n, "'\n  available: ", Str/join(", ", known)])
+    | missing_command(known) =>
+        Str/flatten(["a subcommand is required\n  available: ", Str/join(", ", known)])
     end;
 
 pub let report(cli: Cli, f: Failure) -> Str =
     Str/flatten(
         ["error: ", complaint(f), "\n\n", usage(cli), "\n\nFor more information, try '--help'.\n"]);
+
 -- There is no `main` yet, and the gap is deliberate rather than forgotten: an entry handing `parse(cli.args, ...)` to `cli.run` is refused by the kernel, which reads the instance levels of a specification-indexed function applied to a `Type`-carrying field as constants where the caller supplies its own parameters. Until the elaborator settles which of a declaration's interface levels may be minimized and which must be generalized, a program spells the six lines itself over `parse`, `help` and `report`.
+-- What choosing a subcommand came to. It mirrors `Outcome` deliberately: help is decided before the first token is read as a name, so a parent answers `--help` rather than refusing it as an unknown command, and a caller dispatches on one shape either way.
+pub induct Chosen: pub Type
+| chose(sub: Cli, rest: List(Str))
+| wanted_help()
+| wanted_version()
+| refused(f: Failure)
+end
+
+let command_names(subs: List(Cli)) -> List(Str) =
+    match subs | [] => [] | [c, ..more] => [c.name, ..command_names(more)] end;
+
+let named(subs: List(Cli), name: Str) -> Option(Cli) =
+    match subs
+    | [] => Option/none()
+    | [c, ..more] =>
+        match Str/eql(c.name, name) | true => Option/some(c) | false => named(more, name) end
+    end;
+
+-- The first token names the subcommand and everything after it is that subcommand's line. One level deep: `WellFormed` requires every child's own `commands` to be empty, so what this hands back is a command that parses rather than one that selects again.
+pub let select(cli: Cli, argv: List(Str)) -> Chosen =
+    let names = command_names(cli.commands);
+    match wants_help(argv)
+    | true => Chosen/wanted_help()
+    | false =>
+        match Option/is_some(cli.version) && wants_version(argv)
+        | true => Chosen/wanted_version()
+        | false =>
+            match argv
+            | [] => Chosen/refused(Failure/missing_command(names))
+            | [first, ..rest] =>
+                match named(cli.commands, first)
+                | some(sub) => Chosen/chose(sub, rest)
+                | none() => Chosen/refused(Failure/unknown_command(first, names))
+                end
+            end
+        end
+    end;

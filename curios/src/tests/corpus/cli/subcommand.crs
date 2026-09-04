@@ -1,0 +1,72 @@
+-- Subcommands, one level deep: choosing one by the first token, refusing a name that is not there, and the `Commands:` section a parent's help grows.
+use /std/{Cli, Str, Nat, Option, List, Test};
+
+let add: Cli =
+    Cli {
+        name = "add",
+        about = "Add a dependency",
+        version = Option/none(),
+        args = [Cli/positional("name", Cli/str, "What to add")],
+        run(_) = /std/print("never"),
+        commands = [],
+    };
+
+let remove: Cli =
+    Cli {
+        name = "remove",
+        about = "Remove a dependency",
+        version = Option/none(),
+        args = [Cli/positional("name", Cli/str, "What to remove")],
+        run(_) = /std/print("never"),
+        commands = [],
+    };
+
+let app: Cli =
+    Cli {
+        name = "deps",
+        about = "Manage dependencies",
+        version = Option/some("0.1.0"),
+        args = [],
+        run(_) = /std/print("never"),
+        commands = [add, remove],
+    };
+
+let chose(argv: List(Str)) -> Str =
+    match Cli/select(app, argv)
+    | wanted_help() => "help"
+    | wanted_version() => "version"
+    | refused(f) => Cli/report(app, f)
+    | chose(sub, rest) => Str/flatten([sub.name, "(", Str/join(",", rest), ")"])
+    end;
+
+-- Either child, chosen by the first token, with everything after it left for that child to parse.
+test the_first_token_chooses_the_subcommand_and_the_rest_is_its_line() =
+    Test/all(
+        [
+            Test/equal(chose(["add", "curios"]), "add(curios)"),
+            Test/equal(chose(["remove", "curios", "--force"]), "remove(curios,--force)")]);
+
+-- A parent answers help and its own version before the first token is read as a name, so `--help` is not an unrecognized subcommand.
+test a_parent_answers_help_before_reading_a_name() =
+    Test/all(
+        [
+            Test/equal(chose(["--help"]), "help"),
+            Test/equal(chose(["--version"]), "version"),
+            Test/equal(chose(["add", "--help"]), "help")]);
+
+-- Neither a name that is not there nor no name at all: both refuse, and both list what there is.
+test an_unknown_or_absent_subcommand_lists_the_ones_there_are() =
+    Test/all(
+        [
+            Test/check(Str/contains(chose(["push"]), "unrecognized subcommand 'push'")),
+            Test/check(Str/contains(chose(["push"]), "available: add, remove")),
+            Test/check(Str/contains(chose([]), "a subcommand is required")),
+            Test/check(Str/contains(chose([]), "available: add, remove"))]);
+
+-- A parent's usage names `<COMMAND>` rather than options it does not have, and its help grows the section its children fill.
+test a_parents_help_lists_its_children() =
+    Test/all(
+        [
+            Test/equal(Cli/usage(app), "Usage: deps <COMMAND>"),
+            Test/check(Str/contains(Cli/help(app), "Commands:\n  add     Add a dependency\n")),
+            Test/check(Str/contains(Cli/help(app), "  remove  Remove a dependency\n"))]);
