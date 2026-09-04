@@ -341,7 +341,7 @@ where
 
 /// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, judged by the kernel, and **erased**, with a refusal from any of them reported as the compile path reports it. What a question about a program's correctness is answered by.
 ///
-/// **Erasure is a verdict, which is why the line is drawn under it rather than under the kernel.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the kernel made `wonder diagnostics` report a clean program that `run` then refused, which is the one thing that query may not do. Below here nothing decides: [`lower_from_ersd`] returns no `Result` at all.
+/// **Erasure is a verdict, which is why the line is drawn under it rather than under the kernel.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the kernel made `wonder diagnostics` report a clean program that `run` then refused, which is the one thing that query may not do. Below here nothing decides: `lower_from_ersd` — private, so named here rather than linked — returns no `Result` at all.
 ///
 /// The erased module is discarded. Producing it is the whole cost, and the caller wants the Core module.
 pub fn check_entrypoint(
