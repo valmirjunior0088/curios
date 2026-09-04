@@ -158,3 +158,64 @@ fn concat_crosses_byte_boundaries_without_exposing_padding() {
     assert_eq!(actual.bit_length(), 14);
     assert_eq!(actual.to_packed_bytes().last().unwrap() & 0b1100_0000, 0);
 }
+
+/// The order agrees with equality on every short bit string, and separates two values one packed byte cannot: `b[1]` and `b[1, 0]` pack alike and are ordered by length, shorter first.
+#[test]
+fn the_order_agrees_with_equality_and_separates_equal_packings() {
+    let short = PackedBin::from_bits([true]);
+    let long = PackedBin::from_bits([true, false]);
+    assert_eq!(short.to_packed_bytes(), long.to_packed_bytes());
+    assert!(short < long);
+
+    let values = (0..=9)
+        .flat_map(|length| {
+            (0..(1usize << length)).map(move |mask| {
+                PackedBin::from_bits((0..length).map(|index| mask & (1 << index) != 0))
+            })
+        })
+        .collect::<Vec<_>>();
+    for left in &values {
+        for right in &values {
+            assert_eq!(
+                left.cmp(right).is_eq(),
+                left == right,
+                "{left:?} against {right:?}"
+            );
+        }
+    }
+}
+
+/// The unaligned arm answers what the aligned one does: a window of a framed buffer orders against a directly built value exactly as two directly built values do.
+#[test]
+fn the_order_answers_alike_across_its_arms() {
+    for length in 0..=8 {
+        for mask in 0..(1usize << length) {
+            let bits = (0..length)
+                .map(|index| mask & (1 << index) != 0)
+                .collect::<Vec<_>>();
+            let direct = PackedBin::from_bits(bits.iter().copied());
+            let framed = PackedBin::from_bits(
+                [true, false, true]
+                    .into_iter()
+                    .chain(bits.iter().copied())
+                    .chain([true, true]),
+            );
+            let window = framed.window(3, length).unwrap();
+            assert!(direct.cmp(&window).is_eq());
+            for other in [PackedBin::from_bits([true]), PackedBin::from_bytes(vec![7])] {
+                assert_eq!(direct.cmp(&other), window.cmp(&other));
+                assert_eq!(other.cmp(&direct), other.cmp(&window));
+            }
+        }
+    }
+}
+
+/// The byte grain orders as `/std/Bytes/cmp` does — bytewise, the shorter prefix first — so the compiler's order and the language's never disagree about a value both can see.
+#[test]
+fn the_byte_grain_orders_as_the_language_does() {
+    let model = |bytes: Vec<u8>| PackedBin::from_bytes(bytes);
+    assert!(model(vec![1, 2]) < model(vec![1, 3]));
+    assert!(model(vec![1]) < model(vec![1, 0]));
+    assert!(model(vec![2]) > model(vec![1, 9]));
+    assert!(model(vec![]) < model(vec![0]));
+}

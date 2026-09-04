@@ -5,11 +5,13 @@
 use {
     super::simplify::{rewire_node, rewrite_atoms},
     super::*,
-    curios_utilities::Grain,
+    curios_utilities::{Grain, PackedBin},
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// An operand under a total order, with `Flt` by bit pattern and packed data by canonical bytes, so commutative normalization can sort and the scope table can key deterministically.
+/// An operand under a total order, with `Flt` by bit pattern and packed data by the value's own, so commutative normalization can sort and the scope table can key deterministically.
+///
+/// A `Bin` holds the [`PackedBin`], which carries its logical length, rather than a re-derived byte string that does not. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — so a key built from packed bytes collided them, and two `BinEql`s against those two literals deduped into one.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum AtomKey {
     Value(u32),
@@ -17,7 +19,7 @@ enum AtomKey {
     Nat(u32),
     Int(i32),
     Flt(u32),
-    Bin(u8, usize, Vec<u8>),
+    Bin(Grain, PackedBin),
     Filler,
 }
 
@@ -28,19 +30,7 @@ fn atom_key(atom: &CpsAtom) -> AtomKey {
         CpsAtom::Literal(CpsLiteral::Nat(value)) => AtomKey::Nat(*value),
         CpsAtom::Literal(CpsLiteral::Int(value)) => AtomKey::Int(*value),
         CpsAtom::Literal(CpsLiteral::Flt(value)) => AtomKey::Flt(value.to_bits()),
-        CpsAtom::Literal(CpsLiteral::Bin(grain, value)) => {
-            let bytes = match grain {
-                Grain::B => value.to_packed_bytes(),
-                Grain::X => value
-                    .to_bytes()
-                    .expect("X literals are always byte-aligned"),
-            };
-            let grain = match grain {
-                Grain::B => 0u8,
-                Grain::X => 1u8,
-            };
-            AtomKey::Bin(grain, bytes.len(), bytes)
-        }
+        CpsAtom::Literal(CpsLiteral::Bin(grain, value)) => AtomKey::Bin(*grain, value.clone()),
         CpsAtom::Filler => AtomKey::Filler,
     }
 }

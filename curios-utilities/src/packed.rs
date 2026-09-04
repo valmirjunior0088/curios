@@ -163,6 +163,19 @@ impl PackedBin {
             Self::from_bytes(bytes)
         })
     }
+
+    /// The `index`-th byte of the packed form, read without materializing it — bits past `bit_length` read as the zero padding [`PackedBin::to_packed_bytes`] writes.
+    ///
+    /// The streaming spelling `Hash` and `Ord` share: both must agree with the aligned arm's byte slice, and a second copy of this loop is a second thing to keep in step with it.
+    fn packed_byte(&self, index: usize) -> u8 {
+        let mut byte = 0u8;
+        for offset in 0..8 {
+            if self.bit(index * 8 + offset).unwrap_or(false) {
+                byte |= 1 << offset;
+            }
+        }
+        byte
+    }
 }
 
 impl PartialEq for PackedBin {
@@ -201,16 +214,36 @@ impl Hash for PackedBin {
                 packed.hash(state);
 
                 for index in 0..packed {
-                    let mut byte = 0u8;
-                    for offset in 0..8 {
-                        if self.bit(index * 8 + offset).unwrap_or(false) {
-                            byte |= 1 << offset;
-                        }
-                    }
-                    state.write_u8(byte);
+                    state.write_u8(self.packed_byte(index));
                 }
             }
         }
+    }
+}
+
+impl PartialOrd for PackedBin {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for PackedBin {
+    /// Packed bytes first, then logical length — bytewise with the shorter prefix first, which is `/std/Bytes/cmp` at the byte grain, so the compiler's order and the language's never disagree about a value both can see.
+    ///
+    /// **The length is what makes this a total order rather than a hash collision.** Padding is zeroed, so `b[1]` and `b[1, 0]` pack into the same byte and are separated by nothing else; comparing the packed bytes alone would answer `Equal` for two unequal values and break the agreement with [`PackedBin::eq`] that a key's correctness rests on. The bit grain has no ordering in the language to match, so what it gets is this one: deterministic, consistent with equality, and documented rather than derived.
+    ///
+    /// Allocation-free on both arms for [`PackedBin::hash`]'s reason — this is what an optimizer's key sort walks.
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let ordering = match (self.as_bytes(), other.as_bytes()) {
+            (Some(left), Some(right)) => left.cmp(right),
+            _ => {
+                let (left, right) = (self.bit_length.div_ceil(8), other.bit_length.div_ceil(8));
+                (0..left.min(right))
+                    .map(|index| self.packed_byte(index).cmp(&other.packed_byte(index)))
+                    .find(|ordering| ordering.is_ne())
+                    .unwrap_or_else(|| left.cmp(&right))
+            }
+        };
+        ordering.then_with(|| self.bit_length.cmp(&other.bit_length))
     }
 }
 

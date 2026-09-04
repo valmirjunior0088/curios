@@ -18,29 +18,14 @@ enum ConstKey {
     Nat(u32),
     Int(i32),
     Flt(u32),
-    Bin(u8, usize, Vec<u8>),
+    /// The [`PackedBin`] itself, which carries its logical length. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — and a key built from packed bytes interned them into one constant, whose emitted length was whichever literal arrived first.
+    Bin(Grain, PackedBin),
     List(Vec<String>),
     Tuple(Vec<String>),
     /// A nominal row is its identity plus its canonicalized slots, a filler keying as `None` — kept apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant.
     Row(usize, Vec<Option<String>>),
     /// A closure is its target plus its canonicalized captures: with the code field an ordinary table index, a const-captured closure is a constant aggregate like any `Tuple`, materialized once per instantiation instead of per construction.
     Clsr(String, Vec<String>),
-}
-
-fn bin_key(grain: Grain, value: &PackedBin) -> ConstKey {
-    let bytes = match grain {
-        Grain::B => value.to_packed_bytes(),
-        Grain::X => value
-            .to_bytes()
-            .expect("X literals are always byte-aligned"),
-    };
-    // The *logical* length, in grain units: the packed bytes alone underdetermine a bit-grain value — `b[1]` and `b[1, 0]` pack identically — and a key that dropped the length interned them into one constant, whose emitted length was whichever literal arrived first.
-    let length = value.len(grain);
-    let grain = match grain {
-        Grain::B => 0u8,
-        Grain::X => 1u8,
-    };
-    ConstKey::Bin(grain, length, bytes)
 }
 
 #[derive(Default)]
@@ -112,7 +97,7 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                 consts.renames.insert(name.clone(), interned);
             }
             EmissionData::Bin(grain, value) => {
-                let interned = interner.intern(bin_key(*grain, value), data.clone());
+                let interned = interner.intern(ConstKey::Bin(*grain, value.clone()), data.clone());
                 consts.renames.insert(name.clone(), interned);
             }
             EmissionData::Tuple(elems) => {

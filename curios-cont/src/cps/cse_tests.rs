@@ -4,9 +4,10 @@ use {
     super::test_support::duplicate_pair_module,
     crate::cps::cse::dedupe_intrinsics,
     crate::{
-        CpsAtom, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsic, CpsModule, CpsNode,
-        CpsValueId,
+        CpsAtom, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsic, CpsLiteral, CpsModule,
+        CpsNode, CpsValueId,
     },
+    curios_utilities::{Grain, PackedBin},
     std::collections::BTreeMap,
 };
 
@@ -185,4 +186,55 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
     });
     assert!(forwards, "the merged use forwards the dominating result");
     module.verify().unwrap();
+}
+
+/// `b[1]` and `b[1, 0]` pack into the same byte, so an operand key built from packed bytes made these two comparisons duplicates and the second answered the first's result. Compiled, the program printed `false` for `x == b[1, 0]` where `x` was `b[1, 0]`.
+#[test]
+fn keeps_bit_literals_of_equal_packing_and_unequal_length_distinct() {
+    let mut module = CpsModule::new();
+    let entry = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let x = module.add_value(Some("x".into()));
+    let first = module.add_value(Some("first".into()));
+    let second = module.add_value(Some("second".into()));
+
+    let return_node = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: return_cont,
+        args: vec![CpsAtom::Value(second)],
+    }));
+    let second_node = module.add_node(CpsNode::LetIntrinsic {
+        result: second,
+        op: CpsIntrinsic::BinEql(Grain::B),
+        args: vec![
+            CpsAtom::Value(x),
+            CpsAtom::Literal(CpsLiteral::Bin(
+                Grain::B,
+                PackedBin::from_bits([true, false]),
+            )),
+        ],
+        next: return_node,
+    });
+    let first_node = module.add_node(CpsNode::LetIntrinsic {
+        result: first,
+        op: CpsIntrinsic::BinEql(Grain::B),
+        args: vec![
+            CpsAtom::Value(x),
+            CpsAtom::Literal(CpsLiteral::Bin(Grain::B, PackedBin::from_bits([true]))),
+        ],
+        next: second_node,
+    });
+    module.define_function(
+        entry,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![x],
+            return_cont,
+            body: first_node,
+        },
+    );
+    module.set_entry(entry);
+
+    assert!(!dedupe_intrinsics(&mut module));
+    assert!(module.node(first_node).is_some());
+    assert!(module.node(second_node).is_some());
 }
