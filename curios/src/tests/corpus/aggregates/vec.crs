@@ -1,0 +1,29 @@
+-- `Vec` beyond its constructors: the proof-carrying index, the list round trip, `replicate`, `zip`, `fold`, and its witnesses.
+use /std/{Vec, Nat, Str, Bool, List, Test};
+
+-- The bound is decided, so a literal index inside the length discharges by reduction and the `cons` arm's successor cancellation is what carries it down the vector.
+test get_reads_a_literal_index_under_the_decided_bound() =
+    let v: Vec(Nat, 3) = Vec/cons(10, Vec/cons(20, Vec/cons(30, Vec/nil())));
+    Test/equal([Vec/get(v, 0), Vec/get(v, 1), Vec/get(v, 2)], [10, 20, 30]);
+
+-- `of_list` cannot know its length statically, so it hands back a dependent pair; `to_list` on the vector inside it is the identity on the list.
+test of_list_and_to_list_round_trip_through_the_dependent_pair() =
+    let (n, v) = Vec/of_list([1, 2, 3]);
+    Test/all([Test/equal(n, 3), Test/equal(Vec/to_list(v), [1, 2, 3])]);
+
+-- Equal lengths are in the types, so `zip` demands no proof and `replicate` builds the second operand at exactly the first's length.
+test zip_pairs_two_vectors_of_one_length_and_fold_walks_left_to_right() =
+    let v: Vec(Nat, 3) = Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil())));
+    let z = Vec/zip(v, Vec/replicate(3, "x"));
+    Test/equal(Vec/fold(z, "", (p, acc) => Str/flatten([acc, Nat/to_str(p.0), p.1])), "1x2x3x");
+
+-- A vector compares as its list, and spells as the constructor spine that rebuilds it.
+test a_vector_compares_as_its_list() =
+    let v: Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
+    let w: Vec(Nat, 2) = Vec/cons(1, Vec/cons(3, Vec/nil()));
+    Test/all(
+        [
+            Test/equal(Vec/to_list(v), [1, 2]),
+            Test/check(v == v),
+            Test/check(Bool/not(v == w)),
+            Test/check(v != w)]);

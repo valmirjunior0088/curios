@@ -1,0 +1,30 @@
+-- The `Option` and `Result` surface beyond `bind` and `map`: fallbacks, filtering, the conversions between them, and the proof-carrying `Option/get`.
+use /std/{Option, Result, Nat, Str, Test};
+
+test option_fallbacks_filter_and_flatten() =
+    let a: Option(Nat) = Option/some(1);
+    let b: Option(Nat) = Option/none();
+    Test/all(
+        [
+            Test/equal(Option/or(b, a), Option/some(1)),
+            Test/equal(Option/or_else(b, () => Option/some(9)), Option/some(9)),
+            Test/equal(Option/filter(a, (n: Nat) => n > 5), Option/none()),
+            Test/equal(Option/flatten(Option/some(a)), Option/some(1)),
+            Test/equal(Option/unwrap_or_else(b, () => 7), 7)]);
+
+test option_and_result_convert_into_each_other() =
+    let a: Option(Nat) = Option/some(1);
+    let b: Option(Nat) = Option/none();
+    let ok: Result(Str, Nat) = Result/success(2);
+    let bad: Result(Str, Nat) = Result/failure("no");
+    Test/all(
+        [
+            Test/equal(Option/to_result(a, "missing"), Result/success(1)),
+            Test/equal(Option/to_result(b, "missing"), Result/failure("missing")),
+            Test/equal(Result/to_option(ok), Option/some(2)),
+            Test/equal(Result/to_option(bad), Option/none()),
+            Test/equal(Result/unwrap_or_else(bad, (e: Str) => Str/len(e)), 2)]);
+
+-- `IsSome` is decided by a match, so `get` on a literal `some` fills its bound by reduction with nothing written.
+test get_on_a_literal_some_discharges_its_bound() =
+    Test/equal(Option/get(Option/some(3)), 3);

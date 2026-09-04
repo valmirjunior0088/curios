@@ -1,0 +1,26 @@
+-- Packed atom splices and the folds that sum a sequence.
+use /std/{Str, Nat, Byte, Bytes, Bool, Bits, Eq, List, Option, Test};
+
+-- `..` splices one generator into a packed literal, between literal runs and adjacent to another atom. `i` and `bang` are bound rather than written, so the run is genuinely spliced rather than folded at parse time.
+test atom_splice_builds_the_written_sequence() =
+    let i: Byte = 0x69;
+    let bang: Byte = 0x21;
+    Test/equal(x[0x48, i, bang], Str/to_bytes("Hi!"));
+
+-- An atom leading a spread lowers to the cons spelling the packed-match refinement builds — the singleton `append(x[], h)` concatenated with the tail — so a literal written that way *is* the cons spine rather than merely equal to one. Stated over symbolic operands through `len` and `try_get`, the two observations that reduce across that spine, so nothing here is reached by folding literals; the kernel settles all three under their telescopes.
+test bytes_cons_has_the_length_of_its_tail_plus_one(h: Byte, t: Bytes) =
+    Test/refl(Bytes/len(x[h, ..t]), Nat/add(1, Bytes/len(t)), Eq/refl());
+
+test bytes_cons_decodes_its_head_first(h: Byte, t: Bytes) =
+    Test/refl(Bytes/try_get(x[h, ..t], 0), Option/some(h), Eq/refl());
+
+test bits_cons_has_the_length_of_its_tail_plus_one(h: Bool, t: Bits) =
+    Test/refl(Bits/len(b[h, ..t]), Nat/add(1, Bits/len(t)), Eq/refl());
+
+test list_fold_sums_elements() =
+    Test/equal(List/fold([10, 20, 30], 0, (e, acc) => Nat/add(acc, e)), 60);
+
+test bytes_fold_sums_bytes() =
+    Test/equal(
+        Bytes/fold(x[0x0a, 0x14, 0x1e], 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))),
+        60);
