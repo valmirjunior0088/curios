@@ -140,6 +140,10 @@ pub struct Context {
     goal_obligations: Vec<GoalObligation>,
     // Where each written goal `?` was written, recorded as it is born: a report that names a goal names it by this span, since an occurrence of the goal inside a type may carry the span of the binder it was substituted for — a declaration's, not the `?`'s.
     goal_spans: BTreeMap<MetavarId, Span>,
+    /// Why a solve could not commit: the unsolved metavariables `Convert::solve`'s embedded-metavariable guard found riding inside a candidate, with what each one fills and where it was written. The last attempt wins, so a metavariable that never solves leaves the reason it never did.
+    ///
+    /// This edge is what lets the item drain report the *cause* of an undecided conversion rather than the goal that merely waited on it. An undischarged bound riding inside a helper's unfolded body blocks every metavariable downstream of it, and without the edge the report names the last of them — an implicit the author never wrote, at a line that is not where the fault is — while the bound nothing discharged goes unmentioned entirely.
+    solve_blockers: BTreeMap<MetavarId, Vec<(MetavarId, MetavarOrigin, Option<Span>)>>,
     // What the unit's `use` declarations brought into scope, where, and under which spelling — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals, as they always did.
     imports: Imports,
 }
@@ -184,10 +188,27 @@ impl Context {
             imports: Imports::default(),
             goal_obligations: Vec::new(),
             goal_spans: BTreeMap::new(),
+            solve_blockers: BTreeMap::new(),
         }
     }
 
     /// Record where the written goal `id` was written, at its birth.
+    /// Record what blocked `id`'s solve, replacing any earlier record: only the last attempt's reason is worth reporting, since an earlier one may since have been solved away.
+    pub(crate) fn note_solve_blockers(
+        &mut self,
+        id: MetavarId,
+        blockers: Vec<(MetavarId, MetavarOrigin, Option<Span>)>,
+    ) {
+        self.solve_blockers.insert(id, blockers);
+    }
+
+    pub(crate) fn solve_blockers(
+        &self,
+        id: MetavarId,
+    ) -> &[(MetavarId, MetavarOrigin, Option<Span>)] {
+        self.solve_blockers.get(&id).map_or(&[], Vec::as_slice)
+    }
+
     pub(crate) fn note_goal_span(&mut self, id: MetavarId, span: Span) {
         self.goal_spans.entry(id).or_insert(span);
     }

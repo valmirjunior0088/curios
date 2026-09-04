@@ -1078,6 +1078,21 @@ impl Convert {
             context.metavar_solution(*other).is_none()
                 && !context.metavar_context_contained(*other, id)
         }) {
+            // Record what blocked this candidate before postponing. A metavariable that never solves is reported by the item drain, and the drain has only the goal's own terms to look at — the blocker rides inside a definition body it cannot see, so the edge must be kept here or the cause is lost.
+            let occurrences = crate::metavar_origins(&[t]);
+            context.note_solve_blockers(
+                id,
+                metavars
+                    .iter()
+                    .filter(|other| context.metavar_solution(**other).is_none())
+                    .filter_map(|other| {
+                        occurrences
+                            .get(other)
+                            .map(|(origin, span)| (*other, origin.clone(), span.clone()))
+                    })
+                    .collect(),
+            );
+
             #[cfg(feature = "profile")]
             curios_profile::tracing::debug!(
                 target: "curios_elab::solve",

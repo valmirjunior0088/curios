@@ -180,3 +180,38 @@ fn a_typeless_local_let_still_infers_its_body() {
         "#;
     assert_eq!(run(source), b"ok\n");
 }
+
+// A postponement whose blocker is itself blocked. `List/slice` carries a `Nat/Le(start + length, len)` bound; undischarged inside `bad`, its proof metavariable rides into the candidate for `resize`'s implicit length when the reducer unfolds `bad`'s body, and `Convert::solve`'s embedded-metavariable guard postpones that candidate rather than committing a solution of a wider context. The drain used to report the goal that merely waited — `cannot decide a postponed conversion ... never solved: the implicit argument 'n' of '/resize'` — naming an implicit the author never wrote, at the `resize` call rather than at the bound, and never mentioning `List/slice` at all. Following the recorded blocking edges to the end of the chain reports what nothing was ever going to solve.
+#[test]
+fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
+    let source = r#"
+        use /std/{Nat, Vec, List, Handle};
+
+        let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T, n)) -> Vec(T, m) =
+            (match m: (k) => (j: Nat, Vec(T, j)) -> Vec(T, k)
+            | 0 => (j, x) => Vec/nil()
+            | p + 1; ih => (j, x) =>
+                match x
+                | nil() => Vec/cons(fill, ih(0, Vec/nil()))
+                | cons(@q, y, ys) => Vec/cons(y, ih(q, ys))
+                end
+            end)(n, v);
+
+        let cascade(l: List(Nat), k: Nat, w: Nat) -> Vec(Nat, w) =
+            let bad(u: List(Nat)) -> List(Nat) = List/slice(u, k, 3);
+            let paired = Vec/of_list(bad(l));
+            resize(0, w, paired.1);
+
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("'within' of '/sys/List/slice'") && report.contains("nothing discharged"),
+        "the report should name the bound nothing discharged, got: {report}"
+    );
+    assert!(
+        !report.contains("postponed conversion"),
+        "the waiting goal should not be reported in place of its cause, got: {report}"
+    );
+}

@@ -3,9 +3,9 @@ mod tests;
 
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
 use curios_core::{
-    Apply, Bound, Field, Free, Func, FuncType, Global, Intrinsic, IntrinsicHead, Level, Many,
-    Metavar, MetavarId, MetavarOrigin, Proj, ReduceError, Scope, Subterm, Telescope, Term,
-    Transient, UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole, Visit,
+    Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic, IntrinsicHead,
+    Level, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError, Scope, Subterm, Telescope,
+    Term, Transient, UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole, Visit,
 };
 use curios_utilities::Span;
 use std::{
@@ -514,6 +514,12 @@ impl Context {
                                     )
                                     .at_opt(parked_origin.span())
                                 }
+                                // A watched blocker that is itself blocked names a goal that merely waited. Follow the chain to what nothing was ever going to solve and report *that* instead.
+                                None if let Some(error) =
+                                    root_blocker_error(self, &watching, parked_origin.span()) =>
+                                {
+                                    error
+                                }
                                 // A survivor of the drain is postponed, not rigidly mismatched — the retry's own Mismatch arm reports rigid disagreements. Say so, naming the blockers it watched: a rigid mismatch means the program is wrong, a postponement means inference never gained the structure to decide.
                                 None => {
                                     let blockers =
@@ -633,10 +639,10 @@ fn watched_blockers(
 }
 
 /// A metavariable's insertion provenance and the span of the occurrence it was read off — what a report names a blocker by.
-type Provenance = (MetavarOrigin, Option<Span>);
+pub(crate) type Provenance = (MetavarOrigin, Option<Span>);
 
 /// Every metavariable occurrence across `terms` that carries an origin, by id, with the span of its first occurrence.
-fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetavarId, Provenance> {
+pub(crate) fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetavarId, Provenance> {
     let origins: Rc<RefCell<BTreeMap<MetavarId, Provenance>>> =
         Rc::new(RefCell::new(BTreeMap::new()));
     for term in terms {
@@ -1123,4 +1129,57 @@ pub(crate) fn expect_intrinsic_head(
     let head_type = reduce_with(context, &head_type)?;
 
     check_intrinsic_head(expected, head_type)
+}
+
+/// The error for the *root* of a blocking chain, when a surviving conversion goal waited on a metavariable that was itself blocked.
+///
+/// `Convert::solve`'s embedded-metavariable guard postpones a candidate carrying an unsolved metavariable of a wider context, and records the edge (`Context::note_solve_blockers`). Walking those edges reaches the metavariable nothing was ever going to solve — characteristically an undischarged decided bound riding inside a helper whose body the candidate unfolded — and reporting it is the difference between naming the proposition the author must discharge, at the call that demands it, and naming an implicit they never wrote, at a line that is not where the fault is.
+///
+/// Only a *terminal* implicit argument is reported: one whose own blockers have all been solved, so it is the end of the chain rather than another waiter, and one whose provenance yields the same message a lone undischarged bound already gets. Everything else falls through to the postponement report, which is the honest answer when no better one exists.
+fn root_blocker_error(
+    context: &mut Context,
+    watching: &BTreeSet<MetavarId>,
+    fallback: Option<Span>,
+) -> Option<Error> {
+    let mut seen: BTreeSet<MetavarId> = BTreeSet::new();
+    let mut frontier: Vec<MetavarId> = watching.iter().copied().collect();
+    let mut root: Option<(MetavarId, ImplicitOrigin, Option<Span>)> = None;
+
+    while let Some(id) = frontier.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+
+        for (blocker, origin, span) in context.solve_blockers(id) {
+            if context.metavar_solution(*blocker).is_some() {
+                continue;
+            }
+
+            let terminal = context
+                .solve_blockers(*blocker)
+                .iter()
+                .all(|(next, _, _)| context.metavar_solution(*next).is_some());
+
+            if terminal && let MetavarOrigin::Implicit(implicit) = origin {
+                root = Some((*blocker, implicit.clone(), span.clone()));
+            }
+
+            frontier.push(*blocker);
+        }
+    }
+
+    let (id, origin, span) = root?;
+    let bound = context
+        .metavar_entry(id)
+        .map(|entry| entry.result.clone())?;
+
+    Some(
+        Error::uninferred_implicit(
+            origin.func,
+            origin.binder,
+            resolved_for_display(context, &bound),
+        )
+        // The blocker's own occurrence rides inside a candidate the reducer built, which need not have kept a span; the waiting goal's origin is then the nearest honest place to point.
+        .at_opt(span.or(fallback)),
+    )
 }
