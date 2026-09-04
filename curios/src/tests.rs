@@ -2,6 +2,7 @@ mod aggregates;
 mod big_num;
 mod binders;
 mod characters;
+mod cli;
 mod codegen;
 mod concepts;
 mod corpus;

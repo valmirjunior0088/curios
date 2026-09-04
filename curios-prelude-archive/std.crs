@@ -147,6 +147,9 @@ pub use Json/{let Json};
 pub mod Toml;
 pub use Toml/{let Toml};
 
+pub mod Cli;
+pub use Cli/{let Cli};
+
 pub mod Fmt;
 pub use Fmt/{let Fmt};
 

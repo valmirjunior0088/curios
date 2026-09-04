@@ -1,0 +1,266 @@
+-- A command-line interface is a value, and the record it parses into is a type computed from that value. A program writes a `Cli` -- a name, a list of `Arg`, and a handler -- and `main` runs it: `parse` turns the process arguments into a `Values(args)`, `get(v, name)` reads one field at a type the specification decides, and a name the specification does not contain is refused where it is written rather than at run time.
+--
+-- The token grammar is GNU's. In the order a token is tried: `--` makes every later token a positional; a lone `-` is an ordinary positional; `--name=value` is the option `name`, the first `=` splitting it and every later one belonging to the value; `--name` is the flag `name`, or the option `name` taking the next token verbatim; `-abc` is the flags `a` and `b` followed by `c` as a flag or as an option taking the rest of the token or the next one; anything else is a positional, filled in declaration order and then collected by `rest`. A long name is matched whole -- there is no abbreviation and no single-dash long option.
+--
+-- An option written twice keeps its last value, `many` keeps every value, and a flag written twice is set. `-h` or `--help` anywhere on the line answers help before any failure is reported, and `--version` likewise when the command declares one. Help and version exit 0 on standard output; a usage error prints to standard error and exits 2.
+use /std/{Str, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, True, False};
+
+-- A reader is data rather than a witness, so a program's own type joins a specification by supplying one rather than by declaring an instance. `A` is a field because the carrier a specification entry contributes is read off the entry itself; see `Carrier`.
+pub struct Value: pub Type {
+    A: Type,
+    metavar: Str,
+    read: (Str) -> Result(Str, A),
+}
+
+pub let str: Value =
+    Value { A = Str, metavar = "S", read = (s) => Result/success(s) };
+
+pub let nat: Value =
+    Value {
+        A = Nat,
+        metavar = "N",
+        read =
+            (s) =>
+                match Nat/of_str(s)
+                | some(n) => Result/success(n)
+                | none() => Result/failure(Str/flatten(["expected a number, found '", s, "'"]))
+                end,
+    };
+
+pub let int: Value =
+    Value {
+        A = Int,
+        metavar = "N",
+        read =
+            (s) =>
+                match Int/of_str(s)
+                | some(n) => Result/success(n)
+                | none() => Result/failure(Str/flatten(["expected an integer, found '", s, "'"]))
+                end,
+    };
+
+pub let flt: Value =
+    Value {
+        A = Flt,
+        metavar = "X",
+        read =
+            (s) =>
+                match Flt/of_str(s)
+                | some(x) => Result/success(x)
+                | none() => Result/failure(Str/flatten(["expected a number, found '", s, "'"]))
+                end,
+    };
+
+pub let reader(@A: Type, metavar: Str, f: (Str) -> Result(Str, A)) -> Value =
+    Value { A = A, metavar = metavar, read = f };
+
+-- Whether an option must appear, may be absent, or stands in for a value when absent. `default` carries the value at the reader's own type, which is what makes a defaulted option's carrier `A` rather than `Option(A)`.
+pub induct Presence(A: Type): pub Type
+| required()
+| optional()
+| default(a: A)
+end
+
+pub induct Kind: pub Type
+| flag()
+| option(v: Value, presence: Presence(v.A))
+| many(v: Value)
+| positional(v: Value)
+| rest(v: Value)
+end
+
+pub struct Arg: pub Type {
+    long: Str,
+    short: Option(Char),
+    help: Str,
+    kind: Kind,
+}
+
+-- The smart constructors write the common shapes. A short alias or another metavariable is a structure update over one of them -- `Arg { ..Cli/flag("verbose", "Log every request"), short = Option/some('v') }` -- so there is no builder to learn and no half-built state to get wrong.
+pub let flag(long: Str, help: Str) -> Arg =
+    Arg { long = long, short = Option/none(), help = help, kind = Kind/flag() };
+
+pub let option(long: Str, v: Value, help: Str) -> Arg =
+    Arg {
+        long = long,
+        short = Option/none(),
+        help = help,
+        kind = Kind/option(v, Presence/required()),
+    };
+
+pub let optional(long: Str, v: Value, help: Str) -> Arg =
+    Arg {
+        long = long,
+        short = Option/none(),
+        help = help,
+        kind = Kind/option(v, Presence/optional()),
+    };
+
+pub let default(long: Str, v: Value, fallback: v.A, help: Str) -> Arg =
+    Arg {
+        long = long,
+        short = Option/none(),
+        help = help,
+        kind = Kind/option(v, Presence/default(fallback)),
+    };
+
+pub let many(long: Str, v: Value, help: Str) -> Arg =
+    Arg { long = long, short = Option/none(), help = help, kind = Kind/many(v) };
+
+pub let positional(long: Str, v: Value, help: Str) -> Arg =
+    Arg { long = long, short = Option/none(), help = help, kind = Kind/positional(v) };
+
+pub let rest(long: Str, v: Value, help: Str) -> Arg =
+    Arg { long = long, short = Option/none(), help = help, kind = Kind/rest(v) };
+
+-- What one *kind* contributes to the parsed record. Stated over the kind rather than over the whole entry because the function that builds a field walks the kind under a motive, and a motive can only name what the scrutinee refines: `Carrier(a)` would leave the arm's type stuck on `a` while the match refines `a.kind`.
+let KindCarrier(k: Kind) -> Type =
+    match k
+    | flag() => Bool
+    | option(v, presence) =>
+        match presence | required() => v.A | optional() => Option(v.A) | default(_) => v.A end
+    | many(v) => List(v.A)
+    | positional(v) => v.A
+    | rest(v) => List(v.A)
+    end;
+
+-- What one entry contributes to the parsed record. A flag is always answered, a required or defaulted option and a positional carry the reader's type bare, an optional one carries `Option`, and the two collecting kinds carry a list.
+pub let Carrier(a: Arg) -> Type =
+    KindCarrier(a.kind);
+
+let is_positional(k: Kind) -> Bool =
+    match k | positional(_) => true | _ => false end;
+
+let is_rest(k: Kind) -> Bool =
+    match k | rest(_) => true | _ => false end;
+
+-- The parsed record, indexed by the specification it was parsed against. An inductive rather than a computed tuple, so `get(v, name)` reads the specification off `v`'s own type and a handler needs no annotation.
+pub induct Values: (List(Arg)) -> pub Type
+| nil(): ([])
+| cons(@a: Arg, @rest: List(Arg), head: Carrier(a), tail: Values(rest)): ([a, ..rest])
+end
+
+-- The type `get` answers at `name`, walked at elaboration. The `[]` case is `{}` and unreachable: `Has` refuses the walk before it can arrive there.
+pub let Lookup(spec: List(Arg), name: Str) -> Type =
+    match spec
+    | [] => {}
+    | [a, ..rest] =>
+        match Str/eql(a.long, name) | true => Carrier(a) | false => Lookup(rest, name) end
+    end;
+
+-- That `name` is one of `spec`'s long names, decided by reduction: `True` where the walk finds it and `False` at the end, so a literal specification discharges it silently and a misspelling is refused where it is written.
+pub let Has(spec: List(Arg), name: Str) -> Prop =
+    match spec
+    | [] => False
+    | [a, ..rest] => match Str/eql(a.long, name) | true => True | false => Has(rest, name) end
+    end;
+
+-- Read one field by name. The specification is implicit because it is the index of `v`'s type, so a handler writes `Cli/get(v, "port")` and gets the type the specification gives that name.
+--
+-- Both matches carry a motive that refines the bound alongside the result: the value walk eliminates into a function of the evidence rather than consuming it, because the arm that finds the name and the arm that keeps looking need the evidence at two different types.
+pub let get(
+    @spec: List(Arg),
+    v: Values(spec),
+    name: Str,
+    @ok: Has(spec, name),
+) -> Lookup(spec, name) =
+    let walk =
+        match v: (s, _) => (found: Has(s, name)) -> Lookup(s, name)
+        | nil() => (absent) => match absent end
+        | cons(@a, @rest, head, tail) =>
+            (found) =>
+                let pick =
+                    match Str/eql(a.long, name): (b) =>
+                        (here: match b | true => True | false => Has(rest, name) end) -> match b
+                        | true => Carrier(a)
+                        | false => Lookup(rest, name)
+                        end
+                    | true => (_) => head
+                    | false => (later) => get(@rest, tail, name, @later)
+                    end;
+                pick(found)
+        end;
+    walk(ok);
+
+-- What a program declares. A command either has arguments and a handler or has subcommands; sharing an argument between subcommands is writing the same `Arg` value into both lists, since a specification is a value.
+--
+-- `run` is typed by the `args` written two fields above it, so inside a literal the handler's parameter already carries that specification and `Cli/get(v, "port")` there needs no annotation.
+pub struct Cli: pub Type {
+    name: Str,
+    about: Str,
+    version: Option(Str),
+    args: List(Arg),
+    run: (Values(args)) -> Io({}),
+    commands: List(Cli),
+}
+
+let no_repeat_long(spec: List(Arg)) -> Bool =
+    match spec
+    | [] => true
+    | [a, ..more] =>
+        Bool/not(List/any(more, (b) => Str/eql(a.long, b.long))) && no_repeat_long(more)
+    end;
+
+let no_repeat_short(spec: List(Arg)) -> Bool =
+    match spec
+    | [] => true
+    | [a, ..more] =>
+        match a.short
+        | none() => no_repeat_short(more)
+        | some(c) =>
+            Bool/not(
+                List/any(
+                    more,
+                    (b) => match b.short | some(d) => Char/eql(c, d) | none() => false end))
+                && no_repeat_short(more)
+        end
+    end;
+
+-- `help`, `h` and `version` are the entry's own, spelled here so that a cluster carrying `h` can be read as help before the line is understood at all.
+let no_reserved(spec: List(Arg)) -> Bool =
+    List/all(
+        spec,
+        (a) =>
+            Bool/not(Str/eql(a.long, "help")) && Bool/not(Str/eql(a.long, "version"))
+                && (match a.short | some(c) => Bool/not(Char/eql(c, 'h')) | none() => true end));
+
+-- At most one `rest`, and every positional before it: once a `rest` has been seen nothing may fill from the bare tokens again, which is what makes "the next unfilled positional, then `rest`" a total rule rather than a race.
+let rest_comes_last(spec: List(Arg), seen: Bool) -> Bool =
+    match spec
+    | [] => true
+    | [a, ..more] =>
+        match seen
+        | true => Bool/not(is_positional(a.kind) || is_rest(a.kind)) && rest_comes_last(more, true)
+        | false => rest_comes_last(more, is_rest(a.kind))
+        end
+    end;
+
+let empty(@T: Type, l: List(T)) -> Bool =
+    match l | [] => true | [_, .._] => false end;
+
+let no_repeat_name(subs: List(Cli)) -> Bool =
+    match subs
+    | [] => true
+    | [c, ..more] =>
+        Bool/not(List/any(more, (d) => Str/eql(c.name, d.name))) && no_repeat_name(more)
+    end;
+
+-- Stated flat rather than recursively: the size order grades a constructor payload below its constructor and does not grade a projection below the struct it came from, so a `WellFormed` reached through `cli.commands` is refused as not terminating. One level is what this rule admits, and `main` dispatches exactly that far.
+let sound(cli: Cli) -> Bool =
+    no_repeat_long(cli.args) && no_repeat_short(cli.args) && no_reserved(cli.args)
+        && rest_comes_last(cli.args, false)
+        && (match cli.commands
+        | [] => true
+        | [_, .._] =>
+            empty(cli.args) && no_repeat_name(cli.commands)
+                && List/all(
+                    cli.commands,
+                    (c) =>
+                        empty(c.commands) && no_repeat_long(c.args) && no_repeat_short(c.args)
+                            && no_reserved(c.args)
+                            && rest_comes_last(c.args, false))
+        end);
+
+-- Decided by reduction and demanded by `main`, so a specification that could never be parsed unambiguously is refused where it is written rather than at the first run that trips over it.
+pub let WellFormed(cli: Cli) -> Prop =
+    match sound(cli) | true => True | false => False end;
