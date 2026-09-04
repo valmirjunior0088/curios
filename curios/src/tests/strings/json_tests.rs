@@ -106,6 +106,38 @@ fn a_document_is_refused_when_anything_follows_the_value() {
     );
 }
 
+/// Every number the encoder writes is a JSON number, so a non-finite one becomes `null` rather than a literal the grammar has no room for.
+///
+/// `Flt/to_str` writes `+inf`, `-inf` and `NaN`, and `encode_num` passed all three straight through — so `Json/encode` produced documents this module's own `decode` refuses, from arithmetic nobody spelled: an overflowing multiply is the fourth row. `Flt`'s `Spell` witness detects the same three from the same rendering, for the same reason.
+#[test]
+fn a_non_finite_number_encodes_as_null() {
+    let source = r#"
+        use /std/{Json, Parse, Result, Str, Flt, Handle};
+        let written(value : Json) -> Str =
+            let text = Json/encode(value);
+            match Parse/run(Json/decode, Str/to_bytes(text)) : (_) => Str
+            | success(_) => text
+            | failure(msg) => Str/concat("NOT JSON: ", msg)
+            end;
+        /std/print(Str/join("|", [
+            written(Json/num(Flt/pos_inf)),
+            written(Json/num(Flt/neg_inf)),
+            written(Json/num(Flt/nan)),
+            written(Json/num(Flt/mul(1.0e30, 1.0e30))),
+            written(Json/arr([Json/num(1.0), Json/num(Flt/pos_inf)])),
+            written(Json/num(1.5)),
+            written(Json/num(-1.5)),
+            written(Json/num(-0.0))
+        ]))
+        "#;
+
+    // Each row is written *and* read back, so a rendering the grammar does not admit shows up as its refusal rather than as text. The finite tail is the control: the `+` a non-negative `to_str` writes is still stripped, and a negative sign still is not.
+    assert_eq!(
+        run(source),
+        "null|null|null|null|[1,null]|1.5|-1.5|-0".as_bytes()
+    );
+}
+
 #[test]
 fn character_literals_do_not_coerce_to_numeric_domains() {
     for source in [
