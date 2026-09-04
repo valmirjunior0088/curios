@@ -1,4 +1,4 @@
-//! The process surface: argv, environment and exit through `/std/proc`, and children started through `/std/Command` and reaped through `/std/Child`.
+//! The process surface: argv, environment and exit through `/std/proc`, and children started through `/std/Command` and reaped through `/std/Command/Child`.
 
 use {
     crate::tests::{run, run_text},
@@ -141,7 +141,8 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
 fn child_program(body: &str) -> String {
     format!(
         r#"
-        use /std/{{Str, Bytes, Nat, Option, Result, Show, Try, Async, Io, Path, Command, Child}};
+        use /std/{{Str, Bytes, Nat, Option, Result, Show, Try, Async, Io, Path, Command}};
+        use /std/Command/{{Child}};
         let text(b: Bytes) -> Str = Option/unwrap_or(Str/of_bytes(b), "?");
         let program: Try(Async, Io/Error, Str) =
             {body};

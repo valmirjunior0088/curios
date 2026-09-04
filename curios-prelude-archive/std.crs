@@ -79,9 +79,6 @@ pub use File/{let File};
 pub mod Command;
 pub use Command/{let Command};
 
-pub mod Child;
-pub use Child/{let Child};
-
 pub mod Async;
 pub use Async/{let Async};
 

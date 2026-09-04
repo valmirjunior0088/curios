@@ -189,7 +189,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Process IO
 - [x] Terminal raw mode and window size (`/sys/tty`, wrapped by `std/tty` on the terminal behind standard input with a restoring bracket in `Io` and one registered with the scheduler; the native host restores the terminal when it is dropped)
 - [x] Filesystem (`stat`, listing, making, moving and removing over `Path`, wrapped by `std/fs` in `Try` over `Io`; the browser denies every row)
-- [x] Subprocesses (`spawn`, `wait` and `kill`, a child reaped on a thread that signals a polled pipe, wrapped by `std/Command`'s synchronous `spawn` and its `run` and `status` brackets, and `std/Child` with its pipes as streams and `with` as the bracket that kills what a task started)
+- [x] Subprocesses (`spawn`, `wait` and `kill`, a child reaped on a thread that signals a polled pipe, wrapped by `std/Command`'s synchronous `spawn` and its `run` and `status` brackets, and `std/Command/Child` with its pipes as streams and `with` as the bracket that kills what a task started)
 
 ## Host Interface (FFI)
 

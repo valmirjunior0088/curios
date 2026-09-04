@@ -1,8 +1,11 @@
 -- A program to run, and the ways to run it. `new(program, args)` inherits everything, and the rest — a working directory, environment overrides laid over the inherited environment, and each stream's wiring — is a struct update. `spawn` starts the child synchronously, since the host answers the row at once, and hands back a `Child` whose life is its own; `run` and `status` are the brackets over one inside a fiber, where a task that ends kills what it started.
-use /std/{Bytes, Nat, Str, List, Option, Result, Path, Handle, Try, Io, Async, Child, stream};
+use /std/{Bytes, Nat, Str, List, Option, Result, Path, Handle, Try, Io, Async, stream};
 
 pub mod Stdio;
 pub use Stdio/{let Stdio};
+
+pub mod Child;
+pub use Child/{let Child};
 
 pub struct Command: pub Type {
     program: Str,

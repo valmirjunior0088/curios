@@ -12,7 +12,7 @@
 
 use {
     super::{FormatInput, TopItem, parse_for_format},
-    crate::print::{print_term, print_top_item},
+    crate::print::{between_items, print_term, print_top_item},
     curios_print::{Owed, Printer, begins, flat, hard_line, reaches, run_printer_placing},
     curios_utilities::{Source, Span},
     std::{cell::RefCell, fmt, path::Path, rc::Rc},
@@ -121,13 +121,7 @@ fn emit(input: &FormatInput) -> String {
     let mut previous: Option<&TopItem> = None;
 
     for (item, span) in input.module.items.iter().zip(&input.item_spans) {
-        match previous {
-            None => {}
-            Some(TopItem::Use(_) | TopItem::Mod(_)) if matches!(item, TopItem::Use(_)) => {
-                parts.push(hard_line());
-            }
-            Some(_) => parts.extend([hard_line(), hard_line()]),
-        }
+        parts.push(between_items(previous, item));
 
         // Marked at both ends, as a term is: the start is where a comment leading the item stops leading whatever came before, and the end is what makes a comment written after the item's own `;` owed before the break that would carry it to the next item.
         parts.push(begins(span.start));

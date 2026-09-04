@@ -1431,8 +1431,34 @@ fn print_top_mod(item: TopMod) -> Printer {
     }
 }
 
+/// How one module item is separated from the next, wherever a module is printed: a `use` following a `use` or a `mod` closes up against it, since an import block reads as one paragraph, and everything else takes a blank line.
+///
+/// Shared with [`crate::format::emit`], which prints a *file*'s items, so the two cannot disagree about what a module looks like. They did: this function joined its items with a single line, so an inline `mod … end` lost every blank line written inside it on the first format run while a file kept its own.
+pub(crate) fn between_items(previous: Option<&TopItem>, next: &TopItem) -> Printer {
+    match previous {
+        None => pure(""),
+        Some(TopItem::Use(_)) if matches!(next, TopItem::Use(_)) => hard_line(),
+        // A *file-backed* `mod x;` is one line of the same paragraph; an inline `mod … end` spans lines of its own, so what follows it starts a new one.
+        Some(TopItem::Mod(previous))
+            if previous.module.is_none() && matches!(next, TopItem::Use(_)) =>
+        {
+            hard_line()
+        }
+        Some(_) => flat([hard_line(), hard_line()]),
+    }
+}
+
 pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer {
-    sep_flat(items.into_iter().map(print_top_item), hard_line)
+    let mut parts = Vec::with_capacity(items.len() * 2);
+    let mut previous: Option<&TopItem> = None;
+
+    for item in &items {
+        parts.push(between_items(previous, item));
+        parts.push(print_top_item(item.clone()));
+        previous = Some(item);
+    }
+
+    flat(parts)
 }
 
 fn print_top_induct_case(case: TopCase) -> Printer {

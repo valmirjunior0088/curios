@@ -226,3 +226,16 @@ fn a_newline_in_literal_text_ends_the_scan_within_budget() {
         "aaa\nlong tail beyond any width bbb"
     );
 }
+
+#[test]
+fn a_blank_line_inside_an_indent_carries_no_trailing_whitespace() {
+    // Indentation is emitted lazily, owed by the next line that has content — but it used to be paid before *any* character, a newline included, so two hard lines inside an `indent` left a line of spaces. Nothing reparses differently for it, which is why it went unseen until a formatter emitted one into the standard library.
+    let document = indent(flat([
+        pure("first"),
+        hard_line(),
+        hard_line(),
+        pure("second"),
+    ]));
+
+    assert_eq!(render(document, None), "  first\n\n  second");
+}

@@ -370,3 +370,23 @@ fn an_overflowing_telescope_dedents_its_closer() {
     assert_eq!(output.matches("Zeta: Type,\n)").count(), 3);
     assert_eq!(formatted(&output), output, "and the shape is idempotent");
 }
+
+#[test]
+fn an_inline_module_keeps_the_blank_lines_between_its_items() {
+    // One rule separates module items, and a file and an inline `mod … end` now share it. They did not: the inline printer joined its items with a single line, so every blank line written inside one was eaten on the first run while the file around it kept its own.
+    let source = concat!(
+        "pub mod Inner\n",
+        "    use /std/{Nat};\n",
+        "\n",
+        "    pub let one: Nat =\n",
+        "        1;\n",
+        "\n",
+        "    pub let two: Nat =\n",
+        "        2;\n",
+        "end\n",
+        "\n",
+        "pub use Inner/{let one};\n",
+    );
+
+    assert_eq!(formatted(source), source);
+}

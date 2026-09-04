@@ -91,7 +91,8 @@ impl<'a, 'b> PrinterState<'a, 'b> {
                 let suffix = mem::take(&mut self.suffix);
                 self.write(&suffix)?;
             }
-            if self.should_indent {
+            // A blank line is blank: the pending indent is owed by the next line that has content, so writing it before a newline would leave trailing spaces on an empty line. `should_indent` stays set, and the line after still pays.
+            if self.should_indent && char != '\n' {
                 for _ in 0..self.indent_by {
                     self.formatter.write_str(" ")?;
                     self.column += 1;
