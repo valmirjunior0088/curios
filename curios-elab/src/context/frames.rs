@@ -66,7 +66,10 @@ pub(crate) struct Frames {
     refinement_projections: Vec<HashMap<(Term, usize), Term>>,
     /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by a *canonical* form (head verbatim, arguments reduced to WHNF), so an occurrence that surfaces spelled differently still matches the stored key once both are canonicalized. The term-keyed analogue of the two stores above, suppressed by the same flag.
     refinement_scrutinees: Vec<HashMap<Term, ScrutineeEntry>>,
-    suppress_refinements: bool,
+    /// How much of the refinement stack is withheld, as the frame depth suppression began at — `None` for none of it.
+    ///
+    /// A depth rather than a flag, because the two refinements a re-validation meets are not the same kind. The *ambient* ones — the arm the solver is currently inside — are counterfactual with respect to a committed solution, and withholding them is the whole point (`Convert::solve_refinement_free`). The ones a frame *above* this depth registers are the candidate's own: `check` descending into a match arm of the term being validated re-establishes exactly the equalities that made that arm's body well-typed where it was written. Withholding those rejects correct solutions — a proof discharged by reduction inside an arm, `True/qed()` against `Nat/Lt(0, Bytes/len(b))` in `/std/Str`'s scan fold, fails to re-check and the solution is thrown away — so suppression stops at the depth it started from.
+    suppress_refinements_below: Option<usize>,
     /// The local assumption context in binding order (a companion to `assumptions`, which is keyed by name and loses order). `assume` appends; frames are delimited by `local_marks`.
     local: Vec<(Free, Term)>,
     local_marks: Vec<usize>,
@@ -87,7 +90,7 @@ impl Frames {
             refinements: vec![HashMap::new()],
             refinement_projections: vec![HashMap::new()],
             refinement_scrutinees: vec![HashMap::new()],
-            suppress_refinements: false,
+            suppress_refinements_below: None,
             local: Vec::new(),
             local_marks: Vec::new(),
             witness_scope: Vec::new(),
@@ -321,11 +324,9 @@ impl Frames {
             .collect()
     }
 
-    /// The reduct of a variable: its definition, or — unless refinements are suppressed — its counterfactual refinement. A name never appears in both stores (definitions name `let`/`rec` binders; refinements name assumed scrutinee heads), so the order between them is immaterial.
+    /// The reduct of a variable: its definition, or — from the frames suppression does not withhold — its counterfactual refinement. A name never appears in both stores (definitions name `let`/`rec` binders; refinements name assumed scrutinee heads), so the order between them is immaterial.
     fn raw_var_reduct(&self, name: &Free) -> Option<&Term> {
-        if !self.suppress_refinements
-            && let Some(term) = self.refinements.iter().rev().find_map(|r| r.get(name))
-        {
+        if let Some(term) = self.visible_refinements().rev().find_map(|r| r.get(name)) {
             return Some(term);
         }
 
@@ -355,14 +356,10 @@ impl Frames {
         self.raw_var_reduct(name)
     }
 
-    /// The reduct of a projection: its counterfactual match-arm refinement, unless refinements are suppressed (re-validation).
+    /// The reduct of a projection: its counterfactual match-arm refinement, from the frames suppression does not withhold (re-validation).
     pub(crate) fn proj_reduct(&self, base: &Term, index: usize) -> Option<&Term> {
-        if self.suppress_refinements {
-            return None;
-        }
-
         let base = project_erased_universes(base);
-        self.refinement_projections
+        self.refinement_projections[self.refinement_floor()..]
             .iter()
             .rev()
             .find_map(|p| p.get(&(base.clone(), index)))
@@ -408,11 +405,7 @@ impl Frames {
     ///
     /// Filtered here rather than by the caller so a key under another head is never cloned: the store is keyed by written spelling, and reducing arguments cannot change an application's head, so such a key could not have become the candidate however it canonicalizes. Owned rather than borrowed because canonicalizing a key reduces, which needs the context mutably while this borrow would still be live.
     pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, ScrutineeEntry)> {
-        if self.suppress_refinements {
-            return Vec::new();
-        }
-
-        self.refinement_scrutinees
+        self.refinement_scrutinees[self.refinement_floor()..]
             .iter()
             .rev()
             .flat_map(|frame| frame.iter())
@@ -421,13 +414,9 @@ impl Frames {
             .collect()
     }
 
-    /// The reduct of a canonical stuck scrutinee: its refinement value, unless suppressed (re-validation).
+    /// The reduct of a canonical stuck scrutinee: its refinement value, from the frames suppression does not withhold (re-validation).
     pub(crate) fn scrutinee_reduct(&self, canonical: &Term) -> Option<&Term> {
-        if self.suppress_refinements {
-            return None;
-        }
-
-        self.refinement_scrutinees
+        self.refinement_scrutinees[self.refinement_floor()..]
             .iter()
             .rev()
             .find_map(|f| f.get(canonical))
@@ -442,17 +431,35 @@ impl Frames {
     }
 
     pub(crate) fn refinements_suppressed(&self) -> bool {
-        self.suppress_refinements
+        self.suppress_refinements_below.is_some()
     }
 
-    /// Flip the refinement-suppression flag, returning the previous state — the bracket intrinsic for `Context::with_suppressed_refinements`.
-    pub(crate) fn set_refinements_suppressed(&mut self, suppressed: bool) -> bool {
-        std::mem::replace(&mut self.suppress_refinements, suppressed)
+    /// The lowest refinement frame suppression does not withhold: the depth it began at, or the base frame when nothing is suppressed. Clamped, so a frame popped below the suppression point withholds everything rather than slicing out of range.
+    fn refinement_floor(&self) -> usize {
+        self.suppress_refinements_below
+            .unwrap_or(0)
+            .min(self.refinements.len())
     }
 
-    /// Whether any counterfactual refinement is currently registered (and not already suppressed) — the gate for the refinement-free candidate re-reduction in `Convert::solve_refinement_free`, so the common refinement-free path pays nothing.
+    /// The name-keyed refinement frames suppression does not withhold, outermost first.
+    fn visible_refinements(&self) -> std::slice::Iter<'_, HashMap<Free, Term>> {
+        self.refinements[self.refinement_floor()..].iter()
+    }
+
+    /// Begin withholding every refinement registered so far, returning the previous depth — the bracket intrinsic for `Context::with_suppressed_refinements`. Frames entered after this keep their own refinements live, which is what lets a candidate's own match arms re-establish the equalities that made them well-typed.
+    pub(crate) fn suppress_refinements_here(&mut self) -> Option<usize> {
+        self.suppress_refinements_below
+            .replace(self.refinements.len())
+    }
+
+    /// Restore a depth taken by [`suppress_refinements_here`](Self::suppress_refinements_here).
+    pub(crate) fn restore_refinement_suppression(&mut self, previous: Option<usize>) {
+        self.suppress_refinements_below = previous;
+    }
+
+    /// Whether any counterfactual refinement is currently live — the gate for the refinement-free candidate re-reduction in `Convert::solve_refinement_free`, so the common refinement-free path pays nothing.
     pub(crate) fn has_refinements(&self) -> bool {
-        !self.suppress_refinements && self.any_refinements_registered()
+        self.visible_refinements().any(|frame| !frame.is_empty())
     }
 
     /// Whether any counterfactual refinement of any kind is registered in any frame, *regardless* of suppression. The cache-contamination gate for `Context::with_suppressed_refinements`: only a registered refinement can make a suppressed reduct differ from the live one. (`has_refinements` is this plus "not already suppressed".)

@@ -127,3 +127,30 @@ fn a_spine_mismatch_falls_through_to_unfolding() {
 
     assert_eq!(run(source), b"ok");
 }
+
+// An implicit solved from a projection of a local binding whose value discharges a bound inside a match arm. The candidate `t.0` reduces to the whole of `Str/to_list`'s scan fold, whose `x[h, ..t]` arm carries `peel_byte(True/qed(), valid)` — a proof the arm's own refinement discharged where it was written. `Convert::solve` re-validates a candidate as an oracle, and the oracle used to withhold *every* refinement, including the ones the candidate's own arms re-establish: the proof was then checked against the unreduced `Nat/Lt(0, Bytes/len(b))`, re-validation rejected a correct solution, and the implicit surfaced as a mismatch with the entire unfolded fold on its inferred side. Suppression is scoped to the depth it began at, so the ambient arm stays withheld and the validated term's own arms do not.
+#[test]
+fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, Char, List, Vec, Handle};
+
+        let resize(w: Nat, @w0: Nat, v: Vec(Char, w0)) -> Vec(Char, w) =
+            (match w: (k) => (n: Nat, Vec(Char, n)) -> Vec(Char, k)
+            | 0 => (n, x) => Vec/nil()
+            | p + 1; ih => (n, x) =>
+                match x
+                | nil() => Vec/cons('.', ih(0, Vec/nil()))
+                | cons(@m, y, ys) => Vec/cons(y, ih(m, ys))
+                end
+            end)(w0, v);
+
+        let padded(s: Str, w: Nat) -> Vec(Char, w) =
+            let t = Vec/of_list(Str/to_list(s));
+            resize(w, t.1);
+
+        /std/print(Str/flatten(List/map(Vec/to_list(padded("hi", 4)), Str/of_char)))
+        "#),
+        b"hi.."
+    );
+}

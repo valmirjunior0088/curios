@@ -731,13 +731,14 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
             {
                 let shallow = shallow_scrutinee(context, &term);
 
-                if context.refinements_suppressed() {
+                if let Some(value) = context.scrutinee_reduct(&shallow) {
+                    // A key a suppressed frame withholds answers `None` here, so this serves only what is live — the caller's own arm outside a re-validation, and the validated term's own arms within one.
+                    break 'step Reduce::Continue(value.clone());
+                } else if context.refinements_suppressed() {
                     // Withhold the value, but keep an application key neutral — as a `Var` key already is — so `solve_refinement_free`'s committed spelling stays a term the live refinement can fire on (the registered form, never the unfolded body).
                     if context.is_scrutinee_key(&shallow) {
                         break 'step Reduce::Break(shallow);
                     }
-                } else if let Some(value) = context.scrutinee_reduct(&shallow) {
-                    break 'step Reduce::Continue(value.clone());
                 } else {
                     // Escalate: the candidate and the registered key are spelled differently, so decide it by *convertible* arguments rather than written ones. Only here is anything reduced, and only against entries sharing this head — canonicalizing one under another head would spend the declaration's budget to learn nothing.
                     let candidates = context.scrutinee_entries(head);

@@ -905,15 +905,17 @@ impl Context {
         self.frames.any_refinements_registered()
     }
 
-    /// Run `f` with refinements suppressed (re-validation). Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the flag is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
+    /// Run `f` with every refinement registered *so far* suppressed (re-validation). A frame `f` enters keeps its own refinements live: those belong to the term being validated rather than to the arm the caller sits in, and `Frames::suppress_refinements_below` records why the two are not the same kind.
+    ///
+    /// Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the depth is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
     pub(crate) fn with_suppressed_refinements<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         if self.frames.any_refinements_registered() {
             self.caches.invalidate_suppression_boundary();
         }
 
-        let previous = self.frames.set_refinements_suppressed(true);
+        let previous = self.frames.suppress_refinements_here();
         let result = f(self);
-        self.frames.set_refinements_suppressed(previous);
+        self.frames.restore_refinement_suppression(previous);
 
         if self.frames.any_refinements_registered() {
             self.caches.invalidate_suppression_boundary();
