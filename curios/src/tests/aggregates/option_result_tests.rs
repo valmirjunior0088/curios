@@ -1,6 +1,6 @@
 //! The bound `Option/get` carries, and the report naming it when nothing fills it. The `Option` and `Result` surface itself is the corpus's `/aggregates/option_result`.
 
-use crate::tests::{error, run};
+use crate::tests::error;
 
 // An opaque option's bound reduces to nothing, and the report names the binder that was not filled rather than guessing.
 #[test]
