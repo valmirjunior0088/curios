@@ -1,4 +1,4 @@
-use /std/{Nat, List, Bool, Str, Equal, Show};
+use /std/{Nat, List, Bool, Str, Equal, Show, Spell};
 
 pub induct Vec(T: Type): (Nat) -> pub Type
 | nil(): (0)
@@ -64,3 +64,5 @@ satisfy (@T: Type, @n: Nat, use Equal(T)) => Equal(Vec(T, n)) {
 satisfy (@T: Type, @n: Nat, use Show(T)) => Show(Vec(T, n)) {
     show(v) = Show/show(to_list(v)),
 }
+
+satisfy (@T: Type, @n: Nat, use Spell(T)) => Spell(Vec(T, n));

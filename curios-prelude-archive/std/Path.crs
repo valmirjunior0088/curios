@@ -1,5 +1,5 @@
 -- A path as the host holds it: bytes, with `/` as the one separator, since the release targets are Linux and macOS. The representation is private for one invariant — a path is exactly the bytes the host handed over or a program built, never decoded on the way — so a name that is not UTF-8 is a path like any other, and `to_str` is where a program chooses to decode it or refuse. The algebra here is pure; `fs` and `File` take a `Path` and hand one back, and a listing's entry is a `Path` that `join` puts back under its directory.
-use /std/{Bytes, Byte, Str, Nat, Bool, Option, List, Equal, Show};
+use /std/{Bytes, Byte, Str, Nat, Bool, Option, List, Equal, Show, Spell};
 
 pub struct Path: Type {
     Bytes,
@@ -90,4 +90,13 @@ satisfy Equal(Path) {
 -- The text where the bytes are UTF-8, and the bytes spelled as bytes where they are not.
 satisfy Show(Path) {
     show(p) = match Str/of_bytes(p.0) | some(s) => s | none() => Show/show(p.0) end,
+}
+
+-- The constructor a program writes rather than the private representation: `of_str` where the bytes decode and `of_bytes` where they do not, which is the split `Show` takes above, spelled so it re-parses.
+satisfy Spell(Path) {
+    spell(p) =
+        match Str/of_bytes(p.0)
+        | some(s) => Str/flatten(["Path/of_str(", Spell/spell(s), ")"])
+        | none() => Str/flatten(["Path/of_bytes(", Spell/spell(p.0), ")"])
+        end,
 }

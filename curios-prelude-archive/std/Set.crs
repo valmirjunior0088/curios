@@ -1,5 +1,5 @@
 -- A set of keys, stored as a `Map` whose value is the key itself: `insert(s, k)` is `Map/insert(m, k, k)`, so `to_list` and `fold` hand the typed elements back through `Map/values` with no decoder and no new law, where a set over `Map({})` would hand back the `Bytes` the trie is keyed on. The surface mirrors `Map`'s with the value elided, and set algebra exists exactly where `Map` has the counterpart — `union`, and nothing else until a `Map` consumer wants more.
-use /std/{Nat, Bool, List, Map, Equal, Show};
+use /std/{Nat, Bool, Str, List, Map, Equal, Show, Spell};
 use /std/Map/{Key};
 
 pub struct Set(K: Type): Type {
@@ -40,4 +40,8 @@ satisfy (@K: Type, use Equal(K)) => Equal(Set(K)) {
 
 satisfy (@K: Type, use Show(K)) => Show(Set(K)) {
     show(s) = Show/show(to_list(s)),
+}
+
+satisfy (@K: Type, use Spell(K)) => Spell(Set(K)) {
+    spell(s) = Str/flatten(["Set/of(", Spell/spell(to_list(s)), ")"]),
 }

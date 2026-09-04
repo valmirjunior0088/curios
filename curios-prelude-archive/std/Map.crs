@@ -1,5 +1,5 @@
 -- A crit-bit (Patricia) trie keyed on the byte string a `Key` witness produces. The map deliberately does not remember `K`: the trie's identity *is* that byte string, so two key types serializing alike are the same key. `Key` is therefore a write-side injection only — `entries`, `keys`, and `fold` hand back `Bytes`, and a caller wanting typed keys decodes at the boundary.
-use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq, Equal, Show};
+use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq, Equal, Show, Spell};
 
 induct Node(V: Type): Type
 | leaf(key: Bytes, value: V)
@@ -256,4 +256,19 @@ satisfy (@V: Type, use Show(V)) => Show(Map(V)) {
                         entries(m),
                         ((k, v)) => Str/flatten([Show/show(k), ": ", Show/show(v)]))),
                 "}"]),
+}
+
+-- Spelled over the `Bytes` the trie holds, which is what `of` takes back through `Key(Bytes)`: the map forgets `K`, so the byte string is the only key there is to write, and the identity encoding rebuilds the same trie.
+satisfy (@V: Type, use Spell(V)) => Spell(Map(V)) {
+    spell(m) =
+        Str/flatten(
+            [
+                "Map/of([",
+                Str/join(
+                    ", ",
+                    List/map(
+                        entries(m),
+                        ((k, v)) =>
+                            Str/flatten(["(", Spell/spell(k), ", ", Spell/spell(v), ")"]))),
+                "])"]),
 }
