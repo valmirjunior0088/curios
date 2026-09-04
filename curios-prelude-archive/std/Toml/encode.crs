@@ -87,17 +87,13 @@ let int_str(n: Int) -> Str =
     | _ => Str/concat("-", Nat/to_str(Int/abs(n)))
     end;
 
+-- TOML has all three non-finites, and spells them `inf`, `-inf` and `nan`; a finite value takes `to_str`'s digits with the `+` dropped and a point added, since TOML's float must carry one.
+--
+-- The four cases are told apart the way `/std/Flt`'s own `Spell` tells them apart: `is_finite` is one ordered pair between the infinities, and the sign then separates those two, with a NaN failing both comparisons because every IEEE comparison with one is false. This used to re-decode `to_le_bytes` into exponent and mantissa fields -- `Flt/to_str`'s own first four lines, with the mantissa test spelled differently -- so the same fact was written twice from the bit layout and could drift apart in either place.
 let flt_str(f: Flt) -> Str =
-    let b = Flt/to_le_bytes(f);
-    let b0 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 0), 0));
-    let b1 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 1), 0));
-    let b2 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 2), 0));
-    let b3 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 3), 0));
-    let exp_field = b3 % 0x80 * 2 + b2 / 0x80;
     choose
-    | exp_field == 0xFF && b0 == 0 && b1 == 0 && b2 % 0x80 == 0 =>
-        match b3 >= 0x80 | true => "-inf" | false => "inf" end
-    | exp_field == 0xFF => "nan"
+    | Bool/not(Flt/is_finite(f)) =>
+        choose | f > +0.0 => "inf" | f < +0.0 => "-inf" | _ => "nan" end
     | _ =>
         let raw = Flt/to_str(f);
         let unsigned =

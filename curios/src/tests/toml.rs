@@ -40,6 +40,23 @@ const SCALARS: &[Row] = &[
         expr: r##"canon("neg = -1073741824")"##,
         expected: "neg = -1073741824\n",
     },
+    // The three non-finites TOML spells, on the *encode* side: `fbits` below decodes them and reads the bit pattern, which leaves `flt_str`'s three arms unasserted in the direction they are written for. `-nan` is the normalization row — it decodes to the same NaN and comes back with no sign, since a NaN's is not a fact the encoder reads.
+    Row {
+        expr: r##"canon("f = inf")"##,
+        expected: "f = inf\n",
+    },
+    Row {
+        expr: r##"canon("f = -inf")"##,
+        expected: "f = -inf\n",
+    },
+    Row {
+        expr: r##"canon("f = nan")"##,
+        expected: "f = nan\n",
+    },
+    Row {
+        expr: r##"canon("f = -nan")"##,
+        expected: "f = nan\n",
+    },
     Row {
         expr: r##"canon("arr = [1, \"two\", 3.5]")"##,
         expected: "arr = [1, \"two\", 3.5]\n",
