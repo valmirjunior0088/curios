@@ -15,3 +15,6 @@ pub mod Cell;
 pub use Cell/{let Cell};
 
 pub mod text;
+
+pub mod Frame;
+pub use Frame/{let Frame};

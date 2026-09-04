@@ -1,0 +1,59 @@
+-- The size-indexed frame algebra: what composes, what the type refuses, and what a frame reads back as.
+use /std/{Nat, Str, List, Vec, Option, Test, Tui};
+use /std/Tui/{Style, Cell, Frame};
+
+let render(@w: Nat, @h: Nat, f: Frame(w, h)) -> Str =
+    Str/join("/", Frame/to_lines(f));
+
+-- `beside` joins at `w1 + w2` and `above` at `h1 + h2`, and both sizes are the type's rather than a runtime count, so nothing here measures the result to check it.
+test beside_and_above_join_at_the_sum_of_their_sizes() =
+    Test/equal(
+        Str/join(
+            " ",
+            [
+                render(Frame/beside(Frame/blank(2, 2), Frame/blank(1, 2))),
+                render(Frame/above(Frame/blank(2, 1), Frame/blank(2, 2)))]),
+        "   /      /  /  ");
+
+-- The one coercion, in both directions at once: a frame wider and shorter than the target is cropped on the right and padded below.
+test fit_crops_what_overflows_and_pads_what_falls_short() =
+    let wide = Frame/of_lines(Style/plain, ["abcdef", "ghijkl"], 6, 2);
+    Test/equal(
+        Str/join(" ", [render(Frame/fit(wide, 3, 3)), render(Frame/fit(wide, 8, 1))]),
+        "abc/ghi/    abcdef  ");
+
+-- A string's width is a runtime fact, so `text` answers the width it turned out to be beside the frame at that width. A double-width scalar takes two cells — its own and a continuation — so the count is the column count, while `to_lines` reads the glyph back as itself because the continuation carries no text.
+test text_answers_the_width_it_turned_out_to_be() =
+    let line = Frame/text(Style/plain, "日a");
+    Test/equal(Str/flatten([Nat/to_str(line.w), ":", render(line.frame)]), "3:日a");
+
+-- `overlay` clips rather than demanding a proof that the patch fits: where a popup sits is a runtime fact, and a bound there would push the arithmetic into every caller.
+test overlay_clips_a_patch_at_the_edge() =
+    let base = Frame/of_lines(Style/plain, ["....", "....", "...."], 4, 3);
+    let patch = Frame/of_lines(Style/plain, ["XX", "XX"], 2, 2);
+    Test/equal(
+        Str/join(
+            " ",
+            [
+                render(Frame/overlay(base, patch, 1, 1)),
+                render(Frame/overlay(base, patch, 3, 2)),
+                render(Frame/overlay(base, patch, 9, 9))]),
+        "..../.XX./.XX. ..../..../...X ..../..../....");
+
+-- Reading one cell back, under the bounds the frame's own type decides.
+test a_cell_is_read_under_the_frames_own_bounds() =
+    let f = Frame/of_lines(Style/plain, ["ab", "cd"], 2, 2);
+    let at(x: Nat, y: Nat) -> Str =
+        match Nat/Lt/try(x, 2): (_) => Str
+        | none() => "?"
+        | some(px) =>
+            match Nat/Lt/try(y, 2): (_) => Str
+            | none() => "?"
+            | some(py) => Frame/get(f, x, y, px, py).symbol
+            end
+        end;
+    Test/equal(Str/flatten([at(0, 0), at(1, 0), at(0, 1), at(1, 1)]), "abcd");
+
+-- `of_lines` and `to_lines` are each other's inverse at a size that holds the text, which is what lets a test write an expected frame as the strings it reads as.
+test of_lines_and_to_lines_are_inverse_at_a_size_that_holds_the_text() =
+    Test/equal(render(Frame/of_lines(Style/plain, ["ab", "cd"], 2, 2)), "ab/cd");

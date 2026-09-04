@@ -1,3 +1,6 @@
 -- `/std/Tui`: the terminal values a cell is painted from, the width table that measures one, and the size-indexed frame algebra built over them.
 mod values;
+
 mod text;
+
+mod frame;

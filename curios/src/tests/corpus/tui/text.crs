@@ -5,22 +5,26 @@ use /std/Tui/{text};
 -- The three widths the table separates: a Latin scalar at one, a CJK ideograph at two, and a combining mark at zero — so `é` (an `e` followed by U+0301, written here as the two scalars it is, since a string literal has no `\u` escape) measures one column while `Str/len` counts two.
 test width_counts_columns_rather_than_scalars() =
     Test/equal(
-        Str/join(" ", [
-            Nat/to_str(text/width("hello")),
-            Nat/to_str(text/width("é")),
-            Nat/to_str(Str/len("é")),
-            Nat/to_str(text/width("日本")),
-            Nat/to_str(text/width(""))]),
+        Str/join(
+            " ",
+            [
+                Nat/to_str(text/width("hello")),
+                Nat/to_str(text/width("é")),
+                Nat/to_str(Str/len("é")),
+                Nat/to_str(text/width("日本")),
+                Nat/to_str(text/width(""))]),
         "5 1 2 4 0");
 
 -- A double-width scalar that would straddle the boundary is dropped whole, so truncating to three columns keeps one ideograph and leaves the result two columns wide rather than one and a half.
 test truncate_never_splits_a_wide_scalar() =
     Test/equal(
-        Str/join("|", [
-            text/truncate("abcdef", 3),
-            text/truncate("abc", 10),
-            text/truncate("日本", 3),
-            text/truncate("abc", 0)]),
+        Str/join(
+            "|",
+            [
+                text/truncate("abcdef", 3),
+                text/truncate("abc", 10),
+                text/truncate("日本", 3),
+                text/truncate("abc", 0)]),
         "abc|abc|日|");
 
 test wrap_packs_words_up_to_the_width() =
@@ -28,6 +32,4 @@ test wrap_packs_words_up_to_the_width() =
 
 -- A word wider than the pane becomes its own over-wide line rather than being split mid-word; `Tui/Frame/fit` is what crops it at the pane, which keeps the one coercion in one place.
 test wrap_leaves_an_over_wide_word_on_its_own_line() =
-    Test/equal(
-        Str/join("/", text/wrap("a stupendously long word", 6)),
-        "a/stupendously/long/word");
+    Test/equal(Str/join("/", text/wrap("a stupendously long word", 6)), "a/stupendously/long/word");
