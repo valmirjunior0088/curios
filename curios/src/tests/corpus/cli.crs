@@ -1,0 +1,2 @@
+-- `/std/Cli`: the specification a program declares, and the record computed from it.
+mod spec;

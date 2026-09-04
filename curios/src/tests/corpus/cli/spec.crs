@@ -1,0 +1,58 @@
+-- The typed spine: what each kind contributes to the parsed record, read back by name at the type the specification decides, and the well-formedness a program's entry demands.
+use /std/{Cli, Str, Nat, Bool, Option, List, Io, Test};
+
+let spec: List(Cli/Arg) =
+    [
+        Cli/Arg { ..Cli/flag("verbose", "Log every request"), short = Option/some('v') },
+        Cli/default("port", Cli/nat, 8080, "Port to listen on"),
+        Cli/optional("tag", Cli/str, "An optional tag"),
+        Cli/many("header", Cli/str, "Repeatable"),
+        Cli/positional("root", Cli/str, "Directory to serve")];
+
+-- Built by hand rather than by `parse`, and every value bound at its own type first: a numeral realizes before an indexed constructor's index is solved, so `Values/cons(8080, …)` would commit to `Nat` too early.
+let sample: Cli/Values(spec) =
+    let loud: Bool = true;
+    let port: Nat = 9090;
+    let tag: Option(Str) = Option/some("x");
+    let headers: List(Str) = ["one", "two"];
+    let root: Str = "/srv";
+    Cli/Values/cons(
+        loud,
+        Cli/Values/cons(
+            port,
+            Cli/Values/cons(
+                tag,
+                Cli/Values/cons(headers, Cli/Values/cons(root, Cli/Values/nil())))));
+
+-- Five kinds, five carriers: a flag answers `Bool`, a defaulted option and a positional the reader's own type, an optional one `Option`, and `many` a list. `get` needs no annotation at any of them -- the specification is the index of `sample`'s type.
+test get_reads_each_carrier_at_the_type_its_entry_decides() =
+    Test/all(
+        [
+            Test/equal(Cli/get(sample, "verbose"), true),
+            Test/equal(Cli/get(sample, "port"), 9090),
+            Test/equal(Cli/get(sample, "tag"), Option/some("x")),
+            Test/equal(Cli/get(sample, "header"), ["one", "two"]),
+            Test/equal(Cli/get(sample, "root"), "/srv")]);
+
+let serve: Cli =
+    Cli {
+        name = "serve",
+        about = "Serve a directory over HTTP",
+        version = Option/some("0.1.0"),
+        args =
+            [
+                Cli/default("port", Cli/nat, 8080, "Port to listen on"),
+                Cli/positional("root", Cli/str, "Directory to serve")],
+        run(v) =
+            let port = Cli/get(v, "port");
+            let root = Cli/get(v, "root");
+            /std/print(Str/flatten([root, " on ", Nat/to_str(port)])),
+        commands = [],
+    };
+
+let well_formed(c: Cli, @ok: Cli/WellFormed(c)) -> Bool =
+    true;
+
+-- Two claims in one: the handler's parameter carries the `args` written two fields above it, so the `get` calls inside `serve` type with nothing annotated; and `WellFormed` is decided by reduction, so the entry's bound discharges here with nothing written.
+test a_handler_is_typed_by_the_specification_beside_it() =
+    Test/check(well_formed(serve));
