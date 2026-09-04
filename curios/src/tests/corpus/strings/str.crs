@@ -1,0 +1,70 @@
+-- The `Str` surface: indexing, slicing and trimming at codepoint boundaries.
+use /std/{Str, Char, Nat, Bool, Option, Show, Test};
+
+-- `Str/len` and `Str/try_get` count and index by codepoint, not byte. `a€😀` is a 1-byte, a 3-byte and a 4-byte scalar, so its length is 3 and the codepoints decode to U+0061, U+20AC and U+1F600.
+test get_indexes_codepoints_of_every_width() =
+    let s = "a€😀";
+    let at(i: Nat) -> Str = Nat/to_str(Char/to_nat(Option/unwrap_or(Str/try_get(s, i), '?')));
+    Test/equal(
+        Str/join(",", [Nat/to_str(Str/len(s)), at(0), at(1), at(2)]),
+        "3,97,8364,128512");
+
+-- `Str/get` is the proof-carrying indexer: `ok: Lt(i, len s)` flows erased into the `Bytes/get` bound, so it reads each codepoint with no fallback — the same widths `try_get` reads above, but total.
+test get_reads_codepoints_with_the_proof() =
+    let s = "a€😀";
+    let shown =
+        match Nat/Lt/try(0, Str/len(s)): (_) => Option(Str)
+        | none() => Option/none()
+        | some(p0) =>
+            match Nat/Lt/try(1, Str/len(s)): (_) => Option(Str)
+            | none() => Option/none()
+            | some(p1) =>
+                match Nat/Lt/try(2, Str/len(s)): (_) => Option(Str)
+                | none() => Option/none()
+                | some(p2) =>
+                    Option/some(
+                        Str/join(
+                            ",",
+                            [
+                                Nat/to_str(Char/to_nat(Str/get(s, 0, p0))),
+                                Nat/to_str(Char/to_nat(Str/get(s, 1, p1))),
+                                Nat/to_str(Char/to_nat(Str/get(s, 2, p2)))]))
+                end
+            end
+        end;
+    Test/equal(Option/unwrap_or(shown, "oob"), "97,8364,128512");
+
+-- `Str/slice` cuts at codepoint boundaries, so one scalar from index 1 of `a€😀` is the whole 3-byte euro sign and never a split sequence.
+test slice_cuts_on_codepoint_boundaries() =
+    Test/equal(Str/slice("a€😀", 1, 1), "€");
+
+-- An interior slice over a mixed-width string exercises the single-pass cut: `drop_n` skips the leading `a` and `take_n` keeps the next three scalars, of widths 2, 3 and 4, as one window.
+test slice_spans_every_codepoint_width() =
+    Test/equal(Str/slice("aé€😀b", 1, 3), "é€😀");
+
+-- `Str/trim` strips only leading and trailing ASCII whitespace, leaving an interior multibyte scalar intact.
+test trim_keeps_interior_multibyte() =
+    Test/equal(Str/trim("  café  "), "café");
+
+-- An all-whitespace string trims to empty: `trim_start` overshoots `trim_end`, and the `Nat/min` guard collapses the slice to nothing rather than trapping.
+test trim_all_whitespace_is_empty() =
+    Test/equal(Str/concat(Str/trim(" \t "), "!"), "!");
+
+-- Folding, searching and case-folding all travel in certified `Char`s: the fold rebuilds the string scalar by scalar, `find` answers in codepoint indices, and ASCII case folding leaves a non-ASCII scalar alone.
+test logical_operations_use_certified_chars() =
+    let s = "a€😀";
+    Test/equal(
+        Str/join(
+            "|",
+            [
+                Str/fold(s, "", (c, acc) => Str/concat(acc, Show/show(c))),
+                Show/show(Option/unwrap_or(Str/try_get(s, 1), '?')),
+                Nat/to_str(Option/unwrap_or(Str/find(s, '€'), 99)),
+                Nat/to_str(
+                    Option/unwrap_or(Str/find_index(s, (c) => Char/to_nat(c) > 0xFFFF), 99)),
+                Show/show('😀'),
+                Bool/to_str(Str/eql_ascii_ci("AbÉ", "aBÉ")),
+                Bool/to_str(Str/eql_ascii_ci("É", "é")),
+                Nat/to_str(Str/len(s)),
+                Str/slice(s, 1, 1)]),
+        "a€😀|€|1|2|😀|true|false|3|€");

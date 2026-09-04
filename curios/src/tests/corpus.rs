@@ -1,4 +1,4 @@
-//! The Curios corpus: each `curios/corpus/<unit>.crs` mounted as a unit, compiled once as its own test program, and every test it declares run in an instantiation of its own.
+//! The Curios corpus: each `curios/src/tests/corpus/<unit>.crs` mounted as a unit, compiled once as its own test program, and every test it declares run in an instantiation of its own.
 //!
 //! What this replaces is one full compile per library fixture. A unit's tests share one `compile_tests_with_units` and one [`to_cwasm`], so the prelude-linked baseline each fixture used to pay alone is paid once for the whole unit, and a run of the precompiled module is milliseconds. The units stay separate for two reasons that pull the same way: cargo runs them in parallel, and a compile error costs one unit's results rather than the corpus entire.
 //!
@@ -16,9 +16,12 @@ use {
     },
 };
 
-/// Where the corpus units live, beside the crate that drives them.
+/// Where the corpus units live, beside the driver that mounts them. The `.crs` tree sits under `corpus/` next to `corpus.rs`, which declares no `mod` of its own, so nothing here is reached by Rust's module resolution.
 fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("corpus")
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("tests")
+        .join("corpus")
 }
 
 /// Compile `unit` as its own test program — the synthesized `Test/main` tail over its registered tests, with an empty entry above it — and run every test it declares.
