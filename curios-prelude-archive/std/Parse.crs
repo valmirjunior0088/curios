@@ -16,6 +16,9 @@ end
 let message(refusal: Refusal) -> Str =
     match refusal | declined(msg) => msg | committed(msg) => msg end;
 
+-- Run `p` from the start of `input` and answer its value, or the message it refused with.
+--
+-- **A parser that stops early still succeeds, and what it left is not reported.** Where it stopped is a position, and a position never leaves this module -- the seal above is what keeps the representation free to change -- so there is nothing for this to hand back and nothing a caller could test. A parser is therefore run over a whole input by *being* one: compose it with `eof`, as `Json/decode` and `Toml/decode` each do. `Json/decode` did not, and read `nulll` as `null` and `1 garbage` as `1`, which is what the sentence above is here to prevent.
 pub let run(@A: Type, p: Parse(A), input: Bytes) -> Result(Str, A) =
     match p.run(input, 0)
     | success((_, a)) => Result/success(a)
