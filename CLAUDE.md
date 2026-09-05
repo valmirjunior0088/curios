@@ -15,7 +15,7 @@ Operational guide for working on Curios. Read it before investigating or changin
 
 The compiler is the interface. A claim about what a Curios program means is a hypothesis until the compiler has answered it, and the tools below are how it is asked.
 
-**Test a theory on standard input.** Every command that takes a program takes `-` for one on standard input, so a probe is a heredoc, never a file left in the tree:
+**Test a theory on standard input.** `run` and every `wonder` query take `-` for a program on standard input, so a probe is a heredoc, never a file left in the tree:
 
 ```sh
 cargo run --package curios -- run - <<'CRS'

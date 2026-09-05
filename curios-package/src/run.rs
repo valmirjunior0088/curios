@@ -35,7 +35,7 @@ pub enum Target {
     },
 }
 
-/// What a TARGET argument lexically names, decided before anything looks at a manifest or the disk — the one spelling of the rule the module documentation states, which `run`, `compile` and every `wonder` query dispatch on.
+/// What a TARGET argument lexically names, decided before anything looks at a manifest or the disk — the one spelling of the rule the module documentation states, which `run` and every `wonder` query dispatch on. `compile` dispatches on it too and then admits the named form alone: a product written to disk needs a package to be filed under, and only a declared executable has one.
 pub enum Form {
     /// `-`: the program on standard input.
     Stdin,
@@ -66,17 +66,6 @@ impl Target {
             Self::Stdin => None,
             Self::File(path) => Some(path),
             Self::Executable { entry, .. } => Some(entry),
-        }
-    }
-
-    /// Where a native build of this target is written by default, and `None` when there is no default to have.
-    ///
-    /// A declared executable goes into the governing root's store, nested under the package that declares it. A bare file has no project, hence no governing root and no store, so it lands beside the working directory under its own stem — the same declared-artifact-versus-bare-file split as everywhere else. Standard input has no stem either, and a name invented for it would be a name nobody asked for that overwrites whatever already holds it, so it has no default at all and the caller must supply one.
-    pub fn output(&self) -> Option<PathBuf> {
-        match self {
-            Self::Stdin => None,
-            Self::File(path) => Some(PathBuf::from(path.file_stem().unwrap_or(path.as_os_str()))),
-            Self::Executable { output, .. } => Some(output.clone()),
         }
     }
 

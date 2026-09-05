@@ -15,6 +15,10 @@ const TARGET_HELP: &str = "A declared executable's name, a path to a .crs file, 
 /// The same, for a query that takes the governing package entire when nothing is named.
 const TARGET_HELP_PACKAGE: &str = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package entire)";
 
+/// The named form alone, for the one subcommand that writes a product and so needs a package to file it under.
+const TARGET_HELP_EXECUTABLE: &str =
+    "A declared executable's name (default: the governing package's sole or `default` executable)";
+
 #[derive(Debug, Subcommand)]
 pub(crate) enum Mode {
     /// What the four forms mean is `documentation/usage.md`'s Running and compiling. The dispatch is lexical and probes no disk: the four spaces cannot overlap, so nothing here needs to look before deciding.
@@ -35,14 +39,12 @@ pub(crate) enum Mode {
         args: Vec<OsString>,
     },
 
-    /// The same four forms `run` dispatches, through the same code, so the two cannot drift apart.
-    #[command(
-        about = "Compile an executable, a .crs file, or standard input, to a native executable"
-    )]
+    /// Dispatched through the same code as `run`, so the two cannot drift apart, and then narrowed to the named form: a built executable is filed under the package that declares it, and a loose file or standard input has no package to be filed under.
+    #[command(about = "Compile a declared executable to a native executable")]
     Compile {
         #[arg(
             value_name = "TARGET",
-            help = TARGET_HELP
+            help = TARGET_HELP_EXECUTABLE
         )]
         target: Option<String>,
 
@@ -50,7 +52,7 @@ pub(crate) enum Mode {
             short = 'o',
             long = "output",
             value_name = "PATH",
-            help = "Write the executable to PATH (default: the executable's declared name, or the input file's stem; required for `-`)"
+            help = "Write the executable to PATH (default: under the store, beside the governing manifest)"
         )]
         output_path: Option<PathBuf>,
     },

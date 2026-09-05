@@ -29,7 +29,6 @@ use {
     std::{
         ffi::OsString,
         fs, iter,
-        path::Path,
         process::{self, ExitCode},
         time::Instant,
     },
@@ -121,19 +120,23 @@ fn dispatch() -> Result<(), Failure> {
             output_path,
         } => {
             let target = Target::here(target.as_deref(), manifest.as_deref())?;
-            let entry = target.entry().map(Path::to_path_buf);
 
-            // An anonymous program has no stem to name its executable after, and inventing one would silently claim a path the invocation never mentioned. Refuse instead, naming the flag that answers it.
-            let Some(output) = output_path.or_else(|| target.output()) else {
-                return Err(Failure::Error(format!(
-                    "compiling {} produces an executable with no name to take; pass `-o PATH`",
-                    Subject::Stdin
-                )));
+            // A product written to disk needs a package to be filed under and a name to be filed as, and only a declared executable has both. A loose file or standard input is `run`'s to take: trying a theory leaves nothing behind.
+            let Target::Executable {
+                entry,
+                output: filed,
+                ..
+            } = &target
+            else {
+                return Err(Failure::Error(
+                    "`compile` builds a declared executable of the governing package; `run` is what takes a file or standard input".to_string(),
+                ));
             };
+            let entry = entry.clone();
+            let output = output_path.unwrap_or_else(|| filed.clone());
 
-            // Nothing enforces a `.crs` extension, so an extensionless input's default output is the input itself — and `-o` can name it explicitly. Refuse before compiling rather than destroy the source.
-            if let Some(entry) = &entry
-                && let (Ok(input), Ok(written)) = (entry.canonicalize(), output.canonicalize())
+            // `-o` can name the entry itself. Refuse before compiling rather than destroy the source.
+            if let (Ok(input), Ok(written)) = (entry.canonicalize(), output.canonicalize())
                 && input == written
             {
                 return Err(Failure::Error(format!(

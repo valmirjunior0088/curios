@@ -180,9 +180,9 @@ fn a_declared_executable_builds_into_the_store() {
     let target = Target::of(None, None, &root.join("json")).expect("an enumerated member");
 
     // The umbrella governs, so the store is its own — but the path *within* the store names the package, so it would not move if the member left.
-    let output = target
-        .output()
-        .expect("a declared executable has a default output");
+    let Target::Executable { output, .. } = &target else {
+        panic!("an enumerated member is a declared executable");
+    };
     assert!(
         output.ends_with(".curios/bin/json/serve"),
         "{}",
@@ -190,14 +190,6 @@ fn a_declared_executable_builds_into_the_store() {
     );
 
     fs::remove_dir_all(root).unwrap();
-}
-
-/// A bare file has no project, hence no store: its build lands beside the working directory under its own stem.
-#[test]
-fn a_bare_file_builds_beside_itself() {
-    let target = Target::of(Some("hello.crs"), None, Path::new(".")).expect("a file argument");
-
-    assert_eq!(target.output(), Some(PathBuf::from("hello")));
 }
 
 /// `-` is standard input, and it answers before anything looks for a manifest — so it means the same thing in a package as outside one, which is the whole point of dispatching lexically.
@@ -229,13 +221,12 @@ fn a_dash_is_standard_input_everywhere() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// An anonymous program has neither a file to read nor a stem to name an executable after, so both answers are absent rather than invented — `compile` turns the second into a refusal that names `-o`.
+/// An anonymous program has no file to read, so the answer is absent rather than invented.
 #[test]
-fn standard_input_has_neither_an_entry_nor_an_output() {
+fn standard_input_has_no_entry() {
     let target = Target::of(Some("-"), None, Path::new(".")).expect("standard input");
 
     assert_eq!(target.entry(), None);
-    assert_eq!(target.output(), None);
 }
 
 /// A package of nothing but programs compiles them against its dependencies alone — there is no library of its own to put last.

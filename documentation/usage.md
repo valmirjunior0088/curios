@@ -22,16 +22,18 @@ The complete command-line and package reference. The [README](../README.md) cove
 
 ## Running and compiling
 
-`run` and `compile` take the same four forms, so what a bare invocation means never depends on which one you asked.
+`run` takes four forms, and `compile` the first two of them, so what a bare invocation means never depends on which one you asked.
 
 | Argument | Means |
 | --- | --- |
 | *(none)* | the governing package's sole executable, or the one `default` names when it declares several |
 | an identifier | the executable declared under that name |
-| anything ending in `.crs`, or holding a path separator | that file, standalone |
-| `-` | the program on standard input, standalone |
+| anything ending in `.crs`, or holding a path separator | that file, standalone — `run` only |
+| `-` | the program on standard input, standalone — `run` only |
 
 The dispatch is lexical and never probes the disk: an executable's name is a single identifier, so it can hold neither `.crs` nor a path separator nor be `-`, and the spaces cannot overlap. `curios run scratch.crs` therefore means the file even when the package declares an executable called `scratch`.
+
+`compile` refuses the two standalone forms by name. A product written to disk needs a package to be filed under and a name to be filed as, and only a declared executable has both; a loose file is for trying a theory, which `run` serves and which leaves nothing behind.
 
 Everything after the target belongs to the program, not to `curios`, and reaches it through `/std/proc/args`:
 
@@ -43,7 +45,7 @@ Everything from the target onward is collected verbatim, hyphens included, so a 
 
 A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` past its carrier and where larger values live, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running — followed by the wasm frames where the build kept their names.
 
-`compile` writes its executable beside you, named after the executable it built or after the input file's stem; `-o`/`--output <PATH>` names it something else, and is required when there is no stem to take a name from.
+`compile` writes its executable under the store beside the governing manifest, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead.
 
 A file argument brings no project with it — no manifest, no dependencies, not even the library of the package you are standing in. That is deliberate: project scope is reachable only through something a manifest declares, so a scratch file cannot quietly acquire one. When a scratch program does want the library, one `[[executables]]` line gives it one.
 
@@ -62,7 +64,7 @@ Test programs are filed in the project's store exactly as `run`'s payloads are, 
 
 ## Programs on standard input
 
-`-` runs or compiles whatever arrives on standard input, which is what makes a heredoc a program:
+`-` runs whatever arrives on standard input, which is what makes a heredoc a program:
 
 ```sh
 curios run - <<'EOF'
@@ -74,10 +76,7 @@ It is standalone in the same sense a file argument is, and answers before anythi
 
 Standard input is asked for rather than assumed. A bare `curios run` already means the governing package's default executable, so reading a pipe when one happens to be attached would decide between the two by whether a terminal is present — making one command line mean different things in a shell and in a pipeline, and leaving `curios run < input.txt` compiling the input it was meant to be fed. The spelling costs one character and removes the question.
 
-Two things follow from the program being anonymous, and both are refusals rather than guesses:
-
-- **`compile -` requires `-o`.** There is no stem to name an executable after, and a default would claim a path the invocation never mentioned.
-- **It resolves no file-backed modules.** `mod util;` looks in the header's stem directory, and there is no header on disk to take a stem from, so it fails as an unfound module. Inline modules — `mod util … end` — work normally, so a program on standard input can still be structured, just not spread across files.
+One thing follows from the program being anonymous, and it is a refusal rather than a guess: **it resolves no file-backed modules.** `mod util;` looks in the header's stem directory, and there is no header on disk to take a stem from, so it fails as an unfound module. Inline modules — `mod util … end` — work normally, so a program on standard input can still be structured, just not spread across files.
 
 Diagnostics name it `<stdin>` where they would name a file, keeping line and column:
 

@@ -87,13 +87,6 @@ Run it:
 curios run hello.crs
 ```
 
-Or fold it into a standalone native executable, runtime and all:
-
-```sh
-curios compile hello.crs -o hello
-./hello
-```
-
 ## When one file is not enough
 
 A `.crs` file is standalone wherever it sits: it needs no manifest, and no manifest above it captures it. A package is what you write once a program outgrows that.
@@ -122,6 +115,13 @@ Fmt/print("%\n")(message)
 ```
 
 Note what the program imports. `lib` and `exe` are spellings nothing can refer to, so `/hello` is unambiguously the *mount* — a package's own name never has to mean two things at once. Delete either file and the package is happily just the other one.
+
+A package is also what gets folded into a standalone native executable, runtime and all:
+
+```sh
+curios compile -o hello
+./hello
+```
 
 Dependencies, umbrellas, extra executables, and the rest of the command line live in [Usage](documentation/usage.md).
 

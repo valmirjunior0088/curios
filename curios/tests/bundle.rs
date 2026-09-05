@@ -1,4 +1,4 @@
-//! End-to-end test of the `compile` subcommand's bundler: compile a program to a native executable, run it, and check its output.
+//! End-to-end test of the `compile` subcommand's bundler: compile a package's program to a native executable, run it, and check its output.
 //!
 //! Gated with `#[ignore]` because it execs a produced binary. The compiler embeds its launcher, so the produced executable is self-contained — but the compiler itself only builds once `cargo x runtime` has generated its target-scoped runtime launcher. Run it with:
 //!
@@ -14,16 +14,18 @@ use std::{fs, process::Command};
 fn compile_produces_a_runnable_executable() {
     let compiler = env!("CARGO_BIN_EXE_curios");
 
-    let dir = std::env::temp_dir();
-    let source = dir.join("curios_bundle_e2e.crs");
-    let output = dir.join("curios_bundle_e2e.out");
-    fs::write(&source, r#"/std/print("hello")"#).expect("write the temp source");
+    // `compile` builds a declared executable, so the program is a package: a one-line manifest beside its `exe.crs`.
+    let package = std::env::temp_dir().join("curios_bundle_e2e");
+    let output = std::env::temp_dir().join("curios_bundle_e2e.out");
+    fs::create_dir_all(&package).expect("create the temp package");
+    fs::write(package.join("curios.toml"), "name = \"bundle\"\n").expect("write the manifest");
+    fs::write(package.join("exe.crs"), r#"/std/print("hello")"#).expect("write the temp source");
 
     let compiled = Command::new(compiler)
         .arg("compile")
-        .arg(&source)
         .arg("-o")
         .arg(&output)
+        .current_dir(&package)
         .status()
         .expect("run the compiler");
     assert!(compiled.success(), "compile failed");
