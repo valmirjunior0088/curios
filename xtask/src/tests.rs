@@ -1,6 +1,6 @@
 //! What a rendered installer holds, and which arguments the recipe refuses to bake in.
 
-use super::*;
+use {super::*, askama::Template};
 
 #[test]
 fn the_version_is_baked_in_and_the_template_guard_cannot_fire() {

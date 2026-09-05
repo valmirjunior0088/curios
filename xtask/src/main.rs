@@ -20,6 +20,9 @@ use helpers::*;
 mod installer;
 use installer::*;
 
+#[cfg(test)]
+mod tests;
+
 use {
     clap::{Parser, Subcommand},
     std::{
