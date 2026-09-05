@@ -4,8 +4,8 @@
 --
 -- An option written twice keeps its last value, `many` keeps every value, and a flag written twice is set. `-h` or `--help` anywhere on the line answers help before any failure is reported, and `--version` likewise when the command declares one.
 --
--- **There is no `main`, and a program writes its own entry.** The shape is fixed even though the module cannot yet hold it: read `/std/proc/args`, drop the program name, decode each argument with `Str/of_bytes` and refuse a non-UTF-8 one by its position rather than converting it lossily, hand the rest to `select` where there are subcommands and to `parse` where there are not, print `help` or the version to standard output and exit 0, print `report` to standard error and exit 2, and otherwise apply the command's own `run` to the parsed record. What stops that living here is the elaborator rather than the design: a specification-indexed function applied to a `Type`-carrying struct field has its instance levels read as constants, so `parse(cli.args, ...)` handed to `cli.run` is accepted by the elaborator and refused by the kernel. The roadmap carries it.
-use /std/{Str, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, True, False};
+-- `main` is the entry a program hands its `Cli` to: it reads `/std/proc/args`, drops the program name, decodes each argument with `Str/of_bytes` and refuses a non-UTF-8 one by its position rather than converting it lossily, prints `help` or the version to standard output and exits 0, prints `report` to standard error and exits 2, and otherwise applies the command's own `run` to the parsed record. A program with subcommands reaches `select` first and hands the chosen one its remaining line.
+use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, True, False};
 
 -- A reader is data rather than a witness, so a program's own type joins a specification by supplying one rather than by declaring an instance. `A` is a field because the carrier a specification entry contributes is read off the entry itself; see `Carrier`.
 pub struct Value: pub Type {
@@ -315,12 +315,11 @@ let long_index(spec: List(Arg), name: Str) -> Option(Nat) =
 let short_index(spec: List(Arg), c: Char) -> Option(Nat) =
     List/find_index(spec, (a) => match a.short | some(d) => Char/eql(c, d) | none() => false end);
 
--- Read by a direct match rather than through `Option/map`: `Arg` carries a `Kind`, which carries a `Value`, which carries a `Type`, so the element type sits a universe above the ground one -- and the elaborator leaves `Option/map`'s instance level generalized where the argument's is concretely one, which the kernel then refuses as an instance it cannot verify. The match commits to no instance and needs none.
 let name_at(spec: List(Arg), i: Nat) -> Str =
-    match List/try_get(spec, i) | some(a) => a.long | none() => "" end;
+    Option/unwrap_or(Option/map(List/try_get(spec, i), (a) => a.long), "");
 
 let wants_a_value(spec: List(Arg), i: Nat) -> Bool =
-    match List/try_get(spec, i) | some(a) => takes_value(a.kind) | none() => false end;
+    Option/unwrap_or(Option/map(List/try_get(spec, i), (a) => takes_value(a.kind)), false);
 
 -- The indices of the positional entries in declaration order: the order bare tokens fill them.
 let positional_indices(spec: List(Arg)) -> List(Nat) =
@@ -549,39 +548,23 @@ let placeholder(a: Arg) -> Option(Str) =
     | _ => Option/none()
     end;
 
--- Walked by hand rather than through `List/filter_map` and `List/map`: those carry two type parameters, and `Arg` sits a universe above `Str` because it reaches a `Type` through `Kind` and `Value`. The elaborator leaves one of the two instance levels generalized where the argument's is concrete, and the kernel refuses the instance it cannot verify; a written walk commits to none. `List/any` below is fine -- it has one parameter and nothing to leave undecided.
 let placeholders(spec: List(Arg)) -> List(Str) =
-    match spec
-    | [] => []
-    | [a, ..more] =>
-        match placeholder(a)
-        | some(p) => [p, ..placeholders(more)]
-        | none() => placeholders(more)
-        end
-    end;
+    List/filter_map(spec, placeholder);
 
 let positional_rows(spec: List(Arg)) -> List({Str, Str}) =
-    match spec
-    | [] => []
-    | [a, ..more] =>
-        match placeholder(a)
-        | some(p) => [(p, a.help), ..positional_rows(more)]
-        | none() => positional_rows(more)
-        end
-    end;
+    List/filter_map(spec, (a) => Option/map(placeholder(a), (p) => (p, a.help)));
 
 let option_rows(spec: List(Arg)) -> List({Str, Str}) =
-    match spec
-    | [] => []
-    | [a, ..more] =>
-        match is_positional(a.kind) || is_rest(a.kind)
-        | true => option_rows(more)
-        | false => [(option_head(a), a.help), ..option_rows(more)]
-        end
-    end;
+    List/filter_map(
+        spec,
+        (a) =>
+            match is_positional(a.kind) || is_rest(a.kind)
+            | true => Option/none()
+            | false => Option/some((option_head(a), a.help))
+            end);
 
 let command_rows(subs: List(Cli)) -> List({Str, Str}) =
-    match subs | [] => [] | [c, ..more] => [(c.name, c.about), ..command_rows(more)] end;
+    List/map(subs, (c) => (c.name, c.about));
 
 let has_options(spec: List(Arg)) -> Bool =
     List/any(spec, (a) => Bool/not(is_positional(a.kind) || is_rest(a.kind)));
@@ -652,7 +635,6 @@ pub let report(cli: Cli, f: Failure) -> Str =
     Str/flatten(
         ["error: ", complaint(f), "\n\n", usage(cli), "\n\nFor more information, try '--help'.\n"]);
 
--- There is no `main` yet, and the gap is deliberate rather than forgotten: an entry handing `parse(cli.args, ...)` to `cli.run` is refused by the kernel, which reads the instance levels of a specification-indexed function applied to a `Type`-carrying field as constants where the caller supplies its own parameters. Until the elaborator settles which of a declaration's interface levels may be minimized and which must be generalized, a program spells the six lines itself over `parse`, `help` and `report`.
 -- What choosing a subcommand came to. It mirrors `Outcome` deliberately: help is decided before the first token is read as a name, so a parent answers `--help` rather than refusing it as an unknown command, and a caller dispatches on one shape either way.
 pub induct Chosen: pub Type
 | chose(sub: Cli, rest: List(Str))
@@ -688,5 +670,45 @@ pub let select(cli: Cli, argv: List(Str)) -> Chosen =
                 | none() => Chosen/refused(Failure/unknown_command(first, names))
                 end
             end
+        end
+    end;
+
+-- Arguments arrive as `Bytes` because the host does not promise text. One that is not UTF-8 is refused by its position rather than lossily converted, which is what a carrier narrowing by refusal means for a command line.
+let decode(raw: List(Bytes)) -> Result(Nat, List(Str)) =
+    let walk(rest: List(Bytes), at: Nat) -> Result(Nat, List(Str)) =
+        match rest
+        | [] => Result/success([])
+        | [b, ..more] =>
+            match Str/of_bytes(b)
+            | none() => Result/failure(at)
+            | some(s) => Result/map_success(walk(more, at + 1), (tail) => [s, ..tail])
+            end
+        end;
+    walk(raw, 0);
+
+let fail_with(text: Str) -> Io({}) =
+    let _ = Io/write(Io/stderr, Str/to_bytes(text))!;
+    /std/proc/exit(2);
+
+-- The entry a program hands its `Cli` to. Help and a version answer on standard output and exit 0; a line the specification refuses prints to standard error and exits 2; anything else runs the handler. The bound is demanded here rather than inside, so a specification that could never be parsed unambiguously is refused where the program is written.
+pub let main(cli: Cli, @ok: WellFormed(cli)) -> Io({}) =
+    let raw = /std/proc/args!;
+    let dropped = match raw | [] => [] | [_, ..more] => more end;
+    match decode(dropped)
+    | failure(at) =>
+        fail_with(
+            Str/flatten(
+                [
+                    "error: argument ",
+                    Nat/to_str(at + 1),
+                    " is not valid UTF-8\n\n",
+                    usage(cli),
+                    "\n\nFor more information, try '--help'.\n"]))
+    | success(argv) =>
+        match parse(cli.args, argv, Option/is_some(cli.version))
+        | help() => print(help(cli))
+        | version() => print(Str/flatten([Option/unwrap_or(cli.version, ""), "\n"]))
+        | failure(f) => fail_with(report(cli, f))
+        | parsed(v) => cli.run(v)
         end
     end;

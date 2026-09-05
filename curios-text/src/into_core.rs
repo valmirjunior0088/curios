@@ -706,6 +706,11 @@ fn process_items(
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
+                // Unconditionally, where a `struct`, `concept` or `witness` group tests `formers.len()` and a `let` group tests `mentions_itself` besides — so a lone non-recursive `induct` carries a `rec` group of one that means nothing, and every occurrence of `Option`, `Result` or `Bool` reduces through it.
+                //
+                // Making this conditional is not the two-line change the neighbours make it look like, and both halves were measured rather than reasoned. `mentions_itself` reads `free_vars_shared()`, but an inductive's recursion lives in its *registry entry* — `InductType` holds `name: Global` as a field, not a `Var` — so the test is false for every inductive, recursive ones included, and reaching for it lowers `/std/Nat/Le/Ind` as a `Let` that loses `elaborate_module_rec`'s `context.assume` and leaves its own name unbound while the registry telescopes rebuild. Reading the reach through `order::induct_free_vars` instead clears that and then fails at `/std/Async/Future/State` with `universe instance has 1 arguments but its scheme expects 0`: the group is also where a universe-polymorphic inductive's levels are generalized, and as a `Let` the scheme comes out monomorphic while occurrences still pass a level.
+                //
+                // So the wrapper does double duty, and dropping it needs `elaborate_module_let` to do both jobs. Nothing depends on that today — a folded spelling reduces correctly since `unfold_rec_apply` learned to apply a group that dissolved to its member's value — which leaves this an optimization with no measurement behind it.
                 flat_items.push(FlatItem::Rec(type_flat_items));
 
                 // Step 2: constructor bindings. Each is a function whose body injects the variant as a tagged tuple.
