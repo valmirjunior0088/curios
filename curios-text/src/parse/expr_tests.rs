@@ -515,3 +515,24 @@ fn local_let_group() {
         .into()
     );
 }
+
+/// A term's span is its own text: the whitespace after it, and a comment there, belong to whatever follows.
+///
+/// Every atom parser consumes the whitespace after it inside the span wrapper, so an operand's span ran on to the operator and the caret underlined the blanks — `n   ` under `n   + true` — and a test body sliced from its span ended in the comment that followed it.
+#[test]
+fn a_term_spans_its_own_text_without_the_whitespace_after_it() {
+    let source = "n   + true";
+    let term = source.parse::<Term>().unwrap();
+    let Subterm::Infix(infix) = term.as_subterm() else {
+        panic!("not an infix: {term:?}")
+    };
+    let left = infix.left.span().unwrap();
+    assert_eq!(&source[left.start..left.end], "n");
+    let whole = term.span().unwrap();
+    assert_eq!(&source[whole.start..whole.end], source);
+
+    let source = "f(a)  -- a remark\n  -- another\n";
+    let term = source.parse::<Term>().unwrap();
+    let span = term.span().unwrap();
+    assert_eq!(&source[span.start..span.end], "f(a)");
+}

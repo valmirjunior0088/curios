@@ -116,7 +116,7 @@ pub(super) fn parse_let<'a>() -> Parser<'a, Term> {
 
             let groups = statements.into_iter().map(|(_, group)| group).collect();
 
-            Term::from(Subterm::Let(Let { groups, tail })).with_span(span)
+            Term::from(Subterm::Let(Let { groups, tail })).with_span(trimmed(span))
         })
 }
 
@@ -183,7 +183,7 @@ pub(super) fn apply_suffixes(head: Term, suffixes: Vec<(Span, Suffix)>) -> Term 
                 Suffix::Bang => Subterm::Bang(head).into(),
             };
             match span {
-                Some(span) => node.with_span(span),
+                Some(span) => node.with_span(trimmed(span)),
                 None => node,
             }
         })
@@ -196,7 +196,22 @@ pub(super) fn parse_empty_tuple<'a>() -> Parser<'a, Term> {
 }
 
 pub(super) fn with_span<'a>(parser: Parser<'a, Term>) -> Parser<'a, Term> {
-    spanned(parser).map(|(span, term)| term.with_span(span))
+    spanned(parser).map(|(span, term)| term.with_span(trimmed(span)))
+}
+
+/// The span cut back to the term's own text, which every span a term is stamped with passes through — the wrapper's, a postfix chain's and a `let` block's alike. Every atom parser consumes the whitespace after it, so a span built from where the parse stopped ran on to the next operator or delimiter, and a caret underlined the blanks after an operand; the same run, comment included, is what the `?` oracle, the language server and the test runner's body slice read. A comment is stepped over through the table `parse_whitespace` records it in, complete for everything the parser consumed by the time this runs. The formatter, which needs the far end — a comment past a separator is paid onto its line by the term that reaches it — recovers it from the source text in `print_term` rather than from the span.
+fn trimmed(mut span: Span) -> Span {
+    loop {
+        let text = &span.source.text[span.start..span.end];
+        let end = span.start + text.trim_end().len();
+        match comment_ending_at(end) {
+            Some(comment) if comment.start >= span.start => span.end = comment.start,
+            _ => {
+                span.end = end;
+                return span;
+            }
+        }
+    }
 }
 
 pub(super) fn parse_goal<'a>() -> Parser<'a, Term> {

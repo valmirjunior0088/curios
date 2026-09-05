@@ -18,7 +18,7 @@ use {
         Printer, begins, fill, flat, group, hard_line, if_break, indent, line, pure, reaches,
         sep_flat, soft_line,
     },
-    curios_utilities::{Grain, Plicity},
+    curios_utilities::{Grain, Plicity, Span},
 };
 
 fn print_plicity(plicity: Plicity) -> Printer {
@@ -891,13 +891,28 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
 pub(crate) fn print_term(term: Term) -> Printer {
     // The formatter's comment weave, and the whole of what the printer contributes to it: a term reports where its own text begins and how far into the source it reaches. Nothing here decides where a comment goes — that is a fact about the output line, which only the renderer knows.
     //
-    // The *end* mark is what reaches a comment written past a separator the enclosing printer emits: a term's span runs to the next token, so such a comment falls inside it, and the line comes to owe the comment before the break that would otherwise carry it away. Outside a format run there are no comments and both marks emit nothing.
-    let bounds = term.span().map(|span| (span.start, span.end));
+    // The *end* mark is what reaches a comment written past a separator the enclosing printer emits: it is placed past the whitespace and comments after the term — where the parse stopped, which is where the span itself used to end before a caret had to stop underlining blanks — so such a comment falls inside it, and the line comes to owe the comment before the break that would otherwise carry it away. Outside a format run there are no comments and both marks emit nothing.
+    let bounds = term.span().map(|span| (span.start, past_trailing(span)));
 
     marked(bounds.map(|(start, _)| start), || match bounds {
         Some((start, end)) => flat([begins(start), print_term_inner(term), reaches(end)]),
         None => print_term_inner(term),
     })
+}
+
+/// The offset past the whitespace and line comments that follow `span` — the extent `parse_whitespace` consumed after the term, recovered from the text.
+fn past_trailing(span: &Span) -> usize {
+    let text = &span.source.text;
+    let mut end = span.end;
+    loop {
+        let rest = &text[end..];
+        let trimmed = rest.trim_start();
+        end += rest.len() - trimmed.len();
+        match trimmed.starts_with("--") {
+            true => end += trimmed.find('\n').unwrap_or(trimmed.len()),
+            false => return end,
+        }
+    }
 }
 
 /// Note that `build`'s document begins at `offset`, so the renderer can place there whatever the source held and the document does not — see [`Printer::Mark`]. `None` (a spanless node) notes nothing.

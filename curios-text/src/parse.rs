@@ -81,6 +81,18 @@ pub(crate) fn clear_comments() {
     COMMENTS.with(|comments| comments.borrow_mut().clear());
 }
 
+/// The recorded comment that ends exactly at `end`, if one does — what lets a span step back over a trailing comment it consumed.
+fn comment_ending_at(end: usize) -> Option<Span> {
+    COMMENTS.with(|comments| {
+        comments
+            .borrow()
+            .range(..end)
+            .next_back()
+            .map(|(_, span)| span.clone())
+            .filter(|span| span.end == end)
+    })
+}
+
 /// The recorded comments in ascending offset order, leaving the table empty.
 pub(crate) fn take_comments() -> Vec<Span> {
     COMMENTS.with(|comments| {
