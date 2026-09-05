@@ -2,7 +2,7 @@ use /std/{Nat, Int, Bool, Byte, Parse};
 use /std/Toml/{Toml, Date, Time, OffsetDateTime, LocalDateTime};
 use /std/Toml/calendar/{date_ok, time_ok};
 
--- One decimal digit. Both ways of not finding one -- the end of input and a non-digit -- are the same refusal to the caller, which is what `label` states here.
+-- | One decimal digit. Both ways of not finding one -- the end of input and a non-digit -- are the same refusal to the caller, which is what `label` states here.
 let digit: Parse(Nat) =
     Parse/label(
         Parse/map(
@@ -10,7 +10,7 @@ let digit: Parse(Nat) =
             (b) => Byte/to_nat(b) - 0x30),
         "expected digit");
 
--- Exactly `count` digits, as one number. A date-time field is fixed-width, so a short run is an error rather than a stopping point.
+-- | Exactly `count` digits, as one number. A date-time field is fixed-width, so a short run is an error rather than a stopping point.
 let fixed(count: Nat, acc: Nat) -> Parse(Nat) =
     match count
     | 0 => Parse/pure(acc)
@@ -31,7 +31,7 @@ let frac_stop(taken: Nat, acc: Nat, seen: Bool) -> Parse(Nat) =
     | false => Parse/fail("expected digit")
     end;
 
--- fractional seconds: at most nine digits honored, further digits truncated
+-- | fractional seconds: at most nine digits honored, further digits truncated
 let frac_digits(taken: Nat, acc: Nat, seen: Bool) -> Parse(Nat) =
     let next = Parse/peek!;
     match next
@@ -48,12 +48,12 @@ let frac_digits(taken: Nat, acc: Nat, seen: Bool) -> Parse(Nat) =
         end
     end;
 
--- A dot commits to a fractional part: once it is consumed, a run of digits must follow, so this deliberately does not fall back to zero on failure the way an `or` would.
+-- | A dot commits to a fractional part: once it is consumed, a run of digits must follow, so this deliberately does not fall back to zero on failure the way an `or` would.
 let frac_part: Parse(Nat) =
     let dot = Parse/optional(Parse/take_byte(0x2E))!;
     match dot | some(_) => frac_digits(0, 0, false) | none() => Parse/pure(0) end;
 
--- Each of the three shapes commits once its prefix can be nothing else -- four digits and a dash are a date, two digits and a colon a time, a sign after a time an offset -- so a malformed one reports its own reason rather than letting the integer parser read its leading digits and fail on what follows. The committed parts are named because `!` sequences in the enclosing region, not in a call's argument.
+-- | Each of the three shapes commits once its prefix can be nothing else -- four digits and a dash are a date, two digits and a colon a time, a sign after a time an offset -- so a malformed one reports its own reason rather than letting the integer parser read its leading digits and fail on what follows. The committed parts are named because `!` sequences in the enclosing region, not in a call's argument.
 let date_fields(y: Nat) -> Parse(Date) =
     let mo = fixed(2, 0)!;
     let _ = expect(0x2D)!;
@@ -102,7 +102,7 @@ let offset_parse: Parse(Int) =
         Parse/commit(offset_fields(sign))
     end;
 
--- Everything after a date that is still part of one value. The `or`s here start *after* the date has been consumed, which is what makes a separator with no time behind it give the separator back and leave a plain local date standing -- rather than failing the whole value, and rather than backtracking over the date as well.
+-- | Everything after a date that is still part of one value. The `or`s here start *after* the date has been consumed, which is what makes a separator with no time behind it give the separator back and leave a plain local date standing -- rather than failing the whole value, and rather than backtracking over the date as well.
 let date_time_tail(date: Date) -> Parse(Toml) =
     let _ = Parse/take_if((b) => b == 0x54 || b == 0x74 || b == 0x20)!;
     let time = time_parse!;

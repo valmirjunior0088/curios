@@ -28,12 +28,12 @@ pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
 pub let close(f: File) -> Io({}) =
     /sys/Handle/close(f.0);
 
--- Up to `n` bytes, synchronously: the disk answers a regular file at once.
+-- | Up to `n` bytes, synchronously: the disk answers a regular file at once.
 pub let read(f: File, n: Nat) -> Io(stream/Chunk) =
     let r = /sys/Handle/read(f.0, n)!;
     Io/pure(stream/of_status(r.status, r.bytes));
 
--- The whole of `b`, a short write resent.
+-- | The whole of `b`, a short write resent.
 pub let write(f: File, b: Bytes) -> Try(Io, Io/Error, {}) =
     let r = /sys/Handle/write(f.0, b)!;
     match Io/Error/of(r.status)
@@ -56,7 +56,7 @@ satisfy stream/Write(File) {
     write(f, b) = Async/lift(Try/run(write(f, b))),
 }
 
--- `body` over an open file, closed whichever way the body ends; the body's own failure is the answer after the close.
+-- | `body` over an open file, closed whichever way the body ends; the body's own failure is the answer after the close.
 pub let with(
     @A: Type,
     path: Path,
@@ -73,7 +73,7 @@ pub let with(
     let _ = close(f)!;
     Try/pure(a);
 
--- The same bracket inside a fiber, registered with the scheduler: a cancelled task closes what it opened, and the body may park.
+-- | The same bracket inside a fiber, registered with the scheduler: a cancelled task closes what it opened, and the body may park.
 pub let with_async(
     @A: Type,
     path: Path,
@@ -98,6 +98,6 @@ let read_to_end(f: File) -> Try(Io, Io/Error, Bytes) =
 pub let read_all(path: Path) -> Try(Io, Io/Error, Bytes) =
     with(path, Mode/read(), read_to_end);
 
--- The whole file in one call, the twin of `read_all`: created if absent, replaced if present.
+-- | The whole file in one call, the twin of `read_all`: created if absent, replaced if present.
 pub let write_all(path: Path, b: Bytes) -> Try(Io, Io/Error, {}) =
     with(path, Mode/write(), (f) => write(f, b));

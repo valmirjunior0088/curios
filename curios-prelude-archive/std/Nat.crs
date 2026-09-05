@@ -49,23 +49,23 @@ pub let min(a: Nat, b: Nat) -> Nat =
 pub let max(a: Nat, b: Nat) -> Nat =
     match a < b | true => b | false => a end;
 
--- Structural on the exponent, so a type may mention it.
+-- | Structural on the exponent, so a type may mention it.
 pub let pow(base: Nat, exp: Nat) -> Nat =
     match exp | 0 => 1 | _pred + 1; acc => acc * base end;
 
--- Euclid's algorithm. The recursion is on a remainder, which nothing grades as a decrease: `gcd` is general recursion, classified partial and retained, and a type may not mention it. Casing on `b` rather than testing `b == 0` is what discharges the remainder's bound — `0 < bp + 1` is decided by the successor, where `b == 0 = false` says nothing the comparison can use.
+-- | Euclid's algorithm. The recursion is on a remainder, which nothing grades as a decrease: `gcd` is general recursion, classified partial and retained, and a type may not mention it. Casing on `b` rather than testing `b == 0` is what discharges the remainder's bound — `0 < bp + 1` is decided by the successor, where `b == 0 = false` says nothing the comparison can use.
 pub let gcd(a: Nat, b: Nat) -> Nat =
     match b | 0 => a | bp + 1 => gcd(bp + 1, a % (bp + 1)) end;
 
--- `lcm(0, 0)` is `0`, the one case whose divisor is zero.
+-- | `lcm(0, 0)` is `0`, the one case whose divisor is zero.
 pub let lcm(a: Nat, b: Nat) -> Nat =
     match gcd(a, b) | 0 => 0 | g + 1 => a * b / (g + 1) end;
 
--- The exponent of the highest power of two not above `n`, with `log2(0)` answering `0` because the total spelling wants an answer. The recursion halves under a guard that rules zero out, which the arithmetic rung reads as a decrease, so unlike `gcd` and `sqrt` this one is total.
+-- | The exponent of the highest power of two not above `n`, with `log2(0)` answering `0` because the total spelling wants an answer. The recursion halves under a guard that rules zero out, which the arithmetic rung reads as a decrease, so unlike `gcd` and `sqrt` this one is total.
 pub let log2(n: Nat) -> Nat =
     match n < 2 | true => 0 | false => log2(n / 2) + 1 end;
 
--- The floor of the square root, found by counting up: a step per root rather than Newton's iteration, whose division by a computed value would owe a bound at every step. General recursion, so partial and retained.
+-- | The floor of the square root, found by counting up: a step per root rather than Newton's iteration, whose division by a computed value would owe a bound at every step. General recursion, so partial and retained.
 pub let sqrt(n: Nat) -> Nat =
     let go(r: Nat) -> Nat = match (r + 1) * (r + 1) <= n | true => go(r + 1) | false => r end;
     go(0);
@@ -125,7 +125,7 @@ satisfy Ordered(Nat) {
     cmp = cmp,
 }
 
--- A number in `0 ..= size`: the size is the bound, so the first cases are the smallest numbers.
+-- | A number in `0 ..= size`: the size is the bound, so the first cases are the smallest numbers.
 satisfy Test/Draw(Nat) {
     all() = Option/none(),
     draw(seed, size) =
@@ -133,7 +133,7 @@ satisfy Test/Draw(Nat) {
         (n % (size + 1), rest),
 }
 
--- The two ordering propositions are facades: the module's namesake binding is the proposition and the laws about it nest underneath — `Nat/Lt` is the decided `a < b` and `Nat/Lt/try` the procedure that decides it, `Nat/Le` the decided `a <= b` and `Nat/Le/trans` its transitivity. `<=` has a second form beneath the first, `Nat/Le/Ind`, which is the same relation by induction; a path now says which of the two it is, where the old `Nat/Le`/`Nat/Le/Ind` pair said only that they were spelled differently.
+-- | The two ordering propositions are facades: the module's namesake binding is the proposition and the laws about it nest underneath — `Nat/Lt` is the decided `a < b` and `Nat/Lt/try` the procedure that decides it, `Nat/Le` the decided `a <= b` and `Nat/Le/trans` its transitivity. `<=` has a second form beneath the first, `Nat/Le/Ind`, which is the same relation by induction; a path now says which of the two it is, where the old `Nat/Le`/`Nat/Le/Ind` pair said only that they were spelled differently.
 pub mod Lt;
 pub use Lt/{let Lt};
 

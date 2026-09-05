@@ -12,7 +12,7 @@ end
 
 pub use Json/*;
 
--- The two halves are private modules: their scanners, escape tables, and intermediate parsers are implementation, visible throughout this subtree and nowhere else. Only the two entry points are re-exported.
+-- | The two halves are private modules: their scanners, escape tables, and intermediate parsers are implementation, visible throughout this subtree and nowhere else. Only the two entry points are re-exported.
 mod encode;
 pub use encode/{encode};
 

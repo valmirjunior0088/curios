@@ -178,6 +178,6 @@ pub let print(s: Str) -> Io({}) =
 pub let print_err(s: Str) -> Io({}) =
     Io/write(Io/stderr, Str/to_bytes(s));
 
--- One line of standard input, without its newline; `none` at the end of the input.
+-- | One line of standard input, without its newline; `none` at the end of the input.
 pub let read() -> Io(Option(Bytes)) =
     Io/read_line(Io/stdin);

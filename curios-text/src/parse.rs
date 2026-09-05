@@ -184,16 +184,25 @@ pub(crate) fn text_after(doc: &Doc) -> &str {
     }
 }
 
-/// The word at the head a documentation block runs up to, which decides whom the block belongs to: `and` or `pub` open a later member of the group being parsed, another word opens the next item, and anything else — a closing token, `end`, the end of input — is nothing the block may document.
+/// The keyword at the head a documentation block runs up to, past a `pub` if one is written, which decides whom the block belongs to: `and` opens a later member of the group being parsed, another word opens the next item, and anything else — a closing token, `end`, the end of input — is nothing the block may document.
 pub(crate) fn word_after(doc: &Doc) -> &str {
     let rest = text_after(doc);
-    let length = rest
+    let (first, after) = word_at(rest);
+    match first {
+        "pub" => word_at(after.trim_start()).0,
+        other => other,
+    }
+}
+
+/// The identifier `text` begins with, and the text after it.
+fn word_at(text: &str) -> (&str, &str) {
+    let length = text
         .chars()
         .take_while(|char| is_identifier_char(*char))
         .map(char::len_utf8)
         .sum();
 
-    &rest[..length]
+    text.split_at(length)
 }
 
 /// The documentation comment above what comes next, or `None` when there is none: consecutive `-- |` lines, then the whitespace and plain comments up to the documented head. A second block before that head is refused, so a stray block far above can never be silently absorbed into a declaration's prose.

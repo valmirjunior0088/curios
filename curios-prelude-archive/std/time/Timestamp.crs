@@ -8,7 +8,7 @@ pub struct Timestamp: Type {
     nanos: Nat,
 }
 
--- Canonicalising: nanoseconds past 10⁹ carry into the seconds and seconds past 10⁹ into the high limb, so whatever limbs a host row or a program hands over become the one stored form.
+-- | Canonicalising: nanoseconds past 10⁹ carry into the seconds and seconds past 10⁹ into the high limb, so whatever limbs a host row or a program hands over become the one stored form.
 pub let of_unix(secs_hi: Nat, secs_lo: Nat, nanos: Nat) -> Timestamp =
     let lo = secs_lo + nanos / 1000000000;
     Timestamp {
@@ -21,7 +21,7 @@ pub let now() -> Io(Timestamp) =
     let r = /sys/clock/wall!;
     Io/pure(of_unix(r.secs_hi, r.secs_lo, r.nanos));
 
--- The canonical limbs back: the seconds since the epoch, high and low, and the nanoseconds within the second.
+-- | The canonical limbs back: the seconds since the epoch, high and low, and the nanoseconds within the second.
 pub let to_unix(t: Timestamp) -> {secs_hi: Nat, secs_lo: Nat, nanos: Nat} =
     (secs_hi = t.secs_hi, secs_lo = t.secs_lo, nanos = t.nanos);
 
@@ -40,7 +40,7 @@ let sub_digit(x: Nat, y: Nat) -> {digit: Nat, borrow: Nat} =
     | false => (digit = x - y, borrow = 0)
     end;
 
--- `a - b` as a duration, and zero when `a` is not after `b`: a `Duration` has no sign. Limb by limb with a borrow, as the representation is laid out.
+-- | `a - b` as a duration, and zero when `a` is not after `b`: a `Duration` has no sign. Limb by limb with a borrow, as the representation is laid out.
 pub let diff(a: Timestamp, b: Timestamp) -> Duration =
     match before(a, b)
     | true => Duration/zero
@@ -53,7 +53,7 @@ pub let diff(a: Timestamp, b: Timestamp) -> Duration =
 
 satisfy Equal(Timestamp);
 
--- `secs.nanos`: the seconds unbroken, the nanoseconds padded to nine digits, so `1700000000.000000500` reads as the number it is.
+-- | `secs.nanos`: the seconds unbroken, the nanoseconds padded to nine digits, so `1700000000.000000500` reads as the number it is.
 satisfy Show(Timestamp) {
     show(t) =
         let secs =

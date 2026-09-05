@@ -8,7 +8,7 @@
 use /std/{Nat, Str, List};
 use /std/Tui/{Frame};
 
--- How a child claims its share of an axis. `length` is exact, `min` is a floor a fill may grow past, `percent` is of the whole axis, and `fill(weight)` takes a weighted share of whatever the others leave.
+-- | How a child claims its share of an axis. `length` is exact, `min` is a floor a fill may grow past, `percent` is of the whole axis, and `fill(weight)` takes a weighted share of whatever the others leave.
 pub induct Constraint: pub Type
 | length(Nat)
 | min(Nat)
@@ -26,7 +26,7 @@ end
 
 pub use Layout/*;
 
--- The sizes a layout was split into, indexed by the layout, the width and the height. `leaf` is a pane at its size; `stacked` and `ranged` are the children of a `rows` or a `cols`, one per entry and in order; `fitted` is the coercion, a subtree at one size shown at another.
+-- | The sizes a layout was split into, indexed by the layout, the width and the height. `leaf` is a pane at its size; `stacked` and `ranged` are the children of a `rows` or a `cols`, one per entry and in order; `fitted` is the coercion, a subtree at one size shown at another.
 pub induct Sizes: (Layout, Nat, Nat) -> pub Type
 | leaf(@name: Str, w: Nat, h: Nat): (pane(name), w, h)
 | stacked(@ps: List({Constraint, Layout}), @w: Nat, @h: Nat, col: Column(ps, w, h)): (
@@ -69,7 +69,7 @@ let share_head(shares: List(Nat)) -> Nat =
 let share_tail(shares: List(Nat)) -> List(Nat) =
     match shares | [] => [] | [_, ..rest] => rest end;
 
--- Share `avail` among `cs`, one `Nat` per constraint, in one deterministic pass with no solver. The shares sum to `avail` when the fixed claims fit and there is a fill to absorb the rest; an over-committed axis answers the claims as written and lets `fitted` crop, and an axis with no fill leaves its remainder unclaimed.
+-- | Share `avail` among `cs`, one `Nat` per constraint, in one deterministic pass with no solver. The shares sum to `avail` when the fixed claims fit and there is a fill to absorb the rest; an over-committed axis answers the claims as written and lets `fitted` crop, and an axis with no fill leaves its remainder unclaimed.
 pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
     let fixed(c: Constraint) -> Nat =
         match c
@@ -106,7 +106,7 @@ pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
                 end);
     settled.out;
 
--- Paint every pane at its size and join the results as the tree says. `paint` is the program's: it is asked for one pane by name at the size the split gave it, and the frame it answers is typed at that size, so a widget that does not fill its pane is refused where the program wrote it.
+-- | Paint every pane at its size and join the results as the tree says. `paint` is the program's: it is asked for one pane by name at the size the split gave it, and the frame it answers is typed at that size, so a widget that does not fill its pane is refused where the program wrote it.
 pub let render(
     @l: Layout,
     @w: Nat,
@@ -145,7 +145,7 @@ and render_row(
         Frame/beside(render(head, paint), render_row(tail, paint))
     end;
 
--- Split `w` by `h` along the tree. A `rows` shares `h` among its children by `distribute` and a `cols` shares `w`; each child is split at its share, and the chain is wrapped in `fitted` at the size that was asked for, since the shares are facts the value has and the type does not.
+-- | Split `w` by `h` along the tree. A `rows` shares `h` among its children by `distribute` and a `cols` shares `w`; each child is split at its share, and the chain is wrapped in `fitted` at the size that was asked for, since the shares are facts the value has and the type does not.
 pub let split(l: Layout, w: Nat, h: Nat) -> Sizes(l, w, h) =
     match l
     | pane(_name) => leaf(w, h)
@@ -181,7 +181,7 @@ and split_row(
         (tw = mine + alongside.tw, row = row_part(split(entry.1, mine, h), alongside.row))
     end;
 
--- Split and render in one step: the whole of what a `view` that draws by name writes.
+-- | Split and render in one step: the whole of what a `view` that draws by name writes.
 pub let draw(
     l: Layout,
     w: Nat,

@@ -12,7 +12,7 @@ let seq(@s: Scan, @a: Bytes, @b: Bytes, va: Utf8(s, a), vb: Valid(b)) -> Utf8(s,
 pub let concat_closed(@a: Bytes, @b: Bytes, va: Valid(a), vb: Valid(b)) -> Valid(x[..a, ..b]) =
     seq(va, vb);
 
--- The scan is threaded by the recursion, not by the motive, for the reason `/std/Str/fold` gives: written as an induction, every step returns a *function* of the scan, so validating N bytes allocates N closures and applies the chain once. Here the state is an ordinary parameter the tail call carries forward, exactly as `/syn/Str/scan_from` walks the same recursion.
+-- | The scan is threaded by the recursion, not by the motive, for the reason `/std/Str/fold` gives: written as an induction, every step returns a *function* of the scan, so validating N bytes allocates N closures and applies the chain once. Here the state is an ordinary parameter the tail call carries forward, exactly as `/syn/Str/scan_from` walks the same recursion.
 pub let check(s: Scan, b: Bytes) -> Option(Utf8(s, b)) =
     match b
     | x[] =>
@@ -39,7 +39,7 @@ pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
         end
     end;
 
--- `drop_width` peels at most one byte per step and stops when `b` runs out, so its count never passes `b`'s length. Every window the transports below open is `slice(b, drop_width(..), len(b))`, and this is the ordering half of what that slice demands. Each arm is decided outright — the empty scan counts nothing, an exhausted `n` counts nothing — and the recursive arms cancel a shared successor against the hypothesis at the tail.
+-- | `drop_width` peels at most one byte per step and stops when `b` runs out, so its count never passes `b`'s length. Every window the transports below open is `slice(b, drop_width(..), len(b))`, and this is the ordering half of what that slice demands. Each arm is decided outright — the empty scan counts nothing, an exhausted `n` counts nothing — and the recursive arms cancel a shared successor against the hypothesis at the tail.
 pub let drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, b), Bytes/len(b)) =
     match b: (v) => Nat/Le(drop_width(n, s, v), Bytes/len(v))
     | x[] => True/qed()
@@ -217,7 +217,7 @@ pub let count_scalars(s: Scan, b: Bytes) -> Nat =
         end
     end;
 
--- The scan a lead byte's class transitions to: `step(c, lead())` computed on the class rather than the byte, so `step_scans` below is definitional and each `decode_head_raw` arm receives its witness at the constructor's own scan by plain iota.
+-- | The scan a lead byte's class transitions to: `step(c, lead())` computed on the class rather than the byte, so `step_scans` below is definitional and each `decode_head_raw` arm receives its witness at the constructor's own scan by plain iota.
 let scan_of_class(cl: Class) -> Scan =
     match cl
     | ascii() => Scan/lead()
@@ -228,7 +228,7 @@ let scan_of_class(cl: Class) -> Scan =
 let step_scans(c: Byte) -> Eq(step(c, Scan/lead()), scan_of_class(classify(c))) =
     Eq/refl();
 
--- The convoy spelling, deliberately: the motive abstracts the class so the witness rides into each arm at that constructor's scan. The built-in refinement also accepts the direct spelling, but its recorded equation is replayable only under the elaborator's own reduction order — this form is the strategy-independent statement of the same fact, and the one the independent kernel certifies.
+-- | The convoy spelling, deliberately: the motive abstracts the class so the witness rides into each arm at that constructor's scan. The built-in refinement also accepts the direct spelling, but its recorded equation is replayable only under the elaborator's own reduction order — this form is the strategy-independent statement of the same fact, and the one the independent kernel certifies.
 pub let decode_head_raw(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> Nat =
     let peeled = Eq/subst((sc: Scan) => Utf8(sc, t), step_scans(c), peel_byte(True/qed(), w));
     (match classify(c): (cl) => (w2: Utf8(scan_of_class(cl), t)) -> Nat

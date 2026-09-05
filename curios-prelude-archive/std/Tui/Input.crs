@@ -12,7 +12,7 @@ pub struct Input: pub Type {
 pub let empty: Input =
     Input { text = "", cursor = 0, ok = Le/refl(0) };
 
--- `text` with the cursor at its end.
+-- | `text` with the cursor at its end.
 pub let of_str(s: Str) -> Input =
     Input { text = s, cursor = Str/len(s), ok = Le/refl(Str/len(s)) };
 
@@ -22,7 +22,7 @@ let place(s: Str, at: Nat) -> Input =
     | none() => of_str(s)
     end;
 
--- Insert a character, delete before or after the cursor, or move it; any other key leaves the input.
+-- | Insert a character, delete before or after the cursor, or move it; any other key leaves the input.
 pub let handle(i: Input, k: Key) -> Input =
     let before = Str/slice(i.text, 0, i.cursor);
     let after = Str/slice(i.text, i.cursor, Str/len(i.text) - i.cursor);
@@ -42,7 +42,7 @@ pub let handle(i: Input, k: Key) -> Input =
     | _ => i
     end;
 
--- One row of the text, scrolled so the cursor is in view, and the column the cursor is at.
+-- | One row of the text, scrolled so the cursor is in view, and the column the cursor is at.
 pub let draw(i: Input, style: Style, w: Nat) -> {frame: Frame(w, 1), cursor_x: Nat} =
     let ahead = text/width(Str/slice(i.text, 0, i.cursor));
     let first = match ahead < w | true => 0 | false => ahead + 1 - w end;

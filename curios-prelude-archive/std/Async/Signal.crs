@@ -25,7 +25,7 @@ let wake_all(ws: List(Waker)) -> Io({}) =
         wake_all(more)
     end;
 
--- Raise the flag and wake every fiber parked on it. Raising a raised flag does nothing, so a burst of notifications costs one wake.
+-- | Raise the flag and wake every fiber parked on it. Raising a raised flag does nothing, so a burst of notifications costs one wake.
 pub let notify(s: Signal) -> Io({}) =
     let state = Cell/get(s.0)!;
     match state
@@ -35,7 +35,7 @@ pub let notify(s: Signal) -> Io({}) =
         wake_all(ws)
     end;
 
--- Park until the flag is raised, then lower it. A flag already raised is lowered and answered at once.
+-- | Park until the flag is raised, then lower it. A flag already raised is lowered and answered at once.
 pub let wait(s: Signal) -> Async({}) =
     let state = Cell/get(s.0)!;
     match state

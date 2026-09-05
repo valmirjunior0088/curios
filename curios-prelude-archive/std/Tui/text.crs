@@ -35,16 +35,16 @@ let wide_ranges: List({Nat, Nat}) =
         (0x1F900, 0x1F9FF),
         (0x20000, 0x3FFFD)];
 
--- How many columns one scalar occupies. A control character is zero rather than one: it prints nothing, and counting it would shift every column after it.
+-- | How many columns one scalar occupies. A control character is zero rather than one: it prints nothing, and counting it would shift every column after it.
 pub let char_width(c: Char) -> Nat =
     let n = Char/to_nat(c);
     choose | in_any(n, zero_ranges) => 0 | in_any(n, wide_ranges) => 2 | _ => 1 end;
 
--- How many columns `s` occupies, which is neither its scalar count (`Str/len`) nor its byte count.
+-- | How many columns `s` occupies, which is neither its scalar count (`Str/len`) nor its byte count.
 pub let width(s: Str) -> Nat =
     Str/fold(s, 0, (c, total) => total + char_width(c));
 
--- The longest prefix of `s` that fits `w` columns. A double-width scalar that would straddle the boundary is dropped whole rather than half-drawn, so the result is never wider than `w` and may be one column narrower.
+-- | The longest prefix of `s` that fits `w` columns. A double-width scalar that would straddle the boundary is dropped whole rather than half-drawn, so the result is never wider than `w` and may be one column narrower.
 pub let truncate(s: Str, w: Nat) -> Str =
     Str/fold(
         s,
@@ -53,7 +53,7 @@ pub let truncate(s: Str, w: Nat) -> Str =
             let taken = acc.1 + char_width(c);
             choose | taken <= w => (Str/concat(acc.0, Str/of_char(c)), taken) | _ => acc end).0;
 
--- Break `s` into lines no wider than `w`, at spaces. A word wider than `w` on its own becomes its own over-wide line rather than being split mid-word: `Tui/Frame/fit` crops it at the pane, which is the one coercion this library has, and a hyphenation rule is a choice no library should make for a program.
+-- | Break `s` into lines no wider than `w`, at spaces. A word wider than `w` on its own becomes its own over-wide line rather than being split mid-word: `Tui/Frame/fit` crops it at the pane, which is the one coercion this library has, and a hyphenation rule is a choice no library should make for a program.
 pub let wrap(s: Str, w: Nat) -> List(Str) =
     let packed =
         List/fold(

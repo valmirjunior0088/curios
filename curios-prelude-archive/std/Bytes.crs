@@ -5,11 +5,11 @@ use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Equal, Show, Spell, Orde
 pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
     match i < len(b) | true => Option/some(get(b, i)) | false => Option/none() end;
 
--- Minimal big-endian bytes of `n` — empty for zero, no leading zero otherwise — so distinct naturals encode to distinct sequences, and the result serves as a map key under `Key(Bytes)`'s identity witness with no proof obligation of its own. The dividing recursion is `Nat/to_str`'s shape at base 256, and `of_nat`'s bound needs no refinement here: the reducer knows `n % 256` by its remainder bound, so the comparison decides definitionally and the proof is written nowhere.
+-- | Minimal big-endian bytes of `n` — empty for zero, no leading zero otherwise — so distinct naturals encode to distinct sequences, and the result serves as a map key under `Key(Bytes)`'s identity witness with no proof obligation of its own. The dividing recursion is `Nat/to_str`'s shape at base 256, and `of_nat`'s bound needs no refinement here: the reducer knows `n % 256` by its remainder bound, so the comparison decides definitionally and the proof is written nowhere.
 pub let of_nat(n: Nat) -> Bytes =
     match n == 0 | true => x[] | false => x[..of_nat(n / 256), Byte/of_nat(n % 256)] end;
 
--- Everything from `k` on, which is what a window over "the rest" is: `slice`'s count is `len(b) - k`, and the bound that count needs is `k + (len(b) - k) <= len(b)` — an identity only under the hypothesis, since `Nat` subtraction truncates. Spending `Nat/Le/add_sub_cancel` here is what keeps every caller stating the fact it actually holds (`k` is inside `b`) rather than the one the primitive wants.
+-- | Everything from `k` on, which is what a window over "the rest" is: `slice`'s count is `len(b) - k`, and the bound that count needs is `k + (len(b) - k) <= len(b)` — an identity only under the hypothesis, since `Nat` subtraction truncates. Spending `Nat/Le/add_sub_cancel` here is what keeps every caller stating the fact it actually holds (`k` is inside `b`) rather than the one the primitive wants.
 pub let drop(b: Bytes, k: Nat, @ok: Nat/Le(k, len(b))) -> Bytes =
     slice(
         b,
@@ -56,7 +56,7 @@ pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
         (i) => Option/unwrap_or(List/try_get(parts, i), x[]),
         (l, r) => x[..l, ..sep, ..r]);
 
--- Bytewise, the shorter prefix first. Each index is scrutinised against the length it reads through, which is what discharges `get`'s bound with nothing written.
+-- | Bytewise, the shorter prefix first. Each index is scrutinised against the length it reads through, which is what discharges `get`'s bound with nothing written.
 pub let cmp(a: Bytes, b: Bytes) -> Ordering =
     let go(i: Nat) -> Ordering =
         match i < len(a)

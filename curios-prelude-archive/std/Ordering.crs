@@ -15,7 +15,7 @@ pub let flip(r: Ordering) -> Ordering =
 pub let cong_flip(@s: Ordering, @t: Ordering, p: Eq(s, t)) -> Eq(flip(s), flip(t)) =
     Eq/cong(flip, p);
 
--- The five readings of a comparison, which is what a `Compare` witness written over a `cmp` spells its four methods with.
+-- | The five readings of a comparison, which is what a `Compare` witness written over a `cmp` spells its four methods with.
 pub let is_lt(r: Ordering) -> Bool =
     match r | lt() => true | eq() => false | gt() => false end;
 

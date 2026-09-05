@@ -24,7 +24,7 @@ pub let index(l: Listing) -> Option(Nat) =
 pub let selected(l: Listing) -> Option(Str) =
     Option/map(l.cursor, (c) => List/get(@Str, l.items, c.i, @c.ok));
 
--- Up, down, home and end move the selection; any other key leaves it. A move that would leave the list is not taken.
+-- | Up, down, home and end move the selection; any other key leaves it. A move that would leave the list is not taken.
 pub let move(l: Listing, code: Code) -> Listing =
     match l.cursor
     | none() => l
@@ -43,7 +43,7 @@ pub let move(l: Listing, code: Code) -> Listing =
         end
     end;
 
--- The entries as rows, the selected one in `highlight`, scrolled so the selection is in view.
+-- | The entries as rows, the selected one in `highlight`, scrolled so the selection is in view.
 pub let draw(l: Listing, style: Style, highlight: Style, w: Nat, h: Nat) -> Frame(w, h) =
     let chosen = Option/unwrap_or(index(l), 0);
     let first = match chosen < h | true => 0 | false => chosen + 1 - h end;

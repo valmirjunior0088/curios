@@ -13,7 +13,7 @@ end
 
 pub use Color/*;
 
--- The proof payload is irrelevant, so the derived comparison is the index comparison.
+-- | The proof payload is irrelevant, so the derived comparison is the index comparison.
 satisfy Equal(Color);
 
 pub let black: Color =

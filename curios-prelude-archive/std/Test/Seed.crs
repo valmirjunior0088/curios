@@ -8,13 +8,13 @@ pub struct Seed: Type {
 let mask30: Nat =
     1073741823;
 
--- Xorshift over 30 bits: the low bits are masked before each left shift so the shifted value fits, and an xor of two values below 2^30 is below 2^30 itself.
+-- | Xorshift over 30 bits: the low bits are masked before each left shift so the shifted value fits, and an xor of two values below 2^30 is below 2^30 itself.
 let step(s: Nat) -> Nat =
     let a = Nat/xor(s, Nat/shl(Nat/and(s, 131071), 13));
     let b = Nat/xor(a, Nat/shr(a, 17));
     Nat/xor(b, Nat/shl(Nat/and(b, 33554431), 5));
 
--- The written number is mixed with a constant before the first step, so the zero state — xorshift's fixed point — is never reached from one.
+-- | The written number is mixed with a constant before the first step, so the zero state — xorshift's fixed point — is never reached from one.
 pub let make(n: Nat) -> Seed =
     Seed { state = step(Nat/xor(Nat/and(n, mask30), 305419896)) };
 
@@ -22,7 +22,7 @@ pub let next(seed: Seed) -> {Nat, Seed} =
     let s = step(seed.state);
     (s, Seed { state = s });
 
--- Two children whose states differ from the stepped state by distinct constants before their own step, so neither coincides with `next`'s successor or with the other.
+-- | Two children whose states differ from the stepped state by distinct constants before their own step, so neither coincides with `next`'s successor or with the other.
 pub let split(seed: Seed) -> {Seed, Seed} =
     let s = step(seed.state);
     (Seed { state = step(Nat/xor(s, 623843457)) }, Seed { state = step(Nat/xor(s, 897654321)) });

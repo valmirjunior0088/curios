@@ -2,13 +2,13 @@
 use /std/{Bits, True, BigNat, BigPos};
 use /std/BigPos/{is_cons};
 
--- the raw successor is always cons-headed (`BigNat/succ/raw(b[]) = b[1]`)
+-- | the raw successor is always cons-headed (`BigNat/succ/raw(b[]) = b[1]`)
 let raw_cons(x: Bits) -> is_cons(BigNat/succ/raw(x)) =
     match x: (r) => is_cons(BigNat/succ/raw(r))
     | b[] => True/qed()
     | b[xh, .._xt] => match xh | true => True/qed() | false => True/qed() end
     end;
 
--- `BigNat/succ` answers with its raw ripple untrimmed, so the certificate is `raw_cons` directly — no transport across a trim.
+-- | `BigNat/succ` answers with its raw ripple untrimmed, so the certificate is `raw_cons` directly — no transport across a trim.
 pub let succ(p: BigPos) -> BigPos =
     BigPos { value = BigNat/succ/succ(p.value), non_zero = raw_cons(p.value.bits) };

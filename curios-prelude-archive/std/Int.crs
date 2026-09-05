@@ -30,14 +30,14 @@ pub let of_str(s: Str) -> Option(Int) =
         end
     end;
 
--- The procedure that decides `0 <= n`, the `Int` twin of `Nat/Lt/try`. `Int` carries no inductive ordering family — `Nat/Le/Ind` has constructors a proof can recurse over, and there is no counterpart here — so an `Int` bound is *decided* or it is not had at all.
+-- | The procedure that decides `0 <= n`, the `Int` twin of `Nat/Lt/try`. `Int` carries no inductive ordering family — `Nat/Le/Ind` has constructors a proof can recurse over, and there is no counterpart here — so an `Int` bound is *decided* or it is not had at all.
 pub let non_neg(n: Int) -> Option(NonNeg(n)) =
     match n >= +0: (r) => Option(match r: (_) => Prop | true => True | false => False end)
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
--- Both branches decide their own bound rather than deriving the second from the first. That `0 - n` is non-negative whenever `n` is not would need `Int` arithmetic reasoning the library has no family to carry, so the negated branch asks the same question again — and its own failure, which no `Int` can reach, answers zero rather than pretending to a magnitude it did not compute.
+-- | Both branches decide their own bound rather than deriving the second from the first. That `0 - n` is non-negative whenever `n` is not would need `Int` arithmetic reasoning the library has no family to carry, so the negated branch asks the same question again — and its own failure, which no `Int` can reach, answers zero rather than pretending to a magnitude it did not compute.
 pub let abs(n: Int) -> Nat =
     match non_neg(n)
     | some(ok) => to_nat(n, @ok)
@@ -53,7 +53,7 @@ pub let min(a: Int, b: Int) -> Int =
 pub let max(a: Int, b: Int) -> Int =
     match a < b | true => b | false => a end;
 
--- `-1`, `+0` or `+1` by the sign of `n`.
+-- | `-1`, `+0` or `+1` by the sign of `n`.
 pub let sign(n: Int) -> Int =
     choose | n < +0 => -1 | n == +0 => +0 | _ => +1 end;
 
@@ -95,7 +95,7 @@ satisfy Show(Int) {
     show = to_str,
 }
 
--- `to_str` already writes an explicit sign, which is exactly what keeps the text `Int`-typed without context: a bare `3` would re-parse as `Nat`.
+-- | `to_str` already writes an explicit sign, which is exactly what keeps the text `Int`-typed without context: a bare `3` would re-parse as `Nat`.
 satisfy Spell(Int) {
     spell = to_str,
 }
@@ -104,7 +104,7 @@ satisfy Ordered(Int) {
     cmp = cmp,
 }
 
--- A magnitude drawn as a `Nat`, and one more bit for the sign.
+-- | A magnitude drawn as a `Nat`, and one more bit for the sign.
 satisfy Test/Draw(Int) {
     all() = Option/none(),
     draw(seed, size) =

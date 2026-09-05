@@ -28,7 +28,7 @@ pub let first(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> T =
 pub let rest(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> Vec(T, n) =
     match v | cons(@_j, _x, xs) => xs end;
 
--- The element at `i`, under the decided bound `Str/get` takes. The motive abstracts the length so the bound is refined with the vector: in the `nil` arm it has reduced to `False`, and in the `cons` arm `pred + 1 < m + 1` is `pred < m` once the shared successor cancels.
+-- | The element at `i`, under the decided bound `Str/get` takes. The motive abstracts the length so the bound is refined with the vector: in the `nil` arm it has reduced to `False`, and in the `cons` arm `pred + 1 < m + 1` is `pred < m` once the shared successor cancels.
 pub let get(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, @ok: Nat/Lt(i, n)) -> T =
     (match v: (k, _w) => (j: Nat, Nat/Lt(j, k)) -> T
     | nil() => (_j, bad) => match bad end
@@ -38,21 +38,21 @@ pub let get(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, @ok: Nat/Lt(i, n)) -> T =
 pub let to_list(@T: Type, @n: Nat, v: Vec(T, n)) -> List(T) =
     match v: (_k, _w) => List(T) | nil() => [] | cons(@_m, x, xs) => [x, ..to_list(xs)] end;
 
--- The length is not known until the list is walked, so it is the first component of a dependent pair rather than a parameter.
+-- | The length is not known until the list is walked, so it is the first component of a dependent pair rather than a parameter.
 pub let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T, n)} =
     match l | [] => (0, Vec/nil()) | [x, .._xs]; (m, v) => (m + 1, Vec/cons(x, v)) end;
 
 pub let replicate(@T: Type, n: Nat, x: T) -> Vec(T, n) =
     match n: (k) => Vec(T, k) | 0 => Vec/nil() | _pred + 1; v => Vec/cons(x, v) end;
 
--- Equal lengths are in the types, so the second vector needs no case of its own: the motive hands it down at the refined length and `first`/`rest` read it.
+-- | Equal lengths are in the types, so the second vector needs no case of its own: the motive hands it down at the refined length and `first`/`rest` read it.
 pub let zip(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), w: Vec(B, n)) -> Vec({A, B}, n) =
     (match v: (k, _v) => (Vec(B, k)) -> Vec({A, B}, k)
     | nil() => (_w) => Vec/nil()
     | cons(@_m, x, xs) => (w) => Vec/cons((x, first(w)), zip(xs, rest(w)))
     end)(w);
 
--- Left to right with `(elem, acc)`, the order every fold in `/std` walks in.
+-- | Left to right with `(elem, acc)`, the order every fold in `/std` walks in.
 pub let fold(@T: Type, @A: Type, @n: Nat, v: Vec(T, n), init: A, f: (T, A) -> A) -> A =
     match v: (_k, _w) => A | nil() => init | cons(@_m, x, xs) => fold(xs, f(x, init), f) end;
 

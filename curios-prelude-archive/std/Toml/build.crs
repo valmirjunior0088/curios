@@ -10,7 +10,7 @@ end
 pub let build_empty: Build =
     Build { root = Map/empty(), side = Map/empty(), scope = [] };
 
--- Injective side-table key: tag, decimal name length, ':', name bytes, and for `at` a '#'-separated decimal element index closed by ';'.
+-- | Injective side-table key: tag, decimal name length, ':', name bytes, and for `at` a '#'-separated decimal element index closed by ';'.
 let seg_key(pre: Bytes, seg: Seg) -> Bytes =
     match seg
     | plain(name) =>
@@ -32,12 +32,12 @@ let seg_key(pre: Bytes, seg: Seg) -> Bytes =
 let seg_name(seg: Seg) -> Str =
     match seg | plain(name) => name | at(name, _) => name end;
 
--- Whether the table already at `kp` may be extended by `act`, and why not when it may not.
---
--- The two directions are not symmetric. A dotted-key assignment may only extend a table that dotted keys themselves created: anything else is a table defined elsewhere, and TOML forbids reaching back into it. A header may extend one a header or an implicit parent created, but not one dotted keys did.
--- `items` with the element at `index` replaced by `value`.
---
--- The proofs are what a total slice costs, and they are derived here once rather than at each caller: `index < len` gives `0 ..= index` for the prefix and `index + 1 ..= len` for the suffix, so both halves are in range by construction. Replacing the *last* element is this with an empty suffix, which is why the array-of-tables append below reaches for it too rather than open-coding a second splice.
+-- | Whether the table already at `kp` may be extended by `act`, and why not when it may not.
+-- |
+-- | The two directions are not symmetric. A dotted-key assignment may only extend a table that dotted keys themselves created: anything else is a table defined elsewhere, and TOML forbids reaching back into it. A header may extend one a header or an implicit parent created, but not one dotted keys did.
+-- | `items` with the element at `index` replaced by `value`.
+-- |
+-- | The proofs are what a total slice costs, and they are derived here once rather than at each caller: `index < len` gives `0 ..= index` for the prefix and `index + 1 ..= len` for the suffix, so both halves are in range by construction. Replacing the *last* element is this with an empty suffix, which is why the array-of-tables append below reaches for it too rather than open-coding a second splice.
 let replace_at(
     items: List(Toml),
     index: Nat,
@@ -144,7 +144,7 @@ let walk_final(
         end
     end;
 
--- Resolve a segment path against the root, rebuilding the map spine persistently and threading side-table updates. The first `unchecked` segments are the already-validated scope prefix and are traversed without construction checks.
+-- | Resolve a segment path against the root, rebuilding the map spine persistently and threading side-table updates. The first `unchecked` segments are the already-validated scope prefix and are traversed without construction checks.
 let walk(
     m: Map(Toml),
     side: Map(State),
@@ -321,7 +321,7 @@ pub let apply_aot(b: Build, path: List(Str)) -> Result(Str, Build) =
     | failure(msg) => Result/failure(msg)
     end;
 
--- Inline tables reuse the same construction rules, scoped to the literal.
+-- | Inline tables reuse the same construction rules, scoped to the literal.
 pub let inline_fold(pairs: List({List(Str), Toml})) -> Result(Str, Map(Toml)) =
     let start: Result(Str, Build) = Result/success(build_empty);
     match List/fold(

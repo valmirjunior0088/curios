@@ -23,7 +23,7 @@ let key_path(acc: List(Str)) -> Parse(List(Str)) =
     | none() => Parse/pure(acc2)
     end;
 
--- A `[[` header is read as two separate brackets, so the second one's absence is the doubled form's own error rather than the single form's.
+-- | A `[[` header is read as two separate brackets, so the second one's absence is the doubled form's own error rather than the single form's.
 let header(double: Bool) -> Parse(List(Str)) =
     let _ = ws!;
     let path = key_path([])!;

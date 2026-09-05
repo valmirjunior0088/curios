@@ -6,7 +6,7 @@ pub struct Socket: Type {
     /sys/Handle,
 }
 
--- `Listener` is a sibling, so it cannot reach this representation; the constructor is the public seam through which it wraps an accepted handle.
+-- | `Listener` is a sibling, so it cannot reach this representation; the constructor is the public seam through which it wraps an accepted handle.
 pub let new(h: /sys/Handle) -> Socket =
     Socket { h };
 
@@ -30,12 +30,12 @@ pub let close(c: Socket) -> Io({}) =
 let ok(status: Nat) -> Try(Io, Io/Error, {}) =
     match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
--- The handle closed and the failure passed on: what a connect that got as far as a socket does with a failure after it. Written over `Io` and lifted where the failing step parks.
+-- | The handle closed and the failure passed on: what a connect that got as far as a socket does with a failure after it. Written over `Io` and lifted where the failing step parks.
 let close_raising(@A: Type, h: /sys/Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
     let _ = /sys/Handle/close(h)!;
     Try/raise(e);
 
--- Every step up to the connect is a syscall that answers at once; the connect itself is where a peer decides, so the host may hand the wait back: a non-blocking socket answers `would_block` for any peer that is not local, which `settle` turns into a park on `WRITE` until the kernel has settled it.
+-- | Every step up to the connect is a syscall that answers at once; the connect itself is where a peer decides, so the host may hand the wait back: a non-blocking socket answers `would_block` for any peer that is not local, which `settle` turns into a park on `WRITE` until the kernel has settled it.
 let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {/sys/Handle, Bool}) =
     let s = /sys/socket/open(addr)!;
     let _ = ok(s.status)!;
@@ -51,7 +51,7 @@ let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {/sys/Handle, Bool}) =
         end
     end;
 
--- A pending connect settles once the socket polls writable, and `finish_connect` reads the outcome; an honest early answer of `would_block` parks again.
+-- | A pending connect settles once the socket polls writable, and `finish_connect` reads the outcome; an honest early answer of `would_block` parks again.
 let settle(h: /sys/Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
     match pending
     | false => Try/pure(())
@@ -61,7 +61,7 @@ let settle(h: /sys/Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
         choose | status == /sys/status/would_block => settle(h, true) | _ => ok(status) end
     end;
 
--- The TLS client handshake is not performed here: the host files the session and the reads and writes that follow drive it, parking as any other read or write does.
+-- | The TLS client handshake is not performed here: the host files the session and the reads and writes that follow drive it, parking as any other read or write does.
 let upgrade(h: /sys/Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
     match tls
     | true =>
@@ -76,17 +76,17 @@ let connect_addr(host: Str, addr: Bytes, tls: Bool) -> Try(Async, Io/Error, Sock
     let _ = Try/rescue(upgrade(h, host, tls), (e) => close_raising(h, e))!;
     Try/pure(Socket { h });
 
--- A connection to `host` at `port`, cleartext. Nothing guards it: `with` is the bracket that closes it when the body ends, and a bare `connect` is closed by `close`.
+-- | A connection to `host` at `port`, cleartext. Nothing guards it: `with` is the bracket that closes it when the body ends, and a bare `connect` is closed by `close`.
 pub let connect(host: Str, port: Nat) -> Try(Async, Io/Error, Socket) =
     let addr = resolve(host, port)!;
     connect_addr(host, addr, false);
 
--- The same connection under TLS, the certificate checked against `host`.
+-- | The same connection under TLS, the certificate checked against `host`.
 pub let connect_tls(host: Str, port: Nat) -> Try(Async, Io/Error, Socket) =
     let addr = resolve(host, port)!;
     connect_addr(host, addr, true);
 
--- `body` over the socket `open` connects, closed on both scheduler exits — a cancelled task included — with the body's own failure as the answer after the close.
+-- | `body` over the socket `open` connects, closed on both scheduler exits — a cancelled task included — with the body's own failure as the answer after the close.
 pub let with(
     @A: Type,
     open: Try(Async, Io/Error, Socket),
@@ -97,7 +97,7 @@ pub let with(
     let a = outcome!;
     Try/pure(a);
 
--- `request` written whole and the reply read to its end, over the socket `open` connects, closed after: one exchange with a peer that closes when it has answered.
+-- | `request` written whole and the reply read to its end, over the socket `open` connects, closed after: one exchange with a peer that closes when it has answered.
 pub let call(open: Try(Async, Io/Error, Socket), request: Bytes) -> Try(Async, Io/Error, Bytes) =
     with(
         open,

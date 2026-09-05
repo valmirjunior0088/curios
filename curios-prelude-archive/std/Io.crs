@@ -10,12 +10,12 @@ satisfy Monad(Io) {
     bind = bind,
 }
 
--- The identity edge. A `!` never consults it — equal keys are never wrapped — but a witness whose premise is `Lift(Io, M)` needs it at `M = Io`, which is how `/std/Try`'s one `Io` edge serves `Try(Io, E)`.
+-- | The identity edge. A `!` never consults it — equal keys are never wrapped — but a witness whose premise is `Lift(Io, M)` needs it at `M = Io`, which is how `/std/Try`'s one `Io` edge serves `Try(Io, E)`.
 satisfy Lift(Io, Io) {
     lift(@_A, m) = m,
 }
 
--- This process's standard streams, beside the monad as every peer keeps them. `In` and `Out` hold the raw handle behind a private representation: a fiber reads and writes them through the stream concepts, and a plain `Io` program through `read`, `read_line` and `write`, the synchronous conveniences below.
+-- | This process's standard streams, beside the monad as every peer keeps them. `In` and `Out` hold the raw handle behind a private representation: a fiber reads and writes them through the stream concepts, and a plain `Io` program through `read`, `read_line` and `write`, the synchronous conveniences below.
 pub struct In: Type {
     /sys/Handle,
 }
@@ -33,7 +33,7 @@ pub let stdout: Out =
 pub let stderr: Out =
     Out { /sys/Handle/stderr };
 
--- Up to `n` bytes of standard input, waited for on this program's own behalf: the host answers `would_block` when nothing is there, and a plain `Io` program has no scheduler to park, so it sits in `poll` and reads again. The stream concept's `read` is the form that parks a fiber instead.
+-- | Up to `n` bytes of standard input, waited for on this program's own behalf: the host answers `would_block` when nothing is there, and a plain `Io` program has no scheduler to park, so it sits in `poll` and reads again. The stream concept's `read` is the form that parks a fiber instead.
 pub let read(i: In, n: Nat) -> Io(stream/Chunk) =
     let r = /sys/Handle/read(i.0, n)!;
     choose
@@ -52,7 +52,7 @@ pub let read(i: In, n: Nat) -> Io(stream/Chunk) =
             end)
     end;
 
--- One line of standard input without its newline, `none` at the end of the input: a byte at a time, so nothing past the line is taken. An error ends the input as `eof` does; what was read before it is still the line.
+-- | One line of standard input without its newline, `none` at the end of the input: a byte at a time, so nothing past the line is taken. An error ends the input as `eof` does; what was read before it is still the line.
 pub let read_line(i: In) -> Io(Option(Bytes)) =
     let go(acc: Bytes) -> Io(Option(Bytes)) =
         let c = read(i, 1)!;
@@ -68,7 +68,7 @@ pub let read_line(i: In) -> Io(Option(Bytes)) =
         end;
     go(x[]);
 
--- The whole of `b` to `o`, a short write resent and the status dropped: `print`'s contract, for a program with nowhere to report a failed write. The stream concept's `write` reports.
+-- | The whole of `b` to `o`, a short write resent and the status dropped: `print`'s contract, for a program with nowhere to report a failed write. The stream concept's `write` reports.
 pub let write(o: Out, b: Bytes) -> Io({}) =
     let r = /sys/Handle/write(o.0, b)!;
     choose

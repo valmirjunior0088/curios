@@ -5,11 +5,11 @@
 -- The ceiling is eight, past which a labeled `struct` is the readable type. Because a tuple shape is owned by no module, the orphan rule leaves `/std` the only root that may key a witness on one for a `/std` concept, so the ceiling is a promise rather than a default and was chosen with room: raising it is adding lines and nothing else. `Spell` stops at three for now — a derived witness reaches it through a tuple payload, and no consumer has asked past that — and `Draw` at three beside it, since a drawn argument is spelled when it is reported; raising either is the same kind of edit.
 use /std/{Show, Spell, Equal, Ordered, Ordering, Str, Bool, List, Option, Test};
 
--- A tuple shows as its literal is written, so the rendering is source text as the carriers' renderings are. The one-field literal keeps the trailing comma that separates it from a parenthesized term, so it is written out rather than joined.
+-- | A tuple shows as its literal is written, so the rendering is source text as the carriers' renderings are. The one-field literal keeps the trailing comma that separates it from a parenthesized term, so it is written out rather than joined.
 let parens(parts: List(Str)) -> Str =
     Str/concat("(", Str/concat(Str/join(", ", parts), ")"));
 
--- The first component that is not `eq` decides, so the rest of the comparison is a thunk rather than a value: at the ceiling a strict fold would compare all eight fields on every call.
+-- | The first component that is not `eq` decides, so the rest of the comparison is a thunk rather than a value: at the ceiling a strict fold would compare all eight fields on every call.
 let then(first: Ordering, rest: ({}) -> Ordering) -> Ordering =
     match first | eq() => rest(()) | _ => first end;
 
@@ -142,7 +142,7 @@ satisfy (
                 Show/show(t.7)]),
 }
 
--- A tuple spells as its literal, which is how it shows, with the fields spelled instead of shown: the same text re-parses at the same shape wherever the fields' names are visible.
+-- | A tuple spells as its literal, which is how it shows, with the fields spelled instead of shown: the same text re-parses at the same shape wherever the fields' names are visible.
 satisfy Spell({}) {
     spell(_t) = "()",
 }
@@ -450,7 +450,7 @@ satisfy (
                                                             (_u) => Ordered/cmp(a.7, b.7)))))))),
 }
 
--- A tuple is drawn by drawing each field in turn, threading the seed left to right.
+-- | A tuple is drawn by drawing each field in turn, threading the seed left to right.
 satisfy Test/Draw({}) {
     all() = Option/some([()]),
     draw(seed, _size) = ((), seed),

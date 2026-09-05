@@ -23,11 +23,11 @@ pub let size: Try(Io, Io/Error, Size) =
     | none() => Try/pure(Size { cols = r.cols, rows = r.rows })
     end;
 
--- The restoring switch, its own status dropped: there is nothing left to report it to.
+-- | The restoring switch, its own status dropped: there is nothing left to report it to.
 let restore: Io({}) =
     Io/bind(/sys/tty/raw(/sys/Handle/stdin, false), (_) => Io/pure(()));
 
--- Raw mode around `body`, restored whichever way the body ends — and by the native host underneath on a trap or an `exit`. The body's own failure is the answer after the restore.
+-- | Raw mode around `body`, restored whichever way the body ends — and by the native host underneath on a trap or an `exit`. The body's own failure is the answer after the restore.
 pub let with_raw(@A: Type, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
     let _ = raw(true)!;
     let a =
@@ -39,7 +39,7 @@ pub let with_raw(@A: Type, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
     let _ = restore!;
     Try/pure(a);
 
--- The same bracket inside a fiber, registered with the scheduler through `Async/using`: a cancelled task restores the mode it switched, and the body may park.
+-- | The same bracket inside a fiber, registered with the scheduler through `Async/using`: a cancelled task restores the mode it switched, and the body may park.
 pub let with_raw_async(@A: Type, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
     let _ = raw(true)!;
     let outcome = Async/using(restore, Try/run(body))!;

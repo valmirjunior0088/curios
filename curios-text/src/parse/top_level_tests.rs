@@ -749,3 +749,31 @@ fn a_documentation_comment_takes_a_line_of_its_own_and_its_space() {
         .format();
     assert!(error.contains("with the space"), "{error}");
 }
+
+/// A block after a group's last member belongs to whatever follows it: `pub and` opens a member, while `pub let`, `pub induct` and a bare `satisfy` open the next item and end the group. The look-ahead reads past the `pub`, since a `pub` alone says nothing about which it is.
+#[test]
+fn a_documentation_comment_after_a_group_may_open_the_next_item() {
+    let source = concat!(
+        "satisfy Show(Nat) {\n    show = f,\n}\n",
+        "-- | Next.\npub let x: Nat = 1;\n",
+        "let a: Nat = 1\n-- | Member.\npub and b: Nat = 2;\n",
+        "-- | Type.\npub induct T: Type\nend\n",
+        "-- | Witness.\nsatisfy Spell(T);\n",
+    );
+    let module = source.parse::<Module>().unwrap();
+    assert_eq!(module.items.len(), 5);
+
+    let TopItem::Let(members) = &module.items[1] else {
+        panic!("expected the documented let");
+    };
+    assert_eq!(members[0].doc.as_ref().unwrap().lines, ["Next."]);
+    let TopItem::Let(members) = &module.items[2] else {
+        panic!("expected the group");
+    };
+    assert!(members[1].vis_pub);
+    assert_eq!(members[1].doc.as_ref().unwrap().lines, ["Member."]);
+    let TopItem::Induct(members) = &module.items[3] else {
+        panic!("expected the documented induct");
+    };
+    assert_eq!(members[0].doc.as_ref().unwrap().lines, ["Type."]);
+}

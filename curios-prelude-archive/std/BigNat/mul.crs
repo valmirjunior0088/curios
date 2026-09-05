@@ -304,7 +304,7 @@ pub let assoc(a: BigNat, b: BigNat, c: BigNat) -> Eq(mul(mul(a, b), c), mul(a, m
                 trim_assoc(a.bits, b.bits, c.bits),
                 Eq/sym(trim_raw_trim_r(a.bits, raw(b.bits, c.bits))))));
 
--- `add` answers its raw ripple untrimmed-by-certificate rather than through `of_bits`, so the add side of each distribution law carries no trim of its own: the bridge from the trim calculus is one `trim_of_trimmed` at the end instead of a `trim_raw_trim` absorption at the start.
+-- | `add` answers its raw ripple untrimmed-by-certificate rather than through `of_bits`, so the add side of each distribution law carries no trim of its own: the bridge from the trim calculus is one `trim_of_trimmed` at the end instead of a `trim_raw_trim` absorption at the start.
 pub let distrib_l(
     a: BigNat,
     b: BigNat,
@@ -356,11 +356,11 @@ pub let distrib_r(
 let cong_dbl(@s: BigNat, @t: BigNat, p: Eq(s, t)) -> Eq(dbl(s), dbl(t)) =
     Eq/cong(dbl, p);
 
--- `dbl` answers its bits as `combine(false, ..)` rather than through `of_bits`, so the ladder laws bridge each `trim(dbl_raw ..)` the raw calculus produces back to that spelling: the trim of a canonical word is itself.
+-- | `dbl` answers its bits as `combine(false, ..)` rather than through `of_bits`, so the ladder laws bridge each `trim(dbl_raw ..)` the raw calculus produces back to that spelling: the trim of a canonical word is itself.
 let trim_dbl_raw(x: BigNat) -> Eq(trim(dbl_raw(x.bits)), combine(false, x.bits)) =
     cong_combine(false, trim_of_trimmed(x.bits, is_trimmed_of_canonical(x.bits, x.canonical)));
 
--- Two even words ripple with no carry into the low bit, so the raw sum of doubles is definitionally the double of the raw sum; the case split only exposes enough structure for `combine` to reduce.
+-- | Two even words ripple with no carry into the low bit, so the raw sum of doubles is definitionally the double of the raw sum; the case split only exposes enough structure for `combine` to reduce.
 let dbl_add_raw(
     x: Bits,
     y: Bits,

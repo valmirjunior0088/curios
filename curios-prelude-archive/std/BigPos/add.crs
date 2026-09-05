@@ -4,7 +4,7 @@ use /std/Bool/{false_neq_true};
 use /std/BigNat/{is_trimmed, trim, xor3, maj3};
 use /std/BigPos/{is_cons, trim_head_non_zero, trim_head_true};
 
--- the raw sum of a cons-headed left operand is cons-headed
+-- | the raw sum of a cons-headed left operand is cons-headed
 let raw_cons(x: Bits, y: Bits, c: Bool, ne: is_cons(x)) -> is_cons(BigNat/add/raw(x, y, c)) =
     match x: (r) => is_cons(BigNat/add/raw(r, y, c))
     | b[] => match ne end
@@ -15,7 +15,7 @@ let raw_cons(x: Bits, y: Bits, c: Bool, ne: is_cons(x)) -> is_cons(BigNat/add/ra
         end
     end;
 
--- incrementing any suffix from an empty low half leaves something cons-headed
+-- | incrementing any suffix from an empty low half leaves something cons-headed
 let carry_non_zero(x: Bits) -> is_cons(trim(BigNat/add/raw(b[], x, true))) =
     match x
     | b[] => True/qed()
@@ -82,7 +82,7 @@ pub let trim_non_zero(
         end
     end;
 
--- `BigNat/add` answers with its raw ripple untrimmed, so the certificate is `raw_cons` directly — no transport across a trim. The `+` here is also this file's regression proof for the scheduler's witness edges: the certificate's type only converts by unfolding the addition within this very declaration, which orders correctly only because an operator use now depends on its concept's witness rows.
+-- | `BigNat/add` answers with its raw ripple untrimmed, so the certificate is `raw_cons` directly — no transport across a trim. The `+` here is also this file's regression proof for the scheduler's witness edges: the certificate's type only converts by unfolding the addition within this very declaration, which orders correctly only because an operator use now depends on its concept's witness rows.
 pub let add(p: BigPos, q: BigPos) -> BigPos =
     BigPos {
         value = p.value + q.value,

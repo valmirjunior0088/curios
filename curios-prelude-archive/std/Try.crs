@@ -27,11 +27,11 @@ pub let bind(
                 match r | success(a) => f(a).0 | failure(e) => Monad/pure(Result/failure(e)) end),
     };
 
--- An `M(Result(E, A))` as a `Try`: the seam a host wrapper crosses when its row answers a status.
+-- | An `M(Result(E, A))` as a `Try`: the seam a host wrapper crosses when its row answers a status.
 pub let attempt(@M: (Type) -> Type, @E: Type, @A: Type, m: M(Result(E, A))) -> Try(M, E, A) =
     Try { m };
 
--- The boundary: the base action with its outcome as data, for the region that decides what a failure means.
+-- | The boundary: the base action with its outcome as data, for the region that decides what a failure means.
 pub let run(@M: (Type) -> Type, @E: Type, @A: Type, m: Try(M, E, A)) -> M(Result(E, A)) =
     m.0;
 
@@ -66,28 +66,28 @@ satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Monad((A: Type) => Try(M
     bind(@_A, @_B, m, f) = bind(m, f),
 }
 
--- A bare `Result` in a `Try` region is early return over the base.
+-- | A bare `Result` in a `Try` region is early return over the base.
 satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Lift(
     (A: Type) => Result(E, A),
     (A: Type) => Try(M, E, A)) {
     lift(@_A, r) = Try { Monad/pure(r) },
 }
 
--- An `Io` action in a `Try` region over any base that admits one: the premise is what makes one witness serve every base — `Lift(Io, Io)` for `Try(Io, E)`, `Lift(Io, Async)` for `Try(Async, E)`.
+-- | An `Io` action in a `Try` region over any base that admits one: the premise is what makes one witness serve every base — `Lift(Io, Io)` for `Try(Io, E)`, `Lift(Io, Async)` for `Try(Async, E)`.
 satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Io, M)) => Lift(
     Io,
     (A: Type) => Try(M, E, A)) {
     lift(@A, m) = Try { Monad/bind(Lift/lift(m), (a: A) => Monad/pure(Result/success(a))) },
 }
 
--- An `Async` action in a `Try` region over `Async`, or over any base `Async` embeds in.
+-- | An `Async` action in a `Try` region over `Async`, or over any base `Async` embeds in.
 satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Async, M)) => Lift(
     Async,
     (A: Type) => Try(M, E, A)) {
     lift(@A, m) = Try { Monad/bind(Lift/lift(m), (a: A) => Monad/pure(Result/success(a))) },
 }
 
--- A `Try` over one base in a `Try` over another the first embeds in: `Try(Io, E)` inside `Try(Async, E)`.
+-- | A `Try` over one base in a `Try` over another the first embeds in: `Try(Io, E)` inside `Try(Async, E)`.
 satisfy (
     @M: (Type) -> Type,
     @N: (Type) -> Type,

@@ -41,7 +41,7 @@ pub let raw_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(is_trimmed(raw(x)
         end
     end;
 
--- `raw` preserves canonicity, so unlike a two-operand op the successor owes no boundary trim: the `of_trimmed_bits` door with `raw_trimmed` as the certificate makes an increment cost the carry ripple alone.
+-- | `raw` preserves canonicity, so unlike a two-operand op the successor owes no boundary trim: the `of_trimmed_bits` door with `raw_trimmed` as the certificate makes an increment cost the carry ripple alone.
 pub let succ(a: BigNat) -> BigNat =
     of_trimmed_bits(raw(a.bits), raw_trimmed(a.bits, is_trimmed_of_canonical(a.bits, a.canonical)));
 

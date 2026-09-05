@@ -1,7 +1,7 @@
 pub use /syn/Test/{let Test, Verdict, Settled, prove, refl, check, equal, perform, try, all,
     settled, property, main};
 
--- The property-testing library, under the one name everything testing-shaped is found by: `Test/Seed` the pure splittable generator, `Test/Draw` what an argument is drawn from, `Test/Property` the per-case judgment. Each is re-exported as a value too, so the path names the module and the type at once.
+-- | The property-testing library, under the one name everything testing-shaped is found by: `Test/Seed` the pure splittable generator, `Test/Draw` what an argument is drawn from, `Test/Property` the per-case judgment. Each is re-exported as a value too, so the path names the module and the type at once.
 pub mod Seed;
 
 pub mod Draw;

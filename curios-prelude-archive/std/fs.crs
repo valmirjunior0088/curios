@@ -29,7 +29,7 @@ let kind_of(code: Nat) -> Kind =
     | _ => Kind/other()
     end;
 
--- `size` is the pair of base-10⁹ limbs the row hands over: a `Nat` cannot hold a file size at runtime and `BigNat` is more than a size needs. `size_nat` reads it inside the envelope. `mtime` is a `Timestamp`, a moment with a meaning, not an `Instant`, which is a reading of the monotonic clock and could not compare with one.
+-- | `size` is the pair of base-10⁹ limbs the row hands over: a `Nat` cannot hold a file size at runtime and `BigNat` is more than a size needs. `size_nat` reads it inside the envelope. `mtime` is a `Timestamp`, a moment with a meaning, not an `Instant`, which is a reading of the monotonic clock and could not compare with one.
 pub struct Metadata: pub Type {
     kind: Kind,
     size: {hi: Nat, lo: Nat},
@@ -55,7 +55,7 @@ pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
             })
     end;
 
--- `not_found` is the answer `false`; every other failure is the failure it is.
+-- | `not_found` is the answer `false`; every other failure is the failure it is.
 let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
     let r = Try/run(stat(path))!;
     match r
@@ -72,7 +72,7 @@ pub let is_file(path: Path) -> Try(Io, Io/Error, Bool) =
 pub let is_dir(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (k) => k == Kind/directory());
 
--- The entries' names, each a `Path` that `Path/join` puts back under `path`.
+-- | The entries' names, each a `Path` that `Path/join` puts back under `path`.
 pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
     let r = /sys/dir/list(Path/to_bytes(path))!;
     match Io/Error/of(r.status)
@@ -103,7 +103,7 @@ pub let cwd: Try(Io, Io/Error, Path) =
     | none() => Try/pure(Path/of_bytes(r.path))
     end;
 
--- `path` and every missing prefix of it, one that already exists left as it is: a `not_found` from the row is a missing parent, made first and then the directory tried again. Written over the rows with no row of its own, since a majority of the surveyed libraries ship it and the host pays nothing for it.
+-- | `path` and every missing prefix of it, one that already exists left as it is: a `not_found` from the row is a missing parent, made first and then the directory tried again. Written over the rows with no row of its own, since a majority of the surveyed libraries ship it and the host pays nothing for it.
 pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =
     let r = Try/run(create_dir(path))!;
     match r
@@ -122,7 +122,7 @@ pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =
         end
     end;
 
--- Everything at `path`, a directory's entries first. Written over `list` at `Path`, so a name that is not UTF-8 is removed like any other.
+-- | Everything at `path`, a directory's entries first. Written over `list` at `Path`, so a name that is not UTF-8 is removed like any other.
 pub let remove_all(path: Path) -> Try(Io, Io/Error, {}) =
     let m = stat(path)!;
     match m.kind

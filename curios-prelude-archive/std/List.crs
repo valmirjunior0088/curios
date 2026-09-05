@@ -5,7 +5,7 @@ use /std/{Nat, Bool, Option, Eq, Equal, Str, Show, Spell, Monad, Ordering, Compa
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;
 
--- The `List` twin of `Bytes/drop`; see there for why the count's bound is spent here rather than at each caller.
+-- | The `List` twin of `Bytes/drop`; see there for why the count's bound is spent here rather than at each caller.
 pub let drop(@T: Type, a: List(T), k: Nat, @ok: Nat/Le(k, len(a))) -> List(T) =
     slice(
         @T,
@@ -20,7 +20,7 @@ pub let drop(@T: Type, a: List(T), k: Nat, @ok: Nat/Le(k, len(a))) -> List(T) =
 pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
     fold(parts, [], (a, acc) => [..acc, ..a]);
 
--- Left to right, `f(elem, acc)`, as every fold in `/std` walks: `fold([1, 2], acc, f)` is `f(2, f(1, acc))`. The right fold is the language's `; ih` binding on a `[head, ..tail]` arm, so there is no `fold_right`. Two shapes share this module: the accumulator-threading functions are written over `fold`, and every predicate and search below is a case split on `[head, ..tail]` with a call on the tail — total by structure, and therefore usable where a proposition depends on it, which the index loop under an invariant is not.
+-- | Left to right, `f(elem, acc)`, as every fold in `/std` walks: `fold([1, 2], acc, f)` is `f(2, f(1, acc))`. The right fold is the language's `; ih` binding on a `[head, ..tail]` arm, so there is no `fold_right`. Two shapes share this module: the accumulator-threading functions are written over `fold`, and every predicate and search below is a case split on `[head, ..tail]` with a call on the tail — total by structure, and therefore usable where a proposition depends on it, which the index loop under an invariant is not.
 pub let fold(@T: Type, @A: Type, l: List(T), init: A, f: (T, A) -> A) -> A =
     let n = len(l);
     let go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
@@ -116,7 +116,7 @@ pub let unzip(@A: Type, @B: Type, l: List({A, B})) -> {List(A), List(B)} =
     let empty: {List(A), List(B)} = ([], []);
     fold(l, empty, ((x, y), (xs, ys)) => ([..xs, x], [..ys, y]));
 
--- `lo` up to and excluding `hi`; empty when `hi` is not above `lo`. Structural on the count, so a type may mention it.
+-- | `lo` up to and excluding `hi`; empty when `hi` is not above `lo`. Structural on the count, so a type may mention it.
 pub let range(lo: Nat, hi: Nat) -> List(Nat) =
     let go(k: Nat, i: Nat) -> List(Nat) = match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;
     go(hi - lo, lo);
@@ -130,7 +130,7 @@ pub let concat_map(@T: Type, @B: Type, l: List(T), f: (T) -> List(B)) -> List(B)
 pub let intersperse(@T: Type, l: List(T), sep: T) -> List(T) =
     match l | [] => [] | [h, ..t] => [h, ..fold(t, [], (x, acc) => [..acc, sep, x])] end;
 
--- Sequencing under any `Monad`, one function per container rather than a `Traversable` concept: the effects run in element order and the results are collected in it.
+-- | Sequencing under any `Monad`, one function per container rather than a `Traversable` concept: the effects run in element order and the results are collected in it.
 pub let traverse(
     @M: (Type) -> Type,
     @T: Type,
@@ -155,14 +155,14 @@ pub let each(@M: (Type) -> Type, @T: Type, use Monad(M), l: List(T), f: (T) -> M
         each(t, f)
     end;
 
--- Insertion before the elements equal to `x`, which is what keeps `sort_by` stable: the `; ih` right fold hands each element the sorted suffix of the elements after it, and placing it before its equals keeps the earlier element first.
+-- | Insertion before the elements equal to `x`, which is what keeps `sort_by` stable: the `; ih` right fold hands each element the sorted suffix of the elements after it, and placing it before its equals keeps the earlier element first.
 let insert_by(@T: Type, x: T, sorted: List(T), cmp: (T, T) -> Ordering) -> List(T) =
     match sorted
     | [] => [x]
     | [h, ..t] => match cmp(x, h) | gt() => [h, ..insert_by(x, t, cmp)] | _ => [x, h, ..t] end
     end;
 
--- An insertion sort, written as the right fold so a later proof follows the recursion without the program changing; a merge sort carries fuel when a consumer wants the speed.
+-- | An insertion sort, written as the right fold so a later proof follows the recursion without the program changing; a merge sort carries fuel when a consumer wants the speed.
 pub let sort_by(@T: Type, l: List(T), cmp: (T, T) -> Ordering) -> List(T) =
     match l | [] => [] | [h, .._t]; sorted => insert_by(h, sorted, cmp) end;
 
@@ -202,7 +202,7 @@ satisfy Monad(List) {
     bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)]),
 }
 
--- Lexicographic, the shorter prefix first.
+-- | Lexicographic, the shorter prefix first.
 pub let cmp(@T: Type, use Ordered(T), a: List(T), b: List(T)) -> Ordering =
     match a
     | [] => match b | [] => Ordering/eq() | _ => Ordering/lt() end
@@ -243,7 +243,7 @@ let elements(
         ([..acc, value], rest)
     end;
 
--- At most `size` elements, each drawn at the same size.
+-- | At most `size` elements, each drawn at the same size.
 satisfy (@A: Type, use Test/Draw(A)) => Test/Draw(List(A)) {
     all() = Option/none(),
     draw(seed, size) =

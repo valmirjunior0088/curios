@@ -14,7 +14,7 @@ pub let zero: BigInt =
 pub let is_zero(a: BigInt) -> Bool =
     match a | neg(_) => false | zero() => true | pos(_) => false end;
 
--- attach a sign to a BigNat magnitude, collapsing a zero magnitude to BigInt/zero
+-- | attach a sign to a BigNat magnitude, collapsing a zero magnitude to BigInt/zero
 let signed(negative: Bool, a: BigNat) -> BigInt =
     match BigPos/of_big_nat(a)
     | zero() => BigInt/zero()
@@ -24,7 +24,7 @@ let signed(negative: Bool, a: BigNat) -> BigInt =
 pub let of_big_nat(a: BigNat) -> BigInt =
     signed(false, a);
 
--- x - y for positive x, y: the sign is non_zero_cmp, the magnitude is the truncating BigNat difference of the larger minus the smaller.
+-- | x - y for positive x, y: the sign is non_zero_cmp, the magnitude is the truncating BigNat difference of the larger minus the smaller.
 pub let pos_sub(x: BigPos, y: BigPos) -> BigInt =
     match BigPos/cmp(x, y)
     | lt() => signed(true, y.value - x.value)
@@ -118,26 +118,26 @@ pub let to_str(a: BigInt) -> Str =
     | pos(p) => Str/concat("+", BigNat/to_str(p.value))
     end;
 
--- The magnitude of `s`, any leading sign dropped. Both the bound and the parser read `s` through this one split, so the two cannot disagree about where the digits start.
+-- | The magnitude of `s`, any leading sign dropped. Both the bound and the parser read `s` through this one split, so the two cannot disagree about where the digits start.
 let digits(s: Str) -> Str =
     match Str/starts_with(s, "+") || Str/starts_with(s, "-")
     | true => Str/slice(s, 1, Str/len(s) - 1)
     | false => s
     end;
 
--- What `of_decimal` accepts: an optional sign on a nonempty run of decimal digits, which is what `to_str` above writes.
+-- | What `of_decimal` accepts: an optional sign on a nonempty run of decimal digits, which is what `to_str` above writes.
 pub let is_decimal(s: Str) -> Bool =
     BigNat/is_decimal(digits(s));
 
--- The bound `of_decimal` carries, on the same terms as `BigNat/Decimal`.
+-- | The bound `of_decimal` carries, on the same terms as `BigNat/Decimal`.
 pub let Decimal(s: Str) -> Prop =
     match is_decimal(s) | true => True | false => False end;
 
--- The inverse of `to_str`: the sign is read off the head and the magnitude delegated, as every operation here delegates it. `ok` discharges the magnitude's own bound because the two are the same claim.
+-- | The inverse of `to_str`: the sign is read off the head and the magnitude delegated, as every operation here delegates it. `ok` discharges the magnitude's own bound because the two are the same claim.
 pub let of_decimal(s: Str, @ok: Decimal(s)) -> BigInt =
     signed(Str/starts_with(s, "-"), BigNat/of_decimal(digits(s), @ok));
 
--- The fallible form, spelled as its peers are; the guard is what discharges `of_decimal`'s bound.
+-- | The fallible form, spelled as its peers are; the guard is what discharges `of_decimal`'s bound.
 pub let of_str(s: Str) -> Option(BigInt) =
     match is_decimal(s) | true => Option/some(of_decimal(s)) | false => Option/none() end;
 

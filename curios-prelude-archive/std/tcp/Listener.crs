@@ -23,12 +23,12 @@ let bind_listen(addr: Bytes) -> Try(Io, Io/Error, Listener) =
     let _ = Try/rescue(ok(listening), (e) => close_raising(s.handle, e))!;
     Try/pure(Listener { s.handle });
 
--- A listener bound to `host` at `port`, with the address reusable so a restart does not wait out the previous socket's linger. The resolution parks; the bind and listen answer at once.
+-- | A listener bound to `host` at `port`, with the address reusable so a restart does not wait out the previous socket's linger. The resolution parks; the bind and listen answer at once.
 pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Listener) =
     let addr = resolve(host, port)!;
     bind_listen(addr);
 
--- The next connection, parked for until a peer arrives. It comes non-blocking from the host, so it reads and writes like any other stream.
+-- | The next connection, parked for until a peer arrives. It comes non-blocking from the host, so it reads and writes like any other stream.
 pub let accept(l: Listener) -> Try(Async, Io/Error, Socket) =
     let h = Try/attempt(Async/raw/accept(l.0))!;
     Try/pure(Socket/new(h));
@@ -36,7 +36,7 @@ pub let accept(l: Listener) -> Try(Async, Io/Error, Socket) =
 pub let close(l: Listener) -> Io({}) =
     /sys/Handle/close(l.0);
 
--- A body of its own, so its sequencing does not hoist into `serve`'s region ahead of the `using` that owns the listener's lifetime. The loop ends at the first failed accept, which is how an exhausted scripted host ends it.
+-- | A body of its own, so its sequencing does not hoist into `serve`'s region ahead of the `using` that owns the listener's lifetime. The loop ends at the first failed accept, which is how an exhausted scripted host ends it.
 let accept_loop(l: Listener, on_conn: (/sys/Handle) -> Async({})) -> Async({}) =
     let go() -> Async({}) =
         let r = Async/raw/accept(l.0)!;
@@ -48,16 +48,16 @@ let accept_loop(l: Listener, on_conn: (/sys/Handle) -> Async({})) -> Async({}) =
         end;
     go();
 
--- An accepted stream arrives non-blocking from the host, so it is handed to its own fiber at once, closed when that fiber ends.
+-- | An accepted stream arrives non-blocking from the host, so it is handed to its own fiber at once, closed when that fiber ends.
 let serve_conn(h: /sys/Handle, handler: (Socket) -> Async({})) -> Async({}) =
     Async/go(Async/using(/sys/Handle/close(h), handler(Socket/new(h))));
 
--- Every connection to `host` at `port` handed to `handler` in a fiber of its own, until the loop ends; the listener is closed on both scheduler exits.
+-- | Every connection to `host` at `port` handed to `handler` in a fiber of its own, until the loop ends; the listener is closed on both scheduler exits.
 pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Try(Async, Io/Error, {}) =
     let l = listen(host, port)!;
     Async/using(close(l), accept_loop(l, (h) => serve_conn(h, handler)));
 
--- The server side of the handshake is filed, not performed: the handler's reads and writes drive it. A connection the host cannot file is closed and skipped.
+-- | The server side of the handshake is filed, not performed: the handler's reads and writes drive it. A connection the host cannot file is closed and skipped.
 let serve_tls_conn(h: /sys/Handle, cfg: /sys/Handle, handler: (Socket) -> Async({})) -> Async({}) =
     let status = /sys/tls/start_server(h, cfg)!;
     match status == /sys/status/ok
@@ -65,7 +65,7 @@ let serve_tls_conn(h: /sys/Handle, cfg: /sys/Handle, handler: (Socket) -> Async(
     | false => Async/lift(/sys/Handle/close(h))
     end;
 
--- `serve` under TLS, every accepted connection upgraded with the certificate and key before `handler` sees it; the configuration lives as long as the loop.
+-- | `serve` under TLS, every accepted connection upgraded with the certificate and key before `handler` sees it; the configuration lives as long as the loop.
 pub let serve_tls(
     host: Str,
     port: Nat,

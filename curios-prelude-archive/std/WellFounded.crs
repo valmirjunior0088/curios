@@ -9,7 +9,7 @@ end
 pub let WellFounded(@A: Type, R: (A, A) -> Prop) -> Prop =
     (x: A) -> Accessible(R, x);
 
--- The fixpoint: the step may assume `P` at every `y` below `x`, and the call descends through `below`, a constructor payload applied — which the totality analysis grades as a decrease, and which is what makes this usable in a proof position.
+-- | The fixpoint: the step may assume `P` at every `y` below `x`, and the call descends through `below`, a constructor payload applied — which the totality analysis grades as a decrease, and which is what makes this usable in a proof position.
 pub let recurse(
     @A: Type,
     @R: (A, A) -> Prop,
@@ -22,7 +22,7 @@ pub let recurse(
     | intro(@w, below) => step(w, (y, r) => recurse(P, step, y, below(y, r)))
     end;
 
--- `<` on `Nat` is well-founded, by induction on a bound `k` under `n <= k`: nothing lies below zero, and below an `n <= k + 1` everything is `<= k`. The descent `Nat/Lt/strong` makes, written directly at `Prop` so the whole proof erases together.
+-- | `<` on `Nat` is well-founded, by induction on a bound `k` under `n <= k`: nothing lies below zero, and below an `n <= k + 1` everything is `<= k`. The descent `Nat/Lt/strong` makes, written directly at `Prop` so the whole proof erases together.
 let lt_below(k: Nat, n: Nat, le: Le(n, k)) -> Accessible((a: Nat, b: Nat) => Nat/Lt(a, b), n) =
     match k
     | 0 =>

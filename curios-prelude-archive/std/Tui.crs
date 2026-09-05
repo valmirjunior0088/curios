@@ -53,7 +53,7 @@ pub use Input/{let Input};
 
 pub mod Viewport;
 
--- What an `update` asks the loop to do beside the new model: nothing, stop, run an `Async` and hand its answer back as `Event/custom`, or several of those.
+-- | What an `update` asks the loop to do beside the new model: nothing, stop, run an `Async` and hand its answer back as `Event/custom`, or several of those.
 pub induct Cmd(E: Type): pub Type
 | none()
 | quit()
@@ -61,7 +61,7 @@ pub induct Cmd(E: Type): pub Type
 | batch(List(Cmd(E)))
 end
 
--- A program: its first model and command, how an event changes the model, and what the model looks like at a size. `view` is typed at the size it is given, so a frame that does not fill the terminal is refused where it is written and `run` never crops; `cursor` places the terminal's cursor, or hides it.
+-- | A program: its first model and command, how an event changes the model, and what the model looks like at a size. `view` is typed at the size it is given, so a frame that does not fill the terminal is refused where it is written and `run` never crops; `cursor` places the terminal's cursor, or hides it.
 pub struct Tui(M: Type, E: Type): pub Type {
     init: {M, Cmd(E)},
     update: (model: M, event: Event(E)) -> {M, Cmd(E)},
@@ -69,7 +69,7 @@ pub struct Tui(M: Type, E: Type): pub Type {
     cursor: (model: M, w: Nat, h: Nat) -> Option({x: Nat, y: Nat}),
 }
 
--- A command flattened: whether it stops the loop, and the `Async`s it asks for.
+-- | A command flattened: whether it stops the loop, and the `Async`s it asks for.
 let flatten(@E: Type, c: Cmd(E)) -> {quit: Bool, pending: List(Async(E))} =
     match c
     | none() => (quit = false, pending = [])
@@ -84,7 +84,7 @@ let flatten(@E: Type, c: Cmd(E)) -> {quit: Bool, pending: List(Async(E))} =
                 (quit = acc.quit || f.quit, pending = [..acc.pending, ..f.pending]))
     end;
 
--- The program's fold with no terminal: `events` through `update` from `init`, stopping at the first `quit`. Answers the model, whether it quit, the frame `view` gives at `w` by `h`, and every `perform` it asked for, unrun — which is what a test of a program wants to assert.
+-- | The program's fold with no terminal: `events` through `update` from `init`, stopping at the first `quit`. Answers the model, whether it quit, the frame `view` gives at `w` by `h`, and every `perform` it asked for, unrun — which is what a test of a program wants to assert.
 pub let drive(
     @M: Type,
     @E: Type,
@@ -112,7 +112,7 @@ pub let drive(
         frame = app.view(state.model, w, h),
         pending = state.pending);
 
--- Run the program in a session until it quits, answering its last model. Three kinds of fiber feed one queue and one signal: the reader, which parks on standard input and pushes each burst's events; the ticker, which reads the size every hundred milliseconds and pushes a `resize` only when it changed; and one per `perform`. The loop waits on the signal, drains the queue through `update`, and draws once per drain.
+-- | Run the program in a session until it quits, answering its last model. Three kinds of fiber feed one queue and one signal: the reader, which parks on standard input and pushes each burst's events; the ticker, which reads the size every hundred milliseconds and pushes a `resize` only when it changed; and one per `perform`. The loop waits on the signal, drains the queue through `update`, and draws once per drain.
 pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
     Session/with(
         (s) =>

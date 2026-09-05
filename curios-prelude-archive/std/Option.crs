@@ -44,7 +44,7 @@ pub let to_result(@A: Type, @E: Type, m: Option(A), e: E) -> Result(E, A) =
 pub let unwrap_or_else(@A: Type, m: Option(A), default: () -> A) -> A =
     match m | some(a) => a | none() => default() end;
 
--- Whether `m` holds a value, as a decided proposition: `True` at `some` and `False` at `none`, so `get` on a literal discharges by reduction and `get` on an opaque option names the binder it could not fill — the shape `Nat/Lt` gives `Str/get`.
+-- | Whether `m` holds a value, as a decided proposition: `True` at `some` and `False` at `none`, so `get` on a literal discharges by reduction and `get` on an opaque option names the binder it could not fill — the shape `Nat/Lt` gives `Str/get`.
 pub let IsSome(@A: Type, m: Option(A)) -> Prop =
     match m | some(_) => True | none() => False end;
 
@@ -71,7 +71,7 @@ satisfy Monad(Option) {
     bind = bind,
 }
 
--- `none` below `some`.
+-- | `none` below `some`.
 pub let cmp(@A: Type, use Ordered(A), a: Option(A), b: Option(A)) -> Ordering =
     match a
     | none() => match b | none() => Ordering/eq() | some(_) => Ordering/lt() end
@@ -89,7 +89,7 @@ satisfy (@A: Type, use Ordered(A)) => Ordered(Option(A)) {
     cmp = cmp,
 }
 
--- `none` one case in four, so a drawn option is usually inhabited and the empty case still turns up early.
+-- | `none` one case in four, so a drawn option is usually inhabited and the empty case still turns up early.
 satisfy (@A: Type, use Test/Draw(A)) => Test/Draw(Option(A)) {
     all() =
         map(Test/Draw/all(@A)(), (xs) => [Option/none(), ..List/map(xs, (a) => Option/some(a))]),

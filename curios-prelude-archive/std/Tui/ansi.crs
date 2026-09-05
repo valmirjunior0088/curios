@@ -5,7 +5,7 @@ use /std/Tui/{Color, Style};
 pub let csi(body: Str) -> Bytes =
     x[0x1B, '[', ..Str/to_bytes(body)];
 
--- Put the cursor at column `x` of row `y`, both from zero; the terminal counts from one.
+-- | Put the cursor at column `x` of row `y`, both from zero; the terminal counts from one.
 pub let move_to(x: Nat, y: Nat) -> Bytes =
     csi(Str/flatten([Nat/to_str(y + 1), ";", Nat/to_str(x + 1), "H"]));
 
@@ -45,7 +45,7 @@ pub let kitty_pop: Bytes =
 pub let reset: Bytes =
     csi("0m");
 
--- A colour's SGR parameters: `base` is 30 for a foreground and 40 for a background, and the bright eight of the palette sit sixty above the base.
+-- | A colour's SGR parameters: `base` is 30 for a foreground and 40 for a background, and the bright eight of the palette sit sixty above the base.
 let color_params(c: Color, base: Nat) -> List(Str) =
     match c
     | default() => []
@@ -64,7 +64,7 @@ let color_params(c: Color, base: Nat) -> List(Str) =
             Nat/to_str(Byte/to_nat(b))]
     end;
 
--- The whole of a style as one SGR sequence, from a reset: the renderer emits it only where the style changes, so each is written absolutely rather than as a difference from the last.
+-- | The whole of a style as one SGR sequence, from a reset: the renderer emits it only where the style changes, so each is written absolutely rather than as a difference from the last.
 pub let sgr(s: Style) -> Bytes =
     let flag(on: Bool, code: Str) -> List(Str) = match on | true => [code] | false => [] end;
     csi(

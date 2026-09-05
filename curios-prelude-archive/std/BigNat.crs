@@ -98,11 +98,11 @@ pub let zero: BigNat =
 pub let is_zero(a: BigNat) -> Bool =
     match view(a) | zero() => true | succ(_, _) => false end;
 
--- The raw double survives `dbl`'s restatement as `mul`'s proof vocabulary: the ladder laws relate `dbl` to the raw ripple through this spelling.
+-- | The raw double survives `dbl`'s restatement as `mul`'s proof vocabulary: the ladder laws relate `dbl` to the raw ripple through this spelling.
 let dbl_raw(x: Bits) -> Bits =
     b[0, ..x];
 
--- `combine` already answers the one case a doubling can untrim — a false head over an empty word — so the smart constructors and `of_nat` take the `of_trimmed_bits` door with `combine_is_trimmed` as certificate, costing one head test where `of_bits` walks the whole word.
+-- | `combine` already answers the one case a doubling can untrim — a false head over an empty word — so the smart constructors and `of_nat` take the `of_trimmed_bits` door with `combine_is_trimmed` as certificate, costing one head test where `of_bits` walks the whole word.
 let dbl(a: BigNat) -> BigNat =
     of_trimmed_bits(
         combine(false, a.bits),
@@ -226,7 +226,7 @@ pub let trim_of_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
         end
     end;
 
--- Each operation family is a facade: the module's namesake binding is the operation, and the laws about it nest underneath — `BigNat/add` adds, `BigNat/add/assoc` is its associativity, `BigNat/add/raw` is the raw `Bits` ladder it is built from.
+-- | Each operation family is a facade: the module's namesake binding is the operation, and the laws about it nest underneath — `BigNat/add` adds, `BigNat/add/assoc` is its associativity, `BigNat/add/raw` is the raw `Bits` ladder it is built from.
 pub mod add;
 pub use add/{let add};
 

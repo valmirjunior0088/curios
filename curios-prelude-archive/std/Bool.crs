@@ -16,11 +16,11 @@ pub let of_str(s: Str) -> Option(Bool) =
     | _ => Option/none()
     end;
 
--- The two boolean constructors are distinct: a proof otherwise is absurd. Every `match b : Prop` decision procedure discharges its impossible branch through this.
+-- | The two boolean constructors are distinct: a proof otherwise is absurd. Every `match b : Prop` decision procedure discharges its impossible branch through this.
 pub let false_neq_true(p: Eq(false, true)) -> False =
     Eq/subst((b: Bool) => match b | true => False | false => True end, p, True/qed());
 
--- `xor` is disequality on one bit, so `!=` needs no negation here.
+-- | `xor` is disequality on one bit, so `!=` needs no negation here.
 satisfy Equal(Bool) {
     eql = eql,
     neq = xor,
@@ -42,7 +42,7 @@ satisfy Spell(Bool) {
     spell = to_str,
 }
 
--- `false` below `true`.
+-- | `false` below `true`.
 pub let cmp(a: Bool, b: Bool) -> Ordering =
     match a
     | false => match b | false => Ordering/eq() | true => Ordering/lt() end

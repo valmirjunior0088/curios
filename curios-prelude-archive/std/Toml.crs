@@ -11,7 +11,7 @@
 -- Product limits: integer range is the i31 envelope (narrower than TOML's recommended 64-bit support); finite floats are binary32, correctly rounded from the decimal; there is one NaN, with no payload or sign left to be implementation-defined. Calendar types are owned here because `/std/time` is monotonic-only; `offset_minutes` covers RFC 3339's -23:59 through +23:59, and `nanosecond` truncates (never rounds) past nine fractional digits.
 use /std/{Nat, Int, Flt, Bool, Str, List, Map};
 
--- ===================== data model =====================
+-- | ===================== data model =====================
 pub struct Date: pub Type {
     year: Nat,
     month: Nat,
@@ -51,13 +51,13 @@ end
 
 pub use Toml/*;
 
--- Construction state for the semantic fold. Declared here, not in `Build`, because `Decode` folds statements into a `Build` and reads its root map: the representation has to be transparent across this subtree, and nowhere else. A resolved path segment: `at` carries the array-of-tables element index the segment addresses, so repeated `[[a]]` elements have distinct side-table keys.
+-- | Construction state for the semantic fold. Declared here, not in `Build`, because `Decode` folds statements into a `Build` and reads its root map: the representation has to be transparent across this subtree, and nowhere else. A resolved path segment: `at` carries the array-of-tables element index the segment addresses, so repeated `[[a]]` elements have distinct side-table keys.
 induct Seg: Type
 | plain(Str)
 | at(name: Str, index: Nat)
 end
 
--- Construction metadata for a path in the side table. Plain values and static arrays get no entry: their presence in the root rejects duplicates, and the absence of `many()` is what seals a static array.
+-- | Construction metadata for a path in the side table. Plain values and static arrays get no entry: their presence in the root rejects duplicates, and the absence of `many()` is what seals a static array.
 induct State: Type
 | header()
 | implicit()
@@ -72,7 +72,7 @@ struct Build: Type {
     scope: List(Seg),
 }
 
--- Every stage below is private: the scanners, escape tables, numeric ladders and table-construction rules are implementation, visible throughout this subtree and nowhere else. Only the two entry points are re-exported.
+-- | Every stage below is private: the scanners, escape tables, numeric ladders and table-construction rules are implementation, visible throughout this subtree and nowhere else. Only the two entry points are re-exported.
 mod calendar;
 
 mod build;

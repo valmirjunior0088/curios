@@ -1,7 +1,7 @@
 -- A running child: its handle, which becomes readable when it exits, and whichever of its streams were piped, each a `Pipe` that reads and writes like any other stream. The representation is this module's; `new` is the seam `Command/spawn` builds one through, as `tcp/Socket/new` is for an accepted handle. `wait` reaps the child, `kill` ends it, and `with` is the bracket that ties its life to a task's.
 use /std/{Option, Try, Async, Io, stream};
 
--- How a child ended: with an exit code, or by the signal that ended it.
+-- | How a child ended: with an exit code, or by the signal that ended it.
 pub mod Exit
     use /std/{Nat, Str, Equal, Show};
 
@@ -25,7 +25,7 @@ end
 
 pub use Exit/{let Exit};
 
--- One end of a pipe to the child, filed non-blocking by the host, so a fiber reads and writes it through the stream concepts and parks when it has to.
+-- | One end of a pipe to the child, filed non-blocking by the host, so a fiber reads and writes it through the stream concepts and parks when it has to.
 pub struct Pipe: Type {
     /sys/Handle,
 }
@@ -75,12 +75,12 @@ let close_pipes(c: Child) -> Io({}) =
     let _ = close_pipe(c.stdout)!;
     close_pipe(c.stderr);
 
--- End the child if it still runs, and close its pipes. The statuses are dropped: a child already reaped answers not found, and nothing minds. This is the finalizer `with` registers.
+-- | End the child if it still runs, and close its pipes. The statuses are dropped: a child already reaped answers not found, and nothing minds. This is the finalizer `with` registers.
 pub let kill(c: Child) -> Io({}) =
     let _ = /sys/proc/kill(c.handle)!;
     close_pipes(c);
 
--- Wait for the child to end. Its handle becomes readable when it does, so the fiber parks on it and reaps at once. The pipes are closed with the child, so read what it wrote before waiting for it — `Command/run` drains both outputs first for that reason.
+-- | Wait for the child to end. Its handle becomes readable when it does, so the fiber parks on it and reaps at once. The pipes are closed with the child, so read what it wrote before waiting for it — `Command/run` drains both outputs first for that reason.
 pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
     let _ = Async/raw/wait(c.handle, /sys/event/read)!;
     let r = /sys/proc/wait(c.handle)!;
@@ -95,7 +95,7 @@ pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
             end)
     end;
 
--- `body` under the child's guard, registered with the scheduler: however the task ends — done, failed or cancelled — `kill` runs, so a child never outlives the bracket it was started in. `Async` releases what a task acquired on both exits, and a child outliving the task that spawned it is the one thing that rule cannot mean.
+-- | `body` under the child's guard, registered with the scheduler: however the task ends — done, failed or cancelled — `kill` runs, so a child never outlives the bracket it was started in. `Async` releases what a task acquired on both exits, and a child outliving the task that spawned it is the one thing that rule cannot mean.
 pub let with(@A: Type, c: Child, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
     let outcome = Async/using(kill(c), Try/run(body))!;
     let a = outcome!;

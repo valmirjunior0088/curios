@@ -1,11 +1,11 @@
 use /std/{Monad};
 
--- Pure, deterministic state threading: a `State(S, A)` is a function from a state to a value and the successor state, and running one is ordinary application. Deliberately *no* `Lift(Io, State(S))` edge exists — a `State` region provably performs nothing, which is the whole difference from a `Cell` in `Io`. The parameter order is deliberate too: the result parameter sits last so the family partially applies as a monad, `(A: Type) => State(S, A)`.
+-- | Pure, deterministic state threading: a `State(S, A)` is a function from a state to a value and the successor state, and running one is ordinary application. Deliberately *no* `Lift(Io, State(S))` edge exists — a `State` region provably performs nothing, which is the whole difference from a `Cell` in `Io`. The parameter order is deliberate too: the result parameter sits last so the family partially applies as a monad, `(A: Type) => State(S, A)`.
 pub struct State(S: Type, A: Type): Type {
     (S) -> {A, S},
 }
 
--- The general carrier constructor: any state transformer, as a `State` action.
+-- | The general carrier constructor: any state transformer, as a `State` action.
 pub let state(@S: Type, @A: Type, f: (S) -> {A, S}) -> State(S, A) =
     State { f };
 

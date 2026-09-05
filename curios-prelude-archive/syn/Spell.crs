@@ -7,7 +7,7 @@ pub concept Spell(A: Type): pub Type {
 
 pub use Spell/*;
 
--- The two shapes a derived spelling is built from, spelled once here so the re-parse grammar — parentheses, commas, ` = `, braces — lives in Curios, where the kernel re-certifies it on every prelude build. `call` renders a constructor applied to its spelled explicit payloads, `head()` when it has none; `record` renders a struct literal over its spelled fields, `label = value` for a labeled field and the bare value for the positional field of a newtype-like struct, whose label is written empty. Compiler vocabulary rather than user API: `pub` so an emitted body can name them, with no row in the facade.
+-- | The two shapes a derived spelling is built from, spelled once here so the re-parse grammar — parentheses, commas, ` = `, braces — lives in Curios, where the kernel re-certifies it on every prelude build. `call` renders a constructor applied to its spelled explicit payloads, `head()` when it has none; `record` renders a struct literal over its spelled fields, `label = value` for a labeled field and the bare value for the positional field of a newtype-like struct, whose label is written empty. Compiler vocabulary rather than user API: `pub` so an emitted body can name them, with no row in the facade.
 pub let call(head: Str, args: List(Str)) -> Str =
     Str/concat(head, Str/concat("(", Str/concat(Str/join(", ", args), ")")));
 

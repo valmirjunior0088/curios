@@ -6,25 +6,25 @@ pub induct Verdict: pub Type
 | failed(Str)
 end
 
--- The representation is private on purpose: a `Test` is a description, and like `Io` it has no eliminator outside its owner — a consumer builds one through the combinators below and only `main` schedules it.
+-- | The representation is private on purpose: a `Test` is a description, and like `Io` it has no eliminator outside its owner — a consumer builds one through the combinators below and only `main` schedules it.
 pub induct Test: Type
 | theorem()
 | verdict(Verdict)
 | action(Io(Test))
 end
 
--- The evidence is consumed by the checker right here and would erase in any case, so the description carries only the fact that the proposition held.
+-- | The evidence is consumed by the checker right here and would erase in any case, so the description carries only the fact that the proposition held.
 pub let prove(P: Prop, _proof: P) -> Test =
     Test/theorem();
 
 pub let refl(@A: Type, a: A, b: A, _proof: Eq(a, b)) -> Test =
     Test/theorem();
 
--- That a description was settled by the kernel: `True` on a theorem and `False` otherwise, so the only evidence that exists is for a body that reduces to a theorem, and `settled` below can be handed nothing else.
+-- | That a description was settled by the kernel: `True` on a theorem and `False` otherwise, so the only evidence that exists is for a body that reduces to a theorem, and `settled` below can be handed nothing else.
 pub let Settled(t: Test) -> Prop =
     match t | theorem() => True | verdict(_) => False | action(_) => False end;
 
--- A parameterized description the kernel settled at every argument, closed into one theorem: the evidence is `(a) => True/qed()` exactly when `prop(a)` reduces to a theorem under the open binder, which is what the checker decides at the call. The synthesized tail nests this once per explicit parameter of a test whose body converts to a theorem under its telescope — so `curios test` reports `proved` for what was proved — and the same nesting is how a proved family is closed by hand.
+-- | A parameterized description the kernel settled at every argument, closed into one theorem: the evidence is `(a) => True/qed()` exactly when `prop(a)` reduces to a theorem under the open binder, which is what the checker decides at the call. The synthesized tail nests this once per explicit parameter of a test whose body converts to a theorem under its telescope — so `curios test` reports `proved` for what was proved — and the same nesting is how a proved family is closed by hand.
 pub let settled(@A: Type, prop: (A) -> Test, _evidence: (a: A) -> Settled(prop(a))) -> Test =
     Test/theorem();
 
@@ -48,11 +48,11 @@ pub let equal(@A: Type, use Equal(A), use Spell(A), actual: A, expected: A) -> T
                         Str/concat(" but got ", Spell/spell(actual))))))
     end;
 
--- A thunk rather than a bare `Io(Test)` because a lambda body is a fresh sequencing region with its type pushed from this parameter, so an inline action's `!` binds in `Io`; a bare argument would read the caller's region, which is no monad.
+-- | A thunk rather than a bare `Io(Test)` because a lambda body is a fresh sequencing region with its type pushed from this parameter, so an inline action's `!` binds in `Io`; a bare argument would read the caller's region, which is no monad.
 pub let perform(thunk: () -> Io(Test)) -> Test =
     Test/action(thunk());
 
--- The conjunction of descriptions, so a family of cases — a parameterized test applied to a table of arguments — closes into one test: every theorem is a theorem, the empty list included; a verdict beside a theorem is that verdict; the first failure is the report, naming its position; and an action on either side sequences what follows under it. Written here because a description is matched nowhere else.
+-- | The conjunction of descriptions, so a family of cases — a parameterized test applied to a table of arguments — closes into one test: every theorem is a theorem, the empty list included; a verdict beside a theorem is that verdict; the first failure is the report, naming its position; and an action on either side sequences what follows under it. Written here because a description is matched nowhere else.
 pub let all(tests: List(Test)) -> Test =
     let (conjunction, _) =
         List/fold(
@@ -63,7 +63,7 @@ pub let all(tests: List(Test)) -> Test =
                 (conjoin(acc, case(index, t)), index + 1));
     conjunction;
 
--- A case's report names its position, so a failing conjunction says which member failed.
+-- | A case's report names its position, so a failing conjunction says which member failed.
 let case(index: Nat, t: Test) -> Test =
     match t
     | theorem() => t
@@ -82,7 +82,7 @@ let case(index: Nat, t: Test) -> Test =
                 Io/pure(case(index, inner)))
     end;
 
--- The rung of two descriptions: a failure on the left is final and nothing to its right runs; a theorem contributes nothing; a pass is a pass unless the right says otherwise; an action on the left performs before the right is consulted.
+-- | The rung of two descriptions: a failure on the left is final and nothing to its right runs; a theorem contributes nothing; a pass is a pass unless the right says otherwise; an action on the left performs before the right is consulted.
 let conjoin(left: Test, right: Test) -> Test =
     match left
     | theorem() => right
@@ -98,13 +98,13 @@ let conjoin(left: Test, right: Test) -> Test =
                 Io/pure(conjoin(inner, right)))
     end;
 
--- The outcome of a fallible action as a test: the inner test when it succeeded, a failure spelling the error when it raised.
+-- | The outcome of a fallible action as a test: the inner test when it succeeded, a failure spelling the error when it raised.
 let outcome(@E: Type, use Show(E), io: Io(Result(E, Test))) -> Io(Test) =
     let r = io!;
     Io/pure(
         match r | success(t) => t | failure(e) => Test/verdict(Verdict/failed(Show/show(e))) end);
 
--- `perform` for an action that can fail: the thunk's region is `Try` over `Io`, so a fallible operation sequences in it bare, and a raise is the test's failure with the error's `Show`. A thunk for the reason `perform` takes one.
+-- | `perform` for an action that can fail: the thunk's region is `Try` over `Io`, so a fallible operation sequences in it bare, and a raise is the test's failure with the error's `Show`. A thunk for the reason `perform` takes one.
 pub let try(@E: Type, use Show(E), thunk: () -> Try(Io, E, Test)) -> Test =
     Test/action(outcome(Try/run(thunk())));
 
@@ -139,7 +139,7 @@ let run_all(tests: List({Str, () -> Test})) -> Io(Bool) =
             let here = report(name, body())!;
             Io/pure(earlier && here));
 
--- The selection protocol, spelled once: argv[1] names one test by index and the run exits with its outcome; no argument runs every test in declaration order and exits 1 when any failed.
+-- | The selection protocol, spelled once: argv[1] names one test by index and the run exits with its outcome; no argument runs every test in declaration order and exits 1 when any failed.
 pub let main(tests: List({Str, () -> Test})) -> Io({}) =
     let arguments = proc/args!;
     match List/try_get(arguments, 1)
@@ -159,7 +159,7 @@ pub let main(tests: List({Str, () -> Test})) -> Io({}) =
         match ok | true => Io/pure(()) | false => proc/exit(1) end
     end;
 
--- Only this module may eliminate a description, so the one `Property` witness that sees a `Test` lives here: a theorem was settled by the kernel over its open binders once, at elaboration, so every case passes; a verdict is the case's own; an action cannot be probed by a pure runner, and says so. A description is one case, so its extent is one and exhausting it is judging it.
+-- | Only this module may eliminate a description, so the one `Property` witness that sees a `Test` lives here: a theorem was settled by the kernel over its open binders once, at elaboration, so every case passes; a verdict is the case's own; an action cannot be probed by a pure runner, and says so. A description is one case, so its extent is one and exhausting it is judging it.
 let judge(t: Test) -> Verdict =
     match t
     | theorem() => Verdict/passed()
@@ -173,13 +173,13 @@ satisfy /std/Test/Property(Test) {
     exhaust(t) = [judge(t)],
 }
 
--- The default run: a fixed case count from a fixed seed, so a property's verdict is a function of the sources alone. Each is one number, in one place.
+-- | The default run: a fixed case count from a fixed seed, so a property's verdict is a function of the sources alone. Each is one number, in one place.
 let default_seed: /std/Test/Seed =
     /std/Test/Seed/make(20260831);
 
 let default_cases: Nat =
     100;
 
--- A property closed into a description: `prop` is anything `Property` judges — a nullary `Test`, or a function whose arguments the roster draws — and the tail of a unit compiled as its test program is what applies this to every parameterized test declaration. Public rather than emission-only, so a property is also built and combined by hand.
+-- | A property closed into a description: `prop` is anything `Property` judges — a nullary `Test`, or a function whose arguments the roster draws — and the tail of a unit compiled as its test program is what applies this to every parameterized test declaration. Public rather than emission-only, so a property is also built and combined by hand.
 pub let property(@A: Type, use /std/Test/Property(A), prop: A) -> Test =
     Test/verdict(/std/Test/Property/run(prop, default_seed, default_cases));

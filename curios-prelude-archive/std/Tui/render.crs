@@ -10,7 +10,7 @@ struct Pen: Type {
     at: Option({Nat, Nat}),
 }
 
--- One cell at `(x, y)`, written if it differs from `before` — `none` where there is no previous frame — and skipped where it is a continuation.
+-- | One cell at `(x, y)`, written if it differs from `before` — `none` where there is no previous frame — and skipped where it is a continuation.
 let paint(pen: Pen, x: Nat, y: Nat, cell: Cell, before: Option(Cell)) -> Pen =
     let same = match before | some(b) => b == cell | none() => false end;
     let width = text/width(cell.symbol);

@@ -8,7 +8,7 @@ pub concept Property(A: Type): pub Type {
     exhaust(A) -> List(Verdict),
 }
 
--- A claim whose extent fits the case budget is decided by every case it has, in roster order; any other is probed `cases` times from a seed split once per case, the case's index as its size. The first failure ends the run either way.
+-- | A claim whose extent fits the case budget is decided by every case it has, in roster order; any other is probed `cases` times from a seed split once per case, the case's index as its size. The first failure ends the run either way.
 pub let run(@A: Type, use Property(A), prop: A, seed: Seed, cases: Nat) -> Verdict =
     match Property/extent(@A)()
     | some(extent) =>
@@ -43,14 +43,14 @@ let first_failure(verdicts: List(Verdict)) -> Verdict =
         Verdict/passed(),
         (here, acc) => match acc | passed() => here | failed(_) => acc end);
 
--- A roster past this many cases is as good as none: nothing would enumerate it, and keeping every factor at or below the ceiling is what keeps a product of two inside the i31 envelope before it is compared.
+-- | A roster past this many cases is as good as none: nothing would enumerate it, and keeping every factor at or below the ceiling is what keeps a product of two inside the i31 envelope before it is compared.
 let ceiling: Nat =
     1024;
 
 let bounded(n: Nat) -> Option(Nat) =
     match n <= ceiling | true => Option/some(n) | false => Option/none() end;
 
--- The roster's size, `none` when the type has no roster or its size is past the ceiling.
+-- | The roster's size, `none` when the type has no roster or its size is past the ceiling.
 let roster(@A: Type, use Draw(A)) -> Option(Nat) =
     Option/bind(Draw/all(@A)(), (xs) => bounded(List/len(xs)));
 
@@ -62,11 +62,11 @@ let product(a: Option(Nat), b: Option(Nat)) -> Option(Nat) =
                 b,
                 (y) => match y <= ceiling | true => bounded(x * y) | false => Option/none() end));
 
--- Every value of the roster, or nothing when there is none: what `exhaust` walks, and consulted only under an extent that fits.
+-- | Every value of the roster, or nothing when there is none: what `exhaust` walks, and consulted only under an extent that fits.
 let values(@A: Type, use Draw(A)) -> List(A) =
     Option/unwrap_or(Draw/all(@A)(), []);
 
--- A failure names the case that produced it: the arguments, spelled in parameter order, before the inner report.
+-- | A failure names the case that produced it: the arguments, spelled in parameter order, before the inner report.
 let counterexample(arguments: List(Str), verdict: Verdict) -> Verdict =
     match verdict
     | passed() => Verdict/passed()

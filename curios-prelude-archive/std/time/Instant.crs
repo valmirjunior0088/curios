@@ -10,7 +10,7 @@ pub let now() -> Io(Instant) =
     let e = Duration/now()!;
     Io/pure(Instant { elapsed = e });
 
--- `a - b`, and zero when `a` is not after `b`: a `Duration` has no sign.
+-- | `a - b`, and zero when `a` is not after `b`: a `Duration` has no sign.
 pub let diff(a: Instant, b: Instant) -> Duration =
     Duration/sub(a.elapsed, b.elapsed);
 

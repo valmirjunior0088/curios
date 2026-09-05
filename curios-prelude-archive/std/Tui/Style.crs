@@ -15,7 +15,7 @@ pub struct Style: pub Type {
     strike: Bool,
 }
 
--- Structural, which is what the renderer's diff asks: two cells differ when their styles differ in any field.
+-- | Structural, which is what the renderer's diff asks: two cells differ when their styles differ in any field.
 satisfy Equal(Style);
 
 pub let plain: Style =

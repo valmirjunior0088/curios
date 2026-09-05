@@ -28,7 +28,7 @@ let errors: List({Nat, Error}) =
         (/sys/status/is_directory, Error/is_directory()),
         (/sys/status/not_directory, Error/not_directory())];
 
--- Each constructor by its name, and `other` with the errno it carries: a program that fails has to say why.
+-- | Each constructor by its name, and `other` with the errno it carries: a program that fails has to say why.
 satisfy Show(Error) {
     show(e) =
         match e
@@ -45,7 +45,7 @@ satisfy Show(Error) {
         end,
 }
 
--- The failure `status` names, or `none` for the two non-failure codes, `ok` and `eof` — stated here once so a status that is not an error cannot be manufactured into one. It used to be total, and the two non-failure codes fell through the passthrough monus to `other(0)`, indistinguishable from the errno-less catch-all a host legitimately reports; every caller had to pre-filter them, and twelve of sixteen guarded only `ok`.
+-- | The failure `status` names, or `none` for the two non-failure codes, `ok` and `eof` — stated here once so a status that is not an error cannot be manufactured into one. It used to be total, and the two non-failure codes fell through the passthrough monus to `other(0)`, indistinguishable from the errno-less catch-all a host legitimately reports; every caller had to pre-filter them, and twelve of sixteen guarded only `ok`.
 pub let of(status: Nat) -> Option(Error) =
     choose
     | status == /sys/status/ok => Option/none()

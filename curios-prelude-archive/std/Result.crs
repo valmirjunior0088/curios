@@ -1,6 +1,6 @@
 use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered, List, Monad, Test};
 
--- Error first, value last: the family partially applies as a monad, `(A: Type) => Result(E, A)`, so a `Result` is its own short-circuiting monad — `!` on one is checked early return, `raise` stops a region and `rescue` handles the stop. See `documentation/design/language/an-error-comes-first-so-a-result-is-its-own-monad.md`. Deliberately *no* `Lift(Io, Result(E))` edge exists: a `Result` region provably performs nothing.
+-- | Error first, value last: the family partially applies as a monad, `(A: Type) => Result(E, A)`, so a `Result` is its own short-circuiting monad — `!` on one is checked early return, `raise` stops a region and `rescue` handles the stop. See `documentation/design/language/an-error-comes-first-so-a-result-is-its-own-monad.md`. Deliberately *no* `Lift(Io, Result(E))` edge exists: a `Result` region provably performs nothing.
 pub induct Result(E: Type, A: Type): pub Type
 | success(A)
 | failure(E)
@@ -67,7 +67,7 @@ satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(E, A)) {
 
 satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(E, A));
 
--- `failure` below `success`.
+-- | `failure` below `success`.
 pub let cmp(
     @A: Type,
     @E: Type,

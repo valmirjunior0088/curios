@@ -27,7 +27,7 @@ let leave: Io({}) =
         Io/stdout,
         x[..ansi/kitty_pop, ..ansi/paste_off, ..ansi/cursor_show, ..ansi/alternate_off]);
 
--- The bracket. Raw mode first, so a terminal that is not one fails here with `ENOTTY` before anything is written; the modes are switched inside it and released by `Async/using` on both scheduler exits, and raw mode after them.
+-- | The bracket. Raw mode first, so a terminal that is not one fails here with `ENOTTY` before anything is written; the modes are switched inside it and released by `Async/using` on both scheduler exits, and raw mode after them.
 pub let with(@A: Type, body: (Session) -> Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
     tty/with_raw_async(
         let first = tty/size!;
@@ -40,17 +40,17 @@ pub let with(@A: Type, body: (Session) -> Try(Async, Io/Error, A)) -> Try(Async,
         let a = outcome!;
         Try/pure(a));
 
--- The terminal's size now, recorded for `last_size`.
+-- | The terminal's size now, recorded for `last_size`.
 pub let size(s: Session) -> Try(Async, Io/Error, tty/Size) =
     let now = tty/size!;
     let _ = Cell/set(s.size, now)!;
     Try/pure(now);
 
--- The size last read, by `with` or `size`.
+-- | The size last read, by `with` or `size`.
 pub let last_size(s: Session) -> Io(tty/Size) =
     Cell/get(s.size);
 
--- Write `frame` as the difference from the previous one where the size is unchanged, and whole where it is not, then remember it.
+-- | Write `frame` as the difference from the previous one where the size is unchanged, and whole where it is not, then remember it.
 pub let draw(
     @w: Nat,
     @h: Nat,
@@ -71,7 +71,7 @@ pub let draw(
     let _ = Io/write(Io/stdout, render/render(before, frame, cursor))!;
     Cell/set(s.previous, Option/some(Held { w = w, h = h, frame = frame }));
 
--- The next burst of input as events, parking until one arrives; `none` once standard input has ended. A burst that ends inside a sequence is given a short interval for the rest to follow, and settled by `input/flush` when nothing does — a lone Escape becomes the Escape key here and nowhere else.
+-- | The next burst of input as events, parking until one arrives; `none` once standard input has ended. A burst that ends inside a sequence is given a short interval for the rest to follow, and settled by `input/flush` when nothing does — a lone Escape becomes the Escape key here and nowhere else.
 pub let read(@E: Type, s: Session) -> Async(Option(List(Event(E)))) =
     let carried = Cell/get(s.rest)!;
     let got = stream/Read/read(Io/stdin, 1024)!;

@@ -12,7 +12,7 @@ use /std/Tui/{Style, Cell};
 pub let Frame(w: Nat, h: Nat) -> Type =
     Vec(Vec(Cell, w), h);
 
--- Crop or pad `v` to exactly `m`, by recursion on the target rather than on the vector: `0` answers `nil` whatever is left over, and `p + 1` takes the head where there is one and `fill` where there is not. One function for both directions, and no proof relating `n` to `m` — which is the whole reason `fit` needs no lemma.
+-- | Crop or pad `v` to exactly `m`, by recursion on the target rather than on the vector: `0` answers `nil` whatever is left over, and `p + 1` takes the head where there is one and `fill` where there is not. One function for both directions, and no proof relating `n` to `m` — which is the whole reason `fit` needs no lemma.
 let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T, n)) -> Vec(T, m) =
     (match m: (k) => (j: Nat, Vec(T, j)) -> Vec(T, k)
     | 0 => (_j, _x) => Vec/nil()
@@ -24,7 +24,7 @@ let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T, n)) -> Vec(T, m) =
             end
     end)(n, v);
 
--- Drop up to `k` elements, saturating at the end. `List/slice` carries a `Nat/Le(start + length, len)` bound, and a clip has nothing to discharge it with: where the patch sits and how wide it is are both runtime facts, and running off the end is the case this function exists to absorb.
+-- | Drop up to `k` elements, saturating at the end. `List/slice` carries a `Nat/Le(start + length, len)` bound, and a clip has nothing to discharge it with: where the patch sits and how wide it is are both runtime facts, and running off the end is the case this function exists to absorb.
 let drop_upto(@T: Type, l: List(T), k: Nat) -> List(T) =
     match k
     | 0 => l
@@ -37,22 +37,22 @@ pub let blank(w: Nat, h: Nat) -> Frame(w, h) =
 pub let filled(c: Cell, w: Nat, h: Nat) -> Frame(w, h) =
     Vec/replicate(h, Vec/replicate(w, c));
 
--- Join left to right. The heights must agree, and they agree in the type, so the zip below needs no bound.
+-- | Join left to right. The heights must agree, and they agree in the type, so the zip below needs no bound.
 pub let beside(@w1: Nat, @w2: Nat, @h: Nat, a: Frame(w1, h), b: Frame(w2, h)) -> Frame(w1 + w2, h) =
     Vec/map((r) => Vec/append(r.0, r.1), Vec/zip(a, b));
 
--- Join top to bottom. The widths must agree, so the rows are already the same type and stacking them is `Vec/append`.
+-- | Join top to bottom. The widths must agree, so the rows are already the same type and stacking them is `Vec/append`.
 pub let above(@w: Nat, @h1: Nat, @h2: Nat, a: Frame(w, h1), b: Frame(w, h2)) -> Frame(w, h1 + h2) =
     Vec/append(a, b);
 
--- The one coercion: crop what overflows, pad what falls short, in both dimensions at once.
+-- | The one coercion: crop what overflows, pad what falls short, in both dimensions at once.
 pub let fit(@w0: Nat, @h0: Nat, frame: Frame(w0, h0), w: Nat, h: Nat) -> Frame(w, h) =
     resize(Vec/replicate(w, Cell/blank), h, Vec/map((row) => resize(Cell/blank, w, row), frame));
 
 pub let restyle(@w: Nat, @h: Nat, f: (Style) -> Style, frame: Frame(w, h)) -> Frame(w, h) =
     Vec/map((row) => Vec/map((c) => Cell { ..c, style = f(c.style) }, row), frame);
 
--- The cells one string paints, and how many columns they cover. A combining mark joins the cell before it rather than taking one of its own, and a double-width scalar takes its cell and a `Cell/continuation` beside it, so the count returned is the *column* count and matches `Tui/text/width`.
+-- | The cells one string paints, and how many columns they cover. A combining mark joins the cell before it rather than taking one of its own, and a double-width scalar takes its cell and a `Cell/continuation` beside it, so the count returned is the *column* count and matches `Tui/text/width`.
 let cells_of(style: Style, s: Str) -> {n: Nat, Vec(Cell, n)} =
     let empty: List(Cell) = [];
     let reversed =
@@ -72,17 +72,17 @@ let cells_of(style: Style, s: Str) -> {n: Nat, Vec(Cell, n)} =
                 end);
     Vec/of_list(List/reverse(reversed));
 
--- One line of styled text, at whatever width it turned out to be. The pair is what a runtime-sized value looks like in a library whose sizes are types; `fit` is what carries it into a pane.
+-- | One line of styled text, at whatever width it turned out to be. The pair is what a runtime-sized value looks like in a library whose sizes are types; `fit` is what carries it into a pane.
 pub let text(style: Style, s: Str) -> {w: Nat, frame: Frame(w, 1)} =
     let cells = cells_of(style, s);
     (w = cells.0, frame = Vec/cons(cells.1, Vec/nil()));
 
--- Build a frame of a known size from text, one string per row, each fitted to `w` and the whole fitted to `h`. The counterpart of `to_lines`, and what a test writes its expected frame as.
+-- | Build a frame of a known size from text, one string per row, each fitted to `w` and the whole fitted to `h`. The counterpart of `to_lines`, and what a test writes its expected frame as.
 pub let of_lines(style: Style, lines: List(Str), w: Nat, h: Nat) -> Frame(w, h) =
     let row_of(l: Str) -> Vec(Cell, w) = resize(Cell/blank, w, cells_of(style, l).1);
     resize(Vec/replicate(w, Cell/blank), h, Vec/of_list(List/map(lines, row_of)).1);
 
--- The frame as text, one string per row. A continuation cell contributes nothing, so a double-width glyph reads as the one glyph it is.
+-- | The frame as text, one string per row. A continuation cell contributes nothing, so a double-width glyph reads as the one glyph it is.
 pub let to_lines(@w: Nat, @h: Nat, frame: Frame(w, h)) -> List(Str) =
     List/map(Vec/to_list(frame), (r) => Str/flatten(List/map(Vec/to_list(r), (c) => c.symbol)));
 
@@ -100,7 +100,7 @@ pub let get(
 ) -> Cell =
     Vec/get(@Cell, @w, Vec/get(@Vec(Cell, w), @h, frame, y, @ok_y), x, @ok_x);
 
--- Paint `top` onto `base` with its upper-left corner at `(x, y)`, clipped to `base`. There is no bound to discharge because nothing is required to fit: a `top` that runs past the edge is cropped, and one placed entirely outside changes nothing. That is what makes this the popup primitive — a dialog's position is a runtime fact, and demanding a proof of it would push the arithmetic into every caller.
+-- | Paint `top` onto `base` with its upper-left corner at `(x, y)`, clipped to `base`. There is no bound to discharge because nothing is required to fit: a `top` that runs past the edge is cropped, and one placed entirely outside changes nothing. That is what makes this the popup primitive — a dialog's position is a runtime fact, and demanding a proof of it would push the arithmetic into every caller.
 pub let overlay(
     @w: Nat,
     @h: Nat,
@@ -128,7 +128,7 @@ pub let overlay(
     let rows = Vec/of_list(List/map(List/zip(List/range(0, h), Vec/to_list(base)), row_of));
     resize(Vec/replicate(w, Cell/blank), h, rows.1);
 
--- The rows from `y` and the columns from `x` on, at whatever size is left: the offset-taking counterpart of `fit`, and what a viewport is before it is fitted. Past the edge there is nothing left, and the size says so.
+-- | The rows from `y` and the columns from `x` on, at whatever size is left: the offset-taking counterpart of `fit`, and what a viewport is before it is fitted. Past the edge there is nothing left, and the size says so.
 pub let crop(
     @w: Nat,
     @h: Nat,

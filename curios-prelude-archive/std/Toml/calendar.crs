@@ -23,7 +23,7 @@ pub let date_ok(d: Date) -> Bool =
     d.year <= 9999 && Nat/in_range(d.month, 1, 12)
         && Nat/in_range(d.day, 1, days_in(d.year, d.month));
 
--- second 60 is admitted for RFC 3339 leap seconds
+-- | second 60 is admitted for RFC 3339 leap seconds
 pub let time_ok(t: Time) -> Bool =
     t.hour <= 23 && t.minute <= 59 && t.second <= 60 && t.nanosecond <= 999999999;
 

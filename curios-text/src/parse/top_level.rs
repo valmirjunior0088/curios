@@ -13,7 +13,7 @@ const DOC_BEFORE_TEST: &str =
 
 /// The head of a later member of an `and` group: its documentation comment, its `pub`, and the `and` itself.
 ///
-/// Recoverable when there is no documentation, since the absence of `and` is how a group ends. With one, the word after the block decides: `and` or `pub` make it this group's next member, so a failure past it is the diagnosis; another word makes it the next item's, so the group ends recoverably and the item loop reads the block again; anything else is nothing the block may document.
+/// Recoverable when there is no documentation, since the absence of `and` is how a group ends. With one, the keyword after the block — past a `pub` — decides: `and` makes it this group's next member, so a failure past it is the diagnosis; another word makes it the next item's, so the group ends recoverably and the item loop reads the block again; anything else is nothing the block may document.
 fn parse_and_head<'a>() -> Parser<'a, (Option<Doc>, bool)> {
     parse_doc().flat_map(|doc| {
         let head = parse_pub().and_drop(parse_keyword("and"));
@@ -22,7 +22,7 @@ fn parse_and_head<'a>() -> Parser<'a, (Option<Doc>, bool)> {
         };
 
         match word_after(&doc) {
-            "and" | "pub" => head
+            "and" => head
                 .map_err(DOC_BEFORE_NOTHING)
                 .map(move |vis_pub| (Some(doc), vis_pub)),
             "" | "end" => fail(DOC_BEFORE_NOTHING),
@@ -298,9 +298,7 @@ pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
             Some(doc) if text_after(doc).starts_with('|') => {
                 parse_literal("|").map_err(DOC_BEFORE_NOTHING)
             }
-            Some(doc) if matches!(word_after(doc), "and" | "pub") => {
-                catch(fail(DOC_BEFORE_NOTHING))
-            }
+            Some(doc) if word_after(doc) == "and" => catch(fail(DOC_BEFORE_NOTHING)),
             Some(_) => fail(DOC_BEFORE_NOTHING),
         };
 

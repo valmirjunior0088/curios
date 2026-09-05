@@ -142,7 +142,7 @@ pub let raw_trimmed(
         end
     end;
 
--- `raw_trimmed` proves the ripple of two canonical words is already canonical, so addition owes no boundary trim: the `of_trimmed_bits` door, as `succ` takes, saves the second walk and spine `of_bits` would spend re-trimming a word this certificate already covers.
+-- | `raw_trimmed` proves the ripple of two canonical words is already canonical, so addition owes no boundary trim: the `of_trimmed_bits` door, as `succ` takes, saves the second walk and spine `of_bits` would spend re-trimming a word this certificate already covers.
 pub let add(a: BigNat, b: BigNat) -> BigNat =
     of_trimmed_bits(
         raw(a.bits, b.bits, false),
@@ -153,7 +153,7 @@ pub let add(a: BigNat, b: BigNat) -> BigNat =
             is_trimmed_of_canonical(a.bits, a.canonical),
             is_trimmed_of_canonical(b.bits, b.canonical)));
 
--- Facts about the full-adder bit functions above. They exist only to justify this ladder's commutativity and cancellation, so they live with the adder rather than with `xor3`/`maj3` themselves, which `sub` and `mul` share.
+-- | Facts about the full-adder bit functions above. They exist only to justify this ladder's commutativity and cancellation, so they live with the adder rather than with `xor3`/`maj3` themselves, which `sub` and `mul` share.
 let xor3_comm(a: Bool, b: Bool, c: Bool) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
     match a
     | true =>
@@ -498,7 +498,7 @@ pub let raw_succ_out_r(
         end
     end;
 
--- A carry entering on the right, shifted inward: `raw(raw(x, y, false), z, true)` is that same sum with the carry folded into the inner addition instead. Eight leaves of `raw_assoc`'s carry analysis reduce to exactly this step, and each used to spell the whole chain out. `assoc` is the associativity instance the leaf already holds, taken as a parameter so this lemma stays outside the recursion.
+-- | A carry entering on the right, shifted inward: `raw(raw(x, y, false), z, true)` is that same sum with the carry folded into the inner addition instead. Eight leaves of `raw_assoc`'s carry analysis reduce to exactly this step, and each used to spell the whole chain out. `assoc` is the associativity instance the leaf already holds, taken as a parameter so this lemma stays outside the recursion.
 let carry_shift(
     x: Bits,
     y: Bits,
@@ -1234,7 +1234,7 @@ pub let cancel_l(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(a, b), add(a, c))) -
 pub let cancel_r(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(b, a), add(c, a))) -> Eq(b, c) =
     cancel_l(a, b, c, Eq/trans(comm(a, b), Eq/trans(p, comm(c, a))));
 
--- Registered beside the operation it witnesses rather than in `convert` with its siblings, so the facade is complete in one file: the operation, its laws, and its `+` spelling.
+-- | Registered beside the operation it witnesses rather than in `convert` with its siblings, so the facade is complete in one file: the operation, its laws, and its `+` spelling.
 satisfy Add(BigNat) {
     add = add,
 }

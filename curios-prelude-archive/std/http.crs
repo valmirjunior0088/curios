@@ -121,7 +121,7 @@ pub struct Response: pub Type {
     body: Bytes,
 }
 
--- The header block ends at a bare CR, which is not consumed: `header_line` is repeated by `many0`, so the parser that stops it has to leave the terminator for the caller to read.
+-- | The header block ends at a bare CR, which is not consumed: `header_line` is repeated by `many0`, so the parser that stops it has to leave the terminator for the caller to read.
 let guard_header: Parse({}) =
     let next = Parse/peek!;
     match next
@@ -148,7 +148,7 @@ let content_length_of(headers: List({Str, Str})) -> Option(Nat) =
     | none() => Option/none()
     end;
 
--- A response with a `Content-Length` is that many bytes, clamped by `Parse/take` to what actually arrived; one without is everything the peer sent.
+-- | A response with a `Content-Length` is that many bytes, clamped by `Parse/take` to what actually arrived; one without is everything the peer sent.
 let body_parser(headers: List({Str, Str})) -> Parse(Bytes) =
     match content_length_of(headers) | some(n) => Parse/take(n) | none() => Parse/rest end;
 
@@ -163,7 +163,7 @@ pub let decode: Parse(Response) =
 pub let header(resp: Response, name: Str) -> Option(Str) =
     header_lookup(resp.headers, name);
 
--- One exchange: connect as the request says, send it whole, read the reply to the close, decode. A failure on the wire is `net`; a reply the decoder refuses is `malformed`.
+-- | One exchange: connect as the request says, send it whole, read the reply to the close, decode. A failure on the wire is `net`; a reply the decoder refuses is `malformed`.
 pub let perform(request: Request) -> Try(Async, Error, Response) =
     let open =
         match request.tls
