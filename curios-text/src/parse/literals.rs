@@ -163,9 +163,31 @@ pub(super) fn parse_string_chunk<'a>() -> Parser<'a, String> {
             .or(take_exact("r").map(|()| "\r".to_string()))
             .or(take_exact("\\").map(|()| "\\".to_string()))
             .or(take_exact("\"").map(|()| "\"".to_string()))
-            // An unrecognized escape is not an error: the backslash and the following character both stand for themselves, so e.g. `\%` in source yields the two literal characters `\` and `%`.
+            .or(parse_unicode_escape().map(|char| char.to_string()))
+            // An unrecognized escape is not an error: the backslash and the following character both stand for themselves, so e.g. `\%` in source yields the two literal characters `\` and `%`. `\u` alone is one of them; only `\u{` is reserved, above.
             .or(take_n(1).map(|char| format!("\\{char}"))),
     ))
+}
+
+/// The braced Unicode escape both literal forms share: `\u{…}` with one to six hex digits naming a scalar — a surrogate, a value past `U+10FFFF`, an empty brace or a stray character is refused. It is tried only once `\u{` is read, so the brace is what reserves the form: in a string `\u` before anything else still stands for itself, and the only source this changes the meaning of is source that spelled `\u{` literally, which none did.
+///
+/// The printer never writes one back: a scalar prints as itself, so `"\u{65}"` and `"e"` are one literal with one canonical spelling, and `curios format` turns a written escape into the character it names.
+fn parse_unicode_escape<'a>() -> Parser<'a, char> {
+    take_exact("u{").and_keep(
+        take_while(|char: char| char.is_ascii_hexdigit())
+            .flat_map(|digits| {
+                let scalar = (1..=6)
+                    .contains(&digits.len())
+                    .then(|| u32::from_str_radix(digits, 16).ok())
+                    .flatten()
+                    .and_then(char::from_u32);
+                match scalar {
+                    Some(char) => pure(char),
+                    None => fail("\\u{...} takes one to six hex digits naming a Unicode scalar"),
+                }
+            })
+            .and_drop(take_exact("}")),
+    )
 }
 
 pub(super) fn parse_char_value<'a>() -> Parser<'a, char> {
@@ -177,6 +199,7 @@ pub(super) fn parse_char_value<'a>() -> Parser<'a, char> {
                 .or(take_exact("r").map(|_| '\r'))
                 .or(take_exact("\\").map(|_| '\\'))
                 .or(take_exact("'").map(|_| '\''))
+                .or(parse_unicode_escape())
                 .or(fail("Unknown char escape sequence")),
         )
         .or(

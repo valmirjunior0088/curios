@@ -99,7 +99,7 @@ A character literal contains one Unicode scalar value or one supported escape. I
 '\''
 ```
 
-Character escapes are `\n`, `\t`, `\r`, `\\`, and `\'`. An unrecognized escape in a character literal is a parse error.
+Character escapes are `\n`, `\t`, `\r`, `\\`, `\'`, and `\u{…}` with one to six hexadecimal digits naming a Unicode scalar value — `'\u{301}'` is the combining acute accent, which no keyboard types on its own. A surrogate, a value past `U+10FFFF`, or a malformed brace is a parse error, as is any other unrecognized escape in a character literal.
 
 A string literal has type `Str`.
 
@@ -108,7 +108,7 @@ A string literal has type `Str`.
 "first\nsecond"
 ```
 
-String escapes are `\n`, `\t`, `\r`, `\\`, and `\"`. An unrecognized escape in a string literal is not an error: the backslash and the following character both stand for themselves, so `"\%"` is the two-character string `\%`. This is unlike a character literal, where an unrecognized escape is a parse error.
+String escapes are `\n`, `\t`, `\r`, `\\`, `\"`, and `\u{…}` as in a character literal. An unrecognized escape in a string literal is not an error: the backslash and the following character both stand for themselves, so `"\%"` is the two-character string `\%`, and so is `"\u"` — only the brace reserves the Unicode form, and a malformed `\u{…}` is a parse error. This is unlike a character literal, where every unrecognized escape is a parse error.
 
 `Str` stores certified UTF-8 bytes. Its logical length, indexing, slicing, folding, and search operations count Unicode scalar values (`Char`), not bytes or grapheme clusters.
 

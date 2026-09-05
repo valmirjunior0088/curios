@@ -178,6 +178,68 @@ fn unrecognized_string_escape_is_literal_backslash_and_char() {
 }
 
 #[test]
+fn a_braced_unicode_escape_names_a_scalar_in_a_string() {
+    // `\u{…}` is the one way to spell a scalar without pasting it; a combining mark is the case that needs it.
+    for (source, expected) in [
+        ("\"\\u{65}\"", "e"),
+        ("\"e\\u{301}\"", "e\u{301}"),
+        ("\"\\u{1F600}\"", "😀"),
+        ("\"\\u{0}\"", "\0"),
+    ] {
+        assert_eq!(
+            source.parse::<Term>().unwrap(),
+            Term::from(Subterm::Syn(Syn::Str(expected.to_string()))),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_braced_unicode_escape_names_a_scalar_in_a_character() {
+    assert_eq!(
+        "'\\u{301}'".parse::<Term>().unwrap(),
+        Term::from(Subterm::Syn(Syn::Char('\u{301}')))
+    );
+    // The printer writes the scalar itself, so the escape has no round trip of its own: one scalar, one spelling.
+    assert_eq!("'\\u{65}'".parse::<Term>().unwrap().to_string(), "'e'");
+    assert_eq!("\"\\u{65}\"".parse::<Term>().unwrap().to_string(), "\"e\"");
+}
+
+#[test]
+fn a_backslash_u_without_a_brace_still_stands_for_itself() {
+    // Only the brace reserves the form: the break is confined to source that spelled `\u{`.
+    for (source, expected) in [
+        ("\"\\u\"", "\\u"),
+        ("\"\\ux\"", "\\ux"),
+        ("\"\\u {41}\"", "\\u {41}"),
+    ] {
+        assert_eq!(
+            source.parse::<Term>().unwrap(),
+            Term::from(Subterm::Syn(Syn::Str(expected.to_string()))),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_malformed_braced_escape_is_refused() {
+    // Once `\u{` is read the form is committed: an empty brace, a non-hex digit, a surrogate, a value past the last scalar, a seventh digit, or a missing brace is the diagnosis rather than a fallback, in a string and in a character alike.
+    for source in [
+        "\"\\u{}\"",
+        "\"\\u{zz}\"",
+        "\"\\u{D800}\"",
+        "\"\\u{110000}\"",
+        "\"\\u{0000041}\"",
+        "\"\\u{41\"",
+        "'\\u{}'",
+        "'\\u{D800}'",
+        "'\\u{41'",
+    ] {
+        assert!(source.parse::<Term>().is_err(), "{source}");
+    }
+}
+
+#[test]
 fn char_literal_multi_char_is_error() {
     assert!("'ab'".parse::<Term>().is_err());
 }
