@@ -12,7 +12,7 @@ extern "C" {
     fn harness_run(config: Object) -> Promise;
 }
 
-/// Run a compiled program in the browser. `hooks` is an optional `{ onStdout?, onStderr?, foreign? }` object — `onStdout`/`onStderr` are per-write `Uint8Array` callbacks, `foreign` implements the program's own `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`). The promise resolves to `{ stdout, stderr, exitCode, trap }`.
+/// Run a compiled program in the browser. `hooks` is an optional `{ onStdout?, onStderr?, foreign? }` object — `onStdout`/`onStderr` are per-write `Uint8Array` callbacks, `foreign` implements the program's own `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`). The promise resolves to `{ stdout, stderr, exitCode, trap }` — `trap` is `null` unless the program was stopped, and then the reason: `panicked: …` with the compiler's sentence for a refused computation, or the engine's own text for an engine trap.
 #[wasm_bindgen]
 pub fn run(program: &[u8], hooks: JsValue) -> Promise {
     let config = abi();

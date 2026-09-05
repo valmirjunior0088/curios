@@ -10,6 +10,13 @@ export class ExitSignal extends Error {
   }
 }
 
+/** Thrown by the `panic` import — the compiler's own refusal, an overflow or a read past the end — to unwind the wasm stack with the sentence the program handed over. Surfaces as the run's `trap`, prefixed `panicked:` exactly as the native runtime prints it. */
+export class PanicSignal extends Error {
+  constructor(message) {
+    super(`panicked: ${message}`);
+  }
+}
+
 /**
  * Run a compiled program. `config` carries:
  * - `program`, `bridge`: the module bytes (the program from `compile`, the bridge from `bridge_bytes`);
@@ -193,6 +200,9 @@ export async function run(config) {
     exit: (code) => {
       throw new ExitSignal(code);
     },
+    panic: (message) => {
+      throw new PanicSignal(new TextDecoder().decode(decodeBytes(message)));
+    },
   };
 
   const concat = (chunks) => {
@@ -229,6 +239,11 @@ export async function run(config) {
   } catch (error) {
     if (error instanceof ExitSignal) {
       return { ...result(), exitCode: error.code };
+    }
+
+    // A panic is a trap that says why: its message is the whole report, where an engine trap is rendered as the engine spells it.
+    if (error instanceof PanicSignal) {
+      return { ...result(), exitCode: null, trap: error.message };
     }
 
     return { ...result(), exitCode: null, trap: String(error) };

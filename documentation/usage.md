@@ -40,6 +40,8 @@ curios run serve --port 8080
 
 Everything from the target onward is collected verbatim, hyphens included, so a program's own flags never collide with the compiler's — which is also why every `curios` flag must precede the subcommand.
 
+A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` past its carrier and where larger values live, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running — followed by the wasm frames where the build kept their names.
+
 `compile` writes its executable beside you, named after the executable it built or after the input file's stem; `-o`/`--output <PATH>` names it something else, and is required when there is no stem to take a name from.
 
 A file argument brings no project with it — no manifest, no dependencies, not even the library of the package you are standing in. That is deliberate: project scope is reachable only through something a manifest declares, so a scratch file cannot quietly acquire one. When a scratch program does want the library, one `[[executables]]` line gives it one.
