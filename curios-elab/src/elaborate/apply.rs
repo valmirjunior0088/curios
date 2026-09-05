@@ -90,6 +90,8 @@ pub(super) fn insert_auto_argument(
                 )
             })?
             .unwrap_or_else(|| {
+                // Whether the slot is a bound or a value is decided here, where the sort can still be asked, and kept on the birth record for the report an unsolved one becomes.
+                let proposition = crate::is_prop(context, type_).unwrap_or(false);
                 context.fresh_metavar(
                     type_.clone(),
                     origin.span(),
@@ -97,6 +99,7 @@ pub(super) fn insert_auto_argument(
                         func: func.to_string(),
                         binder: binder.clone(),
                     },
+                    proposition,
                 )
             })),
         Plicity::Witness => {

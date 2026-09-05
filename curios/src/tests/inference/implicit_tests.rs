@@ -185,3 +185,21 @@ fn an_implicit_solves_in_an_arm_that_specializes_the_hypothesis_it_names() {
         b"9"
     );
 }
+
+#[test]
+fn an_undetermined_value_implicit_is_reported_as_undetermined_not_undischarged() {
+    // `n` is a `Nat`, not a proposition: nothing about it was ever an obligation, so the report says nothing determined it and shows its type, rather than claiming nothing discharged `Nat` — which is the wording a *bound* gets, and names a fault a reader cannot find here.
+    let source = r#"
+        use /std/{Nat, Handle};
+        let pad(@n: Nat, x: Nat) -> Nat = x;
+        /std/print(Nat/to_str(pad(1)))
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("implicit argument 'n' of '/pad' was not inferred")
+            && report.contains("no argument or expected type determined it (its type is Nat)")
+            && !report.contains("nothing discharged"),
+        "the report should say nothing determined the value, got: {report}"
+    );
+}

@@ -1169,12 +1169,12 @@ fn root_blocker_error(
     }
 
     let (id, origin, span) = root?;
-    let bound = context
+    let (bound, proposition) = context
         .metavar_entry(id)
-        .map(|entry| entry.result.clone())?;
+        .map(|entry| (entry.result.clone(), entry.proposition))?;
 
     // Only a *proposition* is a bound. An implicit whose type is a sort is a type argument — `@A: Type` — and there is nothing it could have discharged, so "nothing discharged Type" would name an obligation the author never had while burying the postponement that actually explains the goal. Report the root only where the root reads as one.
-    if !is_prop(context, &bound).unwrap_or(false) {
+    if !proposition {
         return None;
     }
 
@@ -1183,6 +1183,7 @@ fn root_blocker_error(
             origin.func,
             origin.binder,
             resolved_for_display(context, &bound),
+            true,
         )
         // The blocker's own occurrence rides inside a candidate the reducer built, which need not have kept a span; the waiting goal's origin is then the nearest honest place to point.
         .at_opt(span.or(fallback)),

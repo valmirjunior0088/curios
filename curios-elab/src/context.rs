@@ -1163,15 +1163,19 @@ impl Context {
         self.solutions.seed_floor(floor);
     }
 
-    /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns the metavariable term carrying the *call site's* span and the insertion provenance (which rides on the node; see [`Metavar::origin`]).
+    /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns the metavariable term carrying the *call site's* span and the insertion provenance (which rides on the node; see [`Metavar::origin`]). `proposition` is whether `result` is one, decided by the caller, which has the sort in hand; it is kept on the birth record for the unsolved report, which cannot ask.
     pub(crate) fn fresh_metavar(
         &mut self,
         result: Term,
         span: Option<Span>,
         origin: ImplicitOrigin,
+        proposition: bool,
     ) -> Term {
-        self.fresh_metavar_with(result, span, MetavarOrigin::Implicit(origin))
-            .1
+        let (id, metavar) = self.fresh_metavar_with(result, span, MetavarOrigin::Implicit(origin));
+        if proposition {
+            self.solutions.mark_proposition(id);
+        }
+        metavar
     }
 
     /// Mint a metavariable for an omitted `use` argument — like [`Context::fresh_metavar`] but carrying witness provenance, and returning the id so the caller can register the resolution goal.

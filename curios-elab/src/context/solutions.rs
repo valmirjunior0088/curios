@@ -21,6 +21,8 @@ pub(crate) struct MetaEntry {
     pub solution: Option<Term>,
     /// Ordinary inference holes may be solved by conversion. Recursive elaboration slots are filled only by the owning `rec` elaborator; conversion treats an unfilled slot as a blocking dependency.
     pub kind: MetaKind,
+    /// Whether `result` is a proposition, decided once where an omitted implicit is minted. It is what tells a *bound* nothing discharged — `Nat/Lt(i, n)`, the whole of why a call was refused — from a type argument nothing determined, `@T: Type`, which never was an obligation; the report reads differently for the two, and zonk, which raises it, holds the context immutably and cannot ask the sort itself.
+    pub proposition: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,7 +133,15 @@ impl Solutions {
             result,
             solution: None,
             kind,
+            proposition: false,
         });
+    }
+
+    /// Record that `id`'s `result` is a proposition. Separate from birth because only the implicit-insertion path knows, and it knows after the sort is asked, not at the mint.
+    pub(crate) fn mark_proposition(&mut self, id: MetavarId) {
+        if let Some(Some(entry)) = self.entries.get_mut(id.0) {
+            entry.proposition = true;
+        }
     }
 
     pub(crate) fn entry(&self, id: MetavarId) -> Option<&MetaEntry> {

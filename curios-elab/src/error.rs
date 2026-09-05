@@ -380,11 +380,12 @@ pub enum Error {
         symbol: String,
         type_: Box<Term>,
     },
-    /// An inserted implicit argument that unification never pinned. Carries the insertion provenance (the applied function and the binder it filled) so the report names the hole instead of a bare metavar id, and the binder's instantiated type — the `bound` nothing discharged — because naming the slot says where the refusal is and naming its type says what was asked for. A decided proposition is the case that needs both: `Has(layout, "sidebr")` is the whole of why the call was refused, and the binder alone reports a refusal the reader cannot act on.
+    /// An inserted implicit argument that unification never pinned. Carries the insertion provenance (the applied function and the binder it filled) so the report names the hole instead of a bare metavar id, and the binder's instantiated type — the `bound` nothing discharged — because naming the slot says where the refusal is and naming its type says what was asked for. A decided proposition is the case that needs both: `Has(layout, "sidebr")` is the whole of why the call was refused, and the binder alone reports a refusal the reader cannot act on. `proposition` is whether `bound` is one: a type argument nothing determined — `@T: Type`, `@n: Nat` — was never an obligation, and reporting it as one discharged by nothing named a fault the author cannot find.
     UninferredImplicit {
         func: String,
         binder: String,
         bound: Box<Term>,
+        proposition: bool,
     },
     /// A settle-synthesized lambda's domain that nothing ever pinned — not the body, not anything the settled type met. Carries only the binder's name: the metavariable is elaboration state the reader cannot see, and the parameter is what they can annotate.
     DomainNeverDetermined {
@@ -909,11 +910,17 @@ impl Error {
         }
     }
 
-    pub(crate) fn uninferred_implicit(func: String, binder: String, bound: Term) -> Self {
+    pub(crate) fn uninferred_implicit(
+        func: String,
+        binder: String,
+        bound: Term,
+        proposition: bool,
+    ) -> Self {
         Self::UninferredImplicit {
             func,
             binder,
             bound: Box::new(bound),
+            proposition,
         }
     }
 

@@ -67,6 +67,7 @@ pub(super) fn elaborate_struct_type(
         let mut tele = struct_decl.arity.clone();
         while let Telescope::Cons(ty, rest) = tele {
             let binder = binder_name(rest.first_hint());
+            let proposition = crate::is_prop(context, &ty).unwrap_or(false);
             let arg = context.fresh_metavar(
                 ty.clone(),
                 term.span(),
@@ -74,6 +75,7 @@ pub(super) fn elaborate_struct_type(
                     func: name.symbol(),
                     binder,
                 },
+                proposition,
             );
             tele = rest.open(&[&arg]);
             resolved.push(arg);
@@ -324,6 +326,7 @@ pub(super) fn resolve_struct_params(
             Some(arg) => check(context, arg, ty.clone())?,
             None => {
                 let binder = binder_name(rest.first_hint());
+                let proposition = crate::is_prop(context, &ty).unwrap_or(false);
                 context.fresh_metavar(
                     ty.clone(),
                     term.span(),
@@ -331,6 +334,7 @@ pub(super) fn resolve_struct_params(
                         func: name.to_string(),
                         binder,
                     },
+                    proposition,
                 )
             }
         };

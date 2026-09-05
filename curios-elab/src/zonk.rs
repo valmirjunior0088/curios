@@ -988,9 +988,9 @@ fn zonk_level(context: &Context, term: &Term) -> Result<Term, Error> {
                 // An unsolved metavariable the *elaborator* minted (an omitted implicit or witness argument) is reported by the binder it filled — the provenance rides on the node itself — not as a bare hole: the user never wrote this metavariable, so a generic "cannot infer" would point at nothing they can see.
                 let error = match origin {
                     MetavarOrigin::Implicit(origin) => {
-                        // The birth record's `result` is the binder's instantiated type — the bound nothing discharged; display it through whatever solutions landed, keeping the raw spelling if holes survive, exactly as the witness branch below does with its goal.
-                        let bound = context
-                            .metavar_entry(*id)
+                        // The birth record's `result` is the binder's instantiated type — the bound nothing discharged, or the type nothing determined, which the record decided at the mint since this walk cannot ask; display it through whatever solutions landed, keeping the raw spelling if holes survive, exactly as the witness branch below does with its goal.
+                        let entry = context.metavar_entry(*id);
+                        let bound = entry
                             .map(|entry| entry.result.clone())
                             .unwrap_or_else(Term::type_ground);
                         let bound = zonk_term(context, &bound).unwrap_or(bound);
@@ -998,6 +998,7 @@ fn zonk_level(context: &Context, term: &Term) -> Result<Term, Error> {
                             origin.func.clone(),
                             origin.binder.clone(),
                             bound,
+                            entry.is_some_and(|entry| entry.proposition),
                         )
                     }
                     MetavarOrigin::Witness(origin) => {

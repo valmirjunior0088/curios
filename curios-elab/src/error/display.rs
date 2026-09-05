@@ -589,11 +589,19 @@ impl fmt::Display for Displayed<'_> {
                 func,
                 binder,
                 bound,
+                proposition,
             } => {
                 let bound = bound.spelled(spelling);
+                // A proposition is a bound, and what was asked for is the fact nothing established. Anything else is a value or a type the arguments and the expectation left undetermined, which is a different fault with a different remedy.
+                let why = match proposition {
+                    true => format!("nothing discharged {bound}"),
+                    false => {
+                        format!("no argument or expected type determined it (its type is {bound})")
+                    }
+                };
                 write!(
                     f,
-                    "implicit argument '{binder}' of '{func}' was not inferred\n  nothing discharged {bound}\n  supply it explicitly: {func}(@...)"
+                    "implicit argument '{binder}' of '{func}' was not inferred\n  {why}\n  supply it explicitly: {func}(@...)"
                 )
             }
             Error::DomainNeverDetermined { binder } => {

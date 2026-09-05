@@ -506,14 +506,18 @@ fn instantiate(
                 };
                 let binder = rest.first_hint().unwrap_or("_").to_string();
                 let arg = match plicity {
-                    Plicity::Implicit => context.fresh_metavar(
-                        ty.clone(),
-                        span.clone(),
-                        ImplicitOrigin {
-                            func: witness.name.symbol(),
-                            binder,
-                        },
-                    ),
+                    Plicity::Implicit => {
+                        let proposition = crate::is_prop(context, &ty).unwrap_or(false);
+                        context.fresh_metavar(
+                            ty.clone(),
+                            span.clone(),
+                            ImplicitOrigin {
+                                func: witness.name.symbol(),
+                                binder,
+                            },
+                            proposition,
+                        )
+                    }
                     Plicity::Witness => {
                         let provenance = WitnessOrigin {
                             func: witness.name.symbol(),
