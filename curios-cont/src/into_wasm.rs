@@ -14,8 +14,6 @@ use {
 mod symbols;
 pub(crate) use symbols::*;
 
-pub(crate) use crate::machine::RowLoad;
-
 mod table;
 use table::*;
 
@@ -108,7 +106,7 @@ pub(crate) enum EmissionData {
     List(Vec<EmissionValueName>),
     Tuple(Vec<EmissionValueName>),
     /// A nominal row's construction, at that row's full width. Emitted as the row's own final struct type rather than an arity-keyed `$tuple/N`, which is what makes every read of it an exact cast.
-    Row(CpsRowId, Vec<EmissionArg>, RowLoad),
+    Row(CpsRowId, Vec<EmissionArg>),
     Closure(EmissionClosureName, Vec<EmissionValueName>),
 }
 

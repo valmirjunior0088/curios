@@ -428,9 +428,12 @@ impl<'a, 'b> Context<'a, 'b> {
                     };
                     self.load_value_instrs(value_name, load)
                 }
-                // The one position whose carrier could not be known upstream. A filler inhabits the slot rather than merely going unread there, so it is built at the carrier the parameter's local is declared as — raw where the analysis raised it, boxed otherwise.
+                // The one position whose carrier could not be known upstream: null, unless the analysis raised the parameter into a register, which has no null and takes its zero.
                 EmissionArg::Filler => {
-                    zero_instrs(param.and_then(|param| self.table().raw_carrier(param)))
+                    match param.and_then(|param| self.table().raw_carrier(param)) {
+                        Some(carrier) => zero_instrs(carrier),
+                        None => null_instrs(),
+                    }
                 }
             });
         }
@@ -889,12 +892,7 @@ pub(crate) fn slot_zero_instrs(slot: CpsSlot) -> Vec<curios_wasm::Instr> {
             vec![curios_wasm::Instr::I32Const { value: 0 }]
         }
         CpsSlot::Flt => vec![curios_wasm::Instr::F32Const { value: 0.0 }],
-        CpsSlot::List | CpsSlot::Closure(_) | CpsSlot::Row(_) => {
-            vec![curios_wasm::Instr::RefNull {
-                heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::None),
-            }]
-        }
-        CpsSlot::Opaque => zero_instrs(None),
+        CpsSlot::List | CpsSlot::Closure(_) | CpsSlot::Row(_) | CpsSlot::Opaque => null_instrs(),
     }
 }
 
@@ -905,14 +903,16 @@ pub(crate) fn null_instrs() -> Vec<curios_wasm::Instr> {
     }]
 }
 
-pub(crate) fn zero_instrs(carrier: Option<Repr>) -> Vec<curios_wasm::Instr> {
+/// Absence in a register: the zero of the carrier, since a register has no null. A packed carrier is small-canonical, so its zero is the empty immediate.
+pub(crate) fn zero_instrs(carrier: Repr) -> Vec<curios_wasm::Instr> {
     match carrier {
-        Some(Repr::Nat | Repr::Int) => vec![curios_wasm::Instr::I32Const { value: 0 }],
-        Some(Repr::Flt) => vec![curios_wasm::Instr::F32Const { value: 0.0 }],
-        Some(Repr::Bin(_) | Repr::List | Repr::Ref) | None => vec![
+        Repr::Nat | Repr::Int => vec![curios_wasm::Instr::I32Const { value: 0 }],
+        Repr::Flt => vec![curios_wasm::Instr::F32Const { value: 0.0 }],
+        Repr::Bin(_) => vec![
             curios_wasm::Instr::I32Const { value: 0 },
             curios_wasm::Instr::RefI31,
         ],
+        Repr::List | Repr::Ref => null_instrs(),
     }
 }
 

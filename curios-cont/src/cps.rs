@@ -718,8 +718,6 @@ pub struct CpsModule {
     /// The nominal rows this module's [`CpsValueExpr::Row`]s belong to, appended by the Ersd door and never removed — a row that loses its last construction is simply an unreferenced entry, so the ids stay stable without tombstones.
     rows: Vec<Option<CpsRow>>,
     entry: Option<CpsFunId>,
-    /// The results of every *head rebuild*: a construction a split pass writes to stand in for the aggregate it took apart, built from the field parameters that replaced it. Its slots are the one place a padded field is *materialized* rather than merely carried — an edge that projected a nullary constructor's absent payload handed the parameter a filler, and the rebuild loads that parameter into the row's typed slot. The emitter reads this set to load such a slot tolerantly, so the filler lands as the slot's null instead of failing the slot's cast. See [`CpsModule::mark_rebuilt`].
-    rebuilt: BTreeSet<CpsValueId>,
 }
 
 /// One nominal row — a variant family or a product schema: its debug name, and the carrier of every slot of its heap type. A family carries its tag at slot zero and a product does not; either way this is the width every [`CpsValueExpr::Row`] naming it is padded to.
@@ -788,18 +786,6 @@ impl CpsModule {
     /// The recorded fields representations, by continuation.
     pub fn field_groups(&self) -> &BTreeMap<CpsContId, Vec<FieldGroup>> {
         &self.field_groups
-    }
-
-    /// Record that `value` is a head rebuild — a row a split pass reconstructs from the field parameters that replaced it.
-    ///
-    /// Why a rebuild needs saying: a filler is "no value", and every destination but one materializes it as an inhabitant nothing reads — a raw zero, or the boxed `i31` a call or a return carries. A rebuild is the exception, because it *reads* the field into the row's typed slot, and the slot's null-admitting cast refuses an `i31`. So a `Cmd/none` joined with a `Cmd/perform` trapped the moment the join rebuilt its closure slot, a cast failure far from the split that padded the edge. Every other construction keeps its exact cast — a value that fails it there is a compiler fault worth trapping on — which is why the tolerance is keyed to this set and not to the row.
-    pub fn mark_rebuilt(&mut self, value: CpsValueId) {
-        self.rebuilt.insert(value);
-    }
-
-    /// Whether `value` is a head rebuild — see [`CpsModule::mark_rebuilt`].
-    pub fn is_rebuilt(&self, value: CpsValueId) -> bool {
-        self.rebuilt.contains(&value)
     }
 
     /// Register a nominal row and hand back its identity. The Ersd door is the only caller; see [`CpsValueExpr::Row`].
