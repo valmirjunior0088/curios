@@ -21,7 +21,13 @@ mod lint;
 use lint::*;
 
 mod scoped;
-use scoped::*;
+
+// What the documentation record reads: the tables resolution built, and the visibility functions the lowering resolves a name with, so a page's referent is looked up by the compiler's rule and no other.
+pub(crate) use {
+    context::ModuleInfo,
+    interface::{PublicInterface, visible_binding, visible_child},
+    scoped::Scoped,
+};
 
 #[cfg(test)]
 mod binding_tests;
@@ -164,6 +170,16 @@ impl PreparedText {
 
     pub fn core(&self) -> &curios_core::Module {
         &self.core
+    }
+
+    /// Each module's direct interface — every declared label with its visibility.
+    pub(crate) fn table(&self) -> &BTreeMap<Qualifier, ModuleInfo> {
+        &self.table
+    }
+
+    /// Each module's export view: its public names, each pointing at the canonical declaration site.
+    pub(crate) fn public(&self) -> &BTreeMap<Qualifier, PublicInterface> {
+        &self.public
     }
 
     /// The `foreign` rows this unit declares.

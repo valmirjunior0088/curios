@@ -5,6 +5,7 @@
 use {
     super::Printer,
     std::{
+        cell::RefCell,
         fmt::{self, Write},
         mem,
     },
@@ -12,6 +13,10 @@ use {
 
 struct PrinterState<'a, 'b> {
     formatter: &'a mut fmt::Formatter<'b>,
+    /// Bytes emitted so far, which is what an [`Annotation`] measures its range in.
+    written: usize,
+    /// Every [`Printer::Named`] emitted, with where it landed — empty for every renderer but [`render_annotated`].
+    annotations: Vec<Annotation>,
     indent_step: usize,
     indent_by: usize,
     should_indent: bool,
@@ -37,6 +42,8 @@ impl<'a, 'b> PrinterState<'a, 'b> {
     ) -> Self {
         Self {
             formatter,
+            written: 0,
+            annotations: Vec::new(),
             indent_step,
             indent_by: 0,
             should_indent: true,
@@ -95,6 +102,7 @@ impl<'a, 'b> PrinterState<'a, 'b> {
             if self.should_indent && char != '\n' {
                 for _ in 0..self.indent_by {
                     self.formatter.write_str(" ")?;
+                    self.written += 1;
                     self.column += 1;
                 }
 
@@ -102,6 +110,7 @@ impl<'a, 'b> PrinterState<'a, 'b> {
             }
 
             self.formatter.write_char(char)?;
+            self.written += char.len_utf8();
 
             if char == '\n' {
                 self.should_indent = true;
@@ -143,6 +152,14 @@ pub struct Owed {
     pub own_line: bool,
     /// The text, spelled as it should appear — including any leading space that separates it from what it rides.
     pub text: String,
+}
+
+/// One [`Printer::Named`] as rendered: the byte range of the output it occupies, and the name it carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Annotation {
+    pub start: usize,
+    pub end: usize,
+    pub name: String,
 }
 
 /// One node of [`fits`]'s walk, with the facts about its surroundings its verdict depends on.
@@ -236,7 +253,7 @@ fn fits(
         }
 
         match &mut *node {
-            Printer::Text(text) => {
+            Printer::Text(text) | Printer::Named(text) => {
                 for char in text.chars() {
                     if char == '\n' {
                         return true;
@@ -333,7 +350,7 @@ pub fn run_printer<'b, 'c>(
     formatter: &'b mut fmt::Formatter<'c>,
     indent_step: usize,
 ) -> Result<(), fmt::Error> {
-    run(printer, formatter, indent_step, None, Vec::new())
+    run(printer, formatter, indent_step, None, Vec::new()).map(|_| ())
 }
 
 /// [`run_printer`] against a line width: each [`group`](crate::group) renders flat only when its flat form fits what remains of the line. The width is a target, not a guarantee — content with no break point still overruns.
@@ -343,7 +360,7 @@ pub fn run_printer_within<'b, 'c>(
     indent_step: usize,
     width: usize,
 ) -> Result<(), fmt::Error> {
-    run(printer, formatter, indent_step, Some(width), Vec::new())
+    run(printer, formatter, indent_step, Some(width), Vec::new()).map(|_| ())
 }
 
 /// [`run_printer_within`], additionally placing `owed` — source-derived text the document does not carry, each paired with the offset it was written at, ascending.
@@ -356,7 +373,7 @@ pub fn run_printer_placing<'b, 'c>(
     width: usize,
     owed: Vec<Owed>,
 ) -> Result<(), fmt::Error> {
-    run(printer, formatter, indent_step, Some(width), owed)
+    run(printer, formatter, indent_step, Some(width), owed).map(|_| ())
 }
 
 fn run<'b, 'c>(
@@ -365,7 +382,7 @@ fn run<'b, 'c>(
     indent_step: usize,
     width: Option<usize>,
     owed: Vec<Owed>,
-) -> Result<(), fmt::Error> {
+) -> Result<Vec<Annotation>, fmt::Error> {
     let mut state = PrinterState::new(formatter, indent_step, width);
     state.owed = owed;
     let mut stack = Vec::from([Step::Print(printer, false)]);
@@ -375,6 +392,15 @@ fn run<'b, 'c>(
         match step {
             Step::Print(mut printer, flat) => match &mut printer {
                 Printer::Text(text) => state.write(text)?,
+                Printer::Named(text) => {
+                    let start = state.written;
+                    state.write(text)?;
+                    state.annotations.push(Annotation {
+                        start,
+                        end: state.written,
+                        name: mem::take(text),
+                    });
+                }
                 // Reversed, because the stack pops last-in first.
                 Printer::Concat(parts) => {
                     stack.extend(
@@ -484,5 +510,42 @@ fn run<'b, 'c>(
         state.write(&suffix)?;
     }
 
-    Ok(())
+    Ok(state.annotations)
+}
+
+/// Render `printer` to a string at `width`, with every [`Printer::Named`] and the byte range it landed on — what a consumer that links names reads, since the layout is decided here and nowhere else, so nothing has to re-lex the text to find a name in it.
+pub fn render_annotated(
+    printer: Printer,
+    indent_step: usize,
+    width: usize,
+) -> (String, Vec<Annotation>) {
+    struct Rendering {
+        printer: RefCell<Option<Printer>>,
+        indent_step: usize,
+        width: usize,
+        annotations: RefCell<Vec<Annotation>>,
+    }
+    impl fmt::Display for Rendering {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            let printer = self.printer.borrow_mut().take().expect("rendered once");
+            let annotations = run(
+                printer,
+                formatter,
+                self.indent_step,
+                Some(self.width),
+                Vec::new(),
+            )?;
+            *self.annotations.borrow_mut() = annotations;
+            Ok(())
+        }
+    }
+
+    let rendering = Rendering {
+        printer: RefCell::new(Some(printer)),
+        indent_step,
+        width,
+        annotations: RefCell::new(Vec::new()),
+    };
+    let text = rendering.to_string();
+    (text, rendering.annotations.into_inner())
 }

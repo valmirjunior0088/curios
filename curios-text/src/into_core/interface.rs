@@ -11,7 +11,7 @@ use {
 // The export view of a module: public names only, each pointing at the canonical declaration site. Built to a fixed point before any body is elaborated.
 #[derive(Clone)]
 #[curios_archive::archived]
-pub(super) struct PublicInterface {
+pub(crate) struct PublicInterface {
     #[archived_with(crate::OrderedMap)]
     pub children: HashMap<String, Entry>,
     #[archived_with(crate::OrderedMap)]
@@ -29,7 +29,7 @@ impl PublicInterface {
 
 #[derive(Clone)]
 #[curios_archive::archived]
-pub(super) struct Entry {
+pub(crate) struct Entry {
     pub target: Qualifier,
     /// The nominal declaration whose representation this export exposes. Kept distinct from `target` so re-exports cannot manufacture representation visibility and aliases can inherit it during the post-lowering audit.
     pub representation: Option<Qualifier>,
@@ -164,7 +164,7 @@ fn widen(
 }
 
 /// The target of `parent`'s child module `label` as seen from `consumer`, or `None` when it is absent or out of view.
-pub(super) fn visible_child(
+pub(crate) fn visible_child(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
     consumer: &Qualifier,
@@ -185,7 +185,7 @@ pub(super) fn visible_child(
 }
 
 /// The target of `parent`'s binding `label` as seen from `consumer`, or `None` when it is absent or out of view.
-pub(super) fn visible_binding(
+pub(crate) fn visible_binding(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
     consumer: &Qualifier,

@@ -7,6 +7,7 @@ mod codegen;
 mod concepts;
 mod corpus;
 mod derive;
+mod document;
 mod effects;
 mod erasure;
 // The fixpoint probe reads the per-pass spans `curios_cont::optimize` carries only under `curios-profile`'s `enabled` feature, reached through this crate's `profile` feature as `churn` is.

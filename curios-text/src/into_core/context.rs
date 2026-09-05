@@ -165,7 +165,7 @@ impl ChildInfo {
 
 #[derive(Clone)]
 #[curios_archive::archived]
-pub(super) struct ModuleInfo {
+pub(crate) struct ModuleInfo {
     #[archived_with(crate::OrderedMap)]
     children: HashMap<String, ChildInfo>,
     #[archived_with(crate::OrderedMap)]
@@ -213,7 +213,7 @@ impl ModuleInfo {
         Ok(())
     }
 
-    pub(super) fn get_child(&self, label: &str) -> Option<bool> {
+    pub(crate) fn get_child(&self, label: &str) -> Option<bool> {
         self.children.get(label).copied().map(ChildInfo::is_public)
     }
 
@@ -224,7 +224,7 @@ impl ModuleInfo {
             .is_some_and(ChildInfo::is_opaque_constructor_namespace)
     }
 
-    pub(super) fn get_binding(&self, label: &str) -> Option<bool> {
+    pub(crate) fn get_binding(&self, label: &str) -> Option<bool> {
         self.bindings.get(label).copied()
     }
 

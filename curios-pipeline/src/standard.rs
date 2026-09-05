@@ -167,6 +167,22 @@ where
     )
 }
 
+/// The standard scope with nothing compiled on top, handed to `then` as the prelude and the units produced in order — for a reader of what the fold established, such as a query answering from the last unit's own tables. The same fold [`check_units_with_prelude`] runs; nothing executes.
+pub fn with_units<P, T>(
+    budget: u64,
+    units: &[curios_text::RootSource],
+    cache: Option<&dyn Cache>,
+    progress: P,
+    then: impl FnOnce(&Unit, &[Unit]) -> Result<T, CompileError>,
+) -> Result<T, CompileError>
+where
+    P: FnMut(Progress<'_>),
+{
+    with_standard_units(budget, units, cache, progress, |prelude, produced, _| {
+        then(prelude, &produced)
+    })
+}
+
 /// The standard scope, assembled once: the fixed prelude, then `units` compiled in the order given against it — what every entry point in this module compiles against — handed to `then` as the prelude, the units produced, and the progress reporter for whatever follows. The one spelling of the scope this module exists to write once; the three callers differ only in what they do with it.
 fn with_standard_units<P, T>(
     budget: u64,

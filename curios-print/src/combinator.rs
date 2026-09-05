@@ -100,6 +100,11 @@ pub fn if_break(flat: impl Into<String>, broken: impl Into<String>) -> Printer {
     }
 }
 
+/// Literal text that names something — see [`Printer::Named`]. Prints exactly as [`pure`] does.
+pub fn named(text: impl Into<String>) -> Printer {
+    Printer::Named(text.into())
+}
+
 /// Note that something written at source offset `offset` begins here — see [`Printer::Mark`]. Zero width and no output.
 pub fn begins(offset: usize) -> Printer {
     Printer::Mark {

@@ -22,6 +22,9 @@ pub use declared::*;
 mod diagnostics;
 pub use diagnostics::*;
 
+mod document;
+pub use document::*;
+
 mod stage;
 pub use stage::*;
 

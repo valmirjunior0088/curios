@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-pub(super) struct Scoped<'a, V> {
+pub(crate) struct Scoped<'a, V> {
     /// What each unit already in scope established, in dependency order. Empty when the unit being lowered is the first and there is nothing beneath it.
     bases: &'a [&'a BTreeMap<curios_utilities::Qualifier, V>],
     own: HashMap<curios_utilities::Qualifier, V>,
@@ -25,7 +25,7 @@ impl<V> Default for Scoped<'_, V> {
 
 impl<'a, V> Scoped<'a, V> {
     /// A map layered over `bases`, in dependency order.
-    pub(super) fn over(bases: &'a [&'a BTreeMap<curios_utilities::Qualifier, V>]) -> Self {
+    pub(crate) fn over(bases: &'a [&'a BTreeMap<curios_utilities::Qualifier, V>]) -> Self {
         Self {
             bases,
             own: HashMap::new(),
@@ -33,7 +33,7 @@ impl<'a, V> Scoped<'a, V> {
     }
 
     /// The unit's own, then its scope's, latest first. A name the unit declares shadows one a base does, and a later unit's shadows an earlier one's — neither can arise, since mount sets are pairwise disjoint, and the rule is stated so the type has an answer rather than a precondition.
-    pub(super) fn get(&self, name: &curios_utilities::Qualifier) -> Option<&V> {
+    pub(crate) fn get(&self, name: &curios_utilities::Qualifier) -> Option<&V> {
         self.own
             .get(name)
             .or_else(|| self.bases.iter().rev().find_map(|base| base.get(name)))

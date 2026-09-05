@@ -15,8 +15,8 @@ use {
     curios_abi::{WireSignature, WireType, stdio},
     curios_num::Natural,
     curios_print::{
-        Printer, begins, fill, flat, group, hard_line, if_break, indent, line, pure, reaches,
-        sep_flat, soft_line,
+        Printer, begins, fill, flat, group, hard_line, if_break, indent, line, named, pure,
+        reaches, sep_flat, soft_line,
     },
     curios_utilities::{Grain, Plicity, Span},
 };
@@ -1041,7 +1041,7 @@ fn print_term_inner(term: Term) -> Printer {
             };
             print_intrinsic_call(name, vec![], args)
         }
-        Subterm::Name(name) => pure(name.join()),
+        Subterm::Name(name) => named(name.join()),
         // Both spell `?`: the written/desugared distinction matters to zonk's reporting, not to how the term reads.
         Subterm::Hole | Subterm::Goal => pure("?"),
         // Never parsed: the witness lowering mints it, and a `satisfy` prints its `;` from the declaration, not from here.
@@ -1963,4 +1963,173 @@ pub(crate) fn print_top_item(item: TopItem) -> Printer {
         TopItem::Foreign(f) => print_top_foreign(f),
         TopItem::Test(t) => print_top_test(t),
     }
+}
+
+// === Declaration heads ==========================================================
+//
+// What a page shows of a declaration: everything before its body, printed from the same tree and by the same printers the formatter uses, so a signature on a page is the signature in the file. Each takes a reference and clones what it prints, since the printers consume what they are handed and a record is built beside the tree rather than from it.
+
+/// The head of a `let` member: its visibility, name and signature, without the body.
+pub(crate) fn print_let_head(item: &TopLet) -> Printer {
+    let signature = match &item.signature {
+        LetSignature::Name {
+            type_: Some(type_), ..
+        } => flat([pure(": "), print_term(type_.clone())]),
+        LetSignature::Name { type_: None, .. } => pure(""),
+        LetSignature::Func { params, output, .. } => {
+            let items = params
+                .iter()
+                .cloned()
+                .map(print_func_sugar_param)
+                .collect::<Vec<_>>();
+            match items.is_empty() {
+                true => flat([pure("()"), pure(" -> "), print_term(output.clone())]),
+                false => group(flat([
+                    telescope(items),
+                    pure(" -> "),
+                    print_term(output.clone()),
+                ])),
+            }
+        }
+    };
+    flat([
+        print_pub(item.vis_pub),
+        pure("let "),
+        pure(item.label.clone()),
+        signature,
+    ])
+}
+
+/// The head of an `induct` member: its visibility, name, parameters and arity, without the cases.
+pub(crate) fn print_induct_head(item: &TopInduct) -> Printer {
+    flat([
+        print_pub(item.vis_pub),
+        pure("induct "),
+        pure(item.label.clone()),
+        print_top_induct_params(item.params.clone()),
+        print_top_induct_arity(item.indices.clone(), item.rep_pub, item.result_sort.clone()),
+    ])
+}
+
+/// One constructor as a page lists it: its label, payload and target, without the bar that introduces it in a declaration.
+pub(crate) fn print_case_head(case: &TopCase) -> Printer {
+    let payload = case
+        .payload
+        .iter()
+        .cloned()
+        .map(|param| {
+            flat([
+                print_plicity(param.plicity),
+                print_field(TupleTypeParam {
+                    label: param.label,
+                    func_params: None,
+                    type_: param.type_,
+                }),
+            ])
+        })
+        .collect();
+    let target = match &case.target {
+        Some(exprs) => flat([
+            pure(": "),
+            listed("(", exprs.iter().cloned().map(print_term).collect(), ")"),
+        ]),
+        None => pure(""),
+    };
+    flat([pure(case.label.clone()), listed("(", payload, ")"), target])
+}
+
+/// The head of a `struct` member: its visibility, name, parameters and sort, without the fields.
+pub(crate) fn print_struct_head(item: &TopStruct) -> Printer {
+    flat([
+        print_pub(item.vis_pub),
+        pure("struct "),
+        pure(item.label.clone()),
+        print_top_induct_params(item.params.clone()),
+        pure(": "),
+        print_pub(item.rep_pub),
+        print_term(item.result_sort.clone()),
+    ])
+}
+
+/// One struct field as a page lists it.
+pub(crate) fn print_struct_field_head(field: &StructField) -> Printer {
+    print_field(field.param.clone())
+}
+
+/// The head of a `concept` member: its visibility, name, parameters and sort, without the fields.
+pub(crate) fn print_concept_head(item: &TopConcept) -> Printer {
+    flat([
+        print_pub(item.vis_pub),
+        pure("concept "),
+        pure(item.label.clone()),
+        print_top_induct_params(item.params.clone()),
+        pure(": "),
+        print_pub(item.rep_pub),
+        print_term(item.result_sort.clone()),
+    ])
+}
+
+/// One concept field as a page lists it: a superclass as `use T`, a method as written, sugar included.
+pub(crate) fn print_concept_field_head(field: &ConceptField) -> Printer {
+    if field.is_super {
+        return flat([pure("use "), print_term(field.type_.clone())]);
+    }
+    match &field.func_params {
+        Some(params) => flat([
+            pure(field.label.clone()),
+            listed(
+                "(",
+                params.iter().cloned().map(print_func_type_param).collect(),
+                ")",
+            ),
+            pure(" -> "),
+            print_term(field.type_.clone()),
+        ]),
+        None => flat([
+            pure(field.label.clone()),
+            pure(": "),
+            print_term(field.type_.clone()),
+        ]),
+    }
+}
+
+/// The head of a `satisfy` member: the keyword, its telescope and the concept application it witnesses, without the body.
+pub(crate) fn print_witness_head(item: &TopWitness) -> Printer {
+    let params = match item.params.is_empty() {
+        true => pure(""),
+        false => flat([
+            pure(" "),
+            group(telescope(
+                item.params
+                    .iter()
+                    .cloned()
+                    .map(print_func_sugar_param)
+                    .collect(),
+            )),
+            pure(" =>"),
+        ]),
+    };
+    let app = match item.args.is_empty() {
+        true => pure(item.concept.join()),
+        false => flat([
+            pure(item.concept.join()),
+            listed(
+                "(",
+                item.args.iter().cloned().map(print_term).collect(),
+                ")",
+            ),
+        ]),
+    };
+    flat([pure("satisfy"), params, pure(" "), app])
+}
+
+/// The head of a `foreign` declaration, which is the whole of it.
+pub(crate) fn print_foreign_head(item: &TopForeign) -> Printer {
+    flat([
+        print_pub(item.vis_pub),
+        pure("foreign "),
+        pure(item.label.clone()),
+        pure(": "),
+        print_wire_signature(item.signature.clone()),
+    ])
 }
