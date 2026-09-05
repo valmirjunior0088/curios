@@ -96,10 +96,10 @@ jobs:
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
-      - name: Build runtime launcher
-        run: cargo x runtime
-      - name: Run cargo doc
-        run: cargo doc --workspace --no-deps --document-private-items
+      - name: Build Rust docs
+        run: cargo x rust-docs
+      - name: Build standard library docs
+        run: cargo x std-docs
 
   wasm:
     name: Browser bundle

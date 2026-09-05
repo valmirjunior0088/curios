@@ -18,7 +18,7 @@ pub(crate) fn root() -> &'static Path {
 }
 
 /// Where cargo puts what it builds, honoring the same override cargo itself honors.
-fn target_directory() -> PathBuf {
+pub(crate) fn target_directory() -> PathBuf {
     match env::var_os("CARGO_TARGET_DIR") {
         Some(directory) => root().join(directory),
         None => root().join("target"),
@@ -206,7 +206,8 @@ fn dep_info_sources(dep_info: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(sources)
 }
 
-fn modified(path: &Path) -> Option<SystemTime> {
+/// When `path` was last written, or `None` for a path that is not there — a recipe deciding whether a filed product is older than what it was made from.
+pub(crate) fn modified(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).ok()?.modified().ok()
 }
 

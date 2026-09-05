@@ -4,7 +4,7 @@
 //!
 //! **The launcher's isolation is the spawn.** `runtime` builds `curios-runtime` in its own `cargo` invocation, exactly as the recipe it replaced did, so workspace feature unification cannot reach it — `curios` enables `curios-runtime/cranelift`, and a launcher built beside it would carry a compiler. `curios/build.rs` embeds what this recipe copies to `curios/.artifacts/<triple>` and refuses to build without it.
 //!
-//! **A recipe that needs the launcher runs `runtime` first, unconditionally.** `build` and `profile` both do, because the compiler they build embeds it. What makes that free to repeat is that `runtime` costs nothing when nothing changed: cargo decides whether the launcher needs rebuilding, and [`file_with_inputs()`](helpers::file_with_inputs) skips the copy when the filed bytes are already the built ones, so a repeated run neither rebuilds nor touches the file `curios/build.rs` watches. It files the launcher's inputs beside it — cargo's dep-info and the lock file — which is what that build script compares the launcher against, and it refreshes the launcher's timestamp when a listed input is newer while the bytes stayed the same, so the staleness warning never outlives the command it names.
+//! **A recipe that needs the launcher runs `runtime` first, unconditionally.** `build`, `profile`, `rust-docs` and `std-docs` all do, because the compiler they build or document embeds it. What makes that free to repeat is that `runtime` costs nothing when nothing changed: cargo decides whether the launcher needs rebuilding, and [`file_with_inputs()`](helpers::file_with_inputs) skips the copy when the filed bytes are already the built ones, so a repeated run neither rebuilds nor touches the file `curios/build.rs` watches. It files the launcher's inputs beside it — cargo's dep-info and the lock file — which is what that build script compares the launcher against, and it refreshes the launcher's timestamp when a listed input is newer while the bytes stayed the same, so the staleness warning never outlives the command it names.
 //!
 //! **The bindings generator is a dependency.** `js` calls `wasm-bindgen-cli-support`, the crate the `wasm-bindgen` command line wraps; why, and what keeps its version honest, is the README's decision.
 //!
@@ -18,6 +18,7 @@ use helpers::*;
 use {
     clap::{Parser, Subcommand},
     std::{
+        fs,
         path::{Path, PathBuf},
         process::{Command, ExitCode},
     },
@@ -61,6 +62,16 @@ enum Recipe {
         about = "Build curios-js for wasm32-unknown-unknown and generate the browser bindings under curios-js/.artifacts/<triple>"
     )]
     Js,
+
+    #[command(
+        about = "Build the launcher, then the workspace's Rust documentation under target/doc, with a root redirect to the compiler's"
+    )]
+    RustDocs,
+
+    #[command(
+        about = "Build the compiler, then the standard library's pages under curios-prelude-archive/.artifacts/documentation from the prelude image it was built with"
+    )]
+    StdDocs,
 
     #[command(about = "Run one compilation under the tracing profiler")]
     Profile {
@@ -125,6 +136,8 @@ fn main() -> ExitCode {
         Recipe::Runtime => runtime(),
         Recipe::Build => build(),
         Recipe::Js => js(),
+        Recipe::RustDocs => rust_docs(),
+        Recipe::StdDocs => std_docs(),
         Recipe::Profile { source } => profile(&source),
         Recipe::Benchmarks { tag } => benchmarks(&tag),
         Recipe::Grammar { arguments } => bridge("grammar", Command::new("npm"), &arguments),
@@ -189,6 +202,66 @@ fn js() -> Result<(), String> {
     bindgen_web(
         &built(BROWSER_TRIPLE, "curios_js.wasm"),
         &artifact("curios-js", BROWSER_TRIPLE),
+    )?;
+
+    Ok(())
+}
+
+/// The one spelling of the rustdoc build: the gate's, the check workflow's and the release's, so a broken intra-doc link fails all three the same way. Private items are documented because these crates state their invariants on `pub(crate)` items, and the root redirect is what makes the tree a site: `target/doc/` has no landing page of its own.
+fn rust_docs() -> Result<(), String> {
+    runtime()?;
+
+    run(
+        cargo(),
+        &[
+            "doc",
+            "--workspace",
+            "--no-deps",
+            "--document-private-items",
+        ],
+    )?;
+
+    let landing = target_directory().join("doc").join("index.html");
+    fs::write(
+        &landing,
+        "<!DOCTYPE html><meta http-equiv=\"refresh\" content=\"0; url=curios/index.html\">\n",
+    )
+    .map_err(|error| format!("{}: {error}", landing.display()))?;
+
+    Ok(())
+}
+
+/// The standard library's pages, rendered by the compiler from the prelude image its own build filed — no sources are read and nothing is compiled twice, since the image already carries the library's record. `build` is what produces both, and costs nothing when nothing changed; the render is skipped the same way, when the landing page is newer than the image and the compiler that reads it, so a repeated run touches nothing. `cargo x clean` removes the pages with every other filed product.
+fn std_docs() -> Result<(), String> {
+    build()?;
+
+    let artifacts = root().join("curios-prelude-archive").join(".artifacts");
+    let image = artifacts.join("prelude.rkyv");
+    let pages = artifacts.join("documentation");
+    let compiler = target_directory().join("release").join("curios");
+
+    if let (Some(rendered), Some(image_at), Some(compiler_at)) = (
+        modified(&pages.join("index.html")),
+        modified(&image),
+        modified(&compiler),
+    ) && rendered >= image_at
+        && rendered >= compiler_at
+    {
+        println!(
+            "{} is newer than the image and the compiler; nothing to render",
+            pages.display()
+        );
+        return Ok(());
+    }
+
+    run(
+        Command::new(&compiler),
+        &[
+            "document",
+            &image.to_string_lossy(),
+            "--output",
+            &pages.to_string_lossy(),
+        ],
     )?;
 
     Ok(())

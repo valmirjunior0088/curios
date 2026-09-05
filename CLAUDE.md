@@ -112,14 +112,15 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 cargo test --workspace --all-targets --all-features
 cargo test --workspace --doc --all-features
-cargo doc --workspace --no-deps --document-private-items
+cargo x rust-docs
 ```
 
-`cargo check` is deliberately absent: `clippy` is the same compilation with more lints. The doctest step is separate because `--all-targets` excludes `--doc`, so nothing above it compiles a documentation example. The documentation build is CI's Documentation job verbatim, and has been red on its own while every step above it was green: rustdoc's lints — a broken intra-doc link above all — are checked by no other step. It carries `--document-private-items` because these crates state their invariants on `pub(crate)` items: without it the step lints the public surface alone, which in this tree is a small fraction of the prose it exists to check. Its denial is `[workspace.lints.rustdoc] all = "deny"` in the root manifest, inherited by every crate through `[lints] workspace = true`, so neither this gate nor CI carries an environment variable that can be forgotten in one of them. Measure a step and name the step; never quote a whole-gate total.
+`cargo check` is deliberately absent: `clippy` is the same compilation with more lints. The doctest step is separate because `--all-targets` excludes `--doc`, so nothing above it compiles a documentation example. The documentation build is `cargo doc --workspace --no-deps --document-private-items` behind one recipe — the check workflow's and the release's spelling as well as this gate's — and has been red on its own while every step above it was green: rustdoc's lints — a broken intra-doc link above all — are checked by no other step. It carries `--document-private-items` because these crates state their invariants on `pub(crate)` items: without it the step lints the public surface alone, which in this tree is a small fraction of the prose it exists to check. Its denial is `[workspace.lints.rustdoc] all = "deny"` in the root manifest, inherited by every crate through `[lints] workspace = true`, so neither this gate nor CI carries an environment variable that can be forgotten in one of them. Measure a step and name the step; never quote a whole-gate total.
 
 ### Additional gates
 
 - Changes to `curios-js` or its dependencies must also pass `cargo x js`.
+- Changes to the standard library's sources, the documentation record or its pages must also pass `cargo x std-docs`, which renders `/std`'s pages from the prelude image the compiler was built with; the check workflow runs it beside `rust-docs`.
 - Changes to `curios-binaryen/build.rs` must verify an empty-cache build and a cache hit from a different Cargo mode or build-script fingerprint.
 - Changes to runtime dependencies must rebuild through `cargo x runtime` and confirm that neither `cranelift-codegen` nor `curios-binaryen` entered its graph — name those crates, since Wasmtime's runtime legitimately pulls the `cranelift-bitset`, `cranelift-bforest` and `cranelift-entity` utility crates.
 - Changes to the bundle format must run the ignored end-to-end test in `curios/tests/bundle.rs` explicitly.

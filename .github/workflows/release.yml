@@ -81,8 +81,8 @@ jobs:
           path: .artifacts/curios-js.tar.gz
           retention-days: 1
 
-  docs:
-    name: Documentation
+  rust-docs:
+    name: Rust documentation
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
@@ -93,35 +93,59 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: docs
+          key: rust-docs
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
 
-      - name: Build runtime launcher
-        run: cargo x runtime
-
       - name: Build docs
-        run: cargo doc --workspace --no-deps
-
-      - name: Add docs root redirect
-        run: echo '<!DOCTYPE html><meta http-equiv="refresh" content="0; url=curios/index.html">' > target/doc/index.html
+        run: cargo x rust-docs
 
       - name: Archive docs
-        run: mkdir -p .artifacts && tar -czf .artifacts/curios-docs.tar.gz -C target/doc .
+        run: mkdir -p .artifacts && tar -czf .artifacts/curios-rust-docs.tar.gz -C target/doc .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: curios-docs
-          path: .artifacts/curios-docs.tar.gz
+          name: curios-rust-docs
+          path: .artifacts/curios-rust-docs.tar.gz
+          retention-days: 1
+
+  std-docs:
+    name: Standard library documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: std-docs
+          cache-directories: |
+            curios/.artifacts
+            curios-binaryen/.artifacts
+
+      - name: Build docs
+        run: cargo x std-docs
+
+      - name: Archive docs
+        run: mkdir -p .artifacts && tar -czf .artifacts/curios-std-docs.tar.gz -C curios-prelude-archive/.artifacts/documentation .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: curios-std-docs
+          path: .artifacts/curios-std-docs.tar.gz
           retention-days: 1
 
   release:
     name: GitHub release
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: [native, wasm, docs]
+    needs: [native, wasm, rust-docs, std-docs]
 
     permissions:
       contents: write
@@ -139,7 +163,8 @@ jobs:
           mv .artifacts/downloads/curios-linux-aarch64/curios .artifacts/curios-linux-aarch64
           mv .artifacts/downloads/curios-macos-aarch64/curios .artifacts/curios-macos-aarch64
           mv .artifacts/downloads/curios-js/curios-js.tar.gz .artifacts/curios-js.tar.gz
-          mv .artifacts/downloads/curios-docs/curios-docs.tar.gz .artifacts/curios-docs.tar.gz
+          mv .artifacts/downloads/curios-rust-docs/curios-rust-docs.tar.gz .artifacts/curios-rust-docs.tar.gz
+          mv .artifacts/downloads/curios-std-docs/curios-std-docs.tar.gz .artifacts/curios-std-docs.tar.gz
 
       # The installer's version is baked in here rather than discovered at run time, so the script a release ships installs that release's binary and a pinned URL stays pinned. The template is rendered to a fresh file rather than edited in place: what ships is a build product, never a mutated checkout.
       - name: Prepare installer
@@ -158,6 +183,7 @@ jobs:
             .artifacts/curios-linux-aarch64 \
             .artifacts/curios-macos-aarch64 \
             .artifacts/curios-js.tar.gz \
-            .artifacts/curios-docs.tar.gz \
+            .artifacts/curios-rust-docs.tar.gz \
+            .artifacts/curios-std-docs.tar.gz \
             .artifacts/checksums.txt \
             .artifacts/install.sh
