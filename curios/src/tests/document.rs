@@ -91,6 +91,22 @@ fn the_standard_library_documents_from_the_archive() {
         ["success", "failure"],
         "a public representation lists its constructors"
     );
+    assert!(!induct.opaque);
+
+    // `pub struct Map(V: Type): Type` exports its name and not its fields, and the record says so rather than leaving an empty member list to be read either way.
+    let map = documentation
+        .modules
+        .iter()
+        .find(|module| module.path.join() == "/std/Map")
+        .and_then(|module| {
+            module
+                .declarations
+                .iter()
+                .find(|declaration| declaration.name == "Map")
+        })
+        .expect("the Map type");
+    assert_eq!(map.kind, Kind::Structure);
+    assert!(map.opaque && map.members.is_empty(), "{map:?}");
 
     // A signature's reference to a declaration of the same unit links within the bundle.
     let pure = result
@@ -207,9 +223,10 @@ fn a_package_documents_its_interface_for_its_consumers() {
         [("circle", "circle(Nat)"), ("square", "square(Nat)")]
     );
     assert_eq!(shape.members[0].prose, Some(vec!["Round.".to_string()]));
+    assert!(!shape.opaque);
     assert!(
-        library.declarations[1].members.is_empty(),
-        "an opaque representation shows no constructors"
+        library.declarations[1].opaque && library.declarations[1].members.is_empty(),
+        "an opaque representation is marked and shows no constructors"
     );
 
     let area = &library.declarations[2];

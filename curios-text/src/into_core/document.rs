@@ -72,6 +72,8 @@ pub struct Declaration {
     pub prose: Option<Vec<String>>,
     /// Constructors, fields or concept methods: present only when the representation is public, so an opaque type shows none.
     pub members: Vec<Member>,
+    /// An inductive, structure or concept whose representation is private to its declaring subtree: no constructor, field, literal or witness of it can be written by a consumer. Stated beside `members` because an empty list cannot say it — a sealed concept still lists its methods, and a public representation can have nothing to list.
+    pub opaque: bool,
     /// A `satisfy` whose body the compiler writes.
     pub derived: bool,
 }
@@ -212,6 +214,7 @@ impl Reader<'_> {
                             ),
                             prose: lines(&member.doc),
                             members: Vec::new(),
+                            opaque: false,
                             derived: false,
                         });
                     }
@@ -239,6 +242,7 @@ impl Reader<'_> {
                             ),
                             prose: lines(&member.doc),
                             members: cases,
+                            opaque: !member.rep_pub,
                             derived: false,
                         });
                     }
@@ -272,6 +276,7 @@ impl Reader<'_> {
                             ),
                             prose: lines(&member.doc),
                             members: fields,
+                            opaque: !member.rep_pub,
                             derived: false,
                         });
                     }
@@ -296,6 +301,7 @@ impl Reader<'_> {
                             ),
                             prose: lines(&member.doc),
                             members: fields,
+                            opaque: !member.rep_pub,
                             derived: false,
                         });
                     }
@@ -314,6 +320,7 @@ impl Reader<'_> {
                             ),
                             prose: lines(&member.doc),
                             members: Vec::new(),
+                            opaque: false,
                             derived: member.body.is_none(),
                         });
                     }
@@ -331,6 +338,7 @@ impl Reader<'_> {
                             ),
                             prose: lines(&declaration.doc),
                             members: Vec::new(),
+                            opaque: false,
                             derived: false,
                         });
                     }
