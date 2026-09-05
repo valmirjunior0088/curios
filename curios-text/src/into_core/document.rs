@@ -202,7 +202,7 @@ impl Reader<'_> {
                             LetSignature::Name { .. } => &[],
                         });
                         page.declarations.push(Declaration {
-                            name: member.label.clone(),
+                            name: member.label.to_string(),
                             kind: Kind::Definition,
                             signature: self.signature(
                                 &qualifier,
@@ -229,7 +229,7 @@ impl Reader<'_> {
                             false => Vec::new(),
                         };
                         page.declarations.push(Declaration {
-                            name: member.label.clone(),
+                            name: member.label.to_string(),
                             kind: Kind::Inductive,
                             signature: self.signature(
                                 &qualifier,
@@ -262,7 +262,7 @@ impl Reader<'_> {
                             false => Vec::new(),
                         };
                         page.declarations.push(Declaration {
-                            name: member.label.clone(),
+                            name: member.label.to_string(),
                             kind: Kind::Structure,
                             signature: self.signature(
                                 &qualifier,
@@ -286,7 +286,7 @@ impl Reader<'_> {
                             .map(|field| self.method(&qualifier, &imports, &binders, field))
                             .collect();
                         page.declarations.push(Declaration {
-                            name: member.label.clone(),
+                            name: member.label.to_string(),
                             kind: Kind::Concept,
                             signature: self.signature(
                                 &qualifier,
@@ -321,7 +321,7 @@ impl Reader<'_> {
                 TopItem::Foreign(declaration) => {
                     if declaration.vis_pub {
                         page.declarations.push(Declaration {
-                            name: declaration.label.clone(),
+                            name: declaration.label.to_string(),
                             kind: Kind::Foreign,
                             signature: self.signature(
                                 &qualifier,
@@ -508,7 +508,7 @@ fn sugar_binders(params: &[FuncSugarParam]) -> HashSet<String> {
     params
         .iter()
         .filter_map(|param| match &param.label {
-            Pattern::Binder(label) => label.clone(),
+            Pattern::Binder(label) => label.as_ref().map(|label| label.to_string()),
             Pattern::Tuple(_) | Pattern::Struct { .. } => None,
         })
         .collect()

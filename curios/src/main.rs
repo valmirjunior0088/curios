@@ -23,8 +23,7 @@ use {
     clap::Parser,
     curios::{
         Linted, Verdicts, archived_documentation, documentation, lint, serve, wonder_diagnostics,
-        wonder_stage,
-        wonder_tests, write_documentation,
+        wonder_stage, wonder_tests, write_documentation,
     },
     curios_package::{Governing, LIBRARY, Target, curate, order, scaffold},
     curios_pipeline::CompileError,
