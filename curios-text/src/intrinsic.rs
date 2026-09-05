@@ -190,7 +190,10 @@ pub enum Intrinsic {
     },
     HandleType,
     Handle(u32),
-    ProcExit(Term),
+    ProcExit {
+        result: Term,
+        code: Term,
+    },
     CellType(Term),
     Cell {
         element: Term,

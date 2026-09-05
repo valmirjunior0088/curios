@@ -784,7 +784,7 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::ListConcat { .. }
             | Intrinsic::ListMap { .. }
             | Intrinsic::Handle(_)
-            | Intrinsic::ProcExit(..)
+            | Intrinsic::ProcExit { .. }
             | Intrinsic::Cell { .. }
             | Intrinsic::CellSet { .. }
             | Intrinsic::CellGet { .. }

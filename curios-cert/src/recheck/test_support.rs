@@ -1622,9 +1622,10 @@ pub(super) fn proof_carrying_unit(exiting: bool) -> Module {
     };
 
     let payload = match exiting {
-        true => Term::intrinsic(Intrinsic::ProcExit(Term::intrinsic(Intrinsic::Nat(
-            Nat::new(0usize),
-        )))),
+        true => Term::intrinsic(Intrinsic::proc_exit(
+            Term::tuple_type_unit(),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+        )),
         false => Term::tuple(Vec::<Term>::new()),
     };
 

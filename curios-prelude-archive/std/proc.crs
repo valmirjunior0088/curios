@@ -10,6 +10,6 @@ pub let env(name: Str) -> Io(Option(Bytes)) =
         | false => Option/none()
         end);
 
--- Unit inside the wrapper, not a caller-chosen type: `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits. At `{}` there is nothing to forge. A branch that exits must still produce a description, so write `let _ = proc/exit(1)!; …` rather than passing the exit off as the value itself.
-pub let exit(code: Nat) -> Io({}) =
+-- The description ends the process and yields whatever the region wanted, so an exiting arm can end a region of any type. Sound because `Io` has no eliminator: nothing takes an `Io(A)` apart, so the value it never produces is never forged.
+pub let exit(@A: Type, code: Nat) -> Io(A) =
     /sys/proc/exit(code);

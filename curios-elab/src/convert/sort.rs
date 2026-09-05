@@ -131,7 +131,7 @@ impl Sort {
                 | Intrinsic::Cell { .. }
                 | Intrinsic::CellGet { .. }
                 | Intrinsic::CellSet { .. }
-                | Intrinsic::ProcExit(..)
+                | Intrinsic::ProcExit { .. }
                 | Intrinsic::Flt(..)
                 | Intrinsic::FltAbs(..)
                 | Intrinsic::FltAdd(..)

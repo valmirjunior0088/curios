@@ -1620,9 +1620,10 @@ pub fn reduce_intrinsic(
         // Every operation the host performs is an `Io`, which is to say a *description*: it denotes one inert value here and becomes a host call only at erasure, where the entrypoint boundary forces the program's description exactly once.
         //
         // These arms used to refuse instead, and the refusal was the type-level half of the effect discipline: a spelling that does not fix a value must not reach a type. It is now the typing that keeps them out — a term of non-`Io` type cannot perform an effect, and an `Io` supports no elimination through which one could reach a type position. So the operands reduce, the node rebuilds, and nothing else follows.
-        Intrinsic::ProcExit(code) => {
+        Intrinsic::ProcExit { result, code } => {
+            let result = reducer.reduce(result.clone())?;
             let code = reducer.reduce(code.clone())?;
-            Ok(Subterm::Intrinsic(Intrinsic::ProcExit(code)))
+            Ok(Subterm::Intrinsic(Intrinsic::proc_exit(result, code)))
         }
         Intrinsic::CellType(elem) => {
             let elem = reducer.reduce(elem.clone())?;

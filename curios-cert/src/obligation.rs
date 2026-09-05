@@ -31,7 +31,7 @@ fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bo
             None => Enter::Descend,
         },
         |state, term, mut children| {
-            let mut partial = matches!(&**term, Subterm::Intrinsic(Intrinsic::ProcExit(..)));
+            let mut partial = matches!(&**term, Subterm::Intrinsic(Intrinsic::ProcExit { .. }));
             if let Subterm::Rec(Rec { group, .. }) = &**term {
                 partial = partial || group_totality(state.0, group) == Totality::Partial;
             }

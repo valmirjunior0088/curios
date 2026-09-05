@@ -225,8 +225,11 @@ pub enum Intrinsic {
     Handle(u32),
     // `(Nat) -> Io({})`: end the process. Like every host operation it denotes an inert description here and becomes a host call only at erasure.
     //
-    // The description's payload is the unit type, not the caller's choice. `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — it is the forgery that is the problem, not the non-return. At `{}` there is nothing to forge, which is the same property `Foreign` has for free by reading its result off an ABI row.
-    ProcExit(Term),
+    // (@A, n : Nat) -> Io(A): the description that ends the process with `n` and yields nothing, at whatever the region wanted. A term that never returns is unsound exactly when it inhabits a type nothing total inhabits, and `Io(A)` is never that type: `Io` has no eliminator, so an inhabitant of `Io(False)` proves nothing — the same fact `IoType` states above and the whole effect discipline rests on. Typing the payload at `{}` was the earlier, stricter answer; it forced every exiting arm to sit in a unit region, and bought nothing the opacity does not already buy.
+    ProcExit {
+        result: Term,
+        code: Term,
+    },
     CellType(Term),
     Cell {
         element: Term,
@@ -512,6 +515,14 @@ impl Intrinsic {
         Self::IoType(result.into())
     }
 
+    /// A `ProcExit` node from a term-shaped result type and exit code.
+    pub fn proc_exit<T: Into<Term>, U: Into<Term>>(result: T, code: U) -> Self {
+        Self::ProcExit {
+            result: result.into(),
+            code: code.into(),
+        }
+    }
+
     /// An `IoPure` node from a term-shaped result type and value.
     pub fn io_pure<T, V>(type_: T, value: V) -> Self
     where
@@ -588,8 +599,7 @@ impl Intrinsic {
             | Intrinsic::BinLen(Grain::X, t)
             | Intrinsic::BinLen(Grain::B, t)
             | Intrinsic::ListType(t)
-            | Intrinsic::IoType(t)
-            | Intrinsic::ProcExit(t) => visit(t),
+            | Intrinsic::IoType(t) => visit(t),
 
             Intrinsic::ByteEql(a, b)
             | Intrinsic::ByteLt(a, b)
@@ -654,7 +664,8 @@ impl Intrinsic {
             | Intrinsic::IoPure {
                 result: a,
                 value: b,
-            } => {
+            }
+            | Intrinsic::ProcExit { result: a, code: b } => {
                 visit(a);
                 visit(b);
             }
@@ -1086,7 +1097,12 @@ impl Intrinsic {
             },
             Intrinsic::HandleType => Intrinsic::HandleType,
             Intrinsic::Handle(token) => Intrinsic::Handle(*token),
-            Intrinsic::ProcExit(code) => Intrinsic::ProcExit(visit.visit_subterm(code)),
+            Intrinsic::ProcExit { result: a, code: b } => {
+                traverse_binary(a, b, visit, |result, code| Intrinsic::ProcExit {
+                    result,
+                    code,
+                })
+            }
             Intrinsic::CellType(a) => Intrinsic::CellType(visit.visit_subterm(a)),
             Intrinsic::Cell {
                 element: a,

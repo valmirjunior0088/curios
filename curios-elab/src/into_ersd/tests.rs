@@ -184,7 +184,7 @@ fn an_exit_seals_the_thunk_that_describes_it() {
     let body = Term::let_(
         &dead,
         Term::tuple_type_unit(),
-        Term::intrinsic(Intrinsic::ProcExit(nat_lit(3))),
+        Term::intrinsic(Intrinsic::proc_exit(Term::tuple_type_unit(), nat_lit(3))),
         nat_lit(7),
     );
     let erased = erase(

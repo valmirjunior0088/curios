@@ -56,9 +56,9 @@ fn env_absent_is_none() {
 
 #[test]
 fn exit_halts_with_code() {
-    // exit traps: it surfaces its code *and* the trailing write never runs.
+    // exit traps: it surfaces its code *and* the trailing write never runs. The result type is supplied because the exit yields whatever its region wants, and a `_` nothing reads wants nothing in particular; an annotation on the binder would instead make it a top-level item with a region of its own.
     let entrypoint = r#"
-        let _ = /std/proc/exit(7)!;
+        let _ = /std/proc/exit(@{}, 7)!;
         let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))!;
         /std/Io/pure(())
         "#
@@ -87,7 +87,7 @@ fn exit_in_local_binding_halts() {
     let entrypoint = r#"
         use /std/{Nat, Str, Io};
         let go(n : std/Nat) -> Io(std/Nat) =
-            let dead = /std/proc/exit(3)!;
+            let dead : {} = /std/proc/exit(3)!;
             Io/pure(n);
         let v = go(1)!;
         let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(std/Nat/to_str(v)))!;
@@ -109,6 +109,39 @@ fn exit_in_local_binding_halts() {
         crate::run_wasm(&module, system, ForeignBindings::empty()).expect("execution succeeded");
 
     assert_eq!(code, 3);
+    assert!(io.output().is_empty());
+}
+
+#[test]
+fn an_exit_ends_a_region_of_any_type() {
+    // `exit` yields whatever its region wants, so an arm that exits ends an `Io(Str)` region without producing a string, and the program exits with the code before the write. It used to be typed at `Io({})`, which refused this arm and forced the `let _ = exit(1)!;` detour in a unit region.
+    let entrypoint = r#"
+        use /std/{Nat, Str, Io};
+        let f(n : Nat) -> Io(Str) =
+            match n
+            | 0 => /std/proc/exit(7)
+            | _ => Io/pure("ok")
+            end;
+        let s = f(0)!;
+        let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes(s))!;
+        /std/Io/pure(())
+        "#
+    .parse::<Entrypoint>()
+    .expect("failed to parse source");
+
+    let (module, _foreigns) = compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let (system, io) = MockHost::builder().build();
+    let code =
+        crate::run_wasm(&module, system, ForeignBindings::empty()).expect("execution succeeded");
+
+    assert_eq!(code, 7);
     assert!(io.output().is_empty());
 }
 

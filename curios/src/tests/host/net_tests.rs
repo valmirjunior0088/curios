@@ -244,7 +244,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     // `double` has no host meaning at all — it's purely an embedder-supplied function, wired up via the store `compile_entrypoint` hands back and exercised end to end through `run_wasm`, not the compiler's own `sys` implementations.
     let source = r#"
         foreign double : (Nat) -> Nat;
-        let _ = /std/proc/exit(double(21)!)!;
+        let _ = /std/proc/exit(@{}, double(21)!)!;
         let _ = std/Io/write(std/Io/stdout, /std/Str/to_bytes("unreachable"))!;
         /std/Io/pure(())
         "#

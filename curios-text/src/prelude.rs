@@ -896,13 +896,19 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
     let mut items = subjects
         .into_iter()
         .map(|(subject, mut ops)| {
-            // `exit` is `Intrinsic::ProcExit` rather than a store row — it traps instead of returning, so no `WireSignature` describes it — but it is a process operation like `args` and `env`, so it is placed by hand in the module its subject already opened. `(n : Nat) -> Io({})`: the result inside the wrapper is unit rather than the caller's choice, because a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — and `{}` is inhabited by `()`, so there is nothing to forge. An `Io`-polymorphic bottom is arguably sound now that no eliminator can extract the result, but it reopens a settled decision for no consumer.
+            // `exit` is `Intrinsic::ProcExit` rather than a store row — it traps instead of returning, so no `WireSignature` describes it — but it is a process operation like `args` and `env`, so it is placed by hand in the module its subject already opened. `(@A : Type, n : Nat) -> Io(A)`: the description yields whatever the region wanted, which is sound because `Io` has no eliminator — an inhabitant of `Io(False)` proves nothing — and is what lets an exiting arm end a region of any type instead of only a unit one.
             if subject == "proc" {
                 ops.push(pub_fn_marked(
                     "exit",
-                    vec![(Plicity::Explicit, "n", nat())],
-                    io_of(unit()),
-                    intrinsic(Intrinsic::ProcExit(name("n"))),
+                    vec![
+                        (Plicity::Implicit, "A", type_()),
+                        (Plicity::Explicit, "n", nat()),
+                    ],
+                    io_of(name("A")),
+                    intrinsic(Intrinsic::ProcExit {
+                        result: name("A"),
+                        code: name("n"),
+                    }),
                 ));
             }
 
