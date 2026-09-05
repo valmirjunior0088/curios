@@ -302,6 +302,35 @@ fn a_malformed_pub_item_is_reported_in_a_program_too() {
     }
 }
 
+/// The unannotated `let` opens the program's tail by design, so a declaration written below it stands where only a term may — and the term grammar says so, rather than the local `let` alternative reporting the keyword it failed to read.
+///
+/// Every term alternative fails at the item head, and the local `let` had consumed the word before its keyword check failed, so it won the furthest-failure tie-break: five heads, one message naming `let`, none naming the word that was actually there or why an item is refused below the tail. The `pub` row is the report `a_malformed_pub_item_is_reported_in_a_program_too` removed from the item loop, returning once the loop had ended.
+#[test]
+fn a_declaration_below_the_tail_is_refused_as_one() {
+    for head in [
+        "mod Foo\nend",
+        "use /std/{Nat};",
+        "pub let y : /std/Nat = 2;",
+        "induct Shape : Type | none() end",
+        "struct P : Type { /std/Nat }",
+        "foreign f : /std/Nat;",
+    ] {
+        let source = format!("let x = 1;\n{head}\nx");
+        let report = source.parse::<Entrypoint>().unwrap_err().format();
+        let word = head.split([' ', '\n']).next().unwrap();
+        assert!(
+            report.contains(&format!("'{word}' begins a declaration, not a term")),
+            "{source:?} reported {report}"
+        );
+        assert!(!report.contains("obtained"), "{source:?} reported {report}");
+        assert!(report.contains("2 |"), "{source:?} reported {report}");
+    }
+    // A `use`-headed form is read by its own parser before the term grammar sees the word, so the refusal reaches none of them.
+    for source in ["f(use x)", "P { use w, a = 1 }", "(use s, v) => v"] {
+        assert!(source.parse::<Term>().is_ok(), "{source:?} stopped parsing");
+    }
+}
+
 /// A keyword mismatch is reported against the word, not against wherever the whitespace after it ended.
 ///
 /// `end` and `and` are habitually written line-final, so reading the word *and* its trailing whitespace before failing put the caret on the next line — the innocent declaration below, or the blank line past the end of the file.

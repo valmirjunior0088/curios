@@ -137,6 +137,14 @@ where
     Parser::new(move |state| parser.parse(state).map_err(|error| error.catch()))
 }
 
+/// Runs the parser and hands its output back at the position it started from, consuming nothing. A positive look-ahead — the dual of [`not_ahead`](crate::not_ahead) — for a grammar that must inspect the next word before choosing among alternatives none of which may be denied their turn at it.
+pub fn look_ahead<'a, T>(parser: Parser<'a, T>) -> Parser<'a, T>
+where
+    T: 'a,
+{
+    Parser::new(move |state| parser.parse(state).map(|(item, _)| (item, state)))
+}
+
 /// Defers building the parser until it is actually run. This is what lets the grammar be recursive: `parse_term`'s alternatives refer to `lazy(parse_term)` instead of calling it eagerly, which would recurse forever while merely *constructing* the parser.
 pub fn lazy<'a, T, F>(f: F) -> Parser<'a, T>
 where

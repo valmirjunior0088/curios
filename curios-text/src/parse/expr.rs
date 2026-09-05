@@ -312,11 +312,24 @@ pub(crate) fn parse_term<'a>() -> Parser<'a, Term> {
 
 pub(super) fn parse_term_inner<'a>() -> Parser<'a, Term> {
     with_span(
-        parse_let()
-            .or(parse_match())
-            .or(parse_choose())
-            .or(parse_func_type())
-            .or(parse_func())
-            .or(parse_infix_expr(0)),
+        refuse_declaration_head().and_keep(
+            parse_let()
+                .or(parse_match())
+                .or(parse_choose())
+                .or(parse_func_type())
+                .or(parse_func())
+                .or(parse_infix_expr(0)),
+        ),
     )
+}
+
+// The reserved words that begin a declaration and can never begin a term, refused ahead of the alternatives above. Left to them, the local `let` read the word as its keyword and failed one token in, which won [`Parser::or`]'s furthest-failure tie-break: a declaration written after the program's tail — after the unannotated top-level `let` that opened it, above all — reported `Expected keyword 'let'`, naming neither the word read nor why an item is refused there. The word is consumed before the failure so it is past the choice point and stays the diagnosis, with the caret after the word as `parse_keyword` places it. `end`, `concept`, `satisfy` and `test` stay out: the first may follow a term and the other three may begin one.
+fn refuse_declaration_head<'a>() -> Parser<'a, ()> {
+    look_ahead(take_while(is_identifier_char)).flat_map(|head| match head {
+        "mod" | "use" | "pub" | "induct" | "struct" | "foreign" => take_while(is_identifier_char)
+            .and_keep(fail(format!(
+                "'{head}' begins a declaration, not a term; every declaration precedes the program's final term, and an unannotated top-level 'let' opens that term"
+            ))),
+        _ => pure(()),
+    })
 }
