@@ -1,0 +1,55 @@
+-- A flag one fiber raises and another parks on: the one park a program may take that waits on no handle and no timer. `notify` raises it and wakes whoever is waiting; `wait` parks until it is raised and lowers it on the way out, so a run of `notify`s between two `wait`s is one wake, and a `notify` before anyone waits is kept rather than lost. That is exactly what an event loop with a queue beside it needs — "park until something was pushed" — and it is edge-triggered on purpose: a level would make a loop that drained the queue and waited again spin on the flag it had just consumed.
+--
+-- Built over the suspension `Async` keeps private, in the shape of `Future`: a `Future` is fulfilled once and answers a value, and this answers nothing and is raised any number of times. It is public where `Future` is not because a program has a use for it — the loop above — while completing someone else's future is scheduler plumbing.
+use /std/{List, Cell, Io, Async};
+use /std/Async/{Waker};
+
+induct State: Type
+| idle(List(Waker))
+| raised()
+end
+
+pub struct Signal: Type {
+    Cell(State),
+}
+
+pub let new() -> Io(Signal) =
+    let cell = Cell/new(State/idle([]))!;
+    Io/pure(Signal { cell });
+
+let wake_all(ws: List(Waker)) -> Io({}) =
+    match ws
+    | [] => Io/pure(())
+    | [w, ..more] =>
+        let _ = Waker/wake(w)!;
+        wake_all(more)
+    end;
+
+-- Raise the flag and wake every fiber parked on it. Raising a raised flag does nothing, so a burst of notifications costs one wake.
+pub let notify(s: Signal) -> Io({}) =
+    let state = Cell/get(s.0)!;
+    match state
+    | raised() => Io/pure(())
+    | idle(ws) =>
+        let _ = Cell/set(s.0, State/raised())!;
+        wake_all(ws)
+    end;
+
+-- Park until the flag is raised, then lower it. A flag already raised is lowered and answered at once.
+pub let wait(s: Signal) -> Async({}) =
+    let state = Cell/get(s.0)!;
+    match state
+    | raised() => Async/lift(Cell/set(s.0, State/idle([])))
+    | idle(_) =>
+        let _ =
+            Async/park(
+                (w) =>
+                    Io/bind(
+                        Cell/get(s.0),
+                        (now) =>
+                            match now
+                            | raised() => Waker/wake(w)
+                            | idle(ws) => Cell/set(s.0, State/idle([w, ..ws]))
+                            end))!;
+        wait(s)
+    end;

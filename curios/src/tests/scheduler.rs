@@ -390,3 +390,38 @@ fn a_deadlock_reports_how_many_fibers_wait_on_a_waker() {
         b"deadlock 1"
     );
 }
+
+// A signal is the one park a program may take on its own account: the root waits, a fiber gone to sleep under the ticking clock notifies, and the root resumes after it. A notify that lands before anyone waits is kept, so the second wait answers at once rather than parking on a flag already raised.
+#[test]
+fn a_signal_parks_the_waiter_until_it_is_notified_and_keeps_an_early_notify() {
+    let (system, io) = ticking();
+    run_text(
+        r#"
+        use /std/{Str, Async, Io};
+        use /std/Async/{Signal};
+        use /std/time/{Duration};
+        let fiber: Async({}) =
+            let s = Signal/new()!;
+            let _ = Async/go(
+                let _ = Async/sleep(Duration/of_secs(1))!;
+                let _ = /std/print("notify ")!;
+                Signal/notify(s))!;
+            let _ = /std/print("wait ")!;
+            let _ = Signal/wait(s)!;
+            let _ = /std/print("woken ")!;
+            let _ = Signal/notify(s)!;
+            let _ = Signal/wait(s)!;
+            /std/print("again");
+        Async/run(fiber)
+        "#,
+        system,
+    )
+    .expect("expected result");
+    // Which of the two runs first is the scheduler's ordering, not the signal's contract: a notify that lands before the wait is kept and answered at once, and one that lands after wakes the parked waiter. Either way the root comes through both waits, which is the claim.
+    let output = io.output();
+    assert!(
+        output == b"wait notify woken again" || output == b"notify wait woken again",
+        "{:?}",
+        String::from_utf8_lossy(&output)
+    );
+}

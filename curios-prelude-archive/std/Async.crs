@@ -9,6 +9,10 @@ pub use Waker/{let Waker};
 mod Future;
 pub use Future/{let Future};
 
+-- The one park a program may take on its own account: a flag raised by one fiber and waited on by another, with no handle or timer beneath it. Public where `Future` is not because an event loop has a use for it — park until something was queued — and it completes nothing of anyone else's.
+pub mod Signal;
+pub use Signal/{let Signal};
+
 -- The would-block loops over a raw handle, public so a stream type's witness reaches them from its own module; it is also where `wait` stays reachable for the modules that park on a handle of their own.
 pub mod raw;
 
