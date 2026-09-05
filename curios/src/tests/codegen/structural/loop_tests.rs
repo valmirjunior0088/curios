@@ -30,7 +30,7 @@ fn lcg_kernel_is_single_entry_recursive_continuation() {
             .and_then(|(_, rest)| rest.split_once('('))
             .map(|(name, _)| name)
             .unwrap_or_default();
-        // An allowlist rather than a check on the loop's own name, which is only possible because every emitted function carries a hint: a prelude helper its `/std/` path, the description machinery its `io/` tag, and a lifted lambda its owner's name qualified — `/std/Handle/write/1`. A leaked `loop` matches none of them.
+        // An allowlist rather than a check on the loop's own name, which is only possible because every emitted function carries a hint: a prelude helper its `/std/` path, the description machinery its `io/` tag, and a lifted lambda its owner's name qualified — `/sys/Handle/write/1`. A leaked `loop` matches none of them.
         assert!(
             provenance == "main"
                 || provenance.starts_with("/std/")

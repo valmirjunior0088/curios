@@ -702,7 +702,7 @@ impl HostOps for MockHost {
                 return (Status::Ok, full);
             }
             Handle::Other(_) => {}
-            // stdin is not writable; the guest's `/std/Handle` never issues this.
+            // stdin is not writable; the guest's `/sys/Handle` never issues this.
             Handle::Stdin => panic!("write to stdin"),
         }
 
