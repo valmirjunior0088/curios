@@ -813,3 +813,18 @@ fn refinement_is_suppressible() {
     let reduced = context.with_suppressed_refinements(|context| reduce(context, b.clone()));
     assert_eq!(reduced, Ok(b));
 }
+
+// A solution that reaches its own metavariable sends the display walk round forever: reducing `?0` unfolds it to `f(?0)`, whose argument is `?0` again. The walk is display-only, but it ran on the native stack with no bound, so a diagnostic about such a term aborted the process instead of rendering. Charged per level, the declaration's budget refuses it, and the caller falls back to the un-normalized spelling as its contract says.
+#[test]
+fn normalizing_a_solution_that_reaches_itself_is_refused_rather_than_overflowing() {
+    let mut context = context();
+    let f = context.fresh(Some("f"));
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
+    let hole = Term::metavar_birthed(0, MetavarOrigin::Hole, Vec::new());
+    context.solve_metavar(
+        MetavarId(0),
+        Term::apply(Term::free_var(&f), [hole.clone()]),
+    );
+
+    assert!(normalize(&mut context, hole).is_err());
+}

@@ -807,6 +807,16 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
 ///
 /// A name whose unfolding stalls at one of those forms keeps its name. `double(n)` over a `rec` unfolds to the folded call's canonical neutral — a `RecProj`-headed application — and a `match`-defined function applied to a variable unfolds to a stuck `Match`; the printer has no name for either, so it spells the whole body, a recursive group twice over, once per reference, and the reader's `n` is renamed against the binders the body brought in. The body says nothing the name does not, so the head stays as written and only the arguments normalize. A name that unfolds to something that *computed* — a literal, a constructor, a type former — still unfolds, which is what the witness-collapse and `2 + 3` fixtures in `curios/src/tests/runtime.rs` and `curios-pipeline/src/tests.rs` hold.
 pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+    // Charged and guarded as `zonk_term` is: a level is a peak of depth the budget prices ([`Cost::FRAME`]), and the walk runs inside [`recurse`] so a deep term buys depth with heap rather than overflowing the native stack. Display-only or not, this walk is a route into unbounded computation like substitution was — a term ten thousand applications deep, or a solution that reaches itself, sent it down the main thread's stack until the process aborted with no diagnostic at all, which is the one outcome a *diagnostic* walk must not have. Charged, the declaration's budget refuses the walk and the caller falls back to the un-normalized spelling, as its contract already allows.
+    context.enter_level()?;
+    let normalized = recurse(|| normalize_level(context, term));
+    context.leave_level();
+
+    normalized
+}
+
+/// The one choke point of the normalization walk, under the level [`normalize`] charged.
+fn normalize_level(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     let reduced = reduce_forced(context, term.clone())?;
     if stalled_unfolding(&term, &reduced) {
         return normalize_arguments(context, term);
