@@ -294,4 +294,4 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] [Test runner](design/toolchain/a-test-is-a-declared-description-run-by-a-synthesized-tail.md) (`test name() = body;` declarations run by `curios test`, listed by `wonder tests`)
   - [x] [Property-based testing](design/language/a-parameterized-test-is-a-property.md) (`test name(params) = body;` probed over drawn arguments by `curios test`, a failure spelling its counterexample; a body the kernel settles under its telescope reports `proved` instead)
   - [ ] [A package's documentation is generated from the compilation that builds it](roadmap/documentation-generator-spec.md) (not refined yet)
-  - [ ] [Linter](roadmap/linter-spec.md) (`curios lint`; nothing reports an unused import, binder, private declaration or dependency today)
+  - [x] [Linter](design/toolchain/a-lint-is-an-exact-finding-read-off-the-compilation.md) (`curios lint` — four exact, always-on lints read off name resolution: an unused import, binder, private declaration or dependency; reported beside diagnostics by `wonder` and the server, turned into an exit code by `lint` alone)
