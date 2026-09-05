@@ -283,7 +283,7 @@ fn a_warm_store_does_not_answer_for_the_buffer() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// A library header that does not parse is a located record like any other: published on the header, at the line the parser stopped, with a message that holds no snippet — the editor draws the location, and a caret drawn in text cannot line up in a proportional font.
+/// A library header that does not parse is a located record like any other: published on the header, underlining the item head the parser refused, with a message that holds no snippet — the editor draws the location, and a caret drawn in text cannot line up in a proportional font.
 #[test]
 fn a_header_that_does_not_parse_is_located_without_a_snippet() {
     let root = project("header");
@@ -304,7 +304,9 @@ fn a_header_that_does_not_parse_is_located_without_a_snippet() {
         "{published}"
     );
     assert!(
-        published.contains(r#""start":{"character":1,"line":1}"#),
+        published.contains(
+            r#""range":{"end":{"character":1,"line":1},"start":{"character":0,"line":1}}"#
+        ),
         "{published}"
     );
     assert!(
