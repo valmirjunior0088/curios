@@ -2,11 +2,11 @@
 
 use {
     super::{DeclaredTest, ReadOnly, Subject, open},
-    crate::Verdicts,
     curios_pipeline::{
         Cache, CompileError, EntryTail, check_with_units, declared_test_paths, unit_test_paths,
     },
     curios_text::Overlay,
+    curios_verdicts::Verdicts,
 };
 
 /// Every test `subject` declares, in declaration order — a library's own for a unit subject, the entry's own for a program. `overlay` and `cache` behave exactly as they do for `diagnostics`: unsaved text wins over the disk, and the store is read but never written.

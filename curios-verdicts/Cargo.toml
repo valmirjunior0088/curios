@@ -1,0 +1,26 @@
+[package]
+name = "curios-verdicts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Curios store as a compilation sees it: the fold's units and an invocation's precompiled payload, believed on a verified record"
+
+[lints]
+workspace = true
+
+# Beside `curios-pipeline` and over `curios-package`, never under either: `Cache` is the pipeline's
+# trait and the store's layout is the package's, and the crate implementing one through the other
+# can belong to neither — see the crate rustdoc. Nothing below here reaches Binaryen or Wasmtime;
+# the engine a payload address carries is handed in by the crate that owns the runtime.
+[dependencies]
+curios-archive = { workspace = true, features = ["enabled"] }
+curios-utilities = { workspace = true }
+curios-core = { workspace = true }
+curios-text = { workspace = true }
+curios-unit = { workspace = true, features = ["archive"] }
+curios-pipeline = { workspace = true }
+curios-package = { workspace = true }
+
+# The payload suite files the bytes of a compiled module as a payload: the store digests a payload and never reads it, so any bytes stand in for machine code.
+[dev-dependencies]
+curios-wasm = { workspace = true }

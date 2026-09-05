@@ -4,9 +4,9 @@
 
 use {
     super::{Diagnostic, Origin, ReadOnly, of_error, open, overlaid},
-    crate::Verdicts,
     curios_pipeline::{Cache, Stage, compile_with_units},
     curios_text::{Overlay, RootSource},
+    curios_verdicts::Verdicts,
 };
 
 /// One rung, reprinted.

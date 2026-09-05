@@ -525,6 +525,7 @@ dependencies = [
  "curios-text",
  "curios-unit",
  "curios-utilities",
+ "curios-verdicts",
  "curios-wasm",
  "lsp-server",
  "lsp-types",
@@ -782,6 +783,20 @@ version = "0.12.1"
 dependencies = [
  "curios-archive",
  "stacker",
+]
+
+[[package]]
+name = "curios-verdicts"
+version = "0.12.1"
+dependencies = [
+ "curios-archive",
+ "curios-core",
+ "curios-package",
+ "curios-pipeline",
+ "curios-text",
+ "curios-unit",
+ "curios-utilities",
+ "curios-wasm",
 ]
 
 [[package]]

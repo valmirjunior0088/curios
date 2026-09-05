@@ -22,13 +22,14 @@ use test_runner::*;
 use {
     clap::Parser,
     curios::{
-        Linted, Verdicts, archived_documentation, documentation, lint, serve, wonder_diagnostics,
+        Linted, archived_documentation, documentation, lint, serve, wonder_diagnostics,
         wonder_stage, wonder_tests, write_documentation,
     },
     curios_package::{Governing, LIBRARY, Target, curate, order, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::{Formatted, Overlay},
+    curios_verdicts::Verdicts,
     std::{
         ffi::OsString,
         fs, iter,

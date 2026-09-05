@@ -1,8 +1,9 @@
 use {
     super::{Origin, ReadOnly, Severity, Subject, diagnostics, rendered},
-    crate::{Asked, Verdicts},
+    crate::Asked,
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Progress, check_units_with_prelude},
     curios_text::Overlay,
+    curios_verdicts::Verdicts,
     std::{
         collections::BTreeMap,
         fs,

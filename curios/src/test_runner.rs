@@ -4,11 +4,12 @@
 
 use {
     crate::{Heading, Line, Subject, fact, load_units, report, step},
-    curios::{Program, Verdicts, to_cwasm},
+    curios::{engine, to_cwasm},
     curios_package::{Governing, LIBRARY, order},
     curios_pipeline::{Cache, CompileError, EntryTail, TestRecord, compile_tests_with_units},
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::{Entrypoint, RootSource, UnitSource},
+    curios_verdicts::{Program, Verdicts},
     std::path::{Path, PathBuf},
 };
 
@@ -173,7 +174,7 @@ fn tests_payload(
         loader,
     };
 
-    if let Some(bytes) = store.payload_get(&program, &sources)
+    if let Some(bytes) = store.payload_get(&program, &sources, engine())
         && let Some(decoded) = decode(&bytes)
     {
         fact(Heading::Processing, subject);
@@ -203,7 +204,7 @@ fn tests_payload(
     let cwasm = to_cwasm(&module).map_err(CompileError::failure)?;
 
     if let Some(bytes) = encode(&records, &cwasm) {
-        store.payload_put(&program, &sources, bytes.as_ref());
+        store.payload_put(&program, &sources, bytes.as_ref(), engine());
     }
 
     Ok((records, cwasm))

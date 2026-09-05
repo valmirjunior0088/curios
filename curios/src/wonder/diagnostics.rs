@@ -2,12 +2,12 @@
 
 use {
     super::{Diagnostic, Severity},
-    crate::Verdicts,
     curios_package::LIBRARY,
     curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, check_with_units},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
     curios_utilities::Qualifier,
+    curios_verdicts::Verdicts,
     std::{collections::BTreeSet, path::PathBuf},
 };
 

@@ -66,7 +66,7 @@ The obligations below are the ones a search does not reveal.
 | What a unit hands its successors | Every stage whose artifact `Unit` holds, `curios-pipeline`'s fold, the store's stored-unit format |
 | A `wonder` query, a record, or what a diagnostic carries | `curios-utilities`'s `Report`, every stage's `report`/`reports_with_hints`, `CompileError` and `check_with_units`, both transports (`ask.rs`, `server.rs`), `curios-package`'s `Membership` |
 | The documentation record or its pages | `curios-text/src/document.rs` and its tests in `curios/src/tests/document.rs`, the renderer in `curios/src/document.rs`, `documentation/usage.md`'s Documenting, and `documentation/syntax.md`'s comments section when the `-- \|` grammar moves |
-| Manifests, dependency resolution, or the store | The CLI subcommands wrapping it, `Qualifier`/`Mount`, and `documentation/soundness/admission-without-judgment/cached-verdicts.md` when the store's keys are involved |
+| Manifests, dependency resolution, or the store | The CLI subcommands wrapping it, `Qualifier`/`Mount`, `curios-verdicts` for what is read and written through the store's keys, and `documentation/soundness/admission-without-judgment/cached-verdicts.md` when those keys are involved |
 | Runtime or bundle format | Slim-launcher dependency boundary, bundle integration tests |
 | A build recipe (`xtask`) | `curios/build.rs`, the CI workflows calling the recipe, `README.md`'s build steps |
 | Binaryen version, build, or FFI | Shared cache behavior, native compiler linkage, optimize round-trip tests |
@@ -76,6 +76,7 @@ The obligations below are the ones a search does not reveal.
 - Compiler stages own their representations. A lowering belongs to the crate holding the source representation and depends on the crate holding the destination representation.
 - `curios-pipeline` is the compiler boundary: no dependency on Binaryen, Wasmtime, the runtime or the CLI. It may name the fixed prelude in `standard.rs` alone; `compile_entrypoint` takes a scope and cannot tell which unit is `/std`.
 - `curios-package` sits beside that boundary, never under it. `curios-pipeline` must not depend on it, and `curios-js` must not touch it.
+- `curios-verdicts` sits above `curios-pipeline` and `curios-package` and below every product that consults a store: `cargo tree -p curios-verdicts --edges normal` must contain neither `curios-binaryen` nor `curios-runtime`, so reading a verdict never links a back end. The engine a payload is addressed under is handed in by `curios`, which owns the runtime.
 - `curios-unit` sits below the kernel: `cargo tree -p curios-unit --edges normal` must not contain `curios-cert`, because a build script that reached the certifier would re-elaborate the whole standard library on every kernel edit.
 - `curios-runtime` is runtime-only in its default feature set: no `curios`, no Binaryen, and no Cranelift. Its `cranelift` feature exists for `curios` and never enters `default`; `curios/src/bundle.rs` enforces this on the shipped launcher image.
 - `curios` is the only crate combining Binaryen with Cranelift-enabled Wasmtime. It names no wasmtime type, reaching the runtime through `curios_runtime::validate` and `curios_runtime::precompile`. The Wasmtime pin lives in `curios-runtime/Cargo.toml` and nowhere else.

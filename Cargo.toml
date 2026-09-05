@@ -21,6 +21,7 @@ members = [
     "curios-prelude-archive",
     "curios-pipeline",
     "curios-package",
+    "curios-verdicts",
     "curios-profile",
     "curios-js",
     "curios",
@@ -67,6 +68,7 @@ curios-prelude = { path = "curios-prelude" }
 curios-prelude-archive = { path = "curios-prelude-archive" }
 curios-pipeline = { path = "curios-pipeline" }
 curios-package = { path = "curios-package" }
+curios-verdicts = { path = "curios-verdicts" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
 clap = { version = "4.6.1", features = ["derive"] }

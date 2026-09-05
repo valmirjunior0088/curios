@@ -6,11 +6,12 @@
 
 use {
     crate::{
-        Diagnosed, Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, Verdicts,
-        declared_tests, diagnosed, diagnostics, stage, wasm_optm,
+        Diagnosed, Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, declared_tests,
+        diagnosed, diagnostics, stage, wasm_optm,
     },
     curios_package::{Form, Governing, LIBRARY, Membership, Target, mounted, order},
     curios_text::{Overlay, RootSource},
+    curios_verdicts::Verdicts,
     std::{
         collections::BTreeSet,
         io,

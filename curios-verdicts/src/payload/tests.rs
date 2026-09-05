@@ -6,15 +6,18 @@
 
 use {
     super::*,
-    crate::to_cwasm,
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, compile_with_units},
     curios_text::{Entrypoint, Module},
     curios_utilities::RootKind,
+    curios_wasm::to_bytes,
     std::{
         path::PathBuf,
         time::{SystemTime, UNIX_EPOCH},
     },
 };
+
+/// The engine every invocation here files under. A constant, because the engine is the one address part this crate is handed rather than computes, and no test here is about two engines.
+const ENGINE: &str = "test-engine";
 
 /// What one invocation did.
 struct Invocation {
@@ -69,7 +72,7 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
     };
 
     let sources = scope.iter().map(UnitSource::mounted).collect::<Vec<_>>();
-    if let Some(payload) = verdicts.payload_get(&program, &sources) {
+    if let Some(payload) = verdicts.payload_get(&program, &sources, ENGINE) {
         return Invocation {
             reused: true,
             payload,
@@ -88,8 +91,9 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
     )
     .expect("the package compiles");
 
-    let payload = to_cwasm(&module).expect("the module precompiles");
-    verdicts.payload_put(&program, &sources, &payload);
+    // The module's own bytes stand in for machine code: the store digests a payload and never reads it, and nothing here runs one.
+    let payload = to_bytes(&module);
+    verdicts.payload_put(&program, &sources, &payload, ENGINE);
 
     Invocation {
         reused: false,

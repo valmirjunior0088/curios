@@ -3,11 +3,12 @@
 //! Everything below `Target::of` is already covered where it lives — the manifest's refusals in `curios-package`, the layout rule in `curios-text`, the fold in `curios-pipeline`. What no other test reaches is the whole chain at once: a manifest on disk deciding what to compile, a governance walk deciding what governs it, a dependency graph deciding the order, and a program that actually runs at the end of it. A wiring mistake anywhere in that chain passes every unit test and fails here.
 
 use {
-    crate::{Verdicts, run_wasm},
+    crate::run_wasm,
     curios_package::Target,
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, compile_with_units},
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::Entrypoint,
+    curios_verdicts::Verdicts,
     std::{
         fs,
         path::{Path, PathBuf},

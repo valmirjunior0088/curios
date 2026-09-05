@@ -1,24 +1,14 @@
-//! What a compilation consults before doing its work again — the fold's units, and the invocation's own precompiled payload.
+//! The unit family: what the fold consults before compiling a unit again, and what it files when it did.
 //!
-//! The store's layout and its keys belong to `curios-package`; reading and writing a `Unit` through them belongs here, because [`Cache`] is `curios-pipeline`'s trait and `curios-package` sits *beside* that boundary rather than under it. Implementing it there would make the crate that answers "what is in this compilation" depend on the driver that folds stages over the answer, which is the one direction the layering forbids.
-//!
-//! It is not, as this said until it was checked, about keeping `curios-package` free of the compiler. That crate depends on `curios-text` and so already links the elaborator — `curios new` included. The dependency the boundary actually buys is the driver's.
-//!
-//! **Taking a unit from here is believing a verdict this compiler reached earlier.** That is a change to what the compiler believes rather than a faster way to do what it already did, and the argument for it is in [Cached verdicts](../../documentation/soundness/admission-without-judgment/cached-verdicts.md). Everything below is the mechanism the argument is about. The payload family in [`payload`] is that same argument one level up, with [Reused payloads](../../documentation/soundness/admission-without-judgment/reused-payloads.md) stating what it adds.
-//!
-//! **A slot is addressed, and a hit is verified.** The address ([`unit_slot`]) names a place — these mounts, this compiler, this predecessor chain — and holds no file contents at all, so a project has as many slots as it has units rather than one per compile. What the unit was compiled *from* rides in a [`Record`] ahead of it in the slot's one file and is checked when the slot is opened: every file the compilation read, by the text it read, plus what each predecessor contained, plus what the slot itself holds — so a record vouches for the bytes it was written with and for no others.
-//!
-//! **A slot is one file, and it is replaced by one rename.** The record and the artifact are framed together ([`framed`]), written beside the slot and renamed into place, so no interrupted or concurrent write can leave a record beside an artifact it was not made from: a reader sees the old slot, the new one, or none. The artifact segment is the same bytes the artifact is archived as on its own, which is what lets `curios document` read a unit off a slot exactly as it reads one off the prelude image.
+//! **A slot is addressed, and a hit is verified.** The address (`unit_slot`) names a place — these mounts, this compiler, this predecessor chain — and holds no file contents at all, so a project has as many slots as it has units rather than one per compile. What the unit was compiled *from* rides in a [`Record`] ahead of it in the slot's one file and is checked when the slot is opened: every file the compilation read, by the text it read, plus what each predecessor contained, plus what the slot itself holds — so a record vouches for the bytes it was written with and for no others.
 //!
 //! That split is deliberate, and the previous scheme is why. It hashed the unit's whole source directory into the address — a directory that, for a package's own library, *contains this store*. Filing a unit therefore changed the address it would next be looked for under, so a package's own code never hit and `verdicts/` grew a directory per compile. The lesson is not "exclude the store from the walk": a key derived from a belief about what the inputs are goes wrong silently the day the belief does, and it goes wrong in the direction that hands back a stale unit. Here the inputs are not believed but recorded, at the one seam every module read passes through (`RootSource::reads`), so a compilation that reads something new records it without anything here being taught to expect it.
-
-mod payload;
-pub use payload::*;
 
 #[cfg(test)]
 mod tests;
 
 use {
+    crate::{replace, segments},
     curios_package::{Store, compiler, digest, unit_slot},
     curios_pipeline::Cache,
     curios_text::UnitSource,
@@ -31,9 +21,6 @@ use {
         rc::Rc,
     },
 };
-
-/// What a slot file opens with, so a slot is told from a bare archive by its first bytes rather than by guessing where a record might end. Versioned in the address's schema tag rather than here: a slot written under an older framing is not found rather than found and misread.
-const MAGIC: &[u8; 8] = b"crslot\0\0";
 
 /// What a stored unit must still be true of to be believed.
 ///
@@ -52,26 +39,26 @@ struct Record {
 /// One unit's place in the chain a compilation builds.
 ///
 /// Both halves are needed by whatever comes after it and neither substitutes for the other, which is why this is a pair rather than one string: the *slot* is where the next unit's address is anchored, and what the slot *contains* is what the next unit's record is verified against. A chain of these is the whole of what one unit hands the next, as far as the store is concerned.
-struct Placed {
+pub(crate) struct Placed {
     /// The slot the unit is filed in.
-    slot: String,
+    pub(crate) slot: String,
     /// The digest of the bytes that slot holds.
-    contained: String,
+    pub(crate) contained: String,
 }
 
 /// The store, as a compilation sees it — the fold's units through [`Cache`], and the invocation's own payload through [`Verdicts::payload_get`] and [`Verdicts::payload_put`].
 ///
 /// One handle for both because they are one store: the same compiler identity decides both addresses, the chain the fold places *is* the payload's predecessor half, and a directory nobody can write refuses both for one reason, which [`Verdicts::refused`] reports once.
 pub struct Verdicts {
-    store: Store,
+    pub(crate) store: Store,
     /// `None` when the compiler cannot identify itself — in which case nothing is read and nothing is written, because a verdict recorded under an identity nobody can reproduce would later be believed on behalf of a different compiler.
-    compiler: Option<String>,
+    pub(crate) compiler: Option<String>,
     /// The units placed so far, in fold order. Read afterwards by [`Verdicts::payload_put`], which files what the whole chain compiled to.
-    placed: RefCell<Vec<Placed>>,
+    pub(crate) placed: RefCell<Vec<Placed>>,
     /// Why the store could not be written, if it could not.
     ///
     /// The first refusal and not a count: a store nobody can write refuses every unit for one reason, so the reason is the whole of what a reader needs and repeating it per unit would say nothing new. Recorded rather than reported here because this crate has no terminal — see [`Verdicts::refused`].
-    refused: RefCell<Option<String>>,
+    pub(crate) refused: RefCell<Option<String>>,
 }
 
 impl Verdicts {
@@ -119,7 +106,7 @@ impl Verdicts {
     /// **This is the verification half of [`Cache::get`], and it is shared rather than restated.** Each source's slot and record are decided by exactly the calls the fold makes, so the two cannot come to different answers about whether a unit is still good; all that is left out is the `Unit` decode, which a payload hit has no use for. A stale unit is `None` and so a payload miss by construction — it is about to recompile into bytes no record of the payload could match.
     ///
     /// A source the store may not file at all is also `None`, which is stricter than the fold, where such a unit is simply compiled every time. The strictness is the point: a payload vouches for the *whole* compilation, and a unit nothing can verify is a part of it nothing can vouch for.
-    fn chain(&self, sources: &[UnitSource<'_>]) -> Option<Vec<Placed>> {
+    pub(crate) fn chain(&self, sources: &[UnitSource<'_>]) -> Option<Vec<Placed>> {
         let mut placed: Vec<Placed> = Vec::new();
 
         for source in sources {
@@ -142,10 +129,10 @@ impl Verdicts {
         Some(placed)
     }
 
-    /// Place `unit` in the chain without filing it: what a caller that may read the store but not write it does with a unit it had to compile.
+    /// Place `unit` in the chain without filing it: what a caller that may read the store but not write it — the `wonder` engine, answering a question — does with a unit it had to compile.
     ///
     /// **Placing and filing are one call but not one decision, and only filing is optional.** A slot is addressed after the units placed before it, so a unit left out of the chain shifts every later unit's address by one — turning one declined hit into a miss for the whole tail, which is the cost declining it was supposed to avoid. Serializing without writing is what placing costs instead: the digest of those bytes is the fact the next unit's record is verified against, and nothing cheaper produces it.
-    pub(crate) fn place(&self, source: &UnitSource<'_>, unit: &Unit) {
+    pub fn place(&self, source: &UnitSource<'_>, unit: &Unit) {
         if let Some((placed, _)) = self.placement(source, unit) {
             self.placed.borrow_mut().push(placed);
         }
@@ -222,57 +209,6 @@ impl Cache for Verdicts {
     }
 }
 
-/// File `record` and `artifact` as the slot at `slot`, replacing whatever it held.
-///
-/// **Written beside and renamed into place, which is the whole of it.** The file is complete before it bears the slot's name, and a rename replaces one name atomically, so a reader — this compiler or another filing the same slot at the same moment — sees the old slot, the new one, or none, and never a record beside an artifact it was not made from. The two-file scheme this replaced ordered its writes so that every interrupted state read as a miss, and needed the record to carry the artifact's digest to survive two compilers racing on one slot; one rename removes both cases rather than arguing about them. It is what every mature toolchain's cache does, and for this reason.
-///
-/// The staging name carries the process id, so two compilers staging one slot at once stage two files and the second rename simply wins. A staging file a crash leaves behind is never read, since it is not a slot's name, and is overwritten by the next write from the same process.
-///
-/// Shared by both families, so the argument holds in one place rather than twice: a payload slot and a unit slot differ in what they hold and in nothing about how it is put there.
-fn replace(slot: &Path, record: &[u8], artifact: &[u8]) -> io::Result<()> {
-    // Every failure names the slot it happened at: an error reading `Permission denied` alone leaves a reader guessing which of the five families under `.curios/` refused.
-    let at = |error: io::Error| io::Error::other(format!("{}: {error}", slot.display()));
-
-    let family = slot
-        .parent()
-        .ok_or_else(|| io::Error::other("a slot has a family"))
-        .map_err(at)?;
-    fs::create_dir_all(family).map_err(at)?;
-
-    let staged = slot.with_extension(format!("{}.part", std::process::id()));
-    fs::write(&staged, framed(record, artifact)).map_err(at)?;
-
-    fs::rename(&staged, slot).map_err(|error| {
-        // Best effort, as the whole write is: what matters is that nothing bearing the slot's name is half of anything.
-        let _ = fs::remove_file(&staged);
-        at(error)
-    })
-}
-
-/// The bytes of one slot file: the magic, the record's length, the record, then the artifact.
-///
-/// The record goes first because it is the part every open decodes and the artifact is the part a payload probe never does; the length is ahead of it because an archive is read from its end and so does not know its own extent.
-fn framed(record: &[u8], artifact: &[u8]) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(MAGIC.len() + 8 + record.len() + artifact.len());
-    bytes.extend_from_slice(MAGIC);
-    bytes.extend_from_slice(&(record.len() as u64).to_le_bytes());
-    bytes.extend_from_slice(record);
-    bytes.extend_from_slice(artifact);
-
-    bytes
-}
-
-/// The record and the artifact of the slot file `bytes`, or `None` for bytes that are not one: something else entirely, or a slot truncated past its record.
-///
-/// The one place a slot's framing is read, shared with `curios document`, which takes the artifact and nothing else.
-pub(crate) fn segments(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
-    let body = bytes.strip_prefix(MAGIC)?;
-    let (length, rest) = body.split_first_chunk::<8>()?;
-    let length = usize::try_from(u64::from_le_bytes(*length)).ok()?;
-
-    (length <= rest.len()).then(|| rest.split_at(length))
-}
-
 /// Whether `record` still describes the world: the slot holds the bytes it was written with, every file it names still holds the text it was read as, and every predecessor still contains what it did.
 ///
 /// The slot's own digest comes first, as the payload family orders its check: it decides a torn or damaged slot before any file is opened.
@@ -299,7 +235,7 @@ fn recorded(source: &UnitSource<'_>, placed: &[Placed], contained: &str) -> Reco
 }
 
 /// Whether `recorded` is what `placed` contains, position by position.
-fn chained(recorded: &[String], placed: &[Placed]) -> bool {
+pub(crate) fn chained(recorded: &[String], placed: &[Placed]) -> bool {
     recorded.len() == placed.len()
         && recorded
             .iter()
@@ -310,7 +246,7 @@ fn chained(recorded: &[String], placed: &[Placed]) -> bool {
 /// Whether every file in `reads` lies under one of `directories` and still holds the text it was recorded as.
 ///
 /// The containment half is what keeps a shared store from admitting across projects; see [`agrees`] for why it is a containment check rather than a re-derivation of the read set.
-fn read_within(directories: &[&Path], reads: &[(String, String)]) -> bool {
+pub(crate) fn read_within(directories: &[&Path], reads: &[(String, String)]) -> bool {
     // Canonical on both sides, because a record's paths are canonical and a source's directories are however the manifest walk spelled them.
     let within = directories
         .iter()
@@ -334,7 +270,7 @@ fn holds(directory: &Path, (path, recorded): &(String, String)) -> bool {
 }
 
 /// A read log as it is recorded: each file by canonical path, with the digest of the text that was parsed from it.
-fn digested(reads: Vec<(PathBuf, Rc<Source>)>) -> Vec<(String, String)> {
+pub(crate) fn digested(reads: Vec<(PathBuf, Rc<Source>)>) -> Vec<(String, String)> {
     reads
         .into_iter()
         .map(|(path, text)| {

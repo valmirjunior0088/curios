@@ -5,11 +5,12 @@
 use {
     crate::{Heading, Line, Subject, fact},
     curios::STDIN_LABEL,
-    curios::{Program, Verdicts, to_cwasm},
+    curios::{engine, to_cwasm},
     curios_package::Target,
     curios_pipeline::{Cache, CompileError, Progress, compile_with_units},
     curios_text::{Entrypoint, RootSource, UnitSource},
     curios_utilities::Source,
+    curios_verdicts::{Program, Verdicts},
     curios_wasm::Module,
     std::{
         io,
@@ -72,7 +73,7 @@ pub(crate) fn payload_of(
     let sources = scope.iter().map(UnitSource::mounted).collect::<Vec<_>>();
 
     if let Some((cache, program)) = &filed
-        && let Some(payload) = cache.payload_get(program, &sources)
+        && let Some(payload) = cache.payload_get(program, &sources, engine())
     {
         // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened. The step names the target rather than a unit, because what came back is the whole program's machine code.
         fact(Heading::Processing, &subject);
@@ -94,7 +95,7 @@ pub(crate) fn payload_of(
     .and_then(|module| to_cwasm(&module).map_err(CompileError::failure));
 
     if let (Ok(payload), Some((cache, program))) = (&compiled, &filed) {
-        cache.payload_put(program, &sources, payload);
+        cache.payload_put(program, &sources, payload, engine());
     }
 
     // After the fold rather than during it: one unwritable store refuses everything for the same reason, so this is one line however many units went past it. Reported even when the compilation failed, because a store nobody can write is true either way and the next run pays for it either way.
