@@ -40,6 +40,7 @@ pub use Io/{let Io};
 pub mod Show;
 pub use Show/{let Show};
 
+-- | A value's rendering as source that reads back: `spell(v)` is Curios text that denotes `v` at its type — a literal, or a constructor spelled by its type's own name, `Ordering/lt()` — which re-parses wherever the type's name is visible unqualified, the one place a value of it can be written at all, and reads in a test report as the author would have written it. `Show` stays the human-facing display; the two coincide only where a value's display already is its literal.
 pub mod Spell;
 pub use Spell/{let Spell};
 
@@ -150,6 +151,11 @@ pub use Cli/{let Cli};
 pub mod Fmt;
 pub use Fmt/{let Fmt};
 
+-- | Claims the runner discharges. A `Test` is a description — a theorem the kernel settled, a verdict passed or failed, or an action that performs and then says — and, like `Io`, it has no eliminator outside its owner: a program builds one through the combinators here and only `main` schedules it.
+-- |
+-- | `prove` and `refl` close a proposition the checker discharged into a theorem, carrying nothing but that it held. `Settled` is the proposition that a description was settled by the kernel, `True` on a theorem and `False` otherwise, and `settled` closes a parameterized description settled at every argument into one theorem: its evidence is `(a) => True/qed()` exactly when the body reduces to a theorem under the open binder, which is how a proved family is closed by hand and how `curios test` reports `proved` for one. `check` and `equal` are verdicts, the latter spelling both sides through `Spell` when they differ. `perform` takes a thunk rather than a bare `Io(Test)` so that an inline action's `!` binds in `Io`, and `try` is the same over a fallible action, whose raise is the test's failure with the error's `Show`.
+-- |
+-- | `all` is the conjunction of descriptions, which closes a family of cases — a parameterized test applied to a table of arguments — into one test: every theorem is a theorem, the empty list included; a verdict beside a theorem is that verdict; the first failure is the report, naming its position; and an action on either side sequences what follows under it. `property` closes anything `Property` judges — a nullary `Test`, or a function whose arguments the roster draws — into a description, probed over a fixed case count from a fixed seed so that a property's verdict is a function of the sources alone; a description is one case, so an action cannot be probed and says so. `main` is the selection protocol: argv[1] names one test by index and the run exits with its outcome; no argument runs every test in declaration order and exits 1 when any failed.
 pub mod Test;
 pub use Test/{let Test};
 

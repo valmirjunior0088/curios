@@ -4,17 +4,14 @@ use /syn/{True, False};
 pub let FourBytes(b: Bytes) -> Prop =
     match Nat/eql(Bytes/len(b), 4) | true => True | false => False end;
 
--- | The two extreme finite values, spelled as literals rather than as the infinities they sit inside. `/std/Flt`'s `pos_inf` is built from a division, so a bound naming it would make the precondition of a narrowing wait on another operation of the same family; a literal waits on nothing. They are private helpers of the two propositions below rather than `/syn` names, since nothing outside this file states a binary32 extreme.
 let max: Flt =
     +340282350000000000000000000000000000000.0;
 
 let min: Flt =
     -340282350000000000000000000000000000000.0;
 
--- | `a` is a number: every finite binary32, and neither infinity nor the NaN — a NaN fails both comparisons, since every IEEE comparison against one is false, and each infinity fails the bound on its own side. That is the domain `Flt/to_int` truncates on.
 pub let Finite(a: Flt) -> Prop =
     match Flt/le(min, a) && Flt/le(a, max) | true => True | false => False end;
 
--- | `a` is a non-negative number, the domain `Flt/to_nat` truncates on. `-0.0` satisfies it because IEEE says `-0.0 >= +0.0`. The upper bound is what excludes `+inf`, which is why `/syn/Int/NonNeg` needs no companion and this one does: an `Int` has no infinity to exclude.
 pub let NonNeg(a: Flt) -> Prop =
     match Flt/ge(a, +0.0) && Flt/le(a, max) | true => True | false => False end;

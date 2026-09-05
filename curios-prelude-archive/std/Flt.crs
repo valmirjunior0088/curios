@@ -29,6 +29,8 @@ pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
 
 -- | The procedures that decide the two narrowings' bounds, in the `Int/non_neg` idiom: the guard refines the scrutinee, so each arm's proposition reduces to `True` or to `False` and the `some` arm's obligation is discharged by the comparison itself.
 -- |
+-- | `Finite(f)` says `f` is a number: every finite binary32, and neither infinity nor the NaN — a NaN fails both comparisons, since every IEEE comparison against one is false, and each infinity fails the bound on its own side. That is the domain `to_int` truncates on. `NonNeg(f)` says `f` is a non-negative number, the domain `to_nat` truncates on: `-0.0` satisfies it because IEEE says `-0.0 >= +0.0`, and the upper bound is what excludes `+inf`, which is why `Int/NonNeg` needs no companion and this one does, an `Int` having no infinity to exclude. Both bounds are the two extreme finite values, spelled as literals rather than as the infinities they sit inside: `pos_inf` is built from a division, and a bound naming it would make the precondition of a narrowing wait on another operation of the same family, while a literal waits on nothing.
+-- |
 -- | Each scrutinee must be spelled as its proposition spells it, operand order included — a refinement is keyed on the term written, and `min <= f` is not the term `f >= min`. The extremes are written out because `/syn/Flt` keeps them private, so the two spellings are checked against each other by this build rather than shared through a name.
 pub let finite(f: Flt) -> Option(Finite(f)) =
     match -340282350000000000000000000000000000000.0 <= f

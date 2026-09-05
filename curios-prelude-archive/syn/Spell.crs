@@ -1,4 +1,3 @@
--- The tooling-facing rendering concept: `spell(v)` is Curios source text that denotes `v` at its type — a literal, or a constructor spelled by its type's own name, `Ordering/lt()`, which re-parses wherever the type's name is visible unqualified, the one place a value of it can be written at all, and reads in a test report as the author would have written it. `Show` stays the human-facing display; the two coincide only where a value's display already is its literal. Declared here rather than in `/std` because a derived witness body names `spell` and the two renderers below, and a compiler-emitted name lives in `/syn`; `/std/Spell` is the facade programs import, and each carrier's witness lives in the module that owns the carrier.
 use /std/{Str, List};
 
 pub concept Spell(A: Type): pub Type {
@@ -7,7 +6,6 @@ pub concept Spell(A: Type): pub Type {
 
 pub use Spell/*;
 
--- | The two shapes a derived spelling is built from, spelled once here so the re-parse grammar — parentheses, commas, ` = `, braces — lives in Curios, where the kernel re-certifies it on every prelude build. `call` renders a constructor applied to its spelled explicit payloads, `head()` when it has none; `record` renders a struct literal over its spelled fields, `label = value` for a labeled field and the bare value for the positional field of a newtype-like struct, whose label is written empty. Compiler vocabulary rather than user API: `pub` so an emitted body can name them, with no row in the facade.
 pub let call(head: Str, args: List(Str)) -> Str =
     Str/concat(head, Str/concat("(", Str/concat(Str/join(", ", args), ")")));
 
