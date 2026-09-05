@@ -1,7 +1,7 @@
 //! Turning a function into a continuation, and the call shapes that forbid it.
 
 use {
-    super::test_support::helper_called,
+    super::test_support::{capture_unmentioned_by_owner, helper_called},
     crate::cps::{contify::contify_calls, optimize::optimize},
     crate::{
         CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsLiteral, CpsModule, CpsNode,
@@ -211,4 +211,16 @@ fn does_not_contify_a_multi_site_function() {
         "a function with two call sites is not contified here"
     );
     assert!(module.function(helper).is_some());
+}
+
+/// `helper` captures `v`, which `owner` never names: the site is inside `helper`'s `LetFun`, so `v` is in scope there, and the move is admitted on scope rather than on what `owner`'s body mentions.
+#[test]
+fn contifies_a_callee_whose_capture_the_owner_never_mentions() {
+    let (mut module, helper, _) = capture_unmentioned_by_owner();
+    assert!(contify_calls(&mut module), "the sweep contifies");
+    module.verify().unwrap();
+    assert!(
+        module.function(helper).is_none(),
+        "the capturing helper is contified:\n{module}"
+    );
 }

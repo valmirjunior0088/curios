@@ -1,6 +1,7 @@
 //! Inlining a known call and a single-use continuation, and what each must clone rather than share.
 
 use {
+    super::test_support::capture_unmentioned_by_owner,
     crate::cps::inline::{inline_known_calls, inline_single_use_continuations},
     crate::{
         CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsLiteral, CpsModule, CpsNode,
@@ -140,4 +141,19 @@ fn known_call_inlining_clones_recursive_local_continuations() {
         Some(CpsNode::LetCont { continuations, .. }) if continuations != &[local_cont]
     ));
     module.verify().unwrap();
+}
+
+/// `helper` captures `v`, which `owner` never names: the call is inside `helper`'s `LetFun`, so `v` is in scope at the site, and the inline is admitted on scope rather than on what `owner`'s body mentions.
+#[test]
+fn known_call_inlining_admits_a_capture_the_owner_never_mentions() {
+    let (mut module, helper, _) = capture_unmentioned_by_owner();
+    assert!(inline_known_calls(&mut module), "the sweep inlines");
+    module.verify().unwrap();
+    let still_called = module.nodes().iter().flatten().any(|node| {
+        matches!(
+            node,
+            CpsNode::ApplyFun { callee: CpsCallee::Known(callee), .. } if *callee == helper
+        )
+    });
+    assert!(!still_called, "the capturing helper is inlined:\n{module}");
 }

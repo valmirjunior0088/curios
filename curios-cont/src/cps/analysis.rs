@@ -239,13 +239,12 @@ pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> 
     }
     found.into_iter().collect()
 }
-/// The values `function` binds, and the values it mentions — from one walk of its body.
+/// The values `function` mentions without binding — what lowering must carry into it.
 ///
-/// The two are collected together because the pair *is* the content of both callers below: free is `used \ owned` and available is `owned ∪ used`. Computing them apart cost three walks to answer a question one walk holds, and made `available_values` derive `owned` twice — once directly and once inside the `free_values` it called.
-fn owned_and_used(
-    module: &CpsModule,
-    function: CpsFunId,
-) -> (BTreeSet<CpsValueId>, BTreeSet<CpsValueId>) {
+/// **The walk stops at a nested function.** [`function_nodes`] enters a `LetFun`'s body and not its members, so a value referenced only inside a function defined *within* this one is not reported here. That is correct for a caller asking what to carry into a call or a closure — a nested function's own captures are answered when the sweep reaches that function, which is the shape `represent`'s `offers` sweep over every live function relies on. It is wrong for a caller about to *remove* a binding, which must cover the whole region that loses it — a pass once asked this question for that purpose and dropped a binding a nested function still referenced.
+///
+/// What this is *not* for is admitting a call's inline or contification: a site names its callee, so the callee's `LetFun` encloses the site and every value reported here is bound before it — in scope at the site by construction. Two passes once checked it against the values the owner's body happened to mention, and refused a move whenever the owner did not name the captured binding itself.
+pub(super) fn free_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<CpsValueId> {
     let mut owned = module
         .function(function)
         .unwrap()
@@ -291,24 +290,7 @@ fn owned_and_used(
         }
     }
 
-    (owned, used)
-}
-
-/// The values `function` mentions without binding — what lowering must carry into it.
-///
-/// **The walk stops at a nested function.** [`function_nodes`] enters a `LetFun`'s body and not its members, so a value referenced only inside a function defined *within* this one is not reported here. That is correct for a caller asking what to carry into a call or a closure — a nested function's own captures are answered when the sweep reaches that function, which is the shape `represent`'s `offers` sweep over every live function relies on. It is wrong for a caller about to *remove* a binding, which must cover the whole region that loses it — a pass once asked this question for that purpose and dropped a binding a nested function still referenced.
-pub(super) fn free_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<CpsValueId> {
-    let (owned, used) = owned_and_used(module, function);
     used.difference(&owned).copied().collect()
-}
-
-/// Everything in scope in `function`: what it binds, plus what it inherits.
-///
-/// Stated as `owned ∪ used` rather than `owned ∪ free`, which is the same set — `free` is `used \ owned`, so the old spelling subtracted `owned` only to add it straight back.
-pub(super) fn available_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<CpsValueId> {
-    let (mut available, used) = owned_and_used(module, function);
-    available.extend(used);
-    available
 }
 
 pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {

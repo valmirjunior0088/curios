@@ -1,7 +1,7 @@
 use {
     super::*,
     super::{
-        analysis::{analyze_calls, available_values, free_values, function_nodes, nodes_from},
+        analysis::{analyze_calls, function_nodes, nodes_from},
         clone::{Mapping, clone_node, copied_extent},
         optimize::{MULTI_SITE_INLINE_LIMIT, SCC_CLONE_NODE_LIMIT},
         reachable::prune_unreachable,
@@ -11,7 +11,7 @@ use {
 
 pub(super) fn inline_known_calls(module: &mut CpsModule) -> bool {
     let mut changed = false;
-    // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline is what made this quadratic on a large unoptimized module. Per-callee facts (`free_values`, body shape) are stable across a sweep because inlining a call copies the callee rather than mutating it, and a surviving call node keeps its owner; only the site counts go stale within a sweep, and a stale count only tightens the size budget, so the calls it defers are picked up by the next sweep's fresh analysis. Inlining that exposes a call inside a copied body is likewise handled by the following sweep.
+    // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline is what made this quadratic on a large unoptimized module. Per-callee facts (the body's shape and extent) are stable across a sweep because inlining a call copies the callee rather than mutating it, and a surviving call node keeps its owner; only the site counts go stale within a sweep, and a stale count only tightens the size budget, so the calls it defers are picked up by the next sweep's fresh analysis. Inlining that exposes a call inside a copied body is likewise handled by the following sweep.
     for _ in 0..10_000 {
         let analysis = analyze_calls(module);
         let mut inlined_any = false;
@@ -30,15 +30,11 @@ pub(super) fn inline_known_calls(module: &mut CpsModule) -> bool {
             if Some(callee) == module.entry || analysis.recursive.contains(&callee) {
                 continue;
             }
-            let Some(&owner) = analysis.node_owners.get(&node_id) else {
-                continue;
-            };
-            // The extent rather than the body: `function_nodes` walks a `LetFun`'s continuation and not its members, which cost nothing while such a body was refused outright and understates the duplication now that one is admitted — and a multi-site inline copies those members once per site.
-            let (nodes, _) = copied_extent(module, function_nodes(module, callee));
-            let owner_values = available_values(module, owner);
-            if !free_values(module, callee).is_subset(&owner_values) {
+            if !analysis.node_owners.contains_key(&node_id) {
                 continue;
             }
+            // The extent rather than the body: `function_nodes` walks a `LetFun`'s continuation and not its members, which cost nothing while such a body was refused outright and understates the duplication now that one is admitted — and a multi-site inline copies those members once per site.
+            let (nodes, _) = copied_extent(module, function_nodes(module, callee));
             let sites = analysis.call_sites.get(&callee).map_or(0, Vec::len);
             let duplicated = sites > 1 || analysis.escaping.contains(&callee);
             let limit = if duplicated {

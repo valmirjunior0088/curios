@@ -284,6 +284,76 @@ pub(super) fn helper_called(two_sites: bool) -> (CpsModule, CpsFunId) {
     (module, helper)
 }
 
+/// `main` binds `v`, then defines `helper` and `owner` in one group: `helper(x)` returns `v`, which it captures, and `owner(y)` calls `helper(y)` once without mentioning `v` itself; `main` calls `owner` once. Every pass that moves `helper`'s body to its site must admit it — `v` is in scope there by lexical scoping, whatever `owner`'s own body names.
+pub(super) fn capture_unmentioned_by_owner() -> (CpsModule, CpsFunId, CpsFunId) {
+    let mut module = CpsModule::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let helper = module.reserve_function();
+    let helper_return = module.reserve_continuation();
+    let owner = module.reserve_function();
+    let owner_return = module.reserve_continuation();
+    let v = module.add_value(Some("v".into()));
+
+    let x = module.add_value(Some("x".into()));
+    let helper_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: helper_return,
+        args: vec![CpsAtom::Value(v)],
+    }));
+    module.define_function(
+        helper,
+        CpsFunction {
+            debug_name: Some("helper".into()),
+            params: vec![x],
+            return_cont: helper_return,
+            body: helper_body,
+        },
+    );
+
+    let y = module.add_value(Some("y".into()));
+    let owner_body = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(helper),
+        args: vec![CpsAtom::Value(y)],
+        return_to: owner_return,
+    });
+    module.define_function(
+        owner,
+        CpsFunction {
+            debug_name: Some("owner".into()),
+            params: vec![y],
+            return_cont: owner_return,
+            body: owner_body,
+        },
+    );
+
+    let call_owner = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(owner),
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        return_to: entry_return,
+    });
+    let group = module.add_node(CpsNode::LetFun {
+        functions: vec![helper, owner],
+        body: call_owner,
+    });
+    let body = module.add_node(CpsNode::LetValue {
+        result: v,
+        value: CpsValueExpr::Literal(CpsLiteral::Nat(7)),
+        next: group,
+    });
+    module.define_function(
+        entry,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_return,
+            body,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+    (module, helper, owner)
+}
+
 pub(super) fn tagged_consumer(
     padding: usize,
     sites: &[u32],

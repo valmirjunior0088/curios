@@ -1,5 +1,5 @@
 use {
-    super::analysis::{CallAnalysis, analyze_calls, available_values, free_values, function_nodes},
+    super::analysis::{analyze_calls, function_nodes},
     super::*,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -8,7 +8,9 @@ use {
 ///
 /// A function qualifies when it has exactly one external call site: any call from a third function would make `external` longer than one, so the only admissible calls are that single entry plus the function's own tail-recursive self-calls. This excludes mutual recursion and multi-return-context callers without a separate check. Common-dominator placement for genuinely multi-site contification is deferred to the machine-CFG analysis.
 ///
-/// One call analysis serves every candidate, because a contification leaves the others admissible. It replaces one call and moves one body: no other function's sites change, nothing new escapes, and the one fact that does move — the owner of a site that sat inside the contified body is now that body's new owner — preserves both conditions that read it. Reachability: the new owner called the contified function directly, so reaching it would have meant reaching the function, which was refused. Capture: the new owner's available values have grown by everything the contified body owned, and the candidate's free values were already within those. What does go stale is mechanical, and [`resolve_owner`] repairs it. It was one contification per call, which `fixpoint_pass_measurements` found setting a `Toml/decode` compile's round count once the two passes ahead of it stopped.
+/// The callee's captures need no check. Its one external site names it, so the `LetFun` binding it encloses that site, and every value the callee mentions without binding is bound before that `LetFun` — in scope at the site by the rule `verify_lexical_scopes` walks. A guard once refused the move unless the owner's own body *mentioned* each such value, which is a fact about the owner's text rather than its scope: a loop capturing an outer binding stayed a function call whenever its caller happened not to name the binding itself.
+///
+/// One call analysis serves every candidate, because a contification leaves the others admissible. It replaces one call and moves one body: no other function's sites change, nothing new escapes, and the one fact that does move — the owner of a site that sat inside the contified body is now that body's new owner — preserves the reachability condition that reads it: the new owner called the contified function directly, so reaching it would have meant reaching the function, which was refused. What does go stale — which function the snapshot says owns a site — nothing below reads. It was one contification per call, which `fixpoint_pass_measurements` found setting a `Toml/decode` compile's round count once the two passes ahead of it stopped.
 pub(super) fn contify_calls(module: &mut CpsModule) -> bool {
     let analysis = analyze_calls(module);
     let mut admitted = Vec::new();
@@ -27,10 +29,11 @@ pub(super) fn contify_calls(module: &mut CpsModule) -> bool {
         if external.len() != 1 {
             continue;
         }
-        let external_owner = analysis.node_owners[&external[0]];
-        if function_reaches(&analysis.call_graph, callee, external_owner)
-            || !free_values(module, callee).is_subset(&available_values(module, external_owner))
-        {
+        if function_reaches(
+            &analysis.call_graph,
+            callee,
+            analysis.node_owners[&external[0]],
+        ) {
             continue;
         }
 
@@ -45,37 +48,18 @@ pub(super) fn contify_calls(module: &mut CpsModule) -> bool {
             }
         }
         if compatible {
-            admitted.push((callee, external[0], external_owner));
+            admitted.push((callee, external[0]));
         }
     }
 
     let mut changed = false;
-    for (callee, call, owner) in admitted {
-        let owner = resolve_owner(module, &analysis, owner);
-        // Implied by the snapshot's verdict, as the doc above argues; re-read live because it is cheap and the argument is the only thing standing behind it.
-        if !free_values(module, callee).is_subset(&available_values(module, owner)) {
-            continue;
-        }
+    for (callee, call) in admitted {
         contify_call(module, callee, call);
         changed = true;
     }
     changed
 }
 
-/// The function that owns a site the snapshot attributed to `owner`, after the contifications this sweep has already applied.
-///
-/// A function the sweep removed was contified, and what contified it was its single external site — so its body, and every site in it, now belongs to whoever the snapshot says owned *that* site. The chain is finite because a contified function does not reach its owner.
-fn resolve_owner(module: &CpsModule, analysis: &CallAnalysis, mut owner: CpsFunId) -> CpsFunId {
-    while module.function(owner).is_none() {
-        let site = analysis.call_sites[&owner]
-            .iter()
-            .copied()
-            .find(|site| analysis.node_owners[site] != owner)
-            .expect("a function removed in this sweep was contified at its one external site");
-        owner = analysis.node_owners[&site];
-    }
-    owner
-}
 pub(super) fn function_reaches(
     graph: &BTreeMap<CpsFunId, BTreeSet<CpsFunId>>,
     start: CpsFunId,
