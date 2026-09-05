@@ -21,7 +21,8 @@ use test_runner::*;
 
 use {
     clap::Parser,
-    curios::{wasm_optm, write_documentation},
+    curios::wasm_optm,
+    curios_document::write_documentation,
     curios_package::{Governing, LIBRARY, Target, curate, order, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},

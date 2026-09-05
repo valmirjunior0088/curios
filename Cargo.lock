@@ -557,13 +557,13 @@ dependencies = [
 name = "curios"
 version = "0.12.1"
 dependencies = [
- "askama",
  "clap",
  "curios-archive",
  "curios-binaryen",
  "curios-cert",
  "curios-cont",
  "curios-core",
+ "curios-document",
  "curios-elab",
  "curios-ersd",
  "curios-package",
@@ -653,6 +653,15 @@ dependencies = [
  "curios-num",
  "curios-print",
  "curios-profile",
+ "curios-utilities",
+]
+
+[[package]]
+name = "curios-document"
+version = "0.12.1"
+dependencies = [
+ "askama",
+ "curios-archive",
  "curios-utilities",
 ]
 
@@ -801,6 +810,7 @@ dependencies = [
  "curios-abi",
  "curios-archive",
  "curios-core",
+ "curios-document",
  "curios-elab",
  "curios-num",
  "curios-parse",
@@ -857,6 +867,7 @@ dependencies = [
 name = "curios-wonder"
 version = "0.12.1"
 dependencies = [
+ "curios-document",
  "curios-package",
  "curios-pipeline",
  "curios-text",

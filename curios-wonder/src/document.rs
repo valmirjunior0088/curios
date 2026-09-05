@@ -2,8 +2,9 @@
 
 use {
     crate::ReadOnly,
+    curios_document::Documentation,
     curios_pipeline::{Cache, CompileError, with_units},
-    curios_text::{Documentation, Overlay, RootSource},
+    curios_text::{Overlay, RootSource},
     curios_verdicts::{Verdicts, archived_unit},
     std::path::Path,
 };

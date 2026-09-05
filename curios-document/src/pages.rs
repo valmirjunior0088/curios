@@ -5,13 +5,14 @@
 //! **The root module's page is the landing page.** A unit's root declares things of its own — `/std/print` is one — and a landing page that listed the modules and hid the root's declarations behind a second page sent every link to that page. So `index.html` is the root's page, opening with the unit's description and the module cards before the root's own declarations, and every other module's page sits at its path below.
 
 mod context;
+use context::*;
 
 mod prose;
 use prose::*;
 
 use {
+    crate::Documentation,
     askama::Template,
-    curios_text::Documentation,
     curios_utilities::Qualifier,
     std::{fs, io, path::Path},
 };
@@ -60,8 +61,8 @@ pub fn write_documentation(record: &Documentation, directory: &Path) -> io::Resu
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let page = bundle.page(module).render().map_err(io::Error::other)?;
-        fs::write(path, page)?;
+        let rendered = page(&bundle, module).render().map_err(io::Error::other)?;
+        fs::write(path, rendered)?;
     }
 
     Ok(())

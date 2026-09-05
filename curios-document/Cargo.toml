@@ -1,0 +1,18 @@
+[package]
+name = "curios-document"
+description = "The documentation record a unit carries for its consumers, and the pages `curios document` renders from it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+archive = ["curios-archive/enabled", "curios-utilities/archive"]
+
+[dependencies]
+curios-archive = { workspace = true }
+curios-utilities = { workspace = true }
+askama = { workspace = true }

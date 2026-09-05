@@ -23,6 +23,7 @@ members = [
     "curios-package",
     "curios-verdicts",
     "curios-wonder",
+    "curios-document",
     "curios-profile",
     "curios-js",
     "curios",
@@ -71,6 +72,7 @@ curios-pipeline = { path = "curios-pipeline" }
 curios-package = { path = "curios-package" }
 curios-verdicts = { path = "curios-verdicts" }
 curios-wonder = { path = "curios-wonder" }
+curios-document = { path = "curios-document" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
 clap = { version = "4.6.1", features = ["derive"] }

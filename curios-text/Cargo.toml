@@ -9,11 +9,12 @@ description = "The Curios surface syntax: lexer, parser, printer, module resolut
 workspace = true
 
 [features]
-archive = ["curios-archive/enabled", "curios-abi/archive", "curios-utilities/archive", "curios-elab/archive", "curios-num/archive"]
+archive = ["curios-archive/enabled", "curios-abi/archive", "curios-utilities/archive", "curios-elab/archive", "curios-num/archive", "curios-document/archive"]
 profile = ["curios-profile/enabled"]
 
 [dependencies]
 curios-archive = { workspace = true }
+curios-document = { workspace = true }
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-utilities = { workspace = true }

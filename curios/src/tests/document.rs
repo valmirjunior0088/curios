@@ -1,9 +1,10 @@
 //! A package's documentation record, built by the lowering and carried on the unit: what `curios document` renders, checked over the standard library — the largest interface in the tree, read off the image it ships in — and over a fixture package whose every rule of the record is written out.
 
 use {
+    curios_document::Kind,
     curios_package::{Governing, order},
     curios_pipeline::{CompileError, DEFAULT_STEP_BUDGET, with_units},
-    curios_text::{Kind, Overlay},
+    curios_text::Overlay,
     curios_utilities::Qualifier,
     curios_wonder::documentation,
     std::{

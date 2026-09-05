@@ -24,10 +24,8 @@ mod scoped;
 use scoped::*;
 
 mod document;
+use curios_document::Documentation;
 use document::document;
-pub use document::{
-    Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Reexport, Signature,
-};
 
 #[cfg(test)]
 mod binding_tests;

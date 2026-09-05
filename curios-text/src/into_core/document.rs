@@ -1,4 +1,4 @@
-//! What a unit's interface is, read for a page: one record per module the unit exposes, each declaration's head printed as the author wrote it with every name it mentions resolved, and the prose attached to each — plain data a renderer walks and a transport encodes, built by the lowering as the last thing it does and carried on the unit it lowered.
+//! The builder of a unit's [`Documentation`] record — `curios-document`'s plain data: one record per module the unit exposes, each declaration's head printed as the author wrote it with every name it mentions resolved, and the prose attached to each — built by the lowering as the last thing it does and carried on the unit it lowered.
 //!
 //! **Built by the compilation that builds the unit, from the tables it just built.** Which modules and declarations a page shows is the export view resolution built to a fixed point, so a private declaration is absent rather than hidden and a re-export is listed as a link to the declaration it names. A referent is looked up with the visibility functions the lowering resolves a name with, over the same tables, seeded by the import scopes the lowering recorded per definition — nothing here resolves a name by a rule of its own. Nothing is read from the elaborated module either: every declaration states its signature, so the surface tree the lowering parsed is the whole of what a page prints, and a signature is printed by the printers `curios format` prints it with. Riding on the unit, the record travels wherever the unit does — the prelude image, a verdict slot, the browser bundle — so a unit is documented from its stored form without its sources.
 //!
@@ -12,6 +12,9 @@ use {
         print_witness_head,
     },
     curios_core::{Global, Imports},
+    curios_document::{
+        Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Reexport, Signature,
+    },
     curios_print::{Printer, render_annotated},
     std::collections::{HashMap, HashSet},
 };
@@ -21,101 +24,6 @@ const WIDTH: usize = 100;
 
 /// The indent a broken signature continues at — the formatter's.
 const INDENT: usize = 4;
-
-/// A unit's interface, for its consumers.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[curios_archive::archived]
-pub struct Documentation {
-    /// The prefix the unit mounts at — `/json` for the package `json` — which every module path below begins with.
-    pub prefix: Qualifier,
-    /// What the unit is, in a sentence or a few, for its landing page: the manifest's `description` for a package, a constant for the standard library, nothing when neither said.
-    pub description: Option<String>,
-    /// Every module a consumer can reach, the root first and each parent before its children.
-    pub modules: Vec<ModuleDocumentation>,
-}
-
-/// One module's page.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[curios_archive::archived]
-pub struct ModuleDocumentation {
-    pub path: Qualifier,
-    /// The `-- |` block above the `mod` declaration that declares it; `None` for the root, whose prose is the manifest's.
-    pub prose: Option<Vec<String>>,
-    /// The public child modules, in declaration order.
-    pub children: Vec<Qualifier>,
-    /// The declarations written here that a consumer can see, in source order.
-    pub declarations: Vec<Declaration>,
-    /// The names this module exposes that are declared elsewhere — a `pub use` — each a link to where the declaration lives, sorted by name.
-    pub reexports: Vec<Reexport>,
-}
-
-/// What kind of declaration a page entry is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[curios_archive::archived]
-pub enum Kind {
-    Definition,
-    Inductive,
-    Structure,
-    Concept,
-    Witness,
-    Foreign,
-}
-
-/// One declaration a consumer can see: its head as written, its prose, and the members its representation exposes.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[curios_archive::archived]
-pub struct Declaration {
-    /// The declared label — and the anchor a link to it names. Empty for a witness, which is anonymous by design.
-    pub name: String,
-    pub kind: Kind,
-    pub signature: Signature,
-    pub prose: Option<Vec<String>>,
-    /// Constructors, fields or concept methods: present only when the representation is public, so an opaque type shows none.
-    pub members: Vec<Member>,
-    /// An inductive, structure or concept whose representation is private to its declaring subtree: no constructor, field, literal or witness of it can be written by a consumer. Stated beside `members` because an empty list cannot say it — a sealed concept still lists its methods, and a public representation can have nothing to list.
-    pub opaque: bool,
-    /// A `satisfy` whose body the compiler writes.
-    pub derived: bool,
-}
-
-/// One constructor, field or concept method.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[curios_archive::archived]
-pub struct Member {
-    pub name: String,
-    pub signature: Signature,
-    pub prose: Option<Vec<String>>,
-}
-
-/// A declaration head as printed, and every name in it that resolved.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[curios_archive::archived]
-pub struct Signature {
-    pub text: String,
-    /// Ascending by position, non-overlapping.
-    pub marks: Vec<Mark>,
-}
-
-/// One name in a signature, resolved: the byte range of `text` it occupies and the declaration it names.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[curios_archive::archived]
-pub struct Mark {
-    pub start: usize,
-    pub end: usize,
-    /// The canonical path of the declaration named.
-    pub referent: Qualifier,
-    /// Whether the referent lies within the documented unit, and so has a page in the same bundle.
-    pub within: bool,
-}
-
-/// A name this module exposes for a declaration made elsewhere.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[curios_archive::archived]
-pub struct Reexport {
-    pub name: String,
-    pub referent: Qualifier,
-    pub within: bool,
-}
 
 /// The interface of the unit mounted at `prefix`, read off the tables the lowering just built: `modules` are the file-backed modules discovery parsed, `table` and `public` the direct interface and the export view over the whole scope, and `imports` what each definition's `use` lines brought into scope.
 ///

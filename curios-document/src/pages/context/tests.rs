@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    curios_text::{Declaration, Kind, Signature},
+    crate::{Declaration, Kind, Signature},
 };
 
 /// The text the segments spell, links and keywords included.
