@@ -1,0 +1,268 @@
+-- The bytes a terminal sends, read as the keys and pastes they encode. A pure function of a chunk, so it is tested by table and by property with no terminal in sight, and the one place time enters — a lone Escape that may be the start of a sequence the next chunk finishes — is handed back rather than decided here.
+--
+-- **Two encodings, one decoder.** The legacy encoding is what every terminal speaks: a control byte below space, `ESC [` and a final letter for the arrows, `ESC [ n ~` for the named keys, `ESC O` for the function keys, an Escape before a printable byte for Alt, and a bracketed-paste envelope around pasted text. It cannot tell a lone Escape from the start of a sequence, `Ctrl+I` from Tab, or `Shift+Enter` from Enter. The kitty keyboard protocol fixes that with `ESC [ code ; modifiers u`, spoken by kitty, ghostty, WezTerm, foot, Alacritty, iTerm2 and Windows Terminal once the session asks for it, while tmux and most others keep to the legacy form — so the decoder reads both, and on a terminal that accepted the protocol every key arrives unambiguous.
+--
+-- **What a chunk boundary means.** Bytes arrive in bursts, and a burst may end inside a sequence: a lone `ESC`, a `CSI` without its final byte, a paste without its terminator, a multi-byte scalar cut in two. `decode` answers such a tail as `rest`, untouched, for the caller to prepend to the next chunk. A caller that waited a short interval and saw nothing more calls `flush`, which reads the lone Escape as the Escape key and whatever follows it as the characters it is — the settling rule every surveyed library applies, and the only decision this module leaves to the clock.
+use /std/{Nat, Bool, Str, Char, Byte, Bytes, List, Option};
+use /std/Tui/{Key, Event};
+use /std/Tui/Key/{Code};
+
+-- `Bytes/slice` under the bound it wants, or nothing where the window runs past the end. Every index here is a runtime fact about a chunk the host produced, so the bound is decided rather than proven.
+let window(b: Bytes, start: Nat, n: Nat) -> Bytes =
+    match Nat/Le/try(start + n, Bytes/len(b))
+    | none() => x[]
+    | some(ok) => Bytes/slice(b, start, n, @ok)
+    end;
+
+let from(b: Bytes, start: Nat) -> Bytes =
+    window(b, start, Bytes/len(b) - start);
+
+let at(b: Bytes, i: Nat) -> Option(Nat) =
+    Option/map(Bytes/try_get(b, i), Byte/to_nat);
+
+-- Modifiers as a `CSI` parameter carries them: one plus a bit field, shift, alt, ctrl.
+let modified(code: Code, m: Nat) -> Key =
+    let bits = m - 1;
+    Key {
+        code = code,
+        shift = Nat/and(bits, 1) > 0,
+        alt = Nat/and(bits, 2) > 0,
+        ctrl = Nat/and(bits, 4) > 0,
+    };
+
+-- A byte below space, or delete. The letters are `Ctrl` and the letter; the four past them are `Ctrl` and the punctuation the terminal folded onto them.
+let control(n: Nat) -> Key =
+    choose
+    | n == 0x0D => Key/plain(Code/enter())
+    | n == 0x09 => Key/plain(Code/tab())
+    | n == 0x7F => Key/plain(Code/backspace())
+    | n == 0x08 => Key/plain(Code/backspace())
+    | n == 0x1B => Key/plain(Code/escape())
+    | n == 0x00 => Key/with_ctrl(Code/char(' '))
+    | n <= 0x1A =>
+        match Char/of_nat(n + 0x60)
+        | some(c) => Key/with_ctrl(Code/char(c))
+        | none() => Key/plain(Code/escape())
+        end
+    | _ =>
+        match Char/of_nat(n + 0x40)
+        | some(c) => Key/with_ctrl(Code/char(c))
+        | none() => Key/plain(Code/escape())
+        end
+    end;
+
+-- The `ESC [ n ~` family.
+let tilde(n: Nat) -> Option(Code) =
+    match n
+    | 1 => Option/some(Code/home())
+    | 2 => Option/some(Code/insert())
+    | 3 => Option/some(Code/delete())
+    | 4 => Option/some(Code/end_key())
+    | 5 => Option/some(Code/page_up())
+    | 6 => Option/some(Code/page_down())
+    | 7 => Option/some(Code/home())
+    | 8 => Option/some(Code/end_key())
+    | 11 => Option/some(Code/f(1))
+    | 12 => Option/some(Code/f(2))
+    | 13 => Option/some(Code/f(3))
+    | 14 => Option/some(Code/f(4))
+    | 15 => Option/some(Code/f(5))
+    | 17 => Option/some(Code/f(6))
+    | 18 => Option/some(Code/f(7))
+    | 19 => Option/some(Code/f(8))
+    | 20 => Option/some(Code/f(9))
+    | 21 => Option/some(Code/f(10))
+    | 23 => Option/some(Code/f(11))
+    | 24 => Option/some(Code/f(12))
+    | _ => Option/none()
+    end;
+
+-- The final byte of a `CSI` or `SS3` sequence that names a key on its own.
+let final_code(n: Nat) -> Option(Code) =
+    match n
+    | 'A' => Option/some(Code/up())
+    | 'B' => Option/some(Code/down())
+    | 'C' => Option/some(Code/right())
+    | 'D' => Option/some(Code/left())
+    | 'H' => Option/some(Code/home())
+    | 'F' => Option/some(Code/end_key())
+    | 'P' => Option/some(Code/f(1))
+    | 'Q' => Option/some(Code/f(2))
+    | 'R' => Option/some(Code/f(3))
+    | 'S' => Option/some(Code/f(4))
+    | _ => Option/none()
+    end;
+
+-- The kitty `CSI u` code: a scalar, or one of the four the protocol reports by their control code.
+let kitty(code: Nat) -> Option(Code) =
+    match code
+    | 13 => Option/some(Code/enter())
+    | 27 => Option/some(Code/escape())
+    | 9 => Option/some(Code/tab())
+    | 127 => Option/some(Code/backspace())
+    | 8 => Option/some(Code/backspace())
+    | _ => Option/map(Char/of_nat(code), Code/char)
+    end;
+
+-- The parameters of a `CSI` sequence from `i` — the numbers, the final byte and the index after it — or `none` where the chunk ends first. A missing number reads as one, which is the protocol's own default; a private marker or an intermediate byte is stepped over.
+let parameters(b: Bytes, i: Nat) -> Option({nums: List(Nat), final: Nat, next: Nat}) =
+    let go(
+        j: Nat,
+        current: Option(Nat),
+        nums: List(Nat),
+    ) -> Option({nums: List(Nat), final: Nat, next: Nat}) =
+        match at(b, j)
+        | none() => Option/none()
+        | some(n) =>
+            choose
+            | Nat/in_range(n, 0x30, 0x39) =>
+                go(j + 1, Option/some(Option/unwrap_or(current, 0) * 10 + (n - 0x30)), nums)
+            | n == 0x3B || n == 0x3A =>
+                go(j + 1, Option/none(), [Option/unwrap_or(current, 1), ..nums])
+            | Nat/in_range(n, 0x20, 0x3F) => go(j + 1, current, nums)
+            | Nat/in_range(n, 0x40, 0x7E) =>
+                let all = match current | some(k) => [k, ..nums] | none() => nums end;
+                Option/some((nums = List/reverse(all), final = n, next = j + 1))
+            | _ => Option/none()
+            end
+        end;
+    go(i, Option/none(), []);
+
+-- One step of the walk: an event, or none for a sequence that names nothing, and where to continue; or `cut`, a sequence the chunk ends inside.
+induct Step(E: Type): Type
+| emit(Option(Event(E)), Nat)
+| cut()
+end
+
+let paste_end: Bytes =
+    x[0x1B, '[', '2', '0', '1', '~'];
+
+-- Read `input` as the events it encodes, up to the first sequence the chunk ends inside; that tail is `rest`, verbatim, for the next chunk to complete.
+pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} =
+    let key(k: Key) -> Option(Event(E)) = Option/some(Event/key(k));
+    -- A multi-byte scalar: complete, one character; cut off, the tail; malformed, one byte skipped.
+    let scalar(i: Nat, n: Nat) -> Step(E) =
+        let len =
+            choose
+            | n < 0x80 => 1
+            | Nat/in_range(n, 0xC2, 0xDF) => 2
+            | Nat/in_range(n, 0xE0, 0xEF) => 3
+            | Nat/in_range(n, 0xF0, 0xF4) => 4
+            | _ => 0
+            end;
+        match len
+        | 0 => Step/emit(Option/none(), i + 1)
+        | _ =>
+            match i + len <= Bytes/len(input)
+            | false => Step/cut()
+            | true =>
+                match Str/of_bytes(window(input, i, len))
+                | none() => Step/emit(Option/none(), i + 1)
+                | some(s) =>
+                    match Str/try_get(s, 0)
+                    | none() => Step/emit(Option/none(), i + len)
+                    | some(c) => Step/emit(key(Key/plain(Code/char(c))), i + len)
+                    end
+                end
+            end
+        end;
+    -- The body of a bracketed paste from `start` to its terminator; a chunk that ends before the terminator is cut at the envelope's opener.
+    let paste(opener: Nat, start: Nat) -> Step(E) =
+        let find(j: Nat) -> Option(Nat) =
+            match at(input, j)
+            | none() => Option/none()
+            | some(_) =>
+                match Bytes/eql(window(input, j, 6), paste_end)
+                | true => Option/some(j)
+                | false => find(j + 1)
+                end
+            end;
+        match find(start)
+        | none() => Step/cut()
+        | some(j) =>
+            match Str/of_bytes(window(input, start, j - start))
+            | some(s) => Step/emit(Option/some(Event/paste(s)), j + 6)
+            | none() => Step/emit(Option/none(), j + 6)
+            end
+        end;
+    let csi(i: Nat, j: Nat) -> Step(E) =
+        match parameters(input, j)
+        | none() => Step/cut()
+        | some(p) =>
+            let m = Option/unwrap_or(List/try_get(p.nums, 1), 1);
+            choose
+            | p.final == '~' =>
+                let n = Option/unwrap_or(List/try_get(p.nums, 0), 1);
+                choose
+                | n == 200 => paste(i, p.next)
+                | some(code) = tilde(n) => Step/emit(key(modified(code, m)), p.next)
+                | _ => Step/emit(Option/none(), p.next)
+                end
+            | p.final == 'u' =>
+                match kitty(Option/unwrap_or(List/try_get(p.nums, 0), 0))
+                | some(code) => Step/emit(key(modified(code, m)), p.next)
+                | none() => Step/emit(Option/none(), p.next)
+                end
+            | some(code) = final_code(p.final) => Step/emit(key(modified(code, m)), p.next)
+            | _ => Step/emit(Option/none(), p.next)
+            end
+        end;
+    let ss3(j: Nat) -> Step(E) =
+        match at(input, j)
+        | none() => Step/cut()
+        | some(n) =>
+            match final_code(n)
+            | some(code) => Step/emit(key(Key/plain(code)), j + 1)
+            | none() => Step/emit(Option/none(), j + 1)
+            end
+        end;
+    -- An Escape: the start of a sequence, Alt on the byte after it, or — before another Escape or at the end of the chunk — the key itself, the latter only once `flush` says the chunk was all there was.
+    let escape(i: Nat) -> Step(E) =
+        match at(input, i + 1)
+        | none() => Step/cut()
+        | some(second) =>
+            choose
+            | second == '[' => csi(i, i + 2)
+            | second == 'O' => ss3(i + 2)
+            | second == 0x1B => Step/emit(key(Key/plain(Code/escape())), i + 1)
+            | Nat/in_range(second, 0x20, 0x7E) =>
+                match Char/of_nat(second)
+                | some(c) => Step/emit(key(Key/with_alt(Code/char(c))), i + 2)
+                | none() => Step/emit(Option/none(), i + 2)
+                end
+            | second < 0x20 || second == 0x7F =>
+                Step/emit(key(Key { ..control(second), alt = true }), i + 2)
+            | _ => Step/emit(key(Key/plain(Code/escape())), i + 1)
+            end
+        end;
+    let go(i: Nat, acc: List(Event(E))) -> {events: List(Event(E)), rest: Bytes} =
+        match at(input, i)
+        | none() => (events = List/reverse(acc), rest = x[])
+        | some(n) =>
+            let step =
+                choose
+                | n == 0x1B => escape(i)
+                | n < 0x20 || n == 0x7F => Step/emit(key(control(n)), i + 1)
+                | _ => scalar(i, n)
+                end;
+            match step
+            | cut() => (events = List/reverse(acc), rest = from(input, i))
+            | emit(event, next) =>
+                match event | some(e) => go(next, [e, ..acc]) | none() => go(next, acc) end
+            end
+        end;
+    go(0, []);
+
+-- What a `rest` means once the settling interval passed with nothing more: an Escape that led it is the Escape key, and what follows is read again on its own — a `[` is the character `[`, a cut-off scalar is dropped. The one place a lone Escape is decided, and it is decided by the caller's clock, not here.
+pub let flush(@E: Type, rest: Bytes) -> List(Event(E)) =
+    match rest
+    | x[] => []
+    | x[head, ..tail] =>
+        let first: List(Event(E)) =
+            match Byte/to_nat(head) == 0x1B
+            | true => [Event/key(Key/plain(Code/escape()))]
+            | false => []
+            end;
+        let d = decode(tail);
+        [..first, ..d.events, ..flush(d.rest)]
+    end;

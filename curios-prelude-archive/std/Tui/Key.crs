@@ -1,0 +1,47 @@
+-- A key as a program sees it: a code — a character or a named key — and the three modifiers a terminal reports. The End key is `end_key` because `end` is a reserved word and cannot be a path segment. `shift` on a character is redundant with its case and is reported only where the terminal says it, which the legacy encoding never does for a plain letter; the kitty protocol does.
+use /std/{Nat, Bool, Char, Equal, Spell};
+
+pub induct Code: pub Type
+| char(Char)
+| enter()
+| escape()
+| backspace()
+| tab()
+| delete()
+| insert()
+| up()
+| down()
+| left()
+| right()
+| home()
+| end_key()
+| page_up()
+| page_down()
+| f(Nat)
+end
+
+pub use Code/*;
+
+satisfy Equal(Code);
+
+satisfy Spell(Code);
+
+pub struct Key: pub Type {
+    code: Code,
+    shift: Bool,
+    alt: Bool,
+    ctrl: Bool,
+}
+
+satisfy Equal(Key);
+
+satisfy Spell(Key);
+
+pub let plain(code: Code) -> Key =
+    Key { code = code, shift = false, alt = false, ctrl = false };
+
+pub let with_ctrl(code: Code) -> Key =
+    Key { code = code, shift = false, alt = false, ctrl = true };
+
+pub let with_alt(code: Code) -> Key =
+    Key { code = code, shift = false, alt = true, ctrl = false };

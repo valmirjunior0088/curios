@@ -1,0 +1,108 @@
+-- The input decoder: the legacy encoding, the kitty form, and what a chunk boundary leaves.
+use /std/{Nat, Bool, Str, Bytes, List, Option, Test, Tui};
+use /std/Tui/{Key, Event, input};
+use /std/Tui/Key/{Code};
+
+let keys(b: Bytes) -> List(Event(Nat)) =
+    input/decode(@Nat, b).events;
+
+let k(code: Code) -> Event(Nat) =
+    Event/key(Key/plain(code));
+
+test a_printable_byte_is_its_character() =
+    Test/equal(keys(x['a', 'Z']), [k(Code/char('a')), k(Code/char('Z'))]);
+
+test the_control_bytes_are_the_named_keys_and_ctrl_letters() =
+    Test/equal(
+        keys(x[0x0D, 0x09, 0x7F, 0x01, 0x1A]),
+        [
+            k(Code/enter()),
+            k(Code/tab()),
+            k(Code/backspace()),
+            Event/key(Key/with_ctrl(Code/char('a'))),
+            Event/key(Key/with_ctrl(Code/char('z')))]);
+
+test the_legacy_sequences_name_their_keys() =
+    Test/equal(
+        keys(
+            x[
+                0x1B,
+                '[',
+                'A',
+                0x1B,
+                '[',
+                'H',
+                0x1B,
+                '[',
+                '3',
+                '~',
+                0x1B,
+                '[',
+                '1',
+                '5',
+                '~',
+                0x1B,
+                'O',
+                'P']),
+        [k(Code/up()), k(Code/home()), k(Code/delete()), k(Code/f(5)), k(Code/f(1))]);
+
+test a_modifier_parameter_sets_the_modifiers() =
+    Test/equal(
+        keys(x[0x1B, '[', '1', ';', '5', 'C', 0x1B, '[', '3', ';', '2', '~']),
+        [
+            Event/key(Key/with_ctrl(Code/right())),
+            Event/key(Key { ..Key/plain(Code/delete()), shift = true })]);
+
+test the_kitty_form_reads_the_code_and_modifiers() =
+    Test/equal(
+        keys(x[0x1B, '[', '9', '7', ';', '2', 'u', 0x1B, '[', '1', '3', ';', '5', 'u']),
+        [
+            Event/key(Key { ..Key/plain(Code/char('a')), shift = true }),
+            Event/key(Key/with_ctrl(Code/enter()))]);
+
+test an_escape_before_a_printable_byte_is_alt() =
+    Test/equal(keys(x[0x1B, 'x']), [Event/key(Key/with_alt(Code/char('x')))]);
+
+test a_bracketed_paste_is_one_event() =
+    Test/equal(
+        keys(x[0x1B, '[', '2', '0', '0', '~', 'h', 'i', 0x1B, '[', '2', '0', '1', '~', 'q']),
+        [Event/paste("hi"), k(Code/char('q'))]);
+
+test a_multi_byte_scalar_is_one_character() =
+    Test/equal(keys(x[0xC3, 0xA9]), [k(Code/char('é'))]);
+
+-- A chunk ending in a lone Escape hands it back untouched, and the next chunk completes the sequence it began.
+test a_lone_escape_at_the_end_waits_for_the_next_chunk() =
+    let first = input/decode(@Nat, x['a', 0x1B]);
+    let second = input/decode(@Nat, x[..first.rest, '[', 'B']);
+    Test/all(
+        [
+            Test/equal(first.events, [k(Code/char('a'))]),
+            Test/equal(first.rest, x[0x1B]),
+            Test/equal(second.events, [k(Code/down())])]);
+
+test an_unfinished_paste_is_cut_at_its_opener() =
+    let first = input/decode(@Nat, x[0x1B, '[', '2', '0', '0', '~', 'a', 'b']);
+    let second = input/decode(@Nat, x[..first.rest, 'c', 0x1B, '[', '2', '0', '1', '~']);
+    Test/all(
+        [
+            Test/equal(List/len(first.events), 0),
+            Test/equal(Bytes/len(first.rest), 8),
+            Test/equal(second.events, [Event/paste("abc")])]);
+
+-- Once the clock says nothing more is coming, a lone Escape is the Escape key and what followed it is read as itself.
+test flush_reads_a_lone_escape_as_the_key() =
+    Test/all(
+        [
+            Test/equal(input/flush(@Nat, x[0x1B]), [k(Code/escape())]),
+            Test/equal(input/flush(@Nat, x[0x1B, '[']), [k(Code/escape()), k(Code/char('['))])]);
+
+-- Whatever the bytes, `rest` is a suffix of the input: nothing is invented and nothing before the cut is kept.
+test the_rest_is_a_suffix_of_any_input(b: Bytes) =
+    let d = input/decode(@Nat, b);
+    let cut = Bytes/len(b) - Bytes/len(d.rest);
+    match Nat/Le/try(cut, Bytes/len(b))
+    | none() => Test/check(false)
+    | some(ok) =>
+        Test/check(Bytes/len(d.rest) <= Bytes/len(b) && Bytes/eql(Bytes/drop(b, cut, @ok), d.rest))
+    end;
