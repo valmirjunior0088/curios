@@ -35,9 +35,20 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
     }
 
     type Solution = (Vec<Free>, Term);
+    /// The metavariables whose solutions this walk is inside right now.
+    ///
+    /// Substitution cannot expand a cyclic solution graph, and elaborating a `rec` group produces one: a member's slot is filled with the body that other solutions already mention, so materializing either reaches the other forever. Left unguarded the walk simply descends, and `curios_utilities::recurse` answers a deepening walk by asking the allocator for stack — so the compilation died by exhausting the machine rather than by refusing anything, on a route no budget prices ([`Cost::FRAME`]'s documentation states the gap: `recurse` grows the stack and nothing else bounds total depth).
+    ///
+    /// Leaving the re-entered occurrence unexpanded is this pass's own contract rather than a concession: it materializes what is committed and *keeps unresolved holes visible*, and a metavariable substitution cannot resolve is exactly such a hole. The strict walk, which owes a meta-free term, charges its depth instead and lets the budget refuse.
+    type Active = Rc<RefCell<BTreeSet<MetavarId>>>;
 
-    fn materialize<B: Bound>(value: &B, solutions: Rc<BTreeMap<MetavarId, Solution>>) -> B {
+    fn materialize<B: Bound>(
+        value: &B,
+        solutions: Rc<BTreeMap<MetavarId, Solution>>,
+        active: Active,
+    ) -> B {
         let rewrite_solutions = Rc::clone(&solutions);
+        let rewrite_active = Rc::clone(&active);
         let mut visit = Visit::rewriting(
             |_, _| None,
             Box::new(move |_, term| {
@@ -53,11 +64,25 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
                     labels.len(),
                     "a solved metavariable's occurrence carries its full spine"
                 );
-                let resolved = materialize(solution, Rc::clone(&rewrite_solutions));
+                if !rewrite_active.borrow_mut().insert(*id) {
+                    return None;
+                }
+                let resolved = materialize(
+                    solution,
+                    Rc::clone(&rewrite_solutions),
+                    Rc::clone(&rewrite_active),
+                );
                 let spine = spine
                     .iter()
-                    .map(|term| materialize(term, Rc::clone(&rewrite_solutions)))
+                    .map(|term| {
+                        materialize(
+                            term,
+                            Rc::clone(&rewrite_solutions),
+                            Rc::clone(&rewrite_active),
+                        )
+                    })
                     .collect::<Vec<_>>();
+                rewrite_active.borrow_mut().remove(id);
                 let labels = labels.iter().collect::<Vec<_>>();
                 let spine = spine.iter().collect::<Vec<_>>();
                 let zonked = resolved.capture(&labels).release(&spine);
@@ -106,7 +131,11 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
             ),
         );
     }
-    materialize(value, Rc::new(solutions))
+    materialize(
+        value,
+        Rc::new(solutions),
+        Rc::new(RefCell::new(BTreeSet::new())),
+    )
 }
 
 /// Zonk a whole [`Module`]: substitute metavariable solutions throughout every top-level item plus the entrypoint body and annotation, yielding a meta-free module for `erase`.
@@ -913,7 +942,20 @@ fn goal_report(context: &Context, id: MetavarId) -> Error {
 }
 
 fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
-    // The one choke point of the zonk walk's mutual recursion, guarded so a deeply nested term — a long sequencing chain's elaborated tail — buys depth with stack instead of overflowing the default test thread.
+    // The level itself, charged when it is a new peak, exactly as `reduce` charges its own bracket — see [`Context::enter_level`] and [`Cost::FRAME`], whose documentation states why the row exists: `recurse` grows the native stack rather than aborting, and nothing else bounds total depth.
+    //
+    // Substitution is a route into unbounded computation like any other, and it was the one route the budget did not price. A metavariable whose solution reaches the metavariable again sends this walk down forever, and every level it takes is memory `recurse` asks the allocator for; uncharged, the compilation died by exhausting the machine instead of refusing the program. Charged, the declaration's own budget decides, and the answer is a fact about the program rather than about how much memory the host had.
+    context
+        .enter_level()
+        .map_err(|error| Error::from_reduce(error, || Error::reduce_exhausted(term.clone())))?;
+    let zonked = zonk_level(context, term);
+    context.leave_level();
+
+    zonked
+}
+
+/// The one choke point of the zonk walk's mutual recursion, guarded so a deeply nested term — a long sequencing chain's elaborated tail — buys depth with stack instead of overflowing the default test thread.
+fn zonk_level(context: &Context, term: &Term) -> Result<Term, Error> {
     curios_utilities::recurse(|| {
         // A metavariable node *is* the substitution site: replace it by its solution, recursively zonked (the solution may itself mention solved metavariables).
         if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
