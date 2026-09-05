@@ -78,36 +78,41 @@ fn document_writes_the_bundle_under_the_store() {
     assert!(output.stdout.is_empty(), "success prints nothing");
 
     let bundle = root.join(".curios/documentation/shapes");
+    // The landing page is the root module's page: the description, the module cards, then the root's own declarations.
     let landing = fs::read_to_string(bundle.join("index.html")).expect("a landing page");
-    assert!(landing.contains("<h1>shapes</h1>"), "{landing}");
+    assert!(landing.contains("<h1>/shapes</h1>"), "{landing}");
     assert!(
         landing.contains("Shapes &amp; their areas."),
         "the manifest's description, escaped: {landing}"
     );
-    assert!(landing.contains("href=\"lib.html\""), "{landing}");
     assert!(landing.contains("href=\"geometry.html\""), "{landing}");
-
-    let library = fs::read_to_string(bundle.join("lib.html")).expect("the root module's page");
-    assert!(library.contains("<li id=\"Shape\">"), "{library}");
-    assert!(library.contains("<li id=\"Shape/circle\">"), "{library}");
-    assert!(library.contains("<p>A shape.</p>"), "{library}");
+    assert!(landing.contains("id=\"Shape\""), "{landing}");
+    assert!(landing.contains("id=\"Shape/circle\""), "{landing}");
     assert!(
-        library.contains("<a href=\"lib.html#Shape\">Shape</a>"),
-        "a signature links a name declared in the unit: {library}"
+        landing.contains("<p class=\"prose\">A shape.</p>"),
+        "{landing}"
     );
     assert!(
-        library.contains("-&gt; Nat<"),
-        "a name outside the unit is plain text: {library}"
+        landing.contains("<a href=\"index.html#Shape\">Shape</a>"),
+        "a signature links a name declared in the unit: {landing}"
+    );
+    assert!(
+        landing.contains("<span class=\"name\">Nat</span>"),
+        "a name outside the unit is a name, not a link: {landing}"
     );
 
     let geometry =
         fs::read_to_string(bundle.join("geometry.html")).expect("the child module's page");
-    assert!(geometry.contains("<p>Points.</p>"), "{geometry}");
     assert!(
-        geometry.contains("<a href=\"lib.html#Shape\">Shape</a>"),
+        geometry.contains("<p class=\"lead\">Points.</p>"),
+        "{geometry}"
+    );
+    assert!(
+        geometry.contains("<a href=\"index.html#Shape\">Shape</a>"),
         "a link reaches the root's page from a sibling: {geometry}"
     );
     assert!(bundle.join("static/style.css").is_file());
+    assert!(bundle.join("static/fonts/geist.woff2").is_file());
 
     fs::remove_dir_all(root).unwrap();
 }
@@ -124,7 +129,7 @@ fn output_names_another_directory() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(site.join("index.html").is_file());
-    assert!(site.join("lib.html").is_file());
+    assert!(site.join("geometry.html").is_file());
     assert!(
         !root.join(".curios/documentation").exists(),
         "the store holds nothing when the pages went elsewhere"
@@ -153,14 +158,21 @@ fn the_prelude_image_documents_the_standard_library_into_output() {
 
     let site = root.join("site");
     let landing = fs::read_to_string(site.join("index.html")).expect("a landing page");
-    assert!(landing.contains("<h1>std</h1>"), "{landing}");
+    assert!(landing.contains("<h1>/std</h1>"), "{landing}");
     assert!(
         landing.contains("The standard library"),
         "the image's description: {landing}"
     );
     assert!(landing.contains("href=\"Result.html\""), "{landing}");
     let result = fs::read_to_string(site.join("Result.html")).expect("a module's page");
-    assert!(result.contains("<li id=\"Result/success\">"), "{result}");
+    assert!(result.contains("id=\"Result/success\""), "{result}");
+    // A nested module's page climbs back to the bundle's static files and the landing page.
+    let signal = fs::read_to_string(site.join("Async/Signal.html")).expect("a nested page");
+    assert!(
+        signal.contains("href=\"../static/style.css\"")
+            && signal.contains("href=\"../index.html\""),
+        "{signal}"
+    );
     assert!(
         !root.join(".curios").exists(),
         "a file has no package, so nothing is filed under a store"
@@ -193,7 +205,7 @@ fn a_verdict_slot_documents_the_unit_it_holds() {
         String::from_utf8_lossy(&output.stderr)
     );
     let landing = fs::read_to_string(root.join("site/index.html")).expect("a landing page");
-    assert!(landing.contains("<h1>shapes</h1>"), "{landing}");
+    assert!(landing.contains("<h1>/shapes</h1>"), "{landing}");
 
     fs::remove_dir_all(root).unwrap();
 }

@@ -1,0 +1,95 @@
+/* The one stylesheet every page links. The brand is three colors and three faces: navy for every surface, ice sage for every word at one of four strengths, amber for what a reader reaches for; Faustina italic for display headings alone, Geist for prose, Geist Mono for everything the compiler said. */
+
+@font-face { font-family: "Geist"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("fonts/geist.woff2") format("woff2"); }
+@font-face { font-family: "Geist Mono"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("fonts/geist-mono.woff2") format("woff2"); }
+@font-face { font-family: "Faustina"; font-style: italic; font-weight: 300 800; font-display: swap; src: url("fonts/faustina-italic.woff2") format("woff2"); }
+
+:root {
+  --navy: #143340;
+  --ink: #dee9e9;
+  --amber: #f7c577;
+  --amber-bright: #ffdca1;
+  --ink-85: rgba(222, 233, 233, 0.85);
+  --ink-70: rgba(222, 233, 233, 0.7);
+  --ink-57: rgba(222, 233, 233, 0.57);
+  --ink-28: rgba(222, 233, 233, 0.28);
+  --edge: rgba(222, 233, 233, 0.14);
+  --edge-soft: rgba(222, 233, 233, 0.1);
+  --well: rgba(0, 0, 0, 0.2);
+  --well-deep: rgba(0, 0, 0, 0.34);
+  --amber-wash: rgba(247, 197, 119, 0.14);
+  --amber-edge: rgba(247, 197, 119, 0.5);
+  --sans: Geist, system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, monospace;
+  --serif: Faustina, Georgia, serif;
+}
+
+html, body { margin: 0; padding: 0; }
+body { background: var(--navy); color: var(--ink); font-family: var(--sans); font-weight: 400; -webkit-font-smoothing: antialiased; }
+a { color: var(--amber); text-decoration: none; }
+a:hover { color: var(--amber-bright); }
+::selection { background: rgba(247, 197, 119, 0.28); }
+code { font-family: var(--mono); font-size: 0.92em; color: var(--ink-85); }
+
+/* The frame: a rail and a main column side by side, stacked when the width runs out. */
+.frame { display: flex; align-items: stretch; flex-wrap: wrap; min-height: 100vh; }
+.rail { flex: 1 1 260px; background: rgba(0, 0, 0, 0.12); border-right: 1px solid var(--edge); padding: 22px 0; }
+main { flex: 999 1 480px; min-width: 0; max-width: 1040px; padding: 22px clamp(20px, 4vw, 40px) 96px; }
+
+/* The rail: the tree, every row a link; the current module carries the page's declarations beneath it. */
+.tree summary { display: none; }
+.tree nav { display: flex; flex-direction: column; }
+.tree a { display: flex; align-items: baseline; gap: 10px; padding: 6px 20px; padding-left: calc(20px + var(--depth) * 22px); font-family: var(--mono); font-size: 12.5px; color: var(--ink-70); overflow: hidden; }
+.tree a:hover { background: rgba(247, 197, 119, 0.06); color: var(--amber); }
+.tree a.current { color: var(--amber); }
+.tree .entry .kind { flex: none; width: 52px; font-size: 10.5px; letter-spacing: 0.06em; color: rgba(247, 197, 119, 0.85); }
+.tree .entry .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The head of a page: where it sits, what it is, what it is for. */
+.crumbs { margin: 0 0 20px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-57); }
+.crumbs .sep { color: var(--ink-28); margin: 0 6px; }
+.crumbs .here { color: var(--ink-85); }
+h1 { margin: 0 0 32px; font-family: var(--mono); font-weight: 400; font-size: clamp(24px, 4.4vw, 34px); line-height: 1.15; letter-spacing: -0.02em; overflow-wrap: break-word; }
+h2 { margin: 40px 0 18px; font-family: var(--serif); font-style: italic; font-weight: 500; font-size: clamp(22px, 3.4vw, 26px); }
+.lead { margin: -12px 0 32px; max-width: 62ch; font-size: clamp(16px, 2.1vw, 17.5px); font-weight: 300; line-height: 1.6; color: var(--ink-70); text-wrap: pretty; }
+
+/* Child modules, as cards in a grid. */
+.modules { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 12px; }
+.module-card { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border: 1px solid var(--edge); border-radius: 4px; background: var(--well); color: inherit; }
+.module-card:hover { border-color: var(--amber-edge); color: inherit; }
+.module-card .path { font-family: var(--mono); font-size: 13px; color: var(--amber); }
+.module-card .counts { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; color: var(--ink-57); }
+.module-card .gloss { font-size: 14px; line-height: 1.6; color: var(--ink-70); text-wrap: pretty; }
+
+/* A declaration: a header naming it, the signature the compiler printed, the prose the author wrote. */
+.card { margin-bottom: 12px; border: 1px solid var(--edge); border-radius: 4px; background: var(--well); overflow: hidden; }
+.card header { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--edge-soft); }
+.card header .kind { padding: 4px 8px; border-radius: 2px; background: var(--amber-wash); font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--amber); }
+.card header .name { font-family: var(--mono); font-size: 15px; color: var(--ink); }
+.badge { padding: 4px 8px; border-radius: 2px; font-family: var(--mono); font-size: 11px; }
+.badge.plain { border: 1px solid var(--edge); color: var(--ink-70); }
+.badge.dashed { border: 1px dashed rgba(222, 233, 233, 0.22); color: var(--ink-57); }
+.signature { padding: 18px 22px; font-family: var(--mono); font-size: 13px; line-height: 1.85; color: var(--ink-85); overflow-x: auto; }
+.signature .line { white-space: pre; }
+.signature .member { padding-left: 2em; }
+.signature .keyword { color: var(--amber); }
+.signature .name { color: var(--ink-70); }
+.signature .note { margin: 0 0 6px 2em; font-family: var(--sans); font-size: 14px; line-height: 1.6; color: var(--ink-57); white-space: normal; }
+.card .prose { margin: 0; padding: 0 22px 20px; max-width: 68ch; font-size: 15px; line-height: 1.65; color: var(--ink-70); text-wrap: pretty; }
+
+/* What a module exposes from elsewhere. */
+.reexports { margin: 0; padding: 0; list-style: none; border: 1px solid var(--edge); border-radius: 4px; overflow: hidden; }
+.reexports li { display: flex; align-items: baseline; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--edge-soft); background: var(--well); font-family: var(--mono); font-size: 13px; }
+.reexports li:last-child { border-bottom: none; }
+.reexports .sep { color: var(--ink-28); }
+.reexports .target { color: var(--ink-70); }
+
+footer { display: flex; align-items: center; gap: 18px; padding: 28px clamp(20px, 4vw, 40px); border-top: 1px solid var(--edge); font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-57); }
+footer img { display: block; }
+
+/* Below 900px the rail stacks above the main column and the tree folds behind its summary. */
+@media (max-width: 900px) {
+  .rail { flex: 1 1 100%; border-right: none; border-bottom: 1px solid var(--edge); padding: 14px 0; }
+  .tree summary { display: block; padding: 6px 20px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-70); cursor: pointer; }
+  .tree nav { padding-top: 8px; max-height: 62vh; overflow-y: auto; }
+}

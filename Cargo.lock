@@ -557,6 +557,7 @@ dependencies = [
 name = "curios"
 version = "0.12.1"
 dependencies = [
+ "askama",
  "clap",
  "curios-archive",
  "curios-binaryen",

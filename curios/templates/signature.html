@@ -1,0 +1,2 @@
+{#- A printed signature, segment by segment: a keyword set apart, a link to a declaration in this bundle, the name of one outside it, and text as it is. -#}
+{% macro segments(items) %}{% for segment in items.iter() %}{% match segment %}{% when Segment::Text(text) %}{{ text }}{% when Segment::Keyword(word) %}<span class="keyword">{{ word }}</span>{% when Segment::Link { href, text } %}<a href="{{ href }}">{{ text }}</a>{% when Segment::Name(name) %}<span class="name">{{ name }}</span>{% endmatch %}{% endfor %}{% endmacro %}

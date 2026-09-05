@@ -1,0 +1,2 @@
+{#- One paragraph of a documentation comment: text, with what a pair of backticks enclosed as code. -#}
+{% macro paragraph(paragraph) %}{% for span in paragraph.spans.iter() %}{% match span %}{% when Span::Text(text) %}{{ text }}{% when Span::Code(code) %}<code>{{ code }}</code>{% endmatch %}{% endfor %}{% endmacro %}

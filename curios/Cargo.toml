@@ -29,6 +29,7 @@ curios-binaryen = { workspace = true }
 # The switch that turns Cranelift on for the shared runtime engine, which is what gives `curios_runtime::precompile` its `precompile_module`. Named nowhere in this crate's code: wasmtime itself is `curios-runtime`'s to own.
 curios-runtime = { workspace = true, features = ["cranelift"] }
 clap = { workspace = true }
+askama = { workspace = true }
 
 # The cross-stage suites in `src/tests` reach into individual pipeline stages; the product code never does.
 [dev-dependencies]
