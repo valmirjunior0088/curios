@@ -106,7 +106,12 @@ pub(crate) fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
 /// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]) — unless `term`, the node the conversion was about, is the `/syn/Monad/bind` application a postfix `!` desugars to and the region it hoisted to has nothing to sequence in.
 ///
 /// `bind` produces `M(B)`, so the generic report names a type the author never wrote, mentions neither the `!` nor the region that rejected it, and leaks the still-unsolved `B`. The specialized report names the monad the region would have to be and the type it actually has.
-fn display_mismatch(context: &mut Context, term: &Term, this: &Term, that: &Term) -> Error {
+pub(crate) fn display_mismatch(
+    context: &mut Context,
+    term: &Term,
+    this: &Term,
+    that: &Term,
+) -> Error {
     let this = resolved_for_display(context, this);
     let that = resolved_for_display(context, that);
 

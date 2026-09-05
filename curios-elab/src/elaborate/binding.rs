@@ -1,6 +1,9 @@
 use {
     super::*,
-    crate::{HeadKey, TermBuilders, WitnessKey, convert::convert, zonk_solved_term_metas},
+    crate::{
+        HeadKey, TermBuilders, WitnessKey, convert::convert, typing::display_mismatch,
+        zonk_solved_term_metas,
+    },
     curios_core::Global,
     curios_utilities::Span,
 };
@@ -286,7 +289,7 @@ pub(super) fn elaborate_num_lit(
                 let value = if sign.is_negative() { -value } else { value };
                 (Intrinsic::Flt(value), flt_type)
             }
-            // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape.
+            // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape, through the rendering every mismatch gets. Built from the raw expected term, the report named the placeholder an operator's operand type arrives through rather than its solution: `"a" + 1` refused `1` against `?`.
             _ => {
                 let Mode::Check(expected) = &mode else {
                     unreachable!("Infer-mode target is always the Nat/Int shape default");
@@ -296,7 +299,7 @@ pub(super) fn elaborate_num_lit(
                 } else {
                     default_type
                 };
-                return Err(Error::type_mismatch(inferred, expected.clone()));
+                return Err(display_mismatch(context, term, &inferred, expected));
             }
         },
         NumLit::Character(character) => {

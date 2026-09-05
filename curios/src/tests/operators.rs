@@ -371,6 +371,22 @@ fn infix_literal_against_a_user_type_is_rejected() {
     error(source);
 }
 
+// A literal refused against the operand type names that type, not the placeholder it arrived through: the shared operand type is a metavariable solved to `Str` by the time `1` is checked, and the report once rendered it as `?`.
+#[test]
+fn infix_literal_against_a_solved_operand_type_names_the_type() {
+    let source = r#"
+        use /std/{Nat, Str, Io};
+        let s : Str = "a" + 1;
+        let _ = Io/write(Io/stdout, Str/to_bytes(s))!;
+        /std/Io/pure(())
+    "#;
+    let error = error(source);
+    assert!(
+        error.contains("inferred: Nat") && error.contains("expected: Str"),
+        "unexpected error: {error}"
+    );
+}
+
 // Type-level operators: `a + 1` in `Le`'s constructor indices elaborates to a witness projection that must reduce during conversion checking, and the two spellings (the index's and this call site's) stay convertible across items.
 #[test]
 fn type_level_operator_indices_stay_convertible() {
