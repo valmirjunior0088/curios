@@ -272,7 +272,6 @@ pub(super) fn elaborate_induct_type(
 pub(super) fn elaborate_variant(
     context: &mut Context,
     uc: &Variant,
-    term: &Term,
 ) -> Result<(Term, Term), Error> {
     let Variant {
         name,
@@ -296,7 +295,7 @@ pub(super) fn elaborate_variant(
 
     let (signature, universes) = if written_universes.is_empty() {
         let Some(signature) = induct_decl.constructor(tag).map(|c| c.telescope.clone()) else {
-            return Err(Error::match_case_missing(term.clone(), tag.clone()));
+            return Err(Error::match_case_missing(name.symbol(), tag.to_string()));
         };
         let (signature, universes) =
             context.instantiate_universe_bound(&induct_decl.universe_context, &signature)?;
@@ -307,7 +306,7 @@ pub(super) fn elaborate_variant(
             .constructor(tag)
             .map(|constructor| constructor.telescope.clone())
         else {
-            return Err(Error::match_case_missing(term.clone(), tag.clone()));
+            return Err(Error::match_case_missing(name.symbol(), tag.to_string()));
         };
         (signature, written_universes.clone())
     };

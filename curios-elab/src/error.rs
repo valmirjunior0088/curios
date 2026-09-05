@@ -227,9 +227,10 @@ pub enum Error {
         type_name: String,
         tag: String,
     },
+    /// A `match` on `type_name` with no arm for `tag` and nothing that proves the constructor impossible. Named by type and constructor alone: the match itself sits under the report's span, and the elaborator's spelling of it repeated that snippet in a vocabulary the surface language does not have.
     MatchCaseMissing {
-        term: Box<Term>,
-        atom: Atom,
+        type_name: String,
+        tag: String,
     },
     CtorArityMismatch {
         atom: Atom,
@@ -716,11 +717,8 @@ impl Error {
         Self::UnknownMatchConstructor { type_name, tag }
     }
 
-    pub(crate) fn match_case_missing<T: Into<Term>, A: Into<Atom>>(term: T, atom: A) -> Self {
-        Self::MatchCaseMissing {
-            term: Box::new(term.into()),
-            atom: atom.into(),
-        }
+    pub(crate) fn match_case_missing(type_name: String, tag: String) -> Self {
+        Self::MatchCaseMissing { type_name, tag }
     }
 
     pub(crate) fn not_a_induct_type<U: Into<Term>>(head_type: U) -> Self {
@@ -1367,7 +1365,6 @@ impl Error {
             Self::OperatorUndefined { type_, .. } => out.push(type_),
             Self::UninferredImplicit { bound, .. } => out.push(bound),
             Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),
-            Self::MatchCaseMissing { term, .. } => out.push(term),
             Self::UnboundVariable { term } => out.push(term),
             Self::Underivable { key, .. } => out.push(key),
             Self::PostponedCheck { expected } => out.push(expected),

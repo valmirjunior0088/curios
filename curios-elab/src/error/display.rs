@@ -310,9 +310,11 @@ impl fmt::Display for Displayed<'_> {
             Error::UnknownMatchConstructor { type_name, tag } => {
                 write!(f, "match arm '{tag}' is not a constructor of '{type_name}'")
             }
-            Error::MatchCaseMissing { term, atom } => {
-                let term = term.spelled(spelling);
-                write!(f, "missing match case for constructor '{atom}': {term}")
+            Error::MatchCaseMissing { type_name, tag } => {
+                write!(
+                    f,
+                    "missing match case for constructor '{tag}' of '{type_name}'"
+                )
             }
             Error::NotAInductType { head_type } => {
                 let head_type = head_type.spelled(spelling);

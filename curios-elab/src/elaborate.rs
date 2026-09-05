@@ -208,7 +208,7 @@ fn elaborate_subterm(
         Subterm::Transient(Transient::Derive) => return elaborate_derive(context, term, mode),
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
         Subterm::InductType(ut) => elaborate_induct_type(context, ut)?,
-        Subterm::Variant(uc) => elaborate_variant(context, uc, term)?,
+        Subterm::Variant(uc) => elaborate_variant(context, uc)?,
         Subterm::StructType(st) => elaborate_struct_type(context, st, term)?,
         Subterm::Struct(s) => elaborate_struct(context, s, term, &mode)?,
     };

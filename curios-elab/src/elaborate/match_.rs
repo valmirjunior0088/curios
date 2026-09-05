@@ -667,7 +667,7 @@ fn elaborate_induct_match(
 
             // An unindexed inductive has nothing to invert: every arm is reachable and a missing one is plainly missing.
             if actual_indices.is_empty() {
-                return Err(Error::match_case_missing(term.clone(), tag.clone()));
+                return Err(Error::match_case_missing(name.symbol(), tag.to_string()));
             }
 
             // Rung C — checker-verified omission: a missing arm is accepted iff first-order inversion of the scrutinee's actual indices against this case's targets finds a *definite* clash. The arm is then pruned (erase fills its slot with an unreachable body); anything short of definite keeps the arm mandatory.
