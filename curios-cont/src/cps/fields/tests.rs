@@ -2,8 +2,8 @@ use {
     super::{split_parameters, split_workers},
     crate::{
         CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
-        CpsIntrinsic, CpsLiteral, CpsModule, CpsNode, CpsValueExpr, CpsValueId, FieldGroup,
-        optimize,
+        CpsIntrinsic, CpsLiteral, CpsModule, CpsNode, CpsRow, CpsSlot, CpsValueExpr, CpsValueId,
+        FieldGroup, optimize,
     },
 };
 
@@ -1021,4 +1021,133 @@ fn a_window_region_with_a_hostile_use_declines() {
         !super::split_windows(&mut module),
         "a window returned through the sentinel is not a candidate",
     );
+}
+
+/// `main` calls `consume(r)` twice with a construction of `row` each time — once full, once padded with a filler in slot 1 — and `consume` reads slot 1 under the tag. The worker split is admitted or declined by whether the row is a family.
+fn row_consumer(slots: Vec<CpsSlot>, pad_second: bool) -> (CpsModule, CpsFunId) {
+    let mut module = CpsModule::default();
+    let row = module.add_row(CpsRow {
+        debug_name: Some("Cmd".into()),
+        slots,
+    });
+    let param = module.add_value(Some("c".into()));
+    let read = module.add_value(Some("read".into()));
+    let consume = module.reserve_function();
+    let consume_ret = module.reserve_continuation();
+    let done = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: consume_ret,
+        args: vec![CpsAtom::Value(read)],
+    }));
+    let body = module.add_node(CpsNode::LetIntrinsic {
+        result: read,
+        op: CpsIntrinsic::RowGet(row, 1),
+        args: vec![CpsAtom::Value(param)],
+        next: done,
+    });
+    module.define_function(
+        consume,
+        CpsFunction {
+            debug_name: Some("consume".into()),
+            params: vec![param],
+            return_cont: consume_ret,
+            body,
+        },
+    );
+
+    let entry = module.reserve_function();
+    let entry_ret = module.reserve_continuation();
+    let second = module.add_value(Some("second".into()));
+    let first_result = module.add_value(Some("first".into()));
+    let second_result = module.add_value(Some("second result".into()));
+    let exit = module.add_node(CpsNode::Exit {
+        value: Some(CpsAtom::Value(second_result)),
+    });
+    let second_resume = module.add_continuation(CpsContinuation {
+        debug_name: None,
+        params: vec![second_result],
+        body: exit,
+    });
+    let call_second = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(consume),
+        args: vec![CpsAtom::Value(second)],
+        return_to: second_resume,
+    });
+    let build_second = module.add_node(CpsNode::LetValue {
+        result: second,
+        value: CpsValueExpr::Row(
+            row,
+            vec![
+                CpsAtom::Literal(CpsLiteral::Nat(1)),
+                match pad_second {
+                    true => CpsAtom::Filler,
+                    false => CpsAtom::Literal(CpsLiteral::Nat(2)),
+                },
+            ],
+        ),
+        next: call_second,
+    });
+    let scope_second = module.add_node(CpsNode::LetCont {
+        continuations: vec![second_resume],
+        body: build_second,
+    });
+    let first_resume = module.add_continuation(CpsContinuation {
+        debug_name: None,
+        params: vec![first_result],
+        body: scope_second,
+    });
+    let first = module.add_value(Some("first".into()));
+    let call_first = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(consume),
+        args: vec![CpsAtom::Value(first)],
+        return_to: first_resume,
+    });
+    let build_first = module.add_node(CpsNode::LetValue {
+        result: first,
+        value: CpsValueExpr::Row(
+            row,
+            vec![
+                CpsAtom::Literal(CpsLiteral::Nat(0)),
+                CpsAtom::Literal(CpsLiteral::Nat(7)),
+            ],
+        ),
+        next: call_first,
+    });
+    let scope_first = module.add_node(CpsNode::LetCont {
+        continuations: vec![first_resume],
+        body: build_first,
+    });
+    let group = module.add_node(CpsNode::LetFun {
+        functions: vec![consume],
+        body: scope_first,
+    });
+    module.define_function(
+        entry,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_ret,
+            body: group,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().expect("the fixture is well-formed");
+    (module, consume)
+}
+
+/// A family's parameter is never taken apart at its callers: a padded slot reads null, and a `func/N` parameter cannot carry one. The product-row twin, with no tag and no padding, still splits.
+///
+/// **A regression fixture with a runtime failure behind it.** `/std/Tui`'s `issue(c: Cmd)` was split into a worker over `Cmd`'s three slots once its callers' arguments became visible constructions, and the call site projected every slot of a `Cmd/none` — two of them the fillers the door pads a nullary constructor with — into non-null parameters: `null reference` in `drain`, before `issue` could dispatch on the tag.
+#[test]
+fn a_family_parameter_is_not_split_into_a_worker() {
+    let (mut module, consume) = row_consumer(vec![CpsSlot::Tag, CpsSlot::Opaque], true);
+    assert!(
+        !split_workers(&mut module),
+        "a padded constructor's slot would cross a function boundary as null"
+    );
+    assert_eq!(module.function(consume).unwrap().params.len(), 1);
+
+    let (mut module, consume) = row_consumer(vec![CpsSlot::Nat, CpsSlot::Nat], false);
+    assert!(split_workers(&mut module), "a product row has no padding");
+    assert_eq!(module.function(consume).unwrap().params.len(), 2);
+    module.verify().expect("the split preserves the module");
 }
