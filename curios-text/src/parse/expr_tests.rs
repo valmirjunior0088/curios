@@ -181,6 +181,7 @@ fn implicit_marks_on_let_shorthand_and_inductive_params() {
         TopItem::Let(items) => {
             let [
                 TopLet {
+                    doc: None,
                     signature: LetSignature::Func { params, .. },
                     ..
                 },

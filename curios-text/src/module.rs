@@ -14,9 +14,26 @@ use {
     std::{fmt, path::Path, rc::Rc, str::FromStr},
 };
 
-/// A `mod` declaration: `module` is `Some` for an inline body (`mod m … end`) and `None` for the file-backed form (`mod m;`), whose body module discovery loads through the active [`RootSource`]. The span locates a failed load at the declaration that requested it; like `Term`'s, it is excluded from `PartialEq`.
+/// A documentation comment: the `-- |` block written on the lines immediately above a declaration, a constructor, a field or a concept method, attached by the parser to what it documents. A plain `-- ` comment is not syntax and lives beside the module; this is syntax and lives in it, which is what lets the formatter print it back where it was written and a generator read it off the tree.
+///
+/// The span runs from the block's first `-- |` to where the documented head begins, past the whitespace and plain comments between — two positions the formatter marks, so a plain comment written above the block is paid above it and one written between the block and its declaration is paid between them. Like every span it is excluded from equality, and `None` on a tree built without source.
+#[derive(Debug, Clone)]
+pub struct Doc {
+    /// One entry per `-- |` line, holding the text after `-- | ` verbatim; an empty entry is a paragraph break, written as a bare `-- |`.
+    pub lines: Vec<String>,
+    pub span: Option<Span>,
+}
+
+impl PartialEq for Doc {
+    fn eq(&self, other: &Self) -> bool {
+        self.lines == other.lines
+    }
+}
+
+/// A `mod` declaration: `module` is `Some` for an inline body (`mod m … end`) and `None` for the file-backed form (`mod m;`), whose body module discovery loads through the active [`RootSource`]. The span locates a failed load at the declaration that requested it; like `Term`'s, it is excluded from `PartialEq`. The documentation comment above a `mod` documents the module it declares, which is the one place a module's prose lives.
 #[derive(Debug, Clone)]
 pub struct TopMod {
+    pub doc: Option<Doc>,
     pub span: Option<Span>,
     pub vis_pub: bool,
     pub label: Label,
@@ -25,7 +42,10 @@ pub struct TopMod {
 
 impl PartialEq for TopMod {
     fn eq(&self, other: &Self) -> bool {
-        self.vis_pub == other.vis_pub && self.label == other.label && self.module == other.module
+        self.doc == other.doc
+            && self.vis_pub == other.vis_pub
+            && self.label == other.label
+            && self.module == other.module
     }
 }
 
@@ -70,6 +90,7 @@ impl PartialEq for TopUse {
 /// One member of a top-level `let` item — a lone definition, or one member of a `let … and …;` group (see `TopItem::Let`): a plain label, never a destructuring pattern, and a signature whose type annotation the parser makes mandatory at top level.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopLet {
+    pub doc: Option<Doc>,
     pub vis_pub: bool,
     pub label: Label,
     pub signature: LetSignature,
@@ -78,6 +99,7 @@ pub struct TopLet {
 /// A `foreign` declaration: a name and a wire signature, bound to a host-provided implementation at link time rather than a Curios definition. `signature` is parsed directly as a [`WireSignature`] (`(Nat, Bytes) -> Nat`) — a closed grammar of the six wire types, not an ordinary Curios type — so there is no name resolution to do and no `= body` form.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopForeign {
+    pub doc: Option<Doc>,
     pub vis_pub: bool,
     pub label: Label,
     pub signature: WireSignature,
@@ -94,6 +116,7 @@ pub struct CasePayloadParam {
 /// One value constructor of an `induct` declaration: a tag label, its payload telescope (see [`CasePayloadParam`]), and — for an indexed family — the `target` pinning which indices this constructor produces.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopCase {
+    pub doc: Option<Doc>,
     pub label: String,
     pub payload: Vec<CasePayloadParam>,
     /// The parenthesized index expressions after the payload — the case's terminal `: Vec(T, Nat/succ(m))` with the mandatory part elided to `: (Nat/succ(m))`. Present iff the inductive head declares indices.
@@ -103,6 +126,7 @@ pub struct TopCase {
 /// An `induct` declaration: one inductive family — a parameter telescope, an index telescope with its result sort, and the value-constructor cases. Lowering registers the family and derives both the type-constructor function and one value-constructor function per case; see the field docs for the plicity and dependency rules each part obeys.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopInduct {
+    pub doc: Option<Doc>,
     pub vis_pub: bool,
     /// Whether construction and elimination are available outside the exact declaring module. Written as `pub` immediately before the result sort.
     pub rep_pub: bool,
@@ -116,21 +140,30 @@ pub struct TopInduct {
     pub cases: Vec<TopCase>,
 }
 
+/// One field of a `struct` declaration: the Σ-type field it is written as, and the documentation comment above it. Wrapped rather than a field on [`TupleTypeParam`], because a tuple type's fields are never documented and a slot that only one of a type's two grammars can fill is a slot every reader has to know is empty.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructField {
+    pub doc: Option<Doc>,
+    pub param: TupleTypeParam,
+}
+
 /// A `struct` declaration: a nominal record. `vis_pub` is the outer `pub` (the type-former's visibility); `rep_pub` is the declaration-local `pub` before the result sort (representation exported wherever the type name is visible). The two markers are orthogonal; every combination is legal. `params` are written exactly like an inductive's; `fields` reuse the Σ-type field grammar (label optional, like tuple-type fields).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopStruct {
+    pub doc: Option<Doc>,
     pub vis_pub: bool,
     pub rep_pub: bool,
     pub label: Label,
     pub params: Vec<(Plicity, String, Term)>,
     /// The result sort — `Type` or `Prop`, written `: Sort` after the parameters; defaults to `Type` when omitted.
     pub result_sort: Term,
-    pub fields: Vec<TupleTypeParam>,
+    pub fields: Vec<StructField>,
 }
 
 /// One field of a `concept` declaration. `is_super` marks a `use`-prefixed field, whose type must elaborate to a concept application (a superclass edge).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConceptField {
+    pub doc: Option<Doc>,
     pub is_super: bool,
     pub label: String,
     /// `Some` for the signature sugar `label(params) -> type_` — the written parameter list, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label : (params) -> type_` (see `ConceptField::desugared_type`). Never set on a super field.
@@ -155,6 +188,7 @@ impl ConceptField {
 /// A `concept` declaration: a record-shaped interface. It lowers to a representation-public nominal structure plus a concept-registry entry and, into its own namespace, one method-wrapper `let` per field.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopConcept {
+    pub doc: Option<Doc>,
     pub vis_pub: bool,
     /// Representation visibility, independent from `vis_pub` (the name's): `: pub Type` is transparent, `: Type` is sealed — witnesses and dictionary literals only in the declaring module, exactly like a private-representation struct.
     pub rep_pub: bool,
@@ -182,6 +216,7 @@ pub enum WitnessEntry {
 /// A `witness` declaration: a registered inhabitant of a concept. Witnesses are anonymous — they are only ever reached through resolution (or an explicit `use <term>` carrying an ordinary value), so there is no name and no `pub`. The declaration desugars to a compiler-named top-level definition `let witness@N(tele) -> C(args) = C(args) { … }` registered in the program-wide witness table; diagnostics identify it by concept, key, and declaring module. Surface syntax writes a nonempty telescope as `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use` parameters (explicit binders are rejected at lowering). `concept`/`args` are the witnessed concept application, reused verbatim as the struct-literal head. The body is written, or omitted as `satisfy C(args);` — the derived form, whose body the compiler writes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopWitness {
+    pub doc: Option<Doc>,
     pub params: Vec<FuncSugarParam>,
     pub concept: Name,
     pub args: Vec<Term>,

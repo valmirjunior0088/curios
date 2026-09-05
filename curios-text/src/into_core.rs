@@ -897,17 +897,17 @@ fn process_items(
 
                     // Field types, with declared or positional (`_i`) names so a later field type can depend on an earlier field. The signature sugar `f(params) -> T` is undone here.
                     let field_binders =
-                        lower.mint(s.fields.iter().enumerate().map(|(i, param)| {
-                            param.label.clone().unwrap_or_else(|| format!("_{i}"))
+                        lower.mint(s.fields.iter().enumerate().map(|(i, field)| {
+                            field.param.label.clone().unwrap_or_else(|| format!("_{i}"))
                         }));
                     let mut field_scope = param_binders.clone();
                     let field_tys = s
                         .fields
                         .iter()
                         .enumerate()
-                        .map(|(i, param)| {
+                        .map(|(i, field)| {
                             let ty = lower.bound(&field_scope, || {
-                                lower.input_type(&param.desugared_type())
+                                lower.input_type(&field.param.desugared_type())
                             })?;
                             field_scope.push(field_binders[i].clone());
                             Ok((field_binders[i].1.clone(), ty))

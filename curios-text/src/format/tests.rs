@@ -247,8 +247,11 @@ fn blank_lines_normalize_to_exactly_one_between_items() {
 /// Every syntactic position a comment can be attached at, one fixture each: a `let` signature over a `choose`, a `match` with a local `let`, an `induct`, a `concept` body, and a `satisfy` body.
 ///
 /// Unbound names are deliberate — formatting is syntax-only, so these need to parse and nothing more.
-const POSITIONS: [&str; 5] = [
+const POSITIONS: [&str; 7] = [
     "use /std/{Bool, Str, Option};\n\npub let of_str(s: Str) -> Option(Bool) =\n    choose\n    | s == \"true\" => Option/some(true)\n    | _ => Option/none()\n    end;\n",
+    // Documentation comments, one line each: a comment inserted between two `-- |` lines would split a block, which is a refusal by design rather than a formatting question.
+    "use /std/{Nat};\n\n-- | Doubles.\npub let double(n: Nat) -> Nat =\n    n + n;\n\n-- | Nothing.\nlet zero: Nat =\n    0\n-- | One more.\nand one: Nat =\n    1;\n",
+    "-- | Shapes.\npub induct Shape: pub Type\n-- | Round.\n| circle(Nat)\n| square(Nat)\nend\n\n-- | A point.\nstruct Point: pub Type {\n    -- | Across.\n    x: Nat,\n    y: Nat,\n}\n",
     "use /std/{Bool, Str};\n\npub let to_str(b: Bool) -> Str =\n    let x: Str = \"y\";\n    match b | true => x | false => \"false\" end;\n",
     "pub induct Ordering: pub Type\n| lt()\n| eq()\n| gt()\nend\n",
     "use /std/{Equal, Ordering};\n\npub concept Ordered(A: Type): pub Type {\n    use Equal(A),\n    cmp(A, A) -> Ordering,\n}\n",
@@ -389,4 +392,93 @@ fn an_inline_module_keeps_the_blank_lines_between_its_items() {
     );
 
     assert_eq!(formatted(source), source);
+}
+
+/// A documentation comment is part of the tree, so the formatter prints it where it was written: above the declaration, the constructor, the field, the method, the witness and the module it documents, with a plain comment above the block kept above it and one between the block and its declaration kept between them.
+#[test]
+fn documentation_comments_are_printed_where_they_were_written() {
+    let source = concat!(
+        "-- | Numbers.\n",
+        "mod nat;\n",
+        "\n",
+        "-- above\n",
+        "-- | Doubles.\n",
+        "-- |\n",
+        "-- | Twice.\n",
+        "-- between\n",
+        "pub let double(n: Nat) -> Nat =\n",
+        "    n + n;\n",
+        "\n",
+        "pub induct Shape: pub Type\n",
+        "-- | Round.\n",
+        "| circle(Nat)\n",
+        "| square(Nat)\n",
+        "end\n",
+        "\n",
+        "struct Point: pub Type {\n",
+        "    -- | Across.\n",
+        "    x: Nat,\n",
+        "    y: Nat,\n",
+        "}\n",
+        "\n",
+        "concept Show(A: Type): pub Type {\n",
+        "    -- | Renders.\n",
+        "    show(A) -> Str,\n",
+        "}\n",
+        "\n",
+        "-- | Structural.\n",
+        "satisfy Equal(Nat);\n",
+        "and Equal(Bool) {\n",
+        "    eql = eql,\n",
+        "    neq = xor,\n",
+        "}\n",
+    );
+
+    assert_eq!(formatted(source), source);
+}
+
+/// Every Curios source in the tree formats without refusal — the parse and the round trip hold over the whole corpus, the standard library included — which is what proves a grammar change left every existing file meaning what it meant.
+#[test]
+fn every_source_in_the_tree_formats_without_refusal() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut sources = Vec::new();
+    collect_sources(&root, &mut sources);
+    assert!(
+        sources.len() > 100,
+        "found only {} sources under {}",
+        sources.len(),
+        root.display()
+    );
+
+    let refused = sources
+        .iter()
+        .filter_map(|path| {
+            Formatted::from_path(path)
+                .err()
+                .map(|refusal| format!("{}: {refusal}", path.display()))
+        })
+        .collect::<Vec<_>>();
+    assert!(refused.is_empty(), "{}", refused.join("\n"));
+}
+
+/// Every `.crs` under `directory`, skipping the directories that hold generated or foreign trees.
+fn collect_sources(directory: &std::path::Path, sources: &mut Vec<std::path::PathBuf>) {
+    for entry in std::fs::read_dir(directory).expect("the tree is readable") {
+        let path = entry.expect("a readable entry").path();
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        if path.is_dir() {
+            // `editors/` holds highlighting fixtures for the editor grammars, which are not programs.
+            if !matches!(
+                name,
+                "target" | ".git" | ".curios" | ".claude" | "node_modules" | "editors"
+            ) {
+                collect_sources(&path, sources);
+            }
+        } else if path.extension().is_some_and(|extension| extension == "crs") {
+            sources.push(path);
+        }
+    }
 }

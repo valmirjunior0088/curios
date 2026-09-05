@@ -25,12 +25,22 @@ Examples use declarations from `/std` and `/syn`. The authored libraries under `
 
 Spaces, tabs, and newlines separate tokens but otherwise have no meaning. Some operators require surrounding whitespace, as specified in [Operators](#operators).
 
-A line comment begins with `--` and continues to the end of the line. There are no block comments.
+A line comment begins with `-- ` — the two dashes and a space — and continues to the end of the line; a bare `--` ending its line is an empty comment. There are no block comments, and `--` glued to what follows it is refused rather than read as one.
 
 ```crs
 -- A complete line comment.
 let n = 1; -- A trailing comment.
 n
+```
+
+A documentation comment begins with `-- | ` — or is a bare `-- |`, an empty line of prose — and is syntax rather than a comment: the parser attaches it to what it documents. Consecutive `-- |` lines form one block, and a block immediately precedes a `let` or an `and` member, an `induct`, a `struct`, a `concept`, a `satisfy`, a `foreign` or a `mod`, or a constructor, a field or a concept method inside one of those; blank lines and plain comments between the block and its declaration are insignificant. The block above a `mod` documents the module it declares, which is where a module's prose lives. A block takes lines of its own, so `-- |` may not follow code; a block before anything else, a second block before the same declaration, a block before `use` and a block before `test` are each refused.
+
+```crs
+-- | Twice the input.
+-- |
+-- | Never overflows, since `Nat` is unbounded.
+pub let double(n: Nat) -> Nat =
+    n + n;
 ```
 
 Every comma-separated list — parameter and argument lists, tuple and struct fields, list literals, import groups — admits one optional trailing comma before its closing delimiter. A comma alone does not form an empty list.
@@ -1092,6 +1102,8 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 
 | Form | Meaning |
 | --- | --- |
+| `-- ` | Line comment |
+| `-- \| ` | Documentation comment, attached to the declaration below it |
 | `{}` | Unit type |
 | `()` | Unit value |
 | `@A: Type` | Implicit binder |

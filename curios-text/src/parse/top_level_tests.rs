@@ -1,6 +1,7 @@
 //! Top-level declarations: `let` and its `and` groups, `foreign`, inductives and structs, and the visibility spellings each admits.
 
 use {
+    super::test_support::comments_of,
     crate::*,
     curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
     curios_utilities::Plicity,
@@ -11,6 +12,7 @@ fn top_let_without_pub() {
     assert_eq!(
         "let x : Type = Type;".parse::<Module>().unwrap().items,
         vec![TopItem::Let(vec![TopLet {
+            doc: None,
             vis_pub: false,
             label: "x".into(),
             signature: LetSignature::Name {
@@ -29,6 +31,7 @@ fn top_foreign_without_pub() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
+            doc: None,
             vis_pub: false,
             label: "frobnicate".into(),
             signature: WireSignature {
@@ -50,6 +53,7 @@ fn top_foreign_with_pub() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
+            doc: None,
             vis_pub: true,
             label: "frobnicate".into(),
             signature: WireSignature {
@@ -68,6 +72,7 @@ fn top_foreign_zero_arg() {
     assert_eq!(
         "foreign clock : Nat;".parse::<Module>().unwrap().items,
         vec![TopItem::Foreign(TopForeign {
+            doc: None,
             vis_pub: false,
             label: "clock".into(),
             signature: WireSignature {
@@ -97,6 +102,7 @@ fn top_foreign_list_of_leaf() {
             .unwrap()
             .items,
         vec![TopItem::Foreign(TopForeign {
+            doc: None,
             vis_pub: false,
             label: "frobnicate".into(),
             signature: WireSignature {
@@ -138,6 +144,7 @@ fn top_let_with_pub() {
     assert_eq!(
         "pub let x : Type = Type;".parse::<Module>().unwrap().items,
         vec![TopItem::Let(vec![TopLet {
+            doc: None,
             vis_pub: true,
             label: "x".into(),
             signature: LetSignature::Name {
@@ -154,6 +161,7 @@ fn top_inductive_single_variant() {
     assert_eq!(
         m.items,
         vec![TopItem::Induct(vec![TopInduct {
+            doc: None,
             vis_pub: false,
             rep_pub: false,
             label: "Foo".into(),
@@ -161,6 +169,7 @@ fn top_inductive_single_variant() {
             indices: vec![],
             result_sort: Subterm::Type.into(),
             cases: vec![TopCase {
+                doc: None,
                 label: "bar".into(),
                 payload: vec![],
                 target: None,
@@ -175,6 +184,7 @@ fn top_inductive_empty() {
     assert_eq!(
         m.items,
         vec![TopItem::Induct(vec![TopInduct {
+            doc: None,
             vis_pub: false,
             rep_pub: false,
             label: "False".into(),
@@ -381,8 +391,8 @@ fn function_field_sugar_in_types() {
         panic!("expected a struct declaration");
     };
     let s = &structs[0];
-    assert_eq!(s.fields[0].func_params, None);
-    assert!(s.fields[1].func_params.is_some());
+    assert_eq!(s.fields[0].param.func_params, None);
+    assert!(s.fields[1].param.func_params.is_some());
 }
 
 #[test]
@@ -490,6 +500,7 @@ fn top_let_group_mixed_pub() {
         .items,
         vec![TopItem::Let(vec![
             TopLet {
+                doc: None,
                 vis_pub: true,
                 label: "id".into(),
                 signature: LetSignature::Name {
@@ -498,6 +509,7 @@ fn top_let_group_mixed_pub() {
                 },
             },
             TopLet {
+                doc: None,
                 vis_pub: false,
                 label: "helper".into(),
                 signature: LetSignature::Name {
@@ -588,4 +600,152 @@ fn every_declaration_label_spans_its_word_alone() {
         })
         .collect::<Vec<_>>();
     assert_eq!(spelled, ["x", "Inner", "Foo", "Pt", "Sh", "it", "clock"]);
+}
+
+/// A `-- |` block attaches to the declaration below it, line by line, with a bare `-- |` as a paragraph break; blank lines and plain comments between the block and the declaration are insignificant, and the plain comment stays a comment.
+#[test]
+fn a_documentation_comment_attaches_to_the_declaration_below_it() {
+    let source = "-- | Doubles.\n-- |\n-- | Twice, that is.\n\n-- plain\npub let double(n: Nat) -> Nat = n + n;";
+    let module = source.parse::<Module>().unwrap();
+    let TopItem::Let(members) = &module.items[0] else {
+        panic!("expected a let item");
+    };
+    let doc = members[0].doc.as_ref().expect("documented");
+    assert_eq!(doc.lines, ["Doubles.", "", "Twice, that is."]);
+    assert_eq!(comments_of(source), ["-- plain"]);
+}
+
+/// A block attaches to a constructor, a struct field and a concept method, and only to the member directly below it.
+#[test]
+fn a_documentation_comment_attaches_to_a_constructor_a_field_and_a_method() {
+    let source = concat!(
+        "induct Shape: pub Type\n-- | Round.\n| circle(Nat)\n| square(Nat)\nend\n",
+        "struct Point: pub Type {\n    -- | Across.\n    x: Nat,\n    y: Nat,\n}\n",
+        "concept Show(A: Type): pub Type {\n    -- | Renders.\n    show(A) -> Str,\n}\n",
+    );
+    let module = source.parse::<Module>().unwrap();
+
+    let TopItem::Induct(inducts) = &module.items[0] else {
+        panic!("expected an induct item");
+    };
+    assert_eq!(inducts[0].cases[0].doc.as_ref().unwrap().lines, ["Round."]);
+    assert_eq!(inducts[0].cases[1].doc, None);
+
+    let TopItem::Struct(structs) = &module.items[1] else {
+        panic!("expected a struct item");
+    };
+    assert_eq!(
+        structs[0].fields[0].doc.as_ref().unwrap().lines,
+        ["Across."]
+    );
+    assert_eq!(structs[0].fields[1].doc, None);
+
+    let TopItem::Concept(concepts) = &module.items[2] else {
+        panic!("expected a concept item");
+    };
+    assert_eq!(
+        concepts[0].fields[0].doc.as_ref().unwrap().lines,
+        ["Renders."]
+    );
+}
+
+/// A block attaches to a `mod`, a `satisfy`, a `foreign`, and a later member of an `and` group.
+#[test]
+fn a_documentation_comment_attaches_to_a_module_a_witness_a_foreign_and_a_later_member() {
+    let source = concat!(
+        "-- | Numbers.\nmod nat;\n",
+        "-- | Structural.\nsatisfy Equal(Nat);\n",
+        "-- | Ticks.\nforeign clock: Nat;\n",
+        "let a: Nat = 1\n-- | The other.\nand b: Nat = 2;\n",
+    );
+    let module = source.parse::<Module>().unwrap();
+
+    let TopItem::Mod(declaration) = &module.items[0] else {
+        panic!("expected a mod item");
+    };
+    assert_eq!(declaration.doc.as_ref().unwrap().lines, ["Numbers."]);
+    let TopItem::Witness(witnesses) = &module.items[1] else {
+        panic!("expected a witness item");
+    };
+    assert_eq!(witnesses[0].doc.as_ref().unwrap().lines, ["Structural."]);
+    let TopItem::Foreign(foreign) = &module.items[2] else {
+        panic!("expected a foreign item");
+    };
+    assert_eq!(foreign.doc.as_ref().unwrap().lines, ["Ticks."]);
+    let TopItem::Let(members) = &module.items[3] else {
+        panic!("expected a let item");
+    };
+    assert_eq!(members[0].doc, None);
+    assert_eq!(members[1].doc.as_ref().unwrap().lines, ["The other."]);
+}
+
+/// A block followed by nothing it may document is refused naming the rule, wherever it is written: at the end of a file, before a constructor list's `end`, before a field list's `}`, and before a program's tail.
+#[test]
+fn a_documentation_comment_before_nothing_is_refused() {
+    for source in [
+        "-- | lost\n",
+        "let x: Nat = 1;\n-- | lost\n\n",
+        "induct T: Type\n| a()\n-- | lost\nend",
+        "struct P: Type {\n    x: Nat,\n    -- | lost\n}",
+        "concept C(A: Type): Type {\n    -- | lost\n}",
+    ] {
+        let error = source.parse::<Module>().unwrap_err().format();
+        assert!(
+            error.contains("must immediately precede"),
+            "{source}: {error}"
+        );
+    }
+
+    let error = "let x: Nat = 1;\n-- | lost\nx"
+        .parse::<Entrypoint>()
+        .unwrap_err()
+        .format();
+    assert!(error.contains("must immediately precede"), "{error}");
+}
+
+/// An import has no page and a test is not part of the interface, so a block before either is refused by name.
+#[test]
+fn a_documentation_comment_before_use_or_test_is_refused() {
+    let error = "-- | lost\nuse /std/{Nat};"
+        .parse::<Module>()
+        .unwrap_err()
+        .format();
+    assert!(error.contains("cannot precede `use`"), "{error}");
+
+    let error = "-- | lost\ntest t() = Test/check(true);"
+        .parse::<Module>()
+        .unwrap_err()
+        .format();
+    assert!(error.contains("cannot precede `test`"), "{error}");
+}
+
+/// Two blocks with a gap between them and one declaration below are refused, so a stray block far above is never silently absorbed.
+#[test]
+fn two_documentation_comments_before_one_declaration_are_refused() {
+    for source in [
+        "-- | one\n\n-- | two\nlet x: Nat = 1;",
+        "-- | one\n-- plain\n-- | two\nlet x: Nat = 1;",
+    ] {
+        let error = source.parse::<Module>().unwrap_err().format();
+        assert!(
+            error.contains("two documentation comments"),
+            "{source}: {error}"
+        );
+    }
+}
+
+/// A block takes lines of its own: `-- |` after code is refused, and so is `-- |` glued to its text.
+#[test]
+fn a_documentation_comment_takes_a_line_of_its_own_and_its_space() {
+    let error = "let x: Nat = 1; -- | trailing\nlet y: Nat = 2;"
+        .parse::<Module>()
+        .unwrap_err()
+        .format();
+    assert!(error.contains("line of its own"), "{error}");
+
+    let error = "-- |glued\nlet x: Nat = 1;"
+        .parse::<Module>()
+        .unwrap_err()
+        .format();
+    assert!(error.contains("with the space"), "{error}");
 }

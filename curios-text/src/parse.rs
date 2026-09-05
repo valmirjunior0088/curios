@@ -39,20 +39,20 @@ mod tuples_tests;
 use {
     super::{
         Apply, Argument, BinPattern, BinSegment, CasePayloadParam, Choose, ChooseArm, ChooseTest,
-        ConceptField, Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
-        Infix, Intrinsic, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry, ListPattern,
-        Match, MatchPattern, MatchPatternField, MatrixArm, Module, Name, NatLiteral, NatPattern,
-        NumLit, Pattern, PatternField, Proj, Radix, StructLit, StructLitEntry, Subterm, Syn, Term,
-        TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest,
-        TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
-        WitnessField,
+        ConceptField, Doc, Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam,
+        GroupItem, Infix, Intrinsic, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry,
+        ListPattern, Match, MatchPattern, MatchPatternField, MatrixArm, Module, Name, NatLiteral,
+        NatPattern, NumLit, Pattern, PatternField, Proj, Radix, StructField, StructLit,
+        StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
+        TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
     },
     curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
     curios_num::{Floating, Natural},
     curios_parse::{
         Mark, Parser, catch, commit, fail, fail_from, lazy, look_ahead, many0, many1, mark,
         memoize, not_ahead, preceded_by_space, pure, sep_by0_trailing, sep_by1_trailing, spanned,
-        take_exact, take_n, take_while,
+        take_eof, take_exact, take_n, take_while,
     },
     curios_utilities::{
         Grain, InfixOp, Plicity, Qualifier, Sign, Span, is_identifier_char, is_keyword,
@@ -107,18 +107,113 @@ pub(crate) fn parse_optional_term<'a>() -> Parser<'a, Option<Term>> {
     catch(lazy(parse_term)).map(Some).or(pure(None))
 }
 
+/// What refuses a `--` glued to what follows it: the plain comment is `-- `, with the space, or a bare `--` ending its line.
+const COMMENT_SPACING: &str = "a comment opens with `-- `, with the space, or ends its line";
+
+/// What refuses a `-- |` glued to what follows it.
+const DOC_SPACING: &str =
+    "a documentation comment opens with `-- | `, with the space, or ends its line";
+
+/// What refuses a `-- |` after code on its line.
+const DOC_TRAILING: &str =
+    "a documentation comment takes a line of its own; `-- |` cannot follow code";
+
+/// What refuses two `-- |` blocks with a blank line or a plain comment between them and nothing declared in between.
+const DOC_TWICE: &str = "two documentation comments precede one declaration; join them, since an empty `-- |` line is a paragraph break";
+
+/// What refuses a `-- |` block followed by anything but what it may document.
+pub(crate) const DOC_BEFORE_NOTHING: &str = "a documentation comment `-- |` must immediately precede what it documents: a declaration, a constructor, a field or a concept method";
+
 pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
     // A `many0` loop over comment-then-whitespace runs, not recursion per comment line: an N-line comment banner used to nest N native frames.
     take_while(|char| char.is_whitespace())
         .and(many0(|| {
-            catch(
-                // The span covers `--` through the end of the line, newline excluded. Recording is sound here because this parser never runs inside a string or character literal — literal interiors are consumed atomically by their own parsers — so every recorded span is a genuine comment of the winning parse.
-                spanned(take_exact("--").and_keep(take_while(|char| char != '\n')))
-                    .map(|(span, _)| record_comment(span))
-                    .and_drop(take_while(|char| char.is_whitespace())),
+            // The head is recoverable, because the absence of a comment is how the loop ends and a `-- |` is not a comment but the documentation syntax the caller reads next. Everything after the head is not: a `--` glued to a word is a mistake nothing else can diagnose.
+            //
+            // The span covers `--` through the end of the line, newline excluded. Recording is sound here because this parser never runs inside a string or character literal — literal interiors are consumed atomically by their own parsers — so every recorded span is a genuine comment of the winning parse.
+            spanned(
+                catch(take_exact("--").and_drop(not_ahead(" |")))
+                    .and_drop(comment_spacing(COMMENT_SPACING))
+                    .and_drop(take_while(|char| char != '\n')),
             )
+            .map(|(span, _)| record_comment(span))
+            .and_drop(take_while(|char| char.is_whitespace()))
         }))
         .map(|_| ())
+}
+
+/// After a comment's opener: a space, consumed, or the line's end, left alone — and anything else refused with `message`, fatally, since the opener was consumed.
+fn comment_spacing<'a>(message: &'static str) -> Parser<'a, ()> {
+    // A zero-width span: the one way to read the source at the current offset through the combinators.
+    spanned(pure(())).flat_map(move |(here, ())| {
+        match here.source.text[here.start..].chars().next() {
+            Some(' ') => take_exact(" "),
+            None | Some('\n') | Some('\r') => pure(()),
+            Some(_) => fail(message),
+        }
+    })
+}
+
+/// One line of a documentation comment: `-- |` at the start of its line, its separator, the text to the line's end, and the line break with the indentation of the next line — so the next `-- |` is read as the same block only when it is on the very next line.
+fn parse_doc_line<'a>() -> Parser<'a, String> {
+    spanned(take_exact("-- |"))
+        .flat_map(|(span, ())| {
+            let text = &span.source.text;
+            let line_start = text[..span.start].rfind('\n').map_or(0, |index| index + 1);
+            match text[line_start..span.start]
+                .chars()
+                .all(char::is_whitespace)
+            {
+                true => pure(()),
+                false => fail(DOC_TRAILING),
+            }
+        })
+        .and_drop(comment_spacing(DOC_SPACING))
+        .and_keep(
+            take_while(|char| char != '\n').map(|line| line.trim_end_matches('\r').to_string()),
+        )
+        .and_drop(catch(take_exact("\n")).or(take_eof()))
+        .and_drop(take_while(|char| char == ' ' || char == '\t'))
+}
+
+/// The source from the head a documentation block runs up to.
+pub(crate) fn text_after(doc: &Doc) -> &str {
+    match &doc.span {
+        Some(span) => &span.source.text[span.end..],
+        None => "",
+    }
+}
+
+/// The word at the head a documentation block runs up to, which decides whom the block belongs to: `and` or `pub` open a later member of the group being parsed, another word opens the next item, and anything else — a closing token, `end`, the end of input — is nothing the block may document.
+pub(crate) fn word_after(doc: &Doc) -> &str {
+    let rest = text_after(doc);
+    let length = rest
+        .chars()
+        .take_while(|char| is_identifier_char(*char))
+        .map(char::len_utf8)
+        .sum();
+
+    &rest[..length]
+}
+
+/// The documentation comment above what comes next, or `None` when there is none: consecutive `-- |` lines, then the whitespace and plain comments up to the documented head. A second block before that head is refused, so a stray block far above can never be silently absorbed into a declaration's prose.
+///
+/// The head itself is not parsed here. Every caller reads it next and decides what a block may precede, committing the failure when there was a block: a documentation comment followed by nothing it may document is the diagnosis, never a reason to backtrack.
+pub(crate) fn parse_doc<'a>() -> Parser<'a, Option<Doc>> {
+    mark()
+        .and(many0(parse_doc_line))
+        .flat_map(|(start, lines)| match lines.is_empty() {
+            true => pure(None),
+            false => parse_whitespace()
+                .and_keep(not_ahead("-- |").map_err(DOC_TWICE))
+                .and_keep(mark())
+                .map(move |end| {
+                    Some(Doc {
+                        lines,
+                        span: Some(start.to(&end)),
+                    })
+                }),
+        })
 }
 
 fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {

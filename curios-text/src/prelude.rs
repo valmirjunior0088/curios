@@ -134,6 +134,7 @@ fn type_() -> Term {
 
 fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
     TopItem::Let(vec![TopLet {
+        doc: None,
         vis_pub: true,
         label: label.into(),
         signature: LetSignature::Name {
@@ -145,6 +146,7 @@ fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
 
 fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
     TopItem::Mod(TopMod {
+        doc: None,
         span: None,
         vis_pub: true,
         label: label.into(),
@@ -198,6 +200,7 @@ fn fn_marked(
     body: Term,
 ) -> TopLet {
     TopLet {
+        doc: None,
         vis_pub,
         label: label.into(),
         signature: LetSignature::Func {
@@ -258,6 +261,7 @@ fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
 
     if signature.params.is_empty() {
         return TopLet {
+            doc: None,
             vis_pub,
             label: function.label.clone().into(),
             signature: LetSignature::Name {

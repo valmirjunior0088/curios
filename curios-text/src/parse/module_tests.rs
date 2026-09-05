@@ -43,11 +43,13 @@ fn parse_nested_module() {
     assert_eq!(
         m.items,
         vec![TopItem::Mod(TopMod {
+            doc: None,
             span: None,
             vis_pub: false,
             label: "Inner".into(),
             module: Some(Module {
                 items: vec![TopItem::Let(vec![TopLet {
+                    doc: None,
                     vis_pub: true,
                     label: "x".into(),
                     signature: LetSignature::Name {

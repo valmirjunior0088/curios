@@ -224,3 +224,16 @@ fn a_literal_mismatch_quotes_the_token_alone() {
     );
     assert!(!report.contains("'= '"), "reported {report}");
 }
+
+/// A plain comment opens with `-- `, or is a bare `--` ending its line; `--` glued to a word is refused rather than read as a comment.
+#[test]
+fn a_comment_opens_with_a_space_or_ends_its_line() {
+    assert_eq!(comments_of("-- spaced\nlet x : Nat = 5;"), ["-- spaced"]);
+    assert_eq!(comments_of("--\nlet x : Nat = 5;"), ["--"]);
+
+    let error = "--glued\nlet x : Nat = 5;"
+        .parse::<Module>()
+        .unwrap_err()
+        .format();
+    assert!(error.contains("with the space"), "{error}");
+}
