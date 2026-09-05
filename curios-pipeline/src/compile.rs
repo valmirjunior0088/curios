@@ -277,6 +277,7 @@ where
         foreigns: user_foreigns,
         unbound,
         imports,
+        ..
     } = into_core_with_prelude(entrypoint, loader, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 

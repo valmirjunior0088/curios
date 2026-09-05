@@ -125,7 +125,8 @@ impl Span {
 }
 
 /// A diagnostic as data: the message, and the span it is about when it is about one. Every stage's error renders through this — [`Report::render`] is the message followed by [`Span::render_snippet`], the one shape a Curios diagnostic has ever had — so a consumer that wants the location gets it as a span rather than by parsing the `-->` header back out of the text. The message is text rather than the stage's own error, deliberately: a report is what a stage *said*, and it survives the crate boundary that the error, with its terms and spellings, does not.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
+#[curios_archive::archived]
 pub struct Report {
     pub span: Option<Span>,
     pub message: String,

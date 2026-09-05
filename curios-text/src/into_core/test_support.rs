@@ -196,6 +196,22 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core:
     (full, cached)
 }
 
+/// The lints of `src` lowered alone, each as `kind: message`.
+pub(super) fn lints(src: &str) -> Vec<String> {
+    let entrypoint = src.parse::<Entrypoint>().unwrap();
+    let loader = RootSource::none();
+    super::into_core_unit(
+        &super::UnitSource::entry(&entrypoint, &loader),
+        &[],
+        syntax(),
+    )
+    .unwrap()
+    .lints()
+    .iter()
+    .map(|lint| format!("{}: {}", lint.kind.name(), lint.report.message))
+    .collect()
+}
+
 pub(super) fn run_err(src: &str) -> String {
     super::into_core(
         &src.parse::<Entrypoint>().unwrap(),

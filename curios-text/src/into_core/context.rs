@@ -1,13 +1,28 @@
 use {
     super::PublicInterface,
     super::Scoped,
-    crate::{Error, Name},
+    crate::{Error, Label, Name},
     curios_utilities::{Entropy, InfixOp, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
         cell::{Cell, RefCell},
-        collections::{BTreeMap, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     },
 };
+
+/// One `use` selector or glob as resolution met it: what it imports, whether it re-exports, and whether any reference resolved through it — the fact the `unused-import` lint reads. Shared across the unit's contexts as the import table is, since a lint is about the unit.
+pub(super) struct UseSite {
+    pub span: Option<Span>,
+    pub what: UseSiteKind,
+    /// A `pub use` is a re-export, which is its own use.
+    pub exported: bool,
+    pub used: bool,
+}
+
+pub(super) enum UseSiteKind {
+    Selector(Label),
+    /// The glob's path as written, `/std/*`, for the message.
+    Glob(String),
+}
 
 #[derive(Clone)]
 pub(super) struct FlatLet {
@@ -264,6 +279,13 @@ pub(super) struct Context<'a> {
     // Every binding a `use` brought into some lexical scope of this unit, with the path the reader wrote it under, and per definition the ones in scope where it was written — see `curios_core::Imports`. The entries are shared across nested contexts like `unbound`, and for the same reason: Core keeps the canonical name, and only this stage knows the spelling that resolves at the use site, which is what a goal report's candidate must be pasteable under. The scope is this body's alone: `use` binds from its position to the end of the body it is written in, and a nested body starts empty, so `in_scope` is per context and a snapshot of it is taken at each item.
     imports: &'a RefCell<curios_core::Imports>,
     in_scope: Vec<usize>,
+    // Every `use` selector and glob of the unit, in the order resolution met them, and per lexical scope the site each imported label came through — a reference resolving through a label marks its site used. Declarations enter `bindings` and `qualifiers` without a site, so nothing marks for them.
+    sites: &'a RefCell<Vec<UseSite>>,
+    current_site: Option<usize>,
+    binding_sites: HashMap<String, usize>,
+    qualifier_sites: HashMap<String, usize>,
+    // The prefix of every mount some reference of this unit resolved into — what decides whether a declared dependency is used. Recorded where a target is resolved, never where it is spelled, so an absolute path and an import count alike.
+    reached: &'a RefCell<BTreeSet<Qualifier>>,
     syntax: &'a SyntaxRegistry,
 }
 
@@ -282,6 +304,8 @@ impl<'a> Context<'a> {
         witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
         unbound: &'a RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
         imports: &'a RefCell<curios_core::Imports>,
+        sites: &'a RefCell<Vec<UseSite>>,
+        reached: &'a RefCell<BTreeSet<Qualifier>>,
         syntax: &'a SyntaxRegistry,
     ) -> Context<'a> {
         Context {
@@ -301,6 +325,11 @@ impl<'a> Context<'a> {
             unbound,
             imports,
             in_scope: Vec::new(),
+            sites,
+            current_site: None,
+            binding_sites: HashMap::new(),
+            qualifier_sites: HashMap::new(),
+            reached,
             syntax,
         }
     }
@@ -323,7 +352,43 @@ impl<'a> Context<'a> {
             unbound: self.unbound,
             imports: self.imports,
             in_scope: Vec::new(),
+            sites: self.sites,
+            current_site: None,
+            binding_sites: HashMap::new(),
+            qualifier_sites: HashMap::new(),
+            reached: self.reached,
             syntax: self.syntax,
+        }
+    }
+
+    /// Open the `use` site every label imported until [`Self::close_site`] is credited to.
+    pub(super) fn open_site(&mut self, site: UseSite) {
+        let mut sites = self.sites.borrow_mut();
+        sites.push(site);
+        self.current_site = Some(sites.len() - 1);
+    }
+
+    pub(super) fn close_site(&mut self) {
+        self.current_site = None;
+    }
+
+    /// A reference resolved through the binding `label` brought into this scope: its `use`, if one did, is used.
+    pub(super) fn note_binding_use(&self, label: &str) {
+        if let Some(&site) = self.binding_sites.get(label) {
+            self.sites.borrow_mut()[site].used = true;
+        }
+    }
+
+    fn note_qualifier_use(&self, label: &str) {
+        if let Some(&site) = self.qualifier_sites.get(label) {
+            self.sites.borrow_mut()[site].used = true;
+        }
+    }
+
+    /// A reference resolved to `target`: the mount owning it is reached. The entry's empty prefix owns every name nothing else claims, and is recorded like any other; the consumer knows which prefixes it asked about.
+    fn note_reached(&self, target: &Qualifier) {
+        if let Some(mount) = Mount::owning(self.mounts, target) {
+            self.reached.borrow_mut().insert(mount.prefix.clone());
         }
     }
 
@@ -512,6 +577,7 @@ impl<'a> Context<'a> {
                     qualifier: head.to_string(),
                 })?
                 .clone();
+            self.note_qualifier_use(head);
 
             self.walk_children(start, &segments[1..upto])?
         };
@@ -533,6 +599,10 @@ impl<'a> Context<'a> {
         {
             Some(target) => {
                 self.insert_scope(label.to_string(), target.clone())?;
+                if let Some(site) = self.current_site {
+                    self.qualifier_sites.insert(label.to_string(), site);
+                }
+                self.note_reached(&target);
                 self.record_module_import(&target, label);
                 Ok(target)
             }
@@ -565,6 +635,9 @@ impl<'a> Context<'a> {
         ) {
             Some(target) => {
                 self.insert_binding(label.to_string(), target.clone())?;
+                if let Some(site) = self.current_site {
+                    self.binding_sites.insert(label.to_string(), site);
+                }
                 self.record_import(&target, label.to_string());
                 Ok(target)
             }
@@ -597,12 +670,19 @@ impl<'a> Context<'a> {
 
         if let Some(target) = module {
             self.insert_scope(label.to_string(), target.clone())?;
+            if let Some(site) = self.current_site {
+                self.qualifier_sites.insert(label.to_string(), site);
+            }
+            self.note_reached(&target);
             self.record_module_import(&target, label);
             result.module = Some(target);
         }
 
         if let Some(target) = binding {
             self.insert_binding(label.to_string(), target.clone())?;
+            if let Some(site) = self.current_site {
+                self.binding_sites.insert(label.to_string(), site);
+            }
             self.record_import(&target, label.to_string());
             result.binding = Some(target);
         }
@@ -612,6 +692,7 @@ impl<'a> Context<'a> {
 
     // Record that `target` is in scope of this body under `spelling`, from here on. A target already in scope under a spelling no longer than this one is not recorded again — both resolve, and the shorter is the one a reader would write; a shorter spelling arriving later is a second entry, so an item between the two sees only the first.
     fn record_import(&mut self, target: &Qualifier, spelling: String) {
+        self.note_reached(target);
         let global = curios_core::Global::Authored(target.clone());
         let mut imports = self.imports.borrow_mut();
         let shadowed = self.in_scope.iter().any(|index| {
@@ -768,7 +849,10 @@ impl<'a> Context<'a> {
                 &parent,
                 &label,
             ) {
-                Some(target) => Ok(target),
+                Some(target) => {
+                    self.note_reached(&target);
+                    Ok(target)
+                }
                 None => Err(
                     match self.table.get(&parent).and_then(|i| i.get_binding(&label)) {
                         Some(false) => Error::PrivateBinding { binding: label },

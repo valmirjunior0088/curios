@@ -20,6 +20,9 @@ pub(crate) use archive::*;
 mod names;
 pub use names::*;
 
+mod lint;
+pub use lint::*;
+
 mod root_source;
 pub use root_source::*;
 

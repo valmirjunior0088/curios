@@ -133,7 +133,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             return Ok(id.clone());
         }
         match self.context.bindings().get(name.head()) {
-            Some(full) => Ok(curios_core::Free::global(full.clone())),
+            Some(full) => {
+                self.context.note_binding_use(name.head());
+                Ok(curios_core::Free::global(full.clone()))
+            }
             // Unresolved, and `curios-elab` is what reports it — so this must lower to something no definition can ever be. A binder identity is unbound by construction (nothing closes over it) and carries the written name as its hint, so the diagnostic still names it; what this stage adds beside it is what the name could have meant, which only this stage can say.
             //
             // A root-level global would *not* do: `Qualifier::from([head])` is exactly what an entry-module `let helper` lowers to, so an unresolvable reference in a nested module would silently capture it. The old spelling-keyed lowering was safe only by accident — it emitted a bare `helper` while every definition carried a leading `/`.

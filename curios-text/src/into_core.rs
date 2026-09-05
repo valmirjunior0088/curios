@@ -27,6 +27,8 @@ mod exposure_tests;
 #[cfg(test)]
 mod foreign_tests;
 #[cfg(test)]
+mod lint_tests;
+#[cfg(test)]
 mod lower_tests;
 #[cfg(test)]
 mod ordering_tests;
@@ -140,9 +142,21 @@ pub struct PreparedText {
     unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
     /// Every binding a `use` brought into scope in this unit, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports`. What a goal report's candidate pool reaches beyond the names the program already mentions, and the spelling each such candidate is displayed under.
     imports: curios_core::Imports,
+    /// Every lint the lowering found, in reading order — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its scope's interfaces.
+    lints: Vec<Lint>,
+    /// The prefix of every mount some reference of this unit resolved into — see `Context::reached`.
+    reached: BTreeSet<Qualifier>,
 }
 
 impl PreparedText {
+    pub fn lints(&self) -> &[Lint] {
+        &self.lints
+    }
+
+    pub fn reached(&self) -> &BTreeSet<Qualifier> {
+        &self.reached
+    }
+
     pub fn core(&self) -> &curios_core::Module {
         &self.core
     }
@@ -361,7 +375,10 @@ fn resolve_concept_head(context: &Context, name: &Name) -> Result<curios_core::G
         context.resolve_term_name(name)?
     } else {
         match context.bindings().get(name.head()) {
-            Some(qualifier) => qualifier.clone(),
+            Some(qualifier) => {
+                context.note_binding_use(name.head());
+                qualifier.clone()
+            }
             None => Qualifier::from([name.head()]),
         }
     };
@@ -464,6 +481,12 @@ fn process_items(
                     UseGroup::Named(items) => {
                         for item in items {
                             let full = use_item.name.with(item.label());
+                            context.open_site(UseSite {
+                                span: item.label().span().cloned(),
+                                what: UseSiteKind::Selector(item.label().clone()),
+                                exported: use_item.vis_pub,
+                                used: false,
+                            });
 
                             match item {
                                 GroupItem::Mod(_) => {
@@ -476,10 +499,18 @@ fn process_items(
                                     context.resolve_both_use(&full)?;
                                 }
                             }
+                            context.close_site();
                         }
                     }
                     UseGroup::Glob => {
+                        context.open_site(UseSite {
+                            span: use_item.span.clone(),
+                            what: UseSiteKind::Glob(format!("{}/*", use_item.name.join())),
+                            exported: use_item.vis_pub,
+                            used: false,
+                        });
                         context.resolve_glob(&use_item.name)?;
+                        context.close_site();
                     }
                 }
             }
@@ -1327,6 +1358,8 @@ fn into_core_unit_within(
     let witness_ids = RefCell::new(BTreeMap::new());
     let unbound = RefCell::new(BTreeMap::new());
     let imports = RefCell::new(curios_core::Imports::default());
+    let sites = RefCell::new(Vec::new());
+    let reached = RefCell::new(BTreeSet::new());
 
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
     // The scope's seed table. A module carries the *cumulative* table from index zero rather than its own slice — `universe_floor` is asserted equal to its length — so the scope's table is the last unit's, already containing every earlier one. Concatenating them counts each predecessor once per successor, which is what the floor assertion catches.
@@ -1351,6 +1384,8 @@ fn into_core_unit_within(
         &witness_ids,
         &unbound,
         &imports,
+        &sites,
+        &reached,
         syntax,
     );
     // Every named prefix in the compilation binds its own one-segment name. No two can repeat it: the disjointness check above refuses a unit claiming what the scope already holds, and the scope's own mounts were pairwise disjoint when each was compiled. The entry's prefix is the empty one, which has no name to bind.
@@ -1454,6 +1489,8 @@ fn into_core_unit_within(
         universe_floor: universes.count(),
         unbound: unbound.into_inner(),
         imports: imports.into_inner(),
+        lints: ordered(unused_imports(sites.into_inner())),
+        reached: reached.into_inner(),
     })
 }
 
@@ -1478,7 +1515,7 @@ pub fn prepare_prelude(input: &RootSource, syntax: &SyntaxRegistry) -> Result<Pr
     into_core_unit(&UnitSource::mounted(input), &[], syntax)
 }
 
-/// The entry program lowered: its module, the floors elaboration's counters start above, its `foreign` rows, and the unresolved-name table its `unbound variable` reports read from.
+/// The entry program lowered: its module, the floors elaboration's counters start above, its `foreign` rows, the unresolved-name table its `unbound variable` reports read from, and its lints.
 pub struct LoweredEntry {
     pub core: curios_core::Module,
     pub metavariable_floor: usize,
@@ -1488,6 +1525,22 @@ pub struct LoweredEntry {
     pub unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
     /// See [`PreparedText::imports`].
     pub imports: curios_core::Imports,
+    /// See [`PreparedText::lints`].
+    pub lints: Vec<Lint>,
+    /// See [`PreparedText::reached`].
+    pub reached: BTreeSet<Qualifier>,
+}
+
+/// The `unused-import` lints: every site no reference resolved through, a re-export excepted.
+fn unused_imports(sites: Vec<UseSite>) -> Vec<Lint> {
+    sites
+        .into_iter()
+        .filter(|site| !site.used && !site.exported)
+        .map(|site| match &site.what {
+            UseSiteKind::Selector(label) => Lint::unused_import(label),
+            UseSiteKind::Glob(path) => Lint::unused_glob(site.span.as_ref(), path),
+        })
+        .collect()
 }
 
 /// Lower the entry program against the units already lowered.
@@ -1506,5 +1559,7 @@ pub fn into_core_with_prelude(
         foreigns: unit.foreigns,
         unbound: unit.unbound,
         imports: unit.imports,
+        lints: unit.lints,
+        reached: unit.reached,
     })
 }
