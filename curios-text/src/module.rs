@@ -168,7 +168,7 @@ pub struct TopConcept {
 #[derive(Debug, Clone, PartialEq)]
 pub struct WitnessField {
     pub label: String,
-    pub func_params: Option<Vec<(Plicity, String, Option<Term>)>>,
+    pub func_params: Option<Vec<(Plicity, Label, Option<Term>)>>,
     pub value: Term,
 }
 

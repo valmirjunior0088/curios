@@ -216,18 +216,15 @@ pub(super) fn parse_nat_zero_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 // The `pred + 1; ih` leaf of a `Nat` match-arm pattern, with the same optional `; ih` as the `List`/`Bin` cons leaves below (`parse_cons_ih`). Tried after `Ctor` and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name+1;ih` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` intrinsics and a `take_exact` operator token that doesn't itself eat trailing whitespace) — `pred+1` sets this apart visually from a plain binder in a way `pred + 1` doesn't need help with.
 pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(
-        parse_identifier()
+        parse_label()
             .and_drop(preceded_by_space())
             .and_drop(take_exact("+"))
             .and_drop(require_space())
             .and_drop(parse_literal("1")),
     )
     .and(parse_cons_ih())
-    .map(|(pred_label, ih): (&str, Option<Pattern>)| {
-        MatchPattern::Nat(NatPattern::Succ {
-            pred_label: pred_label.to_string(),
-            ih,
-        })
+    .map(|(pred_label, ih): (Label, Option<Pattern>)| {
+        MatchPattern::Nat(NatPattern::Succ { pred_label, ih })
     })
 }
 
@@ -263,17 +260,17 @@ pub(super) fn parse_list_nil_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 pub(super) fn parse_list_cons_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(
         parse_literal("[")
-            .and_keep(parse_identifier())
+            .and_keep(parse_label())
             .and_drop(parse_literal(","))
             .and_drop(parse_literal("..")),
     )
-    .and(parse_identifier())
+    .and(parse_label())
     .and_drop(parse_literal("]"))
     .and(parse_cons_ih())
-    .map(|((head, tail), ih)| {
+    .map(|((head_label, tail_label), ih)| {
         MatchPattern::List(ListPattern::Cons {
-            head_label: head.to_string(),
-            tail_label: tail.to_string(),
+            head_label,
+            tail_label,
             ih,
         })
     })
@@ -297,18 +294,18 @@ fn parse_bin_cons_match_pattern<'a>(
 ) -> Parser<'a, MatchPattern> {
     catch(
         parse_literal(prefix)
-            .and_keep(parse_identifier())
+            .and_keep(parse_label())
             .and_drop(parse_literal(","))
             .and_drop(parse_literal("..")),
     )
-    .and(parse_identifier())
+    .and(parse_label())
     .and_drop(parse_literal("]"))
     .and(parse_cons_ih())
-    .map(move |((head, tail), ih)| {
+    .map(move |((head_label, tail_label), ih)| {
         MatchPattern::Bin(BinPattern::Atom {
             grain,
-            head_label: head.to_string(),
-            tail_label: tail.to_string(),
+            head_label,
+            tail_label,
             ih,
         })
     })
@@ -340,7 +337,7 @@ fn parse_match_pattern_inner<'a>() -> Parser<'a, MatchPattern> {
 }
 
 // One parameter of the definition sugar `label(params) = value` (tuple, struct, and witness fields). Like a lambda binder it retains its plicity mark: `@name` (implicit) or `use name` (witness) — the mark is copied onto the generated function value's slot, so a hidden-binder field type (`pure : (@A, x) -> M(A)`) can be implemented as `pure(@A, x) = …` rather than losing the mark.
-pub(super) fn parse_func_param<'a>() -> Parser<'a, (Plicity, String, Option<Term>)> {
+pub(super) fn parse_func_param<'a>() -> Parser<'a, (Plicity, Label, Option<Term>)> {
     parse_func_binder_plicity()
         .and(parse_binder())
         .and(
@@ -348,7 +345,7 @@ pub(super) fn parse_func_param<'a>() -> Parser<'a, (Plicity, String, Option<Term
                 .map(Some)
                 .or(pure(None)),
         )
-        .map(|((plicity, name), annotation)| (plicity, name.to_string(), annotation))
+        .map(|((plicity, name), annotation)| (plicity, name, annotation))
 }
 
 // A lambda parameter's plicity mark: `@` (implicit) or `use` (witness) prefixing the binder pattern, or no mark (explicit). Unlike the function-type and definition-sugar `use` forms — where a witness binder is anonymous and `use` is followed by the domain *type* — a lambda's `use` names a binder the body can reference (`use show`), so the mark precedes an ordinary pattern.

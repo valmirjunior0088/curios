@@ -3,11 +3,15 @@ use {
     super::{Context, MatchCompiler},
     crate::{
         BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic, Label,
-        Let, LetBinding, LetGroup, LetSignature, ListEntry, Name, Nat, NatLiteral, NumLit, Pattern,
-        PatternField, StructLitEntry, Subterm, Syn, Term,
+        Let, LetBinding, LetGroup, LetSignature, Lint, ListEntry, Name, Nat, NatLiteral, NumLit,
+        Pattern, PatternField, StructLitEntry, Subterm, Syn, Term,
     },
     curios_utilities::{Grain, PackedBin, Plicity, Qualifier, Span, recurse},
-    std::{cell::RefCell, sync::Arc},
+    std::{
+        cell::{Cell, RefCell},
+        collections::HashSet,
+        sync::Arc,
+    },
 };
 
 /// A lowered function's binders: `(plicity, core binder, domain)` per slot, paralleling the surface parameter list.
@@ -31,6 +35,31 @@ pub(super) struct Lowerer<'a, 'b> {
     pub(super) context: &'a Context<'b>,
     /// The enclosing local binders (function and `let` binders, match-arm patterns, motive labels), innermost last. A bare reference whose spelling appears here resolves to the innermost such binder rather than a like-named module binding — see [`Self::resolve_name`]. Compiler-minted binders are never registered: nothing can write their name.
     scope: RefCell<Vec<Binder>>,
+    /// Every written binder a reference could reach, with where it was written — the `unused-binder` lint's candidates, decided by [`Self::flush`] once the whole declaration is lowered, since a goal anywhere in it or a mention in its declared type is decided after the binder's scope closes.
+    candidates: RefCell<Vec<Candidate>>,
+    /// The binder identities some reference resolved to.
+    used: RefCell<HashSet<curios_core::Free>>,
+    /// Whether a written `?` was lowered: a declaration holding one is exempt, its binders being the goal's scope.
+    saw_goal: Cell<bool>,
+    /// The function-definition sugar being lowered, when one is — see [`Self::enter_signature`].
+    signature: Cell<Option<usize>>,
+    signatures: RefCell<Vec<Signature>>,
+}
+
+/// One written binder the lint may report: its spelling, its identity, its span, and the signature whose outermost lambda bound it, when one did.
+struct Candidate {
+    name: String,
+    id: curios_core::Free,
+    span: Span,
+    signature: Option<usize>,
+}
+
+/// One function-definition sugar `f(params) -> output = body`. Its telescope is lowered twice, as the Π-type's binders and as the body lambda's, with distinct identities; a parameter the result type mentions is used by the declaration whatever the body does, so the names the output mentions exempt the lambda's parameters of that spelling.
+#[derive(Default)]
+struct Signature {
+    output_mentions: HashSet<String>,
+    telescope_seen: bool,
+    lambda_seen: bool,
 }
 
 impl<'a, 'b> Lowerer<'a, 'b> {
@@ -38,12 +67,59 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Self {
             context,
             scope: RefCell::new(Vec::new()),
+            candidates: RefCell::new(Vec::new()),
+            used: RefCell::new(HashSet::new()),
+            saw_goal: Cell::new(false),
+            signature: Cell::new(None),
+            signatures: RefCell::new(Vec::new()),
         }
+    }
+
+    /// Lower a declaration's type and body as the function-definition sugar they came from, when they did: the first Π-type met is its telescope and the first lambda its parameters, and the two are read together by [`Self::flush`]. A plain `let x : T = e` enters nothing. Returns what was current, for a local `let` to restore.
+    pub(super) fn enter_signature(&self, signature: &LetSignature) -> Option<usize> {
+        match signature {
+            LetSignature::Func { .. } => self.enter_sugar(),
+            LetSignature::Name { .. } => self.signature.replace(None),
+        }
+    }
+
+    pub(super) fn enter_sugar(&self) -> Option<usize> {
+        let mut signatures = self.signatures.borrow_mut();
+        signatures.push(Signature::default());
+        self.signature.replace(Some(signatures.len() - 1))
+    }
+
+    pub(super) fn leave_signature(&self, previous: Option<usize>) {
+        self.signature.set(previous);
+    }
+
+    /// The lints of the declaration this lowered, decided now that every binder's scope has closed and every mention has been seen. A declaration holding a written goal reports none: its binders are what the goal's report lists for the author to use next.
+    fn flush(&self) {
+        if self.saw_goal.get() {
+            return;
+        }
+        let used = self.used.borrow();
+        let signatures = self.signatures.borrow();
+        let lints = self
+            .candidates
+            .borrow()
+            .iter()
+            .filter(|candidate| !used.contains(&candidate.id))
+            .filter(|candidate| {
+                !candidate.signature.is_some_and(|signature| {
+                    signatures[signature]
+                        .output_mentions
+                        .contains(&candidate.name)
+                })
+            })
+            .map(|candidate| Lint::unused_binder(&candidate.name, &candidate.span))
+            .collect::<Vec<_>>();
+        self.context.report(lints);
     }
 
     /// Mint one binder identity per written name, in order. Nothing is brought into scope: the caller decides where each binder is visible, and the identity it holds is the one every such region re-enters.
     ///
-    /// An unwritten (`_` or empty) name still gets an identity — it occupies a binder position — but no reference can reach it.
+    /// An unwritten (`_` or empty) name still gets an identity — it occupies a binder position — but no reference can reach it. A binder minted here is never linted: it is a declaration telescope's, or a Π-type's, which a reference in the declaration reads as part of its type.
     pub(super) fn mint(&self, names: impl IntoIterator<Item = String>) -> Vec<Binder> {
         names
             .into_iter()
@@ -52,6 +128,41 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 (name, id)
             })
             .collect()
+    }
+
+    /// [`Self::mint`] for written binders: one that carries a span, can be referred to and is not `_`-prefixed becomes a lint candidate. `signature` is the sugar whose outermost lambda these are, when they are.
+    fn mint_written(
+        &self,
+        labels: impl IntoIterator<Item = (String, Option<Span>)>,
+        signature: Option<usize>,
+    ) -> Vec<Binder> {
+        labels
+            .into_iter()
+            .map(|(name, span)| {
+                let id = self.context.fresh_binder(bindable(&name).then_some(&name));
+                if let Some(span) = span
+                    && bindable(&name)
+                    && !name.starts_with('_')
+                {
+                    self.candidates.borrow_mut().push(Candidate {
+                        name: name.clone(),
+                        id: id.clone(),
+                        span,
+                        signature,
+                    });
+                }
+                (name, id)
+            })
+            .collect()
+    }
+
+    /// The binders of a lambda's parameters. The first lambda lowered under a signature is its sugar's, and its parameters are decided together with the telescope — see [`Signature`].
+    fn mint_params(&self, params: &[FuncParam]) -> Vec<Binder> {
+        let signature = self.signature.get().filter(|&signature| {
+            let mut signatures = self.signatures.borrow_mut();
+            !std::mem::replace(&mut signatures[signature].lambda_seen, true)
+        });
+        self.mint_written(param_labels(params), signature)
     }
 
     /// Lower `body` with already-minted `binders` in scope, then restore the previous scope.
@@ -112,6 +223,20 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             lowered.push((param.plicity, binders[index].1.clone(), domain));
         }
         let output = self.bound(&binders, output)?;
+        // The first Π-type lowered under a signature is its sugar's telescope: the parameters its result mentions are used by the declaration — see [`Signature`].
+        if let Some(signature) = self.signature.get() {
+            let mut signatures = self.signatures.borrow_mut();
+            let signature = &mut signatures[signature];
+            if !std::mem::replace(&mut signature.telescope_seen, true) {
+                let mentioned = output.free_vars_shared();
+                signature.output_mentions.extend(
+                    binders
+                        .iter()
+                        .filter(|(_, id)| mentioned.contains(id))
+                        .map(|(name, _)| name.clone()),
+                );
+            }
+        }
         Ok(curios_core::Term::func_type_marked(lowered, output))
     }
 
@@ -130,6 +255,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .rev()
             .find(|(bound, _)| bound == name.head())
         {
+            self.used.borrow_mut().insert(id.clone());
             return Ok(id.clone());
         }
         match self.context.bindings().get(name.head()) {
@@ -180,7 +306,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Prop => curios_core::Term::prop(),
             Subterm::Hole => curios_core::Term::hole(self.context.fresh_metavar()),
             // A written goal `?`: same fresh metavariable, but marked so zonk reports what elaboration determined for it instead of splicing.
-            Subterm::Goal => curios_core::Term::goal(self.context.fresh_metavar()),
+            Subterm::Goal => {
+                self.saw_goal.set(true);
+                curios_core::Term::goal(self.context.fresh_metavar())
+            }
             Subterm::Derive => curios_core::Term::derive(),
             // A `/syn` literal (string or list) desugars via the meta-emitter to a `/syn` construction (see `syn_literal`), never a core intrinsic.
             Subterm::Syn(syn) => self.syn_literal(syn)?,
@@ -206,7 +335,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             Subterm::FuncType(ft) => self.func_type_under(&ft.params, || self.term(&ft.output))?,
             Subterm::Func(func) => {
-                let binders = self.mint(param_names(&func.params));
+                let binders = self.mint_params(&func.params);
                 let body = self.bound(&binders, || self.term(&func.body))?;
                 let (params, body) = self.lower_func_params(&func.params, &binders, body)?;
                 curios_core::Term::func_marked(params, body)
@@ -355,7 +484,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             // A lambda re-roots the region.
             Subterm::Func(func) => {
-                let binders = self.mint(param_names(&func.params));
+                let binders = self.mint_params(&func.params);
                 let body = self.bound(&binders, || self.region(&func.body))?;
                 let (params, body) = self.lower_func_params(&func.params, &binders, body)?;
                 Ok(curios_core::Term::func_marked(params, body))
@@ -418,11 +547,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         lower_value: impl Fn(&Term, &mut Vec<Hoisted>) -> Result<curios_core::Term, Error>,
         inner: impl FnOnce() -> Result<curios_core::Term, Error>,
     ) -> Result<(Vec<Hoisted>, curios_core::Term), Error> {
-        let binders = self.mint(
+        let binders = self.mint_written(
             group
                 .members
                 .iter()
-                .flat_map(|member| pattern_names(&member.binder)),
+                .flat_map(|member| pattern_labels(&member.binder)),
+            None,
         );
 
         let mut binds = Vec::new();
@@ -430,8 +560,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let mut types = Vec::with_capacity(group.members.len());
             let mut values = Vec::with_capacity(group.members.len());
             for member in &group.members {
+                let enclosing = self.enter_signature(&member.signature);
                 values.push(lower_value(&member.signature.body(), &mut binds)?);
                 types.push(self.term(&member.signature.type_())?);
+                self.leave_signature(enclosing);
             }
             Ok((types, values))
         })?;
@@ -697,11 +829,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// One pattern-leaf binder: its written spelling and the identity it lowers to. `_` gets an identity nothing can name, so repeated wildcards never collide.
-    pub(super) fn pattern_binder(&self, name: &str) -> Binder {
-        (
-            name.to_string(),
-            self.context.fresh_binder(bindable(name).then_some(name)),
-        )
+    pub(super) fn pattern_binder(&self, name: &Label) -> Binder {
+        self.mint_written([(name.to_string(), name.span().cloned())], None)
+            .remove(0)
     }
 
     /// A nominal head's resolved name. Only a global can head a nominal literal; a local in that position is a resolution error the core stage reports, so an unresolved one keeps its own unbindable identity.
@@ -792,11 +922,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// A `Nat` succ or `List`/`Bin` cons arm's induction-hypothesis binder: an omitted `; ih` (`None` — there is no source name at all) mints an unwritten binder; a written one is minted with its spelling as the hint.
     pub(super) fn cons_ih_binder(&self, ih_label: &Option<Label>) -> Binder {
         match ih_label {
-            Some(name) => (
-                name.to_string(),
-                self.context
-                    .fresh_binder(bindable(name).then_some(name.as_str())),
-            ),
+            Some(name) => self.pattern_binder(name),
             None => (String::new(), self.context.fresh_binder(None)),
         }
     }
@@ -1360,17 +1486,36 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 }
 
+/// A lowerer is one declaration's, and the declaration is done when its lowerer is dropped — which is where the decision every candidate waited on is made, so no lowering site can forget to make it. A lowering that failed reports too, harmlessly: the unit it belonged to reports its error and nothing else.
+impl Drop for Lowerer<'_, '_> {
+    fn drop(&mut self) {
+        self.flush();
+    }
+}
+
 /// Whether a written binder name can be referred to. `_` and the empty label occupy a binder position but name nothing.
 fn bindable(name: &str) -> bool {
     !(name.is_empty() || name == "_")
 }
 
-/// The binder names a parameter list introduces — every leaf binder name in each parameter's pattern, flattened, all in scope across the body. These shadow like-named module bindings; the wildcard `_` rides along but is ignored by [`Lowerer::bound`].
-fn param_names(params: &[FuncParam]) -> Vec<String> {
+/// The binder names a parameter list introduces, each with where it was written — every leaf binder in each parameter's pattern, flattened, all in scope across the body. These shadow like-named module bindings; the wildcard `_` rides along but is ignored by [`Lowerer::bound`].
+fn param_labels(params: &[FuncParam]) -> Vec<(String, Option<Span>)> {
     params
         .iter()
-        .flat_map(|param| pattern_names(&param.pattern))
+        .flat_map(|param| pattern_labels(&param.pattern))
         .collect()
+}
+
+/// Every `Pattern::Binder` leaf in `pattern` with its span, recursing through nested tuple/struct fields in field order.
+fn pattern_labels(pattern: &Pattern) -> Vec<(String, Option<Span>)> {
+    match pattern {
+        Pattern::Binder(Some(name)) => vec![(name.to_string(), name.span().cloned())],
+        Pattern::Binder(None) => vec![],
+        Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => fields
+            .iter()
+            .flat_map(|field| pattern_labels(&field.value))
+            .collect(),
+    }
 }
 
 /// Every `Pattern::Binder` leaf name in `pattern`, recursing through nested tuple/struct fields in field order.

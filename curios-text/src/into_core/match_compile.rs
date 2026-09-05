@@ -2,7 +2,7 @@ use curios_elab::TermBuilders;
 use {
     super::{Hoisted, Lowerer},
     crate::{
-        BinPattern, Choose, ChooseArm, ChooseTest, Error, ListPattern, Match, MatchPattern,
+        BinPattern, Choose, ChooseArm, ChooseTest, Error, Label, ListPattern, Match, MatchPattern,
         MatrixArm, NatPattern, Pattern, PatternField, Term,
     },
     curios_num::Natural,
@@ -552,7 +552,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let rest = columns;
 
         let mut zero_rows = Vec::new();
-        let mut succ_rows: Vec<(String, Option<Pattern>, MatrixRow<'_>)> = Vec::new();
+        let mut succ_rows: Vec<(Label, Option<Pattern>, MatrixRow<'_>)> = Vec::new();
         let mut lit_rows: Vec<(Natural, MatrixRow<'_>)> = Vec::new();
         for mut row in rows {
             match row.patterns.remove(0) {
@@ -658,7 +658,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let rest = columns;
 
         let mut nil_rows = Vec::new();
-        let mut cons_rows: Vec<(String, String, Option<Pattern>, MatrixRow<'_>)> = Vec::new();
+        let mut cons_rows: Vec<(Label, Label, Option<Pattern>, MatrixRow<'_>)> = Vec::new();
         for mut row in rows {
             match row.patterns.remove(0) {
                 MatchPattern::List(ListPattern::Nil) => nil_rows.push(row),
@@ -762,7 +762,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
         let mut grain: Option<&Grain> = None;
         let mut end_rows = Vec::new();
-        let mut byte_rows: Vec<(String, String, Option<Pattern>, MatrixRow<'_>)> = Vec::new();
+        let mut byte_rows: Vec<(Label, Label, Option<Pattern>, MatrixRow<'_>)> = Vec::new();
         for mut row in rows {
             match row.patterns.remove(0) {
                 MatchPattern::Bin(BinPattern::End(row_grain)) => {

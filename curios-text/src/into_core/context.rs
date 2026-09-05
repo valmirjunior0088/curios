@@ -1,7 +1,7 @@
 use {
     super::PublicInterface,
     super::Scoped,
-    crate::{Error, Label, Name},
+    crate::{Error, Label, Lint, Name},
     curios_utilities::{Entropy, InfixOp, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
         cell::{Cell, RefCell},
@@ -286,6 +286,8 @@ pub(super) struct Context<'a> {
     qualifier_sites: HashMap<String, usize>,
     // The prefix of every mount some reference of this unit resolved into — what decides whether a declared dependency is used. Recorded where a target is resolved, never where it is spelled, so an absolute path and an import count alike.
     reached: &'a RefCell<BTreeSet<Qualifier>>,
+    // Every lint a `Lowerer` of this unit decided — see `Lowerer::flush`.
+    lints: &'a RefCell<Vec<Lint>>,
     syntax: &'a SyntaxRegistry,
 }
 
@@ -306,6 +308,7 @@ impl<'a> Context<'a> {
         imports: &'a RefCell<curios_core::Imports>,
         sites: &'a RefCell<Vec<UseSite>>,
         reached: &'a RefCell<BTreeSet<Qualifier>>,
+        lints: &'a RefCell<Vec<Lint>>,
         syntax: &'a SyntaxRegistry,
     ) -> Context<'a> {
         Context {
@@ -330,6 +333,7 @@ impl<'a> Context<'a> {
             binding_sites: HashMap::new(),
             qualifier_sites: HashMap::new(),
             reached,
+            lints,
             syntax,
         }
     }
@@ -357,8 +361,13 @@ impl<'a> Context<'a> {
             binding_sites: HashMap::new(),
             qualifier_sites: HashMap::new(),
             reached: self.reached,
+            lints: self.lints,
             syntax: self.syntax,
         }
+    }
+
+    pub(super) fn report(&self, lints: impl IntoIterator<Item = Lint>) {
+        self.lints.borrow_mut().extend(lints);
     }
 
     /// Open the `use` site every label imported until [`Self::close_site`] is credited to.

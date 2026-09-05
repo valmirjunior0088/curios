@@ -167,7 +167,7 @@ pub struct TupleType {
 pub struct TupleField {
     pub label: Option<String>,
     /// `Some` for the definition sugar `label(params) = value` — the written parameter list (each `(plicity, name, annotation)`), kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label = (params) => value` (see `TupleField::desugared_value`), the plicity marks carried onto the generated lambda's slots. Always paired with a label.
-    pub func_params: Option<Vec<(Plicity, String, Option<Term>)>>,
+    pub func_params: Option<Vec<(Plicity, Label, Option<Term>)>>,
     pub value: Term,
 }
 
@@ -181,7 +181,7 @@ impl TupleField {
                     .iter()
                     .map(|(plicity, name, ty)| FuncParam {
                         plicity: *plicity,
-                        pattern: Pattern::Binder(Some(name.clone().into())),
+                        pattern: Pattern::Binder(Some(name.clone())),
                         annotation: ty.clone(),
                     })
                     .collect(),
@@ -335,7 +335,7 @@ pub enum NatPattern {
     Zero,
     /// The `pred + 1; ih` leaf. `pred_label` is always a plain binder name, never a further nested sub-pattern — deep peeling in one arm stays expressible only via hand-nested matches. The `; ih` binds the *fold result*, not scrutinee shape, so it takes any irrefutable [`Pattern`] (`; (cur, live)` destructures a tuple-valued hypothesis exactly as a `let` binder would); it is optional, exactly like the `; ih` on the `List`/`Bits`/`Bytes` cons leaves below — omitting it makes the arm an ordinary case split.
     Succ {
-        pred_label: String,
+        pred_label: Label,
         ih: Option<Pattern>,
     },
     /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, lowered to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (see `into_core::match_compile`'s `compile_nat`).
@@ -351,8 +351,8 @@ pub enum ListPattern {
     Nil,
     /// The `[head, ..tail][; ih]` leaf. `ih` is `None` when `; ih` is omitted (lowering mints a fresh internal name) — a plain case-split with no fold hypothesis; when written it is any irrefutable [`Pattern`], like the `Nat` succ leaf's.
     Cons {
-        head_label: String,
-        tail_label: String,
+        head_label: Label,
+        tail_label: Label,
         ih: Option<Pattern>,
     },
 }
@@ -365,8 +365,8 @@ pub enum BinPattern {
     /// The `\head\..tail[; ih]` leaf; `ih` is optional (and an irrefutable [`Pattern`]) exactly as on the `List` cons leaf.
     Atom {
         grain: Grain,
-        head_label: String,
-        tail_label: String,
+        head_label: Label,
+        tail_label: Label,
         ih: Option<Pattern>,
     },
 }

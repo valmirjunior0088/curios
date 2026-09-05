@@ -52,6 +52,15 @@ impl Lint {
         )
     }
 
+    /// A binder nothing referenced, underlined at the word. The name is kept by prefixing it with `_`, which is what the message says.
+    pub(crate) fn unused_binder(name: &str, span: &Span) -> Self {
+        Self::at(
+            LintKind::UnusedBinder,
+            Some(span),
+            format!("unused binder `{name}`; name it `_{name}` to keep it"),
+        )
+    }
+
     fn at(kind: LintKind, span: Option<&Span>, message: String) -> Self {
         let report = match span {
             Some(span) => Report::at(span.clone(), message),

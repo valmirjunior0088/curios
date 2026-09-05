@@ -521,6 +521,7 @@ fn process_items(
                     .map(|let_item| {
                         context.record_import_scope(Some(&context.prefixed(&let_item.label)));
                         let lower = Lowerer::new(context);
+                        lower.enter_signature(&let_item.signature);
                         let type_ = lower.term(&let_item.signature.type_())?;
                         Ok(FlatLet {
                             kind: curios_core::DefinitionKind::Authored,
@@ -542,6 +543,7 @@ fn process_items(
             TopItem::Test(test) => {
                 context.record_import_scope(Some(&context.prefixed(&test.label)));
                 let lower = Lowerer::new(context);
+                lower.enter_sugar();
                 let output = curios_core::Term::var(curios_core::Var::free(
                     curios_core::Free::global(context.syntax().test.test_type.qualifier()),
                 ));
@@ -1183,6 +1185,7 @@ fn process_items(
                         };
 
                         let lower = Lowerer::new(context);
+                        lower.enter_signature(&signature);
                         let item = FlatLet {
                             kind: curios_core::DefinitionKind::Witness,
                             name: name.clone(),
@@ -1360,6 +1363,7 @@ fn into_core_unit_within(
     let imports = RefCell::new(curios_core::Imports::default());
     let sites = RefCell::new(Vec::new());
     let reached = RefCell::new(BTreeSet::new());
+    let lints = RefCell::new(Vec::new());
 
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
     // The scope's seed table. A module carries the *cumulative* table from index zero rather than its own slice — `universe_floor` is asserted equal to its length — so the scope's table is the last unit's, already containing every earlier one. Concatenating them counts each predecessor once per successor, which is what the floor assertion catches.
@@ -1386,6 +1390,7 @@ fn into_core_unit_within(
         &imports,
         &sites,
         &reached,
+        &lints,
         syntax,
     );
     // Every named prefix in the compilation binds its own one-segment name. No two can repeat it: the disjointness check above refuses a unit claiming what the scope already holds, and the scope's own mounts were pairwise disjoint when each was compiled. The entry's prefix is the empty one, which has no name to bind.
@@ -1441,17 +1446,20 @@ fn into_core_unit_within(
 
     // The entrypoint, for the one unit that has one. Its tail closes the root body, so the imports in scope there are the last the root saw.
     context.record_import_scope(None);
-    let lower = Lowerer::new(&context);
-    let entry = match source.entrypoint() {
-        Some(entrypoint) => Some(curios_core::Entrypoint {
-            body: lower.value(&entrypoint.tail)?,
-            type_: entrypoint
-                .type_
-                .as_ref()
-                .map(|type_| lower.term(type_))
-                .transpose()?,
-        }),
-        None => None,
+    let entry = {
+        // Scoped so the lowerer drops, and reports its lints, before the tables the context borrows are moved into the result below.
+        let lower = Lowerer::new(&context);
+        match source.entrypoint() {
+            Some(entrypoint) => Some(curios_core::Entrypoint {
+                body: lower.value(&entrypoint.tail)?,
+                type_: entrypoint
+                    .type_
+                    .as_ref()
+                    .map(|type_| lower.term(type_))
+                    .transpose()?,
+            }),
+            None => None,
+        }
     };
 
     audit_public_exposures(
@@ -1489,7 +1497,12 @@ fn into_core_unit_within(
         universe_floor: universes.count(),
         unbound: unbound.into_inner(),
         imports: imports.into_inner(),
-        lints: ordered(unused_imports(sites.into_inner())),
+        lints: ordered(
+            unused_imports(sites.into_inner())
+                .into_iter()
+                .chain(lints.into_inner())
+                .collect(),
+        ),
         reached: reached.into_inner(),
     })
 }

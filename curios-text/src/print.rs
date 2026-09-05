@@ -5,7 +5,7 @@ use {
     super::{
         Apply, Argument, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField,
         Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix,
-        Intrinsic, Let, LetSignature, ListEntry, ListPattern, Match, MatchPattern,
+        Intrinsic, Label, Let, LetSignature, ListEntry, ListPattern, Match, MatchPattern,
         MatchPatternField, Nat, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix,
         StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct,
         TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField,
@@ -265,7 +265,7 @@ fn print_func_sugar_param(param: FuncSugarParam) -> Printer {
 }
 
 /// One lambda parameter: the binder name with its optional domain annotation.
-fn print_func_param((plicity, name, annotation): (Plicity, String, Option<Term>)) -> Printer {
+fn print_func_param((plicity, name, annotation): (Plicity, Label, Option<Term>)) -> Printer {
     let bound = match annotation {
         Some(ty) => flat([pure(name), pure(": "), print_term(ty)]),
         None => pure(name),

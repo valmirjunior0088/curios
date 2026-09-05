@@ -396,7 +396,7 @@ fn function_field_sugar_in_values() {
     assert_eq!(fields[0].label.as_deref(), Some("bump"));
     assert_eq!(
         fields[0].func_params,
-        Some(vec![(Plicity::Explicit, "x".to_string(), None)]),
+        Some(vec![(Plicity::Explicit, "x".into(), None)]),
     );
     assert!(matches!(fields[0].value.as_subterm(), Subterm::Apply(_)));
     assert!(matches!(
