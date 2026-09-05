@@ -26,7 +26,7 @@ use {
 fn bytes_opaque(n: usize) -> String {
     format!(
         r#"
-        use /std/{{Handle, Bytes, Nat, Str}};
+        use /std/{{Bytes, Nat, Str}};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let head_of(b : Bytes) -> Bytes =
@@ -42,7 +42,7 @@ fn bytes_opaque(n: usize) -> String {
 fn bytes_fixed(n: usize) -> String {
     format!(
         r#"
-        use /std/{{Handle, Bytes, Nat, Str}};
+        use /std/{{Bytes, Nat, Str}};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, Str/to_bytes("0123456789")) end;
         let built = go({n}, x[]);
@@ -56,7 +56,7 @@ fn bytes_fixed(n: usize) -> String {
 fn bytes_growing(n: usize) -> String {
     format!(
         r#"
-        use /std/{{Handle, Bytes, Nat, Str}};
+        use /std/{{Bytes, Nat, Str}};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go({n}, x[]);
@@ -70,7 +70,7 @@ fn bytes_growing(n: usize) -> String {
 fn list_opaque(n: usize) -> String {
     format!(
         r#"
-        use /std/{{Handle, List, Nat, Str}};
+        use /std/{{List, Nat, Str}};
         let go(i : Nat, acc : List(Nat)) -> List(Nat) =
             match i | 0 => acc | k + 1; ih => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
         let head_of(a : List(Nat)) -> List(Nat) =
@@ -86,7 +86,7 @@ fn list_opaque(n: usize) -> String {
 fn list_fixed(n: usize) -> String {
     format!(
         r#"
-        use /std/{{Handle, List, Nat, Str}};
+        use /std/{{List, Nat, Str}};
         let go(i : Nat, acc : List(Nat)) -> List(Nat) =
             match i | 0 => acc | k + 1; ih => go(k, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) end;
         let built = go({n}, []);
@@ -100,7 +100,7 @@ fn list_fixed(n: usize) -> String {
 fn list_growing(n: usize) -> String {
     format!(
         r#"
-        use /std/{{Handle, List, Nat, Str}};
+        use /std/{{List, Nat, Str}};
         let go(i : Nat, acc : List(Nat)) -> List(Nat) =
             match i | 0 => acc | k + 1; ih => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
         let built = go({n}, []);
@@ -518,7 +518,7 @@ fn str_literal(n: usize, uses: usize) -> String {
 
     format!(
         r#"
-        use /std/{{Str, Bytes, Handle}};
+        use /std/{{Str, Bytes}};
         let s : Str = "{literal}";
         {used}
         /std/print("ok")
@@ -535,7 +535,7 @@ fn bytes_literal(n: usize) -> String {
 
     format!(
         r#"
-        use /std/{{Bytes, Nat, Handle}};
+        use /std/{{Bytes, Nat}};
         let b : Bytes = x[{entries}];
         /std/print(Nat/to_str(Bytes/len(b)))
         "#
@@ -819,7 +819,7 @@ fn ascii_refinement(n: usize) -> String {
 
     format!(
         r#"
-        use /std/{{Bytes, Byte, Nat, Bool, Eq, Handle}};
+        use /std/{{Bytes, Byte, Nat, Bool, Eq}};
         let all_ascii(b : Bytes) -> Bool =
             match b
             | x[] => true
@@ -863,7 +863,7 @@ fn an_oversized_construction_is_refused_before_it_is_allocated() {
     let shift = |amount: u64| {
         format!(
             r#"
-            use /std/{{Handle, Nat, Bytes, Str}};
+            use /std/{{Nat, Bytes, Str}};
             let big : Nat = Nat/shl(1, {amount});
             let b : Bytes = Str/to_bytes("0123456789");
             let rest : Bytes = Bytes/drop(b, big);

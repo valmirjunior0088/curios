@@ -6,7 +6,7 @@ use crate::tests::{error, run};
 #[test]
 fn struct_private_construction_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
@@ -26,7 +26,7 @@ fn struct_private_construction_rejected() {
 #[test]
 fn struct_private_projection_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
@@ -47,7 +47,7 @@ fn struct_private_projection_rejected() {
 #[test]
 fn pub_signature_exposing_private_sibling_is_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod M
             use /std/{Nat};
             struct Secret : Type { Nat }
@@ -67,7 +67,7 @@ fn pub_signature_exposing_private_sibling_is_rejected() {
 #[test]
 fn pub_signature_exposing_private_child_module_is_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod M
             mod Inner
                 use /std/{Nat};
@@ -90,7 +90,7 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
 #[test]
 fn pub_concept_with_private_superclass_is_rejected() {
     let source = r#"
-        use /std/{Nat, Bool, Handle};
+        use /std/{Nat, Bool};
         mod M
             use /std/{Bool};
             concept Hidden(A : Type) : pub Type {
@@ -115,7 +115,7 @@ fn pub_concept_with_private_superclass_is_rejected() {
 #[test]
 fn sealed_pub_concept_with_private_superclass_is_accepted() {
     let source = r#"
-        use /std/{Nat, Bool, Handle};
+        use /std/{Nat, Bool};
         mod M
             use /std/{Bool};
             concept Hidden(A : Type) : Type {
@@ -136,7 +136,7 @@ fn sealed_pub_concept_with_private_superclass_is_accepted() {
 #[test]
 fn pub_inductive_with_private_payload_type_is_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod M
             induct Secret : Type
             | mk()
@@ -159,7 +159,7 @@ fn pub_inductive_with_private_payload_type_is_rejected() {
 #[test]
 fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
     let hidden = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod M
             use /std/{Nat};
             struct Secret : pub Type { n : Nat }
@@ -172,7 +172,7 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
     assert_eq!(run(hidden), b"ok");
 
     let exposed = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod M
             use /std/{Nat};
             struct Secret : pub Type { n : Nat }
@@ -191,7 +191,7 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
 #[test]
 fn struct_private_representation_open_in_descendant() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
@@ -212,7 +212,7 @@ fn struct_private_representation_open_in_descendant() {
 #[test]
 fn struct_private_representation_closed_to_siblings() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod Owner
             pub mod Celsius
                 use /std/{Nat};
@@ -238,7 +238,7 @@ fn struct_private_representation_closed_to_siblings() {
 #[test]
 fn opaque_inductive_is_eliminable_in_a_descendant() {
     let source = r#"
-        use /std/{Nat, Bool, Handle};
+        use /std/{Nat, Bool};
         mod Flag
             use /std/{Nat, Bool};
             pub induct Flag : Type
@@ -266,7 +266,7 @@ fn opaque_inductive_is_eliminable_in_a_descendant() {
 #[test]
 fn async_future_plumbing_is_not_reachable_from_user_code() {
     let source = r#"
-        use /std/{Nat, Handle, Async};
+        use /std/{Nat, Async};
         let f = /std/Async/Future/new();
         /std/print("no")
         "#;

@@ -70,9 +70,6 @@ pub use List/{let List};
 pub mod Cell;
 pub use Cell/{let Cell};
 
-pub mod Handle;
-pub use Handle/{let Handle};
-
 pub mod File;
 pub use File/{let File};
 

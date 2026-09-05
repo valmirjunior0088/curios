@@ -21,7 +21,7 @@ fn let_bound_tuple_with_an_effectful_field_lowers() {
 fn proj_by_label_resolves_to_its_position() {
     // `.label` is elaboration-time sugar for the positional projection, so both spellings typecheck identically.
     let source = r#"
-        use /std/{Nat, Bytes, Handle};
+        use /std/{Nat, Bytes};
         let r : { status : Nat, payload : Bytes } = (0, /std/Str/to_bytes("ok"));
         let by_label : Bytes = r.payload;
         let by_index : Bytes = r.1;

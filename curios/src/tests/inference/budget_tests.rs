@@ -28,7 +28,7 @@ fn nonproductive_inner_rec_in_type_position_exhausts_its_budget() {
 #[test]
 fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
     let source = r#"
-        use /std/{Nat, List, Bits, Bool, Str, Handle, proc};
+        use /std/{Nat, List, Bits, Bool, Str, proc};
         let taint = List/len(proc/args!);
         let t: Bool = taint == 0;
         let grown = b[t, 1];
@@ -47,7 +47,7 @@ fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
 #[test]
 fn a_literal_depth_packed_recursion_compiles_within_the_default_budget() {
     let source = r#"
-        use /std/{Nat, List, Bits, Bool, Str, Handle, proc};
+        use /std/{Nat, List, Bits, Bool, Str, proc};
         let taint = List/len(proc/args!);
         let t: Bool = taint == 0;
         let grown = b[t, 1];

@@ -185,7 +185,7 @@ fn folded_literal_outside_the_envelope_traps_at_materialization() {
 fn closed_computation_through_the_envelope_folds_in_u32() {
     // Fully constant programs are complete under the numeric law: partial evaluation carries the u32 value straight through `to_str`, so no out-of-envelope literal ever reaches the backend.
     assert_eq!(
-        run("use /std/{Handle, Nat, Io}; /std/print(Nat/to_str(1073741824 + 1073741824))"),
+        run("use /std/{Nat, Io}; /std/print(Nat/to_str(1073741824 + 1073741824))"),
         b"2147483648"
     );
 }
@@ -195,7 +195,7 @@ fn a_literal_divisor_sees_through_a_symbolic_dividend() {
     // `/` and `%` join the floor seam `+`, `-`, and `*` already share, so a literal divisor reduces against an open term. Two unconditional laws do it: the floor law peels the whole divisors a literal floor certainly carries, and the split divides out a scaled symbol when every other summand is bounded below the divisor — which is exactly the shape a base-256 encoding produces, and what makes one provably injective.
     assert_eq!(
         run(r#"
-        use /std/{Handle, Nat, Byte, Eq, Io};
+        use /std/{Nat, Byte, Eq, Io};
         -- The split: `b` cannot carry, because its carrier bounds it at 255.
         let hi : (x : Nat, b : Byte) -> Eq((256 * x + Byte/to_nat(b)) / 256, x) =
             (x, b) => Eq/refl();
@@ -225,7 +225,7 @@ fn byte_of_nat_inverts_to_nat_and_refuses_the_bound() {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     run_text(
         r#"
-        use /std/{Handle, Byte, Bytes, Nat, Str, Option, Io};
+        use /std/{Byte, Bytes, Nat, Str, Option, Io};
         let bytes = match Io/read(Io/stdin, 16)! : (_) => Bytes
             | chunk(b) => b
             | eof() => x[]

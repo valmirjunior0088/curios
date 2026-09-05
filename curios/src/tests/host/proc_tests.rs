@@ -85,7 +85,7 @@ fn exit_halts_with_code() {
 fn exit_in_local_binding_halts() {
     // A forced description bound to a name nothing reads still performs: `dead` is never mentioned again, and the program still exits 3 without reaching the write. Regression test: erasure used to collapse such bindings to the unit constant wholesale, silently dropping the exit. Post-retype `go` must return an `Io` for the force to have a region at all — an unforced `proc/exit(3)` would be an inert description, which is the whole point of the carrier.
     let entrypoint = r#"
-        use /std/{Nat, Handle, Str, Io};
+        use /std/{Nat, Str, Io};
         let go(n : std/Nat) -> Io(std/Nat) =
             let dead = /std/proc/exit(3)!;
             Io/pure(n);

@@ -11,7 +11,7 @@ use {
 #[test]
 fn a_palette_index_past_the_sixteen_is_refused() {
     let source = r#"
-        use /std/{Handle, Tui};
+        use /std/{Tui};
         use /std/Tui/{Color};
         let picked: Color = Color/ansi(16);
         /std/print("unreachable")
@@ -148,7 +148,7 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
     let (system, io) = MockHost::builder().args([b"program".as_slice()]).build();
     run_text(
         r#"
-        use /std/{Nat, Bool, Str, Char, List, Option, Async, Handle, Tui, proc};
+        use /std/{Nat, Bool, Str, Char, List, Option, Async, Tui, proc};
         use /std/Tui/{Style, Frame, Key, Event, Cmd};
         use /std/Tui/Key/{Code};
         let counter: Tui(Nat, Nat) =

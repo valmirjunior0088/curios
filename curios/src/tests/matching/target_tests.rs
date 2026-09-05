@@ -8,7 +8,7 @@ use {
 #[test]
 fn opaque_inductive_is_usable_through_declaring_module_api() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub mod Secret
             use /std/{Nat};
             pub induct T : Type
@@ -29,7 +29,7 @@ fn opaque_inductive_is_usable_through_declaring_module_api() {
 #[test]
 fn opaque_inductive_empty_elimination_is_private() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub mod Secret
             use /std/{Nat};
             pub induct T : Type
@@ -52,7 +52,7 @@ fn opaque_inductive_empty_elimination_is_private() {
 #[test]
 fn tuple_match_target_projects_fields() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         let f(p : { Nat, Nat }) -> Nat =
             match p
             | (x, y) => x + y
@@ -67,7 +67,7 @@ fn tuple_match_target_projects_fields() {
 #[test]
 fn struct_match_target_projects_fields() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let f(p : Pair(Nat, Nat)) -> Nat =
             match p
@@ -83,7 +83,7 @@ fn struct_match_target_projects_fields() {
 #[test]
 fn struct_arm_privacy_is_enforced() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
@@ -124,7 +124,7 @@ fn effectful_match_scrutinee_runs_once() {
 #[test]
 fn inductive_match_catch_all_covers_unenumerated_constructors() {
     let source = r#"
-        use /std/{Option, Nat, Bytes, rand, Handle};
+        use /std/{Option, Nat, Bytes, rand};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(x) => x + 10

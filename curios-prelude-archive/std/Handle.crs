@@ -1,2 +1,0 @@
--- The raw handle the host mints, re-exported for `/std`'s own modules: a stream type wraps one behind a private representation and reads it through `/std/Async/raw`. The type is nameable everywhere — the seams between those modules, `Socket/new` and `Child/new` and the `raw` loops, state it in their interfaces — but nothing public mints one, and the standard streams are `Io/stdin`, `Io/stdout` and `Io/stderr`, so a program never holds one.
-pub use /sys/{Handle};

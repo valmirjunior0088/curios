@@ -5,7 +5,7 @@ use crate::tests::{error, run};
 #[test]
 fn named_fields_run_end_to_end() {
     let source = r#"
-        use /std/{Vec, Nat, Handle};
+        use /std/{Vec, Nat};
         let p : { n : Nat, v : Vec(Nat, n) } =
             (n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())));
         let total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
@@ -23,7 +23,7 @@ fn named_fields_run_end_to_end() {
 #[test]
 fn struct_transparent_pair_projects() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair(Nat, Nat) { fst = 2, snd = 5 };
         /std/print(Nat/to_str(Nat/add(p.fst, p.1)))
@@ -36,7 +36,7 @@ fn struct_transparent_pair_projects() {
 #[test]
 fn struct_parameter_inference_at_construction() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         /std/print(Nat/to_str(Nat/mul(p.fst, p.snd)))
@@ -49,7 +49,7 @@ fn struct_parameter_inference_at_construction() {
 #[test]
 fn struct_newtype_projects() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Meters : pub Type { Nat }
         let m : Meters = Meters { 5 };
         /std/print(Nat/to_str(m.0))
@@ -62,7 +62,7 @@ fn struct_newtype_projects() {
 #[test]
 fn struct_dependent_fields_run_end_to_end() {
     let source = r#"
-        use /std/{Vec, Nat, Handle};
+        use /std/{Vec, Nat};
         pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         let total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
@@ -80,7 +80,7 @@ fn struct_dependent_fields_run_end_to_end() {
 #[test]
 fn struct_abstract_smart_constructor_round_trips() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
@@ -97,7 +97,7 @@ fn struct_abstract_smart_constructor_round_trips() {
 #[test]
 fn struct_is_not_a_tuple() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : { fst : Nat, snd : Nat } = Pair { fst = 1, snd = 2 };
         /std/print("no")
@@ -110,7 +110,7 @@ fn struct_is_not_a_tuple() {
 #[test]
 fn struct_wrong_field_count_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1 };
         /std/print("no")
@@ -123,7 +123,7 @@ fn struct_wrong_field_count_rejected() {
 #[test]
 fn struct_field_label_out_of_order_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { snd = 1, fst = 2 };
         /std/print("no")
@@ -136,7 +136,7 @@ fn struct_field_label_out_of_order_rejected() {
 #[test]
 fn struct_literal_non_struct_head_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         let Foo : Nat = 3;
         let bad : Nat = Foo { x = 1 };
         /std/print("no")
@@ -150,7 +150,7 @@ fn struct_literal_non_struct_head_rejected() {
 #[test]
 fn prop_struct_with_prop_fields_runs() {
     let source = r#"
-        use /std/{Nat, Eq, Handle};
+        use /std/{Nat, Eq};
         struct And(A : Prop, B : Prop) : pub Prop { fst : A, snd : B }
         let p : And(Eq(0, 0), Eq(1, 1)) = And { Eq/refl(), Eq/refl() };
         let proof : Eq(0, 0) = p.fst;
@@ -164,7 +164,7 @@ fn prop_struct_with_prop_fields_runs() {
 #[test]
 fn prop_struct_with_informative_field_rejected() {
     let source = r#"
-        use /std/{Nat, Eq, Handle};
+        use /std/{Nat, Eq};
         struct Box : pub Prop { val : Nat }
         let b0 : Box = Box { 0 };
         let b1 : Box = Box { 1 };
@@ -182,7 +182,7 @@ fn prop_struct_with_informative_field_rejected() {
 #[test]
 fn type_struct_distinct_values_not_convertible() {
     let source = r#"
-        use /std/{Nat, Eq, Handle};
+        use /std/{Nat, Eq};
         struct Box : pub Type { val : Nat }
         let b0 : Box = Box { 0 };
         let b1 : Box = Box { 1 };
@@ -197,7 +197,7 @@ fn type_struct_distinct_values_not_convertible() {
 #[test]
 fn function_field_sugar_runs_end_to_end() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Api : pub Type { base : Nat, bump(x : Nat) -> Nat }
         let api : Api = Api { base = 3, bump(x) = x + 1 };
         let pair : { seed : Nat, twice(x : Nat) -> Nat } =
@@ -212,7 +212,7 @@ fn function_field_sugar_runs_end_to_end() {
 #[test]
 fn a_parameter_typed_by_a_universe_polymorphic_family_is_admitted() {
     let source = r#"
-        use /std/{Nat, List, Handle};
+        use /std/{Nat, List};
         struct Boxed(xs : List(Nat)) : pub Type { size : Nat }
         let b : Boxed([1, 2]) = Boxed([1, 2]) { size = 2 };
         /std/print(Nat/to_str(b.size))
@@ -225,7 +225,7 @@ fn a_parameter_typed_by_a_universe_polymorphic_family_is_admitted() {
 #[test]
 fn a_parameter_typed_by_a_family_carrying_a_type_payload_is_admitted() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         induct Carrier : pub Type | wrap(Type) end
         struct Tagged(c : Carrier) : pub Type { size : Nat }
         let t : Tagged(Carrier/wrap(Nat)) = Tagged(Carrier/wrap(Nat)) { size = 7 };
@@ -239,7 +239,7 @@ fn a_parameter_typed_by_a_family_carrying_a_type_payload_is_admitted() {
 #[test]
 fn a_dependent_parameter_telescope_is_admitted() {
     let source = r#"
-        use /std/{Nat, List, Handle};
+        use /std/{Nat, List};
         struct Dep(A : Type, xs : List(A)) : pub Type { size : Nat }
         let d : Dep(Nat, [1]) = Dep(Nat, [1]) { size = 1 };
         /std/print(Nat/to_str(d.size))
@@ -252,7 +252,7 @@ fn a_dependent_parameter_telescope_is_admitted() {
 #[test]
 fn a_concept_parameter_typed_by_a_universe_polymorphic_family_is_admitted() {
     let source = r#"
-        use /std/{Nat, List, Handle};
+        use /std/{Nat, List};
         concept Sized(F : List(Type)) : pub Type { size(Nat) -> Nat, }
         let s : Sized([Nat]) = Sized([Nat]) { size(n) = n };
         /std/print(Nat/to_str(Sized/size(use s, 4)))
@@ -265,7 +265,7 @@ fn a_concept_parameter_typed_by_a_universe_polymorphic_family_is_admitted() {
 #[test]
 fn a_field_naming_its_own_struct_is_admitted_beside_a_shared_parameter() {
     let source = r#"
-        use /std/{Nat, Option, Handle};
+        use /std/{Nat, Option};
         struct Cell(A : Type) : pub Type { value : A, next : Option(Cell(A)) }
         let c : Cell(Nat) = Cell(Nat) { value = 3, next = Option/none() };
         /std/print(Nat/to_str(c.value))
@@ -278,7 +278,7 @@ fn a_field_naming_its_own_struct_is_admitted_beside_a_shared_parameter() {
 #[test]
 fn a_mismatch_names_an_unlabeled_tuple_the_way_source_writes_it() {
     let source = r#"
-        use /std/{Nat, Bool, Str, Handle};
+        use /std/{Nat, Bool, Str};
         let p : {fst : Nat, snd : Bool, thd : Str} = (1, true, "x");
         let q : {Nat, Bool, Str} = p;
         /std/print("unreachable")
@@ -295,7 +295,7 @@ fn a_mismatch_names_an_unlabeled_tuple_the_way_source_writes_it() {
 #[test]
 fn a_struct_group_may_name_one_another() {
     let source = r#"
-        use /std/{Nat, Option, Handle};
+        use /std/{Nat, Option};
         struct Node : pub Type { value: Nat, next: Option(Edge) }
         and Edge : pub Type { weight: Nat, to: Node }
         let n : Node = Node {

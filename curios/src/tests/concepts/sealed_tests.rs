@@ -6,7 +6,7 @@ use crate::tests::{error, run};
 #[test]
 fn concept_rejects_foreign_satisfy() {
     let source = r#"
-        use /std/{Nat, Str, Handle};
+        use /std/{Nat, Str};
         mod Guard
             use /std/{Nat, Str};
             pub concept Tag(A : Type) : Type {
@@ -30,7 +30,7 @@ fn concept_rejects_foreign_satisfy() {
 #[test]
 fn concept_rejects_foreign_dictionary_literal() {
     let source = r#"
-        use /std/{Nat, Str, Handle};
+        use /std/{Nat, Str};
         mod Guard
             use /std/{Nat, Str};
             pub concept Tag(A : Type) : Type {
@@ -52,7 +52,7 @@ fn concept_rejects_foreign_dictionary_literal() {
 #[test]
 fn concept_resolves_and_projects_cross_module() {
     let source = r#"
-        use /std/{Nat, Str, Handle};
+        use /std/{Nat, Str};
         mod Guard
             use /std/{Nat, Str};
             pub concept Tag(A : Type) : Type {
@@ -74,7 +74,7 @@ fn concept_resolves_and_projects_cross_module() {
 #[test]
 fn concept_superclass_resolves_cross_module() {
     let source = r#"
-        use /std/{Nat, Bool, Handle};
+        use /std/{Nat, Bool};
         mod Guard
             use /std/{Nat, Bool};
             pub concept Eq2(A : Type) : Type {
@@ -103,7 +103,7 @@ fn concept_superclass_resolves_cross_module() {
 #[test]
 fn prop_concept_certifies() {
     let source = r#"
-        use /std/{Nat, Str, Eq, Handle};
+        use /std/{Nat, Str, Eq};
         mod Guard
             use /std/{Nat, Eq};
             pub concept Certified(A : Type) : Prop {

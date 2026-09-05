@@ -9,7 +9,7 @@ use {
 #[test]
 fn a_fold_hypothesis_destructures_directly() {
     let source = r#"
-        use /std/{Nat, Bool, Byte, Bytes, Handle};
+        use /std/{Nat, Bool, Byte, Bytes};
         let count(n : Nat) -> Nat =
             let (total, _) =
                 match n : (_) => {Nat, Bool}
@@ -36,7 +36,7 @@ fn a_fold_hypothesis_destructures_directly() {
 #[test]
 fn flat_option_match_lowers_without_synthetic_indirection() {
     let source = r#"
-        use /std/{Option, Nat, Handle};
+        use /std/{Option, Nat};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(y) => y
@@ -51,7 +51,7 @@ fn flat_option_match_lowers_without_synthetic_indirection() {
 #[test]
 fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
     let source = r#"
-        use /std/{Bits, Nat, Handle};
+        use /std/{Bits, Nat};
         let value(bits : Bits) -> Nat =
             match bits
             | b[] => 0
@@ -69,7 +69,7 @@ fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
 #[test]
 fn nested_ctor_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Option, Nat, Handle};
+        use /std/{Option, Nat};
         let f(a : Option(Nat), b : Option(Nat)) -> Nat =
             match (a, b)
             | (some(x), some(y)) => x + y
@@ -87,7 +87,7 @@ fn nested_ctor_pattern_dispatches_by_shape() {
 #[test]
 fn nested_nat_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Option, Nat, Handle};
+        use /std/{Option, Nat};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(0) => 0
@@ -104,7 +104,7 @@ fn nested_nat_pattern_dispatches_by_shape() {
 #[test]
 fn nested_list_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Nat, List, Handle};
+        use /std/{Nat, List};
         let f(p : { Nat, List(Nat) }) -> Nat =
             match p
             | (x, []) => x
@@ -120,7 +120,7 @@ fn nested_list_pattern_dispatches_by_shape() {
 #[test]
 fn nested_bin_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Nat, Byte, Bytes, Str, Handle};
+        use /std/{Nat, Byte, Bytes, Str};
         let f(p : { Nat, Bytes }) -> Nat =
             match p
             | (x, x[]) => x
@@ -136,7 +136,7 @@ fn nested_bin_pattern_dispatches_by_shape() {
 #[test]
 fn nested_bool_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Bool, Nat, Handle};
+        use /std/{Bool, Nat};
          pub induct Pair(A : Type, B : Type) : pub Type
         | pair(A, B)
         end
@@ -155,7 +155,7 @@ fn nested_bool_pattern_dispatches_by_shape() {
 #[test]
 fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
     let source = r#"
-        use /std/{Option, Nat, Handle};
+        use /std/{Option, Nat};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(0) => 0
@@ -172,7 +172,7 @@ fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
 #[test]
 fn nested_nat_literal_dispatch_selects_matching_case() {
     let source = r#"
-        use /std/{Option, Nat, Bytes, rand, Handle};
+        use /std/{Option, Nat, Bytes, rand};
         let z = Bytes/len(rand/bytes(0)!);
         let n = Nat/add(z, 5);
         let hit =
@@ -189,7 +189,7 @@ fn nested_nat_literal_dispatch_selects_matching_case() {
 #[test]
 fn nested_nat_literal_dispatch_falls_through_to_default() {
     let source = r#"
-        use /std/{Option, Nat, Bytes, rand, Handle};
+        use /std/{Option, Nat, Bytes, rand};
         let z = Bytes/len(rand/bytes(0)!);
         let n = Nat/add(z, 6);
         let miss =

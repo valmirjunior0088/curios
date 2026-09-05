@@ -40,7 +40,7 @@ fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
 #[test]
 fn cumulativity_admits_a_lower_universe_where_a_higher_is_required() {
     let source = r#"
-        use /std/{Str, Handle};
+        use /std/{Str};
         induct Unit : pub Type
         | only()
         end
@@ -58,7 +58,7 @@ fn cumulativity_admits_a_lower_universe_where_a_higher_is_required() {
 #[test]
 fn one_declaration_serves_two_universe_levels() {
     let source = r#"
-        use /std/{Nat, Str, Handle};
+        use /std/{Nat, Str};
         let pick(@A : Type, x : A) -> A = x;
         let small : Nat = pick(7);
         let large : Type = pick(Nat);
@@ -76,7 +76,7 @@ fn one_declaration_serves_two_universe_levels() {
 #[test]
 fn a_body_carried_level_is_minimized_rather_than_generalized() {
     let source = r#"
-        use /std/{Nat, Str, Handle};
+        use /std/{Nat, Str};
         induct Box : pub Type
         | wrap(Type)
         end

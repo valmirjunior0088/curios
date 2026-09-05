@@ -1118,7 +1118,7 @@ fn step_specialization_extent() {
 #[test]
 fn surveys_the_fold_accumulator_region() {
     let source = r#"
-        use /std/{Handle, Nat, Str, Char, List, proc};
+        use /std/{Nat, Str, Char, List, proc};
         let taint = List/len(proc/args!);
         let n : Nat = taint;
         let text : Str = Nat/to_str(n);

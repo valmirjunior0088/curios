@@ -48,7 +48,7 @@ fn io_read() {
 #[test]
 fn io_read_short_reads_and_eof() {
     let source = r#"
-        use /std/{Handle, Io, stream};
+        use /std/{Io, stream};
         let show(r : stream/Chunk) -> Io({}) =
             match r : (_) => Io({})
             | chunk(b) => let _ = Io/write(Io/stdout, b)!; /std/Io/pure(())
@@ -69,7 +69,7 @@ fn io_read_short_reads_and_eof() {
 #[test]
 fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
     let source = r#"
-        use /std/{Nat, Bytes, Handle, Result, Async, Cell, Str, Io, print, stream};
+        use /std/{Nat, Bytes, Result, Async, Cell, Str, Io, print, stream};
         let show(r : Result(Async/Deadlock, Result(Io/Error, Bytes))) -> Str =
             match r
             | failure(_) => "deadlock"

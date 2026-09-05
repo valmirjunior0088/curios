@@ -6,7 +6,7 @@ use crate::tests::{error, run};
 #[test]
 fn concept_witness_resolves_through_wrapper() {
     let source = r#"
-        use /std/{Nat, Handle, Str};
+        use /std/{Nat, Str};
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
@@ -24,7 +24,7 @@ fn concept_witness_resolves_through_wrapper() {
 #[test]
 fn premised_witness_resolves_recursively() {
     let source = r#"
-        use /std/{Nat, Handle, Str, List};
+        use /std/{Nat, Str, List};
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
@@ -46,7 +46,7 @@ fn premised_witness_resolves_recursively() {
 #[test]
 fn explicit_use_argument_overrides() {
     let source = r#"
-        use /std/{Nat, Handle, Str};
+        use /std/{Nat, Str};
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
@@ -66,7 +66,7 @@ fn explicit_use_argument_overrides() {
 #[test]
 fn superclass_projection_resolves() {
     let source = r#"
-        use /std/{Nat, Bool, Ordering, Handle};
+        use /std/{Nat, Bool, Ordering};
         pub concept Equal(A : Type) : pub Type {
             eql(A, A) -> Bool
         }
@@ -92,7 +92,7 @@ fn superclass_projection_resolves() {
 #[test]
 fn missing_witness_is_an_error() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str};
+        use /std/{Nat, Bool, Str};
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
@@ -110,7 +110,7 @@ fn missing_witness_is_an_error() {
 #[test]
 fn prelude_show_resolves() {
     let source = r#"
-        use /std/{Nat, Handle, Show};
+        use /std/{Nat, Show};
         let n : Nat = 42;
         /std/print(Show/show(n))
         "#;
@@ -122,7 +122,7 @@ fn prelude_show_resolves() {
 #[test]
 fn prelude_eql_resolves() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Equal};
+        use /std/{Nat, Bool, Equal};
         let a : Nat = 5;
         let b : Nat = 5;
         /std/print(Bool/to_str(Equal/eql(a, b)))
@@ -135,7 +135,7 @@ fn prelude_eql_resolves() {
 #[test]
 fn prelude_ord_superclass_projects() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Ordered, Equal};
+        use /std/{Nat, Bool, Ordered, Equal};
         pub let equal(@A : Type, use Ordered(A), x : A, y : A) -> Bool = Equal/eql(x, y);
         let n : Nat = 4;
         /std/print(Bool/to_str(equal(n, n)))
@@ -148,7 +148,7 @@ fn prelude_ord_superclass_projects() {
 #[test]
 fn multi_param_witnesses_share_a_first_head() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str};
+        use /std/{Nat, Bool, Str};
         pub concept Into(A : Type, B : Type) : pub Type {
             into(A) -> B
         }
@@ -170,7 +170,7 @@ fn multi_param_witnesses_share_a_first_head() {
 #[test]
 fn open_parameter_does_not_infer_from_the_witness() {
     let source = r#"
-        use /std/{Nat, Handle, Str};
+        use /std/{Nat, Str};
         pub concept Into(A : Type, B : Type) : pub Type {
             into(A) -> B
         }
@@ -189,7 +189,7 @@ fn open_parameter_does_not_infer_from_the_witness() {
 #[test]
 fn prelude_monad_resolves_by_imitation() {
     let source = r#"
-        use /std/{Nat, Handle, Str, Option, Monad};
+        use /std/{Nat, Str, Option, Monad};
         let o : Option(Nat) = Monad/bind(Option/some(20), (x) => Monad/pure(Nat/add(x, 1)));
         /std/print(Nat/to_str(Option/unwrap_or(o, 0)))
         "#;
@@ -202,7 +202,7 @@ fn prelude_monad_resolves_by_imitation() {
 fn written_higher_kinded_argument_resolves_the_witness() {
     let source = r#"
         use /syn/{Monad};
-        use /std/{Nat, Handle, Str, Option};
+        use /std/{Nat, Str, Option};
         pub let lift(@M : (Type) -> Type, use Monad(M), seed : Nat) -> M(Nat) =
             Monad/pure(seed);
         let o : Option(Nat) = lift(@Option, 7);
@@ -217,7 +217,7 @@ fn written_higher_kinded_argument_resolves_the_witness() {
 fn written_hidden_argument_after_an_explicit_slot_resolves() {
     let source = r#"
         use /syn/{Monad};
-        use /std/{Nat, Handle, Str, Option};
+        use /std/{Nat, Str, Option};
         pub let lift2(seed : Nat, @M : (Type) -> Type, use Monad(M)) -> M(Nat) =
             Monad/pure(seed);
         let o : Option(Nat) = lift2(7, @Option);
@@ -232,7 +232,7 @@ fn written_hidden_argument_after_an_explicit_slot_resolves() {
 fn written_type_lambda_argument_resolves_the_witness() {
     let source = r#"
         use /syn/{Monad};
-        use /std/{Nat, Handle, Str, Result};
+        use /std/{Nat, Str, Result};
         struct Box(A : Type) : pub Type {
             A
         }
@@ -254,7 +254,7 @@ fn written_type_lambda_argument_resolves_the_witness() {
 fn bare_generic_reference_resolves_toward_a_rigid_expectation() {
     let source = r#"
         use /syn/{Monad};
-        use /std/{Nat, Handle, Str, Option};
+        use /std/{Nat, Str, Option};
         pub let mk(@M : (Type) -> Type, use Monad(M)) -> M(Nat) =
             Monad/pure(5);
         let z : Option(Nat) = mk;
@@ -268,7 +268,7 @@ fn bare_generic_reference_resolves_toward_a_rigid_expectation() {
 #[test]
 fn higher_kinded_superclass_projects() {
     let source = r#"
-        use /std/{Nat, Handle, Str, Option, Monad};
+        use /std/{Nat, Str, Option, Monad};
         pub concept MonadPlus(M : (Type) -> Type) : Type {
             use Monad(M),
             empty(@A : Type) -> M(A)
@@ -289,7 +289,7 @@ fn higher_kinded_superclass_projects() {
 #[test]
 fn monad_over_intrinsic_constructor_resolves_by_imitation() {
     let source = r#"
-        use /std/{Nat, List, Handle, Str, Monad};
+        use /std/{Nat, List, Str, Monad};
         let a : List(Nat) = [1];
         let b : List(Nat) = Monad/bind(a, (x) => a);
         /std/print(Nat/to_str(List/len(b)))
@@ -302,7 +302,7 @@ fn monad_over_intrinsic_constructor_resolves_by_imitation() {
 #[test]
 fn syn_add_concept_resolves_everywhere() {
     let source = r#"
-        use /std/{Nat, Handle, Str, Add};
+        use /std/{Nat, Str, Add};
         struct Point : pub Type { x : Nat, y : Nat }
         satisfy Add(Point) {
             add(a, b) = Point { x = Nat/add(a.x, b.x), y = Nat/add(a.y, b.y) }
@@ -320,7 +320,7 @@ fn syn_add_concept_resolves_everywhere() {
 #[test]
 fn eql_and_cmp_resolve_across_intrinsics() {
     let source = r#"
-        use /std/{Nat, Flt, Bool, Handle, Str, Equal, Compare};
+        use /std/{Nat, Flt, Bool, Str, Equal, Compare};
         let a : Bool = Equal/eql(2, 2);
         let b : Bool = Equal/eql("abc", "abc");
         let c : Bool = Compare/lt(1.0, 2.0);
@@ -335,7 +335,7 @@ fn eql_and_cmp_resolve_across_intrinsics() {
 #[test]
 fn forward_declared_witness_resolves() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str};
+        use /std/{Nat, Bool, Str};
         pub concept Eqx(A : Type) : pub Type {
             eqx(A, A) -> Bool
         }
@@ -353,7 +353,7 @@ fn forward_declared_witness_resolves() {
 #[test]
 fn missing_witness_in_constructor_index_names_the_concept() {
     let source = r#"
-        use /std/{Nat, Handle, Add};
+        use /std/{Nat, Add};
         pub struct Wrap : pub Type { n : Nat }
         pub induct Foo : (w : Wrap) -> pub Type
         | mk(@w : Wrap, prev : Foo(w)) : (w + w)
@@ -370,7 +370,7 @@ fn missing_witness_in_constructor_index_names_the_concept() {
 #[test]
 fn a_concept_field_may_carry_a_type() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str};
+        use /std/{Nat, Bool, Str};
         pub concept Sized(A : Type) : pub Type {
             Carrier : Type,
             pick() -> Type,
@@ -397,7 +397,7 @@ fn a_concept_field_may_carry_a_type() {
 #[test]
 fn a_higher_kinded_type_field_projects_through_an_explicit_dictionary() {
     let source = r#"
-        use /std/{Nat, Option, Handle, Str};
+        use /std/{Nat, Option, Str};
         pub concept Named(M : (Type) -> Type) : pub Type {
             Carrier : Type,
         }
@@ -444,7 +444,7 @@ fn a_witness_keys_through_a_partially_applied_family() {
 #[test]
 fn a_missing_witness_names_a_curried_head_by_its_innermost_reference() {
     let source = r#"
-        use /std/{Nat, Bool, Fmt, Handle};
+        use /std/{Nat, Bool, Fmt};
         let s = Fmt/print("issue % -> %")(42)((x = 1, y = true));
         /std/print("unreachable")
         "#;
@@ -462,7 +462,7 @@ fn a_missing_witness_names_a_curried_head_by_its_innermost_reference() {
 #[test]
 fn a_missing_witness_names_the_premise_by_position() {
     let source = r#"
-        use /std/{Nat, Bool, Show, Str, Handle};
+        use /std/{Nat, Bool, Show, Str};
         let f(@A : Type, use Show(A), a : A) -> Str = Show/show(a);
         let s : Str = f((x = 1, y = true));
         /std/print("unreachable")
@@ -479,7 +479,7 @@ fn a_missing_witness_names_the_premise_by_position() {
 #[test]
 fn a_later_premise_is_named_by_its_own_position() {
     let source = r#"
-        use /std/{Nat, Str, Show, Equal, Handle};
+        use /std/{Nat, Str, Show, Equal};
         induct T : pub Type | t() end
         satisfy Show(T) { show(x) = "t", }
         let g(@A : Type, use Show(A), use Equal(A), a : A) -> Str = Show/show(a);

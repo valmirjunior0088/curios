@@ -1,5 +1,5 @@
 -- A running child: its handle, which becomes readable when it exits, and whichever of its streams were piped, each a `Pipe` that reads and writes like any other stream. The representation is this module's; `new` is the seam `Command/spawn` builds one through, as `tcp/Socket/new` is for an accepted handle. `wait` reaps the child, `kill` ends it, and `with` is the bracket that ties its life to a task's.
-use /std/{Handle, Option, Try, Async, Io, stream};
+use /std/{Option, Try, Async, Io, stream};
 
 -- How a child ended: with an exit code, or by the signal that ended it.
 pub mod Exit
@@ -27,7 +27,7 @@ pub use Exit/{let Exit};
 
 -- One end of a pipe to the child, filed non-blocking by the host, so a fiber reads and writes it through the stream concepts and parks when it has to.
 pub struct Pipe: Type {
-    Handle,
+    /sys/Handle,
 }
 
 satisfy stream/Read(Pipe) {
@@ -39,17 +39,17 @@ satisfy stream/Write(Pipe) {
 }
 
 pub struct Child: Type {
-    handle: Handle,
+    handle: /sys/Handle,
     stdin: Option(Pipe),
     stdout: Option(Pipe),
     stderr: Option(Pipe),
 }
 
 pub let new(
-    handle: Handle,
-    stdin: Option(Handle),
-    stdout: Option(Handle),
-    stderr: Option(Handle),
+    handle: /sys/Handle,
+    stdin: Option(/sys/Handle),
+    stdout: Option(/sys/Handle),
+    stderr: Option(/sys/Handle),
 ) -> Child =
     Child {
         handle = handle,

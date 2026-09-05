@@ -6,7 +6,7 @@ use crate::tests::run;
 #[test]
 fn codec_round_trips_on_runtime_values() {
     let source = r#"
-        use /std/{Handle, Str, Nat, Flt, Bytes, Option, List, Bool, Io};
+        use /std/{Str, Nat, Flt, Bytes, Option, List, Bool, Io};
         let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
         let check(x : Flt) -> Str =
             let back = Option/unwrap_or(Flt/of_str(Flt/to_str(x)), Flt/nan);

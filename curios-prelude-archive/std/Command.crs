@@ -1,5 +1,5 @@
 -- A program to run, and the ways to run it. `new(program, args)` inherits everything, and the rest — a working directory, environment overrides laid over the inherited environment, and each stream's wiring — is a struct update. `spawn` starts the child synchronously, since the host answers the row at once, and hands back a `Child` whose life is its own; `run` and `status` are the brackets over one inside a fiber, where a task that ends kills what it started.
-use /std/{Bytes, Nat, Str, List, Option, Result, Path, Handle, Try, Io, Async, stream};
+use /std/{Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async, stream};
 
 pub mod Stdio;
 pub use Stdio/{let Stdio};
@@ -40,7 +40,7 @@ let env_entry(entry: {Str, Str}) -> Bytes =
     x[..Str/to_bytes(entry.0), '=', ..Str/to_bytes(entry.1)];
 
 -- A piped stream is fetched from the child by its `stdio` index, filed non-blocking by the host. An unpiped stream has no handle to keep, so the row is not asked.
-let pipe(child: Handle, which: Nat, mode: Stdio) -> Try(Io, Io/Error, Option(Handle)) =
+let pipe(child: /sys/Handle, which: Nat, mode: Stdio) -> Try(Io, Io/Error, Option(/sys/Handle)) =
     match mode
     | piped() =>
         let s = /sys/proc/stream(child, which)!;

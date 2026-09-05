@@ -24,7 +24,7 @@ fn match_omitted_motive_infers() {
 fn omitted_motive_infers_over_a_compound_scrutinee() {
     // The motive hole's scope is opened with the scrutinee — a non-pattern spine entry when the scrutinee is compound. Occurrence abstraction in `solve` rewrites the scrutinee's occurrences in the expected type to the motive binder, so the dependent motive infers where it previously had to be spelled.
     let source = r#"
-        use /std/{Nat, Vec, Handle, Io};
+        use /std/{Nat, Vec, Io};
         let build(n : Nat) -> Vec(Nat, n) =
             match n : (m) => Vec(Nat, m)
             | 0 => Vec/nil()
@@ -69,7 +69,7 @@ fn operator_scrutinee_refines_a_proof_carrying_arm() {
 #[test]
 fn a_guard_discharges_a_bound_spelled_one_reduction_away() {
     let source = r#"
-        use /std/{Nat, List, Str, Handle, Io};
+        use /std/{Nat, List, Str, Io};
         let take(l: List(Nat), n: Nat) -> List(Nat) =
             match n <= List/len(l) | true => List/slice(l, 0, n) | false => [] end;
         /std/print(Str/concat(Nat/to_str(List/len(take([1, 2, 3], 2))), "\n"))

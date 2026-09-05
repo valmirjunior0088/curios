@@ -18,7 +18,7 @@ fn accumulation_loops_are_linear_by_construction() {
     // The design this follows from is `documentation/design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md`.
     assert_eq!(
         run(r#"
-        use /std/{Handle, Bytes, Nat, Str, Io};
+        use /std/{Bytes, Nat, Str, Io};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
@@ -39,7 +39,7 @@ fn peel_loops_are_linear_by_construction() {
     // The window (`view`) shape's whole promise, the consumption-side mirror of `accumulation_loops_are_linear_by_construction`: a naive head/tail peel over 100k bytes is O(n) with no optimizer recognition anywhere — the first read forces once, then every tail is an O(1) collapsed window and every head an O(1) read-through. The tail escapes through a `Cell` each step, so no compile-time pass (worker_wrapper's cursor, slice forwarding) can rescue it: a copying slice would be Θ(n²) and fail on the timeout. Matching directly on `Cell/get(c)` also leans on erasure's scrutinee alias — the cell must be read once per match, not once per projection (the head read lands *after* the `Cell/set` otherwise).
     assert_eq!(
         run(r#"
-        use /std/{Handle, Byte, Bytes, Nat, Str, Cell, Io};
+        use /std/{Byte, Bytes, Nat, Str, Cell, Io};
         let build(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
@@ -183,7 +183,7 @@ fn a_nan_default_on_a_runtime_option_converges() {
 #[test]
 fn arena_pure_computation_hugs_a_host_effect() {
     let source = r#"
-        use /std/{Handle, Nat, Str, Io};
+        use /std/{Nat, Str, Io};
         let triangle(n : Nat) -> Nat =
             match n : (_) => Nat
             | 0 => 0
@@ -210,7 +210,7 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
     let program = |depth: u32| {
         format!(
             r#"
-        use /std/{{Handle, Nat, Str, Bytes, Io}};
+        use /std/{{Nat, Str, Bytes, Io}};
         let count(b : Bytes) -> Nat =
             match b : (_) => Nat
             | x[] => 0

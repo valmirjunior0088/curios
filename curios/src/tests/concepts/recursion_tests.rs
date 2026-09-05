@@ -10,7 +10,7 @@ use crate::tests::{error, run};
 #[test]
 fn a_witness_resolves_through_its_own_entry() {
     let source = r#"
-        use /std/{Nat, Str, Show, Handle};
+        use /std/{Nat, Str, Show};
         induct Tree : pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Show(Tree) {
             show(t) =
@@ -30,7 +30,7 @@ fn a_witness_resolves_through_its_own_entry() {
 #[test]
 fn a_witness_recurses_through_another_formers_witness() {
     let source = r#"
-        use /std/{Nat, Str, List, Show, Handle};
+        use /std/{Nat, Str, List, Show};
         induct Rose : pub Type | rose(Nat, List(Rose)) end
         satisfy Show(Rose) {
             show(r) =
@@ -49,7 +49,7 @@ fn a_witness_recurses_through_another_formers_witness() {
 #[test]
 fn a_witness_naming_a_later_witness_is_ordered_not_refused() {
     let source = r#"
-        use /std/{Nat, Str, Show, Handle};
+        use /std/{Nat, Str, Show};
         induct P : pub Type | p(Nat) end
         induct Q : pub Type | q(Nat) end
         satisfy Show(P) { show(x) = match x | p(n) => Show/show(Q/q(n)) end, }
@@ -64,7 +64,7 @@ fn a_witness_naming_a_later_witness_is_ordered_not_refused() {
 #[test]
 fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
     let source = r#"
-        use /std/{Nat, Str, Show, Handle};
+        use /std/{Nat, Str, Show};
         induct A : pub Type | a(Nat) | ab(B) and B : pub Type | b(Nat) | ba(A) end
         satisfy Show(A) { show(x) = match x | a(n) => Nat/to_str(n) | ab(y) => Show/show(y) end, }
         satisfy Show(B) { show(x) = match x | b(n) => Nat/to_str(n) | ba(y) => Show/show(y) end, }
@@ -86,7 +86,7 @@ fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
 #[test]
 fn mutual_recursion_hoisted_into_one_group_is_admitted() {
     let source = r#"
-        use /std/{Nat, Str, Show, Handle};
+        use /std/{Nat, Str, Show};
         induct A : pub Type | a(Nat) | ab(B) and B : pub Type | b(Nat) | ba(A) end
         let show_a(x : A) -> Str =
             match x | a(n) => Nat/to_str(n) | ab(y) => show_b(y) end
@@ -104,7 +104,7 @@ fn mutual_recursion_hoisted_into_one_group_is_admitted() {
 #[test]
 fn a_witness_group_resolves_its_members_through_the_table() {
     let source = r#"
-        use /std/{Nat, Str, Show, Handle};
+        use /std/{Nat, Str, Show};
         induct A : pub Type | a(Nat) | ab(B) and B : pub Type | b(Nat) | ba(A) end
         satisfy Show(A) { show(x) = match x | a(n) => Nat/to_str(n) | ab(y) => Show/show(y) end, }
         and Show(B) { show(x) = match x | b(n) => Nat/to_str(n) | ba(y) => Show/show(y) end, }
@@ -118,7 +118,7 @@ fn a_witness_group_resolves_its_members_through_the_table() {
 #[test]
 fn a_parameterized_witness_group_resolves_under_its_premises() {
     let source = r#"
-        use /std/{Nat, Str, Show, Handle};
+        use /std/{Nat, Str, Show};
         induct Tree(A : Type) : pub Type | node(A, Forest(A))
         and Forest(A : Type) : pub Type | nil() | cons(Tree(A), Forest(A)) end
         satisfy (@A : Type, use Show(A)) => Show(Tree(A)) {
@@ -137,7 +137,7 @@ fn a_parameterized_witness_group_resolves_under_its_premises() {
 #[test]
 fn a_group_member_also_resolves_through_its_own_entry() {
     let source = r#"
-        use /std/{Nat, Str, Show, Handle};
+        use /std/{Nat, Str, Show};
         induct A : pub Type | a(Nat) | aa(A) | ab(B) and B : pub Type | b(Nat) | ba(A) end
         satisfy Show(A) {
             show(x) = match x | a(n) => Nat/to_str(n) | aa(y) => Str/concat("(", Str/concat(Show/show(y), ")")) | ab(y) => Show/show(y) end,

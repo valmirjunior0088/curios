@@ -6,7 +6,7 @@ use crate::tests::run;
 #[test]
 fn prelude_monad_arr_binds() {
     let source = r#"
-        use /std/{Nat, Handle, Str, List, Monad};
+        use /std/{Nat, Str, List, Monad};
         let l : List(Nat) = [1, 2];
         let doubled : List(Nat) = Monad/bind(l, (x) => [x, x]);
         /std/print(Nat/to_str(List/len(doubled)))
@@ -19,7 +19,7 @@ fn prelude_monad_arr_binds() {
 #[test]
 fn monadic_sugar_binds_through_the_concept() {
     let source = r#"
-        use /std/{Nat, Handle, Str, Option, Monad};
+        use /std/{Nat, Str, Option, Monad};
         pub let chain(a : Option(Nat), b : Option(Nat)) -> Option(Nat) =
             let x = a!;
             let y = b!;
@@ -35,7 +35,7 @@ fn monadic_sugar_binds_through_the_concept() {
 fn bang_works_in_monad_generic_code() {
     let source = r#"
         use /syn/{Monad};
-        use /std/{Nat, Handle, Str, Option, List};
+        use /std/{Nat, Str, Option, List};
         pub let add_both(@M : (Type) -> Type, use Monad(M), a : M(Nat), b : M(Nat)) -> M(Nat) =
             Monad/pure(a! + b!);
         let o : Option(Nat) = add_both(Option/some(20), Option/some(22));

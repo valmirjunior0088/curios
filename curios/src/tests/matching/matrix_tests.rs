@@ -6,7 +6,7 @@ use crate::tests::{error, run};
 #[test]
 fn match_rejects_inconsistent_tuple_arity() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         let f(p : { Nat, Nat }) -> Nat =
             match p
             | (x, y) => x
@@ -26,7 +26,7 @@ fn match_rejects_inconsistent_tuple_arity() {
 #[test]
 fn match_rejects_duplicate_row() {
     let source = r#"
-        use /std/{Option, Nat, Handle};
+        use /std/{Option, Nat};
         let f(a : Option(Nat), b : Option(Nat)) -> Nat =
             match (a, b)
             | (some(x), some(y)) => x + y
@@ -49,7 +49,7 @@ fn match_rejects_duplicate_row() {
 #[test]
 fn match_rejects_duplicate_flat_tag() {
     let source = r#"
-        use /std/{Option, Nat, Handle};
+        use /std/{Option, Nat};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(a) => a
@@ -70,7 +70,7 @@ fn match_rejects_duplicate_flat_tag() {
 #[test]
 fn match_rejects_mixed_binder_and_ctor_column() {
     let source = r#"
-        use /std/{Option, Nat, Handle};
+        use /std/{Option, Nat};
         let f(o : Option(Nat)) -> Nat =
             match o
             | x => 0
@@ -91,7 +91,7 @@ fn match_rejects_mixed_binder_and_ctor_column() {
 fn match_rejects_a_motive_on_tuple_head() {
     // A tuple-headed matrix explodes into projections and builds no core `Match` node, so there is no eliminator for a motive to be checked against. Rejected rather than silently discarded.
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         let f(p : { Nat, Nat }) -> Nat =
             match p : (q) => Nat
             | (x, y) => x
@@ -110,7 +110,7 @@ fn match_rejects_a_motive_on_tuple_head() {
 #[test]
 fn match_rejects_incomplete_nat_pattern() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         let f(n : Nat) -> Nat =
             match n
             | n2 + 1; ih => n2
@@ -129,7 +129,7 @@ fn match_rejects_incomplete_nat_pattern() {
 #[test]
 fn match_allows_dependent_motive_on_nat_head() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         let f(n : Nat) -> Nat =
             match n : (m) => Nat
             | m + 1; ih => m

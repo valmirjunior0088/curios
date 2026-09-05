@@ -1,5 +1,4 @@
-use /std/{Handle, Bytes, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io, True,
-    stream};
+use /std/{Bytes, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io, True, stream};
 use /std/time/{Duration};
 
 -- Both are scheduler plumbing: their operations exist so this module and its descendants can drive a fiber, not so a program can complete someone else's future. The modules stay private and only the two type names are re-exported, which leaves `Future/fulfill` and friends reachable within `/std/Async` alone.
@@ -36,7 +35,7 @@ struct Guard: Type {
 --
 -- A struct cannot join an `induct … and …` group, so `fork` names the raw continuation rather than `Fiber`. `Pause` is private, so nothing about that reaches a consumer.
 induct Pause: Type
-| wait(handle: Handle, interest: Nat)
+| wait(handle: /sys/Handle, interest: Nat)
 | sleep(Duration)
 | fork(child: Io(Step({})), token: Token)
 | park((Waker) -> Io({}))
@@ -80,7 +79,7 @@ let suspend(p: Pause) -> Async({}) =
     Async { Io/pure(Step/step(p, Io/pure(Step/done(())))) };
 
 -- Park until `h` polls ready for `ev`. Private: a program holds no handle, and `/std`'s own stream modules reach it through `raw`.
-let wait(h: Handle, ev: Nat) -> Async({}) =
+let wait(h: /sys/Handle, ev: Nat) -> Async({}) =
     suspend(Pause/wait(h, ev));
 
 pub let sleep(d: Duration) -> Async({}) =
@@ -141,7 +140,7 @@ let Slot: Type =
     Cell(Option(Job));
 
 struct Parked: Type {
-    handle: Handle,
+    handle: /sys/Handle,
     interest: Nat,
     resume: Fiber,
     token: Token,
@@ -349,7 +348,7 @@ let enqueue(q: Queues, j: Job) -> Io({}) =
     let current = Cell/get(q.runq)!;
     Cell/set(q.runq, [..current, j]);
 
-let block_on_handle(q: Queues, job: Job, h: Handle, interest: Nat) -> Io({}) =
+let block_on_handle(q: Queues, job: Job, h: /sys/Handle, interest: Nat) -> Io({}) =
     let current = Cell/get(q.blocked)!;
     Cell/set(
         q.blocked,

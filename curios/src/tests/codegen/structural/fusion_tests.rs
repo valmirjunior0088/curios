@@ -10,7 +10,7 @@ use crate::tests::{census_settles, cont_optm, run};
 #[test]
 fn tainted_packed_literals_fuse_to_flat_chunks() {
     let source = r#"
-        use /std/{Nat, List, Byte, Bytes, Bits, Bool, Str, Handle, proc};
+        use /std/{Nat, List, Byte, Bytes, Bits, Bool, Str, proc};
         let taint = List/len(proc/args!);
         let a: Byte = match taint | 0 => 7 | _ => 9 end;
         let y: Byte = match taint | 0 => 8 | _ => 10 end;
@@ -40,7 +40,7 @@ fn tainted_packed_literals_fuse_to_flat_chunks() {
 #[test]
 fn indexed_field_store_fuses_to_flat_build() {
     let source = r#"
-        use /std/{Nat, List, Str, Handle, Option, proc};
+        use /std/{Nat, List, Str, Option, proc};
 
         induct Box: Type
         | pack(items: List(Nat))
@@ -95,7 +95,7 @@ fn a_shared_tuple_field_settles_nothing() {
 #[test]
 fn regrown_field_store_stays_lazy() {
     let source = r#"
-        use /std/{Nat, List, Str, Handle, proc};
+        use /std/{Nat, List, Str, proc};
 
         induct Acc: Type
         | keep(items: List(Nat))
@@ -133,7 +133,7 @@ fn regrown_field_store_stays_lazy() {
 #[test]
 fn indexed_local_concat_fuses_to_flat_build() {
     let source = r#"
-        use /std/{Nat, List, Str, Handle, Option, proc};
+        use /std/{Nat, List, Str, Option, proc};
         let taint = List/len(proc/args!);
         let a = [taint + 1, taint + 2];
         let b = [taint + 3, taint + 4];

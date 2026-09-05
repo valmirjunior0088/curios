@@ -155,7 +155,7 @@ fn raw_wasm_validates_and_executes_without_binaryen() {
 #[test]
 fn packed_unary_payload_declines_the_immediate_encoding() {
     let nat_family = r#"
-        use /std/{Nat, List, Str, Handle, proc};
+        use /std/{Nat, List, Str, proc};
 
         induct Gauge: Type
         | tiny(Nat)
@@ -170,7 +170,7 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
         end
         "#;
     let bytes_family = r#"
-        use /std/{Nat, List, Bytes, Str, Handle, proc};
+        use /std/{Nat, List, Bytes, Str, proc};
 
         induct Gauge: Type
         | tiny(Bytes)
@@ -197,7 +197,7 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
 
     // The bit grain declines identically: a `Bits` payload is sometimes-immediate too.
     let bits_family = r#"
-        use /std/{Nat, List, Bits, Str, Handle, proc};
+        use /std/{Nat, List, Bits, Str, proc};
 
         induct Gauge: Type
         | tiny(Bits)
@@ -225,7 +225,7 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
 #[test]
 fn small_bits_ride_the_immediate_and_overflow_boxes() {
     let source = r#"
-        use /std/{Nat, List, Bits, Bool, Str, Handle, proc};
+        use /std/{Nat, List, Bits, Bool, Str, proc};
         let taint = List/len(proc/args!);
         let t: Bool = taint == 0;
         let small = b[t, 1, 0, t];
@@ -251,7 +251,7 @@ fn small_bits_ride_the_immediate_and_overflow_boxes() {
 #[test]
 fn a_two_way_dispatch_is_a_branch_not_a_table() {
     let source = r#"
-        use /std/{Nat, Bool, List, Str, Handle, proc};
+        use /std/{Nat, Bool, List, Str, proc};
 
         induct Pair : Type
         | left(Nat)
@@ -294,7 +294,7 @@ fn a_two_way_dispatch_is_a_branch_not_a_table() {
 #[test]
 fn a_tuple_is_read_at_its_own_final_type() {
     let source = r#"
-        use /std/{Nat, List, Str, Handle, proc};
+        use /std/{Nat, List, Str, proc};
 
         induct Chain : Type
         | stop()
@@ -360,7 +360,7 @@ fn a_tuple_is_read_at_its_own_final_type() {
 #[test]
 fn a_monomorphic_slot_carries_its_own_type() {
     let source = r#"
-        use /std/{Nat, List, Str, Handle, proc};
+        use /std/{Nat, List, Str, proc};
 
         induct Chain : Type
         | stop()

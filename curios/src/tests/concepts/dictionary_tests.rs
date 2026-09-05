@@ -6,7 +6,7 @@ use crate::tests::{error, run};
 #[test]
 fn use_entry_fills_a_concept_field_explicitly() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Ordering};
+        use /std/{Nat, Bool, Str, Ordering};
         pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
@@ -30,7 +30,7 @@ fn use_entry_fills_a_concept_field_explicitly() {
 #[test]
 fn use_entry_fills_a_witness_superclass() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Ordering};
+        use /std/{Nat, Bool, Str, Ordering};
         pub concept Eq3(A : Type) : pub Type {
             eq3(A, A) -> Bool
         }
@@ -53,7 +53,7 @@ fn use_entry_fills_a_witness_superclass() {
 #[test]
 fn labeled_fill_of_a_former_superclass_is_unknown() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Ordering};
+        use /std/{Nat, Bool, Str, Ordering};
         pub concept Eq4(A : Type) : pub Type {
             eq4(A, A) -> Bool
         }
@@ -77,7 +77,7 @@ fn labeled_fill_of_a_former_superclass_is_unknown() {
 #[test]
 fn misplaced_use_entries_are_errors() {
     let non_concept = r#"
-        use /std/{Nat, Handle, Str};
+        use /std/{Nat, Str};
         pub struct Pair : pub Type { fst : Nat, snd : Nat }
         let p = Pair { use 1, snd = 2 };
         /std/print("no")
@@ -85,7 +85,7 @@ fn misplaced_use_entries_are_errors() {
     assert!(error(non_concept).contains("not a concept"));
 
     let surplus = r#"
-        use /std/{Nat, Bool, Handle, Str, Ordering};
+        use /std/{Nat, Bool, Str, Ordering};
         pub concept Eq5(A : Type) : pub Type {
             eq5(A, A) -> Bool
         }
@@ -110,7 +110,7 @@ fn misplaced_use_entries_are_errors() {
 #[test]
 fn omitted_superclass_resolves_from_a_premise() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Ordering, List};
+        use /std/{Nat, Bool, Str, Ordering, List};
         pub concept Eq6(A : Type) : pub Type {
             eq6(A, A) -> Bool
         }
@@ -142,7 +142,7 @@ fn omitted_superclass_resolves_from_a_premise() {
 #[test]
 fn concept_literal_spread_copies_superclass() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Ordering};
+        use /std/{Nat, Bool, Str, Ordering};
         pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
@@ -167,7 +167,7 @@ fn concept_literal_spread_copies_superclass() {
 #[test]
 fn concept_literal_spread_use_override() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Ordering};
+        use /std/{Nat, Bool, Str, Ordering};
         pub concept Eq2(A : Type) : pub Type {
             eq2(A, A) -> Bool
         }
@@ -190,7 +190,7 @@ fn concept_literal_spread_use_override() {
 #[test]
 fn concept_literal_spread_use_on_non_concept_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, use 1 };
@@ -204,7 +204,7 @@ fn concept_literal_spread_use_on_non_concept_rejected() {
 #[test]
 fn a_concept_group_may_name_one_anothers_dictionaries() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         concept A(T : Type) : pub Type { fa(T) -> B(T) }
         and B(T : Type) : pub Type { fb(T) -> Nat, back(T) -> A(T) }
         let a : A(Nat) = A { fa(x) = B { fb(y) = x + y, back(y) = a } };

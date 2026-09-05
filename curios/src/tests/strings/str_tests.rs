@@ -5,7 +5,7 @@ use crate::tests::{run, typecheck};
 #[test]
 fn literal_prints_its_bytes() {
     let source = r#"
-        use /std/{Str, Handle};
+        use /std/{Str};
         let s : Str = "hello";
         /std/print(s)
         "#;
@@ -19,7 +19,7 @@ fn long_str_literal_compiles_on_the_default_test_stack() {
     let literal = "0123456789".repeat(50); // 500 bytes: an order of magnitude past the old cliff
     let source = format!(
         r#"
-        use /std/{{Str, Handle}};
+        use /std/{{Str}};
         let s : Str = "{literal}";
         /std/print(s)
         "#

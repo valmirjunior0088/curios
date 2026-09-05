@@ -6,7 +6,7 @@ use crate::tests::{error, run};
 #[test]
 fn struct_spread_identity_copy() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         let q : Pair(Nat, Nat) = Pair { ..p };
@@ -20,7 +20,7 @@ fn struct_spread_identity_copy() {
 #[test]
 fn struct_spread_single_override() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         let q : Pair(Nat, Nat) = Pair { ..p, snd = 9 };
@@ -34,7 +34,7 @@ fn struct_spread_single_override() {
 #[test]
 fn struct_spread_multi_override_with_gap() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Tri : pub Type { fst : Nat, snd : Nat, thd : Nat }
         let t : Tri = Tri { fst = 1, snd = 2, thd = 3 };
         let u : Tri = Tri { ..t, fst = 10, thd = 30 };
@@ -48,7 +48,7 @@ fn struct_spread_multi_override_with_gap() {
 #[test]
 fn struct_spread_dependent_override_runs() {
     let source = r#"
-        use /std/{Nat, Vec, Handle};
+        use /std/{Nat, Vec};
         pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         let t : Sized = Sized { ..s, n = 1, v = Vec/cons(42, Vec/nil()) };
@@ -67,7 +67,7 @@ fn struct_spread_dependent_override_runs() {
 #[test]
 fn struct_spread_dependent_field_mismatch_rejected() {
     let source = r#"
-        use /std/{Nat, Vec, Handle};
+        use /std/{Nat, Vec};
         pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(1, Vec/cons(2, Vec/nil())) };
         let bad : Sized = Sized { ..s, n = 3 };
@@ -81,7 +81,7 @@ fn struct_spread_dependent_field_mismatch_rejected() {
 #[test]
 fn struct_spread_parameter_changing_update() {
     let source = r#"
-        use /std/{Nat, Str, Handle};
+        use /std/{Nat, Str};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 42 };
         let q : Pair(Str, Nat) = Pair { ..p, fst = "x" };
@@ -95,7 +95,7 @@ fn struct_spread_parameter_changing_update() {
 #[test]
 fn struct_spread_bare_head_inference() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 4, snd = 3 };
         let q = Pair { ..p, snd = 9 };
@@ -109,7 +109,7 @@ fn struct_spread_bare_head_inference() {
 #[test]
 fn struct_spread_function_field_override() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Api : pub Type { base : Nat, bump : (Nat) -> Nat }
         let api : Api = Api { base = 40, bump(x) = x };
         let api2 : Api = Api { ..api, bump(x) = Nat/add(x, 2) };
@@ -123,7 +123,7 @@ fn struct_spread_function_field_override() {
 #[test]
 fn struct_spread_unlabeled_override_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, 5 };
@@ -138,7 +138,7 @@ fn struct_spread_unlabeled_override_rejected() {
 #[test]
 fn struct_spread_out_of_order_override_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Tri : pub Type { fst : Nat, snd : Nat, thd : Nat }
         let t : Tri = Tri { fst = 1, snd = 2, thd = 3 };
         let bad = Tri { ..t, thd = 30, fst = 10 };
@@ -153,7 +153,7 @@ fn struct_spread_out_of_order_override_rejected() {
 #[test]
 fn struct_spread_duplicate_override_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, fst = 3, fst = 4 };
@@ -168,7 +168,7 @@ fn struct_spread_duplicate_override_rejected() {
 #[test]
 fn struct_spread_unknown_field_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, nope = 3 };
@@ -183,7 +183,7 @@ fn struct_spread_unknown_field_rejected() {
 #[test]
 fn struct_spread_not_first_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { fst = 3, ..p };
@@ -198,7 +198,7 @@ fn struct_spread_not_first_rejected() {
 #[test]
 fn struct_spread_multiple_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
         let bad = Pair { ..p, ..p };
@@ -213,7 +213,7 @@ fn struct_spread_multiple_rejected() {
 #[test]
 fn struct_spread_non_struct_base_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let bad = Pair { ..(fst = 1, snd = 2) };
         /std/print("no")
@@ -230,7 +230,7 @@ fn struct_spread_non_struct_base_rejected() {
 #[test]
 fn struct_spread_wrong_struct_base_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
         pub struct Dup(A : Type, B : Type) : pub Type { fst : A, snd : B }
         let d : Dup(Nat, Nat) = Dup { fst = 1, snd = 2 };
@@ -249,7 +249,7 @@ fn struct_spread_wrong_struct_base_rejected() {
 #[test]
 fn struct_spread_private_outside_module_rejected() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }

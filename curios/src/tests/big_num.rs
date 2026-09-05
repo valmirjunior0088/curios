@@ -40,7 +40,7 @@ fn flt_to_str_matches_rust_shortest_format() {
         .join(", ");
     let source = format!(
         r#"
-        use /std/{{Handle, Str, Flt, List}};
+        use /std/{{Str, Flt, List}};
         /std/print(Str/join("|", [{array}]))
         "#
     );
@@ -94,7 +94,7 @@ fn flt_of_str_matches_rust_parse() {
         .join(", ");
     let source = format!(
         r#"
-        use /std/{{Handle, Str, Flt, List, Option}};
+        use /std/{{Str, Flt, List, Option}};
         /std/print(Str/join("|", [{array}]))
         "#
     );

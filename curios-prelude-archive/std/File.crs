@@ -1,8 +1,8 @@
 -- A file the program opened: its handle behind a private representation, the mode it was opened in, and the operations a program wants over it. Every operation here is `Io`, because a regular file never waits on a peer — the disk answers it — so a read or a write is one synchronous row, and what can fail is `Try` over `Io`. The stream witnesses lift the same operations into a fiber, where a `File` reads and writes like any other stream. `with` is the bracket a file lives inside; `with_async` is the same bracket registered with the scheduler, so a cancelled task closes what it opened.
-use /std/{Bytes, Nat, Path, Handle, Result, Try, Async, Io, True, stream};
+use /std/{Bytes, Nat, Path, Result, Try, Async, Io, True, stream};
 
 pub struct File: Type {
-    Handle,
+    /sys/Handle,
 }
 
 pub induct Mode: pub Type

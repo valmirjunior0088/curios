@@ -6,7 +6,7 @@ use crate::tests::{error, run};
 #[test]
 fn duplicate_witness_is_an_error() {
     let source = r#"
-        use /std/{Nat, Handle, Str};
+        use /std/{Nat, Str};
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
@@ -151,7 +151,7 @@ fn a_standard_library_witness_cannot_be_shadowed() {
 #[test]
 fn witness_for_a_locally_owned_type_is_not_an_orphan() {
     let source = r#"
-        use /std/{Nat, Handle, Str, Show};
+        use /std/{Nat, Str, Show};
         pub struct Wrapper : pub Type { inner : Nat }
         satisfy Show(Wrapper) {
             show(w) = Nat/to_str(w.inner)

@@ -12,7 +12,7 @@ use {
 fn a_bound_over_a_recursion_returning_a_literal_discharges() {
     assert_eq!(
         run(r#"
-        use /std/{Handle, Str, Nat};
+        use /std/{Str, Nat};
         let f(k : Nat, n : Nat) -> Nat =
             match k | 0 => 5 | j + 1; ih => f(j, n) end;
         let bound(n : Nat) -> Nat/Le(5, f(0, n)) = Nat/Le/refl(5);
@@ -29,7 +29,7 @@ fn a_bound_over_a_recursion_returning_a_literal_discharges() {
 fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
     assert_eq!(
         run(r#"
-        use /std/{Handle, Str, Nat};
+        use /std/{Str, Nat};
         let f(k : Nat, n : Nat) -> Nat =
             match k | 0 => n | j + 1; ih => f(j, n) end;
         let bound(n : Nat) -> Nat/Le(n, f(0, n)) = Nat/Le/refl(n);
@@ -48,7 +48,7 @@ fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
 fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
     assert_eq!(
         run(r#"
-        use /std/{Handle, Str, Bytes, Nat};
+        use /std/{Str, Bytes, Nat};
         let head(b : Bytes) -> Bytes =
             match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;
         let interior(b : Bytes, k : Nat) -> Bytes =
@@ -68,7 +68,7 @@ fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
 
     let error = typecheck(
         r#"
-        use /std/{Handle, Str, Bytes, Nat};
+        use /std/{Str, Bytes, Nat};
         let mismatched(b : Bytes, k : Nat) -> Bytes =
             match 1 + k <= Bytes/len(b) | true => Bytes/slice(b, 2, k) | false => x[] end;
         /std/print("unreachable")
@@ -87,7 +87,7 @@ fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
 fn a_guard_over_like_terms_discharges_a_bound_spelled_the_other_way() {
     assert_eq!(
         run(r#"
-        use /std/{Handle, Str, Bytes, Nat};
+        use /std/{Str, Bytes, Nat};
         let doubled(b : Bytes, n : Nat) -> Bytes =
             match n + n <= Bytes/len(b) | true => Bytes/slice(b, 0, 2 * n) | false => x[] end;
         /std/print("ok")
@@ -101,7 +101,7 @@ fn a_guard_over_like_terms_discharges_a_bound_spelled_the_other_way() {
 fn a_difference_over_a_folded_recursion_converts_with_its_unfolding() {
     assert_eq!(
         run(r#"
-        use /std/{Handle, Str, Bytes, Byte, Nat, Eq};
+        use /std/{Str, Bytes, Byte, Nat, Eq};
         let len(b : Bytes) -> Nat = match b | x[] => 0 | x[_, ..t] => 1 + len(t) end;
         let step(h : Byte, t : Bytes) -> Eq(Nat/sub(len(x[h, ..t]), 1), len(t)) = Eq/refl();
         /std/print("ok")
@@ -141,7 +141,7 @@ fn a_bound_over_a_diverging_subject_is_refused_by_name() {
 fn a_guard_spelled_the_other_way_discharges_a_bound() {
     assert_eq!(
         run(r#"
-        use /std/{Handle, Str, Nat, Int};
+        use /std/{Str, Nat, Int};
         let narrow(a : Int) -> Nat = match 0 <= a | true => Int/to_nat(a) | false => 0 end;
         /std/print(Nat/to_str(narrow(+7)))
         "#),
@@ -159,7 +159,7 @@ fn a_bound_on_a_computed_subject_evaluates_it() {
     let error = typecheck_within(
         500_000,
         r#"
-        use /std/{Handle, Bytes, Nat, Str};
+        use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go(100000, x[]);
@@ -181,7 +181,7 @@ fn a_bound_on_a_small_computed_subject_discharges() {
     typecheck_within(
         DEFAULT_STEP_BUDGET,
         r#"
-        use /std/{Handle, Bytes, Nat, Str};
+        use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go(2000, x[]);
@@ -200,7 +200,7 @@ fn a_bound_behind_a_parameter_evaluates_nothing() {
     typecheck_within(
         500_000,
         r#"
-        use /std/{Handle, Bytes, Nat, Str};
+        use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let head_of(b : Bytes) -> Bytes =
@@ -321,7 +321,7 @@ fn strong_induction_serves_a_proposition_and_a_computation() {
 fn an_undischarged_bound_is_named_in_the_refusal() {
     let error = typecheck(
         r#"
-        use /std/{Handle, Str, Bytes, Nat};
+        use /std/{Str, Bytes, Nat};
         let unguarded(b : Bytes, k : Nat) -> Bytes =
             Bytes/slice(b, 2, k);
         /std/print("unreachable")

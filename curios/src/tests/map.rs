@@ -4,7 +4,7 @@
 #[test]
 fn a_colliding_key_witness_is_rejected() {
     let source = r#"
-        use /std/{Handle, Str, Bytes, Map, Eq};
+        use /std/{Str, Bytes, Map, Eq};
         pub induct Side : pub Type
         | left()
         | right()

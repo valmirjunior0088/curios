@@ -6,7 +6,7 @@ use crate::tests::{error, run};
 #[test]
 fn prop_concept_resolves_and_erases() {
     let source = r#"
-        use /std/{Nat, Str, Eq, Handle};
+        use /std/{Nat, Str, Eq};
         pub concept Refl(A : Type) : pub Prop {
             proof(x : A) -> Eq(x, x)
         }
@@ -24,7 +24,7 @@ fn prop_concept_resolves_and_erases() {
 #[test]
 fn prop_method_in_top_level_binding_collapses() {
     let source = r#"
-        use /std/{Nat, Eq, Handle};
+        use /std/{Nat, Eq};
         pub concept Refl(A : Type) : pub Prop {
             proof(x : A) -> Eq(x, x)
         }
@@ -44,7 +44,7 @@ fn prop_method_in_top_level_binding_collapses() {
 #[test]
 fn type_concept_prop_method_binding_collapses() {
     let source = r#"
-        use /std/{Nat, Eq, Handle};
+        use /std/{Nat, Eq};
         pub concept Refl(A : Type) : pub Type {
             proof(x : A) -> Eq(x, x)
         }
@@ -62,7 +62,7 @@ fn type_concept_prop_method_binding_collapses() {
 #[test]
 fn prop_laws_concept_resolves() {
     let source = r#"
-        use /std/{Nat, Str, Show, Eq, Handle};
+        use /std/{Nat, Str, Show, Eq};
         pub concept ShowLaws(A : Type) : pub Prop {
             stable(use Show(A), x : A) -> Eq(Show/show(x), Show/show(x))
         }
@@ -80,7 +80,7 @@ fn prop_laws_concept_resolves() {
 #[test]
 fn a_witness_must_prove_its_concepts_law() {
     let source = r#"
-        use /std/{Nat, Eq, Handle, Str};
+        use /std/{Nat, Eq, Str};
         pub concept Idem(A : Type) : pub Type {
             op(A) -> A,
             law(x : A) -> Eq(op(op(x)), op(x)),
@@ -100,7 +100,7 @@ fn a_witness_must_prove_its_concepts_law() {
 #[test]
 fn a_witness_violating_its_concepts_law_is_rejected() {
     let source = r#"
-        use /std/{Nat, Eq, Handle, Str};
+        use /std/{Nat, Eq, Str};
         pub concept Idem(A : Type) : pub Type {
             op(A) -> A,
             law(x : A) -> Eq(op(op(x)), op(x)),

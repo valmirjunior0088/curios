@@ -7,7 +7,7 @@ use crate::tests::{error, run};
 #[test]
 fn a_declared_group_of_definitions_is_mutually_recursive() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         let f(n : Nat) -> Nat = match n | 0 => 0 | p + 1; _ => g(p) end
         and g(n : Nat) -> Nat = match n | 0 => 1 | p + 1; _ => f(p) end;
         /std/print(Nat/to_str(f(3)))
@@ -19,7 +19,7 @@ fn a_declared_group_of_definitions_is_mutually_recursive() {
 #[test]
 fn a_definition_that_names_itself_recurses() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         let count(n : Nat) -> Nat = match n | 0 => 0 | p + 1; _ => count(p) + 1 end;
         /std/print(Nat/to_str(count(3)))
         "#;
@@ -30,7 +30,7 @@ fn a_definition_that_names_itself_recurses() {
 #[test]
 fn a_local_binding_that_names_itself_recurses() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         let twice(n : Nat) -> Nat =
             let go(k : Nat) -> Nat = match k | 0 => 0 | p + 1; _ => go(p) + 2 end;
             go(n);
@@ -43,7 +43,7 @@ fn a_local_binding_that_names_itself_recurses() {
 #[test]
 fn a_local_group_is_mutually_recursive() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         let parity(n : Nat) -> Nat =
             let even(k : Nat) -> Nat = match k | 0 => 1 | p + 1; _ => odd(p) end
             and odd(k : Nat) -> Nat = match k | 0 => 0 | p + 1; _ => even(p) end;
@@ -58,7 +58,7 @@ fn a_local_group_is_mutually_recursive() {
 #[test]
 fn a_value_that_names_itself_under_a_lambda_is_admitted() {
     let source = r#"
-        use /std/{Nat, Handle};
+        use /std/{Nat};
         struct Stream : pub Type { head: Nat, tail: () -> Stream }
         let ones : Stream = Stream { head = 1, tail = () => ones };
         /std/print(Nat/to_str(ones.tail().head + ones.head))
@@ -142,7 +142,7 @@ fn a_shadowing_rebinding_is_refused_as_a_self_reference() {
 #[test]
 fn a_rec_group_over_a_dependent_family_closes_without_expanding_its_own_members() {
     let source = r#"
-        use /std/{Nat, Str, List, Handle};
+        use /std/{Nat, Str, List};
 
         induct Shape: pub Type
         | leaf() | node(a: List(Shape))

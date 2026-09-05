@@ -8,7 +8,7 @@ use crate::tests::{error, run};
 fn parked_constraints_let_nested_constructor_metas_resolve() {
     // `sym2(Eq2/refl())` — the argument's fresh metas meet the domain's fresh metas as flex–flex pairs embedded under the inductive type. Before the constraint store, the argument's `expect` failed at quiescence, seconds before the result-type unification would have pinned everything. Now the pairs park, the output `expect` solves the domain metas against the annotation, and the wake retries the parked pairs.
     let source = r#"
-        use /std/{Nat, Handle, Io};
+        use /std/{Nat, Io};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
@@ -56,7 +56,7 @@ fn a_list_of_tuples_settles_before_the_lambda_that_projects_them() {
 fn parked_constraints_still_reject_the_unsolvable() {
     // An undecidable-at-first constraint that never resolves must still fail — at the item drain, attributed to its origin. `refl` forces both indices equal; `2` and `3` are not.
     let source = r#"
-        use /std/{Nat, Handle, Io};
+        use /std/{Nat, Io};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
@@ -72,7 +72,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
 fn bare_tuple_continuation_tail_infers() {
     // The recorded dead-end from the result-directed elaboration work: a bare tuple in a monadic continuation's tail, its expected type a metavariable pinned only by the *outer* apply's result unification. The in-apply postponement defers the tuple, the constraint store parks the flex–flex codomain pair across the inner apply, and the outer pin wakes both.
     let source = r#"
-        use /std/{Parse, Byte, Nat, Bytes, Handle, Io};
+        use /std/{Parse, Byte, Nat, Bytes, Io};
         let pairer : Parse({ Byte, Byte }) =
             Parse/bind(Parse/any_byte, (a) => Parse/pure((a, a)));
         let with_sugar : Parse({ Byte, Byte }) =
@@ -91,7 +91,7 @@ fn bare_tuple_continuation_tail_infers() {
 fn checking_problem_parks_until_an_outer_pin_lands() {
     // The constraint store's own window: the inner apply's output expect parks (provisional success), so the postponed tuple re-check meets a still-unsolved expected type — it now parks as a *checking problem* behind a placeholder metavariable, and the outer annotation's pin wakes it. Before ParkedWork::Checking this was a NotATupleType error.
     let source = r#"
-        use /std/{Nat, List, Handle, Io};
+        use /std/{Nat, List, Io};
         let mk(@A : Type, a : A) -> List(A) = [a];
         let use_(@B : Type, l : List(B)) -> List(B) = l;
         let v : List({ Nat, Nat }) = use_(mk((1, 2)));
@@ -185,7 +185,7 @@ fn a_typeless_local_let_still_infers_its_body() {
 #[test]
 fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
     let source = r#"
-        use /std/{Nat, Vec, List, Handle};
+        use /std/{Nat, Vec, List};
 
         let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T, n)) -> Vec(T, m) =
             (match m: (k) => (j: Nat, Vec(T, j)) -> Vec(T, k)

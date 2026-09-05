@@ -1,13 +1,13 @@
 -- A connected stream: `connect` and `connect_tls` open one, `with` is the bracket a body runs inside, and `call` is one request and the whole reply. A socket reads and writes through the stream concepts, so everything written over `stream` applies to it, and `read` and `write` are the same operations by name.
-use /std/{Bytes, Str, Nat, Bool, Handle, Result, Try, Async, Io, stream};
+use /std/{Bytes, Str, Nat, Bool, Result, Try, Async, Io, stream};
 use /std/tcp/{resolve};
 
 pub struct Socket: Type {
-    Handle,
+    /sys/Handle,
 }
 
 -- `Listener` is a sibling, so it cannot reach this representation; the constructor is the public seam through which it wraps an accepted handle.
-pub let new(h: Handle) -> Socket =
+pub let new(h: /sys/Handle) -> Socket =
     Socket { h };
 
 pub let read(c: Socket, n: Nat) -> Async(stream/Chunk) =
@@ -31,12 +31,12 @@ let ok(status: Nat) -> Try(Io, Io/Error, {}) =
     match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
 -- The handle closed and the failure passed on: what a connect that got as far as a socket does with a failure after it. Written over `Io` and lifted where the failing step parks.
-let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
+let close_raising(@A: Type, h: /sys/Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
     let _ = /sys/Handle/close(h)!;
     Try/raise(e);
 
 -- Every step up to the connect is a syscall that answers at once; the connect itself is where a peer decides, so the host may hand the wait back: a non-blocking socket answers `would_block` for any peer that is not local, which `settle` turns into a park on `WRITE` until the kernel has settled it.
-let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
+let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {/sys/Handle, Bool}) =
     let s = /sys/socket/open(addr)!;
     let _ = ok(s.status)!;
     let status = /sys/socket/connect(s.handle, addr)!;
@@ -52,7 +52,7 @@ let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
     end;
 
 -- A pending connect settles once the socket polls writable, and `finish_connect` reads the outcome; an honest early answer of `would_block` parks again.
-let settle(h: Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
+let settle(h: /sys/Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
     match pending
     | false => Try/pure(())
     | true =>
@@ -62,7 +62,7 @@ let settle(h: Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
     end;
 
 -- The TLS client handshake is not performed here: the host files the session and the reads and writes that follow drive it, parking as any other read or write does.
-let upgrade(h: Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
+let upgrade(h: /sys/Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
     match tls
     | true =>
         let status = /sys/tls/start(h, Str/to_bytes(host))!;

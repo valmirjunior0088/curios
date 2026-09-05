@@ -1,15 +1,15 @@
 -- A bound and listening socket: `listen` opens one, `accept` pulls the next connection off it as a `Socket`, and `close` ends it. `serve` and `serve_tls` are the loop written over them, one fiber per connection, the listener closed when the loop ends.
-use /std/{Bytes, Str, Nat, Handle, Try, Async, Io};
+use /std/{Bytes, Str, Nat, Try, Async, Io};
 use /std/tcp/{resolve, Socket};
 
 pub struct Listener: Type {
-    Handle,
+    /sys/Handle,
 }
 
 let ok(status: Nat) -> Try(Io, Io/Error, {}) =
     match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
-let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
+let close_raising(@A: Type, h: /sys/Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
     let _ = /sys/Handle/close(h)!;
     Try/raise(e);
 
@@ -37,7 +37,7 @@ pub let close(l: Listener) -> Io({}) =
     /sys/Handle/close(l.0);
 
 -- A body of its own, so its sequencing does not hoist into `serve`'s region ahead of the `using` that owns the listener's lifetime. The loop ends at the first failed accept, which is how an exhausted scripted host ends it.
-let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
+let accept_loop(l: Listener, on_conn: (/sys/Handle) -> Async({})) -> Async({}) =
     let go() -> Async({}) =
         let r = Async/raw/accept(l.0)!;
         match r
@@ -49,7 +49,7 @@ let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
     go();
 
 -- An accepted stream arrives non-blocking from the host, so it is handed to its own fiber at once, closed when that fiber ends.
-let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
+let serve_conn(h: /sys/Handle, handler: (Socket) -> Async({})) -> Async({}) =
     Async/go(Async/using(/sys/Handle/close(h), handler(Socket/new(h))));
 
 -- Every connection to `host` at `port` handed to `handler` in a fiber of its own, until the loop ends; the listener is closed on both scheduler exits.
@@ -58,7 +58,7 @@ pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Try(Async
     Async/using(close(l), accept_loop(l, (h) => serve_conn(h, handler)));
 
 -- The server side of the handshake is filed, not performed: the handler's reads and writes drive it. A connection the host cannot file is closed and skipped.
-let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> Async({}) =
+let serve_tls_conn(h: /sys/Handle, cfg: /sys/Handle, handler: (Socket) -> Async({})) -> Async({}) =
     let status = /sys/tls/start_server(h, cfg)!;
     match status == /sys/status/ok
     | true => serve_conn(h, handler)

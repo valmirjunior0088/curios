@@ -6,7 +6,7 @@ use crate::tests::run;
 #[test]
 fn allows_condition_before_bind_arm() {
     let source = r#"
-        use /std/{Bool, Nat, Option, Handle};
+        use /std/{Bool, Nat, Option};
         let pick(prefer_fresh : Bool, cached : Option(Nat), fresh : Nat) -> Nat =
             choose
             | prefer_fresh && fresh > 0 => fresh
@@ -23,7 +23,7 @@ fn allows_condition_before_bind_arm() {
 #[test]
 fn selects_first_true_arm() {
     let source = r#"
-        use /std/{Nat, Bytes, rand, Handle};
+        use /std/{Nat, Bytes, rand};
         let z = Bytes/len(rand/bytes(0)!);
         let n = Nat/add(z, 2);
         let result =
@@ -43,7 +43,7 @@ fn selects_first_true_arm() {
 #[test]
 fn a_choose_of_only_a_default_takes_it() {
     let source = r#"
-        use /std/{Nat, Bytes, rand, Handle};
+        use /std/{Nat, Bytes, rand};
         let z = Bytes/len(rand/bytes(0)!);
         let result =
             choose
@@ -59,7 +59,7 @@ fn a_choose_of_only_a_default_takes_it() {
 #[test]
 fn bind_arm_destructures_or_falls_through() {
     let source = r#"
-        use /std/{Option, Nat, Bytes, rand, Handle};
+        use /std/{Option, Nat, Bytes, rand};
         let f(o : Option(Nat)) -> Nat =
             choose
             | some(x) = o => x + 10
@@ -76,7 +76,7 @@ fn bind_arm_destructures_or_falls_through() {
 #[test]
 fn nested_bind_shares_the_fallthrough() {
     let source = r#"
-        use /std/{Option, List, Nat, Bytes, rand, Handle};
+        use /std/{Option, List, Nat, Bytes, rand};
         let f(o : Option(List(Nat))) -> Nat =
             choose
             | some([h, ..t]) = o => h + 1

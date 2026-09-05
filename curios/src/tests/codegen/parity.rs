@@ -6,14 +6,14 @@ use crate::tests::cont_optm;
 #[test]
 fn concept_method_call_matches_direct_intrinsic_codegen() {
     let through_concept = r#"
-        use /std/{Nat, List, Handle, Str, Add, proc};
+        use /std/{Nat, List, Str, Add, proc};
         pub let bump(x : Nat) -> Nat = Add/add(x, 1);
         let taint = List/len(proc/args!);
         let n : Nat = taint;
         /std/print(Nat/to_str(bump(n)))
         "#;
     let direct = r#"
-        use /std/{Nat, List, Handle, Str, proc};
+        use /std/{Nat, List, Str, proc};
         pub let bump(x : Nat) -> Nat = Nat/add(x, 1);
         let taint = List/len(proc/args!);
         let n : Nat = taint;
@@ -30,7 +30,7 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
 #[test]
 fn choose_matches_hand_nested_bool_codegen() {
     let ladder = r#"
-        use /std/{Nat, List, Handle, Str, proc};
+        use /std/{Nat, List, Str, proc};
         let taint = List/len(proc/args!);
         let n : Nat = taint;
         let result =
@@ -42,7 +42,7 @@ fn choose_matches_hand_nested_bool_codegen() {
         /std/print(Nat/to_str(result))
         "#;
     let nested = r#"
-        use /std/{Nat, List, Handle, Str, proc};
+        use /std/{Nat, List, Str, proc};
         let taint = List/len(proc/args!);
         let n : Nat = taint;
         let result =
@@ -67,7 +67,7 @@ fn choose_matches_hand_nested_bool_codegen() {
 #[test]
 fn choose_bind_arm_matches_headed_catch_all_codegen() {
     let bind = r#"
-        use /std/{Option, Nat, List, Handle, Str, proc};
+        use /std/{Option, Nat, List, Str, proc};
         let f(o : Option(Nat)) -> Nat =
             choose
             | some(x) = o => x + 10
@@ -78,7 +78,7 @@ fn choose_bind_arm_matches_headed_catch_all_codegen() {
         /std/print(Nat/to_str(f(Option/some(n))))
         "#;
     let headed = r#"
-        use /std/{Option, Nat, List, Handle, Str, proc};
+        use /std/{Option, Nat, List, Str, proc};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(x) => x + 10
@@ -150,14 +150,14 @@ fn operation_ending_at(dump: &str, at: usize) -> Option<String> {
 #[test]
 fn concept_comparison_matches_direct_intrinsic_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Bool, List, Handle, Str, Compare, proc};
+        use /std/{Nat, Bool, List, Str, Compare, proc};
         pub let small(x : Nat) -> Bool = Compare/lt(x, 10);
         let taint = List/len(proc/args!);
         let n : Nat = taint;
         /std/print(Bool/to_str(small(n)))
         "#;
     let direct = r#"
-        use /std/{Nat, Bool, List, Handle, Str, proc};
+        use /std/{Nat, Bool, List, Str, proc};
         pub let small(x : Nat) -> Bool = Nat/lt(x, 10);
         let taint = List/len(proc/args!);
         let n : Nat = taint;

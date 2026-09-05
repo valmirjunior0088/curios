@@ -8,7 +8,7 @@ use crate::tests::{error, run};
 #[test]
 fn a_tuple_argument_no_caller_pins_settles_to_its_product() {
     let source = r#"
-        use /std/{Nat, Handle, Io};
+        use /std/{Nat, Io};
         let swallow(@A : Type, a : A) -> Nat = 0;
         let n : Nat = swallow((1, 2));
         let _ = Io/write(Io/stdout, /std/Str/to_bytes(Nat/to_str(n)))!;
@@ -70,7 +70,7 @@ fn a_settled_tuple_reports_the_obligation_it_unblocked() {
 #[test]
 fn a_written_tuple_type_still_checks_the_literal_against_itself() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Io};
+        use /std/{Nat, Bool, Io};
         let id(@A : Type, a : A) -> A = a;
         let z : {Nat, Bool} = id((1, true));
         /std/print(Nat/to_str(z.0))
@@ -83,7 +83,7 @@ fn a_written_tuple_type_still_checks_the_literal_against_itself() {
 #[test]
 fn a_tuple_payload_waits_for_the_index_that_types_it() {
     let source = r#"
-        use /std/{Nat, Str, Handle, Io};
+        use /std/{Nat, Str, Io};
         induct Labels : pub Type | nil() | cons(Str, Labels) end
         let Count(L : Labels) -> Type =
             match L : (_) => Type
@@ -102,7 +102,7 @@ fn a_tuple_payload_waits_for_the_index_that_types_it() {
 #[test]
 fn a_payload_stuck_on_a_rigid_index_is_refused_at_the_literal() {
     let source = r#"
-        use /std/{Nat, Str, Handle, Io};
+        use /std/{Nat, Str, Io};
         induct Labels : pub Type | nil() | cons(Str, Labels) end
         let Count(L : Labels) -> Type =
             match L : (_) => Type
@@ -126,7 +126,7 @@ fn a_payload_stuck_on_a_rigid_index_is_refused_at_the_literal() {
 #[test]
 fn a_settled_index_measures_the_literal_against_the_type_it_computes() {
     let source = r#"
-        use /std/{Nat, Str, Handle, Io};
+        use /std/{Nat, Str, Io};
         induct Labels : pub Type | nil() | cons(Str, Labels) end
         let Count(L : Labels) -> Type =
             match L : (_) => Type
@@ -149,7 +149,7 @@ fn a_settled_index_measures_the_literal_against_the_type_it_computes() {
 #[test]
 fn a_labeled_literal_synthesizes_with_its_labels() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Io};
+        use /std/{Nat, Bool, Io};
         let z = (a = 1, b = true);
         /std/print(Nat/to_str(z.a))
         "#;
@@ -176,7 +176,7 @@ fn a_synthesized_labeled_product_reports_its_labels() {
 #[test]
 fn a_tuple_argument_settles_inside_an_inferred_call() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Io};
+        use /std/{Nat, Bool, Io};
         let id(@A : Type, a : A) -> A = a;
         let z = id((1, true));
         /std/print(Nat/to_str(z.0))
