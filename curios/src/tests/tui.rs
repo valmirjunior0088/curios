@@ -142,7 +142,7 @@ fn a_program_runs_against_scripted_keystrokes_and_answers_its_model() {
     assert_eq!(io.raw_modes(), vec![true, false]);
 }
 
-// A `Cmd/none` beside a `Cmd/perform` through a join the optimizer split into fields, with nothing the compile-time evaluator can fold. The two constructors share a row whose closure slot `none` leaves padded; the continuation split carried that padding as a filler, and the join's head rebuilt the row from its field parameters through the slot's cast — which an `i31` zero fails and a null passes. The events depend on the process arguments so the fold runs at run time, which is the only place the trap was.
+// A `Cmd/none` beside a `Cmd/perform` through a join the optimizer split into fields, with nothing the compile-time evaluator can fold. The two constructors share a row whose closure slot `none` leaves padded; the continuation split carried that padding as a filler, and the join's head rebuilt the row from its field parameters through the slot's cast — which the boxed zero a filler used to materialise as failed, and the null it travels as passes. The events depend on the process arguments so the fold runs at run time, which is the only place the trap was.
 #[test]
 fn a_padded_variant_survives_a_split_join_at_run_time() {
     let (system, io) = MockHost::builder().args([b"program".as_slice()]).build();
