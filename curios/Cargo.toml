@@ -20,7 +20,6 @@ curios-profile = { workspace = true }
 curios-wasm = { workspace = true }
 curios-text = { workspace = true }
 curios-utilities = { workspace = true }
-curios-cert = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-package = { workspace = true }
 curios-verdicts = { workspace = true }
