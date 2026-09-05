@@ -8,6 +8,9 @@ pub use cache::*;
 mod compile;
 pub use compile::*;
 
+mod document;
+pub use document::*;
+
 mod wonder;
 pub use wonder::*;
 

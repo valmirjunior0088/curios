@@ -62,6 +62,19 @@ Each unit is compiled as its own test program — the same compilation `run` per
 
 Test programs are filed in the project's store exactly as `run`'s payloads are, so an invocation whose sources are all unchanged recompiles nothing; the test *verdicts* are never cached — every invocation runs every selected test.
 
+## Documenting
+
+`curios document` writes the governing package's library interface as pages, read off the compilation that builds it: what each module exports, each declaration's head printed as written with every name in it linked to where it was declared, and the `-- |` documentation comments attached to each. It takes no target — a library is the one thing with an interface, and the governing package has at most one — and `--manifest` overrides which package governs as everywhere.
+
+```sh
+curios document              # .curios/documentation/<name>/
+curios document -o site      # somewhere else
+```
+
+The pages are the library's consumers' view: a private declaration or module is absent rather than hidden, a type whose representation is private shows no constructors, a test never appears, and a `pub use` is a link to the declaration it re-exports. A reference into a dependency or the standard library renders as its qualified name in plain text, since nothing hosts their pages yet. The landing page shows the package's name and the manifest's `description`, and a module's page opens with the `-- |` block above the `mod` that declares it.
+
+What is written is `index.html`, one page per module at its source path — `/json/parse/lexer` is `parse/lexer.html`, and the root is `lib.html` — and a stylesheet under `static/`. Nothing else is fetched and no script runs, so the pages read from `file://`. Files are overwritten by name and nothing else in the directory is touched. A library that does not compile is not documented: its diagnostics are reported as `run` reports them, nothing is written, and the exit is non-zero. Success prints nothing.
+
 ## Programs on standard input
 
 `-` runs whatever arrives on standard input, which is what makes a heredoc a program:

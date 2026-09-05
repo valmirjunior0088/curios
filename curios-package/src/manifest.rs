@@ -76,6 +76,8 @@ impl FromStr for Manifest {
 pub struct Package {
     /// The canonical name, which is this package's mount prefix and the only way any consumer refers to it. Declared here and nowhere else — no umbrella contributes to it, so reorganizing a tree renames nothing.
     pub name: String,
+    /// What the package is, in a sentence or a few, for the landing page of its documentation. A fact about the package as a whole, which is what the manifest declares and no source file does — the library root is declared by no `mod`, so it has nowhere else to carry prose.
+    pub description: Option<String>,
     /// Which executable a bare `curios run` means. `None` when there is at most one for it to mean.
     pub default: Option<String>,
     /// What this package depends on, by the canonical name each dependency declares for itself.
@@ -172,6 +174,7 @@ pub struct Snapshot {
 #[serde(deny_unknown_fields)]
 struct Document {
     name: Option<String>,
+    description: Option<String>,
     default: Option<String>,
     dependencies: Option<BTreeMap<String, DependencyRow>>,
     executables: Option<Vec<ExecutableRow>>,
@@ -184,6 +187,7 @@ impl Document {
     fn classify(self) -> Result<Manifest, String> {
         let package = declared(&[
             ("name", self.name.is_some()),
+            ("description", self.description.is_some()),
             ("default", self.default.is_some()),
             ("dependencies", self.dependencies.is_some()),
             ("executables", self.executables.is_some()),
@@ -233,6 +237,7 @@ impl Document {
 
         Ok(Package {
             name,
+            description: self.description,
             default: self.default,
             dependencies: table(self.dependencies.unwrap_or_default(), "dependency row")?,
             executables,

@@ -57,6 +57,18 @@ pub(crate) enum Mode {
         output_path: Option<PathBuf>,
     },
 
+    /// No target at all: a library is the one thing with an interface, and the governing package has at most one. Where the pages go is `documentation/usage.md`'s Documenting.
+    #[command(about = "Write the governing package's library interface as pages")]
+    Document {
+        #[arg(
+            short = 'o',
+            long = "output",
+            value_name = "DIR",
+            help = "Write the pages under DIR (default: under the store, beside the governing manifest)"
+        )]
+        output_path: Option<PathBuf>,
+    },
+
     /// Always the governing package entire, and the optional argument is a filter rather than a target — the reasoning is `documentation/usage.md`'s Testing.
     #[command(about = "Run the governing package's declared tests")]
     Test {

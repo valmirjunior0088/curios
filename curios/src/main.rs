@@ -21,11 +21,14 @@ use test_runner::*;
 
 use {
     clap::Parser,
-    curios::{Linted, lint, serve, wonder_diagnostics, wonder_stage, wonder_tests},
-    curios_package::{Governing, Target, curate, scaffold},
+    curios::{
+        Linted, Verdicts, documentation, lint, serve, wonder_diagnostics, wonder_stage,
+        wonder_tests, write_documentation,
+    },
+    curios_package::{Governing, LIBRARY, Target, curate, order, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
-    curios_text::Formatted,
+    curios_text::{Formatted, Overlay},
     std::{
         ffi::OsString,
         fs, iter,
@@ -154,6 +157,26 @@ fn dispatch() -> Result<(), Failure> {
             let mut line = Line::open(Heading::Finished, &Subject::File(output));
             line.outcome(&format!("{:.1}s", started.elapsed().as_secs_f64()));
             eprintln!();
+        }
+        Mode::Document { output_path } => {
+            let governing = Governing::here(manifest.as_deref())?;
+            if !governing.directory.join(LIBRARY).is_file() {
+                return Err(Failure::Error(format!(
+                    "{:?} declares no library, and a library is the one thing with an interface to document",
+                    governing.package.name
+                )));
+            }
+
+            // The same scope `test` and `wonder` assemble: the `--unit` mounts in front, then the dependency graph with the governing package's own library last.
+            let mut scope = load_units(&units)?;
+            scope.extend(order(&governing)?);
+            let store = Verdicts::at(governing.root.clone());
+            let record = documentation(budget, scope, &Overlay::default(), Some(&store))?;
+
+            let directory = output_path
+                .unwrap_or_else(|| governing.store().documentation(&governing.package.name));
+            write_documentation(&record, &governing.package, &directory)
+                .map_err(|error| format!("{}: {error}", directory.display()))?;
         }
         Mode::New { directory } => {
             for written in scaffold(&directory)? {
