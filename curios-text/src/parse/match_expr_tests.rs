@@ -25,7 +25,7 @@ fn inductive_match_nullary_and_unary() {
                 MatrixArm {
                     pattern: MatchPattern::Variant {
                         tag: "bool_".to_string(),
-                        args: vec![(Plicity::Explicit, MatchPattern::Binder("b".to_string()))],
+                        args: vec![(Plicity::Explicit, MatchPattern::Binder("b".into()))],
                     },
                     body: Subterm::Name(Name::from(["b".to_string()])).into(),
                 },
@@ -48,8 +48,8 @@ fn inductive_match_multi_binder() {
                 pattern: MatchPattern::Variant {
                     tag: "lit".to_string(),
                     args: vec![
-                        (Plicity::Explicit, MatchPattern::Binder("a".to_string())),
-                        (Plicity::Explicit, MatchPattern::Binder("b".to_string())),
+                        (Plicity::Explicit, MatchPattern::Binder("a".into())),
+                        (Plicity::Explicit, MatchPattern::Binder("b".into())),
                     ],
                 },
                 body: Subterm::Name(Name::from(["a".to_string()])).into(),
@@ -70,7 +70,7 @@ fn match_omitted_motive() {
             arms: vec![MatrixArm {
                 pattern: MatchPattern::Variant {
                     tag: "foo".to_string(),
-                    args: vec![(Plicity::Explicit, MatchPattern::Binder("y".to_string()))],
+                    args: vec![(Plicity::Explicit, MatchPattern::Binder("y".into()))],
                 },
                 body: Subterm::Name(Name::from(["y".to_string()])).into(),
             }],
@@ -277,7 +277,7 @@ fn choose_bind_arm() {
                     test: ChooseTest::Bind {
                         pattern: MatchPattern::Variant {
                             tag: "some".to_string(),
-                            args: vec![(Plicity::Explicit, MatchPattern::Binder("x".to_string()))],
+                            args: vec![(Plicity::Explicit, MatchPattern::Binder("x".into()))],
                         },
                         value: name("o"),
                     },
@@ -385,4 +385,22 @@ fn a_dispatch_case_keeps_a_numeral_wider_than_the_erased_carrier() {
             Natural::parse_bytes(b"4294967296", 10).expect("a decimal numeral")
         ))
     );
+}
+
+/// A match-arm binder is spanned over its word, inside a constructor pattern as at the top of an arm.
+#[test]
+fn a_match_binder_spans_its_word_alone() {
+    let term = "match v | some( x ) => x | none() => 0 end"
+        .parse::<Term>()
+        .unwrap();
+    let Subterm::Match(matched) = &*term else {
+        panic!("a match");
+    };
+    let MatchPattern::Variant { args, .. } = &matched.arms[0].pattern else {
+        panic!("a constructor pattern");
+    };
+    let MatchPattern::Binder(x) = &args[0].1 else {
+        panic!("a binder argument");
+    };
+    assert_eq!(super::test_support::spelled(x), "x");
 }

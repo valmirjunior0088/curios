@@ -45,8 +45,8 @@ pub(super) fn parse_func_type<'a>() -> Parser<'a, Term> {
 }
 
 // A binder name: a plain identifier (`_` to ignore). The `label(params) = value`/`label(params) -> type` definition-sugar parameter lists stay single-name-only — see `parse_func_param` below. `let`, lambda, and function-definition-sugar parameters accept a full `Pattern` instead (see `parse_pattern`); match arms accept a full `MatchPattern` instead (see `parse_match_pattern`).
-pub(super) fn parse_binder<'a>() -> Parser<'a, String> {
-    parse_identifier().map(str::to_string)
+pub(super) fn parse_binder<'a>() -> Parser<'a, Label> {
+    parse_label()
 }
 
 // The committing prefix of a labeled pattern field: `label =`. The caller wraps it in `catch`, so a positional field that merely starts with an identifier backtracks cleanly — mirrors `parse_tuple_field_prefix`, with no definition-sugar form (a pattern field is never itself a function).
@@ -348,7 +348,7 @@ pub(super) fn parse_func_param<'a>() -> Parser<'a, (Plicity, String, Option<Term
                 .map(Some)
                 .or(pure(None)),
         )
-        .map(|((plicity, name), annotation)| (plicity, name, annotation))
+        .map(|((plicity, name), annotation)| (plicity, name.to_string(), annotation))
 }
 
 // A lambda parameter's plicity mark: `@` (implicit) or `use` (witness) prefixing the binder pattern, or no mark (explicit). Unlike the function-type and definition-sugar `use` forms — where a witness binder is anonymous and `use` is followed by the domain *type* — a lambda's `use` names a binder the body can reference (`use show`), so the mark precedes an ordinary pattern.

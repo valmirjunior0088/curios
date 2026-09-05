@@ -45,11 +45,11 @@ fn parse_nested_module() {
         vec![TopItem::Mod(TopMod {
             span: None,
             vis_pub: false,
-            label: "Inner".to_string(),
+            label: "Inner".into(),
             module: Some(Module {
                 items: vec![TopItem::Let(vec![TopLet {
                     vis_pub: true,
-                    label: "x".to_string(),
+                    label: "x".into(),
                     signature: LetSignature::Name {
                         type_: Some(Subterm::Type.into()),
                         body: Subterm::Type.into(),
@@ -137,11 +137,12 @@ fn use_brace_group() {
     assert_eq!(
         "use /std/{Bin, List};".parse::<Module>().unwrap().items,
         vec![TopItem::Use(TopUse {
+            span: None,
             vis_pub: false,
             name: Name::new(true, Qualifier::from(["std".to_string()])),
             group: UseGroup::Named(vec![
-                GroupItem::Both("Bin".to_string()),
-                GroupItem::Both("List".to_string()),
+                GroupItem::Both("Bin".into()),
+                GroupItem::Both("List".into()),
             ]),
         })]
     );
@@ -155,12 +156,13 @@ fn use_brace_group_kinds() {
             .unwrap()
             .items,
         vec![TopItem::Use(TopUse {
+            span: None,
             vis_pub: false,
             name: Name::new(true, Qualifier::from(["std".to_string()])),
             group: UseGroup::Named(vec![
-                GroupItem::Mod("Bin".to_string()),
-                GroupItem::Let("Nat".to_string()),
-                GroupItem::Both("List".to_string()),
+                GroupItem::Mod("Bin".into()),
+                GroupItem::Let("Nat".into()),
+                GroupItem::Both("List".into()),
             ]),
         })]
     );
@@ -171,6 +173,7 @@ fn use_brace_group_empty() {
     assert_eq!(
         "use /std/{};".parse::<Module>().unwrap().items,
         vec![TopItem::Use(TopUse {
+            span: None,
             vis_pub: false,
             name: Name::new(true, Qualifier::from(["std".to_string()])),
             group: UseGroup::Named(vec![]),
@@ -183,6 +186,7 @@ fn parse_use_glob() {
     assert_eq!(
         "use /sys/Nat/*;".parse::<Module>().unwrap().items,
         vec![TopItem::Use(TopUse {
+            span: None,
             vis_pub: false,
             name: Name::new(
                 true,
@@ -367,4 +371,30 @@ fn a_misspelled_keyword_is_reported_against_the_word() {
     assert!(!report.contains("7 |"), "{report}");
     // And the caret underlines the word itself, all four characters of it, rather than standing after it.
     assert!(report.contains("^^^^"), "{report}");
+}
+
+/// A `use` selector is spanned over its word, and the declaration over `use` through `;` — the two things a report about an import can underline.
+#[test]
+fn a_use_selector_spans_its_word_and_the_declaration_spans_through_the_semicolon() {
+    let module = "use /std/{ Nat , mod Bool, let List };\n\nuse /std/Nat/* ;\n"
+        .parse::<Module>()
+        .unwrap();
+    let [TopItem::Use(named), TopItem::Use(glob)] = module.items.as_slice() else {
+        panic!("two use items");
+    };
+    let UseGroup::Named(items) = &named.group else {
+        panic!("a named group");
+    };
+    let selectors = items
+        .iter()
+        .map(|item| super::test_support::spelled(item.label()))
+        .collect::<Vec<_>>();
+    assert_eq!(selectors, ["Nat", "Bool", "List"]);
+
+    let text = |span: &curios_utilities::Span| span.source.text[span.start..span.end].to_string();
+    assert_eq!(
+        text(named.span.as_ref().unwrap()),
+        "use /std/{ Nat , mod Bool, let List };"
+    );
+    assert_eq!(text(glob.span.as_ref().unwrap()), "use /std/Nat/* ;");
 }

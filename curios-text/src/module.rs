@@ -1,6 +1,6 @@
 use {
     super::{
-        FuncSugarParam, FuncType, FuncTypeParam, LetSignature, LoadError, Name, RootSource,
+        FuncSugarParam, FuncType, FuncTypeParam, Label, LetSignature, LoadError, Name, RootSource,
         Subterm, Term, TupleTypeParam, print_module_items, print_term,
     },
     crate::parse::{
@@ -19,7 +19,7 @@ use {
 pub struct TopMod {
     pub span: Option<Span>,
     pub vis_pub: bool,
-    pub label: String,
+    pub label: Label,
     pub module: Option<Module>,
 }
 
@@ -32,15 +32,15 @@ impl PartialEq for TopMod {
 /// One name in a `use` group, carrying which namespace the writer pinned: `mod x` (child module only), `let x` (binding only), or bare `x` (`Both`). Modules and bindings occupy separate namespaces, so one label can name both; a bare item imports whichever exist, requiring at least one.
 #[derive(Debug, Clone, PartialEq)]
 pub enum GroupItem {
-    Mod(String),
-    Let(String),
-    Both(String),
+    Mod(Label),
+    Let(Label),
+    Both(Label),
 }
 
 impl GroupItem {
-    pub(crate) fn label(&self) -> &str {
+    pub(crate) fn label(&self) -> &Label {
         match self {
-            GroupItem::Mod(s) | GroupItem::Let(s) | GroupItem::Both(s) => s,
+            GroupItem::Mod(label) | GroupItem::Let(label) | GroupItem::Both(label) => label,
         }
     }
 }
@@ -52,19 +52,26 @@ pub enum UseGroup {
     Glob,
 }
 
-/// A `use` declaration: imports the `group`'s items from the module `name` names into the local scope at its own source position (scoping is point-of-use, not file-wide). `pub use` additionally re-exports the items from the declaring module — that interface effect is computed in resolution's fixed point, separately from the lexical one.
-#[derive(Debug, Clone, PartialEq)]
+/// A `use` declaration: imports the `group`'s items from the module `name` names into the local scope at its own source position (scoping is point-of-use, not file-wide). `pub use` additionally re-exports the items from the declaring module — that interface effect is computed in resolution's fixed point, separately from the lexical one. The span covers the whole declaration, `use` through `;`, and is excluded from `PartialEq` as `TopMod`'s is.
+#[derive(Debug, Clone)]
 pub struct TopUse {
+    pub span: Option<Span>,
     pub vis_pub: bool,
     pub name: Name,
     pub group: UseGroup,
+}
+
+impl PartialEq for TopUse {
+    fn eq(&self, other: &Self) -> bool {
+        self.vis_pub == other.vis_pub && self.name == other.name && self.group == other.group
+    }
 }
 
 /// One member of a top-level `let` item — a lone definition, or one member of a `let … and …;` group (see `TopItem::Let`): a plain label, never a destructuring pattern, and a signature whose type annotation the parser makes mandatory at top level.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopLet {
     pub vis_pub: bool,
-    pub label: String,
+    pub label: Label,
     pub signature: LetSignature,
 }
 
@@ -72,7 +79,7 @@ pub struct TopLet {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopForeign {
     pub vis_pub: bool,
-    pub label: String,
+    pub label: Label,
     pub signature: WireSignature,
 }
 
@@ -99,7 +106,7 @@ pub struct TopInduct {
     pub vis_pub: bool,
     /// Whether construction and elimination are available outside the exact declaring module. Written as `pub` immediately before the result sort.
     pub rep_pub: bool,
-    pub label: String,
+    pub label: Label,
     /// Inductive parameters are *implicit* on every value constructor regardless of any mark (the desugar applies those marks), with the call-site `@` available to supply one positionally when wanted. On the type-constructor function a parameter is *explicit* by default (types are written out); a declaration-site `@` makes it implicit there too (`induct Eq(@A : Type) : (x : A, y : A)` — `A` is recoverable from the indices, so types are written `Eq(x, y)`).
     pub params: Vec<(Plicity, String, Term)>,
     /// The head's index telescope, `induct Vec(T : Type) : (n : Nat)`. Names are optional and documentary — needed only when a later index's type depends on an earlier one; they are *not* in scope in the cases.
@@ -114,7 +121,7 @@ pub struct TopInduct {
 pub struct TopStruct {
     pub vis_pub: bool,
     pub rep_pub: bool,
-    pub label: String,
+    pub label: Label,
     pub params: Vec<(Plicity, String, Term)>,
     /// The result sort — `Type` or `Prop`, written `: Sort` after the parameters; defaults to `Type` when omitted.
     pub result_sort: Term,
@@ -151,7 +158,7 @@ pub struct TopConcept {
     pub vis_pub: bool,
     /// Representation visibility, independent from `vis_pub` (the name's): `: pub Type` is transparent, `: Type` is sealed — witnesses and dictionary literals only in the declaring module, exactly like a private-representation struct.
     pub rep_pub: bool,
-    pub label: String,
+    pub label: Label,
     pub params: Vec<(Plicity, String, Term)>,
     pub result_sort: Term,
     pub fields: Vec<ConceptField>,
@@ -185,7 +192,7 @@ pub struct TopWitness {
 /// A `test` declaration: `test name(params) = body;` — the function-definition sugar with its output fixed at `/syn/Test`. Empty parentheses declare the harness's nullary test; a telescope declares a property, probed over drawn arguments. No `pub`: a test's name is its report line, not an export.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopTest {
-    pub label: String,
+    pub label: Label,
     /// The written telescope, kept verbatim as a `let`'s is so the printer round-trips it; lowering builds the Π-type and the lambda from it exactly as it does for a `let`.
     pub params: Vec<FuncSugarParam>,
     pub body: Term,

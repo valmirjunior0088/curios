@@ -12,7 +12,7 @@ fn top_let_without_pub() {
         "let x : Type = Type;".parse::<Module>().unwrap().items,
         vec![TopItem::Let(vec![TopLet {
             vis_pub: false,
-            label: "x".to_string(),
+            label: "x".into(),
             signature: LetSignature::Name {
                 type_: Some(Subterm::Type.into()),
                 body: Subterm::Type.into(),
@@ -30,7 +30,7 @@ fn top_foreign_without_pub() {
             .items,
         vec![TopItem::Foreign(TopForeign {
             vis_pub: false,
-            label: "frobnicate".to_string(),
+            label: "frobnicate".into(),
             signature: WireSignature {
                 params: vec![
                     ("a0".to_string(), WireType::Nat),
@@ -51,7 +51,7 @@ fn top_foreign_with_pub() {
             .items,
         vec![TopItem::Foreign(TopForeign {
             vis_pub: true,
-            label: "frobnicate".to_string(),
+            label: "frobnicate".into(),
             signature: WireSignature {
                 params: vec![
                     ("a0".to_string(), WireType::Nat),
@@ -69,7 +69,7 @@ fn top_foreign_zero_arg() {
         "foreign clock : Nat;".parse::<Module>().unwrap().items,
         vec![TopItem::Foreign(TopForeign {
             vis_pub: false,
-            label: "clock".to_string(),
+            label: "clock".into(),
             signature: WireSignature {
                 params: vec![],
                 results: WireResults::single("_".to_string(), WireType::Nat),
@@ -98,7 +98,7 @@ fn top_foreign_list_of_leaf() {
             .items,
         vec![TopItem::Foreign(TopForeign {
             vis_pub: false,
-            label: "frobnicate".to_string(),
+            label: "frobnicate".into(),
             signature: WireSignature {
                 params: vec![
                     ("a0".to_string(), WireType::List(WireLeaf::Bytes)),
@@ -139,7 +139,7 @@ fn top_let_with_pub() {
         "pub let x : Type = Type;".parse::<Module>().unwrap().items,
         vec![TopItem::Let(vec![TopLet {
             vis_pub: true,
-            label: "x".to_string(),
+            label: "x".into(),
             signature: LetSignature::Name {
                 type_: Some(Subterm::Type.into()),
                 body: Subterm::Type.into(),
@@ -156,12 +156,12 @@ fn top_inductive_single_variant() {
         vec![TopItem::Induct(vec![TopInduct {
             vis_pub: false,
             rep_pub: false,
-            label: "Foo".to_string(),
+            label: "Foo".into(),
             params: vec![],
             indices: vec![],
             result_sort: Subterm::Type.into(),
             cases: vec![TopCase {
-                label: "bar".to_string(),
+                label: "bar".into(),
                 payload: vec![],
                 target: None,
             }],
@@ -177,7 +177,7 @@ fn top_inductive_empty() {
         vec![TopItem::Induct(vec![TopInduct {
             vis_pub: false,
             rep_pub: false,
-            label: "False".to_string(),
+            label: "False".into(),
             params: vec![],
             indices: vec![],
             result_sort: Subterm::Type.into(),
@@ -491,7 +491,7 @@ fn top_let_group_mixed_pub() {
         vec![TopItem::Let(vec![
             TopLet {
                 vis_pub: true,
-                label: "id".to_string(),
+                label: "id".into(),
                 signature: LetSignature::Name {
                     type_: Some(Subterm::Type.into()),
                     body: Subterm::Type.into(),
@@ -499,7 +499,7 @@ fn top_let_group_mixed_pub() {
             },
             TopLet {
                 vis_pub: false,
-                label: "helper".to_string(),
+                label: "helper".into(),
                 signature: LetSignature::Name {
                     type_: Some(Subterm::Type.into()),
                     body: Subterm::Type.into(),
@@ -565,4 +565,27 @@ fn a_test_takes_no_pub_and_stays_a_contextual_word() {
             .parse::<Entrypoint>()
             .is_ok()
     );
+}
+
+/// A declaration's label is spanned over the word alone, whatever whitespace follows it: the span is what a report about the declaration underlines.
+#[test]
+fn every_declaration_label_spans_its_word_alone() {
+    let module = "pub let  x  : Type = Type;\nmod  Inner ;\ninduct  Foo  : Type | bar() end\nstruct  Pt  : Type { }\nconcept  Sh (A : Type) : Type { }\ntest  it () = Type;\nforeign  clock  : Nat;"
+        .parse::<Module>()
+        .unwrap();
+    let spelled = module
+        .items
+        .iter()
+        .map(|item| match item {
+            TopItem::Let(items) => super::test_support::spelled(&items[0].label),
+            TopItem::Mod(item) => super::test_support::spelled(&item.label),
+            TopItem::Induct(items) => super::test_support::spelled(&items[0].label),
+            TopItem::Struct(items) => super::test_support::spelled(&items[0].label),
+            TopItem::Concept(items) => super::test_support::spelled(&items[0].label),
+            TopItem::Test(item) => super::test_support::spelled(&item.label),
+            TopItem::Foreign(item) => super::test_support::spelled(&item.label),
+            other => panic!("unexpected item {other:?}"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(spelled, ["x", "Inner", "Foo", "Pt", "Sh", "it", "clock"]);
 }

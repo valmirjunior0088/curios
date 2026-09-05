@@ -1,5 +1,5 @@
 use {
-    super::{Intrinsic, Name, Radix, print_term},
+    super::{Intrinsic, Label, Name, Radix, print_term},
     crate::parse::{parse_term, parse_whitespace},
     curios_abi::ForeignFunction,
     curios_num::Natural,
@@ -181,7 +181,7 @@ impl TupleField {
                     .iter()
                     .map(|(plicity, name, ty)| FuncParam {
                         plicity: *plicity,
-                        pattern: Pattern::Binder(Some(name.clone())),
+                        pattern: Pattern::Binder(Some(name.clone().into())),
                         annotation: ty.clone(),
                     })
                     .collect(),
@@ -203,7 +203,7 @@ pub struct Tuple {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pattern {
     /// `None` only for a function-sugar `use` parameter, which has no source binder position at all — genuinely anonymous, not a user-spelled `_`. Lowering mints a fresh internal name for it directly; `Some("_")` (a user actually typing the wildcard) goes through the same gensym path but is a distinct case, kept apart so an anonymous `use` binder lowers its Π-type binder as truly unlabeled (see `LetSignature::type_`) rather than as a Π-binder spelled `"_"`.
-    Binder(Option<String>),
+    Binder(Option<Label>),
     Tuple(Vec<PatternField>),
     Struct {
         head: String,
@@ -293,7 +293,7 @@ pub struct MatrixArm {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MatchPattern {
     /// A plain name (or `_`) — never splits a column by itself; legal only when every row shares this shape in that column (see the matrix compiler in `into_core::match_compile`).
-    Binder(String),
+    Binder(Label),
     /// An inductive constructor tag applied to sub-patterns — positional (constructors have no field labels in this language). Each argument retains its plicity mark (`@`/`use`): a payload slot the constructor declared implicit must be matched with `@`. The marks lower to the Core arm untouched; core elaboration checks them against the constructor's canonical payload plicities.
     Variant {
         tag: String,
@@ -408,7 +408,7 @@ pub(crate) fn func_sugar_type_params(params: &[FuncSugarParam]) -> Vec<FuncTypeP
         .map(|param| FuncTypeParam {
             plicity: param.plicity,
             label: match &param.label {
-                Pattern::Binder(name) => name.clone(),
+                Pattern::Binder(name) => name.as_ref().map(|name| name.to_string()),
                 Pattern::Tuple(_) | Pattern::Struct { .. } => None,
             },
             type_: param.type_.clone(),

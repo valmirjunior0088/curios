@@ -295,7 +295,7 @@ fn seed(
                     for item in group.iter().filter(|item| item.vis_pub && item.rep_pub) {
                         interface
                             .bindings
-                            .get_mut(&item.label)
+                            .get_mut(item.label.as_str())
                             .expect("direct struct binding")
                             .representation = Some(prefix.with(&item.label));
                     }
@@ -304,7 +304,7 @@ fn seed(
                     for item in group.iter().filter(|item| item.vis_pub && item.rep_pub) {
                         interface
                             .bindings
-                            .get_mut(&item.label)
+                            .get_mut(item.label.as_str())
                             .expect("direct inductive binding")
                             .representation = Some(prefix.with(&item.label));
                     }
@@ -313,7 +313,7 @@ fn seed(
                     for item in group.iter().filter(|item| item.vis_pub) {
                         interface
                             .bindings
-                            .get_mut(&item.label)
+                            .get_mut(item.label.as_str())
                             .expect("direct concept binding")
                             .representation = Some(prefix.with(&item.label));
                     }
@@ -467,28 +467,28 @@ fn resolvable(
             for item in items {
                 match item {
                     GroupItem::Mod(label) => {
-                        if let Some(entry) = interface.children.get(label) {
-                            out.push((Ns::Module, label.clone(), entry.target.clone(), None));
+                        if let Some(entry) = interface.children.get(label.as_str()) {
+                            out.push((Ns::Module, label.to_string(), entry.target.clone(), None));
                         }
                     }
                     GroupItem::Let(label) => {
-                        if let Some(entry) = interface.bindings.get(label) {
+                        if let Some(entry) = interface.bindings.get(label.as_str()) {
                             out.push((
                                 Ns::Binding,
-                                label.clone(),
+                                label.to_string(),
                                 entry.target.clone(),
                                 entry.representation.clone(),
                             ));
                         }
                     }
                     GroupItem::Both(label) => {
-                        if let Some(entry) = interface.children.get(label) {
-                            out.push((Ns::Module, label.clone(), entry.target.clone(), None));
+                        if let Some(entry) = interface.children.get(label.as_str()) {
+                            out.push((Ns::Module, label.to_string(), entry.target.clone(), None));
                         }
-                        if let Some(entry) = interface.bindings.get(label) {
+                        if let Some(entry) = interface.bindings.get(label.as_str()) {
                             out.push((
                                 Ns::Binding,
-                                label.clone(),
+                                label.to_string(),
                                 entry.target.clone(),
                                 entry.representation.clone(),
                             ));
@@ -561,14 +561,14 @@ fn classify_dead(
                         GroupItem::Both(label) => (label, true, true),
                     };
 
-                    let module_ok = !in_module || interface.children.contains_key(label);
-                    let binding_ok = !in_binding || interface.bindings.contains_key(label);
+                    let module_ok = !in_module || interface.children.contains_key(label.as_str());
+                    let binding_ok = !in_binding || interface.bindings.contains_key(label.as_str());
 
                     // `{x}` resolves if either namespace filled; `{mod x}` / `{let x}` require their own namespace.
                     let resolved = match item {
                         GroupItem::Both(_) => {
-                            interface.children.contains_key(label)
-                                || interface.bindings.contains_key(label)
+                            interface.children.contains_key(label.as_str())
+                                || interface.bindings.contains_key(label.as_str())
                         }
                         GroupItem::Mod(_) => module_ok,
                         GroupItem::Let(_) => binding_ok,

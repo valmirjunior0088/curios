@@ -34,3 +34,9 @@ pub(super) fn comments_of(source: &str) -> Vec<String> {
         .map(|span| span.source.text[span.start..span.end].to_string())
         .collect()
 }
+
+/// The source text a label's span covers — what a report about it would underline.
+pub(super) fn spelled(label: &Label) -> String {
+    let span = label.span().expect("a parsed label carries a span");
+    span.source.text[span.start..span.end].to_string()
+}

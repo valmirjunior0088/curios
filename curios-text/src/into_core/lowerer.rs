@@ -2,8 +2,8 @@ use curios_elab::{IntrinsicBuilders, TermBuilders};
 use {
     super::{Context, MatchCompiler},
     crate::{
-        BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic, Let,
-        LetBinding, LetGroup, LetSignature, ListEntry, Name, Nat, NatLiteral, NumLit, Pattern,
+        BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic, Label,
+        Let, LetBinding, LetGroup, LetSignature, ListEntry, Name, Nat, NatLiteral, NumLit, Pattern,
         PatternField, StructLitEntry, Subterm, Syn, Term,
     },
     curios_utilities::{Grain, PackedBin, Plicity, Qualifier, Span, recurse},
@@ -460,7 +460,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             if matches!(member.signature, LetSignature::Name { type_: None, .. }) {
                 return Err(located(
                     Error::RecursiveBindingNeedsType {
-                        label: label.clone(),
+                        label: label.to_string(),
                     },
                     member,
                 ));
@@ -468,7 +468,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             if !binds.is_empty() {
                 return Err(located(
                     Error::RecursiveBangBinding {
-                        label: label.clone(),
+                        label: label.to_string(),
                     },
                     member,
                 ));
@@ -787,11 +787,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 
     /// A `Nat` succ or `List`/`Bin` cons arm's induction-hypothesis binder: an omitted `; ih` (`None` — there is no source name at all) mints an unwritten binder; a written one is minted with its spelling as the hint.
-    pub(super) fn cons_ih_binder(&self, ih_label: &Option<String>) -> Binder {
+    pub(super) fn cons_ih_binder(&self, ih_label: &Option<Label>) -> Binder {
         match ih_label {
             Some(name) => (
-                name.clone(),
-                self.context.fresh_binder(bindable(name).then_some(name)),
+                name.to_string(),
+                self.context
+                    .fresh_binder(bindable(name).then_some(name.as_str())),
             ),
             None => (String::new(), self.context.fresh_binder(None)),
         }
@@ -1372,7 +1373,7 @@ fn param_names(params: &[FuncParam]) -> Vec<String> {
 /// Every `Pattern::Binder` leaf name in `pattern`, recursing through nested tuple/struct fields in field order.
 fn pattern_names(pattern: &Pattern) -> Vec<String> {
     match pattern {
-        Pattern::Binder(Some(name)) => vec![name.clone()],
+        Pattern::Binder(Some(name)) => vec![name.to_string()],
         // No source name at all — nothing to shadow-track.
         Pattern::Binder(None) => vec![],
         Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => fields

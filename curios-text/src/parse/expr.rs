@@ -1,10 +1,8 @@
 use super::*;
 
 // A plain-label binding with a mandatory type: every top-level member, and every member of a local group after the first.
-pub(super) fn parse_binding<'a>() -> Parser<'a, (String, LetSignature)> {
-    parse_identifier()
-        .and(parse_let_signature())
-        .map(|(label, signature)| (label.to_string(), signature))
+pub(super) fn parse_binding<'a>() -> Parser<'a, (Label, LetSignature)> {
+    parse_label().and(parse_let_signature())
 }
 
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.

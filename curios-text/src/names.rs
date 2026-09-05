@@ -1,6 +1,10 @@
 use {
     curios_utilities::{Qualifier, Span},
-    std::hash::{Hash, Hasher},
+    std::{
+        fmt,
+        hash::{Hash, Hasher},
+        ops::Deref,
+    },
 };
 
 /// A surface reference, exactly as written in source: a [`Qualifier`] plus an `is_abs` flag marking a leading `/` (an absolute, root-anchored path). It is *not* a canonical identity — resolution turns a `Name` into an always-absolute `Qualifier` — so equality and hashing compare the written form (ignoring the span, as everywhere in this crate).
@@ -92,5 +96,91 @@ where
             is_abs: false,
             qualifier: Qualifier::from(iter),
         }
+    }
+}
+
+/// A written identifier at a declaring position — a binder, a declaration's name, a `use` selector — with the span of the word itself, where a [`Term`](super::Term)'s span covers the whole form it heads. Equality and hashing compare the text alone, as [`Name`]'s do: tests build spanless expected trees, and two labels spelled alike are one name however they were located.
+#[derive(Debug, Clone)]
+pub struct Label {
+    text: String,
+    span: Option<Span>,
+}
+
+impl Label {
+    pub(crate) fn spanned(text: impl Into<String>, span: Span) -> Self {
+        Self {
+            text: text.into(),
+            span: Some(span),
+        }
+    }
+
+    /// Where the word was written, or `None` for a label the compiler spelled.
+    pub fn span(&self) -> Option<&Span> {
+        self.span.as_ref()
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+}
+
+impl Deref for Label {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.text
+    }
+}
+
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.text)
+    }
+}
+
+impl PartialEq for Label {
+    fn eq(&self, other: &Self) -> bool {
+        self.text == other.text
+    }
+}
+
+impl Eq for Label {}
+
+impl PartialEq<str> for Label {
+    fn eq(&self, other: &str) -> bool {
+        self.text == other
+    }
+}
+
+impl PartialEq<&str> for Label {
+    fn eq(&self, other: &&str) -> bool {
+        self.text == *other
+    }
+}
+
+impl Hash for Label {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.text.hash(state);
+    }
+}
+
+impl From<&str> for Label {
+    fn from(text: &str) -> Self {
+        Self {
+            text: text.to_string(),
+            span: None,
+        }
+    }
+}
+
+impl From<String> for Label {
+    fn from(text: String) -> Self {
+        Self { text, span: None }
+    }
+}
+
+impl From<Label> for String {
+    fn from(label: Label) -> Self {
+        label.text
     }
 }

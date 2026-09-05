@@ -89,7 +89,7 @@ fn stems(package: &Package, library: Option<&Module>) -> Result<(), String> {
         .flat_map(|library| library.items.iter())
         .filter_map(|item| match item {
             TopItem::Mod(declaration) => Some((
-                declaration.label.clone(),
+                declaration.label.to_string(),
                 format!("`mod {}` in `{LIBRARY}`", declaration.label),
             )),
             _ => None,

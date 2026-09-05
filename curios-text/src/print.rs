@@ -1296,7 +1296,7 @@ fn print_group_item(item: &GroupItem) -> String {
     match item {
         GroupItem::Mod(s) => format!("mod {s}"),
         GroupItem::Let(s) => format!("let {s}"),
-        GroupItem::Both(s) => s.clone(),
+        GroupItem::Both(s) => s.to_string(),
     }
 }
 

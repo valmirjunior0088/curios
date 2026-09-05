@@ -18,7 +18,7 @@ fn let_func_and_apply() {
         Subterm::Let(Let {
             groups: vec![LetGroup {
                 members: vec![LetBinding {
-                    binder: Pattern::Binder(Some("id".to_string())),
+                    binder: Pattern::Binder(Some("id".into())),
                     signature: LetSignature::Name {
                         type_: Some(
                             Subterm::FuncType(FuncType {
@@ -34,7 +34,7 @@ fn let_func_and_apply() {
                         body: Subterm::Func(Func {
                             params: vec![FuncParam {
                                 plicity: Plicity::Explicit,
-                                pattern: Pattern::Binder(Some("x".to_string())),
+                                pattern: Pattern::Binder(Some("x".into())),
                                 annotation: None,
                             }],
                             body: Subterm::Name(Name::from(["x".to_string()])).into(),
@@ -274,7 +274,7 @@ fn local_let_without_type() {
         Subterm::Let(Let {
             groups: vec![LetGroup {
                 members: vec![LetBinding {
-                    binder: Pattern::Binder(Some("x".to_string())),
+                    binder: Pattern::Binder(Some("x".into())),
                     signature: LetSignature::Name {
                         type_: None,
                         body: Subterm::Type.into(),
@@ -294,7 +294,7 @@ fn local_let_with_type_still_works() {
         Subterm::Let(Let {
             groups: vec![LetGroup {
                 members: vec![LetBinding {
-                    binder: Pattern::Binder(Some("x".to_string())),
+                    binder: Pattern::Binder(Some("x".into())),
                     signature: LetSignature::Name {
                         type_: Some(Subterm::Type.into()),
                         body: Subterm::Type.into(),
@@ -314,7 +314,7 @@ fn func_with_annotation() {
         Subterm::Func(Func {
             params: vec![FuncParam {
                 plicity: Plicity::Explicit,
-                pattern: Pattern::Binder(Some("x".to_string())),
+                pattern: Pattern::Binder(Some("x".into())),
                 annotation: Some(Subterm::Type.into()),
             }],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
@@ -332,12 +332,12 @@ fn func_with_mixed_annotations() {
             params: vec![
                 FuncParam {
                     plicity: Plicity::Explicit,
-                    pattern: Pattern::Binder(Some("x".to_string())),
+                    pattern: Pattern::Binder(Some("x".into())),
                     annotation: Some(Subterm::Type.into()),
                 },
                 FuncParam {
                     plicity: Plicity::Explicit,
-                    pattern: Pattern::Binder(Some("y".to_string())),
+                    pattern: Pattern::Binder(Some("y".into())),
                     annotation: None,
                 },
             ],
@@ -354,7 +354,7 @@ fn func_without_annotation_still_works() {
         Subterm::Func(Func {
             params: vec![FuncParam {
                 plicity: Plicity::Explicit,
-                pattern: Pattern::Binder(Some("x".to_string())),
+                pattern: Pattern::Binder(Some("x".into())),
                 annotation: None,
             }],
             body: Subterm::Name(Name::from(["x".to_string()])).into(),
@@ -406,7 +406,7 @@ fn bang_in_let_binding() {
         Subterm::Let(Let {
             groups: vec![LetGroup {
                 members: vec![LetBinding {
-                    binder: Pattern::Binder(Some("x".to_string())),
+                    binder: Pattern::Binder(Some("x".into())),
                     signature: LetSignature::Name {
                         type_: None,
                         body: Subterm::Bang(name("e")).into(),
@@ -496,7 +496,7 @@ fn bang_round_trips() {
 fn local_let_group() {
     // `and` joins members into one statement, each a plain label with a mandatory type.
     let member = |label: &str, body: &str| LetBinding {
-        binder: Pattern::Binder(Some(label.to_string())),
+        binder: Pattern::Binder(Some(label.into())),
         signature: LetSignature::Name {
             type_: Some(Subterm::Type.into()),
             body: name(body),
@@ -535,4 +535,47 @@ fn a_term_spans_its_own_text_without_the_whitespace_after_it() {
     let term = source.parse::<Term>().unwrap();
     let span = term.span().unwrap();
     assert_eq!(&source[span.start..span.end], "f(a)");
+}
+
+/// A binder is spanned over its word at every binder position: a lambda parameter, a `let` pattern leaf and a function-sugar parameter.
+#[test]
+fn a_binder_spans_its_word_alone() {
+    let term = "let ( a , b ) = p; let f( n : Nat) -> Nat = n; ( x ) => x"
+        .parse::<Term>()
+        .unwrap();
+    let Subterm::Let(outer) = &*term else {
+        panic!("a let");
+    };
+    let Pattern::Tuple(fields) = &outer.groups[0].members[0].binder else {
+        panic!("a tuple pattern");
+    };
+    let leaves = fields
+        .iter()
+        .map(|field| match &field.value {
+            Pattern::Binder(Some(label)) => spelled(label),
+            other => panic!("a binder leaf, not {other:?}"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(leaves, ["a", "b"]);
+
+    // Consecutive statements are the groups of one `Let`, so the second is the next group rather than a nested node.
+    let LetBinding {
+        binder: Pattern::Binder(Some(f)),
+        signature: LetSignature::Func { params, .. },
+    } = &outer.groups[1].members[0]
+    else {
+        panic!("function sugar");
+    };
+    let Pattern::Binder(Some(n)) = &params[0].label else {
+        panic!("a named parameter");
+    };
+    assert_eq!((spelled(f), spelled(n)), ("f".to_string(), "n".to_string()));
+
+    let Subterm::Func(func) = &*outer.tail else {
+        panic!("a lambda");
+    };
+    let Pattern::Binder(Some(x)) = &func.params[0].pattern else {
+        panic!("a named parameter");
+    };
+    assert_eq!(spelled(x), "x");
 }

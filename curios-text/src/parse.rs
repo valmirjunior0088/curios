@@ -40,11 +40,11 @@ use {
     super::{
         Apply, Argument, BinPattern, BinSegment, CasePayloadParam, Choose, ChooseArm, ChooseTest,
         ConceptField, Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
-        Infix, Intrinsic, Let, LetBinding, LetGroup, LetSignature, ListEntry, ListPattern, Match,
-        MatchPattern, MatchPatternField, MatrixArm, Module, Name, NatLiteral, NatPattern, NumLit,
-        Pattern, PatternField, Proj, Radix, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase,
-        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse,
-        TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
+        Infix, Intrinsic, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry, ListPattern,
+        Match, MatchPattern, MatchPatternField, MatrixArm, Module, Name, NatLiteral, NatPattern,
+        NumLit, Pattern, PatternField, Proj, Radix, StructLit, StructLitEntry, Subterm, Syn, Term,
+        TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest,
+        TopUse, TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
         WitnessField,
     },
     curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
@@ -135,6 +135,13 @@ fn parse_identifier_raw<'a>() -> Parser<'a, &'a str> {
 
 fn parse_identifier<'a>() -> Parser<'a, &'a str> {
     parse_identifier_raw().and_drop(parse_whitespace())
+}
+
+// An identifier at a declaring position, carrying the span of the word alone: the trailing whitespace is consumed after the span closes, so a report about the declaration underlines the name and nothing after it.
+fn parse_label<'a>() -> Parser<'a, Label> {
+    spanned(parse_identifier_raw())
+        .map(|(span, text)| Label::spanned(text, span))
+        .and_drop(parse_whitespace())
 }
 
 fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> Parser<'a, Name> {

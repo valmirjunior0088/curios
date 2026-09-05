@@ -273,37 +273,37 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
 
     for item in items {
         match item {
-            TopItem::Mod(m) => info.insert_child(m.label.clone(), m.vis_pub)?,
+            TopItem::Mod(m) => info.insert_child(m.label.to_string(), m.vis_pub)?,
             TopItem::Let(ls) => {
                 for l in ls {
-                    info.insert_binding(l.label.clone(), l.vis_pub)?;
+                    info.insert_binding(l.label.to_string(), l.vis_pub)?;
                 }
             }
             TopItem::Induct(group) => {
                 for u in group {
-                    info.insert_induct_child(u.label.clone(), u.vis_pub, u.rep_pub)?;
-                    info.insert_binding(u.label.clone(), u.vis_pub)?;
+                    info.insert_induct_child(u.label.to_string(), u.vis_pub, u.rep_pub)?;
+                    info.insert_binding(u.label.to_string(), u.vis_pub)?;
                 }
             }
             // A struct declares one binding (the type-former), like a `let` — there are no value constructors and no nested namespace, so no child module.
             TopItem::Struct(group) => {
                 for s in group {
-                    info.insert_binding(s.label.clone(), s.vis_pub)?;
+                    info.insert_binding(s.label.to_string(), s.vis_pub)?;
                 }
             }
             // A concept declares the type-former binding *and* a nested namespace (its method wrappers), like an inductive.
             TopItem::Concept(group) => {
                 for c in group {
-                    info.insert_child(c.label.clone(), c.vis_pub)?;
-                    info.insert_binding(c.label.clone(), c.vis_pub)?;
+                    info.insert_child(c.label.to_string(), c.vis_pub)?;
+                    info.insert_binding(c.label.to_string(), c.vis_pub)?;
                 }
             }
             // A witness is anonymous: it declares no binding and occupies no lexical scope — its backing definition gets a compiler name.
             TopItem::Witness(_) => {}
             // A `foreign` declaration is an ordinary binding, like a `let` — it has no body of its own, but it is called the same way.
-            TopItem::Foreign(f) => info.insert_binding(f.label.clone(), f.vis_pub)?,
+            TopItem::Foreign(f) => info.insert_binding(f.label.to_string(), f.vis_pub)?,
             // A test binds its name privately — referable within its subtree, colliding with a like-named sibling, never `pub`.
-            TopItem::Test(t) => info.insert_binding(t.label.clone(), false)?,
+            TopItem::Test(t) => info.insert_binding(t.label.to_string(), false)?,
             _ => {}
         }
     }
@@ -383,38 +383,40 @@ fn process_items(
 ) -> Result<(), Error> {
     for top_item in top_items {
         match top_item {
-            TopItem::Mod(m) => context.insert_scope(m.label.clone(), context.prefixed(&m.label))?,
+            TopItem::Mod(m) => {
+                context.insert_scope(m.label.to_string(), context.prefixed(&m.label))?
+            }
             TopItem::Let(labels) => {
                 for l in labels {
-                    context.insert_binding(l.label.clone(), context.prefixed(&l.label))?;
+                    context.insert_binding(l.label.to_string(), context.prefixed(&l.label))?;
                 }
             }
             TopItem::Induct(group) => {
                 for u in group {
-                    context.insert_scope(u.label.clone(), context.prefixed(&u.label))?;
-                    context.insert_binding(u.label.clone(), context.prefixed(&u.label))?;
+                    context.insert_scope(u.label.to_string(), context.prefixed(&u.label))?;
+                    context.insert_binding(u.label.to_string(), context.prefixed(&u.label))?;
                 }
             }
             // The type-former binding only — like a `let` (no constructor namespace).
             TopItem::Struct(group) => {
                 for s in group {
-                    context.insert_binding(s.label.clone(), context.prefixed(&s.label))?;
+                    context.insert_binding(s.label.to_string(), context.prefixed(&s.label))?;
                 }
             }
             // A concept declares its type-former binding and a nested namespace for the method wrappers, like an inductive.
             TopItem::Concept(group) => {
                 for c in group {
-                    context.insert_scope(c.label.clone(), context.prefixed(&c.label))?;
-                    context.insert_binding(c.label.clone(), context.prefixed(&c.label))?;
+                    context.insert_scope(c.label.to_string(), context.prefixed(&c.label))?;
+                    context.insert_binding(c.label.to_string(), context.prefixed(&c.label))?;
                 }
             }
             // A witness is anonymous — no binding, no scope entry.
             TopItem::Witness(_) => {}
             TopItem::Foreign(f) => {
-                context.insert_binding(f.label.clone(), context.prefixed(&f.label))?
+                context.insert_binding(f.label.to_string(), context.prefixed(&f.label))?
             }
             TopItem::Test(t) => {
-                context.insert_binding(t.label.clone(), context.prefixed(&t.label))?
+                context.insert_binding(t.label.to_string(), context.prefixed(&t.label))?
             }
             _ => {}
         }
@@ -996,7 +998,7 @@ fn process_items(
                         .map(|(idx, field)| {
                             let head = field.type_.concept_app_head().ok_or_else(|| {
                                 Error::MalformedSuperField {
-                                    concept: concept.label.clone(),
+                                    concept: concept.label.to_string(),
                                 }
                             })?;
                             Ok((idx, resolve_concept_head(context, &head)?))

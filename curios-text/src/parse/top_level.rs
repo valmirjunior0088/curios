@@ -12,7 +12,7 @@ pub(super) fn parse_top_test<'a>(vis_pub: bool) -> Parser<'a, TopItem> {
         true => fail("a test is never `pub`: its name is its report line, not an export"),
         false => pure(()),
     }
-    .and_keep(parse_identifier())
+    .and_keep(parse_label())
     .and_drop(parse_literal("("))
     .and(sep_by0_trailing(parse_func_sugar_param, || {
         parse_literal(",")
@@ -23,7 +23,7 @@ pub(super) fn parse_top_test<'a>(vis_pub: bool) -> Parser<'a, TopItem> {
     .and_drop(parse_literal(";"))
     .map(|((label, params), body)| {
         TopItem::Test(TopTest {
-            label: label.to_string(),
+            label,
             params,
             body,
         })
@@ -106,23 +106,21 @@ pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
 
 // `foreign name : T;` — a name and a wire signature with no body, bound to a host-provided implementation at link time. Mirrors `parse_top_let`, but ends after the signature instead of parsing `= body`.
 pub(super) fn parse_top_foreign<'a>(vis_pub: bool) -> Parser<'a, TopItem> {
-    parse_identifier()
+    parse_label()
         .and_drop(parse_literal(":"))
         .and(parse_wire_signature())
         .and_drop(parse_literal(";"))
         .map(move |(label, signature)| {
             TopItem::Foreign(TopForeign {
                 vis_pub,
-                label: label.to_string(),
+                label,
                 signature,
             })
         })
 }
 
 pub(super) fn parse_top_mod<'a>(vis_pub: bool, start: Mark) -> Parser<'a, TopItem> {
-    parse_identifier().flat_map(move |name| {
-        let label = name.to_string();
-
+    parse_label().flat_map(move |label| {
         catch(
             many0(parse_top_item)
                 .and_drop(parse_keyword("end"))
@@ -194,11 +192,10 @@ pub(super) fn parse_use_path<'a>() -> Parser<'a, Name> {
 }
 
 pub(super) fn parse_group_item<'a>() -> Parser<'a, GroupItem> {
-    catch(parse_keyword("mod").and_keep(parse_identifier()))
-        .map(|s| GroupItem::Mod(s.to_string()))
-        .or(catch(parse_keyword("let").and_keep(parse_identifier()))
-            .map(|s| GroupItem::Let(s.to_string())))
-        .or(parse_identifier().map(|s| GroupItem::Both(s.to_string())))
+    catch(parse_keyword("mod").and_keep(parse_label()))
+        .map(GroupItem::Mod)
+        .or(catch(parse_keyword("let").and_keep(parse_label())).map(GroupItem::Let))
+        .or(parse_label().map(GroupItem::Both))
 }
 
 pub(super) fn parse_brace_group<'a>() -> Parser<'a, Vec<GroupItem>> {
@@ -213,12 +210,16 @@ pub(super) fn parse_use_group<'a>() -> Parser<'a, UseGroup> {
         .or(catch(take_exact("/").and_keep(parse_literal("*"))).map(|()| UseGroup::Glob))
 }
 
-pub(super) fn parse_top_use<'a>(vis_pub: bool) -> Parser<'a, TopItem> {
+// The span reaches back to the mark the dispatch took before `pub`, as a `mod`'s does, and closes on the `;` rather than on the whitespace after it: it is what a report about the whole declaration underlines.
+pub(super) fn parse_top_use<'a>(vis_pub: bool, start: Mark) -> Parser<'a, TopItem> {
     parse_use_path()
         .and(parse_use_group())
-        .and_drop(parse_literal(";"))
-        .map(move |(name, group)| {
+        .and_drop(take_exact(";"))
+        .and(mark())
+        .and_drop(parse_whitespace())
+        .map(move |((name, group), end)| {
             TopItem::Use(TopUse {
+                span: Some(start.to(&end)),
                 vis_pub,
                 name,
                 group,
@@ -314,7 +315,7 @@ pub(super) fn parse_induct_arity<'a>() -> Parser<'a, InductArity> {
 }
 
 pub(super) fn parse_top_induct_body<'a>(vis_pub: bool) -> Parser<'a, TopInduct> {
-    parse_identifier()
+    parse_label()
         .and(
             catch(
                 parse_literal("(")
@@ -358,7 +359,6 @@ pub(super) fn parse_top_induct_body<'a>(vis_pub: bool) -> Parser<'a, TopInduct> 
                     }
                 }
 
-                let label = label.to_string();
                 pure(TopInduct {
                     vis_pub,
                     rep_pub,
@@ -389,7 +389,7 @@ pub(super) fn parse_sort<'a>() -> Parser<'a, Term> {
 
 // One structure of a `struct` item, after its `pub` and keyword: the name, the parameters, the result sort with its own `pub`, and the fields.
 fn parse_struct_member<'a>(vis_pub: bool) -> Parser<'a, TopStruct> {
-    parse_identifier()
+    parse_label()
         .and(
             catch(
                 parse_literal("(")
@@ -409,7 +409,7 @@ fn parse_struct_member<'a>(vis_pub: bool) -> Parser<'a, TopStruct> {
             move |(((label, params), (rep_pub, result_sort)), fields)| TopStruct {
                 vis_pub,
                 rep_pub,
-                label: label.to_string(),
+                label,
                 params,
                 result_sort,
                 fields,
@@ -467,7 +467,7 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
 
 // One concept of a `concept` item, after its `pub` and keyword — the struct member's shape with concept fields.
 fn parse_concept_member<'a>(vis_pub: bool) -> Parser<'a, TopConcept> {
-    parse_identifier()
+    parse_label()
         .and(
             catch(
                 parse_literal("(")
@@ -485,7 +485,7 @@ fn parse_concept_member<'a>(vis_pub: bool) -> Parser<'a, TopConcept> {
             move |(((label, params), (rep_pub, result_sort)), fields)| TopConcept {
                 vis_pub,
                 rep_pub,
-                label: label.to_string(),
+                label,
                 params,
                 result_sort,
                 fields,
@@ -597,7 +597,7 @@ pub(crate) fn parse_top_item<'a>() -> Parser<'a, TopItem> {
             // The head is read *raw*, so an unrecognized one is reported against the word itself rather than wherever the whitespace after it ended — which for a one-word line is the next line, or end of input. Every arm therefore consumes that whitespace itself.
             let body = match head {
                 "mod" => commit(parse_top_mod(vis_pub, start)),
-                "use" => commit(parse_top_use(vis_pub)),
+                "use" => commit(parse_top_use(vis_pub, start)),
                 "induct" => commit(parse_top_induct(vis_pub)),
                 "struct" => commit(parse_top_struct(vis_pub)),
                 "foreign" => commit(parse_top_foreign(vis_pub)),

@@ -135,7 +135,7 @@ fn type_() -> Term {
 fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
     TopItem::Let(vec![TopLet {
         vis_pub: true,
-        label: label.to_string(),
+        label: label.into(),
         signature: LetSignature::Name {
             type_: Some(type_),
             body,
@@ -147,7 +147,7 @@ fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
     TopItem::Mod(TopMod {
         span: None,
         vis_pub: true,
-        label: label.to_string(),
+        label: label.into(),
         module: Some(Module { items }),
     })
 }
@@ -155,9 +155,10 @@ fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
 // `pub use Label/{let Label}` — the facade re-export that hoists a submodule's own type binding up to the library root, so `/sys/{Label}` names the type.
 fn pub_use(label: &str) -> TopItem {
     TopItem::Use(TopUse {
+        span: None,
         vis_pub: true,
         name: Name::from([label.to_string()]),
-        group: UseGroup::Named(vec![GroupItem::Let(label.to_string())]),
+        group: UseGroup::Named(vec![GroupItem::Let(label.into())]),
     })
 }
 
@@ -198,13 +199,13 @@ fn fn_marked(
 ) -> TopLet {
     TopLet {
         vis_pub,
-        label: label.to_string(),
+        label: label.into(),
         signature: LetSignature::Func {
             params: params
                 .into_iter()
                 .map(|(p, n, t)| FuncSugarParam {
                     plicity: p,
-                    label: Pattern::Binder(Some(n.to_string())),
+                    label: Pattern::Binder(Some(n.into())),
                     type_: t,
                 })
                 .collect(),
@@ -258,7 +259,7 @@ fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
     if signature.params.is_empty() {
         return TopLet {
             vis_pub,
-            label: function.label.clone(),
+            label: function.label.clone().into(),
             signature: LetSignature::Name {
                 type_: Some(output),
                 body,
@@ -289,7 +290,7 @@ pub(crate) fn foreign_signature(
         namespace: Namespace::Ffi,
         name,
         subject: None,
-        label: declaration.label.clone(),
+        label: declaration.label.to_string(),
         signature: declaration.signature.clone(),
     };
 
