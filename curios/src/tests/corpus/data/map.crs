@@ -44,10 +44,7 @@ test entries_agree_across_insertion_orders() =
 -- 300 sequential keys rendered as decimal share long prefixes — "1" against "10" against "100" — exercising deep shared paths and the presence markers that separate a key from its own extensions; deleting the even half exercises collapse at scale. Keys are `Str` because there is no `Key(Nat)`: `/std/Map` records why a base-256 encoding of an intrinsic `Nat` cannot discharge `Key/injective`.
 test holds_many_keys_with_shared_prefixes() =
     let build(i: Nat, acc: Map(Str)) -> Map(Str) =
-        match i
-        | 0 => acc
-        | _ => build(i - 1, Map/insert(acc, Nat/to_str(i), Nat/to_str(i)))
-        end;
+        match i | 0 => acc | _ => build(i - 1, Map/insert(acc, Nat/to_str(i), Nat/to_str(i))) end;
     let drop_even(i: Nat, acc: Map(Str)) -> Map(Str) =
         match i
         | 0 => acc
@@ -63,7 +60,13 @@ test holds_many_keys_with_shared_prefixes() =
     Test/equal(
         Str/join(
             ",",
-            [Nat/to_str(Map/len(m)), Nat/to_str(Map/len(d)), at(2), at(3), at(255), at(256),
+            [
+                Nat/to_str(Map/len(m)),
+                Nat/to_str(Map/len(d)),
+                at(2),
+                at(3),
+                at(255),
+                at(256),
                 at(257)]),
         "300,150,?,3,255,?,257");
 
@@ -76,14 +79,14 @@ test update_map_filter_union_and_get_or_rewrite_entries() =
                 Map/update(m, "a", (o: Option(Nat)) => Option/map(o, (n: Nat) => n + 10)),
                 Map/of([("a", 11), ("b", 2), ("c", 3)])),
             Test/equal(
-                Map/update(m, "b", (o: Option(Nat)) => Option/none()),
+                Map/update(m, "b", (_o: Option(Nat)) => Option/none()),
                 Map/of([("a", 1), ("c", 3)])),
             Test/equal(
-                Map/update(m, "d", (o: Option(Nat)) => Option/some(4)),
+                Map/update(m, "d", (_o: Option(Nat)) => Option/some(4)),
                 Map/of([("a", 1), ("b", 2), ("c", 3), ("d", 4)])),
             Test/equal(Map/map(m, (n: Nat) => n * 2), Map/of([("a", 2), ("b", 4), ("c", 6)])),
             Test/equal(
-                Map/filter(m, (k: Bytes, n: Nat) => Bool/not(Nat/is_even(n))),
+                Map/filter(m, (_k: Bytes, n: Nat) => Bool/not(Nat/is_even(n))),
                 Map/of([("a", 1), ("c", 3)])),
             Test/equal(
                 Map/union(Map/of([("a", 1), ("x", 9)]), Map/of([("a", 100), ("y", 8)])),

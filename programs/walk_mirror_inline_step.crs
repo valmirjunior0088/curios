@@ -1,7 +1,7 @@
 -- The returned scan state removed from the baseline mirror: the transition is inlined, so no scan value crosses a call, and the range test the step performed is paid once rather than twice.
 -- One of five mirror programs attributing `/std/Str/fold`'s allocation obligations; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
 -- N is read from stdin so the loop survives constant folding; output stays bounded well inside i31.
-use /std/{Str, Nat, Byte, Bytes, Bool, Option, Io};
+use /std/{Str, Nat, Byte, Bytes, Bool, Io};
 
 induct MClass: Type
 | ascii()
@@ -31,7 +31,7 @@ let mclassify(c: Byte) -> MClass =
     | _ => MClass/bad()
     end;
 
-let mstep(c: Byte, s: MScan) -> MScan =
+let _mstep(c: Byte, s: MScan) -> MScan =
     let n = Byte/to_nat(c);
     match s
     | bad() => MScan/bad()

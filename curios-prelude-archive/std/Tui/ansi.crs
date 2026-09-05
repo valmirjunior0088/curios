@@ -49,7 +49,7 @@ pub let reset: Bytes =
 let color_params(c: Color, base: Nat) -> List(Str) =
     match c
     | default() => []
-    | ansi(n, @ok) =>
+    | ansi(n, @_ok) =>
         match n < 8
         | true => [Nat/to_str(base + n)]
         | false => [Nat/to_str(base + 60 + (n - 8))]

@@ -17,6 +17,7 @@ mod harness;
 mod host;
 mod inference;
 mod laws;
+mod lint;
 mod map;
 mod matching;
 mod numeric;

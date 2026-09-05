@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
+use /std/{Nat, Bool, Byte, Bytes, Char, Str, Option, Parse};
 use /std/Toml/scan/{hex_val};
 
 -- One hex digit of an escape. The two ways of not finding one are different errors here -- running out of input truncates the escape, a wrong byte spells it wrongly -- so this peeks rather than labelling a single refusal.
@@ -59,7 +59,7 @@ let crlf: Parse(Option({Byte, Byte})) =
     Parse/optional(Parse/and(Parse/take_byte(0xD), Parse/take_byte(0xA)));
 
 let quotes(quote: Byte, count: Nat) -> Bytes =
-    match count | 0 => x[] | pred + 1; ih => x[..ih, quote] end;
+    match count | 0 => x[] | _pred + 1; ih => x[..ih, quote] end;
 
 let basic_body(acc: Bytes) -> Parse(Bytes) =
     let next = Parse/peek!;

@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse, BigNat};
+use /std/{Nat, Flt, Bool, Byte, Option, Parse, BigNat};
 use /std/Toml/{Toml};
 use /std/Toml/scan/{hex_val};
 

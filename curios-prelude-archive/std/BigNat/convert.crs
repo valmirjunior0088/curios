@@ -1,7 +1,5 @@
-use /std/{Nat, Bool, Bits, Str, Char, Option, Ordering, Eq, False, True, Equal, Compare, Add,
-    Subtract, Multiply, Show, Ordered, Spell};
-use /std/Bool/{false_neq_true};
-use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
+use /std/{Nat, Bool, Str, Char, Option, False, True, Equal, Compare, Subtract, Multiply, Show,
+    Ordered, Spell};
 use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, of_nat, view, zero, mod add, mod cmp, mod mul,
     mod sub};
 
@@ -40,7 +38,7 @@ pub let Decimal(s: Str) -> Prop =
     match is_decimal(s) | true => True | false => False end;
 
 -- The inverse of `to_str`, total on a string the bound admits. Each digit shifts the accumulator one decimal place, so the value is bounded by the numeral it is written as rather than by any native width.
-pub let of_decimal(s: Str, @ok: Decimal(s)) -> BigNat =
+pub let of_decimal(s: Str, @_ok: Decimal(s)) -> BigNat =
     Str/fold(s, zero, (cp, acc) => add/add(mul/small(acc, 10), of_nat(Char/to_nat(cp) - 0x30)));
 
 -- The fallible form, spelled as its peers `Nat/of_str` and `Int/of_str` are; the guard is what discharges `of_decimal`'s bound.

@@ -1,7 +1,7 @@
 -- The accumulator obligation removed from the baseline mirror: the `{Nat, Nat}` tuple becomes two parameters, which forces each acc arm to carry its own tail call.
 -- One of five mirror programs attributing `/std/Str/fold`'s allocation obligations; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
 -- N is read from stdin so the loop survives constant folding; output stays bounded well inside i31.
-use /std/{Str, Nat, Byte, Bytes, Bool, Option, Io};
+use /std/{Str, Nat, Byte, Bytes, Bool, Io};
 
 induct MClass: Type
 | ascii()

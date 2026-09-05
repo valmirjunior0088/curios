@@ -1,5 +1,5 @@
 -- The widget five, each a pure function of its state and its size.
-use /std/{Nat, Str, List, Option, Test, Tui};
+use /std/{Nat, Str, Option, Test};
 use /std/Tui/{Style, Frame, Key, Border, Paragraph, Listing, Input, Viewport};
 use /std/Tui/Key/{Code};
 

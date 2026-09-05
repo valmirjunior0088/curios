@@ -1,5 +1,5 @@
 -- Cell width, and the truncation and wrapping written over it.
-use /std/{Nat, Str, List, Test, Tui};
+use /std/{Nat, Str, Test};
 use /std/Tui/{text};
 
 -- The three widths the table separates: a Latin scalar at one, a CJK ideograph at two, and a combining mark at zero — so `é` (an `e` followed by U+0301, written here as the two scalars it is, since a string literal has no `\u` escape) measures one column while `Str/len` counts two.

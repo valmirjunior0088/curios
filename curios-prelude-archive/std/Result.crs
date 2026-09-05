@@ -51,8 +51,8 @@ pub let unwrap_or_else(@A: Type, @E: Type, r: Result(E, A), default: (E) -> A) -
     match r | success(a) => a | failure(e) => default(e) end;
 
 satisfy (@E: Type) => Monad((A: Type) => Result(E, A)) {
-    pure(@A, a) = pure(a),
-    bind(@A, @B, m, f) = bind(m, f),
+    pure(@_A, a) = pure(a),
+    bind(@_A, @_B, m, f) = bind(m, f),
 }
 
 satisfy (@A: Type, @E: Type, use Equal(A), use Equal(E)) => Equal(Result(E, A));

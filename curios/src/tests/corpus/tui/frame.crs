@@ -1,6 +1,6 @@
 -- The size-indexed frame algebra: what composes, what the type refuses, and what a frame reads back as.
-use /std/{Nat, Str, List, Vec, Option, Test, Tui};
-use /std/Tui/{Style, Cell, Frame};
+use /std/{Nat, Str, Test};
+use /std/Tui/{Style, Frame};
 
 let render(@w: Nat, @h: Nat, f: Frame(w, h)) -> Str =
     Str/join("/", Frame/to_lines(f));

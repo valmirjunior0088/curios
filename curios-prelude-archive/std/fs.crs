@@ -64,7 +64,7 @@ let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
     end;
 
 pub let exists(path: Path) -> Try(Io, Io/Error, Bool) =
-    kind_is(path, (k) => true);
+    kind_is(path, (_k) => true);
 
 pub let is_file(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (k) => k == Kind/file());

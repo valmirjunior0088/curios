@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io, True, stream};
+use /std/{Bytes, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io, stream};
 use /std/time/{Duration};
 
 -- Both are scheduler plumbing: their operations exist so this module and its descendants can drive a fiber, not so a program can complete someone else's future. The modules stay private and only the two type names are re-exported, which leaves `Future/fulfill` and friends reachable within `/std/Async` alone.
@@ -604,5 +604,5 @@ satisfy Lift(Io, Async) {
 
 -- The identity edge, for a witness whose premise is `Lift(Async, M)` at `M = Async`, as `/std/Io`'s is for `Lift(Io, M)`.
 satisfy Lift(Async, Async) {
-    lift(@A, m) = m,
+    lift(@_A, m) = m,
 }

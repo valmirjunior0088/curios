@@ -1,5 +1,5 @@
 -- The pure path algebra: bytes underneath, `/` as the one separator, and the functions a listing entry or a specification needs.
-use /std/{Str, Bytes, Bool, Option, Path, Test};
+use /std/{Str, Option, Path, Test};
 
 let p(s: Str) -> Path =
     Path/of_str(s);

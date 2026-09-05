@@ -61,7 +61,7 @@ let every_byte(count: Nat, next: Nat) -> List(Byte) =
 -- `n % 256` is known to the reducer by its remainder bound, so `of_nat`'s precondition decides definitionally.
 satisfy Test/Draw(Byte) {
     all() = Option/some(every_byte(256, 0)),
-    draw(seed, size) =
+    draw(seed, _size) =
         let (n, rest) = Test/Seed/next(seed);
         (of_nat(n % 256), rest),
 }

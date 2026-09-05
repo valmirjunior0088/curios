@@ -1,7 +1,4 @@
-use /std/{Nat, Bool, Bits, Str, Ordering, Eq, False, True, Equal, Compare, Add, Subtract, Multiply,
-    Show, Ordered};
-use /std/Bool/{false_neq_true};
-use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
+use /std/{Bool, Bits};
 use /std/BigNat/{BigNat, of_bits, xor3, zero};
 
 let borrow_out(a: Bool, b: Bool, bw: Bool) -> Bool =

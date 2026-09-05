@@ -1,5 +1,5 @@
 -- The typed pane tree: what `distribute` shares, and what `draw` joins.
-use /std/{Nat, Str, List, Test, Tui};
+use /std/{Nat, Str, List, Test};
 use /std/Tui/{Style, Frame, Layout};
 
 let render(@w: Nat, @h: Nat, f: Frame(w, h)) -> Str =

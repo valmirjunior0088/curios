@@ -1,5 +1,5 @@
 -- The renderer: what a first frame writes, what a diff writes, and what it skips.
-use /std/{Nat, Str, Bytes, List, Vec, Option, Test, Tui};
+use /std/{Nat, Str, Bytes, Vec, Option, Test, Tui};
 use /std/Tui/{Style, Cell, Frame, render};
 
 let esc: Str =

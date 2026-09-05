@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, Flt, Bool};
+use /std/{Nat, Bytes, Flt};
 use /syn/{True, False};
 
 pub let FourBytes(b: Bytes) -> Prop =

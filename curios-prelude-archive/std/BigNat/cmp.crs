@@ -1,5 +1,4 @@
-use /std/{Nat, Bool, Bits, Str, Ordering, Eq, False, True, Equal, Compare, Add, Subtract, Multiply,
-    Show, Ordered};
+use /std/{Bool, Bits, Ordering, Eq};
 use /std/Bool/{false_neq_true};
 use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, cong_cons2, eq};
@@ -88,7 +87,7 @@ let cong_cmp_match(
 ) -> Eq(
     match s: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
     match t: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end) =
-    match p: (u, v, q) =>
+    match p: (u, v, _q) =>
         Eq(
             match u: (_) => Ordering
             | eq() => E
@@ -100,7 +99,7 @@ let cong_cmp_match(
             | lt() => Ordering/lt()
             | gt() => Ordering/gt()
             end)
-    | refl(@z) => Eq/refl()
+    | refl(@_z) => Eq/refl()
     end;
 
 pub let raw_to_eq(x: Bits, y: Bits, p: Eq(raw(x, y), Ordering/eq())) -> Eq(x, y) =
@@ -309,10 +308,10 @@ let trans_cons(
         raw(xt, zt),
         Ordering/lt()),
 ) -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt()) =
-    match s1: (r1) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
+    match s1: (_r1) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
     | gt() => match gt_neq_lt(reduce_whole(e1, p)) end
     | lt() =>
-        match s2: (r2) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
+        match s2: (_r2) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
         | gt() => match gt_neq_lt(reduce_whole(e2, q)) end
         | lt() => cons_lt(xh, zh, ih(e1)(e2))
         | eq() =>
@@ -322,7 +321,7 @@ let trans_cons(
                 Eq/subst((w: Bits) => Eq(raw(xt, w), Ordering/lt()), raw_to_eq(yt, zt, e2), e1))
         end
     | eq() =>
-        match s2: (r3) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
+        match s2: (_r3) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
         | gt() => match gt_neq_lt(reduce_whole(e2, q)) end
         | lt() =>
             cons_lt(
@@ -352,19 +351,19 @@ pub let raw_trans(
     | b[] =>
         match y
         | b[] => match eq_neq_lt(p) end
-        | b[yh, ..yt] =>
+        | b[_yh, .._yt] =>
             match z
             | b[] => match gt_neq_lt(q) end
             | b[_, .._] => Eq/refl()
             end
         end
-    | b[xh, ..xt] =>
+    | b[_xh, ..xt] =>
         match y
         | b[] => match gt_neq_lt(p) end
-        | b[yh, ..yt] =>
+        | b[_yh, ..yt] =>
             match z
             | b[] => match gt_neq_lt(q) end
-            | b[zh, ..zt] =>
+            | b[_zh, ..zt] =>
                 trans_cons(
                     raw(xt, yt),
                     Eq/refl(),

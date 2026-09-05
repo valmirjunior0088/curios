@@ -1,5 +1,5 @@
 -- Multiplication of strictly-positive naturals. The certificate recurses on the left operand's bits: a set bit reduces the goal to `add`'s transport lemma, a clear bit to a shift of the recursive result.
-use /std/{Bool, Bits, Eq, False, True, BigNat, BigPos};
+use /std/{Bits, Eq, True, BigNat, BigPos};
 use /std/Bool/{false_neq_true};
 use /std/BigNat/{is_trimmed, trim};
 use /std/BigPos/{is_cons, nz_trimmed, trim_head_non_zero, add};

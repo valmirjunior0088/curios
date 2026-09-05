@@ -14,7 +14,7 @@ let then(first: Ordering, rest: ({}) -> Ordering) -> Ordering =
     match first | eq() => rest(()) | _ => first end;
 
 satisfy Show({}) {
-    show(t) = "()",
+    show(_t) = "()",
 }
 
 satisfy (@A: Type, use Show(A)) => Show({A}) {
@@ -144,7 +144,7 @@ satisfy (
 
 -- A tuple spells as its literal, which is how it shows, with the fields spelled instead of shown: the same text re-parses at the same shape wherever the fields' names are visible.
 satisfy Spell({}) {
-    spell(t) = "()",
+    spell(_t) = "()",
 }
 
 satisfy (@A: Type, use Spell(A)) => Spell({A}) {
@@ -161,8 +161,8 @@ satisfy (@A: Type, @B: Type, @C: Type, use Spell(A), use Spell(B), use Spell(C))
 }
 
 satisfy Equal({}) {
-    eql(a, b) = true,
-    neq(a, b) = false,
+    eql(_a, _b) = true,
+    neq(_a, _b) = false,
 }
 
 satisfy (@A: Type, use Equal(A)) => Equal({A}) {
@@ -277,7 +277,7 @@ satisfy (
 }
 
 satisfy Ordered({}) {
-    cmp(a, b) = Ordering/eq(),
+    cmp(_a, _b) = Ordering/eq(),
 }
 
 satisfy (@A: Type, use Ordered(A)) => Ordered({A}) {
@@ -285,7 +285,7 @@ satisfy (@A: Type, use Ordered(A)) => Ordered({A}) {
 }
 
 satisfy (@A: Type, @B: Type, use Ordered(A), use Ordered(B)) => Ordered({A, B}) {
-    cmp(a, b) = then(Ordered/cmp(a.0, b.0), (u) => Ordered/cmp(a.1, b.1)),
+    cmp(a, b) = then(Ordered/cmp(a.0, b.0), (_u) => Ordered/cmp(a.1, b.1)),
 }
 
 satisfy (@A: Type, @B: Type, @C: Type, use Ordered(A), use Ordered(B), use Ordered(C)) => Ordered(
@@ -293,7 +293,7 @@ satisfy (@A: Type, @B: Type, @C: Type, use Ordered(A), use Ordered(B), use Order
     cmp(a, b) =
         then(
             Ordered/cmp(a.0, b.0),
-            (u) => then(Ordered/cmp(a.1, b.1), (u) => Ordered/cmp(a.2, b.2))),
+            (_u) => then(Ordered/cmp(a.1, b.1), (_u) => Ordered/cmp(a.2, b.2))),
 }
 
 satisfy (
@@ -309,10 +309,10 @@ satisfy (
     cmp(a, b) =
         then(
             Ordered/cmp(a.0, b.0),
-            (u) =>
+            (_u) =>
                 then(
                     Ordered/cmp(a.1, b.1),
-                    (u) => then(Ordered/cmp(a.2, b.2), (u) => Ordered/cmp(a.3, b.3)))),
+                    (_u) => then(Ordered/cmp(a.2, b.2), (_u) => Ordered/cmp(a.3, b.3)))),
 }
 
 satisfy (
@@ -330,13 +330,13 @@ satisfy (
     cmp(a, b) =
         then(
             Ordered/cmp(a.0, b.0),
-            (u) =>
+            (_u) =>
                 then(
                     Ordered/cmp(a.1, b.1),
-                    (u) =>
+                    (_u) =>
                         then(
                             Ordered/cmp(a.2, b.2),
-                            (u) => then(Ordered/cmp(a.3, b.3), (u) => Ordered/cmp(a.4, b.4))))),
+                            (_u) => then(Ordered/cmp(a.3, b.3), (_u) => Ordered/cmp(a.4, b.4))))),
 }
 
 satisfy (
@@ -356,19 +356,19 @@ satisfy (
     cmp(a, b) =
         then(
             Ordered/cmp(a.0, b.0),
-            (u) =>
+            (_u) =>
                 then(
                     Ordered/cmp(a.1, b.1),
-                    (u) =>
+                    (_u) =>
                         then(
                             Ordered/cmp(a.2, b.2),
-                            (u) =>
+                            (_u) =>
                                 then(
                                     Ordered/cmp(a.3, b.3),
-                                    (u) =>
+                                    (_u) =>
                                         then(
                                             Ordered/cmp(a.4, b.4),
-                                            (u) => Ordered/cmp(a.5, b.5)))))),
+                                            (_u) => Ordered/cmp(a.5, b.5)))))),
 }
 
 satisfy (
@@ -390,22 +390,22 @@ satisfy (
     cmp(a, b) =
         then(
             Ordered/cmp(a.0, b.0),
-            (u) =>
+            (_u) =>
                 then(
                     Ordered/cmp(a.1, b.1),
-                    (u) =>
+                    (_u) =>
                         then(
                             Ordered/cmp(a.2, b.2),
-                            (u) =>
+                            (_u) =>
                                 then(
                                     Ordered/cmp(a.3, b.3),
-                                    (u) =>
+                                    (_u) =>
                                         then(
                                             Ordered/cmp(a.4, b.4),
-                                            (u) =>
+                                            (_u) =>
                                                 then(
                                                     Ordered/cmp(a.5, b.5),
-                                                    (u) => Ordered/cmp(a.6, b.6))))))),
+                                                    (_u) => Ordered/cmp(a.6, b.6))))))),
 }
 
 satisfy (
@@ -429,31 +429,31 @@ satisfy (
     cmp(a, b) =
         then(
             Ordered/cmp(a.0, b.0),
-            (u) =>
+            (_u) =>
                 then(
                     Ordered/cmp(a.1, b.1),
-                    (u) =>
+                    (_u) =>
                         then(
                             Ordered/cmp(a.2, b.2),
-                            (u) =>
+                            (_u) =>
                                 then(
                                     Ordered/cmp(a.3, b.3),
-                                    (u) =>
+                                    (_u) =>
                                         then(
                                             Ordered/cmp(a.4, b.4),
-                                            (u) =>
+                                            (_u) =>
                                                 then(
                                                     Ordered/cmp(a.5, b.5),
-                                                    (u) =>
+                                                    (_u) =>
                                                         then(
                                                             Ordered/cmp(a.6, b.6),
-                                                            (u) => Ordered/cmp(a.7, b.7)))))))),
+                                                            (_u) => Ordered/cmp(a.7, b.7)))))))),
 }
 
 -- A tuple is drawn by drawing each field in turn, threading the seed left to right.
 satisfy Test/Draw({}) {
     all() = Option/some([()]),
-    draw(seed, size) = ((), seed),
+    draw(seed, _size) = ((), seed),
 }
 
 satisfy (@A: Type, use Test/Draw(A)) => Test/Draw({A}) {

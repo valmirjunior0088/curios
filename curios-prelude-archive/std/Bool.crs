@@ -62,7 +62,7 @@ satisfy Ordered(Bool) {
 
 satisfy Test/Draw(Bool) {
     all() = Option/some([true, false]),
-    draw(seed, size) =
+    draw(seed, _size) =
         let (n, rest) = Test/Seed/next(seed);
         (Nat/and(n, 1) == 1, rest),
 }

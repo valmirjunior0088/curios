@@ -1,5 +1,5 @@
 -- The typed spine: what each kind contributes to the parsed record, read back by name at the type the specification decides, and the well-formedness a program's entry demands.
-use /std/{Cli, Str, Nat, Bool, Option, List, Io, Test};
+use /std/{Cli, Str, Nat, Bool, Option, List, Test};
 
 let spec: List(Cli/Arg) =
     [
@@ -50,7 +50,7 @@ let serve: Cli =
         commands = [],
     };
 
-let well_formed(c: Cli, @ok: Cli/WellFormed(c)) -> Bool =
+let well_formed(c: Cli, @_ok: Cli/WellFormed(c)) -> Bool =
     true;
 
 -- Two claims in one: the handler's parameter carries the `args` written two fields above it, so the `get` calls inside `serve` type with nothing annotated; and `WellFormed` is decided by reduction, so the entry's bound discharges here with nothing written.

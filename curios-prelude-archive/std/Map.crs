@@ -20,7 +20,7 @@ pub concept Key(K: Type): pub Type {
 satisfy Key(Bytes) {
     to_bytes(b) = b,
     -- The identity encoding: the goal reduces to the hypothesis.
-    injective(a, b, same) = same,
+    injective(_a, _b, same) = same,
 }
 
 satisfy Key(Str) {
@@ -116,7 +116,7 @@ let insert1(@V: Type, t: Node(V), k: Bytes, v: V) -> {Node(V), Nat, Nat} =
 -- The same single descent for removal, over three states: 0 unchanged, 1 removed, 2 emptied. A fork whose child emptied answers its other child, which is the collapse that keeps the shape canonical; `emptied` reaching the root means the map held exactly this one entry. The node answered alongside `emptied` is the untouched original and is never read.
 let remove1(@V: Type, t: Node(V), k: Bytes) -> {Node(V), Nat} =
     match t
-    | leaf(k0, v0) => match Bytes/eql(k0, k) | true => (t, 2) | false => (t, 0) end
+    | leaf(k0, _v0) => match Bytes/eql(k0, k) | true => (t, 2) | false => (t, 0) end
     | fork(c, z, o) =>
         match bit(k, c)
         | 0 =>
@@ -177,7 +177,7 @@ pub let fold(@V: Type, @A: Type, m: Map(V), init: A, f: (Bytes, V, A) -> A) -> A
     | none() => init
     | some(n) =>
         let go(t: Node(V), acc: A) -> A =
-            match t | leaf(k, v) => f(k, v, acc) | fork(c, z, o) => go(o, go(z, acc)) end;
+            match t | leaf(k, v) => f(k, v, acc) | fork(_c, z, o) => go(o, go(z, acc)) end;
         go(n, init)
     end;
 

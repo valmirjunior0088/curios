@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
+use /std/{Byte, Str, List, Map, Parse};
 use /std/Toml/{Toml};
 use /std/Toml/build/{inline_fold};
 use /std/Toml/scan/{trivia, ws};

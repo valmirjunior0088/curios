@@ -2,7 +2,7 @@
 -- The digit-parsing rungs never leave the ASCII arm of `/std/Str/fold`, so the two `Scan` obligations — the scan state returned by `/syn/Str/step` and the argument reconstruction in the `cont` arm — execute zero times there. This fixture walks 1-, 2-, 3- and 4-byte characters so those obligations run once per continuation byte and their shares are measurable rather than absent.
 -- The text is derived from stdin rather than written as a literal, so closed-term evaluation cannot fold the walk away.
 -- N is read from stdin so the loop survives constant folding; output stays bounded well inside i31.
-use /std/{Str, Char, Nat, Option, Io};
+use /std/{Str, Char, Nat, Io};
 
 let loop(k: Nat, text: Str, acc: Nat) -> Nat =
     match k: (_) => Nat

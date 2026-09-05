@@ -26,10 +26,10 @@ pub let run(@A: Type, p: Parse(A), input: Bytes) -> Result(Str, A) =
     end;
 
 pub let pure(@A: Type, a: A) -> Parse(A) =
-    Parse { run(input, pos) = Result/success((pos, a)) };
+    Parse { run(_input, pos) = Result/success((pos, a)) };
 
 pub let fail(@A: Type, msg: Str) -> Parse(A) =
-    Parse { run(input, pos) = Result/failure(Refusal/declined(msg)) };
+    Parse { run(_input, _pos) = Result/failure(Refusal/declined(msg)) };
 
 pub let map(@A: Type, @B: Type, p: Parse(A), f: (A) -> B) -> Parse(B) =
     Parse {
@@ -197,7 +197,7 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
                     match Bytes/len(input) - pos: (_) =>
                         {taken: Nat, within: Nat/Le(pos + taken, Bytes/len(input)), stopped: Bool}
                     | 0 => (0, within, false)
-                    | step + 1; ih =>
+                    | _step + 1; ih =>
                         let (taken, at_cur, stopped) = ih;
                         match stopped
                         | true => ih

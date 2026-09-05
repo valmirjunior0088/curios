@@ -6,7 +6,7 @@
 -- free to walk the chain either way; the reverse-accumulate spelling is used
 -- everywhere because it is the one that is tail-recursive in every language.
 -- K is read from stdin; the seed is derived from it so nothing is a closed term.
-use /std/{Str, Nat, Option, Io};
+use /std/{Str, Nat, Io};
 
 induct Chain: Type
 | nil()
@@ -21,7 +21,7 @@ let cells: Nat =
 let build(n: Nat, x: Nat, acc: Chain) -> Chain =
     match n: (_) => Chain
     | 0 => acc
-    | m + 1; ih => build(m, 75 * x % 65537, Chain/cons(x, acc))
+    | m + 1; _ih => build(m, 75 * x % 65537, Chain/cons(x, acc))
     end;
 
 let step(rest: Chain, acc: Chain) -> Chain =
@@ -31,7 +31,7 @@ let step(rest: Chain, acc: Chain) -> Chain =
     end;
 
 let rounds(k: Nat, c: Chain) -> Chain =
-    match k: (_) => Chain | 0 => c | m + 1; ih => rounds(m, step(c, Chain/nil())) end;
+    match k: (_) => Chain | 0 => c | m + 1; _ih => rounds(m, step(c, Chain/nil())) end;
 
 let total(c: Chain, acc: Nat) -> Nat =
     match c: (_) => Nat | nil() => acc | cons(v, tail) => total(tail, (acc + v) % 1000003) end;

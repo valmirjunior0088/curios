@@ -3,7 +3,7 @@
 -- **Two encodings, one decoder.** The legacy encoding is what every terminal speaks: a control byte below space, `ESC [` and a final letter for the arrows, `ESC [ n ~` for the named keys, `ESC O` for the function keys, an Escape before a printable byte for Alt, and a bracketed-paste envelope around pasted text. It cannot tell a lone Escape from the start of a sequence, `Ctrl+I` from Tab, or `Shift+Enter` from Enter. The kitty keyboard protocol fixes that with `ESC [ code ; modifiers u`, spoken by kitty, ghostty, WezTerm, foot, Alacritty, iTerm2 and Windows Terminal once the session asks for it, while tmux and most others keep to the legacy form — so the decoder reads both, and on a terminal that accepted the protocol every key arrives unambiguous.
 --
 -- **What a chunk boundary means.** Bytes arrive in bursts, and a burst may end inside a sequence: a lone `ESC`, a `CSI` without its final byte, a paste without its terminator, a multi-byte scalar cut in two. `decode` answers such a tail as `rest`, untouched, for the caller to prepend to the next chunk. A caller that waited a short interval and saw nothing more calls `flush`, which reads the lone Escape as the Escape key and whatever follows it as the characters it is — the settling rule every surveyed library applies, and the only decision this module leaves to the clock.
-use /std/{Nat, Bool, Str, Char, Byte, Bytes, List, Option};
+use /std/{Nat, Str, Char, Byte, Bytes, List, Option};
 use /std/Tui/{Key, Event};
 use /std/Tui/Key/{Code};
 
@@ -167,7 +167,7 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
             end
         end;
     -- The body of a bracketed paste from `start` to its terminator; a chunk that ends before the terminator is cut at the envelope's opener.
-    let paste(opener: Nat, start: Nat) -> Step(E) =
+    let paste(_opener: Nat, start: Nat) -> Step(E) =
         let find(j: Nat) -> Option(Nat) =
             match at(input, j)
             | none() => Option/none()

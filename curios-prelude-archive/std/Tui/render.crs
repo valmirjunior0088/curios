@@ -1,7 +1,7 @@
 -- Two frames of one size into the bytes that carry the terminal from the first to the second. Every surveyed library that does not flicker diffs a cell grid, and this is that diff with the size in the type: both frames are `Frame(w, h)`, so the walk pairs row with row and cell with cell and has no bound to check.
 --
 -- A cell is written only where it differs from the previous frame's, with a cursor move only where the pen is not already there and an SGR only where the style changes from the last one written; a continuation cell writes nothing, since the wide symbol before it already covered its column. With no previous frame the screen is cleared and every cell written. The whole is bracketed in synchronized output (`CSI ? 2026 h` / `l`), which a terminal that lacks the mode ignores, so a frame lands at once rather than tearing. The cursor is hidden while cells are written and shown at its place after, where the program asked for one.
-use /std/{Nat, Bool, Str, Bytes, List, Vec, Option, Equal};
+use /std/{Nat, Str, Bytes, List, Vec, Option};
 use /std/Tui/{Style, Cell, Frame, ansi, text};
 
 struct Pen: Type {

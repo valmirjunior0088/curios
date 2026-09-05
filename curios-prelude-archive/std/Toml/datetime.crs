@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
+use /std/{Nat, Int, Bool, Byte, Parse};
 use /std/Toml/{Toml, Date, Time, OffsetDateTime, LocalDateTime};
 use /std/Toml/calendar/{date_ok, time_ok};
 
@@ -23,7 +23,7 @@ let expect(want: Byte) -> Parse({}) =
     Parse/label(Parse/map(Parse/take_byte(want), (_) => ()), "malformed date-time");
 
 let nat_pow10(n: Nat) -> Nat =
-    match n | 0 => 1 | pred + 1; ih => ih * 10 end;
+    match n | 0 => 1 | _pred + 1; ih => ih * 10 end;
 
 let frac_stop(taken: Nat, acc: Nat, seen: Bool) -> Parse(Nat) =
     match seen

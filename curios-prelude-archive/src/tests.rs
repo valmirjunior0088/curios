@@ -1,7 +1,8 @@
 //! What this crate's own sources must be true of, beyond elaborating.
 
 use {
-    curios_text::Formatted,
+    crate::{SYNTAX, sources::authored_prelude},
+    curios_text::{Formatted, prepare_prelude},
     std::{fs, path::PathBuf},
 };
 
@@ -51,5 +52,26 @@ fn every_authored_source_is_canonically_formatted() {
         "{} of these sources are not as `curios format` writes them:\n  {}\n\nrun `cargo run --package curios -- format <file>` on each",
         wrong.len(),
         wrong.join("\n  ")
+    );
+}
+
+/// **The standard and syntax libraries lint clean.**
+///
+/// The lints are exact and always on, so the honest test of them is the largest corpus in the tree: an import nothing resolves through, a binder nothing reads or a private declaration nothing reaches in `/std` is a finding to fix there, not a rule to relax. Lowering is the whole cost — the same lowering the build script pays — so this belongs in the ordinary suite. A failure renders each lint as `curios lint` would.
+#[test]
+fn every_authored_source_is_lint_clean() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let prepared = prepare_prelude(&authored_prelude(&manifest), &SYNTAX)
+        .unwrap_or_else(|error| panic!("the prelude failed to lower: {}", error.format()));
+    let lints = prepared
+        .lints()
+        .iter()
+        .map(|lint| lint.render())
+        .collect::<Vec<_>>();
+    assert!(
+        lints.is_empty(),
+        "{} lints in the prelude:\n\n{}",
+        lints.len(),
+        lints.join("\n\n")
     );
 }

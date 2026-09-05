@@ -1,7 +1,7 @@
 -- Thread a counter through N steps using the `State` monad, and print it.
 -- The paired `state_manual.crs` computes the identical result by threading the state by hand, so the two differ in abstraction and in nothing else: whatever separates their emitted code is what the `State` abstraction costs.
 -- N is read from stdin so the loop survives constant folding; output is 3N.
-use /std/{Str, Nat, Option, State, Io};
+use /std/{Str, Nat, State, Io};
 
 let loop(n: Nat) -> State(Nat, {}) =
     match n: (_) => State(Nat, {})

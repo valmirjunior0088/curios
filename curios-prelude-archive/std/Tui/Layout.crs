@@ -5,7 +5,7 @@
 -- **`fitted` is the one coercion in the tree, and the reason no proof appears.** `distribute` shares an axis by a deterministic pass — lengths and minimums first, percentages next, the rest to the fills by weight, the rounding shortfall to the last fill — and its shares are `Nat`s that sum to the axis in practice but not in the type. So `split` builds the children at the shares it computed and wraps the whole in `fitted(w, h, inner)`, which `render` discharges with `Frame/fit`: a column that came out one row short of `h` is padded there, one row over is cropped, and the type never had to know. That is the same coercion `Frame` pays for a string of runtime width, spent once per join rather than once per caller, and it is what the spec called "a proof that the layout sums" and declined to write.
 --
 -- **Two axes cost nothing beyond a second chain.** `Column` chains heights at a shared width and `Row` widths at a shared height, and each is the other with its indices swapped. The joins converted with no lemma — `h1 + h2` and `w1 + w2` are exactly what `above` and `beside` answer — which is what made committing to both axes free.
-use /std/{Nat, Str, Bool, List, Option};
+use /std/{Nat, Str, List};
 use /std/Tui/{Frame};
 
 -- How a child claims its share of an axis. `length` is exact, `min` is a floor a fill may grow past, `percent` is of the whole axis, and `fill(weight)` takes a weighted share of whatever the others leave.
@@ -116,9 +116,9 @@ pub let render(
 ) -> Frame(w, h) =
     match s
     | leaf(@name, pw, ph) => paint(name, pw, ph)
-    | stacked(@ps, @sw, @sh, col) => render_column(col, paint)
-    | ranged(@ps, @sw, @sh, row) => render_row(row, paint)
-    | fitted(@il, @w0, @h0, fw, fh, inner) => Frame/fit(render(inner, paint), fw, fh)
+    | stacked(@_ps, @_sw, @_sh, col) => render_column(col, paint)
+    | ranged(@_ps, @_sw, @_sh, row) => render_row(row, paint)
+    | fitted(@_il, @_w0, @_h0, fw, fh, inner) => Frame/fit(render(inner, paint), fw, fh)
     end
 and render_column(
     @ps: List({Constraint, Layout}),
@@ -129,7 +129,7 @@ and render_column(
 ) -> Frame(w, h) =
     match col
     | col_stop(@cw) => Frame/blank(cw, 0)
-    | col_part(@c, @l, @rest, @cw, @h1, @h2, head, tail) =>
+    | col_part(@_c, @_l, @_rest, @_cw, @_h1, @_h2, head, tail) =>
         Frame/above(render(head, paint), render_column(tail, paint))
     end
 and render_row(
@@ -141,14 +141,14 @@ and render_row(
 ) -> Frame(w, h) =
     match row
     | row_stop(@rh) => Frame/blank(0, rh)
-    | row_part(@c, @l, @rest, @w1, @w2, @rh, head, tail) =>
+    | row_part(@_c, @_l, @_rest, @_w1, @_w2, @_rh, head, tail) =>
         Frame/beside(render(head, paint), render_row(tail, paint))
     end;
 
 -- Split `w` by `h` along the tree. A `rows` shares `h` among its children by `distribute` and a `cols` shares `w`; each child is split at its share, and the chain is wrapped in `fitted` at the size that was asked for, since the shares are facts the value has and the type does not.
 pub let split(l: Layout, w: Nat, h: Nat) -> Sizes(l, w, h) =
     match l
-    | pane(name) => leaf(w, h)
+    | pane(_name) => leaf(w, h)
     | rows(ps) =>
         let built = split_column(ps, w, distribute(List/map(ps, (p) => p.0), h));
         fitted(w, h, stacked(built.col))

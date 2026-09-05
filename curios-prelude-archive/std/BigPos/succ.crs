@@ -6,7 +6,7 @@ use /std/BigPos/{is_cons};
 let raw_cons(x: Bits) -> is_cons(BigNat/succ/raw(x)) =
     match x: (r) => is_cons(BigNat/succ/raw(r))
     | b[] => True/qed()
-    | b[xh, ..xt] => match xh | true => True/qed() | false => True/qed() end
+    | b[xh, .._xt] => match xh | true => True/qed() | false => True/qed() end
     end;
 
 -- `BigNat/succ` answers with its raw ripple untrimmed, so the certificate is `raw_cons` directly — no transport across a trim.

@@ -1,5 +1,5 @@
 -- The `List` functions every peer ships: structural predicates and searches, the fold-shaped builders, `traverse` over a monad, and the stable sort.
-use /std/{Nat, Str, Bool, List, Option, Ordering, Eq, Test};
+use /std/{Nat, Str, Bool, List, Option, Eq, Test};
 
 test predicates_and_searches_answer_over_the_elements() =
     let l = [3, 1, 4, 1, 5];

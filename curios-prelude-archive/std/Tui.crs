@@ -5,7 +5,7 @@
 -- **The size is in the type because that is the class of bug this library exists to remove.** A column that does not fill its pane, a widget that overflows it, a border off by one: every surveyed library's issue tracker is full of them, and the two that are honest about it — Notty and brick — pad the mismatch away silently. Here `beside` and `above` refuse a mismatched join where it is written, `view` must produce exactly the frame it was asked for, and the renderer's diff walks two frames of one type with no bound to check. The cost is one coercion, `Tui/Frame/fit`, wherever a runtime-sized value meets a typed one.
 --
 -- **The loop is the program's model, its `update` and its `view`, driven by one queue.** `run` reads keys, the terminal's size and the answers of the program's own `Cmd/perform`s into a queue, parks on an `Async/Signal` until something is there, folds the queue through `update`, and draws once per burst, so ten keys in one read cost one frame. `drive` is the same fold with no terminal: a test hands it events and reads the model and the frame back, which is how a whole program is asserted as a `test` declaration.
-use /std/{Nat, Bool, Str, List, Option, Io, Try, Async, tty, Equal};
+use /std/{Nat, Bool, List, Option, Io, Try, Async};
 use /std/time/{Duration};
 use /std/Async/{Signal};
 

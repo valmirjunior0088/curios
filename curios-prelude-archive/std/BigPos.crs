@@ -1,6 +1,5 @@
 -- Strictly-positive naturals, as a `BigNat` paired with a proof that its packed representation is nonempty (`is_cons(value.bits)`). The record is transparent: the accompanying proof, not an opaque wrapper, is what enforces the invariant, so `.value` is directly usable by consumers (e.g. `BigInt`). Operations delegate to `BigNat` over the magnitude and transport the nonzero certificate through the same raw ripple-carry the `BigNat` op runs, so the algebraic lemma corpus is a one-line delegation each.
 use /std/{Bool, Bits, Eq, False, True, BigNat, Show};
-use /std/Bool/{false_neq_true};
 use /std/BigNat/{of_trimmed_bits, is_trimmed, is_trimmed_of_canonical, trim, view, combine};
 
 -- nonzero certificate: the (canonical) word is nonempty. A plain match (no fold), so it reduces on any cons-headed word, even one with an opaque tail.
@@ -16,7 +15,7 @@ pub let eq(a: BigPos, b: BigPos, p: Eq(a.value, b.value)) -> Eq(a, b) =
     Eq/subst(
         (m: BigNat) => (nz: is_cons(m.bits)) -> Eq(a, BigPos { value = m, non_zero = nz }),
         p,
-        (nz: is_cons(a.value.bits)) => Eq/refl())(b.non_zero);
+        (_nz: is_cons(a.value.bits)) => Eq/refl())(b.non_zero);
 
 pub let nz_trimmed(t: BigPos) -> Eq(is_trimmed(t.value.bits), true) =
     is_trimmed_of_canonical(t.value.bits, t.value.canonical);

@@ -1,6 +1,5 @@
 -- The JSON codec: escapes, the refusals the grammar names, and what the encoder writes for a number the grammar has no room for.
-use /std/{Json, Parse, Result, Str, Flt, Test};
-use /std/Json/{str};
+use /std/{Json, Parse, Str, Flt, Test};
 
 -- The document decoded and re-encoded, or the refusal that stopped it.
 let decoded(input: Str) -> Str =
@@ -88,9 +87,13 @@ test a_non_finite_number_encodes_as_null() =
                 written(Json/num(Flt/pos_inf)),
                 written(Json/num(Flt/neg_inf)),
                 written(Json/num(Flt/nan)),
-                written(Json/num(Flt/mul(1.0e30, 1.0e30))),
-                written(Json/arr([Json/num(1.0), Json/num(Flt/pos_inf)])),
-                written(Json/num(1.5)),
+                written(
+                    Json/num(
+                        Flt/mul(
+                            +1000000000000000000000000000000.0,
+                            +1000000000000000000000000000000.0))),
+                written(Json/arr([Json/num(+1.0), Json/num(Flt/pos_inf)])),
+                written(Json/num(+1.5)),
                 written(Json/num(-1.5)),
                 written(Json/num(-0.0))]),
         "null|null|null|null|[1,null]|1.5|-1.5|-0");

@@ -8,11 +8,11 @@ end
 let append(@T: Type, @n: Nat, @m: Nat, v: Vec(T, n), w: Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
     match v: (k, _) => Vec(T, Nat/add(k, m))
     | nil() => w
-    | cons(@j, x, xs) => Vec/cons(x, append(xs, w))
+    | cons(@_j, x, xs) => Vec/cons(x, append(xs, w))
     end;
 
 let total(@n: Nat, v: Vec(Nat, n), acc: Nat) -> Nat =
-    match v: (_, _) => Nat | nil() => acc | cons(@m, x, xs) => total(xs, Nat/add(acc, x)) end;
+    match v: (_, _) => Nat | nil() => acc | cons(@_m, x, xs) => total(xs, Nat/add(acc, x)) end;
 
 let a: Vec(Nat, 2) =
     Vec/cons(1, Vec/cons(2, Vec/nil()));

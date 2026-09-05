@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
+use /std/{Bytes, Str, List, Parse};
 use /std/Toml/scan/{is_bare_byte, ws};
 use /std/Toml/strings/{str_basic, str_literal};
 

@@ -207,11 +207,11 @@ pub let to_str(f: Flt) -> Str =
     end;
 
 pub let pow10(n: Nat) -> Flt =
-    match n | 0 => +1.0 | pred + 1; ih => ih * +10.0 end;
+    match n | 0 => +1.0 | _pred + 1; ih => ih * +10.0 end;
 
 -- `of_str` is exact: the digits are read into a `BigNat` and `D · 10^E` is narrowed to the nearest binary32 once, ties to even, the way the printer above is exact in the other direction. It used to compute `to_flt(int) + to_flt(frac) / pow10(len) * pow10(exp)` — four roundings, `to_flt` already past nine digits, and `pow10(39)` is `inf`, which flushed every subnormal to zero — and failed `of_str(to_str(x)) == x` for about forty percent of finite values.
 let pow10_big(n: Nat) -> BigNat =
-    match n | 0 => BigNat/of_nat(1) | p + 1; ih => BigNat/mul/small(ih, 10) end;
+    match n | 0 => BigNat/of_nat(1) | _p + 1; ih => BigNat/mul/small(ih, 10) end;
 
 -- The decimal digits of `s` as a number, or `none` on any other character. The empty string is zero, so an absent integer or fraction part reads as nothing rather than failing.
 let digits_big(s: Str) -> Option(BigNat) =
@@ -229,8 +229,8 @@ let digits_big(s: Str) -> Option(BigNat) =
 let two_pow(e: Int) -> Flt =
     let mag = Int/abs(e);
     match e >= +0
-    | true => match mag | 0 => +1.0 | k + 1; ih => ih * +2.0 end
-    | false => match mag | 0 => +1.0 | k + 1; ih => ih * +0.5 end
+    | true => match mag | 0 => +1.0 | _k + 1; ih => ih * +2.0 end
+    | false => match mag | 0 => +1.0 | _k + 1; ih => ih * +0.5 end
     end;
 
 -- `bits` quotient bits of `n / d`, most significant first, where `d` arrives scaled so that `d <= n < 2 · d`: each step keeps or drops the current power of `d`, halves it — exact, since every power down to the last is `d` times a power of two — and shifts the bit in. The remainder says whether anything was lost below the last bit.
@@ -371,12 +371,12 @@ satisfy Multiply(Flt) {
 
 -- IEEE division is total, so this carrier's domain is everything and the obligation costs nothing — the check that the concept can express "no precondition" without a carve-out.
 satisfy Divide(Flt) {
-    Ok(b) = True,
+    Ok(_b) = True,
     div(a, b) = div(a, b),
 }
 
 satisfy Remainder(Flt) {
-    Ok(b) = True,
+    Ok(_b) = True,
     rem(a, b) = rem(a, b),
 }
 

@@ -1,8 +1,7 @@
 -- A single line of text being edited. The cursor is a scalar index into the text and carries the proof that it is no further than its end, so an insertion or a deletion never has to check where it is.
-use /std/{Nat, Str, Bool, List, Option};
+use /std/{Nat, Str};
 use /std/Nat/{Le};
 use /std/Tui/{Style, Frame, Key, text};
-use /std/Tui/Key/{Code};
 
 pub struct Input: pub Type {
     text: Str,

@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse, True};
+use /std/{Nat, Bool, Bytes, Str, List, Map, Result};
 use /std/Toml/{Toml, Seg, State, let Build};
 
 induct Act: Type

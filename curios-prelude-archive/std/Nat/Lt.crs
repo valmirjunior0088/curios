@@ -14,17 +14,17 @@ pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
 pub let le_one_of_positive(@n: Nat, p: Lt(0, n)) -> Nat/Le(1, n) =
     match n
     | 0 => match p end
-    | pred + 1 => True/qed()
+    | _pred + 1 => True/qed()
     end;
 
 pub let succ_of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Lt(a, b + 1) =
-    match p: (x, y, w) => Lt(x, y + 1)
+    match p: (x, y, _w) => Lt(x, y + 1)
     | z(@_) => True/qed()
     | s(@_, @_, prev) => succ_of_ind(prev)
     end;
 
 pub let of_ind_succ(@a: Nat, @b: Nat, p: Ind(a + 1, b)) -> Lt(a, b) =
-    match p: (x, y, w) => Lt(x - 1, y) | s(@a2, @b2, prev) => succ_of_ind(prev) end;
+    match p: (x, y, _w) => Lt(x - 1, y) | s(@_a2, @_b2, prev) => succ_of_ind(prev) end;
 
 -- The strict bound weakened into the inductive family, so a `<` guard can reach the laws that recurse over `Nat/Le/Ind`. The `ind_`/`le_` prefixes across this module say which form a law hands back; they used to be `lte_`/`le_`, which said only that the two were spelled differently. The zero case is immediate, the case where the bound has run out is `False` under the hypothesis, and the successor case is the hypothesis itself — `a + 1 < b + 1` and `a < b` are one term once the shared floor cancels.
 pub let ind_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Ind(a, b) =
@@ -63,10 +63,10 @@ pub let strong(
         | 0 =>
             step(
                 n,
-                (m, lt) =>
+                (_m, lt) =>
                     match n
                     | 0 => match lt end
-                    | np + 1 => match le end
+                    | _np + 1 => match le end
                     end)
         | kp + 1 => step(n, (m, lt) => go(kp, m, Le/trans(le_succ_of_lt(m, n, lt), le)))
         end;

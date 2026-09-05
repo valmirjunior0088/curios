@@ -1,5 +1,5 @@
 -- What a stream is to a program: something read and written in chunks, where a read may park the fiber until a peer answers. `Chunk` is one read's answer; `Read` and `Write` are the concepts every stream type satisfies — a `File`, a `Socket`, a child's pipe, the standard streams — and the functions below are written once over them. The loops that turn a raw handle's `would_block` into a park live in `/std/Async/raw`, where a type's witness reaches them; a program holds no raw handle, so it reaches a stream only through a type that does.
-use /std/{Bytes, Byte, Nat, Bool, Option, Result, Io, Async, Equal};
+use /std/{Bytes, Byte, Nat, Option, Result, Io, Async};
 
 pub induct Chunk: pub Type
 | chunk(Bytes)

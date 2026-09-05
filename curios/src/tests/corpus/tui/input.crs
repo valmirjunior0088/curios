@@ -1,5 +1,5 @@
 -- The input decoder: the legacy encoding, the kitty form, and what a chunk boundary leaves.
-use /std/{Nat, Bool, Str, Bytes, List, Option, Test, Tui};
+use /std/{Nat, Bytes, List, Test};
 use /std/Tui/{Key, Event, input};
 use /std/Tui/Key/{Code};
 

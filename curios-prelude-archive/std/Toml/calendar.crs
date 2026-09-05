@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
+use /std/{Nat, Int, Bool};
 use /std/Toml/{Date, Time};
 
 let leap(year: Nat) -> Bool =

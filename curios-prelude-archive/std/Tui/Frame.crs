@@ -15,9 +15,9 @@ pub let Frame(w: Nat, h: Nat) -> Type =
 -- Crop or pad `v` to exactly `m`, by recursion on the target rather than on the vector: `0` answers `nil` whatever is left over, and `p + 1` takes the head where there is one and `fill` where there is not. One function for both directions, and no proof relating `n` to `m` — which is the whole reason `fit` needs no lemma.
 let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T, n)) -> Vec(T, m) =
     (match m: (k) => (j: Nat, Vec(T, j)) -> Vec(T, k)
-    | 0 => (j, x) => Vec/nil()
-    | p + 1; ih =>
-        (j, x) =>
+    | 0 => (_j, _x) => Vec/nil()
+    | _p + 1; ih =>
+        (_j, x) =>
             match x
             | nil() => Vec/cons(fill, ih(0, Vec/nil()))
             | cons(@q, y, ys) => Vec/cons(y, ih(q, ys))
@@ -28,7 +28,7 @@ let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T, n)) -> Vec(T, m) =
 let drop_upto(@T: Type, l: List(T), k: Nat) -> List(T) =
     match k
     | 0 => l
-    | p + 1; ih => match ih | [] => [] | [_, ..rest] => rest end
+    | _p + 1; ih => match ih | [] => [] | [_, ..rest] => rest end
     end;
 
 pub let blank(w: Nat, h: Nat) -> Frame(w, h) =

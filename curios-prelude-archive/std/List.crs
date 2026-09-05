@@ -122,7 +122,7 @@ pub let range(lo: Nat, hi: Nat) -> List(Nat) =
     go(hi - lo, lo);
 
 pub let replicate(@T: Type, n: Nat, x: T) -> List(T) =
-    match n | 0 => [] | k + 1; acc => [x, ..acc] end;
+    match n | 0 => [] | _k + 1; acc => [x, ..acc] end;
 
 pub let concat_map(@T: Type, @B: Type, l: List(T), f: (T) -> List(B)) -> List(B) =
     fold(l, [], (x, acc) => [..acc, ..f(x)]);
@@ -164,7 +164,7 @@ let insert_by(@T: Type, x: T, sorted: List(T), cmp: (T, T) -> Ordering) -> List(
 
 -- An insertion sort, written as the right fold so a later proof follows the recursion without the program changing; a merge sort carries fuel when a consumer wants the speed.
 pub let sort_by(@T: Type, l: List(T), cmp: (T, T) -> Ordering) -> List(T) =
-    match l | [] => [] | [h, ..t]; sorted => insert_by(h, sorted, cmp) end;
+    match l | [] => [] | [h, .._t]; sorted => insert_by(h, sorted, cmp) end;
 
 pub let sort(@T: Type, use Ordered(T), l: List(T)) -> List(T) =
     sort_by(l, (a, b) => Ordered/cmp(a, b));
@@ -238,7 +238,7 @@ let elements(
 ) -> {List(A), Test/Seed} =
     match count
     | 0 => ([], seed)
-    | more + 1; (acc, after) =>
+    | _more + 1; (acc, after) =>
         let (value, rest) = Test/Draw/draw(@A, after, size);
         ([..acc, value], rest)
     end;

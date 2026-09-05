@@ -12,12 +12,12 @@
 -- int-keyed hash map quite mirrors. It orients rather than proves. N is read from
 -- stdin; the seed derives from N so nothing is a closed term. Values are the step
 -- index, so later writes to a returning key are observable in the printed sum.
-use /std/{Str, Nat, Bytes, Option, Map, Io};
+use /std/{Str, Nat, Bytes, Map, Io};
 
 let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat)) -> Map(Nat) =
     match n: (_) => Map(Nat)
     | 0 => m
-    | k + 1; ih =>
+    | k + 1; _ih =>
         let y = 75 * x % 65537;
         walk(k, i + 1, y, Map/insert(m, Bytes/of_nat(y), i % 1000003))
     end;

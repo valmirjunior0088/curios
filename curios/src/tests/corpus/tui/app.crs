@@ -1,5 +1,5 @@
 -- A whole program through `drive`: the fold from `init` through `update`, the frame `view` gives, and what a command asks for.
-use /std/{Nat, Bool, Str, Char, List, Option, Async, Test, Tui};
+use /std/{Nat, Char, List, Option, Async, Test, Tui};
 use /std/Tui/{Style, Frame, Key, Event, Cmd};
 use /std/Tui/Key/{Code};
 
@@ -25,7 +25,7 @@ let counter: Tui(Nat, Nat) =
             | _ => (model, Cmd/none())
             end,
         view(model, w, h) = Frame/of_lines(Style/plain, [Nat/to_str(model)], w, h),
-        cursor(model, w, h) = Option/none(),
+        cursor(_model, _w, _h) = Option/none(),
     };
 
 let press(c: Char) -> Event(Nat) =

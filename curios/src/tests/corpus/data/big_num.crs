@@ -1,8 +1,7 @@
 -- `/std/BigNat` and `/std/BigInt`: arbitrary-precision arithmetic over a limb spine. Each expectation is written as the decimal it stands for, so a failure spells both sides as `of_decimal` calls rather than as limbs.
-use /std/{Str, Nat, Bool, Option, Ordering, BigNat, BigInt, Test};
+use /std/{Str, Bool, Option, Ordering, BigNat, BigInt, Test};
 
 -- === `BigNat`, unsigned. =========================================================
-
 -- `add` propagates carry along the binary numeral: 99_999_999 ends in eight set bits, so adding 1 ripples the carry through all of them — the `pos_add`/`pos_add_c` twin recursion — before it lands.
 test big_nat_add_ripples_carry() =
     Test/equal(
@@ -17,9 +16,7 @@ test big_nat_sub_borrows() =
 
 -- `mul/small` is `mul` against a decoded native operand: 9999 * 99999 crosses well past both inputs' bit widths, so every carry of the shift-and-add recursion has to land.
 test big_nat_mul_small_propagates_carry() =
-    Test/equal(
-        BigNat/mul/small(BigNat/of_nat(9999), 99999),
-        BigNat/of_decimal("999890001"));
+    Test/equal(BigNat/mul/small(BigNat/of_nat(9999), 99999), BigNat/of_decimal("999890001"));
 
 -- Full big-by-big `mul`: the product needs 57 bits, so a correct result proves it lives in the numeral itself and never in a fixed-width intermediate.
 test big_nat_mul_crosses_word_width() =
@@ -75,7 +72,6 @@ test big_nat_of_str_inverts_to_str() =
             Test/equal(BigNat/of_str("12x"), Option/none())]);
 
 -- === `BigInt`, signed. ===========================================================
-
 -- Mixed-sign `add` routes through `pos_sub`, which reads the sign straight off `cmp`: the same magnitudes flipped land exactly on the other side of zero, and equal magnitudes land on zero itself — which has its own constructor, so "-0" cannot even be produced.
 test bigint_add_crosses_zero_in_both_directions() =
     Test/equal(

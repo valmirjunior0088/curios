@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
+use /std/{Nat, Bool, Byte, Option, Parse};
 
 let is_ws_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);

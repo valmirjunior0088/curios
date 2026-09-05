@@ -1,7 +1,7 @@
 -- A list with one selected entry. The selection carries the proof that it is in range, so `selected` never reads past the end and `move` past either end is a no-op rather than a wrap; an empty listing has no selection, and the type says so.
-use /std/{Nat, Str, Bool, List, Vec, Option};
+use /std/{Nat, Str, List, Vec, Option};
 use /std/Nat/{Lt};
-use /std/Tui/{Style, Cell, Frame, Key};
+use /std/Tui/{Style, Cell, Frame};
 use /std/Tui/Key/{Code};
 
 pub struct Listing: pub Type {

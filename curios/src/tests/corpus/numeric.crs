@@ -1,14 +1,26 @@
 -- The arithmetic every peer ships beyond the operators — powers, divisors, logarithms, roots, parity and the `Int` extrema — and the `Flt` narrowings that answer their partiality with an `Option`.
-use /std/{Nat, Int, Str, Bool, Flt, Option, List, Test};
+use /std/{Nat, Int, Bool, Flt, Option, Test};
 
 test nat_powers_divisors_logarithms_and_roots_compute() =
     Test/equal(
         [
-            Nat/pow(2, 10), Nat/pow(7, 0), Nat/pow(0, 3),
-            Nat/gcd(48, 18), Nat/gcd(0, 5), Nat/gcd(5, 0), Nat/gcd(0, 0),
-            Nat/lcm(4, 6), Nat/lcm(0, 6),
-            Nat/log2(1), Nat/log2(1024), Nat/log2(1023), Nat/log2(0),
-            Nat/sqrt(0), Nat/sqrt(15), Nat/sqrt(16), Nat/sqrt(1000000)],
+            Nat/pow(2, 10),
+            Nat/pow(7, 0),
+            Nat/pow(0, 3),
+            Nat/gcd(48, 18),
+            Nat/gcd(0, 5),
+            Nat/gcd(5, 0),
+            Nat/gcd(0, 0),
+            Nat/lcm(4, 6),
+            Nat/lcm(0, 6),
+            Nat/log2(1),
+            Nat/log2(1024),
+            Nat/log2(1023),
+            Nat/log2(0),
+            Nat/sqrt(0),
+            Nat/sqrt(15),
+            Nat/sqrt(16),
+            Nat/sqrt(1000000)],
         [1024, 1, 0, 6, 5, 5, 0, 12, 0, 0, 10, 9, 0, 0, 3, 4, 1000]);
 
 test parity_and_the_int_extrema_and_sign() =

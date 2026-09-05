@@ -1,7 +1,4 @@
-use /std/{Nat, Bool, Bits, Str, Ordering, Eq, False, True, Equal, Compare, Add, Subtract, Multiply,
-    Show, Ordered};
-use /std/Bool/{false_neq_true};
-use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
+use /std/{Nat, Bool, Bits, Eq};
 use /std/BigNat/{BigNat, combine, cong_combine, dbl, dbl_raw, eq, is_trimmed_of_canonical, maj3,
     of_bits, of_nat, refl_at, trim, trim_is_trimmed, trim_of_trimmed, xor3, mod add};
 
@@ -16,7 +13,7 @@ pub let mul(a: BigNat, b: BigNat) -> BigNat =
     of_bits(raw(a.bits, b.bits));
 
 pub let pow2(a: BigNat, k: Nat) -> BigNat =
-    match k | 0 => a | kp + 1; ih => dbl(ih) end;
+    match k | 0 => a | _kp + 1; ih => dbl(ih) end;
 
 pub let small(a: BigNat, c: Nat) -> BigNat =
     mul(a, of_nat(c));
@@ -422,5 +419,5 @@ pub let pow2_mul_l(a: BigNat, b: BigNat, k: Nat) -> Eq(pow2(mul(a, b), k), mul(p
 pub let pow2_compose(a: BigNat, j: Nat, k: Nat) -> Eq(pow2(pow2(a, j), k), pow2(a, j + k)) =
     match k: (n) => Eq(pow2(pow2(a, j), n), pow2(a, j + n))
     | 0 => refl_at(pow2(a, j))
-    | pred + 1; ih => cong_dbl(ih)
+    | _pred + 1; ih => cong_dbl(ih)
     end;

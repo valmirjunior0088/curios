@@ -1,4 +1,4 @@
-use /std/{Bool, Eq, Equal, False, Show, Spell, Option, List, Test};
+use /std/{Bool, Eq, Equal, False, Show, Spell, Option, Test};
 use /std/Bool/{false_neq_true};
 
 pub induct Ordering: pub Type
@@ -32,22 +32,22 @@ pub let is_ge(r: Ordering) -> Bool =
     match r | lt() => false | eq() => true | gt() => true end;
 
 pub let lt_neq_eq(p: Eq(Ordering/lt(), Ordering/eq())) -> False =
-    false_neq_true(match p: (s, t, q) => Eq(is_eq(s), is_eq(t)) | refl(@z) => Eq/refl() end);
+    false_neq_true(match p: (s, t, _q) => Eq(is_eq(s), is_eq(t)) | refl(@_z) => Eq/refl() end);
 
 pub let gt_neq_eq(p: Eq(Ordering/gt(), Ordering/eq())) -> False =
-    false_neq_true(match p: (s, t, q) => Eq(is_eq(s), is_eq(t)) | refl(@z) => Eq/refl() end);
+    false_neq_true(match p: (s, t, _q) => Eq(is_eq(s), is_eq(t)) | refl(@_z) => Eq/refl() end);
 
 pub let eq_neq_lt(p: Eq(Ordering/eq(), Ordering/lt())) -> False =
-    false_neq_true(match p: (s, t, q) => Eq(is_lt(s), is_lt(t)) | refl(@z) => Eq/refl() end);
+    false_neq_true(match p: (s, t, _q) => Eq(is_lt(s), is_lt(t)) | refl(@_z) => Eq/refl() end);
 
 pub let gt_neq_lt(p: Eq(Ordering/gt(), Ordering/lt())) -> False =
-    false_neq_true(match p: (s, t, q) => Eq(is_lt(s), is_lt(t)) | refl(@z) => Eq/refl() end);
+    false_neq_true(match p: (s, t, _q) => Eq(is_lt(s), is_lt(t)) | refl(@_z) => Eq/refl() end);
 
 pub let eq_neq_gt(p: Eq(Ordering/eq(), Ordering/gt())) -> False =
-    false_neq_true(match p: (s, t, q) => Eq(is_gt(s), is_gt(t)) | refl(@z) => Eq/refl() end);
+    false_neq_true(match p: (s, t, _q) => Eq(is_gt(s), is_gt(t)) | refl(@_z) => Eq/refl() end);
 
 pub let lt_neq_gt(p: Eq(Ordering/lt(), Ordering/gt())) -> False =
-    false_neq_true(match p: (s, t, q) => Eq(is_gt(s), is_gt(t)) | refl(@z) => Eq/refl() end);
+    false_neq_true(match p: (s, t, _q) => Eq(is_gt(s), is_gt(t)) | refl(@_z) => Eq/refl() end);
 
 satisfy Equal(Ordering);
 
@@ -59,7 +59,7 @@ satisfy Spell(Ordering);
 
 satisfy Test/Draw(Ordering) {
     all() = Option/some([Ordering/lt(), Ordering/eq(), Ordering/gt()]),
-    draw(seed, size) =
+    draw(seed, _size) =
         let (n, rest) = Test/Seed/next(seed);
         (match n % 3 | 0 => Ordering/lt() | 1 => Ordering/eq() | _ => Ordering/gt() end, rest),
 }

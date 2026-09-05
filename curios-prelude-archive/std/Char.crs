@@ -25,7 +25,7 @@ pub let eq_of_code(a: Char, b: Char, proof: Eq(a.code, b.code)) -> Eq(a, b) =
     Eq/subst(
         (code: Nat) => (scalar: Scalar(code)) -> Eq(a, Char { code = code, scalar = scalar }),
         proof,
-        (scalar: Scalar(a.code)) => Eq/refl())(b.scalar);
+        (_scalar: Scalar(a.code)) => Eq/refl())(b.scalar);
 
 pub let eql(a: Char, b: Char) -> Bool =
     a.code == b.code;
@@ -151,7 +151,7 @@ satisfy Ordered(Char) {
 -- Printable ASCII, so a drawn character spells as itself and a drawn string reads as text. `of_nat` cannot refuse a code below 128, so the fallback is never reached.
 satisfy Test/Draw(Char) {
     all() = Option/none(),
-    draw(seed, size) =
+    draw(seed, _size) =
         let (n, rest) = Test/Seed/next(seed);
         (Option/unwrap_or(of_nat(32 + n % 95), ' '), rest),
 }

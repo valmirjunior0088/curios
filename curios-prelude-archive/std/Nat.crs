@@ -51,7 +51,7 @@ pub let max(a: Nat, b: Nat) -> Nat =
 
 -- Structural on the exponent, so a type may mention it.
 pub let pow(base: Nat, exp: Nat) -> Nat =
-    match exp | 0 => 1 | pred + 1; acc => acc * base end;
+    match exp | 0 => 1 | _pred + 1; acc => acc * base end;
 
 -- Euclid's algorithm. The recursion is on a remainder, which nothing grades as a decrease: `gcd` is general recursion, classified partial and retained, and a type may not mention it. Casing on `b` rather than testing `b == 0` is what discharges the remainder's bound — `0 < bp + 1` is decided by the successor, where `b == 0 = false` says nothing the comparison can use.
 pub let gcd(a: Nat, b: Nat) -> Nat =

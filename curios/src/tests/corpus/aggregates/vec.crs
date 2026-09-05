@@ -1,5 +1,5 @@
 -- `Vec` beyond its constructors: the proof-carrying index, the list round trip, `replicate`, `zip`, `fold`, and its witnesses.
-use /std/{Vec, Nat, Str, Bool, List, Test};
+use /std/{Vec, Nat, Str, Bool, Test};
 
 -- The bound is decided, so a literal index inside the length discharges by reduction and the `cons` arm's successor cancellation is what carries it down the vector.
 test get_reads_a_literal_index_under_the_decided_bound() =

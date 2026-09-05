@@ -1,7 +1,5 @@
-use /std/{Nat, Bool, Bits, Str, Ordering, Eq, False, True, Equal, Compare, Add, Subtract, Multiply,
-    Show, Ordered};
+use /std/{Bool, Bits, Eq, False};
 use /std/Bool/{false_neq_true};
-use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, cong_cons2, cons_inj_head, cons_inj_tail, is_trimmed, is_trimmed_cons,
     is_trimmed_of_canonical, nonempty, of_trimmed_bits, refl_at, tail_is_trimmed};
 
@@ -17,7 +15,7 @@ pub let cong_raw(@s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(raw(s), raw(t)) =
 let raw_nonempty(x: Bits) -> Eq(nonempty(raw(x)), true) =
     match x: (a) => Eq(nonempty(raw(a)), true)
     | b[] => Eq/refl()
-    | b[h, ..t] => match h | true => Eq/refl() | false => Eq/refl() end
+    | b[h, .._t] => match h | true => Eq/refl() | false => Eq/refl() end
     end;
 
 pub let raw_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(is_trimmed(raw(x)), true) =

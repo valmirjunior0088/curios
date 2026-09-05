@@ -1,5 +1,5 @@
 -- Well-founded recursion for proofs. `WellFounded(R)` is the claim that every element is accessible under `R` — the constructive definition Rocq, Agda, Idris and Lean share — and `Accessible(R, x)` the predicate beneath it: `x` is accessible when everything below it is. `recurse` is the fixpoint over the predicate, and it is a proof principle only: its motive is `Prop`-valued because the recursion lives in the accessibility proof, which erasure deletes, so a program recursing through it would have nothing to run — programs recurse freely wherever erasure keeps the result. The names are adjectives about the thing they qualify, as `/std` names its propositions (`Finite`, `Valid`, `Canonical`): `WellFounded` is the claim a user makes about their own relation.
-use /std/{Nat, True, False};
+use /std/{Nat};
 use /std/Nat/{Le};
 
 pub induct Accessible(@A: Type, R: (A, A) -> Prop): (A) -> pub Prop
@@ -27,10 +27,10 @@ let lt_below(k: Nat, n: Nat, le: Le(n, k)) -> Accessible((a: Nat, b: Nat) => Nat
     match k
     | 0 =>
         Accessible/intro(
-            (m, lt) =>
+            (_m, lt) =>
                 match n
                 | 0 => match lt end
-                | np + 1 => match le end
+                | _np + 1 => match le end
                 end)
     | kp + 1 =>
         Accessible/intro((m, lt) => lt_below(kp, m, Le/trans(Nat/Lt/le_succ_of_lt(m, n, lt), le)))

@@ -1,5 +1,5 @@
 -- HTTP/1.1 over one connection per request: a `Request` rendered onto a socket, the whole reply read back and decoded through `/std/Parse`. `perform` is `Try` over `Async` with this module's own `Error`, which keeps the network's failure beside the reply's.
-use /std/{Bytes, Byte, Str, Nat, Bool, List, Parse, Result, Option, Try, Async, Io};
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Parse, Option, Try, Async, Io};
 use /std/tcp/{Socket};
 
 pub induct Method: pub Type

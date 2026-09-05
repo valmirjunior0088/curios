@@ -44,4 +44,5 @@ curios-text = { workspace = true, features = ["archive"] }
 curios-archive = { workspace = true, features = ["enabled"] }
 
 [dev-dependencies]
+curios-abi = { workspace = true, features = ["archive"] }
 curios-cert = { workspace = true, features = ["archive"] }

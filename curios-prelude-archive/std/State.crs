@@ -32,6 +32,6 @@ pub let run(@S: Type, @A: Type, m: State(S, A), init: S) -> {A, S} =
     m.0(init);
 
 satisfy (@S: Type) => Monad((A: Type) => State(S, A)) {
-    pure(@A, a) = pure(a),
-    bind(@A, @B, m, f) = bind(m, f),
+    pure(@_A, a) = pure(a),
+    bind(@_A, @_B, m, f) = bind(m, f),
 }

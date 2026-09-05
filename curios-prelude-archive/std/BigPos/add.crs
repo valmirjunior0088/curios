@@ -1,5 +1,5 @@
 -- Addition of strictly-positive naturals. The magnitude adds as an ordinary `BigNat`; the work here is carrying the nonzero certificate through the same raw ripple-carry the `BigNat` ladder runs. `trim_non_zero` is the one helper a sibling needs — `mul` reduces its own certificate to an addition — so it is the only one this module exports.
-use /std/{Bool, Bits, Eq, False, True, BigNat, BigPos};
+use /std/{Bool, Bits, Eq, True, BigNat, BigPos};
 use /std/Bool/{false_neq_true};
 use /std/BigNat/{is_trimmed, trim, xor3, maj3};
 use /std/BigPos/{is_cons, trim_head_non_zero, trim_head_true};
@@ -66,7 +66,7 @@ pub let trim_non_zero(
                 end
             | false => match false_neq_true(tr) end
             end
-        | b[ath, ..att] =>
+        | b[_ath, .._att] =>
             match b
             | b[] =>
                 trim_head_non_zero(

@@ -39,7 +39,7 @@ satisfy Spell(Bits) {
 let bits(seed: Test/Seed, count: Nat) -> {Bits, Test/Seed} =
     match count
     | 0 => (b[], seed)
-    | more + 1; (acc, after) =>
+    | _more + 1; (acc, after) =>
         let (bit, rest) = Test/Draw/draw(@Bool, after, 0);
         (b[..acc, bit], rest)
     end;

@@ -1,8 +1,6 @@
 -- Arbitrary-precision naturals over the packed `Bits` substrate. A `BigNat` is a transparent record pairing an LSB-first `Bits` word with a `Canonical` proof that the word is trimmed (no redundant high zero bit), so equality is decided at the `.bits` level and the certificate erases away. `View` (zero / succ low tail) is the structural accessor consumers and single-operand recursions go through; two-operand ops match `.bits` directly and build a raw result. One whose ripple can untrim (`mul`, `sub`) routes it through `of_bits` — a single `trim` — at the public boundary; `add`'s cannot, so it carries the `raw_trimmed` certificate through `of_trimmed_bits` and pays no trim at all.
-use /std/{Nat, Bool, Bits, Str, Ordering, Eq, False, True, Equal, Compare, Add, Subtract, Multiply,
-    Show, Ordered};
+use /std/{Nat, Bool, Bits, Eq, False, True};
 use /std/Bool/{false_neq_true};
-use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 
 pub let is_trimmed(bits: Bits) -> Bool =
     match bits
@@ -20,7 +18,7 @@ pub let combine(head: Bool, t: Bits) -> Bits =
     end;
 
 pub let trim(bits: Bits) -> Bits =
-    match bits | b[] => b[] | b[head, ..tail]; ih => combine(head, ih) end;
+    match bits | b[] => b[] | b[head, .._tail]; ih => combine(head, ih) end;
 
 let combine_is_trimmed(
     head: Bool,
@@ -152,7 +150,7 @@ pub let eq(a: BigNat, b: BigNat, p: Eq(a.bits, b.bits)) -> Eq(a, b) =
     Eq/subst(
         (r: Bits) => (c: Canonical(r)) -> Eq(a, BigNat { bits = r, canonical = c }),
         p,
-        (c: Canonical(a.bits)) => Eq/refl())(b.canonical);
+        (_c: Canonical(a.bits)) => Eq/refl())(b.canonical);
 
 pub let cong_cons2(
     @h1: Bool,
@@ -162,9 +160,9 @@ pub let cong_cons2(
     @t2: Bits,
     pt: Eq(t1, t2),
 ) -> Eq(b[h1, ..t1], b[h2, ..t2]) =
-    match ph: (a, b, q) => Eq(b[a, ..t1], b[b, ..t2])
-    | refl(@z) =>
-        match pt: (a2, b2, q2) => Eq(b[h1, ..a2], b[h1, ..b2]) | refl(@z2) => Eq/refl() end
+    match ph: (a, b, _q) => Eq(b[a, ..t1], b[b, ..t2])
+    | refl(@_z) =>
+        match pt: (a2, b2, _q2) => Eq(b[h1, ..a2], b[h1, ..b2]) | refl(@_z2) => Eq/refl() end
     end;
 
 pub let cong_combine(h: Bool, @s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(combine(h, s), combine(h, t)) =
@@ -186,7 +184,7 @@ let cons_inj_head(
     @t2: Bits,
     p: Eq(b[h1, ..t1], b[h2, ..t2]),
 ) -> Eq(h1, h2) =
-    match p: (s, t, q) => Eq(head_of(s), head_of(t)) | refl(@z) => Eq/refl() end;
+    match p: (s, t, _q) => Eq(head_of(s), head_of(t)) | refl(@_z) => Eq/refl() end;
 
 let cons_inj_tail(
     @h1: Bool,
@@ -195,7 +193,7 @@ let cons_inj_tail(
     @t2: Bits,
     p: Eq(b[h1, ..t1], b[h2, ..t2]),
 ) -> Eq(t1, t2) =
-    match p: (s, t, q) => Eq(tail_of(s), tail_of(t)) | refl(@z) => Eq/refl() end;
+    match p: (s, t, _q) => Eq(tail_of(s), tail_of(t)) | refl(@_z) => Eq/refl() end;
 
 let nonempty(x: Bits) -> Bool =
     match x | b[] => false | b[_, .._] => true end;

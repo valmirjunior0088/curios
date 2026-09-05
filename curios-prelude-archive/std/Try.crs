@@ -62,15 +62,15 @@ pub let map_error(
     Try { Monad/bind(m.0, (r: Result(E, A)) => Monad/pure(Result/map_failure(r, f))) };
 
 satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Monad((A: Type) => Try(M, E, A)) {
-    pure(@A, a) = pure(a),
-    bind(@A, @B, m, f) = bind(m, f),
+    pure(@_A, a) = pure(a),
+    bind(@_A, @_B, m, f) = bind(m, f),
 }
 
 -- A bare `Result` in a `Try` region is early return over the base.
 satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Lift(
     (A: Type) => Result(E, A),
     (A: Type) => Try(M, E, A)) {
-    lift(@A, r) = Try { Monad/pure(r) },
+    lift(@_A, r) = Try { Monad/pure(r) },
 }
 
 -- An `Io` action in a `Try` region over any base that admits one: the premise is what makes one witness serve every base — `Lift(Io, Io)` for `Try(Io, E)`, `Lift(Io, Async)` for `Try(Async, E)`.
@@ -96,5 +96,5 @@ satisfy (
     use Monad(N),
     use Lift(M, N),
 ) => Lift((A: Type) => Try(M, E, A), (A: Type) => Try(N, E, A)) {
-    lift(@A, m) = Try { Lift/lift(m.0) },
+    lift(@_A, m) = Try { Lift/lift(m.0) },
 }

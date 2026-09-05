@@ -1,5 +1,5 @@
 -- The two screens a command answers with: the help the specification renders into, and the refusal a bad line prints. Both are `Str`, so what they are is what a test can compare.
-use /std/{Cli, Str, Nat, Option, List, Test};
+use /std/{Cli, Str, Option, Test};
 
 let serve: Cli =
     Cli {

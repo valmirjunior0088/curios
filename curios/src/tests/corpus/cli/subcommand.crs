@@ -1,5 +1,5 @@
 -- Subcommands, one level deep: choosing one by the first token, refusing a name that is not there, and the `Commands:` section a parent's help grows.
-use /std/{Cli, Str, Nat, Option, List, Test};
+use /std/{Cli, Str, Option, List, Test};
 
 let add: Cli =
     Cli {

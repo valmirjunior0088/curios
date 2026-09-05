@@ -111,7 +111,7 @@ satisfy Spell(Bytes) {
 let bytes(seed: Test/Seed, count: Nat) -> {Bytes, Test/Seed} =
     match count
     | 0 => (x[], seed)
-    | more + 1; (acc, after) =>
+    | _more + 1; (acc, after) =>
         let (byte, rest) = Test/Draw/draw(@Byte, after, 0);
         (x[..acc, byte], rest)
     end;

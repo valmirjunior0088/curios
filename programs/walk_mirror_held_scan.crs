@@ -1,7 +1,7 @@
 -- The scan-argument reconstruction removed from the baseline mirror: the cont arm hands `mstep` the parameter it already holds instead of rebuilding it field by field.
 -- One of five mirror programs attributing `/std/Str/fold`'s allocation obligations; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
 -- N is read from stdin so the loop survives constant folding; output stays bounded well inside i31.
-use /std/{Str, Nat, Byte, Bytes, Bool, Option, Io};
+use /std/{Str, Nat, Byte, Bytes, Bool, Io};
 
 induct MClass: Type
 | ascii()
@@ -63,7 +63,7 @@ let walk2(sc: MScan, b: Bytes, acc: {Nat, Nat}) -> {Nat, Nat} =
                 | lead(_, _, _, payload) => (acc.0, payload)
                 | bad() => acc
                 end)
-        | cont(rem, lo, hi) =>
+        | cont(rem, _lo, _hi) =>
             let partial = acc.1 * 0x40 + (Byte/to_nat(h) - 0x80);
             walk2(
                 mstep(h, sc),

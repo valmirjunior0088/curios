@@ -17,6 +17,9 @@ pub(crate) use archive::*;
 mod syntax;
 pub use syntax::*;
 
+#[cfg(test)]
+mod sources;
+
 mod restore;
 pub use restore::*;
 

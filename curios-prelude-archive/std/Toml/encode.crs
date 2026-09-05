@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result};
 use /std/Toml/{Toml, Date, Time};
 use /std/Toml/calendar/{date_ok, offset_ok, time_ok};
 use /std/Toml/scan/{is_bare_byte};

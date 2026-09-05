@@ -12,7 +12,7 @@ satisfy Monad(Io) {
 
 -- The identity edge. A `!` never consults it — equal keys are never wrapped — but a witness whose premise is `Lift(Io, M)` needs it at `M = Io`, which is how `/std/Try`'s one `Io` edge serves `Try(Io, E)`.
 satisfy Lift(Io, Io) {
-    lift(@A, m) = m,
+    lift(@_A, m) = m,
 }
 
 -- This process's standard streams, beside the monad as every peer keeps them. `In` and `Out` hold the raw handle behind a private representation: a fiber reads and writes them through the stream concepts, and a plain `Io` program through `read`, `read_line` and `write`, the synchronous conveniences below.

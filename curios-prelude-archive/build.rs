@@ -7,21 +7,19 @@ use archive::*;
 mod syntax;
 use syntax::SYNTAX;
 
+#[path = "src/sources.rs"]
+mod sources;
+use sources::*;
+
 use {
-    curios_abi::host_ops,
     curios_core::Item,
     curios_core::{Global, Sharing, Zonked, derived_binder_floor, validate_stored_identities},
     curios_elab::{
         Context, ErasedArena, Mode, Resumed, elaborate_and_zonk_module, erase_unit,
         validate_lowered_universe_seeds, validate_universes,
     },
-    curios_text::{Module, RootSource, prepare_prelude, sys_module},
-    curios_utilities::{Qualifier, RootKind},
-    std::{
-        collections::BTreeSet,
-        env, fs,
-        path::{Path, PathBuf},
-    },
+    curios_text::prepare_prelude,
+    std::{collections::BTreeSet, env, fs, path::PathBuf},
 };
 
 // Installed for the whole build script so the capture's memory columns are populated; the counters are what make this build's own footprint measurable, which is the question the prelude build most often raises.
@@ -80,6 +78,7 @@ fn main() {
 fn build() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/archive.rs");
+    println!("cargo:rerun-if-changed=src/sources.rs");
     println!("cargo:rerun-if-changed=src/syntax.rs");
 
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
@@ -90,26 +89,7 @@ fn build() {
             manifest.join(watched).display()
         );
     }
-    let sources = source_files(&manifest);
-
-    let mut modules = RootSource::supplied();
-    modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops(), &SYNTAX));
-    modules.insert_root(
-        "syn",
-        RootKind::Privileged,
-        parse_module(manifest.join("syn.crs")),
-    );
-    modules.insert_root(
-        "std",
-        RootKind::Privileged,
-        parse_module(manifest.join("std.crs")),
-    );
-
-    for source in sources.iter().filter(|path| {
-        path.starts_with(manifest.join("syn")) || path.starts_with(manifest.join("std"))
-    }) {
-        modules.insert_module(source_qualifier(&manifest, source), parse_module(source));
-    }
+    let modules = authored_prelude(&manifest);
 
     let prepared = prepare_prelude(&modules, &SYNTAX)
         .unwrap_or_else(|error| panic!("fixed prelude failed to lower: {}", error.format()));
@@ -199,55 +179,6 @@ fn build() {
 
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("prelude.rkyv");
     fs::write(out, &*first).expect("failed to write fixed prelude archive");
-}
-
-fn source_files(manifest: &Path) -> Vec<PathBuf> {
-    let mut files = vec![manifest.join("syn.crs"), manifest.join("std.crs")];
-    collect_crs(&manifest.join("syn"), &mut files);
-    collect_crs(&manifest.join("std"), &mut files);
-    files.sort();
-    files
-}
-
-fn collect_crs(directory: &Path, files: &mut Vec<PathBuf>) {
-    let mut entries = fs::read_dir(directory)
-        .unwrap_or_else(|error| panic!("failed to read {}: {error}", directory.display()))
-        .map(|entry| {
-            entry
-                .expect("failed to read prelude directory entry")
-                .path()
-        })
-        .collect::<Vec<_>>();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            collect_crs(&path, files);
-        } else if path.extension().is_some_and(|extension| extension == "crs") {
-            files.push(path);
-        }
-    }
-}
-
-fn parse_module(path: impl AsRef<Path>) -> Module {
-    let path = path.as_ref();
-    Module::from_path(path)
-        .unwrap_or_else(|error| panic!("failed to parse {}: {error:?}", path.display()))
-}
-
-fn source_qualifier(manifest: &Path, source: &Path) -> Qualifier {
-    let relative = source
-        .strip_prefix(manifest)
-        .expect("prelude source lies below its crate");
-    let mut segments = relative
-        .components()
-        .map(|component| component.as_os_str().to_string_lossy().into_owned())
-        .collect::<Vec<_>>();
-    let last = segments.last_mut().expect("prelude source has a file name");
-    *last = last
-        .strip_suffix(".crs")
-        .expect("prelude source extension was filtered")
-        .to_owned();
-    Qualifier::from(segments)
 }
 
 fn validate_syntax_targets(module: &curios_core::Module) {

@@ -536,8 +536,8 @@ let metavar_of(k: Kind) -> Option(Str) =
     | flag() => Option/none()
     | option(v, _) => Option/some(v.metavar)
     | many(v) => Option/some(v.metavar)
-    | positional(v) => Option/none()
-    | rest(v) => Option/none()
+    | positional(_v) => Option/none()
+    | rest(_v) => Option/none()
     end;
 
 -- `Usage: name [OPTIONS] <ROOT> [REST]...`, with the bracket telling required from collected.
@@ -691,7 +691,7 @@ let fail_with(text: Str) -> Io({}) =
     /std/proc/exit(2);
 
 -- The entry a program hands its `Cli` to. Help and a version answer on standard output and exit 0; a line the specification refuses prints to standard error and exits 2; anything else runs the handler. The bound is demanded here rather than inside, so a specification that could never be parsed unambiguously is refused where the program is written.
-pub let main(cli: Cli, @ok: WellFormed(cli)) -> Io({}) =
+pub let main(cli: Cli, @_ok: WellFormed(cli)) -> Io({}) =
     let raw = /std/proc/args!;
     let dropped = match raw | [] => [] | [_, ..more] => more end;
     match decode(dropped)

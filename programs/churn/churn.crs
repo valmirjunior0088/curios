@@ -7,7 +7,7 @@
 -- outside its own pair, so simultaneous and sequential update agree and no
 -- field is dead or loop-invariant. N is read from stdin; the seed derives from
 -- N so nothing is a closed term.
-use /std/{Str, Nat, Option, Io};
+use /std/{Str, Nat, Io};
 
 struct Churn: Type {
     a: Nat,
@@ -21,7 +21,7 @@ struct Churn: Type {
 let walk(n: Nat, p: Nat, x: Nat, r: Churn) -> Churn =
     match n: (_) => Churn
     | 0 => r
-    | m + 1; ih =>
+    | m + 1; _ih =>
         let y = 75 * x % 65537;
         match p
         | 0 =>

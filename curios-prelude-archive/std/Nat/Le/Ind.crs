@@ -11,22 +11,22 @@ end
 pub use Ind/*;
 
 pub let refl(n: Nat) -> Ind(n, n) =
-    match n: (m) => Ind(m, m) | 0 => Ind/z() | pred + 1; ih => Ind/s(ih) end;
+    match n: (m) => Ind(m, m) | 0 => Ind/z() | _pred + 1; ih => Ind/s(ih) end;
 
 pub let succ_r(@a: Nat, @b: Nat, p: Ind(a, b)) -> Ind(a, b + 1) =
-    match p: (x, y, w) => Ind(x, y + 1)
+    match p: (x, y, _w) => Ind(x, y + 1)
     | z(@_) => Ind/z()
     | s(@_, @_, prev) => Ind/s(succ_r(prev))
     end;
 
 pub let add_r(a: Nat, k: Nat) -> Ind(a, a + k) =
-    match k: (m) => Ind(a, a + m) | 0 => refl(a) | pred + 1; ih => succ_r(ih) end;
+    match k: (m) => Ind(a, a + m) | 0 => refl(a) | _pred + 1; ih => succ_r(ih) end;
 
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Ind(a, b), q: Ind(b, c)) -> Ind(a, c) =
     match p
     | z(@_) => Ind/z()
-    | s(@a2, @b2, prev) => match q | s(@b3, @c3, q2) => Ind/s(trans(prev, q2)) end
+    | s(@_a2, @_b2, prev) => match q | s(@_b3, @_c3, q2) => Ind/s(trans(prev, q2)) end
     end;
 
 pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Ind(a, b)) -> Ind(n + a, n + b) =
-    match n: (m) => Ind(m + a, m + b) | 0 => p | m + 1; ih => Ind/s(ih) end;
+    match n: (m) => Ind(m + a, m + b) | 0 => p | _m + 1; ih => Ind/s(ih) end;

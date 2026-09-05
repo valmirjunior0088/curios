@@ -1,6 +1,6 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
-use /syn/{True, False};
+use /syn/{True};
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Equal, Show, Spell, Ordering, Compare,
     Ordered, Test};
 
@@ -27,7 +27,7 @@ pub let eq_of_bytes(a: Str, b: Str, p: Eq(a.bytes, b.bytes)) -> Eq(a, b) =
     Eq/subst(
         (bytes: Bytes) => (valid: Valid(bytes)) -> Eq(a, Str { bytes = bytes, valid = valid }),
         p,
-        (valid: Valid(a.bytes)) => Eq/refl())(b.valid);
+        (_valid: Valid(a.bytes)) => Eq/refl())(b.valid);
 
 pub let concat(a: Str, b: Str) -> Str =
     Str { bytes = x[..a.bytes, ..b.bytes], valid = concat_closed(a.valid, b.valid) };
@@ -75,7 +75,7 @@ pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
     Bytes/eql(lower_ascii_bytes(to_bytes(a)), lower_ascii_bytes(to_bytes(b)));
 
 pub let repeat(s: Str, n: Nat) -> Str =
-    List/balanced(n, "", (i) => s, (l, r) => concat(l, r));
+    List/balanced(n, "", (_i) => s, (l, r) => concat(l, r));
 
 -- The accumulator is threaded by the recursion, not by the motive, and that is the whole of why this is a `rec` rather than an induction over `s.bytes`.
 --
@@ -93,10 +93,10 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                     peel_byte(True/qed(), valid),
                     match classify(h)
                     | ascii() => (f(certify_decoded(Byte/to_nat(h)), acc.0), 0)
-                    | lead(width, lo, hi, payload) => (acc.0, payload)
+                    | lead(_width, _lo, _hi, payload) => (acc.0, payload)
                     | bad() => acc
                     end)
-            | cont(rem, lo, hi) =>
+            | cont(rem, _lo, _hi) =>
                 let partial = acc.1 * 0x40 + (Byte/to_nat(h) - 0x80);
                 go(
                     step(h, sc),
@@ -176,11 +176,11 @@ pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
                         t,
                         peel_byte(True/qed(), valid),
                         pred,
-                        match le: (x, y, le) => Nat/Le/Ind(x - 1, y - 1)
-                        | s(@a, @c, prev) => prev
+                        match le: (x, y, _le) => Nat/Le/Ind(x - 1, y - 1)
+                        | s(@_a, @_c, prev) => prev
                         end)
                 end
-            | cont(rem, lo, hi) => go(step(h, sc), t, peel_byte(True/qed(), valid), i, le)
+            | cont(_rem, _lo, _hi) => go(step(h, sc), t, peel_byte(True/qed(), valid), i, le)
             | bad() => go(step(h, Scan/bad()), t, peel_byte(True/qed(), valid), i, le)
             end
         end;
@@ -332,7 +332,7 @@ satisfy Ordered(Str) {
 let chars(seed: Test/Seed, size: Nat, count: Nat) -> {Str, Test/Seed} =
     match count
     | 0 => ("", seed)
-    | more + 1; (acc, after) =>
+    | _more + 1; (acc, after) =>
         let (c, rest) = Test/Draw/draw(@Char, after, size);
         (concat(acc, of_char(c)), rest)
     end;
