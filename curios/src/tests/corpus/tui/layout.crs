@@ -1,0 +1,71 @@
+-- The typed pane tree: what `distribute` shares, and what `draw` joins.
+use /std/{Nat, Str, List, Test, Tui};
+use /std/Tui/{Style, Frame, Layout};
+
+let render(@w: Nat, @h: Nat, f: Frame(w, h)) -> Str =
+    Str/join("/", Frame/to_lines(f));
+
+let shares(cs: List(Layout/Constraint), avail: Nat) -> Str =
+    Str/join(",", List/map(Layout/distribute(cs, avail), Nat/to_str));
+
+-- Each pane is painted as its name, fitted to the size the split gave it, so the frame reads back as which pane landed where.
+let by_name(name: Str, pw: Nat, ph: Nat) -> Frame(pw, ph) =
+    Frame/fit(Frame/text(Style/plain, name).frame, pw, ph);
+
+-- Lengths and minimums are taken as written; with no fill, what they leave stays unclaimed rather than being forced onto anyone.
+test fixed_claims_are_taken_as_written() =
+    Test/equal(shares([Layout/length(2), Layout/min(3)], 10), "2,3");
+
+-- A percentage is of the whole axis, and the fill takes what it leaves.
+test a_percentage_is_of_the_whole_axis() =
+    Test/equal(shares([Layout/percent(50), Layout/fill(1)], 10), "5,5");
+
+-- Fills share the spare by weight, and the rounding shortfall goes to the last of them.
+test fills_share_by_weight_and_the_last_absorbs_the_rounding() =
+    Test/equal(
+        Str/join(
+            " ",
+            [
+                shares([Layout/fill(1), Layout/fill(3)], 8),
+                shares([Layout/fill(1), Layout/fill(1), Layout/fill(1)], 10)]),
+        "2,6 3,3,4");
+
+-- An over-committed axis answers the claims as written; `fitted` is what crops the result to the axis.
+test an_over_committed_axis_keeps_its_claims() =
+    Test/equal(shares([Layout/length(8), Layout/fill(1)], 5), "8,0");
+
+-- A `rows` layout stacks its panes at the heights the shares gave them, and the whole is the frame the caller asked for.
+test rows_stack_panes_at_their_shares() =
+    let l =
+        Layout/rows(
+            [
+                (Layout/length(1), Layout/pane("head")),
+                (Layout/fill(1), Layout/pane("body")),
+                (Layout/length(1), Layout/pane("foot"))]);
+    Test/equal(render(Layout/draw(l, 6, 4, by_name)), "head  /body  /      /foot  ");
+
+-- A `cols` layout sets its panes side by side at the widths the shares gave them.
+test cols_set_panes_side_by_side() =
+    let l = Layout/cols([(Layout/length(2), Layout/pane("l")), (Layout/fill(1), Layout/pane("r"))]);
+    Test/equal(render(Layout/draw(l, 5, 1, by_name)), "l r  ");
+
+-- One axis nested in the other: the inner split is at the size the outer gave it, and both joins are checked at the type.
+test one_axis_nests_in_the_other() =
+    let l =
+        Layout/rows(
+            [
+                (Layout/length(1), Layout/pane("top")),
+                (
+                    Layout/fill(1),
+                    Layout/cols(
+                        [
+                            (Layout/fill(1), Layout/pane("a")),
+                            (Layout/fill(1), Layout/pane("b"))]))]);
+    Test/equal(render(Layout/draw(l, 4, 3, by_name)), "top /a b /    ");
+
+-- A pane the constraints leave at zero takes no room and the rest is drawn as if it were not there.
+test a_pane_left_at_zero_takes_no_room() =
+    let l =
+        Layout/rows(
+            [(Layout/length(0), Layout/pane("gone")), (Layout/fill(1), Layout/pane("all"))]);
+    Test/equal(render(Layout/draw(l, 3, 2, by_name)), "all/   ");

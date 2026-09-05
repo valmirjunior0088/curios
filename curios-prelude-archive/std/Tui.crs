@@ -1,9 +1,13 @@
 -- A terminal program draws a screen and reads keys.
 --
--- The design is Notty's drawing algebra with the size in the type and brick's model-update-view above it: a frame is a value of `Image(w, h)`, built by joining smaller images whose sizes the type checks, and a program is a `Tui` record the loop drives. Nothing here is a command to a screen — `Image` is data, `Tui/render` turns two of them into the bytes that carry one to the other, and only `Tui/Session` touches the terminal.
+-- The design is Notty's drawing algebra with the size in the type and brick's model-update-view above it: a screen is a value of `Frame(w, h)`, built by joining smaller frames whose sizes the type checks and split by a `Layout` whose sizes mirror it, and a program is a `Tui` record the loop drives. Nothing here is a command to a screen — a `Frame` is data, `Tui/render` turns two of them into the bytes that carry one to the other, and only `Tui/Session` touches the terminal.
 --
--- **The size is in the type because that is the class of bug this library exists to remove.** A column that does not fill its pane, a widget that overflows it, a border off by one: every surveyed library's issue tracker is full of them, and the two that are honest about it — Notty and brick — pad the mismatch away silently. Here `beside` and `above` refuse a mismatched join where it is written, `view` must produce exactly the frame it was asked for, and the renderer's diff walks two images of one type with no bound to check. The cost is one coercion, `Tui/Image/fit`, wherever a runtime-sized value meets a typed one.
-use /std/{Str};
+-- **The size is in the type because that is the class of bug this library exists to remove.** A column that does not fill its pane, a widget that overflows it, a border off by one: every surveyed library's issue tracker is full of them, and the two that are honest about it — Notty and brick — pad the mismatch away silently. Here `beside` and `above` refuse a mismatched join where it is written, `view` must produce exactly the frame it was asked for, and the renderer's diff walks two frames of one type with no bound to check. The cost is one coercion, `Tui/Frame/fit`, wherever a runtime-sized value meets a typed one.
+--
+-- **The loop is the program's model, its `update` and its `view`, driven by one queue.** `run` reads keys, the terminal's size and the answers of the program's own `Cmd/perform`s into a queue, parks on an `Async/Signal` until something is there, folds the queue through `update`, and draws once per burst, so ten keys in one read cost one frame. `drive` is the same fold with no terminal: a test hands it events and reads the model and the frame back, which is how a whole program is asserted as a `test` declaration.
+use /std/{Nat, Bool, Str, List, Option, Io, Try, Async, tty, Equal};
+use /std/time/{Duration};
+use /std/Async/{Signal};
 
 pub mod Color;
 pub use Color/{let Color};
@@ -18,3 +22,6 @@ pub mod text;
 
 pub mod Frame;
 pub use Frame/{let Frame};
+
+pub mod Layout;
+pub use Layout/{let Layout};
