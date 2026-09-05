@@ -331,6 +331,28 @@ fn a_declaration_below_the_tail_is_refused_as_one() {
     }
 }
 
+/// A keyword expected where punctuation stands names the keyword and what stood there. The word run is empty for a `;` or a `/`, and the identifier parser's own `Expected identifier` said neither — the two common shapes of a missing `end`.
+#[test]
+fn a_keyword_expected_at_punctuation_names_both() {
+    for (source, expected) in [
+        (
+            "let f : Type =\n    match n\n    | 0 => 1\n    | p + 1 => p;\n()",
+            "Expected keyword 'end', obtained ';'",
+        ),
+        (
+            "let f : Type =\n    match n\n    | 0 => 1\n    | p + 1 => p\n\n/std/print(1)",
+            "Expected keyword 'end', obtained '/'",
+        ),
+        (
+            "let f : Type =\n    match n\n    | 0 => 1\n    | p + 1 => p\n",
+            "Expected keyword 'end', obtained 'end-of-file'",
+        ),
+    ] {
+        let report = source.parse::<Entrypoint>().unwrap_err().format();
+        assert!(report.contains(expected), "{source:?} reported {report}");
+    }
+}
+
 /// A keyword mismatch is reported against the word, not against wherever the whitespace after it ended.
 ///
 /// `end` and `and` are habitually written line-final, so reading the word *and* its trailing whitespace before failing put the caret on the next line — the innocent declaration below, or the blank line past the end of the file.
