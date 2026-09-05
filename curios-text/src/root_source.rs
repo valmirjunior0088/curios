@@ -22,6 +22,8 @@ use {
 /// Lookup is longest-match over the claimed prefixes, exactly as [`Mount::owning`] is everywhere else, and the mounts of one source are pairwise disjoint because a unit claims each of its prefixes once.
 pub struct RootSource {
     bases: Vec<(Mount, Base)>,
+    /// The mount whose interface the unit documents, with its description — a package's library with the manifest's sentence, the standard library with a constant. At most one, so a unit file carries one record; `None` for every other unit, since a program has no consumer and a prelude mount nobody names has no page. See [`RootSource::documented`].
+    documented: Option<(Qualifier, Option<String>)>,
     /// Text consulted before the disk for every file this source would read. See [`Overlay`].
     overlay: Overlay,
     /// Every file this source has read, by the canonical path it was read from. See [`RootSource::reads`].
@@ -90,9 +92,28 @@ impl RootSource {
     fn over(bases: Vec<(Mount, Base)>) -> Self {
         Self {
             bases,
+            documented: None,
             overlay: Overlay::default(),
             reads: RefCell::new(BTreeMap::new()),
         }
+    }
+
+    /// This source with the mount `prefix` marked as the one the unit documents, described by `description` — what makes the lowering build the unit's documentation record and carry it on the unit. The prefix must be one this source claims.
+    pub fn documented(mut self, prefix: &str, description: Option<&str>) -> Self {
+        let prefix = Qualifier::from([prefix]);
+        assert!(
+            self.bases.iter().any(|(mount, _)| mount.prefix == prefix),
+            "'{}' is not a mount this source claims",
+            prefix.join()
+        );
+
+        self.documented = Some((prefix, description.map(str::to_string)));
+        self
+    }
+
+    /// The mount this source documents, with its description, when one was marked.
+    pub(crate) fn documented_mount(&self) -> Option<(Qualifier, Option<String>)> {
+        self.documented.clone()
     }
 
     /// This source with `overlay` consulted before the disk on every read.

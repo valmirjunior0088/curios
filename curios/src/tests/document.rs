@@ -1,14 +1,14 @@
-//! A package's documentation record, read off the compilation that builds it: what `curios document` renders, checked over the standard library — the largest interface in the tree — and over a fixture package whose every rule of the record is written out.
+//! A package's documentation record, built by the lowering and carried on the unit: what `curios document` renders, checked over the standard library — the largest interface in the tree, read off the image it ships in — and over a fixture package whose every rule of the record is written out.
 
 use {
     crate::documentation,
     curios_package::{Governing, order},
     curios_pipeline::{CompileError, DEFAULT_STEP_BUDGET, with_units},
-    curios_text::{Kind, Overlay, RootSource, document_unit},
-    curios_utilities::{Qualifier, RootKind},
+    curios_text::{Kind, Overlay},
+    curios_utilities::Qualifier,
     std::{
         fs,
-        path::{Path, PathBuf},
+        path::PathBuf,
         time::{SystemTime, UNIX_EPOCH},
     },
 };
@@ -30,26 +30,20 @@ fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
     root
 }
 
-/// The standard library documents from the archive it ships in: the surface modules on disk beside it, its tables restored from the archive — no checkout of anything else, and no second compilation. It is the honest test of the record, holding opaque types, derived witnesses, concepts and re-exports.
+/// The standard library's record rides in the image it ships in: no sources, no checkout, no second compilation — the build that made the image built the record. It is the honest test of the record, holding opaque types, derived witnesses, concepts and re-exports.
 #[test]
 fn the_standard_library_documents_from_the_archive() {
-    let archive = Path::new(env!("CARGO_MANIFEST_DIR")).join("../curios-prelude-archive");
-    let source = RootSource::mounted(
-        "std",
-        RootKind::Privileged,
-        archive.join("std.crs"),
-        archive.join("std"),
-    );
-    let prefix = Qualifier::from(["std"]);
-
     let documentation = with_units(
         DEFAULT_STEP_BUDGET,
         &[],
         None,
         |_| {},
         |prelude, _| {
-            document_unit(&source, &prefix, &[], prelude.text())
-                .map_err(|error| CompileError::Failure(vec![error.report()]))
+            prelude
+                .text()
+                .documentation()
+                .cloned()
+                .ok_or_else(|| CompileError::failure("the image carries no record".to_string()))
         },
     )
     .expect("the standard library documents");
@@ -60,6 +54,14 @@ fn the_standard_library_documents_from_the_archive() {
         documentation.modules.len()
     );
     assert_eq!(documentation.modules[0].path.join(), "/std");
+    assert!(
+        documentation
+            .description
+            .as_deref()
+            .is_some_and(|description| description.starts_with("The standard library")),
+        "{:?}",
+        documentation.description
+    );
 
     let result = documentation
         .modules
@@ -123,7 +125,10 @@ fn a_package_documents_its_interface_for_its_consumers() {
     let root = tree(
         "document-package",
         &[
-            ("curios.toml", "name = \"shapes\"\n"),
+            (
+                "curios.toml",
+                "name = \"shapes\"\ndescription = \"Shapes and their areas.\"\n",
+            ),
             (
                 "lib.crs",
                 concat!(
@@ -165,6 +170,11 @@ fn a_package_documents_its_interface_for_its_consumers() {
         "a private module has no page"
     );
 
+    assert_eq!(
+        documentation.description.as_deref(),
+        Some("Shapes and their areas."),
+        "the manifest's description rides in the record"
+    );
     let library = &documentation.modules[0];
     assert_eq!(library.prose, None, "the root's prose is the manifest's");
     assert_eq!(library.children, [Qualifier::from(["shapes", "geometry"])]);

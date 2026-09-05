@@ -52,12 +52,11 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
 
     match present {
         false => Ok(None),
-        true => Ok(Some(RootSource::mounted(
-            &package.name,
-            RootKind::Ordinary,
-            header,
-            directory,
-        ))),
+        // The library is what a package documents, described as the manifest describes it.
+        true => Ok(Some(
+            RootSource::mounted(&package.name, RootKind::Ordinary, header, directory)
+                .documented(&package.name, package.description.as_deref()),
+        )),
     }
 }
 

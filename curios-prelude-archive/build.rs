@@ -22,6 +22,9 @@ use {
     std::{collections::BTreeSet, env, fs, path::PathBuf},
 };
 
+/// What the standard library's landing page says it is — the one description no manifest supplies.
+const STD_DESCRIPTION: &str = "The standard library: what every Curios program gets for free, compiled into the fixed prelude beside the syntax forms and the host's operations.";
+
 // Installed for the whole build script so the capture's memory columns are populated; the counters are what make this build's own footprint measurable, which is the question the prelude build most often raises.
 #[cfg(feature = "profile")]
 #[global_allocator]
@@ -89,7 +92,8 @@ fn build() {
             manifest.join(watched).display()
         );
     }
-    let modules = authored_prelude(&manifest);
+    // The standard library is the one prelude mount a program reaches for by name, so it is the one the image documents; `/syn` is the syntax forms' concepts and `/sys` the host's rows, neither an interface anybody reads for.
+    let modules = authored_prelude(&manifest).documented("std", Some(STD_DESCRIPTION));
 
     let prepared = prepare_prelude(&modules, &SYNTAX)
         .unwrap_or_else(|error| panic!("fixed prelude failed to lower: {}", error.format()));
@@ -177,8 +181,11 @@ fn build() {
         "fixed prelude archive is not deterministic"
     );
 
-    let out = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("prelude.rkyv");
-    fs::write(out, &*first).expect("failed to write fixed prelude archive");
+    // Filed beside this crate rather than under `OUT_DIR`, because the image is read outside the build: `curios document` renders the standard library's pages from it, so it needs a path a recipe can name. The crate includes it from the same path, so there is one image in one place; the rule for a product that outlives its build is `.artifacts/`, which `cargo clean` leaves alone and `cargo x clean` removes.
+    let artifacts = manifest.join(".artifacts");
+    fs::create_dir_all(&artifacts).expect("failed to create the archive's .artifacts directory");
+    fs::write(artifacts.join("prelude.rkyv"), &*first)
+        .expect("failed to write fixed prelude archive");
 }
 
 fn validate_syntax_targets(module: &curios_core::Module) {

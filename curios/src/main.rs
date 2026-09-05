@@ -175,7 +175,7 @@ fn dispatch() -> Result<(), Failure> {
 
             let directory = output_path
                 .unwrap_or_else(|| governing.store().documentation(&governing.package.name));
-            write_documentation(&record, &governing.package, &directory)
+            write_documentation(&record, &directory)
                 .map_err(|error| format!("{}: {error}", directory.display()))?;
         }
         Mode::New { directory } => {

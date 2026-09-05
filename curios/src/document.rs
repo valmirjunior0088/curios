@@ -3,7 +3,6 @@
 //! **This is the placeholder rendering.** The markup is headings and lists — enough to read an interface and follow its links — and the design of the pages is a decision this module does not make yet. What it does decide is the layout of the bundle and the addressing: where a module's page is, what a declaration's anchor is, and how a link from one page reaches another, since every later design renders the same record into the same places.
 
 use {
-    curios_package::Package,
     curios_text::{Declaration, Documentation, Kind, Member, ModuleDocumentation, Signature},
     curios_utilities::Qualifier,
     std::{fmt::Write, fs, io, path::Path},
@@ -12,17 +11,13 @@ use {
 /// The stylesheet every page links, filed under `static/`.
 const STYLESHEET: &str = "static/style.css";
 
-/// Write `record`'s pages under `directory`: `index.html`, one page per module, and the stylesheet. Files are overwritten by name and nothing else in the directory is touched.
-pub fn write_documentation(
-    record: &Documentation,
-    package: &Package,
-    directory: &Path,
-) -> io::Result<()> {
+/// Write `record`'s pages under `directory`: `index.html`, one page per module, and the stylesheet. Files are overwritten by name and nothing else in the directory is touched. The record is the whole input: its prefix names the landing page and its description fills it, so a record read off a stored unit renders exactly as one read off a compilation just made.
+pub fn write_documentation(record: &Documentation, directory: &Path) -> io::Result<()> {
     let bundle = Bundle { record };
 
     fs::create_dir_all(directory.join("static"))?;
     fs::write(directory.join(STYLESHEET), STYLE)?;
-    fs::write(directory.join("index.html"), bundle.landing(package))?;
+    fs::write(directory.join("index.html"), bundle.landing())?;
 
     for module in &record.modules {
         let path = directory.join(bundle.page_path(&module.path));
@@ -81,11 +76,13 @@ impl Bundle<'_> {
         })
     }
 
-    fn landing(&self, package: &Package) -> String {
+    fn landing(&self) -> String {
+        // The unit's name is its mount's one segment: the package's name, or `std`.
+        let name = self.record.prefix.last();
         let mut html = String::new();
-        head(&mut html, &package.name, 0);
-        let _ = writeln!(html, "<h1>{}</h1>", escape(&package.name));
-        if let Some(description) = &package.description {
+        head(&mut html, name, 0);
+        let _ = writeln!(html, "<h1>{}</h1>", escape(name));
+        if let Some(description) = &self.record.description {
             let _ = writeln!(html, "<p>{}</p>", escape(description));
         }
         html.push_str("<h2>Modules</h2>\n<ul>\n");

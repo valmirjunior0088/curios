@@ -1,20 +1,18 @@
-//! What a unit's interface is, read for a page: one record per module the unit exposes, each declaration's head printed as the author wrote it with every name it mentions resolved, and the prose attached to each — the documentation engine's answer, plain data a renderer walks and a transport encodes.
+//! What a unit's interface is, read for a page: one record per module the unit exposes, each declaration's head printed as the author wrote it with every name it mentions resolved, and the prose attached to each — plain data a renderer walks and a transport encodes, built by the lowering as the last thing it does and carried on the unit it lowered.
 //!
-//! **Read from this stage's own tables, after the unit compiled.** Which modules and declarations a page shows is the export view resolution built to a fixed point, so a private declaration is absent rather than hidden and a re-export is listed as a link to the declaration it names. A referent is looked up with the visibility functions the lowering resolves a name with, over the same tables, seeded by the import scopes the lowering recorded per definition — nothing here resolves a name by a rule of its own. Nothing is read from the elaborated module either: every declaration states its signature, so the surface tree is the whole of what a page prints, and a signature is printed by the printers `curios format` prints it with.
+//! **Built by the compilation that builds the unit, from the tables it just built.** Which modules and declarations a page shows is the export view resolution built to a fixed point, so a private declaration is absent rather than hidden and a re-export is listed as a link to the declaration it names. A referent is looked up with the visibility functions the lowering resolves a name with, over the same tables, seeded by the import scopes the lowering recorded per definition — nothing here resolves a name by a rule of its own. Nothing is read from the elaborated module either: every declaration states its signature, so the surface tree the lowering parsed is the whole of what a page prints, and a signature is printed by the printers `curios format` prints it with. Riding on the unit, the record travels wherever the unit does — the prelude image, a verdict slot, the browser bundle — so a unit is documented from its stored form without its sources.
 //!
-//! **A library is documented for its consumers.** That is the one audience this record knows: a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one.
+//! **A library is documented for its consumers.** That is the one audience this record knows: a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one; which mount is documented, and with what description, is the resolver's to say.
 
 use {
+    super::*,
     crate::{
-        ConceptField, Doc, Error, FuncSugarParam, LetSignature, ModuleInfo, Pattern, PreparedText,
-        PublicInterface, RootSource, Scoped, StructField, Term, TopCase, TopItem, print_case_head,
-        print_concept_field_head, print_concept_head, print_foreign_head, print_induct_head,
-        print_let_head, print_struct_field_head, print_struct_head, print_witness_head,
-        visible_binding, visible_child,
+        print_case_head, print_concept_field_head, print_concept_head, print_foreign_head,
+        print_induct_head, print_let_head, print_struct_field_head, print_struct_head,
+        print_witness_head,
     },
     curios_core::{Global, Imports},
     curios_print::{Printer, render_annotated},
-    curios_utilities::{Plicity, Qualifier},
     std::collections::{HashMap, HashSet},
 };
 
@@ -26,15 +24,19 @@ const INDENT: usize = 4;
 
 /// A unit's interface, for its consumers.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
 pub struct Documentation {
     /// The prefix the unit mounts at — `/json` for the package `json` — which every module path below begins with.
     pub prefix: Qualifier,
+    /// What the unit is, in a sentence or a few, for its landing page: the manifest's `description` for a package, a constant for the standard library, nothing when neither said.
+    pub description: Option<String>,
     /// Every module a consumer can reach, the root first and each parent before its children.
     pub modules: Vec<ModuleDocumentation>,
 }
 
 /// One module's page.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
 pub struct ModuleDocumentation {
     pub path: Qualifier,
     /// The `-- |` block above the `mod` declaration that declares it; `None` for the root, whose prose is the manifest's.
@@ -49,6 +51,7 @@ pub struct ModuleDocumentation {
 
 /// What kind of declaration a page entry is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
 pub enum Kind {
     Definition,
     Inductive,
@@ -60,6 +63,7 @@ pub enum Kind {
 
 /// One declaration a consumer can see: its head as written, its prose, and the members its representation exposes.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
 pub struct Declaration {
     /// The declared label — and the anchor a link to it names. Empty for a witness, which is anonymous by design.
     pub name: String,
@@ -74,6 +78,7 @@ pub struct Declaration {
 
 /// One constructor, field or concept method.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
 pub struct Member {
     pub name: String,
     pub signature: Signature,
@@ -82,6 +87,7 @@ pub struct Member {
 
 /// A declaration head as printed, and every name in it that resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
 pub struct Signature {
     pub text: String,
     /// Ascending by position, non-overlapping.
@@ -90,6 +96,7 @@ pub struct Signature {
 
 /// One name in a signature, resolved: the byte range of `text` it occupies and the declaration it names.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
 pub struct Mark {
     pub start: usize,
     pub end: usize,
@@ -101,76 +108,72 @@ pub struct Mark {
 
 /// A name this module exposes for a declaration made elsewhere.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
 pub struct Reexport {
     pub name: String,
     pub referent: Qualifier,
     pub within: bool,
 }
 
-/// The interface of the unit `source` reads and `unit` lowered, mounted at `prefix`, resolved over `scope` — every unit compiled before it, in order, the prelude first.
+/// The interface of the unit mounted at `prefix`, read off the tables the lowering just built: `modules` are the file-backed modules discovery parsed, `table` and `public` the direct interface and the export view over the whole scope, and `imports` what each definition's `use` lines brought into scope.
 ///
-/// `source` is asked for the surface modules again, module by module from the root, which is a re-read of files the compilation already read through the same resolver and the same overlay. A module that fails to load here is one the compilation loaded, so the error is about the disk having changed underneath.
-pub fn document_unit(
-    source: &RootSource,
+/// Infallible, because every module it visits is one discovery loaded a moment ago: a prefix without a module in the map is a broken invariant of this stage, not a condition a caller can meet.
+pub(super) fn document(
+    modules: &HashMap<Qualifier, Rc<Module>>,
+    table: &Scoped<'_, ModuleInfo>,
+    public: &Scoped<'_, PublicInterface>,
+    imports: &Imports,
     prefix: &Qualifier,
-    scope: &[&PreparedText],
-    unit: &PreparedText,
-) -> Result<Documentation, Error> {
-    let tables = scope
-        .iter()
-        .chain(std::iter::once(&unit))
-        .map(|text| text.table())
-        .collect::<Vec<_>>();
-    let publics = scope
-        .iter()
-        .chain(std::iter::once(&unit))
-        .map(|text| text.public())
-        .collect::<Vec<_>>();
+    description: Option<String>,
+) -> Documentation {
     let reader = Reader {
-        table: Scoped::over(&tables),
-        public: Scoped::over(&publics),
-        imports: unit.imports(),
+        modules,
+        table,
+        public,
+        imports,
         prefix,
     };
 
-    let mut modules = Vec::new();
-    reader.visit(source, prefix.clone(), None, &mut modules)?;
+    let mut pages = Vec::new();
+    reader.visit(prefix.clone(), None, &mut pages);
 
-    Ok(Documentation {
+    Documentation {
         prefix: prefix.clone(),
-        modules,
-    })
+        description,
+        modules: pages,
+    }
 }
 
 /// The tables a page is read from, and the walk over the unit's modules.
 struct Reader<'a> {
-    table: Scoped<'a, ModuleInfo>,
-    public: Scoped<'a, PublicInterface>,
+    modules: &'a HashMap<Qualifier, Rc<Module>>,
+    table: &'a Scoped<'a, ModuleInfo>,
+    public: &'a Scoped<'a, PublicInterface>,
     imports: &'a Imports,
     prefix: &'a Qualifier,
 }
 
 impl Reader<'_> {
-    /// The module `qualifier` names, loaded, then its public children after it.
+    /// The file-backed module `qualifier` names, then its public children after it.
     fn visit(
         &self,
-        source: &RootSource,
         qualifier: Qualifier,
         prose: Option<Vec<String>>,
         out: &mut Vec<ModuleDocumentation>,
-    ) -> Result<(), Error> {
-        let module = source.load(&qualifier)?;
-        self.visit_items(source, qualifier, prose, module.items, out)
+    ) {
+        let module = self.modules.get(&qualifier).unwrap_or_else(|| {
+            panic!("discovery loaded every module it declared, including {qualifier:?}")
+        });
+        self.visit_items(qualifier, prose, &module.items, out);
     }
 
     fn visit_items(
         &self,
-        source: &RootSource,
         qualifier: Qualifier,
         prose: Option<Vec<String>>,
-        items: Vec<TopItem>,
+        items: &[TopItem],
         out: &mut Vec<ModuleDocumentation>,
-    ) -> Result<(), Error> {
+    ) {
         let imports = self.imports_of(&qualifier);
         let mut page = ModuleDocumentation {
             path: qualifier.clone(),
@@ -187,7 +190,7 @@ impl Reader<'_> {
                     if declaration.vis_pub {
                         let child = qualifier.with(&declaration.label);
                         page.children.push(child.clone());
-                        children.push((child, lines(&declaration.doc), declaration.module));
+                        children.push((child, lines(&declaration.doc), &declaration.module));
                     }
                 }
                 // An import is not a declaration, and a test is not part of the interface.
@@ -298,7 +301,7 @@ impl Reader<'_> {
                     }
                 }
                 TopItem::Witness(members) => {
-                    for member in &members {
+                    for member in members {
                         let binders = sugar_binders(&member.params);
                         page.declarations.push(Declaration {
                             name: String::new(),
@@ -324,7 +327,7 @@ impl Reader<'_> {
                                 &qualifier,
                                 &imports,
                                 &HashSet::new(),
-                                print_foreign_head(&declaration),
+                                print_foreign_head(declaration),
                             ),
                             prose: lines(&declaration.doc),
                             members: Vec::new(),
@@ -337,14 +340,13 @@ impl Reader<'_> {
 
         out.push(page);
 
+        // An inline module's items are in the tree; a file-backed one's are in the map, where discovery filed them.
         for (child, prose, inline) in children {
             match inline {
-                Some(module) => self.visit_items(source, child, prose, module.items, out)?,
-                None => self.visit(source, child, prose, out)?,
+                Some(module) => self.visit_items(child, prose, &module.items, out),
+                None => self.visit(child, prose, out),
             }
         }
-
-        Ok(())
     }
 
     fn case(
@@ -434,9 +436,9 @@ impl Reader<'_> {
         if absolute {
             let mut current = Qualifier::empty();
             for segment in parents {
-                current = visible_child(&self.public, &self.table, module, &current, segment)?;
+                current = visible_child(self.public, self.table, module, &current, segment)?;
             }
-            return visible_binding(&self.public, &self.table, module, &current, last);
+            return visible_binding(self.public, self.table, module, &current, last);
         }
 
         if let Some(target) = imports.get(spelling) {
@@ -448,9 +450,9 @@ impl Reader<'_> {
 
         let mut current = module.clone();
         for segment in parents {
-            current = visible_child(&self.public, &self.table, module, &current, segment)?;
+            current = visible_child(self.public, self.table, module, &current, segment)?;
         }
-        visible_binding(&self.public, &self.table, module, &current, last)
+        visible_binding(self.public, self.table, module, &current, last)
     }
 
     /// Every spelling a `use` in `module` brought into scope, with what it resolved to — the union over the module's definitions of the scopes the lowering recorded for them. `use` is point-of-use, so two definitions may differ in what they see, but a spelling that resolves two ways in one module is a program nobody writes, and the first recorded wins.

@@ -21,12 +21,12 @@ mod lint;
 use lint::*;
 
 mod scoped;
+use scoped::*;
 
-// What the documentation record reads: the tables resolution built, and the visibility functions the lowering resolves a name with, so a page's referent is looked up by the compiler's rule and no other.
-pub(crate) use {
-    context::ModuleInfo,
-    interface::{PublicInterface, visible_binding, visible_child},
-    scoped::Scoped,
+mod document;
+use document::document;
+pub use document::{
+    Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Reexport, Signature,
 };
 
 #[cfg(test)]
@@ -157,6 +157,8 @@ pub struct PreparedText {
     lints: Vec<Lint>,
     /// The prefix of every mount some reference of this unit resolved into — see `Context::reached`.
     reached: BTreeSet<Qualifier>,
+    /// This unit's interface for its consumers, when its resolver marked a mount as documented — built here, as the last thing the lowering does, so it travels with the unit. See `document`.
+    documentation: Option<Documentation>,
 }
 
 impl PreparedText {
@@ -172,14 +174,9 @@ impl PreparedText {
         &self.core
     }
 
-    /// Each module's direct interface — every declared label with its visibility.
-    pub(crate) fn table(&self) -> &BTreeMap<Qualifier, ModuleInfo> {
-        &self.table
-    }
-
-    /// Each module's export view: its public names, each pointing at the canonical declaration site.
-    pub(crate) fn public(&self) -> &BTreeMap<Qualifier, PublicInterface> {
-        &self.public
+    /// This unit's interface for its consumers, or `None` for a unit whose resolver marked nothing as documented — an entry program, or a prelude mount nobody reaches for by name.
+    pub fn documentation(&self) -> Option<&Documentation> {
+        self.documentation.as_ref()
     }
 
     /// The `foreign` rows this unit declares.
@@ -1305,6 +1302,14 @@ impl<'a> UnitSource<'a> {
             .unwrap_or_default()
     }
 
+    /// The mount this unit documents, with its description, when its resolver marked one. An entry documents nothing: a program has no consumer.
+    fn documented(&self) -> Option<(Qualifier, Option<String>)> {
+        match self.entrypoint {
+            Some(_) => None,
+            None => self.source.documented_mount(),
+        }
+    }
+
     /// The entrypoint this source carries, for the one unit that has one.
     fn entrypoint(&self) -> Option<&Entrypoint> {
         self.entrypoint
@@ -1525,6 +1530,18 @@ fn into_core_unit_within(
         .map(FlatItem::into_core)
         .collect();
 
+    // Read last, when the export view is final and every definition's import scope has been recorded, and before the tables below are taken out of their scoped views.
+    let documentation = source.documented().map(|(prefix, description)| {
+        document(
+            &modules,
+            &table,
+            &public,
+            &imports.borrow(),
+            &prefix,
+            description,
+        )
+    });
+
     Ok(PreparedText {
         mounts: own.clone(),
         foreigns,
@@ -1555,6 +1572,7 @@ fn into_core_unit_within(
                 .collect(),
         ),
         reached: reached.into_inner(),
+        documentation,
     })
 }
 

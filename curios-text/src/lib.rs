@@ -41,9 +41,6 @@ pub use into_core::*;
 mod format;
 pub use format::*;
 
-mod document;
-pub use document::*;
-
 mod print;
 use print::*;
 
