@@ -42,7 +42,7 @@ pub(crate) enum MachineConstruct {
 }
 
 /// How a row construction loads a value into a reference slot: through the slot's exact cast, or tolerantly, landing whatever fails the cast as the slot's null.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum RowLoad {
     Exact,
     Tolerant,

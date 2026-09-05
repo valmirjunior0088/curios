@@ -6,7 +6,7 @@ use {
     super::{
         EmissionArg, EmissionBody, EmissionCallTarget, EmissionCellTarget, EmissionCode,
         EmissionData, EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue,
-        EmissionValueName,
+        EmissionValueName, RowLoad,
     },
     curios_utilities::{Grain, PackedBin},
     std::collections::HashMap,
@@ -22,8 +22,8 @@ enum ConstKey {
     Bin(Grain, PackedBin),
     List(Vec<String>),
     Tuple(Vec<String>),
-    /// A nominal row is its identity plus its canonicalized slots, a filler keying as `None` — kept apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant.
-    Row(usize, Vec<Option<String>>),
+    /// A nominal row is its identity, its load mode and its canonicalized slots, a filler keying as `None` — kept apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant. The load mode rides the key so two rows that would emit different loads can never share one global, whether or not a tolerant one can reach here.
+    Row(usize, RowLoad, Vec<Option<String>>),
     /// A closure is its target plus its canonicalized captures: with the code field an ordinary table index, a const-captured closure is a constant aggregate like any `Tuple`, materialized once per instantiation instead of per construction.
     Clsr(String, Vec<String>),
 }
@@ -121,6 +121,7 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                 if let Some(canonical) = intern_slots(slots, interner, consts) {
                     let key = ConstKey::Row(
                         row.index(),
+                        *load,
                         canonical
                             .iter()
                             .map(|slot| match slot {
