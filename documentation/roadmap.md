@@ -244,7 +244,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] HTTP client (`std/http`, built on `tcp` + `Async`)
 - [x] Host-service modules (`std/time`, `std/proc`, `std/rand`, `std/fs`, `std/tty`)
 - [x] Command-line interfaces (`/std/Cli`) — a specification is a list of `Arg` values, the record a line parses into is `Values(spec)` computed from it, `get(v, name)` is typed by a type-level lookup and refuses a name the specification does not contain, `WellFormed` is decided by reduction, and `main` reads the process arguments against all of it: `parse` and `select` for the line, `help` and `usage` for the screens, `report` and exit 2 for a refusal
-- [ ] [A terminal program draws a screen and reads keys (`/std/Tui`)](roadmap/terminal-ui-spec.md)
+- [x] A terminal program draws a screen and reads keys (`/std/Tui`) — a screen is a `Frame(w, h)` whose joins the type checks, a layout is a tree of named panes whose sizes mirror it, keys and pastes are decoded from bytes and frames are diffed into bytes by pure functions, `Session` brackets the terminal, and a program is a `Tui` record `run` drives against one queue and one `Async/Signal` or `drive` folds with no terminal; five widgets — a border, a paragraph, a listing, an input and a viewport — and the `\u{…}` escape that spelling a combining mark asked for
 - [ ] [A program talks to a serial device (`/std/Serial`)](roadmap/serial-port-spec.md) (one host row and one module; written as if the indispensable tier's runtime prerequisites had landed)
 - [x] Arbitrary-precision naturals (`std/BigNat`, canonical and packed over `Bits`)
   - [x] Machine-checked additive, multiplicative, cancellation and order laws
