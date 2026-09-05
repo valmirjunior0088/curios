@@ -118,6 +118,17 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
         let Some(solution) = &entry.solution else {
             continue;
         };
+        // A filled recursive slot stands for its member, and the member is spelled by its name: substituting the *body* is what closes the cycle, since the body reaches the very solution being materialized. The name is what `RecItem::try_new` captures, so this is also the spelling the group's binder is waiting for. Its body is deliberately not walked — nothing in it needs materializing here, and walking it is the divergence.
+        if let Some(name) = context.rec_slot_name(id) {
+            // The birth telescope's names are kept so the occurrence's spine still matches, as every entry here must. Capturing them in a term that mentions none of them leaves it alone, which is right: a member's value does not depend on the slot's spine.
+            let labels = entry
+                .telescope
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect::<Vec<_>>();
+            solutions.insert(id, (labels, Term::free_var(name)));
+            continue;
+        }
         pending.extend(solution.metavars());
         solutions.insert(
             id,
@@ -962,6 +973,15 @@ fn zonk_level(context: &Context, term: &Term) -> Result<Term, Error> {
             // A written goal `?` never splices — the whole point of writing it was the report. Solved or not, error with what elaboration determined: the frozen scope, the goal's type, and the solution when one landed.
             if matches!(origin, MetavarOrigin::Goal) {
                 return Err(goal_report(context, *id).at_opt(term.span()));
+            }
+
+            // A filled recursive slot is spelled by its member's name, for the reason the tolerant walk above gives: the body reaches this very occurrence again, and the name is what the group's binder captures.
+            if let Some(name) = context.rec_slot_name(*id) {
+                let member = Term::free_var(name);
+                return Ok(match term.span() {
+                    Some(span) => member.with_span(span),
+                    None => member,
+                });
             }
 
             let solution = context.metavar_solution(*id).ok_or_else(|| {

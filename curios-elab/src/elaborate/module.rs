@@ -823,7 +823,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .zip(&names)
         .zip(&types)
         .map(|((def, name), type_)| {
-            let (id, slot) = context.fresh_rec_slot(type_.clone());
+            let (id, slot) = context.fresh_rec_slot(name, type_.clone());
             context.define(name, &slot, Some(&def.kind));
             id
         })

@@ -136,7 +136,8 @@ fn flex_flex_distinct_is_residual() {
 #[test]
 fn conversion_cannot_solve_a_protected_recursive_slot() {
     let mut context = context();
-    let (id, slot) = context.fresh_rec_slot(Term::type_ground());
+    let member = context.fresh(Some("member"));
+    let (id, slot) = context.fresh_rec_slot(&member, Term::type_ground());
     let nat_type = Term::intrinsic(Intrinsic::NatType);
 
     assert!(matches!(

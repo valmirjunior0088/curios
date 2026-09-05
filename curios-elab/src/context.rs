@@ -140,6 +140,10 @@ pub struct Context {
     goal_obligations: Vec<GoalObligation>,
     // Where each written goal `?` was written, recorded as it is born: a report that names a goal names it by this span, since an occurrence of the goal inside a type may carry the span of the binder it was substituted for — a declaration's, not the `?`'s.
     goal_spans: BTreeMap<MetavarId, Span>,
+    /// The member name each recursive slot stands for.
+    ///
+    /// A slot is the placeholder a `rec` group's member is known by while its body is being checked, and `elaborate_rec` defines the member's *name* to it — so reduction turns a recursive reference into the slot, and a committed solution can carry one. `RecItem::try_new` captures member **names** into the group's binder, so a slot reaching that point is not something the capture can bind: zonk expands it to the member's body instead, the body mentions that solution again, and the walk never ends. Knowing the name lets both substitution walks spell the member as the capturable thing it is.
+    rec_slot_names: BTreeMap<MetavarId, Free>,
     /// Why a solve could not commit: the unsolved metavariables `Convert::solve`'s embedded-metavariable guard found riding inside a candidate, with what each one fills and where it was written. The last attempt wins, so a metavariable that never solves leaves the reason it never did.
     ///
     /// This edge is what lets the item drain report the *cause* of an undecided conversion rather than the goal that merely waited on it. An undischarged bound riding inside a helper's unfolded body blocks every metavariable downstream of it, and without the edge the report names the last of them — an implicit the author never wrote, at a line that is not where the fault is — while the bound nothing discharged goes unmentioned entirely.
@@ -188,6 +192,7 @@ impl Context {
             imports: Imports::default(),
             goal_obligations: Vec::new(),
             goal_spans: BTreeMap::new(),
+            rec_slot_names: BTreeMap::new(),
             solve_blockers: BTreeMap::new(),
         }
     }
@@ -1110,12 +1115,25 @@ impl Context {
     }
 
     /// Allocate the protected placeholder for one member of a recursive group. It has the same contextual spine as an inference metavariable so parked work can carry it across a popped local frame, but only `fill_rec_slot` may solve it.
-    pub(crate) fn fresh_rec_slot(&mut self, result: Term) -> (MetavarId, Term) {
+    ///
+    /// `name` is the member this slot stands for, kept so the substitution walks can spell it — see [`Context::rec_slot_name`].
+    pub(crate) fn fresh_rec_slot(&mut self, name: &Free, result: Term) -> (MetavarId, Term) {
         self.caches.note_write();
         let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.solutions.birth_rec_slot(id, telescope, result);
+        self.rec_slot_names.insert(id, name.clone());
         (id, Term::metavar_birthed(id, MetavarOrigin::Hole, spine))
+    }
+
+    /// The member name a *filled* recursive slot stands for, which is what substitution must put in its place.
+    ///
+    /// Only once filled. While a slot is unsolved it is deliberately a blocking dependency — `elaborate_rec` records that a dependency on a later member parks on the unsolved slot — and spelling it as a name would let a conversion commit where it must still wait. Nothing is lost by waiting: the cycle needs substitution to expand a slot into a body, so refusing to do that at all is enough however early the slot leaked.
+    pub(crate) fn rec_slot_name(&self, id: MetavarId) -> Option<&Free> {
+        match self.solutions.solution(id).is_some() {
+            true => self.rec_slot_names.get(&id),
+            false => None,
+        }
     }
 
     pub(crate) fn is_rec_slot(&self, id: MetavarId) -> bool {

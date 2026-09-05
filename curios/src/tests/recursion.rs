@@ -135,3 +135,69 @@ fn a_shadowing_rebinding_is_refused_as_a_self_reference() {
         "expected the self-reference named with the rename:\n{report}"
     );
 }
+
+// A `rec` group whose member is reached through a *dependent* index family, at both the top level and inside a function.
+//
+// A member's name is defined to its slot while the group is being checked, so reduction turns a recursive reference into that slot and a committed solution can carry one. `RecItem::try_new` captures member *names* into the group's binder, so a slot reaching that point is not something the capture can bind: substitution expanded it to the member's body instead, the body mentioned that same solution, and the walk never ended — `recurse` answers a deepening walk by asking the allocator for stack, so the compilation died by exhausting memory rather than refusing anything. Both substitution walks now spell a filled slot as its member's name, which is the capturable thing the group's binder is waiting for, and `elaborate_rec` materializes before it closes so the name lands where the capture still binds it.
+#[test]
+fn a_rec_group_over_a_dependent_family_closes_without_expanding_its_own_members() {
+    let source = r#"
+        use /std/{Nat, Str, List, Handle};
+
+        induct Shape: pub Type
+        | leaf() | node(a: List(Shape))
+        end
+
+        induct Sizes: (Shape, Nat) -> pub Type
+        | one(h: Nat): (Shape/leaf(), h)
+        | many(@ps: List(Shape), @h: Nat, col: Column(ps, h)): (Shape/node(ps), h)
+        | fitted(@s: Shape, @h0: Nat, h: Nat, inner: Sizes(s, h0)): (s, h)
+        and Column: (List(Shape), Nat) -> pub Type
+        | stop(): ([], 0)
+        | part(
+            @s: Shape,
+            @rest: List(Shape),
+            @h1: Nat,
+            @h2: Nat,
+            head: Sizes(s, h1),
+            tail: Column(rest, h2),
+          ): ([s, ..rest], h1 + h2)
+        end
+
+        let split(s: Shape, h: Nat) -> Sizes(s, h) =
+            match s
+            | leaf() => Sizes/one(h)
+            | node(ps) =>
+                let made = split_column(ps, h);
+                Sizes/fitted(h, Sizes/many(made.col))
+            end
+        and split_column(ps: List(Shape), h: Nat) -> {th: Nat, col: Column(ps, th)} =
+            match ps
+            | [] => (th = 0, col = Column/stop())
+            | [child, ..rest] =>
+                let below = split_column(rest, h);
+                (th = h + below.th, col = Column/part(split(child, h), below.col))
+            end;
+
+        let local(root: Shape, avail: Nat) -> Nat =
+            let inner(s: Shape, h: Nat) -> Sizes(s, h) =
+                match s
+                | leaf() => Sizes/one(h)
+                | node(ps) =>
+                    let made = inner_column(ps, h);
+                    Sizes/fitted(h, Sizes/many(made.col))
+                end
+            and inner_column(ps: List(Shape), h: Nat) -> {th: Nat, col: Column(ps, th)} =
+                match ps
+                | [] => (th = 0, col = Column/stop())
+                | [child, ..rest] =>
+                    let below = inner_column(rest, h);
+                    (th = h + below.th, col = Column/part(inner(child, h), below.col))
+                end;
+            avail;
+
+        /std/print(Nat/to_str(local(Shape/leaf(), 7)))
+        "#;
+
+    assert_eq!(run(source), b"7");
+}

@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::{HeadKey, TermBuilders, WitnessKey, convert::convert},
+    crate::{HeadKey, TermBuilders, WitnessKey, convert::convert, zonk_solved_term_metas},
     curios_core::Global,
     curios_utilities::Span,
 };
@@ -108,7 +108,7 @@ pub(super) fn elaborate_rec(
             .iter()
             .zip(&types_elaborated)
             .map(|(label, type_)| {
-                let (id, slot) = context.fresh_rec_slot(type_.clone());
+                let (id, slot) = context.fresh_rec_slot(label, type_.clone());
                 context.define(label, &slot, None);
                 id
             })
@@ -121,6 +121,16 @@ pub(super) fn elaborate_rec(
             bodies_elaborated.push(body);
         }
         context.retry_parked()?;
+
+        // Materialize before the group closes, as `elaborate_module_rec` does for the same reason: `Term::rec` captures the member names, so anything a committed solution still spells as a slot must become that name *here*, while the capture below can still bind it. Substituting afterwards would insert a name whose binder the capture had already consumed and whose frame has popped. Tolerant on purpose — it fixes only what is committed and leaves the rest for the final zonk, so materializing early can lose nothing.
+        let types_elaborated = types_elaborated
+            .iter()
+            .map(|type_| zonk_solved_term_metas(context, type_))
+            .collect::<Vec<_>>();
+        let bodies_elaborated = bodies_elaborated
+            .iter()
+            .map(|body| zonk_solved_term_metas(context, body))
+            .collect::<Vec<_>>();
 
         let triples = labels
             .iter()

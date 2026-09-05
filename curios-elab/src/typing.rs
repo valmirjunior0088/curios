@@ -1173,6 +1173,11 @@ fn root_blocker_error(
         .metavar_entry(id)
         .map(|entry| entry.result.clone())?;
 
+    // Only a *proposition* is a bound. An implicit whose type is a sort is a type argument — `@A: Type` — and there is nothing it could have discharged, so "nothing discharged Type" would name an obligation the author never had while burying the postponement that actually explains the goal. Report the root only where the root reads as one.
+    if !is_prop(context, &bound).unwrap_or(false) {
+        return None;
+    }
+
     Some(
         Error::uninferred_implicit(
             origin.func,
