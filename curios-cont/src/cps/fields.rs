@@ -631,6 +631,16 @@ fn grow_window_region(
     if slices.is_empty() {
         return None;
     }
+    // The ceiling is a fact of each continuation's whole list after the split, so a region spanning two of one continuation's parameters is measured with both splits applied: the per-parameter check above admitted each one alone, and let a pair land two past the limit.
+    let mut widened = BTreeMap::<CpsContId, usize>::new();
+    for &(continuation, ..) in &params {
+        *widened.entry(continuation).or_default() += 2;
+    }
+    if widened.iter().any(|(continuation, growth)| {
+        module.continuation(*continuation).unwrap().params.len() + growth > PARAM_SPLIT_GROWTH_LIMIT
+    }) {
+        return None;
+    }
     Some(WindowRegion {
         row: row?,
         params,
