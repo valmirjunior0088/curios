@@ -253,7 +253,7 @@ fn std_docs() -> Result<(), String> {
     build()?;
 
     let artifacts = root().join("curios-prelude-archive").join(".artifacts");
-    let image = artifacts.join("prelude.rkyv");
+    let image = artifacts.join("archive.rkyv");
     let pages = artifacts.join("documentation");
     let compiler = target_directory().join("release").join("curios");
 

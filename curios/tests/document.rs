@@ -141,7 +141,7 @@ fn output_names_another_directory() {
 /// The image the compiler was built with, where its build script filed it: the one `.rkyv` every checkout that built `curios` has.
 const IMAGE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../curios-prelude-archive/.artifacts/prelude.rkyv"
+    "/../curios-prelude-archive/.artifacts/archive.rkyv"
 );
 
 #[test]

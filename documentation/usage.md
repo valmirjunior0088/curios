@@ -69,7 +69,7 @@ Test programs are filed in the project's store exactly as `run`'s payloads are, 
 ```sh
 curios document              # .curios/documentation/<name>/
 curios document -o site      # somewhere else
-curios document curios-prelude-archive/.artifacts/prelude.rkyv -o site   # the standard library, from a checkout that built the compiler
+curios document curios-prelude-archive/.artifacts/archive.rkyv -o site   # the standard library, from a checkout that built the compiler
 ```
 
 The pages are the library's consumers' view: a private declaration or module is absent rather than hidden, a type whose representation is private shows no constructors and is marked opaque, a test never appears, and a `pub use` is a link to the declaration it re-exports. A reference into a dependency or the standard library renders as its qualified name in plain text, since nothing hosts their pages yet. The landing page is the root module's page: it opens with the manifest's `description`, lists the modules, then the root's own declarations; every other module's page opens with the `-- |` block above the `mod` that declares it, whose first paragraph is also the module's gloss on its parent's page. In prose, a pair of backticks encloses a code span.

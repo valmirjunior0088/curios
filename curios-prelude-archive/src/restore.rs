@@ -8,7 +8,7 @@ use {
 // From `.artifacts/` beside this crate, where the build script files it, rather than from `OUT_DIR`: the image is also read by `curios document` to render the standard library's pages, and one image in one nameable place is what keeps the pages and the compiler agreeing about what the library is.
 const BYTES: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/.artifacts/prelude.rkyv"
+    "/.artifacts/archive.rkyv"
 ));
 
 static ARCHIVE: OnceLock<Result<&'static ArchivedUnit, String>> = OnceLock::new();

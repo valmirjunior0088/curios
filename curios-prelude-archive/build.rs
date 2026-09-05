@@ -176,7 +176,7 @@ fn build() {
     // Filed beside this crate rather than under `OUT_DIR`, because the image is read outside the build: `curios document` renders the standard library's pages from it, so it needs a path a recipe can name. The crate includes it from the same path, so there is one image in one place; the rule for a product that outlives its build is `.artifacts/`, which `cargo clean` leaves alone and `cargo x clean` removes.
     let artifacts = manifest.join(".artifacts");
     fs::create_dir_all(&artifacts).expect("failed to create the archive's .artifacts directory");
-    fs::write(artifacts.join("prelude.rkyv"), &*first)
+    fs::write(artifacts.join("archive.rkyv"), &*first)
         .expect("failed to write fixed prelude archive");
 }
 
