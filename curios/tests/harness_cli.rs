@@ -54,7 +54,7 @@ test overflow_traps() =
     Test/check(Nat/shl(1, 40) == 0);
 
 test exits_seven() =
-    Test/perform(() => let _ = /std/proc/exit(7)!; Io/pure(Test/check(true)));
+    Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/check(true)));
 
 test effect_passes() =
     Test/perform(() => let s = Io/pure("x")!; Io/pure(Test/equal(s, "x")));
@@ -105,7 +105,7 @@ fn the_six_outcomes_report_in_declaration_order_and_exit_one() {
             "/app/equality_fails: failed\n  expected 5 but got 4\n    Test/equal(double(2), 5)\n",
             "/app/overflow_traps: trapped\n",
             "    Test/check(Nat/shl(1, 40) == 0)\n",
-            "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/proc/exit(7)!; Io/pure(Test/check(true)))\n",
+            "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/check(true)))\n",
             "/app/effect_passes: passed\n",
             "3 passed, 1 failed, 1 trapped, 1 exited\n",
         ],
