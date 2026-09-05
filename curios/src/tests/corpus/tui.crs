@@ -12,3 +12,5 @@ mod input;
 mod render;
 
 mod app;
+
+mod widgets;

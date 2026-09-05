@@ -20,6 +20,6 @@ pub let blank: Cell =
 pub let continuation: Cell =
     Cell { symbol = "", style = Style/plain };
 
--- One cell of `s` in `style`. Nothing here checks that `s` is one symbol wide; `Tui/Image/text` is where a string becomes cells and is where the measurement happens.
+-- One cell of `s` in `style`. Nothing here checks that `s` is one symbol wide; `Tui/Frame/text` is where a string becomes cells and is where the measurement happens.
 pub let of_str(style: Style, s: Str) -> Cell =
     Cell { symbol = s, style = style };

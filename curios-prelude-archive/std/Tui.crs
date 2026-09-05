@@ -41,6 +41,18 @@ pub mod render;
 pub mod Session;
 pub use Session/{let Session};
 
+pub mod Border;
+
+pub mod Paragraph;
+
+pub mod Listing;
+pub use Listing/{let Listing};
+
+pub mod Input;
+pub use Input/{let Input};
+
+pub mod Viewport;
+
 -- What an `update` asks the loop to do beside the new model: nothing, stop, run an `Async` and hand its answer back as `Event/custom`, or several of those.
 pub induct Cmd(E: Type): pub Type
 | none()

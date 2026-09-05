@@ -127,3 +127,20 @@ pub let overlay(
         resize(Cell/blank, w, spliced.1);
     let rows = Vec/of_list(List/map(List/zip(List/range(0, h), Vec/to_list(base)), row_of));
     resize(Vec/replicate(w, Cell/blank), h, rows.1);
+
+-- The rows from `y` and the columns from `x` on, at whatever size is left: the offset-taking counterpart of `fit`, and what a viewport is before it is fitted. Past the edge there is nothing left, and the size says so.
+pub let crop(
+    @w: Nat,
+    @h: Nat,
+    frame: Frame(w, h),
+    x: Nat,
+    y: Nat,
+) -> {cw: Nat, ch: Nat, frame: Frame(cw, ch)} =
+    let rows =
+        List/map(
+            drop_upto(Vec/to_list(frame), y),
+            (r) => Vec/of_list(drop_upto(Vec/to_list(r), x)));
+    let cw = w - x;
+    let fitted = List/map(rows, (r) => resize(Cell/blank, cw, r.1));
+    let stacked = Vec/of_list(fitted);
+    (cw = cw, ch = stacked.0, frame = stacked.1);

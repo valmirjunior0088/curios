@@ -1,0 +1,59 @@
+-- A list with one selected entry. The selection carries the proof that it is in range, so `selected` never reads past the end and `move` past either end is a no-op rather than a wrap; an empty listing has no selection, and the type says so.
+use /std/{Nat, Str, Bool, List, Vec, Option};
+use /std/Nat/{Lt};
+use /std/Tui/{Style, Cell, Frame, Key};
+use /std/Tui/Key/{Code};
+
+pub struct Listing: pub Type {
+    items: List(Str),
+    cursor: Option({i: Nat, ok: Lt(i, List/len(items))}),
+}
+
+let at(items: List(Str), i: Nat) -> Option({i: Nat, ok: Lt(i, List/len(items))}) =
+    match Lt/try(i, List/len(items))
+    | none() => Option/none()
+    | some(ok) => Option/some((i = i, ok = ok))
+    end;
+
+pub let new(items: List(Str)) -> Listing =
+    Listing { items = items, cursor = at(items, 0) };
+
+pub let index(l: Listing) -> Option(Nat) =
+    Option/map(l.cursor, (c) => c.i);
+
+pub let selected(l: Listing) -> Option(Str) =
+    Option/map(l.cursor, (c) => List/get(@Str, l.items, c.i, @c.ok));
+
+-- Up, down, home and end move the selection; any other key leaves it. A move that would leave the list is not taken.
+pub let move(l: Listing, code: Code) -> Listing =
+    match l.cursor
+    | none() => l
+    | some(c) =>
+        let to(i: Nat) -> Listing =
+            match at(l.items, i)
+            | none() => l
+            | some(next) => Listing { ..l, cursor = Option/some(next) }
+            end;
+        match code
+        | up() => match c.i | 0 => l | p + 1 => to(p) end
+        | down() => to(c.i + 1)
+        | home() => to(0)
+        | end_key() => to(List/len(l.items) - 1)
+        | _ => l
+        end
+    end;
+
+-- The entries as rows, the selected one in `highlight`, scrolled so the selection is in view.
+pub let draw(l: Listing, style: Style, highlight: Style, w: Nat, h: Nat) -> Frame(w, h) =
+    let chosen = Option/unwrap_or(index(l), 0);
+    let first = match chosen < h | true => 0 | false => chosen + 1 - h end;
+    let shown =
+        List/take(
+            List/drop_while(
+                List/zip(List/range(0, List/len(l.items)), l.items),
+                (e) => e.0 < first),
+            h);
+    let row(entry: {Nat, Str}) -> Vec(Cell, w) =
+        let s = match entry.0 == chosen | true => highlight | false => style end;
+        Vec/first(Frame/fit(Frame/text(s, entry.1).frame, w, 1));
+    Frame/fit(Vec/of_list(List/map(shown, row)).1, w, h);

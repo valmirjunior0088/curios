@@ -1,0 +1,6 @@
+-- Styled text wrapped into a pane: `text/wrap` at the width, each line fitted, the whole fitted to the height. A word wider than the pane is cropped at the edge rather than split, as `text/wrap` says.
+use /std/{Nat, Str};
+use /std/Tui/{Style, Frame, text};
+
+pub let draw(style: Style, s: Str, w: Nat, h: Nat) -> Frame(w, h) =
+    Frame/of_lines(style, text/wrap(s, w), w, h);

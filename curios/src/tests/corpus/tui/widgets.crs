@@ -1,0 +1,54 @@
+-- The widget five, each a pure function of its state and its size.
+use /std/{Nat, Str, List, Option, Test, Tui};
+use /std/Tui/{Style, Frame, Key, Border, Paragraph, Listing, Input, Viewport};
+use /std/Tui/Key/{Code};
+
+let render(@w: Nat, @h: Nat, f: Frame(w, h)) -> Str =
+    Str/join("/", Frame/to_lines(f));
+
+-- A border is two wider and two taller than what it wraps, the title in its top edge.
+test a_border_wraps_at_two_more_each_way() =
+    Test/equal(
+        render(Border/around(Style/plain, "t", Frame/of_lines(Style/plain, ["ab"], 2, 1))),
+        "┌t─┐/│ab│/└──┘");
+
+-- A paragraph wraps at spaces and fits the pane.
+test a_paragraph_wraps_and_fits() =
+    Test/equal(render(Paragraph/draw(Style/plain, "aa bb cc", 5, 3)), "aa bb/cc   /     ");
+
+-- The selection moves down and stops at the end; the rows scroll so it stays in view.
+test a_listing_moves_within_its_bounds_and_scrolls_to_its_selection() =
+    let l = Listing/new(["one", "two", "three"]);
+    let moved = Listing/move(Listing/move(Listing/move(l, Code/down()), Code/down()), Code/down());
+    Test/all(
+        [
+            Test/equal(Listing/index(moved), Option/some(2)),
+            Test/equal(Listing/selected(moved), Option/some("three")),
+            Test/equal(render(Listing/draw(moved, Style/plain, Style/plain, 5, 2)), "two  /three"),
+            Test/equal(Listing/index(Listing/move(l, Code/up())), Option/some(0)),
+            Test/equal(Listing/index(Listing/new([])), Option/none())]);
+
+-- An input edits at its cursor, which never passes its text.
+test an_input_edits_at_its_cursor() =
+    let i =
+        Input/handle(
+            Input/handle(Input/of_str("ab"), Key/plain(Code/left())),
+            Key/plain(Code/char('X')));
+    let drawn = Input/draw(i, Style/plain, 5);
+    let past = Input/handle(Input/handle(i, Key/plain(Code/right())), Key/plain(Code/right()));
+    Test/all(
+        [
+            Test/equal(
+                Str/flatten([render(drawn.frame), ":", Nat/to_str(drawn.cursor_x)]),
+                "aXb  :2"),
+            Test/equal(past.cursor, 3),
+            Test/equal(Input/handle(past, Key/plain(Code/backspace())).text, "aX")]);
+
+-- A viewport is a window onto a larger frame, blank past its edge.
+test a_viewport_windows_a_larger_frame() =
+    let big = Frame/of_lines(Style/plain, ["abcd", "efgh", "ijkl"], 4, 3);
+    Test/equal(
+        Str/join(
+            " ",
+            [render(Viewport/draw(big, 1, 1, 2, 2)), render(Viewport/draw(big, 3, 2, 2, 2))]),
+        "fg/jk l /  ");

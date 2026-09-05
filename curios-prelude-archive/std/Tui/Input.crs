@@ -1,0 +1,51 @@
+-- A single line of text being edited. The cursor is a scalar index into the text and carries the proof that it is no further than its end, so an insertion or a deletion never has to check where it is.
+use /std/{Nat, Str, Bool, List, Option};
+use /std/Nat/{Le};
+use /std/Tui/{Style, Frame, Key, text};
+use /std/Tui/Key/{Code};
+
+pub struct Input: pub Type {
+    text: Str,
+    cursor: Nat,
+    ok: Le(cursor, Str/len(text)),
+}
+
+pub let empty: Input =
+    Input { text = "", cursor = 0, ok = Le/refl(0) };
+
+-- `text` with the cursor at its end.
+pub let of_str(s: Str) -> Input =
+    Input { text = s, cursor = Str/len(s), ok = Le/refl(Str/len(s)) };
+
+let place(s: Str, at: Nat) -> Input =
+    match Le/try(at, Str/len(s))
+    | some(ok) => Input { text = s, cursor = at, ok = ok }
+    | none() => of_str(s)
+    end;
+
+-- Insert a character, delete before or after the cursor, or move it; any other key leaves the input.
+pub let handle(i: Input, k: Key) -> Input =
+    let before = Str/slice(i.text, 0, i.cursor);
+    let after = Str/slice(i.text, i.cursor, Str/len(i.text) - i.cursor);
+    match k.code
+    | char(c) =>
+        match k.ctrl || k.alt
+        | true => i
+        | false => place(Str/flatten([before, Str/of_char(c), after]), i.cursor + 1)
+        end
+    | backspace() =>
+        match i.cursor | 0 => i | p + 1 => place(Str/concat(Str/slice(i.text, 0, p), after), p) end
+    | delete() => place(Str/concat(before, Str/slice(after, 1, Str/len(after) - 1)), i.cursor)
+    | left() => match i.cursor | 0 => i | p + 1 => place(i.text, p) end
+    | right() => place(i.text, i.cursor + 1)
+    | home() => place(i.text, 0)
+    | end_key() => of_str(i.text)
+    | _ => i
+    end;
+
+-- One row of the text, scrolled so the cursor is in view, and the column the cursor is at.
+pub let draw(i: Input, style: Style, w: Nat) -> {frame: Frame(w, 1), cursor_x: Nat} =
+    let ahead = text/width(Str/slice(i.text, 0, i.cursor));
+    let first = match ahead < w | true => 0 | false => ahead + 1 - w end;
+    let shown = Str/slice(i.text, first, Str/len(i.text) - first);
+    (frame = Frame/fit(Frame/text(style, shown).frame, w, 1), cursor_x = ahead - first);

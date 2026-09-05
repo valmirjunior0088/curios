@@ -1,6 +1,6 @@
 -- How wide a string is on a terminal, and the two operations written over that measurement.
 --
--- **The width is approximate, deliberately, and this is the only place that approximation lives.** There is no exact answer: `wcwidth` is per code point while a terminal renders grapheme clusters, an emoji sequence's width depends on whether the terminal joins it, and Mode 2027 exists precisely because terminals disagree. So this is a table of twenty-one ranges — zero for the combining marks, the Hangul jamo tails, the zero-width space family and the variation selectors; two for the East Asian Wide and Fullwidth blocks and the two emoji planes; one otherwise — and a program that needs the terminal's own answer asks the terminal, which no protocol in this tier speaks. A table that is wrong about one glyph misplaces one column, which `Tui/Image/fit` then crops or pads; it never corrupts a frame.
+-- **The width is approximate, deliberately, and this is the only place that approximation lives.** There is no exact answer: `wcwidth` is per code point while a terminal renders grapheme clusters, an emoji sequence's width depends on whether the terminal joins it, and Mode 2027 exists precisely because terminals disagree. So this is a table of twenty-one ranges — zero for the combining marks, the Hangul jamo tails, the zero-width space family and the variation selectors; two for the East Asian Wide and Fullwidth blocks and the two emoji planes; one otherwise — and a program that needs the terminal's own answer asks the terminal, which no protocol in this tier speaks. A table that is wrong about one glyph misplaces one column, which `Tui/Frame/fit` then crops or pads; it never corrupts a frame.
 --
 -- The ranges are merged where merging costs at most a handful of code points: `0x2E80-0x33FF` sweeps up `0x303F`, and `0x3400-0x9FFF` the hexagram block, both of which are narrow. Splitting them would buy accuracy no terminal agrees on at the cost of a table nobody can read.
 use /std/{Nat, Bool, Str, Char, List};
@@ -53,7 +53,7 @@ pub let truncate(s: Str, w: Nat) -> Str =
             let taken = acc.1 + char_width(c);
             choose | taken <= w => (Str/concat(acc.0, Str/of_char(c)), taken) | _ => acc end).0;
 
--- Break `s` into lines no wider than `w`, at spaces. A word wider than `w` on its own becomes its own over-wide line rather than being split mid-word: `Tui/Image/fit` crops it at the pane, which is the one coercion this library has, and a hyphenation rule is a choice no library should make for a program.
+-- Break `s` into lines no wider than `w`, at spaces. A word wider than `w` on its own becomes its own over-wide line rather than being split mid-word: `Tui/Frame/fit` crops it at the pane, which is the one coercion this library has, and a hyphenation rule is a choice no library should make for a program.
 pub let wrap(s: Str, w: Nat) -> List(Str) =
     let packed =
         List/fold(
