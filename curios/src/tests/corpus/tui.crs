@@ -10,3 +10,5 @@ mod layout;
 mod input;
 
 mod render;
+
+mod app;

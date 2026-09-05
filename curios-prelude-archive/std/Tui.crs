@@ -37,3 +37,140 @@ pub mod input;
 mod ansi;
 
 pub mod render;
+
+pub mod Session;
+pub use Session/{let Session};
+
+-- What an `update` asks the loop to do beside the new model: nothing, stop, run an `Async` and hand its answer back as `Event/custom`, or several of those.
+pub induct Cmd(E: Type): pub Type
+| none()
+| quit()
+| perform(Async(E))
+| batch(List(Cmd(E)))
+end
+
+-- A program: its first model and command, how an event changes the model, and what the model looks like at a size. `view` is typed at the size it is given, so a frame that does not fill the terminal is refused where it is written and `run` never crops; `cursor` places the terminal's cursor, or hides it.
+pub struct Tui(M: Type, E: Type): pub Type {
+    init: {M, Cmd(E)},
+    update: (model: M, event: Event(E)) -> {M, Cmd(E)},
+    view: (model: M, w: Nat, h: Nat) -> Frame(w, h),
+    cursor: (model: M, w: Nat, h: Nat) -> Option({x: Nat, y: Nat}),
+}
+
+-- A command flattened: whether it stops the loop, and the `Async`s it asks for.
+let flatten(@E: Type, c: Cmd(E)) -> {quit: Bool, pending: List(Async(E))} =
+    match c
+    | none() => (quit = false, pending = [])
+    | quit() => (quit = true, pending = [])
+    | perform(a) => (quit = false, pending = [a])
+    | batch(cs) =>
+        List/fold(
+            cs,
+            (quit = false, pending = []),
+            (inner, acc) =>
+                let f = flatten(inner);
+                (quit = acc.quit || f.quit, pending = [..acc.pending, ..f.pending]))
+    end;
+
+-- The program's fold with no terminal: `events` through `update` from `init`, stopping at the first `quit`. Answers the model, whether it quit, the frame `view` gives at `w` by `h`, and every `perform` it asked for, unrun — which is what a test of a program wants to assert.
+pub let drive(
+    @M: Type,
+    @E: Type,
+    app: Tui(M, E),
+    w: Nat,
+    h: Nat,
+    events: List(Event(E)),
+) -> {model: M, quit: Bool, frame: Frame(w, h), pending: List(Async(E))} =
+    let start = flatten(app.init.1);
+    let state =
+        List/fold(
+            events,
+            (model = app.init.0, quit = start.quit, pending = start.pending),
+            (e, acc) =>
+                match acc.quit
+                | true => acc
+                | false =>
+                    let next = app.update(acc.model, e);
+                    let f = flatten(next.1);
+                    (model = next.0, quit = f.quit, pending = [..acc.pending, ..f.pending])
+                end);
+    (
+        model = state.model,
+        quit = state.quit,
+        frame = app.view(state.model, w, h),
+        pending = state.pending);
+
+-- Run the program in a session until it quits, answering its last model. Three kinds of fiber feed one queue and one signal: the reader, which parks on standard input and pushes each burst's events; the ticker, which reads the size every hundred milliseconds and pushes a `resize` only when it changed; and one per `perform`. The loop waits on the signal, drains the queue through `update`, and draws once per drain.
+pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
+    Session/with(
+        (s) =>
+            let queue: /std/Cell(List(Event(E))) = /std/Cell/new([])!;
+            let signal = Signal/new()!;
+            let push(e: Event(E)) -> Io({}) =
+                let current = /std/Cell/get(queue)!;
+                let _ = /std/Cell/set(queue, [..current, e])!;
+                Signal/notify(signal);
+            let reader() -> Async({}) =
+                let got = Session/read(@E, s)!;
+                match got
+                | none() => Async/pure(())
+                | some(events) =>
+                    let _ = Async/lift(List/each(events, push))!;
+                    reader()
+                end;
+            let ticker() -> Async({}) =
+                let _ = Async/sleep(Duration/of_millis(100))!;
+                let known = Session/last_size(s)!;
+                let now = Try/run(Session/size(s))!;
+                match now
+                | failure(_) => ticker()
+                | success(sz) =>
+                    match sz == known
+                    | true => ticker()
+                    | false =>
+                        let _ = push(Event/resize(sz.cols, sz.rows))!;
+                        ticker()
+                    end
+                end;
+            let answer(a: Async(E)) -> Async({}) =
+                let e = a!;
+                push(Event/custom(e));
+            let issue(c: Cmd(E)) -> Async(Bool) =
+                let f = flatten(c);
+                let _ = List/each(f.pending, (a) => Async/go(answer(a)))!;
+                Async/pure(f.quit);
+            let draw(m: M) -> Async({}) =
+                let sz = Session/last_size(s)!;
+                Session/draw(s, app.view(m, sz.cols, sz.rows), app.cursor(m, sz.cols, sz.rows));
+            let drain(m: M, events: List(Event(E))) -> Async({M, Bool}) =
+                match events
+                | [] => Async/pure((m, false))
+                | [e, ..more] =>
+                    let next = app.update(m, e);
+                    let stop = issue(next.1)!;
+                    match stop
+                    | true => Async/pure((next.0, true))
+                    | false => drain(next.0, more)
+                    end
+                end;
+            let loop(m: M) -> Async(M) =
+                let _ = Signal/wait(signal)!;
+                let events = /std/Cell/get(queue)!;
+                let _ = /std/Cell/set(queue, [])!;
+                let folded = drain(m, events)!;
+                match folded.1
+                | true => Async/pure(folded.0)
+                | false =>
+                    let _ = draw(folded.0)!;
+                    loop(folded.0)
+                end;
+            let _ = Async/go(reader())!;
+            let _ = Async/go(ticker())!;
+            let first = issue(app.init.1)!;
+            match first
+            | true => Try/pure(app.init.0)
+            | false =>
+                let _ = draw(app.init.0)!;
+                let m = loop(app.init.0)!;
+                Try/pure(m)
+            end);

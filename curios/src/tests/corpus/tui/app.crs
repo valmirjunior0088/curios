@@ -1,0 +1,55 @@
+-- A whole program through `drive`: the fold from `init` through `update`, the frame `view` gives, and what a command asks for.
+use /std/{Nat, Bool, Str, Char, List, Option, Async, Test, Tui};
+use /std/Tui/{Style, Frame, Key, Event, Cmd};
+use /std/Tui/Key/{Code};
+
+-- A counter: `+` and `-` change it, `q` quits, `!` asks for an `Async` that answers the count doubled.
+let counter: Tui(Nat, Nat) =
+    Tui {
+        init = (0, Cmd/none()),
+        update(model, event) =
+            match event
+            | key(k) =>
+                match k.code
+                | char(c) =>
+                    choose
+                    | c == '+' => (model + 1, Cmd/none())
+                    | c == '-' => (model - 1, Cmd/none())
+                    | c == 'q' => (model, Cmd/quit())
+                    | c == '!' => (model, Cmd/perform(Async/pure(model * 2)))
+                    | _ => (model, Cmd/none())
+                    end
+                | _ => (model, Cmd/none())
+                end
+            | custom(n) => (n, Cmd/none())
+            | _ => (model, Cmd/none())
+            end,
+        view(model, w, h) = Frame/of_lines(Style/plain, [Nat/to_str(model)], w, h),
+        cursor(model, w, h) = Option/none(),
+    };
+
+let press(c: Char) -> Event(Nat) =
+    Event/key(Key/plain(Code/char(c)));
+
+test the_fold_runs_every_event_through_update() =
+    let d = Tui/drive(counter, 3, 1, [press('+'), press('+'), press('-')]);
+    Test/all(
+        [
+            Test/equal(d.model, 1),
+            Test/equal(d.quit, false),
+            Test/equal(Frame/to_lines(d.frame), ["1  "])]);
+
+-- `quit` stops the fold where it is issued; the events after it are not seen.
+test quit_stops_the_fold_early() =
+    let d = Tui/drive(counter, 3, 1, [press('+'), press('q'), press('+')]);
+    Test/all([Test/equal(d.model, 1), Test/equal(d.quit, true)]);
+
+-- A `perform` comes back unrun, for the test to run or to count.
+test a_perform_comes_back_pending() =
+    let d = Tui/drive(counter, 3, 1, [press('+'), press('!')]);
+    Test/equal(List/len(d.pending), 1);
+
+-- A `custom` event is the program's own, and reaches `update` like any other.
+test a_custom_event_reaches_update() =
+    let d = Tui/drive(counter, 3, 1, [Event/custom(7)]);
+    Test/equal(d.model, 7);
