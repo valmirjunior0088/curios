@@ -82,7 +82,7 @@ The obligations below are the ones a search does not reveal.
 - Crate boundaries, not Cargo features, separate the compiler, runtime and browser products.
 - `curios-abi` is the source of truth for the host/guest wire contract. A host operation is complete only when its ABI row, compiler use, native runtime implementation and JavaScript implementation agree.
 - `Intrinsic::signature` is the source of truth for what an intrinsic demands and produces; both checkers walk it rather than restate it. `/sys`'s declarations state the same types a second time, deliberately, and the prelude build checks them against the table. A new operation is typed by adding a row.
-- `/std` and `/syn` are owned by `curios-prelude-archive` and compiled into an rkyv image in that crate's `OUT_DIR`. Every source module is registered in its Curios index.
+- `/std` and `/syn` are owned by `curios-prelude-archive` and compiled into an rkyv image of a `Unit`, filed at `curios-prelude-archive/.artifacts/prelude.rkyv` where `curios document` can name it. Every source module is registered in its Curios index.
 - Production compilation has no fixed-prelude source fallback or cache-miss branch. Archive construction or restoration failure is a compiler invariant and fails loudly.
 - No crate below `curios-prelude-archive` may spell a `/syn` name. The one exception is `curios-analysis`'s `fixture`, gated on `test-support`, which is what keeps those names out of every build that ships.
 - Binaryen is built from a verified pinned source release, shared through the locked cache under `curios-binaryen/.artifacts/<triple>`, never a fingerprint-specific `OUT_DIR`.

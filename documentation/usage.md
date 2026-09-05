@@ -64,11 +64,12 @@ Test programs are filed in the project's store exactly as `run`'s payloads are, 
 
 ## Documenting
 
-`curios document` writes the governing package's library interface as pages, read off the compilation that builds it: what each module exports, each declaration's head printed as written with every name in it linked to where it was declared, and the `-- |` documentation comments attached to each. It takes no target — a library is the one thing with an interface, and the governing package has at most one — and `--manifest` overrides which package governs as everywhere.
+`curios document` writes a library's interface as pages, read off the compilation that builds it: what each module exports, each declaration's head printed as written with every name in it linked to where it was declared, and the `-- |` documentation comments attached to each. Bare, it documents the governing package's library — a library is the one thing with an interface, and the governing package has at most one — and `--manifest` overrides which package governs as everywhere. Its one other form takes a `.rkyv` file holding an archived unit, a store slot's or the prelude image the compiler was built with, and reads the record that unit already carries: that is how the standard library is documented, since it has no package to be compiled from. A file has no store to file pages under, so that form requires `--output`.
 
 ```sh
 curios document              # .curios/documentation/<name>/
 curios document -o site      # somewhere else
+curios document curios-prelude-archive/.artifacts/prelude.rkyv -o site   # the standard library, from a checkout that built the compiler
 ```
 
 The pages are the library's consumers' view: a private declaration or module is absent rather than hidden, a type whose representation is private shows no constructors, a test never appears, and a `pub use` is a link to the declaration it re-exports. A reference into a dependency or the standard library renders as its qualified name in plain text, since nothing hosts their pages yet. The landing page shows the package's name and the manifest's `description`, and a module's page opens with the `-- |` block above the `mod` that declares it.

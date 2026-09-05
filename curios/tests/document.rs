@@ -1,6 +1,6 @@
 //! What the `document` subcommand writes, end to end: the bundle under the store, its layout, and the override.
 //!
-//! The record itself is covered in `curios/src/tests/document.rs`; this decides what the *subcommand* does with it — where the pages land, that a link from one page reaches another, and that a package without a library is refused by name.
+//! The record itself is covered in `curios/src/tests/document.rs`; this decides what the *subcommand* does with it — where the pages land, that a link from one page reaches another, that the prelude image documents the standard library through the file form, and that a package without a library is refused by name.
 
 use std::{
     fs,
@@ -129,6 +129,55 @@ fn output_names_another_directory() {
         !root.join(".curios/documentation").exists(),
         "the store holds nothing when the pages went elsewhere"
     );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// The image the compiler was built with, where its build script filed it: the one `.rkyv` every checkout that built `curios` has.
+const IMAGE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../curios-prelude-archive/.artifacts/prelude.rkyv"
+);
+
+#[test]
+fn the_prelude_image_documents_the_standard_library_into_output() {
+    let root = temporary("image");
+    fs::create_dir_all(&root).unwrap();
+
+    let output = curios(&root, &["document", IMAGE, "-o", "site"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let site = root.join("site");
+    let landing = fs::read_to_string(site.join("index.html")).expect("a landing page");
+    assert!(landing.contains("<h1>std</h1>"), "{landing}");
+    assert!(
+        landing.contains("The standard library"),
+        "the image's description: {landing}"
+    );
+    assert!(landing.contains("href=\"Result.html\""), "{landing}");
+    let result = fs::read_to_string(site.join("Result.html")).expect("a module's page");
+    assert!(result.contains("<li id=\"Result/success\">"), "{result}");
+    assert!(
+        !root.join(".curios").exists(),
+        "a file has no package, so nothing is filed under a store"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_file_without_output_is_refused_before_it_is_read() {
+    let root = temporary("image-no-output");
+    fs::create_dir_all(&root).unwrap();
+
+    let output = curios(&root, &["document", IMAGE]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--output"), "{stderr}");
 
     fs::remove_dir_all(root).unwrap();
 }

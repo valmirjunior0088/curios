@@ -1,7 +1,3 @@
-#[path = "src/archive.rs"]
-mod archive;
-use archive::*;
-
 #[path = "src/syntax.rs"]
 #[allow(unreachable_pub)]
 mod syntax;
@@ -19,6 +15,7 @@ use {
         validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::prepare_prelude,
+    curios_unit::Unit,
     std::{collections::BTreeSet, env, fs, path::PathBuf},
 };
 
@@ -80,7 +77,6 @@ fn main() {
 
 fn build() {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=src/archive.rs");
     println!("cargo:rerun-if-changed=src/sources.rs");
     println!("cargo:rerun-if-changed=src/syntax.rs");
 
@@ -166,12 +162,8 @@ fn build() {
 
     // Derived here, where the walk that establishes this image runs, so per-compile rechecking reads the bound instead of re-deriving it over every archived term.
     let binder_floor = derived_binder_floor(&core);
-    let image = PreludeArchive {
-        prepared,
-        core,
-        binder_floor,
-        ersd,
-    };
+    // The image is the unit itself, in the format every store slot files a unit in. It carries no version and is no stable interchange format: Cargo regenerates it whenever its inputs change — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare a build against itself.
+    let image = Unit::new(prepared, core, ersd, binder_floor);
     let first =
         curios_archive::to_bytes(&image).expect("fixed prelude archive serialization failed");
     let second = curios_archive::to_bytes(&image)

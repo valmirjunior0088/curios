@@ -14,7 +14,7 @@ Consumers depend on `curios-prelude`, never on this crate: the image here has be
 
 ### The archive is build-scoped, not an interchange format
 
-**Decision.** The prelude ships as an rkyv image in this crate's `OUT_DIR`, scoped to one compiler build: the build script discovers every `.crs` input and emits the matching rebuild directives, and production compilation replays the image with no source fallback and no cache-miss branch — construction or restoration failure is a compiler invariant and fails loudly.
+**Decision.** The prelude ships as an rkyv image of a `Unit` filed under this crate's `.artifacts/`, scoped to one compiler build: the build script discovers every `.crs` input and emits the matching rebuild directives, and production compilation replays the image with no source fallback and no cache-miss branch — construction or restoration failure is a compiler invariant and fails loudly.
 
 **Rationale.** A fallback would turn an invariant violation into a silent recompile, letting the archive drift from the sources it claims to capture; failing loudly keeps the archive's fidelity a checked property. Scoping the image to one compiler build removes any stability obligation on the format, so it can change freely with the representations it serializes.
 

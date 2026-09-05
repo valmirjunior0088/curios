@@ -1,11 +1,27 @@
-//! The `document` engine: a unit's interface as a [`Documentation`] record, read off the unit the compilation builds — what `curios document` renders into pages, and what a `wonder document` transport would print. Nothing executes, and the store is read as every query reads it and never written.
+//! The `document` engine: a unit's interface as a [`Documentation`] record, read off the unit the compilation builds — what `curios document` renders into pages, and what a `wonder document` transport would print. Nothing executes, and the store is read as every query reads it and never written. [`archived_documentation`] is the same record read off a unit already archived, which is how a library is documented without compiling it again: a store slot's unit, or the prelude image, which has no package to be compiled from.
 
 use {
     super::ReadOnly,
     crate::Verdicts,
     curios_pipeline::{Cache, CompileError, with_units},
     curios_text::{Documentation, Overlay, RootSource},
+    curios_unit::Unit,
+    std::{fs, path::Path},
 };
+
+/// The record carried by the unit archived at `path`: a store slot's `unit.rkyv`, or the prelude image, both filed in the one format a unit is archived in. Validated before it is read, so a file that is not a unit is an error rather than undefined behaviour; a unit that carries no record — an executable's — is refused by name.
+pub fn archived_documentation(path: &Path) -> Result<Documentation, String> {
+    let bytes = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let unit = curios_archive::from_bytes::<Unit>(&bytes)
+        .map_err(|error| format!("{}: not an archived unit: {error}", path.display()))?;
+
+    unit.text().documentation().cloned().ok_or_else(|| {
+        format!(
+            "{}: the archived unit carries no interface to document",
+            path.display()
+        )
+    })
+}
 
 /// The interface of the last of `units` — a package's library, compiled against everything before it — for its consumers. `overlay` and `cache` behave exactly as they do for `diagnostics`: unsaved text wins over the disk, and the store is read but never written.
 ///

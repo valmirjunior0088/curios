@@ -22,7 +22,8 @@ use test_runner::*;
 use {
     clap::Parser,
     curios::{
-        Linted, Verdicts, documentation, lint, serve, wonder_diagnostics, wonder_stage,
+        Linted, Verdicts, archived_documentation, documentation, lint, serve, wonder_diagnostics,
+        wonder_stage,
         wonder_tests, write_documentation,
     },
     curios_package::{Governing, LIBRARY, Target, curate, order, scaffold},
@@ -158,23 +159,42 @@ fn dispatch() -> Result<(), Failure> {
             line.outcome(&format!("{:.1}s", started.elapsed().as_secs_f64()));
             eprintln!();
         }
-        Mode::Document { output_path } => {
-            let governing = Governing::here(manifest.as_deref())?;
-            if !governing.directory.join(LIBRARY).is_file() {
-                return Err(Failure::Error(format!(
-                    "{:?} declares no library, and a library is the one thing with an interface to document",
-                    governing.package.name
-                )));
-            }
+        Mode::Document {
+            target,
+            output_path,
+        } => {
+            let (record, directory) = match target {
+                // A unit already archived has no package to file its pages under, so the directory is asked for rather than guessed.
+                Some(path) => {
+                    let Some(directory) = output_path else {
+                        return Err(Failure::Error(format!(
+                            "{}: an archived unit has no store to file its pages under; say where with `--output`",
+                            path.display()
+                        )));
+                    };
+                    (archived_documentation(&path)?, directory)
+                }
+                None => {
+                    let governing = Governing::here(manifest.as_deref())?;
+                    if !governing.directory.join(LIBRARY).is_file() {
+                        return Err(Failure::Error(format!(
+                            "{:?} declares no library, and a library is the one thing with an interface to document",
+                            governing.package.name
+                        )));
+                    }
 
-            // The same scope `test` and `wonder` assemble: the `--unit` mounts in front, then the dependency graph with the governing package's own library last.
-            let mut scope = load_units(&units)?;
-            scope.extend(order(&governing)?);
-            let store = Verdicts::at(governing.root.clone());
-            let record = documentation(budget, scope, &Overlay::default(), Some(&store))?;
+                    // The same scope `test` and `wonder` assemble: the `--unit` mounts in front, then the dependency graph with the governing package's own library last.
+                    let mut scope = load_units(&units)?;
+                    scope.extend(order(&governing)?);
+                    let store = Verdicts::at(governing.root.clone());
+                    let record = documentation(budget, scope, &Overlay::default(), Some(&store))?;
+                    let directory = output_path.unwrap_or_else(|| {
+                        governing.store().documentation(&governing.package.name)
+                    });
+                    (record, directory)
+                }
+            };
 
-            let directory = output_path
-                .unwrap_or_else(|| governing.store().documentation(&governing.package.name));
             write_documentation(&record, &directory)
                 .map_err(|error| format!("{}: {error}", directory.display()))?;
         }
