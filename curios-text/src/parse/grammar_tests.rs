@@ -213,3 +213,14 @@ fn entrypoint_parses_capture_tail_comments() {
         .collect::<Vec<_>>();
     assert_eq!(texts, ["-- item", "-- tail"]);
 }
+
+/// A literal mismatch quotes the token found, not as many characters as the literal is long: `=` where `=>` belongs is `'='`, not `'= '`.
+#[test]
+fn a_literal_mismatch_quotes_the_token_alone() {
+    let report = "match n | 0 = 1 end".parse::<Term>().unwrap_err().format();
+    assert!(
+        report.contains("Expected '=>', obtained '='"),
+        "reported {report}"
+    );
+    assert!(!report.contains("'= '"), "reported {report}");
+}

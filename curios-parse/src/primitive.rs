@@ -17,7 +17,7 @@ where
     Parser::new(move |state| Err(ParserError::new(state, message)))
 }
 
-/// Consumes exactly the literal `expected`, yielding nothing. On mismatch the error sits at the *pre-consumption* offset, so failing here never commits — a keyword or punctuation probe is always safe as the first token of an [`Parser::or`] alternative. The mismatch message shows what actually follows, counted in characters rather than the literal's bytes, so non-ASCII input never truncates mid-character or misreports as end-of-file.
+/// Consumes exactly the literal `expected`, yielding nothing. On mismatch the error sits at the *pre-consumption* offset, so failing here never commits — a keyword or punctuation probe is always safe as the first token of an [`Parser::or`] alternative. The mismatch message shows what actually follows, counted in characters rather than the literal's bytes, so non-ASCII input never truncates mid-character or misreports as end-of-file — and cut at the first whitespace, so a token shorter than the literal is quoted alone rather than with its neighbour: `=` where `=>` was expected read as `'= '`.
 pub fn take_exact<'a>(expected: &'static str) -> Parser<'a, ()> {
     Parser::new(move |state| match state.string.starts_with(expected) {
         true => Ok(((), state.jump_to(state.offset + expected.len()))),
@@ -26,6 +26,7 @@ pub fn take_exact<'a>(expected: &'static str) -> Parser<'a, ()> {
                 .string
                 .chars()
                 .take(expected.chars().count())
+                .take_while(|char| !char.is_whitespace())
                 .collect();
 
             Err(ParserError::new(
