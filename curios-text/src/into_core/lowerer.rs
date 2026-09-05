@@ -216,6 +216,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         params: &[FuncTypeParam],
         output: impl FnOnce() -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
+        // The first Π-type entered under a signature is its sugar's telescope, claimed before its domains are lowered: a parameter's own type may be a Π-type, and it is not the telescope. The parameters the result mentions are used by the declaration — see [`Signature`].
+        let telescope = self.signature.get().filter(|&signature| {
+            let mut signatures = self.signatures.borrow_mut();
+            !std::mem::replace(&mut signatures[signature].telescope_seen, true)
+        });
         let binders = self.mint(params.iter().map(|p| p.label.clone().unwrap_or_default()));
         let mut lowered = Vec::with_capacity(params.len());
         for (index, param) in params.iter().enumerate() {
@@ -223,19 +228,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             lowered.push((param.plicity, binders[index].1.clone(), domain));
         }
         let output = self.bound(&binders, output)?;
-        // The first Π-type lowered under a signature is its sugar's telescope: the parameters its result mentions are used by the declaration — see [`Signature`].
-        if let Some(signature) = self.signature.get() {
-            let mut signatures = self.signatures.borrow_mut();
-            let signature = &mut signatures[signature];
-            if !std::mem::replace(&mut signature.telescope_seen, true) {
-                let mentioned = output.free_vars_shared();
-                signature.output_mentions.extend(
+        if let Some(signature) = telescope {
+            let mentioned = output.free_vars_shared();
+            self.signatures.borrow_mut()[signature]
+                .output_mentions
+                .extend(
                     binders
                         .iter()
                         .filter(|(_, id)| mentioned.contains(id))
                         .map(|(name, _)| name.clone()),
                 );
-            }
         }
         Ok(curios_core::Term::func_type_marked(lowered, output))
     }
@@ -1502,7 +1504,14 @@ fn bindable(name: &str) -> bool {
 fn param_labels(params: &[FuncParam]) -> Vec<(String, Option<Span>)> {
     params
         .iter()
-        .flat_map(|param| pattern_labels(&param.pattern))
+        .flat_map(|param| {
+            let labels = pattern_labels(&param.pattern);
+            // A `use` binder joins the instance scope, and resolution uses it whether or not the body names it, so it is never a candidate.
+            match param.plicity {
+                Plicity::Witness => labels.into_iter().map(|(name, _)| (name, None)).collect(),
+                _ => labels,
+            }
+        })
         .collect()
 }
 

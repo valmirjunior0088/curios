@@ -556,3 +556,30 @@ fn an_underscore_prefixed_declaration_and_a_public_one_are_kept() {
         Vec::<String>::new()
     );
 }
+
+/// The sugar's telescope is the Π-type entered first, not the first one finished: a parameter whose own type is a function type is lowered before the result, and must not stand in for the telescope.
+#[test]
+fn a_parameter_the_result_mentions_is_used_when_an_earlier_parameter_has_a_function_type() {
+    assert_eq!(
+        lints(
+            r#"
+        let cong(f : (Type) -> Type, x : Type, y : Type) -> f(x) = Type;
+        cong
+    "#
+        ),
+        ["unused-binder: unused binder `y`; name it `_y` to keep it"]
+    );
+}
+
+/// A named `use` binder joins the instance scope: resolution reads it, whether or not the body names it.
+#[test]
+fn a_named_use_lambda_binder_is_never_reported() {
+    assert_eq!(
+        lints(
+            r#"
+        (use w, a : Type) => a
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
