@@ -28,6 +28,8 @@ pub(super) enum UseSiteKind {
 pub(super) struct FlatLet {
     pub name: curios_core::Global,
     pub kind: curios_core::DefinitionKind,
+    /// Where the declaration's name was written — what the `unused-declaration` lint underlines. `None` for a definition the compiler named: a constructor, a method wrapper, a witness, a test, or a `foreign` row the prelude synthesized.
+    pub span: Option<Span>,
     pub island: Qualifier,
     pub type_: curios_core::Term,
     pub body: curios_core::Term,
@@ -81,6 +83,14 @@ impl FlatItem {
         match self {
             FlatItem::Let(let_) => vec![let_.name.clone()],
             FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name.clone()).collect(),
+        }
+    }
+
+    /// The item's members: one for a `let`, every one of a group.
+    pub(super) fn lets(&self) -> &[FlatLet] {
+        match self {
+            FlatItem::Let(let_) => std::slice::from_ref(let_),
+            FlatItem::Rec(lets) => lets.as_slice(),
         }
     }
 

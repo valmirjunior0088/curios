@@ -1,4 +1,4 @@
-//! The lints the lowering decides: an import nothing resolved through, a binder nothing referenced, and what counts as a use of each.
+//! The lints the lowering decides: an import nothing resolved through, a binder nothing referenced, a declaration nothing reaches, and what counts as a use of each.
 
 use super::test_support::*;
 
@@ -342,13 +342,15 @@ fn a_declaration_holding_a_goal_reports_no_binder() {
     );
 }
 
+/// A binder is a count, not a reachability question: the local function's own body mentions it.
 #[test]
 fn a_local_function_that_calls_itself_is_used() {
     assert_eq!(
         lints(
             r#"
-        let go(n : Type) -> Type = go(n);
-        Type
+        (x : Type) =>
+            let go(n : Type) -> Type = go(n);
+            x
     "#
         ),
         Vec::<String>::new()
@@ -364,5 +366,193 @@ fn a_sugar_field_parameter_nothing_reads_is_reported() {
     "#
         ),
         ["unused-binder: unused binder `x`; name it `_x` to keep it"]
+    );
+}
+
+#[test]
+fn a_private_definition_nothing_reaches_is_reported_at_its_name() {
+    assert_eq!(
+        lints(
+            r#"
+        let helper : Type = Type;
+        Type
+    "#
+        ),
+        [
+            "unused-declaration: unused declaration `helper`; name it `_helper` or make it `pub` to keep it"
+        ]
+    );
+}
+
+#[test]
+fn a_definition_the_entry_tail_reaches_is_used() {
+    assert_eq!(
+        lints(
+            r#"
+        let helper : Type = Type;
+        helper
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn a_definition_a_public_one_reaches_is_used_and_the_public_one_is_a_root() {
+    assert_eq!(
+        lints(
+            r#"
+        let helper : Type = Type;
+        pub let api : Type = helper;
+        Type
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn a_definition_only_a_test_reaches_is_used() {
+    assert_eq!(
+        lints(
+            r#"
+        let helper : Type = Type;
+        test it() = helper;
+        Type
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn a_definition_only_a_witness_reaches_is_used() {
+    assert_eq!(
+        lints(
+            r#"
+        pub concept Show(A : Type) : pub Type { show : A }
+        struct Foo : Type { }
+        satisfy Show(Foo) { show = Foo { } }
+        Type
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn a_type_only_its_constructor_reaches_is_used() {
+    assert_eq!(
+        lints(
+            r#"
+        induct Foo : Type
+        | mk()
+        end
+        Foo/mk()
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn a_definition_used_only_by_itself_is_dead() {
+    assert_eq!(
+        lints(
+            r#"
+        let go : Type = go;
+        Type
+    "#
+        ),
+        ["unused-declaration: unused declaration `go`; name it `_go` or make it `pub` to keep it"]
+    );
+}
+
+#[test]
+fn two_dead_definitions_reaching_each_other_are_both_dead() {
+    assert_eq!(
+        lints(
+            r#"
+        let a : Type = b
+        and b : Type = a;
+        Type
+    "#
+        ),
+        [
+            "unused-declaration: unused declaration `a`; name it `_a` or make it `pub` to keep it",
+            "unused-declaration: unused declaration `b`; name it `_b` or make it `pub` to keep it",
+        ]
+    );
+}
+
+#[test]
+fn a_private_module_nothing_reaches_is_reported_once_at_the_mod() {
+    assert_eq!(
+        lints(
+            r#"
+        mod Internal
+            pub let a : Type = Type;
+            let b : Type = a;
+            mod Deeper
+                pub let c : Type = Type;
+            end
+        end
+        Type
+    "#
+        ),
+        [
+            "unused-declaration: unused declaration `Internal`; name it `_Internal` or make it `pub` to keep it"
+        ]
+    );
+}
+
+#[test]
+fn a_private_module_one_declaration_of_which_is_reached_reports_the_others() {
+    assert_eq!(
+        lints(
+            r#"
+        mod Internal
+            pub let a : Type = Type;
+            pub let b : Type = Type;
+        end
+        Internal/a
+    "#
+        ),
+        ["unused-declaration: unused declaration `b`; name it `_b` or make it `pub` to keep it"]
+    );
+}
+
+#[test]
+fn a_facade_re_export_keeps_the_private_module_it_reaches_into() {
+    assert_eq!(
+        lints(
+            r#"
+        pub mod Api
+            pub use /Impl/{f};
+        end
+        mod Impl
+            pub let f : Type = Type;
+        end
+        Type
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn an_underscore_prefixed_declaration_and_a_public_one_are_kept() {
+    assert_eq!(
+        lints(
+            r#"
+        let _scratch : Type = Type;
+        pub let api : Type = Type;
+        mod _Later
+            pub let x : Type = Type;
+        end
+        Type
+    "#
+        ),
+        Vec::<String>::new()
     );
 }

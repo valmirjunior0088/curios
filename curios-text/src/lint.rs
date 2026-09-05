@@ -61,6 +61,15 @@ impl Lint {
         )
     }
 
+    /// A declaration nothing reaches, underlined at its name. Kept by a `_` prefix, as a binder is, or by `pub`, which makes it part of what the unit hands out.
+    pub(crate) fn unused_declaration(name: &str, span: Span) -> Self {
+        Self::at(
+            LintKind::UnusedDeclaration,
+            Some(&span),
+            format!("unused declaration `{name}`; name it `_{name}` or make it `pub` to keep it"),
+        )
+    }
+
     fn at(kind: LintKind, span: Option<&Span>, message: String) -> Self {
         let report = match span {
             Some(span) => Report::at(span.clone(), message),

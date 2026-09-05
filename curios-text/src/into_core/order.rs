@@ -11,7 +11,7 @@ use {
 };
 
 /// The full set of names one node's declaration references: its own free vars, plus (for a declared inductive/struct) its registry entry's free vars. An inductive's declaration is wider than its items: the registry entry's constructor payload and target types are elaborated alongside the type-binding group (`curios_elab::elaborate_module_rec` rebuilds the registry telescopes there), so a node declaring a registered name references everything its registry entry does — those names live nowhere in the type binding's own `type_`/`body`. Struct field types live in the registry too.
-fn node_reference_names(
+pub(super) fn node_reference_names(
     item: &FlatItem,
     declared: &[curios_core::Global],
     induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
@@ -172,7 +172,7 @@ fn dep_nodes(
 }
 
 /// Owner index (declared name → node) over the given nodes only.
-fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_core::Global, usize> {
+pub(super) fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_core::Global, usize> {
     nodes
         .iter()
         .flat_map(|&n| items[n].names().into_iter().map(move |name| (name, n)))

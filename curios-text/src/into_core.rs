@@ -17,6 +17,9 @@ use order::*;
 mod interface;
 use interface::*;
 
+mod lint;
+use lint::*;
+
 mod scoped;
 use scoped::*;
 
@@ -121,6 +124,8 @@ fn claims(source: &UnitSource<'_>, own: &[Mount]) -> Vec<(String, Qualifier)> {
 
 struct Resolved<'a> {
     modules: HashMap<Qualifier, Rc<Module>>,
+    /// Where each `mod` the unit declares was written, by the module it declares — what the `unused-declaration` lint underlines for a whole dead module.
+    mod_spans: HashMap<Qualifier, Span>,
     /// The entry's own module graph, over whatever a prepared prelude already established. Every insertion below targets a module the entry declares; reads cross the boundary, which is why this is layered rather than copied. See [`Scoped`].
     table: Scoped<'a, ModuleInfo>,
 }
@@ -213,6 +218,7 @@ impl<'a> Resolved<'a> {
     ) -> Result<Self, Error> {
         let mut resolved = Resolved {
             modules: HashMap::new(),
+            mod_spans: HashMap::new(),
             table: Scoped::over(scope),
         };
 
@@ -260,6 +266,9 @@ impl<'a> Resolved<'a> {
         for item in items {
             if let TopItem::Mod(module_item) = item {
                 let path = prefix.with(&module_item.label);
+                if let Some(span) = module_item.label.span() {
+                    self.mod_spans.insert(path.clone(), span.clone());
+                }
 
                 match &module_item.module {
                     Some(module) => self.discover(&module.items, &path, source)?,
@@ -525,6 +534,7 @@ fn process_items(
                         let type_ = lower.term(&let_item.signature.type_())?;
                         Ok(FlatLet {
                             kind: curios_core::DefinitionKind::Authored,
+                            span: let_item.label.span().cloned(),
                             name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
                             island: context.island(),
                             type_,
@@ -554,6 +564,7 @@ fn process_items(
                 tests.push(name.clone());
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: curios_core::DefinitionKind::Test,
+                    span: None,
                     name,
                     island: context.island(),
                     type_,
@@ -569,6 +580,7 @@ fn process_items(
                 let type_ = lower.term(&signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
                     kind: curios_core::DefinitionKind::Authored,
+                    span: f.label.span().cloned(),
                     name: curios_core::Global::Authored(path),
                     island: context.island(),
                     type_,
@@ -733,6 +745,7 @@ fn process_items(
                         };
                         Ok(FlatLet {
                             kind: curios_core::DefinitionKind::InductiveType,
+                            span: u.label.span().cloned(),
                             name: curios_core::Global::Authored(context.prefixed(&u.label)),
                             island: context.island(),
                             type_,
@@ -837,6 +850,7 @@ fn process_items(
                         let ctor_body = curios_core::Term::func_marked(param_tys, inject);
 
                         flat_items.push(FlatItem::Let(FlatLet {
+                            span: None,
                             kind: curios_core::DefinitionKind::InductiveConstructor {
                                 owner: context.prefixed(&u.label),
                                 tag: curios_core::Atom::from(c.label.as_str()),
@@ -932,6 +946,7 @@ fn process_items(
 
                     formers.push(FlatLet {
                         kind: curios_core::DefinitionKind::StructType,
+                        span: s.label.span().cloned(),
                         name: curios_core::Global::Authored(context.prefixed(&s.label)),
                         island: context.island(),
                         type_,
@@ -1061,6 +1076,7 @@ fn process_items(
                     };
                     formers.push(FlatLet {
                         kind: curios_core::DefinitionKind::ConceptType,
+                        span: concept.label.span().cloned(),
                         name: curios_core::Global::Authored(context.prefixed(&concept.label)),
                         island: context.island(),
                         type_,
@@ -1102,6 +1118,7 @@ fn process_items(
                             .expect("a concept's own field index is within its record telescope");
 
                         flat_items.push(FlatItem::Let(FlatLet {
+                            span: None,
                             kind: curios_core::DefinitionKind::ConceptMethod {
                                 owner: context.prefixed(&concept.label),
                             },
@@ -1188,6 +1205,7 @@ fn process_items(
                         lower.enter_signature(&signature);
                         let item = FlatLet {
                             kind: curios_core::DefinitionKind::Witness,
+                            span: None,
                             name: name.clone(),
                             island: context.island(),
                             type_: lower.term(&declared_type)?,
@@ -1331,7 +1349,11 @@ fn into_core_unit_within(
         }
     }
 
-    let Resolved { mut table, modules } = Resolved::of(source, &scope_tables, &scope_mounts, &own)?;
+    let Resolved {
+        mut table,
+        modules,
+        mod_spans,
+    } = Resolved::of(source, &scope_tables, &scope_mounts, &own)?;
 
     // Every prefix this compilation mounts — the scope's, then this unit's. Resolution asks the whole set; the lowered module records only `own`, because a module states what its own unit provides.
     let mounts = scope_mounts
@@ -1469,6 +1491,18 @@ fn into_core_unit_within(
         NominalScope::new(&scope_cores, &induct_decls, &struct_decls),
     )?;
 
+    let dead = unused_declarations(&Declarations {
+        items: &flat_items,
+        entry: entry.as_ref(),
+        table: &table,
+        public: &public,
+        own: &own,
+        mod_spans: &mod_spans,
+        induct_decls: &induct_decls,
+        struct_decls: &struct_decls,
+        syntax,
+    });
+
     // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
     let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls, syntax)?
         .into_iter()
@@ -1501,6 +1535,7 @@ fn into_core_unit_within(
             unused_imports(sites.into_inner())
                 .into_iter()
                 .chain(lints.into_inner())
+                .chain(dead)
                 .collect(),
         ),
         reached: reached.into_inner(),
