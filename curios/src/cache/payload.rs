@@ -1,6 +1,6 @@
 //! What an invocation consults before compiling a program it has already compiled.
 //!
-//! **The same address-and-record split the unit family states for itself, one level up.** A slot names a place — this executable, by this compiler, after this chain, for this engine — and carries no file contents, so a source edit changes what the slot is verified against rather than where it is looked for. What the payload was made from rides in a [`Record`] beside it: the entry file, every file the entry's loader read, what each predecessor contained, and the payload's own digest.
+//! **The same address-and-record split the unit family states for itself, one level up.** A slot names a place — this executable, by this compiler, after this chain, for this engine — and carries no file contents, so a source edit changes what the slot is verified against rather than where it is looked for. What the payload was made from rides in a [`Record`] ahead of it in the slot's one file: the entry file, every file the entry's loader read, what each predecessor contained, and the payload's own digest.
 //!
 //! **Taking a payload from here is believing a whole compilation, judgment included.** The entry's kernel recheck is skipped on the strength of the record exactly as a reused unit's is, and the argument for that is [Reused payloads](../../../documentation/soundness/admission-without-judgment/reused-payloads.md), which extends [Cached verdicts](../../../documentation/soundness/admission-without-judgment/cached-verdicts.md) rather than restating it.
 //!
@@ -10,16 +10,11 @@
 mod tests;
 
 use {
-    super::{Placed, RECORD, Verdicts, chained, digested, read_within, replace},
+    super::{Placed, Verdicts, chained, digested, read_within, replace, segments},
     curios_package::{Fingerprint, digest, payload_slot},
     curios_text::{RootSource, UnitSource},
     std::{fs, io, path::Path, sync::LazyLock},
 };
-
-/// The file a stored payload is written as, inside its slot.
-///
-/// Named for what it is rather than for the stage that produced it: what sits here is exactly the byte string a bundled executable carries and `curios_runtime::run_bytes` deserializes.
-const STORED: &str = "payload.cwasm";
 
 /// What a payload is filed for: the executable it builds, and the entry it builds from.
 ///
@@ -51,7 +46,7 @@ struct Record {
     reads: Vec<(String, String)>,
     /// What each predecessor contained, in fold order — the digest of the bytes its own unit slot holds.
     predecessors: Vec<String>,
-    /// The payload's own digest, so a truncated or corrupted artifact is a miss here rather than a failure to deserialize at run time.
+    /// The payload's own digest, so a damaged artifact is a miss here rather than a failure to deserialize at run time — or, for a flipped byte inside a function's code, machine code that runs wrong. Its segment of the slot is exactly the byte string a bundled executable carries and `curios_runtime::run_bytes` deserializes.
     payload: String,
 }
 
@@ -63,17 +58,14 @@ impl Verdicts {
     /// Consulting this does not enter the fold's chain: a hit means no fold runs at all, and a miss leaves the fold to place its own units as it always did.
     pub fn payload_get(&self, program: &Program<'_>, units: &[UnitSource<'_>]) -> Option<Vec<u8>> {
         let placed = self.chain(units)?;
-        let directory = self.store.payload(&slot(self, program, &placed)?);
 
-        // Read before either is judged, and both before anything is believed: a slot missing one of the two files is a half-written store to ignore.
-        let recorded = fs::read(directory.join(RECORD)).ok()?;
-        let bytes = fs::read(directory.join(STORED)).ok()?;
+        // A file that is not a slot, or a stored record that will not read back, is a store to ignore, never a compile to fail.
+        let filed = fs::read(self.store.payload(&slot(self, program, &placed)?)).ok()?;
+        let (recorded, bytes) = segments(&filed)?;
+        let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
-        // A stored record that will not read back is a store to ignore, never a compile to fail.
-        let record = curios_archive::from_bytes::<Record>(&recorded).ok()?;
-
-        match agrees(program, &record, &placed, &bytes) {
-            true => Some(bytes),
+        match agrees(program, &record, &placed, bytes) {
+            true => Some(bytes.to_vec()),
             false => None,
         }
     }
@@ -106,7 +98,7 @@ impl Verdicts {
 
         let filed = curios_archive::to_bytes(&record)
             .map_err(io::Error::other)
-            .and_then(|record| replace(&self.store.payload(&slot), STORED, bytes, &record));
+            .and_then(|record| replace(&self.store.payload(&slot), &record, bytes));
 
         if let Err(error) = filed {
             self.refused.borrow_mut().get_or_insert(error.to_string());

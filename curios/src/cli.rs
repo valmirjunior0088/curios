@@ -57,12 +57,12 @@ pub(crate) enum Mode {
         output_path: Option<PathBuf>,
     },
 
-    /// No target, or a `.rkyv` file: a library is the one thing with an interface, and the governing package has at most one — the file form reads a unit already archived, a store slot's or the prelude image's, which is how the standard library is documented without a package. Where the pages go is `documentation/usage.md`'s Documenting.
+    /// No target, or a file: a library is the one thing with an interface, and the governing package has at most one — the file form reads a unit already archived, a verdict slot's or the prelude image, which is how the standard library is documented without a package. Where the pages go is `documentation/usage.md`'s Documenting.
     #[command(about = "Write a library's interface as pages")]
     Document {
         #[arg(
             value_name = "FILE",
-            help = "A .rkyv file holding an archived unit: a store slot's, or the prelude image (default: the governing package's library)"
+            help = "A file holding an archived unit: a verdict slot under a store, or the prelude image (default: the governing package's library)"
         )]
         target: Option<PathBuf>,
         #[arg(

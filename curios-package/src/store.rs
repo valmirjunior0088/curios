@@ -9,8 +9,8 @@
 //!   executables/    json/serve      what `curios compile` emits
 //!   documentation/  json/           what `curios document` emits
 //!   sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
-//!   verdicts/       <slot>/         judged units, one slot per mount, compiler and predecessor chain
-//!   payloads/       <slot>/         precompiled `.cwasm` payloads, one slot per executable, chain and engine
+//!   verdicts/       <slot>          judged units, one file per mount, compiler and predecessor chain
+//!   payloads/       <slot>          precompiled payloads, one file per executable, chain and engine
 //! ```
 //!
 //! Separated because the alternative re-invites a collision that nesting otherwise removes: a hash has to be transformed to sit in a directory name at all — `c1:<digest>` most naturally becoming `c1/<digest>` — and a package legitimately named `c1` would then land on top of it.
@@ -76,12 +76,12 @@ impl Store {
         self.shared.join("sources").join(scheme).join(digest)
     }
 
-    /// Where a judged unit is filed, under the address its mounts, its predecessors and the certifier decide. What it was compiled *from* is verified when the slot is opened rather than spelled here.
+    /// Where a judged unit is filed, under the address its mounts, its predecessors and the certifier decide: one file, holding the record of what it was compiled *from* ahead of the unit, verified when the slot is opened rather than spelled here.
     pub fn verdict(&self, slot: &str) -> PathBuf {
         self.shared.join("verdicts").join(slot)
     }
 
-    /// Where an executable's precompiled payload is filed, under the address its predecessor chain, its own identity and the engine decide. What it was compiled *from* is verified when the slot is opened, exactly as a unit's is.
+    /// Where an executable's precompiled payload is filed, under the address its predecessor chain, its own identity and the engine decide: one file, laid out as a unit's is, with what it was compiled *from* verified when the slot is opened.
     ///
     /// Shared rather than project-local, for the reason the type states: the address says nothing about which project asked. `executables/` stays local because a built executable's identity *is* project-relative; the payload inside it is not.
     pub fn payload(&self, slot: &str) -> PathBuf {
@@ -106,10 +106,10 @@ fn shared() -> Option<PathBuf> {
 /// What version of the verdict family's layout a key names.
 ///
 /// In the key rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what a slot holds, or what a hit is verified against, changes.
-const SCHEMA: &str = "u4";
+const SCHEMA: &str = "u5";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
-const PAYLOAD_SCHEMA: &str = "p1";
+const PAYLOAD_SCHEMA: &str = "p2";
 
 /// The slot a unit compiled by `compiler`, after `predecessors`, claiming `mounts`, is filed under.
 ///

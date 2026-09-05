@@ -6,7 +6,9 @@
 //!
 //! **Taking a unit from here is believing a verdict this compiler reached earlier.** That is a change to what the compiler believes rather than a faster way to do what it already did, and the argument for it is in [Cached verdicts](../../documentation/soundness/admission-without-judgment/cached-verdicts.md). Everything below is the mechanism the argument is about. The payload family in [`payload`] is that same argument one level up, with [Reused payloads](../../documentation/soundness/admission-without-judgment/reused-payloads.md) stating what it adds.
 //!
-//! **A slot is addressed, and a hit is verified.** The address ([`unit_slot`]) names a place — these mounts, this compiler, this predecessor chain — and holds no file contents at all, so a project has as many slots as it has units rather than one per compile. What the unit was compiled *from* rides in a [`Record`] beside it and is checked when the slot is opened: every file the compilation read, by the text it read, plus what each predecessor contained, plus what the slot itself holds — so a record vouches for the bytes it was written beside and for no others.
+//! **A slot is addressed, and a hit is verified.** The address ([`unit_slot`]) names a place — these mounts, this compiler, this predecessor chain — and holds no file contents at all, so a project has as many slots as it has units rather than one per compile. What the unit was compiled *from* rides in a [`Record`] ahead of it in the slot's one file and is checked when the slot is opened: every file the compilation read, by the text it read, plus what each predecessor contained, plus what the slot itself holds — so a record vouches for the bytes it was written with and for no others.
+//!
+//! **A slot is one file, and it is replaced by one rename.** The record and the artifact are framed together ([`framed`]), written beside the slot and renamed into place, so no interrupted or concurrent write can leave a record beside an artifact it was not made from: a reader sees the old slot, the new one, or none. The artifact segment is the same bytes the artifact is archived as on its own, which is what lets `curios document` read a unit off a slot exactly as it reads one off the prelude image.
 //!
 //! That split is deliberate, and the previous scheme is why. It hashed the unit's whole source directory into the address — a directory that, for a package's own library, *contains this store*. Filing a unit therefore changed the address it would next be looked for under, so a package's own code never hit and `verdicts/` grew a directory per compile. The lesson is not "exclude the store from the walk": a key derived from a belief about what the inputs are goes wrong silently the day the belief does, and it goes wrong in the direction that hands back a stale unit. Here the inputs are not believed but recorded, at the one seam every module read passes through (`RootSource::reads`), so a compilation that reads something new records it without anything here being taught to expect it.
 
@@ -30,11 +32,8 @@ use {
     },
 };
 
-/// The file a stored unit is written as, inside its slot.
-const STORED: &str = "unit.rkyv";
-
-/// The file recording what that unit was compiled from.
-const RECORD: &str = "record.rkyv";
+/// What a slot file opens with, so a slot is told from a bare archive by its first bytes rather than by guessing where a record might end. Versioned in the address's schema tag rather than here: a slot written under an older framing is not found rather than found and misread.
+const MAGIC: &[u8; 8] = b"crslot\0\0";
 
 /// What a stored unit must still be true of to be believed.
 ///
@@ -46,7 +45,7 @@ struct Record {
     reads: Vec<(String, String)>,
     /// What each predecessor contained, in fold order — the digest of the bytes its own slot holds. Ordered for the same reason the address orders their slots: two orders of one set are two lowerings.
     predecessors: Vec<String>,
-    /// The stored unit's own digest, so the record vouches for the bytes it was written beside and for no others. Two projects with one package name and one chain address one slot, and `replace` is two writes with no lock between them, so two compilers filing one slot at once can leave one's record beside the other's unit; without this the record's files agree, the unit deserializes, and a project is handed another project's library. It is also what makes a damaged unit that still deserializes a miss rather than a belief, as the payload family's own digest does for its artifact.
+    /// The stored unit's own digest, so a damaged unit that still deserializes is a miss rather than a belief, as the payload family's own digest makes a damaged artifact. Bytecheck confirms a unit's structure and nothing about its contents: a flipped byte inside a string reads back as a different string. It no longer stands between two compilers filing one slot at once — a slot is one file renamed into place, so no write can leave a record beside a unit it was not made from.
     unit: String,
 }
 
@@ -125,19 +124,18 @@ impl Verdicts {
 
         for source in sources {
             let slot = self.slot(source, &placed)?;
-            let directory = self.store.verdict(&slot);
 
-            let recorded = fs::read(directory.join(RECORD)).ok()?;
-            let bytes = fs::read(directory.join(STORED)).ok()?;
-            let record = curios_archive::from_bytes::<Record>(&recorded).ok()?;
+            let filed = fs::read(self.store.verdict(&slot)).ok()?;
+            let (recorded, bytes) = segments(&filed)?;
+            let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
-            if !agrees(source, &record, &placed, &bytes) {
+            if !agrees(source, &record, &placed, bytes) {
                 return None;
             }
 
             placed.push(Placed {
                 slot,
-                contained: digest(&bytes),
+                contained: digest(bytes),
             });
         }
 
@@ -183,24 +181,23 @@ impl Verdicts {
 impl Cache for Verdicts {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
         let slot = self.slot(source, &self.placed.borrow())?;
-        let directory = self.store.verdict(&slot);
 
-        // Read before deserializing either: a slot whose record disagrees is not worth the unit's decode, and a slot missing one of the two files is a half-written store to ignore.
-        let recorded = fs::read(directory.join(RECORD)).ok()?;
-        let bytes = fs::read(directory.join(STORED)).ok()?;
+        // The record is judged before the unit is decoded: a slot whose record disagrees is not worth the decode, and a file that is not a slot is a store to ignore.
+        let filed = fs::read(self.store.verdict(&slot)).ok()?;
+        let (recorded, bytes) = segments(&filed)?;
 
         // A stored unit that will not read back is a store to ignore, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
-        let record = curios_archive::from_bytes::<Record>(&recorded).ok()?;
+        let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
-        if !agrees(source, &record, &self.placed.borrow(), &bytes) {
+        if !agrees(source, &record, &self.placed.borrow(), bytes) {
             return None;
         }
 
-        let restored = curios_archive::from_bytes::<Unit>(&bytes).ok()?;
+        let restored = curios_archive::from_bytes::<Unit>(bytes).ok()?;
 
         self.placed.borrow_mut().push(Placed {
             slot,
-            contained: digest(&bytes),
+            contained: digest(bytes),
         });
 
         Some(restored)
@@ -214,9 +211,7 @@ impl Cache for Verdicts {
         let filed =
             curios_archive::to_bytes(&recorded(source, &self.placed.borrow(), &placed.contained))
                 .map_err(io::Error::other)
-                .and_then(|record| {
-                    replace(&self.store.verdict(&placed.slot), STORED, &bytes, &record)
-                });
+                .and_then(|record| replace(&self.store.verdict(&placed.slot), &record, &bytes));
 
         // Best effort: a store that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit enters the chain below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.
         if let Err(error) = filed {
@@ -227,29 +222,58 @@ impl Cache for Verdicts {
     }
 }
 
-/// Write `bytes` as `stored`, and `record` beside it, into `directory` — replacing whatever it held.
+/// File `record` and `artifact` as the slot at `slot`, replacing whatever it held.
 ///
-/// **The order is the whole of it.** The old record goes first, the artifact second, the new record last, so every state an interrupted run can leave behind is one that reads as a miss. Both other orders admit: a record written before its artifact vouches for whatever the slot held previously, and a record left in place while the artifact beneath it is replaced vouches for source that artifact was never made from — which a later run walks into by reverting the very edit that caused this write.
+/// **Written beside and renamed into place, which is the whole of it.** The file is complete before it bears the slot's name, and a rename replaces one name atomically, so a reader — this compiler or another filing the same slot at the same moment — sees the old slot, the new one, or none, and never a record beside an artifact it was not made from. The two-file scheme this replaced ordered its writes so that every interrupted state read as a miss, and needed the record to carry the artifact's digest to survive two compilers racing on one slot; one rename removes both cases rather than arguing about them. It is what every mature toolchain's cache does, and for this reason.
 ///
-/// That is also why a failed removal abandons the write instead of being ignored. Finding no record to remove is the ordinary case on a fresh slot; failing to remove one that *is* there leaves precisely the state this ordering exists to prevent.
+/// The staging name carries the process id, so two compilers staging one slot at once stage two files and the second rename simply wins. A staging file a crash leaves behind is never read, since it is not a slot's name, and is overwritten by the next write from the same process.
 ///
 /// Shared by both families, so the argument holds in one place rather than twice: a payload slot and a unit slot differ in what they hold and in nothing about how it is put there.
-fn replace(directory: &Path, stored: &str, bytes: &[u8], record: &[u8]) -> io::Result<()> {
-    // Every failure names the directory it happened in: an error reading `Permission denied` alone leaves a reader guessing which of the five families under `.curios/` refused.
-    let at = |error: io::Error| io::Error::other(format!("{}: {error}", directory.display()));
+fn replace(slot: &Path, record: &[u8], artifact: &[u8]) -> io::Result<()> {
+    // Every failure names the slot it happened at: an error reading `Permission denied` alone leaves a reader guessing which of the five families under `.curios/` refused.
+    let at = |error: io::Error| io::Error::other(format!("{}: {error}", slot.display()));
 
-    fs::create_dir_all(directory).map_err(at)?;
+    let family = slot
+        .parent()
+        .ok_or_else(|| io::Error::other("a slot has a family"))
+        .map_err(at)?;
+    fs::create_dir_all(family).map_err(at)?;
 
-    match fs::remove_file(directory.join(RECORD)) {
-        Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(at(error)),
-        _ => {}
-    }
+    let staged = slot.with_extension(format!("{}.part", std::process::id()));
+    fs::write(&staged, framed(record, artifact)).map_err(at)?;
 
-    fs::write(directory.join(stored), bytes).map_err(at)?;
-    fs::write(directory.join(RECORD), record).map_err(at)
+    fs::rename(&staged, slot).map_err(|error| {
+        // Best effort, as the whole write is: what matters is that nothing bearing the slot's name is half of anything.
+        let _ = fs::remove_file(&staged);
+        at(error)
+    })
 }
 
-/// Whether `record` still describes the world: the slot holds the bytes it was written beside, every file it names still holds the text it was read as, and every predecessor still contains what it did.
+/// The bytes of one slot file: the magic, the record's length, the record, then the artifact.
+///
+/// The record goes first because it is the part every open decodes and the artifact is the part a payload probe never does; the length is ahead of it because an archive is read from its end and so does not know its own extent.
+fn framed(record: &[u8], artifact: &[u8]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(MAGIC.len() + 8 + record.len() + artifact.len());
+    bytes.extend_from_slice(MAGIC);
+    bytes.extend_from_slice(&(record.len() as u64).to_le_bytes());
+    bytes.extend_from_slice(record);
+    bytes.extend_from_slice(artifact);
+
+    bytes
+}
+
+/// The record and the artifact of the slot file `bytes`, or `None` for bytes that are not one: something else entirely, or a slot truncated past its record.
+///
+/// The one place a slot's framing is read, shared with `curios document`, which takes the artifact and nothing else.
+pub(crate) fn segments(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
+    let body = bytes.strip_prefix(MAGIC)?;
+    let (length, rest) = body.split_first_chunk::<8>()?;
+    let length = usize::try_from(u64::from_le_bytes(*length)).ok()?;
+
+    (length <= rest.len()).then(|| rest.split_at(length))
+}
+
+/// Whether `record` still describes the world: the slot holds the bytes it was written with, every file it names still holds the text it was read as, and every predecessor still contains what it did.
 ///
 /// The slot's own digest comes first, as the payload family orders its check: it decides a torn or damaged slot before any file is opened.
 ///
@@ -262,7 +286,7 @@ fn agrees(source: &UnitSource<'_>, record: &Record, placed: &[Placed], bytes: &[
         && read_within(&source.directories(), &record.reads)
 }
 
-/// What `source` read after `placed`, as the record of it, beside a unit whose bytes digest to `contained`.
+/// What `source` read after `placed`, as the record of it, ahead of a unit whose bytes digest to `contained`.
 fn recorded(source: &UnitSource<'_>, placed: &[Placed], contained: &str) -> Record {
     Record {
         reads: digested(source.reads()),

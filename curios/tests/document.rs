@@ -169,6 +169,35 @@ fn the_prelude_image_documents_the_standard_library_into_output() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A verdict slot frames a record ahead of its unit, and `document` reads the unit off it as it reads the image, so a library filed under a store documents without compiling again. `test` is what files it: `document` itself reads the store as every query does and never writes it.
+#[test]
+fn a_verdict_slot_documents_the_unit_it_holds() {
+    let root = project("slot");
+
+    let output = curios(&root, &["test"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let slot = fs::read_dir(root.join(".curios/verdicts"))
+        .expect("a store with the library's unit in it")
+        .map(|slot| slot.unwrap().path())
+        .next()
+        .expect("the library's slot");
+
+    let output = curios(&root, &["document", slot.to_str().unwrap(), "-o", "site"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let landing = fs::read_to_string(root.join("site/index.html")).expect("a landing page");
+    assert!(landing.contains("<h1>shapes</h1>"), "{landing}");
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn a_file_without_output_is_refused_before_it_is_read() {
     let root = temporary("image-no-output");

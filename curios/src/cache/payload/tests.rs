@@ -164,7 +164,7 @@ fn slots(root: &Path) -> usize {
         .count()
 }
 
-/// The one payload slot's directory, for a test that has to damage what is in it.
+/// The one payload slot's file, for a test that has to damage what is in it.
 fn slot_of(root: &Path) -> PathBuf {
     let mut slots = fs::read_dir(root.join(".curios").join("payloads"))
         .expect("a store with payloads in it")
@@ -319,9 +319,11 @@ fn a_corrupted_payload_is_not_reused() {
     run(&root);
     assert!(run(&root).reused, "filed by the first invocation");
 
-    let stored = slot_of(&root).join(STORED);
+    // The last byte is the artifact's: the record is framed ahead of it.
+    let stored = slot_of(&root);
     let mut bytes = fs::read(&stored).unwrap();
-    bytes[16] ^= 0xff;
+    let last = bytes.len() - 1;
+    bytes[last] ^= 0xff;
     fs::write(&stored, &bytes).unwrap();
 
     assert!(!run(&root).reused, "damaged bytes are not the bytes filed");
@@ -330,54 +332,41 @@ fn a_corrupted_payload_is_not_reused() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// The write ordering exists so that every state an interrupted run can leave behind reads as a miss. These are those states, enumerated.
-///
-/// The record goes last, so an interruption can leave a slot with neither file, with the artifact alone, or with a record still being written — never with a record vouching for an artifact it was not made from. Each is checked by producing it.
+/// A slot is written beside its name and renamed into place, so an interrupted write leaves the slot as it was, or absent, with at most a staging file beside it that nothing reads. These are the states a store can be found in, and each reads as a miss or as the intact slot it is.
 #[test]
-fn every_half_written_slot_state_reads_as_a_miss() {
-    let root = project("half-written");
+fn no_state_a_store_is_left_in_reads_as_a_hit_it_is_not() {
+    let root = project("interrupted");
 
     run(&root);
     assert!(run(&root).reused, "filed by the first invocation");
 
     let slot = slot_of(&root);
-    let (stored, record) = (slot.join(STORED), slot.join(RECORD));
-    let (payload, recorded) = (fs::read(&stored).unwrap(), fs::read(&record).unwrap());
+    let filed = fs::read(&slot).unwrap();
+    let restore = || fs::write(&slot, &filed).unwrap();
 
-    let restore = || {
-        fs::write(&stored, &payload).unwrap();
-        fs::write(&record, &recorded).unwrap();
-    };
-
-    // The state an interrupted run leaves after removing the old record and before writing the artifact.
-    fs::remove_file(&record).unwrap();
+    // A write interrupted before its rename: the slot is absent and a staging file sits beside where it would be.
+    let staged = slot.with_extension("0.part");
+    fs::rename(&slot, &staged).unwrap();
     assert!(
         !run(&root).reused,
-        "an artifact with no record vouches for nothing"
+        "a staging file is not a slot, whatever it holds"
     );
+    fs::remove_file(&staged).unwrap();
     restore();
 
-    // The state a store that lost its artifact leaves — and the state after the record is removed but before anything replaces it.
-    fs::remove_file(&stored).unwrap();
-    assert!(
-        !run(&root).reused,
-        "a record with no artifact answers for nothing"
-    );
-    restore();
-
-    // A record interrupted mid-write.
-    fs::write(&record, &recorded[..recorded.len() / 2]).unwrap();
-    assert!(
-        !run(&root).reused,
-        "a record that will not read back is a store to ignore"
-    );
-    restore();
-
-    // And an artifact interrupted mid-write, which the record's own digest catches.
-    fs::write(&stored, &payload[..payload.len() / 2]).unwrap();
+    // A slot cut short past its record, which the record's own digest catches.
+    fs::write(&slot, &filed[..filed.len() - 1]).unwrap();
     assert!(
         !run(&root).reused,
         "a truncated artifact is not the artifact filed"
+    );
+    restore();
+
+    // A slot cut short inside its record, which is not a slot at all.
+    fs::write(&slot, &filed[..24]).unwrap();
+    assert!(
+        !run(&root).reused,
+        "a file that will not read back as a slot is a store to ignore"
     );
     restore();
 
@@ -437,13 +426,7 @@ fn stage(from: &Path, into: &Path) {
 
         for slot in fs::read_dir(&from).expect("a store with slots in it") {
             let slot = slot.unwrap().path();
-            let target = into.join(slot.file_name().unwrap());
-            fs::create_dir_all(&target).unwrap();
-
-            for file in fs::read_dir(&slot).unwrap() {
-                let file = file.unwrap().path();
-                fs::copy(&file, target.join(file.file_name().unwrap())).unwrap();
-            }
+            fs::copy(&slot, into.join(slot.file_name().unwrap())).unwrap();
         }
     }
 }

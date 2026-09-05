@@ -77,13 +77,7 @@ fn stage(from: &std::path::Path, into: &std::path::Path) {
 
     for slot in fs::read_dir(&from).expect("a store with units in it") {
         let slot = slot.unwrap().path();
-        let target = into.join(slot.file_name().unwrap());
-        fs::create_dir_all(&target).unwrap();
-
-        for file in fs::read_dir(&slot).unwrap() {
-            let file = file.unwrap().path();
-            fs::copy(&file, target.join(file.file_name().unwrap())).unwrap();
-        }
+        fs::copy(&slot, into.join(slot.file_name().unwrap())).unwrap();
     }
 }
 
@@ -191,35 +185,28 @@ fn a_slot_answers_for_a_dependency_both_projects_read() {
     fs::remove_dir_all(theirs).unwrap();
 }
 
-/// A record vouches for the bytes it was written beside and for no others. Two projects holding a package of one name address one slot, and the slot is two files written without a lock, so two compilers filing it at once can leave one's record beside the other's unit; a record that named only its files would find them unchanged and hand one project the other's library.
+/// The unit's own digest is in its record, so a unit damaged after it was filed is a miss rather than a belief — bytecheck confirms its structure and nothing about its contents, and a flipped byte inside a string would otherwise read back as a different string.
 #[test]
-fn a_record_does_not_vouch_for_a_unit_it_was_not_written_beside() {
-    let mine = project("mine-torn");
-    let theirs = project("theirs-torn");
+fn a_damaged_unit_is_not_reused() {
+    let root = project("damaged");
 
-    write(&theirs, "shape/lib.crs", &library("theirs"));
-    reused(&theirs);
-    reused(&mine);
+    reused(&root);
+    assert!(reused(&root), "filed by the first compilation");
 
-    // Their unit under my record, in the one slot both address.
-    let (from, into) = (
-        theirs.join(".curios/verdicts"),
-        mine.join(".curios/verdicts"),
-    );
-    for slot in fs::read_dir(&from).expect("a store with units in it") {
-        let slot = slot.unwrap().path();
-        let name = slot.file_name().unwrap();
-        assert!(into.join(name).is_dir(), "both projects address one slot");
-        fs::copy(slot.join(STORED), into.join(name).join(STORED)).unwrap();
-    }
+    let slot = fs::read_dir(root.join(".curios/verdicts"))
+        .expect("a store with units in it")
+        .map(|slot| slot.unwrap().path())
+        .next()
+        .expect("one slot");
+    let mut bytes = fs::read(&slot).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 0xff;
+    fs::write(&slot, &bytes).unwrap();
 
-    assert!(
-        !reused(&mine),
-        "my record does not vouch for bytes it was not written beside"
-    );
+    assert!(!reused(&root), "damaged bytes are not the bytes filed");
+    assert!(reused(&root), "and the recompile repairs the slot");
 
-    fs::remove_dir_all(mine).unwrap();
-    fs::remove_dir_all(theirs).unwrap();
+    fs::remove_dir_all(root).unwrap();
 }
 
 /// The store holds one slot per unit rather than one per compile — the property the address exists to have, and the one the previous scheme lost.
