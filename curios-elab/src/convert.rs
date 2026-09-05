@@ -1138,6 +1138,8 @@ impl Convert {
             .collect::<Vec<_>>();
 
         // Invert the spine through its *pattern* entries — a syntactic free variable whose name no other entry shares. A non-variable or duplicated entry is simply not invertible; the solution then may not depend on that slot, which the scope check below enforces — pruning in its simplest form.
+        //
+        // Each entry's multiplicity is counted once, over the spine, rather than by rescanning the spine per entry: a spine is as long as the birth telescope, which is every binder in scope, and a region a hundred `let`s deep solves a metavariable per `!` — the rescans were a cubic term in a long chain's elaboration.
         let image: Vec<_> = {
             let names = entries
                 .iter()
@@ -1146,6 +1148,10 @@ impl Convert {
                     _ => None,
                 })
                 .collect::<Vec<_>>();
+            let mut multiplicity = HashMap::<&Free, usize>::new();
+            for name in names.iter().flatten() {
+                *multiplicity.entry(name).or_default() += 1;
+            }
 
             names
                 .iter()
@@ -1153,18 +1159,22 @@ impl Convert {
                 .filter_map(|(name, (birth, _))| {
                     let name = (*name)?;
                     // A duplicated image name is ambiguous to invert.
-                    let unique = names.iter().filter(|n| **n == Some(name)).count() == 1;
+                    let unique = multiplicity.get(name) == Some(&1);
                     unique.then(|| (name.clone(), birth))
                 })
                 .collect()
         };
+        let mut entry_multiplicity = HashMap::<&Term, usize>::new();
+        for entry in &entries {
+            *entry_multiplicity.entry(entry).or_default() += 1;
+        }
 
         // Non-pattern entries that are meta-free and pairwise distinct become *abstraction subjects*: every occurrence of the entry inside the candidate rewrites to the entry's birth binder, extending inversion beyond the pattern fragment (the practical "abstracting over non-variable terms" move; the choice of all occurrences is checked by the round-trip verification below and by re-validation). An entry embedding a metavariable, or equal to another entry, stays ambiguous, and the candidate may not depend on it. Each subject contributes both its spellings — as written, and as the reducer exposes it at a whnf position (the candidate's root arrives reduced while deep positions do not) — except a reduced form that is a bare variable, which would collide with the renaming machinery.
         let mut subjects = Vec::new();
         for (entry, (birth, _)) in entries.iter().zip(telescope.iter()) {
             if matches!(&**entry, Subterm::Var(_))
                 || !entry.metavars().is_empty()
-                || entries.iter().filter(|e| *e == entry).count() != 1
+                || entry_multiplicity.get(entry) != Some(&1)
             {
                 continue;
             }

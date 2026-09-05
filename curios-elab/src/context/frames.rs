@@ -25,6 +25,14 @@ impl DefEntry {
     pub(crate) fn new(term: Term, kind: Option<DefinitionKind>) -> Self {
         Self { term, kind }
     }
+
+    pub(crate) fn body(&self) -> &Term {
+        &self.term
+    }
+
+    pub(crate) fn kind(&self) -> Option<&DefinitionKind> {
+        self.kind.as_ref()
+    }
 }
 
 /// The local frame a parked problem froze at park time: assumptions (in binding order), and the non-base-frame definitions, counterfactual refinements, projection refinements, and scrutinee refinements (each outermost frame first, so reapplying in order reproduces the shadowing). A retry must run under the same equalities its origin saw — including the arm-local refinements — while solution re-validation independently suppresses them, keeping committed solutions refinement-free.

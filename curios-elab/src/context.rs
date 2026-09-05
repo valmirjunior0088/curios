@@ -1425,7 +1425,13 @@ impl Context {
             }
         }
 
+        // Definitions take the same test as the assumptions above, and for a sharper reason: a name still defined with the frozen body *is* the frozen definition, and re-defining it reads to the cache protocol as a redefinition, which clears both caches wholesale. A witness parked under a hundred `let` binders was retried a hundred clears at a time, and every reduct the region had memoized was recomputed after each — the slow half of a long `!` chain's cliff.
         for (name, entry) in &frame.definitions {
+            if self.definition_body(name) == Some(entry.body())
+                && self.definition_kind(name) == entry.kind()
+            {
+                continue;
+            }
             self.define_entry(name.clone(), entry.clone());
         }
 
