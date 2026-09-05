@@ -10,6 +10,7 @@ The complete command-line and package reference. The [README](../README.md) cove
 - [Asking about a program](#asking-about-a-program)
 - [Exit codes](#exit-codes)
 - [Formatting](#formatting)
+- [Linting](#linting)
 - [Dependencies](#dependencies)
 - [Fetching](#fetching)
 - [Umbrellas](#umbrellas)
@@ -177,7 +178,7 @@ Exit status is a tri-state, so tooling can tell "here is your goal batch" from "
 | Code | Meaning |
 | --- | --- |
 | `0` | compiled, and for `run`, the program itself exited 0 |
-| `1` | a hard error |
+| `1` | a hard error, or for `lint`, a lint |
 | `2` | the program contains written goals (`?`), and their report went to stderr |
 
 A running program's own exit code passes through untouched, so `0` never hides a failure.
@@ -190,6 +191,25 @@ curios format --check <files…>  # write nothing, exit nonzero if anything woul
 ```
 
 There is one canonical style and no options to configure it. Formatting is verified before anything is written — the output must reparse to exactly the same program, with every comment preserved — so a formatter defect refuses rather than corrupts.
+
+## Linting
+
+```sh
+curios lint              # the governing package entire: its library, then every executable, then its dependencies
+curios lint app.crs      # one file, placed in its unit as `wonder` places it
+curios lint -            # the program on standard input
+```
+
+A lint is an exact finding the compilation already has and nothing stops on: `run`, `compile` and `test` never mention one, `wonder diagnostics` and the language server report them beside the errors and goals, and `lint` is where they turn into an exit code. There are four, every one always on, and there is nothing to configure — what keeps a name is spelled in the program, and each message says how.
+
+| Lint | Reports | Kept by |
+| --- | --- | --- |
+| `unused-import` | a `use` selector, or a glob, that no reference resolved through; a `pub use` is a re-export and its own use | deleting it |
+| `unused-binder` | a parameter, `let` binder, pattern binder or motive label nothing references, implicit or shadowed included; a declaration holding a written goal reports none, since its binders are the goal's scope | naming it `_x` |
+| `unused-declaration` | a non-`pub` `let`, `foreign`, `induct`, `struct` or `concept` unreachable from the unit's roots — its exported surface, its tests, its witnesses and its program's tail; a private `mod` none of whose declarations is reached is reported once, at the `mod` | naming it `_x`, or `pub` |
+| `unused-dependency` | a `[dependencies]` row whose package no reference in the library or any executable resolved into; decided over the package, so reported only by the package-entire form | deleting the row |
+
+The target takes `wonder`'s four forms and is placed the same way, so a library module is linted as its library. Output is what `wonder diagnostics` prints — each diagnostic, goal and lint rendered as `run` reports it, a blank line between — and the exit is the tri-state: 1 when a lint or an error was reported, 2 when only goals were, 0 when nothing. A program that does not lower reports its error alone, since the lints are read off the lowering; one that lowers and is then refused reports its lints beside the refusal.
 
 ## Dependencies
 

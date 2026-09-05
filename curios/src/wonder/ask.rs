@@ -137,8 +137,8 @@ pub fn wonder_diagnostics(
     Ok(())
 }
 
-/// The subjects `target` names, resolved the way `diagnostics` and `tests` share it: one for a file, an executable or standard input, and the governing package entire — its library, then every executable it declares, each a subject of its own — for none.
-fn resolve(
+/// The subjects `target` names, resolved the way `diagnostics`, `tests` and `curios lint` share it: one for a file, an executable or standard input, and the governing package entire — its library, then every executable it declares, each a subject of its own — for none.
+pub(crate) fn resolve(
     mounted: &[PathBuf],
     manifest: Option<&Path>,
     target: Option<&str>,

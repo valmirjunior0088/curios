@@ -79,6 +79,18 @@ pub(crate) enum Mode {
         directory: PathBuf,
     },
 
+    /// The gate over what `wonder diagnostics` reports: every diagnostic, goal and lint of the target, and — for the package entire — the dependencies nothing reached, with the exit code turning on them. The reasoning is `documentation/usage.md`'s Linting.
+    #[command(
+        about = "Report every unused import, binder, declaration and dependency; exit 1 when any"
+    )]
+    Lint {
+        #[arg(
+            value_name = "TARGET",
+            help = TARGET_HELP_PACKAGE
+        )]
+        target: Option<String>,
+    },
+
     #[command(about = "Format .crs files canonically, in place")]
     Format {
         #[arg(

@@ -21,7 +21,7 @@ use test_runner::*;
 
 use {
     clap::Parser,
-    curios::{serve, wonder_diagnostics, wonder_stage, wonder_tests},
+    curios::{Linted, lint, serve, wonder_diagnostics, wonder_stage, wonder_tests},
     curios_package::{Governing, Target, curate, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
@@ -106,6 +106,14 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Test { filter } => {
             if !run_tests(budget, &units, manifest.as_deref(), filter.as_deref())? {
                 process::exit(1);
+            }
+        }
+        // The tri-state `run` exits with, read off what was reported: a lint is as much a finding as an error, and a goal batch alone is the incomplete state it is everywhere else.
+        Mode::Lint { target } => {
+            match lint(budget, &units, manifest.as_deref(), target.as_deref())? {
+                Linted::Clean => {}
+                Linted::Goals => process::exit(2),
+                Linted::Findings => process::exit(1),
             }
         }
         Mode::Compile {
