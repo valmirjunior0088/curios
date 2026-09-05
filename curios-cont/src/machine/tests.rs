@@ -1,5 +1,8 @@
 use {
-    super::{MachineFunction, MachineInstruction, MachineOperand, MachineTerminator, lower},
+    super::{
+        MachineFunction, MachineInstruction, MachineOperand, MachineTerminator, MachineValueId,
+        lower,
+    },
     crate::{
         CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral, CpsModule,
         CpsNode,
@@ -345,6 +348,30 @@ fn verify_rejects_a_nested_block_with_no_lexical_owner() {
     let error = machine.verify().unwrap_err();
     assert!(
         error.to_string().contains("has no lexical owner"),
+        "unexpected error: {error}"
+    );
+}
+
+/// A tail position is held to the function's result count. A closure call hands back one value through `return_call_indirect`, so a function widened to two results cannot end in one: the CPS verifier refuses that upstream, and this is the machine-level check that would otherwise be missing beside the one a tail *direct* call already gets.
+#[test]
+fn verify_rejects_a_tail_closure_call_in_a_function_returning_two_values() {
+    let (source, _) = exiting_main();
+    let mut machine = lower(&source);
+    let entry = machine.entry;
+    let function = machine.functions.get_mut(&entry).unwrap();
+    function.results = 2;
+    let closure = MachineValueId(0);
+    let block = function.blocks.get_mut(&function.entry).unwrap();
+    block.terminator = MachineTerminator::TailIndirectCall {
+        closure,
+        args: vec![],
+    };
+
+    let error = machine.verify().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("returns 1 values from a tail position"),
         "unexpected error: {error}"
     );
 }

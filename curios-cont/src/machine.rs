@@ -996,7 +996,8 @@ impl MachineModule {
                 }
                 verify_block_resume(function, *resume, 1)?;
             }
-            MachineTerminator::TailIndirectCall { .. } => {}
+            // Every tail position hands its own results straight out of the function, as a tail direct call does, so each is held to the function's result count: a closure call and a `ListMap` produce one, a host or cell operation what its row says.
+            MachineTerminator::TailIndirectCall { .. } => tail_returns(owner, function, 1)?,
             MachineTerminator::IntrinsicReturn {
                 op: CpsIntrinsicCall::ListMap,
                 args,
@@ -1005,7 +1006,7 @@ impl MachineModule {
                     "{owner} tail ListMap has the wrong operand count"
                 )));
             }
-            MachineTerminator::IntrinsicReturn { .. } => {}
+            MachineTerminator::IntrinsicReturn { .. } => tail_returns(owner, function, 1)?,
             MachineTerminator::Foreign {
                 function: foreign,
                 args,
@@ -1022,17 +1023,13 @@ impl MachineModule {
             MachineTerminator::ForeignReturn {
                 function: foreign,
                 args,
-            } if foreign.signature.results.len() != 1 => {
-                return Err(MachineVerifyError(
-                    "foreign return must produce one language value".into(),
-                ));
-            }
-            MachineTerminator::ForeignReturn { function, args } => {
-                if args.len() != function.signature.params.len() {
+            } => {
+                if args.len() != foreign.signature.params.len() {
                     return Err(MachineVerifyError(format!(
                         "{owner} foreign tail call argument count does not match its ABI"
                     )));
                 }
+                tail_returns(owner, function, foreign.signature.results.len())?;
             }
             MachineTerminator::Cell { op, args, resume } => {
                 if args.len() != op.operand_arity() {
@@ -1042,18 +1039,33 @@ impl MachineModule {
                 }
                 verify_block_resume(function, *resume, op.result_arity())?
             }
-            MachineTerminator::CellReturn { op, args }
-                if op.result_arity() != 1 || args.len() != op.operand_arity() =>
-            {
-                return Err(MachineVerifyError(
-                    "cell return has an invalid operand or result arity".into(),
-                ));
+            MachineTerminator::CellReturn { op, args } => {
+                if args.len() != op.operand_arity() {
+                    return Err(MachineVerifyError(format!(
+                        "{owner} cell return has the wrong operand count"
+                    )));
+                }
+                tail_returns(owner, function, op.result_arity())?;
             }
-            MachineTerminator::CellReturn { .. } => {}
             MachineTerminator::Exit(_) | MachineTerminator::Unreachable => {}
         }
         Ok(())
     }
+}
+
+/// A tail position produces `results` values straight out of `function`, so the two counts must agree — the check `TailDirectCall` makes against its callee, stated once for the positions whose count is fixed by an operation rather than a callee.
+fn tail_returns(
+    owner: CpsFunId,
+    function: &MachineFunction,
+    results: usize,
+) -> Result<(), MachineVerifyError> {
+    if results != function.results {
+        return Err(MachineVerifyError(format!(
+            "{owner} returns {results} values from a tail position while its function returns {}",
+            function.results
+        )));
+    }
+    Ok(())
 }
 
 fn verify_edge(function: &MachineFunction, edge: &MachineEdge) -> Result<(), MachineVerifyError> {
