@@ -143,7 +143,10 @@ let m = 1.5e3 + 0xFF + 0b10;
   (let_term
     (let_binding
       (identifier)
-      (string))
+      (string
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence)))
     (let_term
       (let_binding
         (identifier)
@@ -218,3 +221,50 @@ satisfy(and)
         (argument
           (path
             (identifier)))))))
+
+================================================================================
+A braced Unicode escape is one escape in a string and one character
+================================================================================
+
+let a = "e\u{301}\n";
+let b = '\u{1F600}';
+a
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (string
+        (escape_sequence)
+        (escape_sequence)))
+    (let_term
+      (let_binding
+        (identifier)
+        (character))
+      (path
+        (identifier)))))
+
+================================================================================
+A double dash inside a string is text, not a comment
+================================================================================
+
+let a = "--help";
+let b = "x -- y"; -- and this one is a comment
+a
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (string))
+    (let_term
+      (let_binding
+        (identifier)
+        (string))
+      (comment)
+      (path
+        (identifier)))))

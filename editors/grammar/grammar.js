@@ -503,23 +503,25 @@ module.exports = grammar({
         ),
       ),
 
-    character: (_) => token(seq("'", choice(/[^'\\]/, /\\[ntr\\']/), "'")),
+    character: (_) =>
+      token(seq("'", choice(/[^'\\]/, /\\[ntr\\']/, /\\u\{[0-9a-fA-F]+\}/), "'")),
 
-    // An unrecognized escape stands for itself, so only the five recognized ones are named.
+    // An unrecognized escape stands for itself, so only the six recognized ones are named — the five one-letter ones and the braced Unicode scalar. Lexical precedence outranks match length, and both ranks below are load-bearing: the named escape outranks the catch-all, since a `\n` matches both at the same length and the catch-all won the tie, so no escape was ever named; and the plain content outranks the comment token, since a `--` inside a string is otherwise a comment running to the end of the line, which is what made every string spelling a long option a parse error.
     string: ($) =>
       seq(
         '"',
         repeat(
           choice(
             $.escape_sequence,
-            token.immediate(/[^"\\]+/),
+            token.immediate(prec(1, /[^"\\]+/)),
             token.immediate(/\\./),
           ),
         ),
         token.immediate('"'),
       ),
 
-    escape_sequence: (_) => token.immediate(/\\[ntr\\"]/),
+    escape_sequence: (_) =>
+      token.immediate(prec(1, choice(/\\[ntr\\"]/, /\\u\{[0-9a-fA-F]+\}/))),
 
     // ---- Irrefutable patterns ----
 

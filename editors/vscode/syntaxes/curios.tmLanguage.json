@@ -55,19 +55,19 @@
       "patterns": [
         {
           "name": "constant.character.escape.curios",
-          "match": "\\\\[ntr\\\\\"]"
+          "match": "\\\\(?:[ntr\\\\\"]|u\\{[0-9a-fA-F]+\\})"
         }
       ]
     },
     "character": {
       "name": "string.quoted.single.curios",
-      "match": "'(?:[^'\\\\]|\\\\[ntr\\\\'])'",
+      "match": "'(?:[^'\\\\]|\\\\[ntr\\\\']|\\\\u\\{[0-9a-fA-F]+\\})'",
       "captures": {
         "0": {
           "patterns": [
             {
               "name": "constant.character.escape.curios",
-              "match": "\\\\[ntr\\\\']"
+              "match": "\\\\(?:[ntr\\\\']|u\\{[0-9a-fA-F]+\\})"
             }
           ]
         }
