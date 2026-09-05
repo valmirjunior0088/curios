@@ -166,11 +166,11 @@ jobs:
           mv .artifacts/downloads/curios-rust-docs/curios-rust-docs.tar.gz .artifacts/curios-rust-docs.tar.gz
           mv .artifacts/downloads/curios-std-docs/curios-std-docs.tar.gz .artifacts/curios-std-docs.tar.gz
 
-      # The installer's version is baked in here rather than discovered at run time, so the script a release ships installs that release's binary and a pinned URL stays pinned. The template is rendered to a fresh file rather than edited in place: what ships is a build product, never a mutated checkout.
+      # The installer's version is baked in here rather than discovered at run time, so the script a release ships installs that release's binary and a pinned URL stays pinned. The recipe renders the template to a fresh file under xtask/.artifacts rather than editing it in place: what ships is a build product, never a mutated checkout.
       - name: Prepare installer
         run: |
           (cd .artifacts && sha256sum curios-linux-x86_64 curios-linux-aarch64 curios-macos-aarch64 > checksums.txt)
-          sed "s/@VERSION@/${GITHUB_REF_NAME#release/}/" .github/workflows/install.sh.in > .artifacts/install.sh
+          cargo x installer "${GITHUB_REF_NAME#release/}"
 
       - name: Create release
         env:
@@ -186,4 +186,4 @@ jobs:
             .artifacts/curios-rust-docs.tar.gz \
             .artifacts/curios-std-docs.tar.gz \
             .artifacts/checksums.txt \
-            .artifacts/install.sh
+            xtask/.artifacts/install.sh

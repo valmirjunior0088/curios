@@ -74,5 +74,6 @@ curios-wonder = { path = "curios-wonder" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
 clap = { version = "4.6.1", features = ["derive"] }
+askama = { version = "0.16.1", default-features = false, features = ["derive", "std"] }
 wasm-bindgen = { version = "0.2.126" }
 wasm-bindgen-cli-support = { version = "0.2.126" }

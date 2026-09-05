@@ -8,12 +8,17 @@
 //!
 //! **The bindings generator is a dependency.** `js` calls `wasm-bindgen-cli-support`, the crate the `wasm-bindgen` command line wraps; why, and what keeps its version honest, is the README's decision.
 //!
+//! **The installer is a template.** `installer` renders `templates/install.sh` with a release's version through Askama and files the script under `xtask/.artifacts/`, the one recipe that runs no cargo at all: the release workflow calls it with the tag's version and attaches what it filed. What it is and why it is rendered here rather than by the workflow is [`installer`]'s own documentation.
+//!
 //! **A dependency of nothing.** This crate is reached only through the `x` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of it.
 //!
 //! The command line is clap's, in `curios`'s own convention — a `Parser` root over a `Subcommand` of recipes — so the help is derived from the definitions and cannot fall out of step with them. Each recipe below is its steps and nothing else; the verbs they share live in [`helpers`].
 
 mod helpers;
 use helpers::*;
+
+mod installer;
+use installer::*;
 
 use {
     clap::{Parser, Subcommand},
@@ -72,6 +77,17 @@ enum Recipe {
         about = "Build the compiler, then the standard library's pages under curios-prelude-archive/.artifacts/documentation from the prelude image it was built with"
     )]
     StdDocs,
+
+    #[command(
+        about = "Render the installer script for one release version under xtask/.artifacts/install.sh"
+    )]
+    Installer {
+        #[arg(
+            value_name = "VERSION",
+            help = "The release's version: the part of its tag after release/"
+        )]
+        version: String,
+    },
 
     #[command(about = "Run one compilation under the tracing profiler")]
     Profile {
@@ -138,6 +154,7 @@ fn main() -> ExitCode {
         Recipe::Js => js(),
         Recipe::RustDocs => rust_docs(),
         Recipe::StdDocs => std_docs(),
+        Recipe::Installer { version } => installer(&version),
         Recipe::Profile { source } => profile(&source),
         Recipe::Benchmarks { tag } => benchmarks(&tag),
         Recipe::Grammar { arguments } => bridge("grammar", Command::new("npm"), &arguments),

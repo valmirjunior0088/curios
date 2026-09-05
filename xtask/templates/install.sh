@@ -8,7 +8,7 @@
 
 set -eu
 
-VERSION="@VERSION@"
+VERSION="{{ version }}"
 REPO="https://github.com/valmirjunior0088/curios"
 BIN_DIR="$HOME/.local/bin"
 
@@ -18,7 +18,7 @@ die() {
 }
 
 case "$VERSION" in
-    @*) die "this is the template, not a released installer; fetch it from $REPO/releases/latest/download/install.sh" ;;
+    *"{"*) die "this is the template, not a released installer; fetch it from $REPO/releases/latest/download/install.sh" ;;
 esac
 
 # The three platforms the release workflow builds. Anything else is refused by name rather than guessed at: a binary for the wrong architecture fails much less clearly than this line does.
