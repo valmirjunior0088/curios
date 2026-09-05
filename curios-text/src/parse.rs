@@ -50,8 +50,8 @@ use {
     curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
     curios_num::{Floating, Natural},
     curios_parse::{
-        Mark, Parser, catch, commit, fail, lazy, look_ahead, many0, many1, mark, memoize,
-        not_ahead, preceded_by_space, pure, sep_by0_trailing, sep_by1_trailing, spanned,
+        Mark, Parser, catch, commit, fail, fail_from, lazy, look_ahead, many0, many1, mark,
+        memoize, not_ahead, preceded_by_space, pure, sep_by0_trailing, sep_by1_trailing, spanned,
         take_exact, take_n, take_while,
     },
     curios_utilities::{
@@ -182,18 +182,21 @@ fn parse_qualified_name<'a>() -> Parser<'a, Name> {
 //
 // Where no word begins at all — a `;` or a `/` standing where `end` belongs — the word run is empty and the report names the keyword and the character found, in `take_exact`'s style. Left to `parse_identifier_raw`, the report was its bare `Expected identifier`, which named neither. The empty run consumes nothing, so the failure stays recoverable at the choice point exactly as the identifier parser's did.
 fn parse_keyword<'a>(expected: &'static str) -> Parser<'a, ()> {
-    take_while(is_identifier_char)
+    mark()
+        .and(take_while(is_identifier_char))
         .and(look_ahead(take_while(|char| !char.is_whitespace())))
         .flat_map(
-            move |(obtained, rest)| match (obtained, expected == obtained) {
+            move |((start, obtained), rest)| match (obtained, expected == obtained) {
                 (_, true) => pure(()),
                 ("", false) => fail(match rest.chars().next() {
                     Some(next) => format!("Expected keyword '{expected}', obtained '{next}'"),
                     None => format!("Expected keyword '{expected}', obtained 'end-of-file'"),
                 }),
-                (obtained, false) => fail(format!(
-                    "Expected keyword '{expected}', obtained '{obtained}'"
-                )),
+                // The report spans the word, so the caret underlines it rather than standing after it.
+                (obtained, false) => fail_from(
+                    &start,
+                    format!("Expected keyword '{expected}', obtained '{obtained}'"),
+                ),
             },
         )
         .and_drop(parse_whitespace())

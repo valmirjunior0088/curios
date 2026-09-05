@@ -605,7 +605,7 @@ pub(crate) fn parse_top_item<'a>() -> Parser<'a, TopItem> {
                 "satisfy" => fallible(parse_top_witness(vis_pub)),
                 "test" => fallible(parse_top_test(vis_pub)),
                 "let" => fallible(parse_top_let(vis_pub)),
-                _ => return fallible(fail(NOT_A_TOP_LEVEL_ITEM)),
+                _ => return fallible(fail_from(&start, NOT_A_TOP_LEVEL_ITEM)),
             };
 
             parse_whitespace().and_keep(body)

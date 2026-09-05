@@ -365,4 +365,6 @@ fn a_misspelled_keyword_is_reported_against_the_word() {
     // The word sits on line 5; the declaration the caret used to land on is line 7.
     assert!(report.contains("5 |"), "{report}");
     assert!(!report.contains("7 |"), "{report}");
+    // And the caret underlines the word itself, all four characters of it, rather than standing after it.
+    assert!(report.contains("^^^^"), "{report}");
 }

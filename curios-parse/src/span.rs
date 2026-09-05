@@ -28,6 +28,10 @@ pub struct Mark {
 }
 
 impl Mark {
+    pub(crate) fn offset(&self) -> usize {
+        self.offset
+    }
+
     /// The span between this mark and `end` (order-independent — whichever offset is smaller becomes the start).
     pub fn to(&self, end: &Mark) -> Span {
         let (start, end) = match self.offset <= end.offset {
