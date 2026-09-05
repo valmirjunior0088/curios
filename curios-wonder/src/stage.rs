@@ -3,7 +3,7 @@
 //! What `--print` was, as a question rather than a flag. The rungs are [`Stage::NAMES`], observed exactly where the driver emits them; the last, `wasm-optm`, is constructed by the native product after Binaryen rather than by the driver, so the engine cannot render it and hands the module back for the transport to finish — the one rung `curios` can reach and `curios-js` cannot.
 
 use {
-    super::{Diagnostic, Origin, ReadOnly, of_error, open, overlaid},
+    crate::{Diagnostic, Origin, ReadOnly, of_error, open, overlaid},
     curios_pipeline::{Cache, Stage, compile_with_units},
     curios_text::{Overlay, RootSource},
     curios_verdicts::Verdicts,

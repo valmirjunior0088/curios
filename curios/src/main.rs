@@ -21,15 +21,16 @@ use test_runner::*;
 
 use {
     clap::Parser,
-    curios::{
-        Linted, archived_documentation, documentation, lint, serve, wonder_diagnostics,
-        wonder_stage, wonder_tests, write_documentation,
-    },
+    curios::{wasm_optm, write_documentation},
     curios_package::{Governing, LIBRARY, Target, curate, order, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::{Formatted, Overlay},
     curios_verdicts::Verdicts,
+    curios_wonder::{
+        Linted, archived_documentation, documentation, lint, serve, wonder_diagnostics,
+        wonder_stage, wonder_tests,
+    },
     std::{
         ffi::OsString,
         fs, iter,
@@ -247,12 +248,14 @@ fn dispatch() -> Result<(), Failure> {
             Query::Tests { target } => {
                 wonder_tests(budget, &units, manifest.as_deref(), target.as_deref())?
             }
+            // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
             Query::Stage { name, target } => wonder_stage(
                 budget,
                 &units,
                 manifest.as_deref(),
                 &name,
                 target.as_deref(),
+                |module| wasm_optm(&module, |stage| println!("{stage}")),
             )?,
             Query::Server => serve(budget, &units, manifest.as_deref())?,
         },

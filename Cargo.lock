@@ -523,13 +523,10 @@ dependencies = [
  "curios-profile",
  "curios-runtime",
  "curios-text",
- "curios-unit",
  "curios-utilities",
  "curios-verdicts",
  "curios-wasm",
- "lsp-server",
- "lsp-types",
- "serde_json",
+ "curios-wonder",
 ]
 
 [[package]]
@@ -806,6 +803,22 @@ dependencies = [
  "curios-parse",
  "curios-print",
  "curios-utilities",
+]
+
+[[package]]
+name = "curios-wonder"
+version = "0.12.1"
+dependencies = [
+ "curios-package",
+ "curios-pipeline",
+ "curios-text",
+ "curios-unit",
+ "curios-utilities",
+ "curios-verdicts",
+ "curios-wasm",
+ "lsp-server",
+ "lsp-types",
+ "serde_json",
 ]
 
 [[package]]

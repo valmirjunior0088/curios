@@ -1,6 +1,6 @@
 use {
-    super::{Origin, ReadOnly, Severity, Subject, diagnostics, rendered},
     crate::Asked,
+    crate::{Origin, ReadOnly, Severity, Subject, diagnostics, rendered},
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Progress, check_units_with_prelude},
     curios_text::Overlay,
     curios_verdicts::Verdicts,
@@ -12,7 +12,7 @@ use {
     },
 };
 
-fn of(text: &str) -> Vec<super::Diagnostic> {
+fn of(text: &str) -> Vec<crate::Diagnostic> {
     diagnostics(
         DEFAULT_STEP_BUDGET,
         Subject::Entry {
@@ -28,8 +28,8 @@ fn of(text: &str) -> Vec<super::Diagnostic> {
 }
 
 /// One rung of `program`, asked for the way the one-shot transport asks.
-fn rung(name: &str, text: &str) -> Result<super::Rendering, super::Refusal> {
-    match super::stage(
+fn rung(name: &str, text: &str) -> Result<crate::Rendering, crate::Refusal> {
+    match crate::stage(
         DEFAULT_STEP_BUDGET,
         Vec::new(),
         Origin::Text {
@@ -40,8 +40,8 @@ fn rung(name: &str, text: &str) -> Result<super::Rendering, super::Refusal> {
         None,
         name,
     ) {
-        Ok(super::Reached::Rendered(rendering)) => Ok(rendering),
-        Ok(super::Reached::Wasm(_)) => panic!("asked for a driver rung, reached the module"),
+        Ok(crate::Reached::Rendered(rendering)) => Ok(rendering),
+        Ok(crate::Reached::Wasm(_)) => panic!("asked for a driver rung, reached the module"),
         Err(refusal) => Err(refusal),
     }
 }
@@ -68,7 +68,7 @@ fn a_rung_reached_before_the_failure_is_still_answered() {
 fn a_rung_the_program_never_reached_is_refused() {
     let refusal = rung("ersd", REFUSED_LATER).expect_err("ersd is never reached");
     assert!(
-        matches!(refusal, super::Refusal::Diagnostics(diagnostics) if !diagnostics.is_empty()),
+        matches!(refusal, crate::Refusal::Diagnostics(diagnostics) if !diagnostics.is_empty()),
         "expected the refusal to carry what stopped the program"
     );
 }
@@ -369,7 +369,7 @@ fn built(root: &Path) {
 
 /// What the fold did to each of `root`'s units, checked through [`ReadOnly`] over `overlay` — the store `wonder` hands a query.
 fn folded(root: &Path, overlay: &Overlay) -> Vec<String> {
-    let units = super::overlaid(mounted(root), overlay);
+    let units = crate::overlaid(mounted(root), overlay);
     let store = Verdicts::at(root.to_path_buf());
     let read_only = ReadOnly {
         cache: &store,

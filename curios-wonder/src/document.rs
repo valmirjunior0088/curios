@@ -1,7 +1,7 @@
 //! The `document` engine: a unit's interface as a [`Documentation`] record, read off the unit the compilation builds — what `curios document` renders into pages, and what a `wonder document` transport would print. Nothing executes, and the store is read as every query reads it and never written. [`archived_documentation`] is the same record read off a unit already archived, which is how a library is documented without compiling it again: a store slot's unit, or the prelude image, which has no package to be compiled from.
 
 use {
-    super::ReadOnly,
+    crate::ReadOnly,
     curios_pipeline::{Cache, CompileError, with_units},
     curios_text::{Documentation, Overlay, RootSource},
     curios_verdicts::{Verdicts, archived_unit},
@@ -33,7 +33,7 @@ pub fn documentation(
 ) -> Result<Documentation, CompileError> {
     let read_only = cache.map(|cache| ReadOnly { cache, overlay });
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
-    let units = super::overlaid(units, overlay);
+    let units = crate::overlaid(units, overlay);
 
     with_units(
         budget,

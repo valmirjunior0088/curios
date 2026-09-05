@@ -1,10 +1,10 @@
 //! The programs this tree ships lint clean: every instrument under `programs/`, standalone as `curios lint` would place it, and every corpus unit under `tests/corpus/`, as its library. A lint is exact and always on, so a finding here is fixed in the program rather than excused.
 
 use {
-    crate::{Origin, Severity, Subject, diagnostics},
     curios_pipeline::DEFAULT_STEP_BUDGET,
     curios_text::{Overlay, RootSource},
     curios_utilities::RootKind,
+    curios_wonder::{Origin, Severity, Subject, diagnostics},
     std::{
         fs,
         path::{Path, PathBuf},

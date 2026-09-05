@@ -1,0 +1,25 @@
+[package]
+name = "curios-wonder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "What the compiler knows about a program, handed out as records: the wonder engine, the command-line and language-server transports, and the lint gate"
+
+[lints]
+workspace = true
+
+# Under `curios` and free of everything it links: no Binaryen, no Wasmtime, no launcher. A question
+# runs the compiler as far as it needs and reads the answer off the store through `curios-verdicts`;
+# the one rung the driver cannot render, `wasm-optm`, is handed back for the product that owns
+# Binaryen to finish. The language server's protocol crates have this crate as their one owner.
+[dependencies]
+curios-utilities = { workspace = true }
+curios-text = { workspace = true }
+curios-unit = { workspace = true }
+curios-wasm = { workspace = true }
+curios-pipeline = { workspace = true }
+curios-package = { workspace = true }
+curios-verdicts = { workspace = true }
+lsp-server = "0.10.0"
+lsp-types = "0.97.0"
+serde_json = "1.0.151"

@@ -1,7 +1,7 @@
 //! The `tests` query: every test a subject declares, as `{ path }` records — read off `Module::tests` by the compilation that would build the subject, executing nothing. A rung is a constructor the body builds at run time, so a record deliberately does not name one.
 
 use {
-    super::{DeclaredTest, ReadOnly, Subject, open},
+    crate::{DeclaredTest, ReadOnly, Subject, open},
     curios_pipeline::{
         Cache, CompileError, EntryTail, check_with_units, declared_test_paths, unit_test_paths,
     },
@@ -21,7 +21,7 @@ pub fn declared_tests(
 
     let paths = match subject {
         Subject::Unit { units } => {
-            let units = super::overlaid(units, overlay);
+            let units = crate::overlaid(units, overlay);
             unit_test_paths(budget, &units, cache, |_| {})?
         }
         Subject::Entry { units, origin } => {
@@ -34,7 +34,7 @@ pub fn declared_tests(
                         .join("\n\n"),
                 )
             })?;
-            let units = super::overlaid(units, overlay);
+            let units = crate::overlaid(units, overlay);
             let module = check_with_units(
                 budget,
                 &units,

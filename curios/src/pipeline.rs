@@ -4,7 +4,6 @@
 
 use {
     crate::{Heading, Line, Subject, fact},
-    curios::STDIN_LABEL,
     curios::{engine, to_cwasm},
     curios_package::Target,
     curios_pipeline::{Cache, CompileError, Progress, compile_with_units},
@@ -12,6 +11,7 @@ use {
     curios_utilities::Source,
     curios_verdicts::{Program, Verdicts},
     curios_wasm::Module,
+    curios_wonder::STDIN_LABEL,
     std::{
         io,
         path::{Path, PathBuf},

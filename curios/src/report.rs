@@ -16,8 +16,8 @@
 //! **A header is the one line terminated before its work is done.** Nesting costs that much of the rule above: `Processing hello` has to close so the `↳` lines can follow it, and the group ends by dedent rather than by a closing line of its own. What the rule protects survives and sharpens — the unterminated line is now the innermost one, so an interrupted compile names the step it died in rather than the target around it. A header carries no outcome of its own: what became of the target is what its steps say.
 
 use {
-    curios::STDIN_LABEL,
     curios_utilities::Qualifier,
+    curios_wonder::STDIN_LABEL,
     std::{fmt, path::PathBuf, time::Instant},
 };
 

@@ -126,6 +126,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Full memory and data section support in `curios-wasm` (plural memories, 32- and 64-bit)
 - [x] Full table and element section support in `curios-wasm` (plural tables, every segment mode)
 - [x] `Stage::WasmOptm`: the Binaryen-optimized module observable through `wonder stage`
+- [x] Crate-boundary split isolating the store-backed cache (`curios-verdicts`) and the `wonder` engine with its transports (`curios-wonder`) from the native back end
 
 ## Optimizations
 

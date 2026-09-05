@@ -3,7 +3,7 @@ name = "curios"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios native compiler: CLI, Binaryen optimization, Wasmtime precompilation, and executable bundling"
+description = "The Curios native compiler: the CLI, Binaryen optimization, Wasmtime precompilation, executable bundling, and the documentation pages"
 
 [lints]
 workspace = true
@@ -24,15 +24,12 @@ curios-cert = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-package = { workspace = true }
 curios-verdicts = { workspace = true }
+curios-wonder = { workspace = true }
 curios-archive = { workspace = true, features = ["enabled"] }
-curios-unit = { workspace = true, features = ["archive"] }
 curios-binaryen = { workspace = true }
 # The switch that turns Cranelift on for the shared runtime engine, which is what gives `curios_runtime::precompile` its `precompile_module`. Named nowhere in this crate's code: wasmtime itself is `curios-runtime`'s to own.
 curios-runtime = { workspace = true, features = ["cranelift"] }
 clap = { workspace = true }
-lsp-server = "0.10.0"
-lsp-types = "0.97.0"
-serde_json = "1.0.151"
 
 # The cross-stage suites in `src/tests` reach into individual pipeline stages; the product code never does.
 [dev-dependencies]

@@ -1,7 +1,7 @@
 //! The `diagnostics` query: every diagnostic and goal one compilation of a program reports.
 
 use {
-    super::{Diagnostic, Severity},
+    crate::{Diagnostic, Severity},
     curios_package::LIBRARY,
     curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, check_with_units},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},

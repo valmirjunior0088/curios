@@ -1,6 +1,6 @@
 # curios
 
-The Curios native compiler: the compile-and-run helpers, the CLI, and the only workspace crate that links both native backends — Binaryen via `curios-binaryen` and Cranelift via Wasmtime. Runtime-only embedders stay on the slim `curios-runtime`, whose launcher this crate embeds into bundled executables. Public usage belongs to the repository [README](../README.md); local architecture belongs to the crate rustdoc.
+The Curios native compiler: the compile-and-run helpers, the CLI, the documentation pages, and the only workspace crate that links both native backends — Binaryen via `curios-binaryen` and Cranelift via Wasmtime. Runtime-only embedders stay on the slim `curios-runtime`, whose launcher this crate embeds into bundled executables; the questions `wonder` answers, and the store they read, stay in `curios-wonder` and `curios-verdicts` beneath this crate, which link neither back end. Public usage belongs to the repository [README](../README.md); local architecture belongs to the crate rustdoc.
 
 ## Design
 

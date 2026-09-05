@@ -7,7 +7,7 @@
 use {
     crate::{
         Diagnosed, Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, declared_tests,
-        diagnosed, diagnostics, stage, wasm_optm,
+        diagnosed, diagnostics, stage,
     },
     curios_package::{Form, Governing, LIBRARY, Membership, Target, mounted, order},
     curios_text::{Overlay, RootSource},
@@ -210,12 +210,15 @@ pub(crate) fn rendered(answers: Vec<Asked>, budget: u64, overlay: &Overlay) -> V
 }
 
 /// `wonder stage STAGE [TARGET]`: the rung, reprinted, to stdout.
+///
+/// `finish` renders the one rung the driver cannot: `wasm-optm` is the module after Binaryen, which this crate does not link, so the engine hands the emitted module back and the product that owns Binaryen prints it. Every other rung is printed here, from the driver's own rendering.
 pub fn wonder_stage(
     budget: u64,
     mounted: &[PathBuf],
     manifest: Option<&Path>,
     name: &str,
     target: Option<&str>,
+    finish: impl FnOnce(Box<curios_wasm::Module>),
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
@@ -240,7 +243,7 @@ pub fn wonder_stage(
                 eprintln!("{}", diagnostic.render());
             }
         }
-        Ok(Reached::Wasm(module)) => wasm_optm(&module, |stage| println!("{stage}")),
+        Ok(Reached::Wasm(module)) => finish(module),
         Err(Refusal::NoSuchStage { asked }) => {
             return Err(format!(
                 "no stage named {asked:?}; the stages are {}",
