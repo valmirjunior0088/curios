@@ -206,6 +206,17 @@ pub(super) fn run_err(src: &str) -> String {
     .to_string()
 }
 
+// `run_err` rendered as the reader sees it: the message and, where the error was placed, its snippet.
+pub(super) fn run_err_report(src: &str) -> String {
+    super::into_core(
+        &src.parse::<Entrypoint>().unwrap(),
+        &RootSource::none(),
+        syntax(),
+    )
+    .unwrap_err()
+    .format()
+}
+
 // Lower against the real prelude (so `sys` and `std` are served and rooted), returning only success/error — the lens for the internal-root gate.
 pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
     let mut modules = RootSource::supplied();

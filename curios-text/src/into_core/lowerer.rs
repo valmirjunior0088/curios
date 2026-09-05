@@ -312,11 +312,21 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         })
     }
 
+    /// An error at `term`'s span, where `term` has one and the error is not already placed — the counterpart of the stamping `region` and `collect` perform on the term they return. Only [`Self::term`] placed its errors, so a refusal the matrix compiler raised while lowering a `match` or `choose` in a value body — every arm-shape error it has — reached the reader with no location at all.
+    fn located(error: Error, term: &Term) -> Error {
+        match term.span() {
+            Some(span) => error.at(span.clone()),
+            None => error,
+        }
+    }
+
     /// Desugars `term` as a single **region**. A region is a stretch of a value body that shares one continuation; each `!` in it hoists to the top of the region, never past a boundary (lambda body, match arm, recursive-group member). Boundaries re-root a region. Every hoisted action is sequenced through `/syn/Monad/bind` — see `wrap`.
     ///
     /// Span stamping happens here for the reason [`Self::collect`] states, and for the arms that are not spines: `Let`, `Match`, `Choose` and `Func` each *rebuild* their node below, so a value body rooted at a whole-term form reached elaboration with no span — its errors unlocated, and the `test` declaration's recorded body empty, since the runner slices that body from this very span. `with_span` is innermost-wins, so the spine arm keeps the one [`Self::collect`] already stamped.
     pub(super) fn region(&self, term: &Term) -> Result<curios_core::Term, Error> {
-        let lowered = self.region_root(term)?;
+        let lowered = self
+            .region_root(term)
+            .map_err(|error| Self::located(error, term))?;
 
         Ok(match term.span() {
             Some(span) => lowered.with_span(span.clone()),
@@ -483,7 +493,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         term: &Term,
         binds: &mut Vec<Hoisted>,
     ) -> Result<curios_core::Term, Error> {
-        let lowered = self.collect_spine(term, binds)?;
+        let lowered = self
+            .collect_spine(term, binds)
+            .map_err(|error| Self::located(error, term))?;
         Ok(match term.span() {
             Some(span) => lowered.with_span(span.clone()),
             None => lowered,

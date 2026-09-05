@@ -117,6 +117,31 @@ fn nat_literal_mixed_with_succ_is_rejected() {
     );
 }
 
+/// A refusal the matrix compiler raises names the match it refused: `region` and `collect` place the error at the term they were lowering, as `term` places its own. They stamped only the core term they returned, so every arm-shape error a value body reached — a whole body, an operand, a lambda's body alike — rendered as bare text with no location.
+#[test]
+fn a_match_shape_refusal_is_located_at_the_match() {
+    for (source, line) in [
+        (
+            "let f : Type =\n    match b\n    | wrap(5) => 1\n    | wrap(n + 1; ih) => n\n    | _ => 0\n    end;\n()",
+            "2 |",
+        ),
+        (
+            "let f : Type =\n    1 + (match b | wrap(5) => 1 | wrap(n + 1; ih) => n | _ => 0 end);\n()",
+            "2 |",
+        ),
+        (
+            "let f : Type =\n    let g = (k : Type) =>\n        match k | wrap(5) => 1 | wrap(n + 1; ih) => n | _ => 0 end;\n    g(1);\n()",
+            "3 |",
+        ),
+    ] {
+        let report = run_err_report(source);
+        assert!(
+            report.contains("mixes successor-peeling") && report.contains(line),
+            "{source:?} reported {report}"
+        );
+    }
+}
+
 #[test]
 fn constant_atoms_fold_into_the_packed_run() {
     // A constant atom folds into the neighbouring run whether it is spelled as a numeral or as a `true`/`false` literal, so the literal stays one `Intrinsic::Bin` rather than an append onto one. Conversion equates the spellings either way — `core::spine` decodes a concrete appended atom as a length-1 literal run — so this pins the compaction, not the meaning. (Names need not resolve: lowering precedes name resolution.)
