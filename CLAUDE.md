@@ -65,6 +65,7 @@ The obligations below are the ones a search does not reveal.
 | Host operations or foreign calls | `curios-abi`'s row, compiler use, native runtime implementation, JavaScript implementation |
 | What a unit hands its successors | Every stage whose artifact `Unit` holds, `curios-pipeline`'s fold, the store's stored-unit format |
 | A `wonder` query, a record, or what a diagnostic carries | `curios-utilities`'s `Report`, every stage's `report`/`reports_with_hints`, `CompileError` and `check_with_units`, both transports (`ask.rs`, `server.rs`), `curios-package`'s `Membership` |
+| The documentation record or its pages | `curios-text/src/document.rs` and its tests in `curios/src/tests/document.rs`, the renderer in `curios/src/document.rs`, `documentation/usage.md`'s Documenting, and `documentation/syntax.md`'s comments section when the `-- \|` grammar moves |
 | Manifests, dependency resolution, or the store | The CLI subcommands wrapping it, `Qualifier`/`Mount`, and `documentation/soundness/admission-without-judgment/cached-verdicts.md` when the store's keys are involved |
 | Runtime or bundle format | Slim-launcher dependency boundary, bundle integration tests |
 | A build recipe (`xtask`) | `curios/build.rs`, the CI workflows calling the recipe, `README.md`'s build steps |
