@@ -207,7 +207,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Complete written-goal batches: one elaboration reports every reached goal, located
 - [x] [Goal suggestions (`? ≈`)](design/toolchain/goal-suggestions-are-depth-one-fits-not-proof-search.md): sandboxed candidate fits, verified to compile
 - [x] Goal suggestions reach what a program has not already mentioned
-- [ ] [A failing program names what failed](roadmap/runtime-failure-legibility-spec.md) (every backend trap is a bare `unreachable`, so an overflow and a bad index are one message; refined, not started: a `sys.panic` import the emitter calls with one sentence per refusal class, nothing above the emitter involved)
+- [x] A failing program names what failed — the emitter calls a `sys.panic` import with one sentence per class (a `Nat` or `Int` past its carrier, a read past the end, a `Flt` decode, a recursive value read during its own initialization, a compiler invariant), both runtimes render `panicked: …`, the CPS IR carries the class as `CpsNode::Panic` where a lowering seats one, and no program can spell it
 
 ## Standard Library
 
