@@ -13,12 +13,46 @@ use {
     },
     curios_ersd::lower_to_cont,
     curios_text::{
-        Entrypoint, LoweredEntry, RootSource, UnitSource, into_core_unit, into_core_with_prelude,
+        Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, UnitSource, into_core_unit,
+        into_core_with_prelude,
     },
     curios_unit::{Prefix, Unit},
     curios_utilities::{Qualifier, Report, SyntaxRegistry},
-    std::fmt,
+    std::{collections::BTreeSet, fmt},
 };
+
+/// What a unit's lowering decided beside its module: its lints, and the prefix of every mount some reference of it resolved into — see [`Lint`]. Read off the lowering before elaboration consumes it, so a question about a program has them whether or not elaboration then accepted it.
+#[derive(Debug, Clone, Default)]
+pub struct Findings {
+    pub lints: Vec<Lint>,
+    pub reached: BTreeSet<Qualifier>,
+}
+
+impl Findings {
+    /// A stored unit's, as its lowering left them.
+    pub fn of_text(text: &PreparedText) -> Self {
+        Self {
+            lints: text.lints().to_vec(),
+            reached: text.reached().clone(),
+        }
+    }
+
+    fn take(lowered: &mut LoweredEntry) -> Self {
+        Self {
+            lints: std::mem::take(&mut lowered.lints),
+            reached: std::mem::take(&mut lowered.reached),
+        }
+    }
+}
+
+/// What checking a program decides: the entry's findings, the last mounted unit's when the question is about a library, and the verdict — which is a `Result` of its own because a lint is not a refusal, and an entry that lowers has findings whatever elaboration then says about it.
+#[derive(Debug)]
+pub struct Checked {
+    pub entry: Findings,
+    /// The last of the mounted units' findings — the subject of a question about a library, which is checked through an empty entry. `None` when nothing is mounted.
+    pub unit: Option<Findings>,
+    pub verdict: Result<curios_core::Module, CompileError>,
+}
 
 /// A compile failure, split for process-level reporting: a written-goal batch is *incomplete* development state, everything else a hard *failure*. The CLI maps the two to distinct exit codes — 2 for incomplete, 1 for failure — so tooling can distinguish "here is your goal batch" from "something is wrong" without parsing stderr.
 ///
@@ -253,6 +287,7 @@ fn test_records(scheduled: &[curios_elab::ScheduledTest]) -> Vec<TestRecord> {
 /// The type-checking prologue of [`compile_entrypoint`] (and the tests' typecheck-only path): lower to core, elaborate (checking against the entrypoint's type when it carries one, else synthesizing), then zonk metavariable solutions in so the module is meta-free — the `elaborate → zonk` half of the `elaborate → zonk → erase` data flow. Elaboration is authoritative: it returns a rebuilt module (lambda domains solved, binders re-closed), and it is *that* module — not the lowered one — that zonk makes meta-free. `zonk` is also where an unsolved hole is rejected, so a program that merely *type-checks* is fully validated by the time this returns. Elaboration and zonking share one context (the solutions live in its `MetaStore`); the returned module is self-contained, so the caller's `erase` runs over a fresh one.
 ///
 /// The `sys`/`syn`/`std` prelude is neither lowered nor elaborated per call: prepared Text state is merged with the user graph, then the archived Core prelude is replayed into the elaboration context and only the entry's own items are type-checked.
+#[cfg(test)]
 pub(crate) fn elaborate_and_zonk<O>(
     budget: u64,
     scope: Prefix<'_>,
@@ -265,10 +300,42 @@ pub(crate) fn elaborate_and_zonk<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    curios_profile::profile!("elaborate_and_zonk");
+    let lowered = lower_entry(scope, syntax, entrypoint, loader, observe)?;
+    elaborate_lowered(budget, scope, syntax, lowered, tail, observe)
+}
+
+/// The lowering half of the prologue: the surface tree to a core module, observed as the `text` rung.
+fn lower_entry<O>(
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+    entrypoint: &Entrypoint,
+    loader: &RootSource,
+    observe: &mut O,
+) -> Result<LoweredEntry, CompileError>
+where
+    O: FnMut(Stage<'_>),
+{
     observe(Stage::Text(entrypoint));
 
     let text = scope.text();
+    into_core_with_prelude(entrypoint, loader, &text, syntax)
+        .map_err(|error| CompileError::Failure(vec![error.report()]))
+}
+
+/// The elaborating half of the prologue, over an entry already lowered — split from [`lower_entry`] so a check can read the lowering's findings before elaboration consumes it.
+fn elaborate_lowered<O>(
+    budget: u64,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+    lowered: LoweredEntry,
+    tail: EntryTail,
+    observe: &mut O,
+) -> Result<(curios_core::Module, Term, ForeignStore, Vec<TestRecord>), CompileError>
+where
+    O: FnMut(Stage<'_>),
+{
+    curios_profile::profile!("elaborate_and_zonk");
+
     let cores = scope.cores();
     let LoweredEntry {
         core: lowered,
@@ -277,9 +344,9 @@ where
         foreigns: user_foreigns,
         unbound,
         imports,
-        ..
-    } = into_core_with_prelude(entrypoint, loader, &text, syntax)
-        .map_err(|error| CompileError::Failure(vec![error.report()]))?;
+        lints: _,
+        reached: _,
+    } = lowered;
 
     // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; `type_: None` on the synthesized entry routes it into the `Io({})` expectation below like an authored tail without an annotation. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     let scheduled = match tail {
@@ -352,12 +419,21 @@ pub fn check_entrypoint(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     tail: EntryTail,
-) -> Result<curios_core::Module, CompileError> {
-    let (module, core_type, _foreigns, _records) =
-        check_observed(budget, scope, syntax, entrypoint, loader, tail, &mut |_| {})?;
-    erase_checked(budget, scope, syntax, &module, &core_type)?;
+) -> Result<Checked, CompileError> {
+    let mut lowered = lower_entry(scope, syntax, entrypoint, loader, &mut |_| {})?;
+    let entry = Findings::take(&mut lowered);
+    let verdict = check_lowered(budget, scope, syntax, lowered, tail, &mut |_| {}).and_then(
+        |(module, core_type, _foreigns, _records)| {
+            erase_checked(budget, scope, syntax, &module, &core_type)?;
+            Ok(module.into_module())
+        },
+    );
 
-    Ok(module.into_module())
+    Ok(Checked {
+        entry,
+        unit: None,
+        verdict,
+    })
 }
 
 /// The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
@@ -401,8 +477,32 @@ fn check_observed<O>(
 where
     O: FnMut(Stage<'_>),
 {
+    let lowered = lower_entry(scope, syntax, entrypoint, loader, observe)?;
+    check_lowered(budget, scope, syntax, lowered, tail, observe)
+}
+
+/// The back half of [`check_observed`], from a lowered entry: elaborate, zonk, and put the result to the kernel.
+fn check_lowered<O>(
+    budget: u64,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+    lowered: LoweredEntry,
+    tail: EntryTail,
+    observe: &mut O,
+) -> Result<
+    (
+        curios_core::Zonked<curios_core::Module>,
+        Term,
+        ForeignStore,
+        Vec<TestRecord>,
+    ),
+    CompileError,
+>
+where
+    O: FnMut(Stage<'_>),
+{
     let (module, core_type, foreigns, records) =
-        elaborate_and_zonk(budget, scope, syntax, entrypoint, loader, tail, observe)?;
+        elaborate_lowered(budget, scope, syntax, lowered, tail, observe)?;
 
     // The zonk evidence the kernel and erasure consume, established where the module is final. A refusal here is a compiler invariant — `zonk_module` just enforced the same claim — surfacing as a failure rather than a panic.
     let module = curios_core::Zonked::project(&module)

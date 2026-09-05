@@ -4,11 +4,18 @@ use {
     super::{Diagnostic, Severity},
     crate::Verdicts,
     curios_package::LIBRARY,
-    curios_pipeline::{Cache, CompileError, EntryTail, check_with_units},
+    curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, check_with_units},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
-    std::path::PathBuf,
+    curios_utilities::Qualifier,
+    std::{collections::BTreeSet, path::PathBuf},
 };
+
+/// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject resolved into — what `curios lint` reads a package's unused dependencies off.
+pub struct Diagnosed {
+    pub diagnostics: Vec<Diagnostic>,
+    pub reached: BTreeSet<Qualifier>,
+}
 
 /// What a question is about.
 ///
@@ -37,6 +44,8 @@ pub enum Origin {
 ///
 /// **One failure stops the compilation, as it does on the compile path.** A parse failure yields one diagnostic and nothing after it; a refused declaration yields its own and nothing after it; only a goal batch yields several, one per `?`. Per-item recovery would be a change to three loops on the shared compile path, and until it lands this is the answer on a broken file: what stopped the compiler, and where.
 ///
+/// **A lint is reported beside whatever the verdict was**, after it. A lint is decided by the lowering, so a program that lowers has its lints whether elaboration then refused it, left a goal batch, or accepted it; only a program that does not lower — a parse failure, an unresolved name — reports its error alone, since there is nothing to have read the lints off.
+///
 /// `cache` is consulted for units already built and never written — see the `wonder` module documentation.
 pub fn diagnostics(
     budget: u64,
@@ -44,18 +53,30 @@ pub fn diagnostics(
     overlay: &Overlay,
     cache: Option<&Verdicts>,
 ) -> Vec<Diagnostic> {
+    diagnosed(budget, subject, overlay, cache).diagnostics
+}
+
+/// [`diagnostics`], with what the subject reached beside the records.
+pub fn diagnosed(
+    budget: u64,
+    subject: Subject,
+    overlay: &Overlay,
+    cache: Option<&Verdicts>,
+) -> Diagnosed {
     let read_only = cache.map(|cache| ReadOnly { cache, overlay });
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
 
-    let checked = match subject {
+    let (checked, is_unit) = match subject {
         Subject::Unit { units } => {
             let units = overlaid(units, overlay);
             // `()` is the smallest text an entrypoint parses, and the tests tail replaces it before anything checks it — the subject is the scope's final unit, exactly as `curios test` compiles a library.
             let (entrypoint, loader, _source) = match Entrypoint::supplied(LIBRARY, "()") {
                 Ok(opened) => opened,
-                Err(error) => return of_error(CompileError::Failure(vec![error.report()])),
+                Err(error) => {
+                    return Diagnosed::refused(CompileError::Failure(vec![error.report()]));
+                }
             };
-            check_with_units(
+            let checked = check_with_units(
                 budget,
                 &units,
                 &entrypoint,
@@ -63,17 +84,22 @@ pub fn diagnostics(
                 cache,
                 EntryTail::LastUnitTests,
                 |_| {},
-            )
-            .map(|_module| ())
+            );
+            (checked, true)
         }
         Subject::Entry { units, origin } => {
             let (entrypoint, loader) = match open(origin, overlay) {
                 Ok(opened) => opened,
-                Err(refusal) => return refusal,
+                Err(refusal) => {
+                    return Diagnosed {
+                        diagnostics: refusal,
+                        reached: BTreeSet::new(),
+                    };
+                }
             };
             let units = overlaid(units, overlay);
 
-            check_with_units(
+            let checked = check_with_units(
                 budget,
                 &units,
                 &entrypoint,
@@ -81,14 +107,39 @@ pub fn diagnostics(
                 cache,
                 EntryTail::Both,
                 |_| {},
-            )
-            .map(|_module| ())
+            );
+            (checked, false)
         }
     };
 
     match checked {
-        Ok(()) => Vec::new(),
-        Err(error) => of_error(error),
+        Ok(Checked {
+            entry,
+            unit,
+            verdict,
+        }) => {
+            let Findings { lints, reached } = match is_unit {
+                true => unit.unwrap_or_default(),
+                false => entry,
+            };
+            let mut diagnostics = verdict.err().map(of_error).unwrap_or_default();
+            diagnostics.extend(lints.into_iter().map(Diagnostic::lint));
+            Diagnosed {
+                diagnostics,
+                reached,
+            }
+        }
+        Err(error) => Diagnosed::refused(error),
+    }
+}
+
+impl Diagnosed {
+    /// A compilation that stopped before its subject was lowered: the error, and nothing reached.
+    fn refused(error: CompileError) -> Self {
+        Self {
+            diagnostics: of_error(error),
+            reached: BTreeSet::new(),
+        }
     }
 }
 

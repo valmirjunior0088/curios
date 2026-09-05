@@ -6,8 +6,9 @@
 
 use {
     crate::{
-        Cache, CompileError, EntryTail, Progress, Stage, TestRecord, check_entrypoint,
-        compile_entrypoint, compile_unit_as_tests, compile_units, declared_test_paths, recheck,
+        Cache, Checked, CompileError, EntryTail, Findings, Progress, Stage, TestRecord,
+        check_entrypoint, compile_entrypoint, compile_unit_as_tests, compile_units,
+        declared_test_paths, recheck,
     },
     curios_prelude::{SYNTAX, with_prelude},
     curios_unit::{Prefix, Unit},
@@ -79,7 +80,7 @@ where
     })
 }
 
-/// [`compile_with_units`] stopped where the verdicts stop: `units` in the order given, then `entrypoint` lowered, elaborated and judged against all of them and the prelude — see [`check_entrypoint`]. The same fold, so a unit the store already holds is reused here exactly as a compile reuses it, and one that is not is compiled and judged in full: a question about the entry is answered against the dependencies it would actually be built on.
+/// [`compile_with_units`] stopped where the verdicts stop: `units` in the order given, then `entrypoint` lowered, elaborated and judged against all of them and the prelude — see [`check_entrypoint`]. The same fold, so a unit the store already holds is reused here exactly as a compile reuses it, and one that is not is compiled and judged in full: a question about the entry is answered against the dependencies it would actually be built on. The last of `units` hands its findings back beside the entry's, since a question about a library is asked through an empty entry.
 pub fn check_with_units<P>(
     budget: u64,
     units: &[curios_text::RootSource],
@@ -88,12 +89,18 @@ pub fn check_with_units<P>(
     cache: Option<&dyn Cache>,
     tail: EntryTail,
     progress: P,
-) -> Result<curios_core::Module, CompileError>
+) -> Result<Checked, CompileError>
 where
     P: FnMut(Progress<'_>),
 {
     fold_with_units(budget, units, cache, progress, |scope| {
-        check_entrypoint(budget, scope, &SYNTAX, entrypoint, loader, tail)
+        let mut checked = check_entrypoint(budget, scope, &SYNTAX, entrypoint, loader, tail)?;
+        // The prelude sits first in every scope, so the last text is a mounted unit's exactly when one was mounted.
+        checked.unit = match units.is_empty() {
+            true => None,
+            false => scope.text().last().map(|text| Findings::of_text(text)),
+        };
+        Ok(checked)
     })
 }
 

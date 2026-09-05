@@ -236,6 +236,44 @@ fn the_server_publishes_from_the_buffer_and_clears() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A lint reaches the editor as a warning, at the word it is about: the severity the protocol has for a finding that stops nothing.
+#[test]
+fn a_lint_is_published_as_a_warning() {
+    let root = temporary("lint");
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("scratch.crs");
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let uri = format!("file://{}", path.display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"use /std/{{Bool}};\n/std/print(\"\")\n"}}}}}}"#
+    ));
+    let published = editor.receive();
+    assert!(
+        published.contains(r#""message":"unused import `Bool`; delete it""#),
+        "{published}"
+    );
+    assert!(published.contains(r#""severity":2"#), "{published}");
+    assert!(
+        published.contains(r#""start":{"character":10,"line":0}"#),
+        "{published}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// A store a build already filled answers about the disk, so it does not answer here: the library's unit is in the store, the editor holds a module of it that does not type-check, and the record is published anyway. A stored unit is believed on a re-read of the files it was compiled from, which still hold what was built — so a hit taken here would report on the file rather than on the document that was asked about.
 ///
 /// The second half is that the record goes when the buffer stops disagreeing, with the store warm throughout. It does not witness a surviving hit: the document is still open, so the overlay still reaches its unit either way, and no progress event reaches this transport to say which happened.

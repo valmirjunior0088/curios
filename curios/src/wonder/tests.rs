@@ -84,7 +84,7 @@ fn a_parameterized_test_the_roster_cannot_draw_is_reported_through_the_test_prog
     // The written program compiles — a test body is an item like any other — and the fault is in the test program's tail, where the `Property` goal is raised: the answer is that goal, at the declaration, exactly as `curios test` reports it. A drawable twin reports nothing, since its test program compiles too.
     let diagnostics = of(r#"
 use /std/{Nat, Test};
-test bounded(n: Nat, p: Nat/Lt(n, 100)) =
+test bounded(n: Nat, _p: Nat/Lt(n, 100)) =
     Test/check(n < 100);
 /std/print("ran\n")
 "#);
@@ -112,7 +112,7 @@ fn a_library_test_the_roster_cannot_draw_is_reported_through_its_test_program() 
     write(
         &root,
         "b/lib.crs",
-        "use /std/{Nat, Test};\n\ntest bounded(n: Nat, p: Nat/Lt(n, 100)) =\n    Test/check(n < 100);\n",
+        "use /std/{Nat, Test};\n\ntest bounded(n: Nat, _p: Nat/Lt(n, 100)) =\n    Test/check(n < 100);\n",
     );
     let diagnostics = diagnostics(
         DEFAULT_STEP_BUDGET,
@@ -159,7 +159,7 @@ fn a_parse_failure_is_one_error_at_the_offset_the_parser_stopped() {
 
 #[test]
 fn a_refused_type_is_one_error_at_the_term_refused() {
-    let reports = of("let bad : /std/Nat = true;\n/std/print(\"\")");
+    let reports = of("let _bad : /std/Nat = true;\n/std/print(\"\")");
     let [report] = reports.as_slice() else {
         panic!("one diagnostic, got {reports:?}");
     };
@@ -170,10 +170,10 @@ fn a_refused_type_is_one_error_at_the_term_refused() {
         .span
         .as_ref()
         .expect("a type error is located");
-    assert_eq!(span.line_column(), (1, 22));
+    assert_eq!(span.line_column(), (1, 23));
     // The record renders as the compile path prints: message, then the snippet the span draws.
     assert!(
-        report.render().contains("<stdin>:1:22"),
+        report.render().contains("<stdin>:1:23"),
         "{}",
         report.render()
     );
@@ -184,7 +184,7 @@ fn a_refused_type_is_one_error_at_the_term_refused() {
 /// The check path used to stop at the kernel, on the claim that the stages under it only build the program. Erasure does more than build: it narrows every numeral into the erased carriers, refusing one that does not fit, and it hands the module to the erased verifier, which rejects the recursion classes the language does not admit. Both programs below were reported clean here and refused by `run`.
 #[test]
 fn a_refusal_below_the_kernel_is_still_reported() {
-    let overflowing = of("let f(n : /std/Nat) -> /std/Bool = n == 4294967296;\n/std/print(\"\")");
+    let overflowing = of("let _f(n : /std/Nat) -> /std/Bool = n == 4294967296;\n/std/print(\"\")");
     let [report] = overflowing.as_slice() else {
         panic!("one diagnostic, got {overflowing:?}");
     };
@@ -198,7 +198,7 @@ fn a_refusal_below_the_kernel_is_still_reported() {
     );
 
     // A mutual value group with no lambda between its members: no forcing order satisfies it, and the erased verifier is what says so.
-    let knotted = of("let a : /std/Nat = b\nand b : /std/Nat = a;\n/std/print(\"\")");
+    let knotted = of("let _a : /std/Nat = _b\nand _b : /std/Nat = _a;\n/std/print(\"\")");
     let [report] = knotted.as_slice() else {
         panic!("one diagnostic, got {knotted:?}");
     };
@@ -214,15 +214,15 @@ fn a_refusal_below_the_kernel_is_still_reported() {
 
 #[test]
 fn every_goal_is_its_own_record_at_its_own_occurrence() {
-    let reports = of("let m : /std/Nat = ?;\nlet n : /std/Nat = ?;\n/std/print(\"\")");
+    let reports = of("let _m : /std/Nat = ?;\nlet _n : /std/Nat = ?;\n/std/print(\"\")");
     let [first, second] = reports.as_slice() else {
         panic!("two goals, got {reports:?}");
     };
 
     assert_eq!(first.severity, Severity::Goal);
     assert_eq!(second.severity, Severity::Goal);
-    assert_eq!(first.report.span.as_ref().unwrap().line_column(), (1, 20));
-    assert_eq!(second.report.span.as_ref().unwrap().line_column(), (2, 20));
+    assert_eq!(first.report.span.as_ref().unwrap().line_column(), (1, 21));
+    assert_eq!(second.report.span.as_ref().unwrap().line_column(), (2, 21));
     assert!(
         first.report.message.starts_with("goal `?`"),
         "{}",
@@ -230,6 +230,73 @@ fn every_goal_is_its_own_record_at_its_own_occurrence() {
     );
     // The message carries no snippet — the span is the record's, and the transport draws or does not draw it.
     assert!(!first.report.message.contains("-->"));
+}
+
+/// A lint is a record of its own severity, located at the word it is about, rendered as any report is.
+#[test]
+fn a_lint_is_its_own_record_at_the_word() {
+    let reports = of("use /std/{Bool};\n/std/print(\"\")");
+    let [report] = reports.as_slice() else {
+        panic!("one lint, got {reports:?}");
+    };
+
+    assert_eq!(report.severity, Severity::Lint);
+    assert_eq!(report.report.message, "unused import `Bool`; delete it");
+    assert_eq!(report.report.span.as_ref().unwrap().line_column(), (1, 11));
+    assert!(
+        report.render().contains("<stdin>:1:11"),
+        "{}",
+        report.render()
+    );
+}
+
+/// The lowering decides a lint, so a program that lowers reports its lints beside whatever elaboration then said — after it, since the verdict is what a reader acts on first.
+#[test]
+fn lints_are_reported_after_a_goal_and_after_an_error() {
+    let reports = of("use /std/{Bool};\nlet _m : /std/Nat = ?;\n/std/print(\"\")");
+    let severities = reports.iter().map(|r| r.severity).collect::<Vec<_>>();
+    assert_eq!(severities, [Severity::Goal, Severity::Lint]);
+
+    let reports = of("use /std/{Bool};\nlet _m : /std/Nat = true;\n/std/print(\"\")");
+    let severities = reports.iter().map(|r| r.severity).collect::<Vec<_>>();
+    assert_eq!(severities, [Severity::Error, Severity::Lint]);
+}
+
+/// A program that does not lower has nothing to read lints off: the error alone.
+#[test]
+fn a_program_that_does_not_lower_reports_the_error_alone() {
+    let reports = of("use /std/{Nope};\nlet x : /std/Nat = 1;\n/std/print(\"\")");
+    let severities = reports.iter().map(|r| r.severity).collect::<Vec<_>>();
+    assert_eq!(severities, [Severity::Error]);
+}
+
+/// A library's lints are the unit's own, read off the unit the fold placed last — not the empty entry it is checked through.
+#[test]
+fn a_library_reports_its_own_lints() {
+    let root = mounted_project("library-lints");
+    write(
+        &root,
+        "b/lib.crs",
+        "use /std/{Nat, Bool};\n\npub let one : Nat = 1;\n",
+    );
+    let diagnostics = diagnostics(
+        DEFAULT_STEP_BUDGET,
+        Subject::Unit {
+            units: mounted(&root),
+        },
+        &Overlay::default(),
+        None,
+    );
+    let [report] = diagnostics.as_slice() else {
+        panic!("one lint, got {diagnostics:?}");
+    };
+    assert_eq!(report.severity, Severity::Lint);
+    assert!(
+        report.render().contains("lib.crs:1:16"),
+        "{}",
+        report.render()
+    );
+    fs::remove_dir_all(root).unwrap();
 }
 
 /// A unit the overlay does not reach still comes from the store, however many units before it the overlay refused.

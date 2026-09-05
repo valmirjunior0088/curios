@@ -295,6 +295,7 @@ fn adapt(document: &Path, record: &Record) -> (PathBuf, Diagnostic) {
     let severity = match record.severity {
         Severity::Error => DiagnosticSeverity::ERROR,
         Severity::Goal => DiagnosticSeverity::INFORMATION,
+        Severity::Lint => DiagnosticSeverity::WARNING,
     };
 
     let (path, range) = match &record.report.span {

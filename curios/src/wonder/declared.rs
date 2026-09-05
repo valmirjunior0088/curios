@@ -43,7 +43,8 @@ pub fn declared_tests(
                 cache,
                 EntryTail::Authored,
                 |_| {},
-            )?;
+            )?
+            .verdict?;
 
             declared_test_paths(&module)
         }

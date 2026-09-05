@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, Verdicts, declared_tests,
-        diagnostics, stage, wasm_optm,
+        Diagnosed, Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, Verdicts,
+        declared_tests, diagnosed, diagnostics, stage, wasm_optm,
     },
     curios_package::{Form, Governing, LIBRARY, Membership, Target, mounted, order},
     curios_text::{Overlay, RootSource},
@@ -107,9 +107,14 @@ impl Asked {
         })
     }
 
-    /// Every diagnostic and goal the subject reports.
+    /// Every diagnostic, goal and lint the subject reports.
     pub fn diagnostics(self, budget: u64, overlay: &Overlay) -> Vec<Diagnostic> {
         diagnostics(budget, self.subject, overlay, self.store.as_ref())
+    }
+
+    /// [`Self::diagnostics`], with what the subject reached beside them.
+    pub fn diagnosed(self, budget: u64, overlay: &Overlay) -> Diagnosed {
+        diagnosed(budget, self.subject, overlay, self.store.as_ref())
     }
 }
 
