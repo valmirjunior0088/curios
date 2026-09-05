@@ -567,7 +567,10 @@ impl<'m> Census<'m> {
                         self.closure_funs.insert(*fun);
                     }
                 }
-                CpsNode::LetFun { .. } | CpsNode::LetCont { .. } | CpsNode::Unreachable => {}
+                CpsNode::LetFun { .. }
+                | CpsNode::LetCont { .. }
+                | CpsNode::Panic(_)
+                | CpsNode::Unreachable => {}
             }
         }
     }

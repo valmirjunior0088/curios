@@ -66,14 +66,22 @@ pub(super) fn folded_matches_runtime(rows: &[&str]) -> Vec<Vec<u8>> {
         .collect()
 }
 
-/// Compile `rows` tainted and assert each traps at the backend boundary when it is the row selected.
+/// Compile `rows` tainted and assert each traps at the backend boundary when it is the row selected, naming the carrier the row computes in — read off the row's `Nat/` or `Int/` head, which is the carrier its result leaves.
 pub(super) fn runtime_traps(rows: &[&str]) {
     let executed = compile(&table(rows, true)).expect("the tainted table compiles");
     for (index, row) in rows.iter().enumerate() {
         let error = run_row(&executed, index).expect_err("expression should trap");
         assert!(
-            error.contains("execution failed"),
+            error.contains(carrier_refusal(row)),
             "expected a runtime trap for {row}, got: {error}"
         );
+    }
+}
+
+/// The sentence a refusal of `row`'s carrier begins with: the report names the carrier the value left, and `BigNat` or `BigInt` as where larger values live.
+pub(super) fn carrier_refusal(row: &str) -> &'static str {
+    match row.starts_with("Int/") {
+        true => "panicked: an Int left its carrier",
+        false => "panicked: a Nat left its carrier",
     }
 }

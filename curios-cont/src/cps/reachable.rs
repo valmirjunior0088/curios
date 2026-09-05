@@ -61,7 +61,7 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
             CpsNode::Foreign { return_to, .. }
             | CpsNode::Cell { return_to, .. }
             | CpsNode::Intrinsic { return_to, .. } => queue_cont(*return_to),
-            CpsNode::Exit { .. } | CpsNode::Unreachable => {}
+            CpsNode::Exit { .. } | CpsNode::Panic(_) | CpsNode::Unreachable => {}
         }
     }
 

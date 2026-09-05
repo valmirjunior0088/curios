@@ -17,7 +17,7 @@ mod shorthand;
 use shorthand::*;
 
 use {
-    super::{ImmediateLayout, RopeData, Table},
+    super::{ImmediateLayout, Panic, RopeData, Table},
     curios_utilities::Grain,
 };
 
@@ -445,7 +445,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             curios_wasm::Instr::If {
                 label_name: curios_wasm::LabelName::from("bounds"),
                 block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![curios_wasm::Instr::Unreachable],
+                then_instructions: self.table.refuse_instrs(Panic::OutOfBounds),
                 else_instructions: vec![],
             },
         ]);
@@ -735,7 +735,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             curios_wasm::Instr::If {
                 label_name: curios_wasm::LabelName::from("bounds"),
                 block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![curios_wasm::Instr::Unreachable],
+                then_instructions: self.table.refuse_instrs(Panic::OutOfBounds),
                 else_instructions: vec![],
             },
             get(&i),

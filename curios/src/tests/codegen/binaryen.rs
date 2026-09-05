@@ -107,6 +107,15 @@ fn dumping_emits_the_optimized_module_as_text() {
         text.contains(&format!("(export \"{export}\"")),
         "expected the optimized module to keep the {export:?} export"
     );
+    // A refusal is a call to the `sys.panic` import, and a call is a side effect no optimizer removes: the import and a call to it survive the closed-world pass, which is what makes the message mechanism independent of Binaryen.
+    assert!(
+        text.contains("(import \"sys\" \"panic\""),
+        "expected the optimized module to keep the panic import"
+    );
+    assert!(
+        text.contains("(call $panic"),
+        "expected a refusal site to survive as a call to the panic import"
+    );
 }
 
 /// The feature mask is what keeps the emitter and the optimizer agreeing on the envelope, and `optimize` aborts the process on a module it cannot read rather than returning an error — so a mask missing a feature `curios-wasm` can now emit fails hard here rather than surprising a caller later. Each module reaches one construct the mask had to grow for, or one the grown mask must still accept beside it.

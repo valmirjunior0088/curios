@@ -127,10 +127,12 @@ fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
         main
         "#,
     );
+    // The forcing state is a `Panic(Cycle)` the lowering seats, so the report names the cycle before the frames, and the frame names the member.
     assert!(
-        error.contains("execution failed: wasm trap: wasm `unreachable` instruction executed")
-            && error.contains("/force"),
-        "the cycle must trap in a member's force function, and the report must name the trap before the frames: {error}"
+        error.contains(
+            "panicked: a recursive value was read while its own initializer was still running"
+        ) && error.contains("/force"),
+        "the cycle must trap in a member's force function, and the report must name the refusal before the frames: {error}"
     );
 }
 

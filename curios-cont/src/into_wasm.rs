@@ -1,7 +1,7 @@
 use {
     crate::{
-        CpsIntrinsic, CpsModule, CpsRow, CpsRowId, CpsSlot, Repr, cps::represent, machine::lower,
-        machine::structurize, machine::value_id, machine::value_name,
+        CpsIntrinsic, CpsModule, CpsRow, CpsRowId, CpsSlot, Panic, Repr, cps::represent,
+        machine::lower, machine::structurize, machine::value_id, machine::value_name,
     },
     curios_abi::ForeignFunction,
     curios_utilities::{Grain, PackedBin, grown},
@@ -39,6 +39,8 @@ use hoist::*;
 
 mod immediate;
 use immediate::*;
+
+mod refusal;
 
 mod module_emitter;
 use module_emitter::*;
@@ -219,7 +221,7 @@ impl EmissionCellTarget {
     }
 }
 
-/// The sole control transfer out of a region — a region never falls through. `Jump` and `Match` stay within the body; `Call` transfers to user code; `Host` and `Cell` are the effectful intrinsics (the only impurity the IR admits — purity analysis marks a region tree impure exactly when one appears in it); `Unreachable` traps, marking a path that cannot be taken (an absurd match).
+/// The sole control transfer out of a region — a region never falls through. `Jump` and `Match` stay within the body; `Call` transfers to user code; `Host` and `Cell` are the effectful intrinsics (the only impurity the IR admits — purity analysis marks a region tree impure exactly when one appears in it); `Panic` reports a failure of its class and stops; `Unreachable` traps, marking a path that cannot be taken (an absurd match).
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionTail {
     Jump(EmissionJumpTarget),
@@ -227,6 +229,7 @@ pub(crate) enum EmissionTail {
     Call(EmissionCallTarget),
     Host(EmissionHostTarget),
     Cell(EmissionCellTarget),
+    Panic(Panic),
     Unreachable,
 }
 

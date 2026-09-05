@@ -6,7 +6,7 @@ use {
     crate::{
         CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsic,
         CpsIntrinsicCall, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsRow, CpsRowId,
-        CpsValueExpr, CpsValueId, atoms,
+        CpsValueExpr, CpsValueId, Panic, atoms,
     },
     curios_abi::ForeignFunction,
     curios_utilities::{Entropy, id},
@@ -129,6 +129,8 @@ pub(crate) enum MachineTerminator {
         args: Vec<MachineOperand>,
     },
     Exit(Option<MachineOperand>),
+    /// A deliberate failure of the given class; see [`CpsNode::Panic`].
+    Panic(Panic),
     Unreachable,
 }
 
@@ -735,6 +737,7 @@ impl<'a> MachineFunctionLowerer<'a> {
                     .as_ref()
                     .map(|value| self.lower_atom(value, instructions)),
             ),
+            CpsNode::Panic(panic) => MachineTerminator::Panic(*panic),
             CpsNode::Unreachable => MachineTerminator::Unreachable,
             _ => unreachable!("non-terminal CPS node reached terminal lowering"),
         }
@@ -1047,7 +1050,9 @@ impl MachineModule {
                 }
                 tail_returns(owner, function, op.result_arity())?;
             }
-            MachineTerminator::Exit(_) | MachineTerminator::Unreachable => {}
+            MachineTerminator::Exit(_)
+            | MachineTerminator::Panic(_)
+            | MachineTerminator::Unreachable => {}
         }
         Ok(())
     }

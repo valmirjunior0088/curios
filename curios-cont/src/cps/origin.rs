@@ -179,6 +179,7 @@ pub(crate) fn origins(module: &CpsModule) -> BTreeMap<CpsValueId, Origin> {
                 CpsNode::LetFun { .. }
                 | CpsNode::LetCont { .. }
                 | CpsNode::Exit { .. }
+                | CpsNode::Panic(_)
                 | CpsNode::Unreachable => {}
             }
         }

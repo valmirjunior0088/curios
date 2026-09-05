@@ -119,6 +119,7 @@ pub(super) fn dedupe_intrinsics(module: &mut CpsModule) -> bool {
                 | CpsNode::Cell { .. }
                 | CpsNode::Intrinsic { .. }
                 | CpsNode::Exit { .. }
+                | CpsNode::Panic(_)
                 | CpsNode::Unreachable => {}
             }
         }

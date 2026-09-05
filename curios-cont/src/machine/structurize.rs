@@ -309,6 +309,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 };
                 EmissionTail::Host(EmissionHostTarget::Exit { code })
             }
+            MachineTerminator::Panic(panic) => EmissionTail::Panic(*panic),
             MachineTerminator::Unreachable => EmissionTail::Unreachable,
         }
     }
@@ -589,7 +590,7 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
             args.iter().for_each(&mut insert);
         }
         MachineTerminator::Exit(operand) => operand.iter().for_each(&mut insert),
-        MachineTerminator::Unreachable => {}
+        MachineTerminator::Panic(_) | MachineTerminator::Unreachable => {}
     }
     values
 }

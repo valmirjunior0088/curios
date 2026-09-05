@@ -130,6 +130,7 @@ fn collect_control_targets(node: &CpsNode, targets: &mut BTreeSet<CpsContId>) {
         | CpsNode::LetFun { .. }
         | CpsNode::LetCont { .. }
         | CpsNode::Exit { .. }
+        | CpsNode::Panic(_)
         | CpsNode::Unreachable => {}
     }
 }

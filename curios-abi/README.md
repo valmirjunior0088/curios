@@ -18,6 +18,12 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 **Rationale.** A row exists to describe what comes back, and a call that never returns has nothing for a `WireSignature` to say — a row would let the store promise a result the runtime cannot deliver. The name still lives here because it is wire: stamped by the emitter and matched by the runtime linker, and a wire string spelled once at each end is exactly the drift this crate exists to remove.
 
+### `panic` is not a row either, and no program can spell it
+
+**Decision.** `panic` is the second `sys` import outside the store: a byte string in, no return. Its name lives here as `PANIC`; it has no `/sys` declaration, because it is not a language operation but the emitter's — `curios-cont` calls it wherever it refuses a computation (a `Nat` or `Int` past its carrier, a read past the end, a `Flt` decode, a compiler invariant) with one constant sentence per class, and both runtimes render what arrives as `panicked: …`. The sentences are not wire: they cross as ordinary byte strings the runtime prints verbatim, so the text is the emitter's alone. The decision is [a refusal is a panic the emitter alone emits](../documentation/design/toolchain/a-refusal-is-a-panic-the-emitter-alone-emits.md).
+
+**Rationale.** The same as `exit`'s for the row, and one more for the absence of a declaration: a user-level `panic` typed at any `A` would be an axiom, and one typed at `Io(A)` is `exit` with a message, which a program already writes as a write and an exit.
+
 ### The wire vocabulary is a closed subset of guest types, and lists do not nest
 
 **Decision.** `WireType` is `Nat`, `Int`, `Bool`, `Bytes`, `Handle` and `List` of a `WireLeaf` — the same vocabulary minus `List` itself — so `List(List(_))` is unrepresentable rather than merely unchecked. Nothing below the type distinguishes `Bytes` from `Handle`: they share a wasm `ValType`, a wasmtime `FuncType` slot and a load/force/embed path, and only the guest type built from them differs.

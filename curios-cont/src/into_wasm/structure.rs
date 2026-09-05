@@ -108,7 +108,7 @@ fn tail_targets(tail: &EmissionTail) -> Vec<&EmissionBlockName> {
         EmissionTail::Host(EmissionHostTarget::Foreign { resume, .. }) => vec![resume],
         EmissionTail::Host(EmissionHostTarget::Exit { .. }) => vec![],
         EmissionTail::Cell(cell) => vec![cell.resume()],
-        EmissionTail::Unreachable => vec![],
+        EmissionTail::Panic(_) | EmissionTail::Unreachable => vec![],
     }
 }
 

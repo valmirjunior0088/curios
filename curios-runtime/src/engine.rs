@@ -3,7 +3,9 @@ use {
         Handle, HostOps, Lift, Lower, Mode, Poll,
         lower::{anyref_array_type, i8_array_type},
     },
-    curios_abi::{ENTRY, EXIT, ForeignFunction, ForeignStore, Namespace, WireType, host_ops},
+    curios_abi::{
+        ENTRY, EXIT, ForeignFunction, ForeignStore, Namespace, PANIC, WireType, host_ops,
+    },
     std::{
         collections::HashMap,
         error::Error,
@@ -412,6 +414,18 @@ impl fmt::Display for ExitTrap {
 
 impl Error for ExitTrap {}
 
+/// A refusal the emitted program raised through `sys.panic`: the message it handed over, carried out of the wasm call as a trap exactly as an exit is, and rendered by `instantiate` as `panicked: …` — the sentence is the report, and the frames follow it as context.
+#[derive(Debug)]
+struct PanicTrap(Vec<u8>);
+
+impl fmt::Display for PanicTrap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "panicked: {}", String::from_utf8_lossy(&self.0))
+    }
+}
+
+impl Error for PanicTrap {}
+
 /// Run a precompiled module — `.cwasm` bytes produced by `Engine::precompile_module` for this exact wasmtime version and engine configuration — returning the process exit code (`0` when `main` returns normally, otherwise the code passed to `proc/exit`).
 ///
 /// # Safety
@@ -464,6 +478,22 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
                         })
                         .map_err(|error| format!("failed to define exit: {error}"))?;
                 }
+                // `panic` is the emitter's own refusal, `exit` with a message: the byte string it hands over is lifted as any `Bytes` operand is, and carried out as the trap the caller below renders.
+                PANIC => {
+                    let bytes_ref = ValType::Ref(RefType::new(
+                        false,
+                        HeapType::ConcreteArray(i8_array_type(engine)),
+                    ));
+                    let panic_type = FuncType::new(engine, [bytes_ref], []);
+
+                    linker
+                        .func_new(SYS, PANIC, panic_type, move |mut caller, params, _| {
+                            let message = Vec::<u8>::lift(&mut caller, params)?;
+
+                            Err(wasmtime::Error::from(PanicTrap(message)))
+                        })
+                        .map_err(|error| format!("failed to define panic: {error}"))?;
+                }
                 name => impls.link(&mut linker, engine, Namespace::Sys, name)?,
             },
             FFI => bindings.link(&mut linker, engine, Namespace::Ffi, import.name())?,
@@ -491,8 +521,11 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
         Ok(_) => Ok(0),
         Err(error) => match error.downcast_ref::<ExitTrap>() {
             Some(ExitTrap(code)) => Ok(*code),
-            // The trap is the root of the chain and the backtrace a context wrapped around it, so the error's own `Display` shows only the frames; the cause — `unreachable`, a null reference — is what a reader needs first.
-            None => Err(format!("execution failed: {}\n{error}", error.root_cause())),
+            // The trap is the root of the chain and the backtrace a context wrapped around it, so the error's own `Display` shows only the frames; the cause — a refusal's own sentence, or the engine's for a null reference or an exhausted stack — is what a reader needs first.
+            None => match error.downcast_ref::<PanicTrap>() {
+                Some(panic) => Err(format!("{panic}\n{error}")),
+                None => Err(format!("execution failed: {}\n{error}", error.root_cause())),
+            },
         },
     }
 }

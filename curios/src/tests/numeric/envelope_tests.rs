@@ -124,7 +124,7 @@ fn a_shift_past_the_widened_intermediate_traps_folded_and_executed() {
         for (index, row) in rows.iter().enumerate() {
             let error = run_row(&compiled, index).expect_err("the expression should trap");
             assert!(
-                error.contains("execution failed"),
+                error.contains(carrier_refusal(row)),
                 "expected a trap for {row} (tainted: {tainted}), got: {error}"
             );
         }

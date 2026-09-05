@@ -310,8 +310,10 @@ impl<'a> Emitter<'a> {
         });
         let forced = self.continuation_of(forced);
 
-        // Forcing: a read inside the initializer, which no order could satisfy.
-        let forcing = self.module.add_node(curios_cont::CpsNode::Unreachable);
+        // Forcing: a read inside the initializer, which no order could satisfy — reachable whenever the eager verifier could not see the cycle through a closure, so it is the program's failure and says so.
+        let forcing = self
+            .module
+            .add_node(curios_cont::CpsNode::Panic(curios_cont::Panic::Cycle));
         let forcing = self.continuation_of(forcing);
 
         // Unforced: mark the cell, run the initializer, store what it produced, and return it.

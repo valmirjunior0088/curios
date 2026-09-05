@@ -2,7 +2,7 @@ use {
     super::{
         BlockData, CodeEmitter, Context, EmissionArg, EmissionBlockName, EmissionBody,
         EmissionData, EmissionValue, EmissionValueName, Frame, ImmediateLayout, LayoutItem, LoadAs,
-        LocalData, RowLoad, region_layout, slot_zero_instrs,
+        LocalData, Panic, RowLoad, region_layout, slot_zero_instrs,
     },
     curios_utilities::{Grain, recurse},
     std::collections::{BTreeMap, HashMap, HashSet},
@@ -62,7 +62,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             &EmissionData::Nat(value) => {
                 // A folded u32 value the i31 carrier cannot box traps at its materialization point — the same backend boundary where the checked runtime computation of the value would have trapped.
                 if value >> 31 != 0 {
-                    self.emit_instrs([curios_wasm::Instr::Unreachable]);
+                    self.emit_instrs(self.context.table().refuse_instrs(Panic::NatCarrier));
                     return;
                 }
 
@@ -76,7 +76,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             &EmissionData::Int(value) => {
                 // In-range iff bit 30 agrees with the sign bit — the signed analogue of the `Nat` check above; out of range traps at the materialization point instead of silently wrapping to 31 bits.
                 if value >> 30 != value >> 31 {
-                    self.emit_instrs([curios_wasm::Instr::Unreachable]);
+                    self.emit_instrs(self.context.table().refuse_instrs(Panic::IntCarrier));
                     return;
                 }
 
@@ -253,11 +253,11 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 0 => self.emit_instr(curios_wasm::Instr::I32Const {
                     value: value as i32,
                 }),
-                _ => self.emit_instr(curios_wasm::Instr::Unreachable),
+                _ => self.emit_instrs(self.context.table().refuse_instrs(Panic::NatCarrier)),
             },
             (Some(_), &EmissionData::Int(value)) => match value >> 30 == value >> 31 {
                 true => self.emit_instr(curios_wasm::Instr::I32Const { value }),
-                false => self.emit_instr(curios_wasm::Instr::Unreachable),
+                false => self.emit_instrs(self.context.table().refuse_instrs(Panic::IntCarrier)),
             },
             (Some(_), &EmissionData::Flt(value)) => {
                 self.emit_instr(curios_wasm::Instr::F32Const { value })

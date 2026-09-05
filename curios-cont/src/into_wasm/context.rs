@@ -3,7 +3,7 @@ use {
         BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
         EmissionCellTarget, EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget,
         EmissionMatchTarget, EmissionTail, EmissionValueName, FieldData, Frame, FuncData,
-        LocalData, Table,
+        LocalData, Panic, Table,
     },
     crate::{CpsSlot, Repr},
     curios_abi::{WireLeaf, WireReference, WireType},
@@ -440,13 +440,14 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     pub(crate) fn match_instrs(&self, target: &'a EmissionMatchTarget) -> Vec<curios_wasm::Instr> {
+        // A match with no arm at all, or a tag outside every case with no default, is an arm the theory proved impossible: reaching it is the compiler's fault, and the refusal says so.
         if target.cases.is_empty() && target.default.is_none() {
-            return vec![curios_wasm::Instr::Unreachable];
+            return self.table().refuse_instrs(Panic::Invariant);
         }
 
         let default_instructions = match &target.default {
             Some(target) => self.jump_instrs(target),
-            None => vec![curios_wasm::Instr::Unreachable],
+            None => self.table().refuse_instrs(Panic::Invariant),
         };
 
         let sorted: Vec<(u32, &EmissionJumpTarget)> =
@@ -671,7 +672,9 @@ impl<'a, 'b> Context<'a, 'b> {
             }) => self.call_indirect_instrs(target, params, resume),
             EmissionTail::Host(host) => self.host_instrs(host),
             EmissionTail::Cell(cell) => self.cell_instrs(cell),
-            EmissionTail::Unreachable => vec![curios_wasm::Instr::Unreachable],
+            EmissionTail::Panic(panic) => self.table().refuse_instrs(*panic),
+            // An arm the theory proved impossible, carried down as `CpsNode::Unreachable`; reaching it is a compiler bug, which is what the refusal reports.
+            EmissionTail::Unreachable => self.table().refuse_instrs(Panic::Invariant),
         }
     }
 

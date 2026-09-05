@@ -6,7 +6,7 @@ use {
     super::{
         EmissionArg, EmissionBody, EmissionCallTarget, EmissionCellTarget, EmissionCode,
         EmissionData, EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue,
-        EmissionValueName, RowLoad,
+        EmissionValueName, Panic, RowLoad,
     },
     curios_utilities::{Grain, PackedBin},
     std::collections::HashMap,
@@ -62,6 +62,10 @@ pub(crate) fn hoist_consts(module: &mut EmissionModule) {
         hoist_region(&mut func.region, &mut interner);
     }
     module.consts = interner.consts;
+    // The refusal messages, after everything the program hoisted: `Table` reads its const index off this vector, and the code emitter loads a message by the name `Panic::const_name` spells.
+    module
+        .consts
+        .extend(Panic::ALL.map(|class| (class.const_name(), class.data())));
 }
 
 /// Hoist one function's region tree: collect and intern its constants, then drop the hoisted bindings and rename every surviving occurrence. Two phases because a scalar may be demanded by an aggregate bound after uses of the scalar were already walked.
@@ -298,6 +302,6 @@ fn rename_tail(tail: &mut EmissionTail, renames: &HashMap<EmissionValueName, Emi
             rename_name(value, renames);
         }
         EmissionTail::Cell(EmissionCellTarget::Get { cell, .. }) => rename_name(cell, renames),
-        EmissionTail::Unreachable => {}
+        EmissionTail::Panic(_) | EmissionTail::Unreachable => {}
     }
 }

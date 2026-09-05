@@ -234,6 +234,7 @@ pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> 
             | CpsNode::Cell { .. }
             | CpsNode::Intrinsic { .. }
             | CpsNode::Exit { .. }
+            | CpsNode::Panic(_)
             | CpsNode::Unreachable => {}
         }
     }
@@ -375,6 +376,7 @@ pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> 
             | CpsNode::LetFun { .. }
             | CpsNode::LetCont { .. }
             | CpsNode::Exit { .. }
+            | CpsNode::Panic(_)
             | CpsNode::Unreachable => {}
         }
     }

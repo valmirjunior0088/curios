@@ -6,7 +6,7 @@ use {
         rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
     },
     crate::CpsSlot,
-    curios_abi::{ENTRY, EXIT, Namespace, WireType},
+    curios_abi::{ENTRY, EXIT, Namespace, PANIC, WireType},
     curios_utilities::{Grain, PackedBin},
     std::iter,
 };
@@ -163,6 +163,16 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 curios_wasm::ResultType::from([]),
             );
         }
+
+        // Unconditional, unlike `exit`: every module has refusal sites, and a program that reaches none still declares the import a refusal would call. The parameter is the flat `$bytes` payload every `Bytes` host operand crosses as.
+        self.add_host_import(
+            Namespace::Sys.as_str(),
+            PANIC,
+            curios_wasm::TypeName::from("panic"),
+            self.table.panic_func(),
+            curios_wasm::ResultType::from([self.wire_param_type(&WireType::Bytes)]),
+            curios_wasm::ResultType::from([]),
+        );
     }
 
     /// The `List` mirror of [`emit_bin_rope_types`](Self::emit_bin_rope_types).

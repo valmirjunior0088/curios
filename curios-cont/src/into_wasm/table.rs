@@ -2,7 +2,7 @@ use {
     super::{
         EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName, EmissionCode,
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
-        EmissionValueName, LoadAs,
+        EmissionValueName, LoadAs, Panic,
     },
     crate::{CpsIntrinsic, CpsRowId, CpsSlot, Repr},
     curios_abi::ForeignFunction,
@@ -247,6 +247,7 @@ pub(crate) struct Table<'a> {
     list_rope_view_type: curios_wasm::TypeName,
     cell_type: curios_wasm::TypeName,
     exit: OnceCell<curios_wasm::FuncName>,
+    panic: OnceCell<curios_wasm::FuncName>,
     // The shared rope helpers, minted lazily like `exit`: the first call site recorded during emission names the function, and the module emitter then adds exactly the recorded set after the program's own functions (see `emit_rope_funcs`).
     bytes_force: OnceCell<curios_wasm::FuncName>,
     bits_force: OnceCell<curios_wasm::FuncName>,
@@ -320,6 +321,7 @@ impl<'a> Table<'a> {
             list_rope_view_type: curios_wasm::TypeName::from("rope/list/view"),
             cell_type: curios_wasm::TypeName::from("cell"),
             exit: OnceCell::new(),
+            panic: OnceCell::new(),
             bytes_force: OnceCell::new(),
             bits_force: OnceCell::new(),
             list_force: OnceCell::new(),
@@ -575,6 +577,29 @@ impl<'a> Table<'a> {
 
     pub(crate) fn exit_used(&self) -> bool {
         self.exit.get().is_some()
+    }
+
+    /// The `sys.panic` import: a byte string in, no return. Declared by every module, since every module refuses somewhere.
+    pub(crate) fn panic_func(&self) -> curios_wasm::FuncName {
+        self.panic
+            .get_or_init(|| curios_wasm::FuncName::from("panic"))
+            .clone()
+    }
+
+    /// The instruction sequence a refusal is: the class's message, forced to its payload, handed to `sys.panic`, and the `unreachable` that keeps the block's type. Spelled once for the code emitter, the region context and the rope helpers alike. The message const is a rope leaf — [`Panic::data`] asserts as much — so it forces through `$bytes/force` exactly as a `Bytes` host operand does.
+    pub(crate) fn refuse_instrs(&self, panic: Panic) -> Vec<curios_wasm::Instr> {
+        vec![
+            curios_wasm::Instr::GlobalGet {
+                global_name: self.find_const(&panic.const_name()),
+            },
+            curios_wasm::Instr::Call {
+                func_name: self.bytes_force_func(),
+            },
+            curios_wasm::Instr::Call {
+                func_name: self.panic_func(),
+            },
+            curios_wasm::Instr::Unreachable,
+        ]
     }
 
     /// `$bytes/force (ref $rope/bin) -> (ref $bytes)`: flatten a `Bytes` rope to its payload, memoizing in the entry node. First use marks it for emission.

@@ -127,6 +127,7 @@ pub(super) fn clone_node(node: &CpsNode, map: &Mapping<'_>) -> CpsNode {
         CpsNode::Exit { value } => CpsNode::Exit {
             value: value.as_ref().map(map.atom),
         },
+        CpsNode::Panic(panic) => CpsNode::Panic(*panic),
         CpsNode::Unreachable => CpsNode::Unreachable,
         CpsNode::LetFun { functions, body } => CpsNode::LetFun {
             functions: functions.iter().map(|id| (map.function)(*id)).collect(),

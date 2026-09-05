@@ -1,6 +1,6 @@
 use {
     super::{
-        Context, EmissionCode, EmissionValueName, ImmediateLayout, LoadAs, RopeData, Table,
+        Context, EmissionCode, EmissionValueName, ImmediateLayout, LoadAs, Panic, RopeData, Table,
         box_instr,
     },
     crate::{CpsIntrinsic, CpsSlot, Repr},
@@ -131,7 +131,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instr(curios_wasm::Instr::If {
             label_name: self.context.table().special_label(),
             block_type: curios_wasm::BlockType::Empty,
-            then_instructions: vec![curios_wasm::Instr::Unreachable],
+            then_instructions: self.context.table().refuse_instrs(Panic::NatCarrier),
             else_instructions: vec![],
         });
 
@@ -176,7 +176,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instr(curios_wasm::Instr::If {
             label_name: self.context.table().special_label(),
             block_type: curios_wasm::BlockType::Empty,
-            then_instructions: vec![curios_wasm::Instr::Unreachable],
+            then_instructions: self.context.table().refuse_instrs(Panic::IntCarrier),
             else_instructions: vec![],
         });
 
@@ -267,7 +267,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instr(curios_wasm::Instr::If {
             label_name: self.context.table().special_label(),
             block_type: curios_wasm::BlockType::Empty,
-            then_instructions: vec![curios_wasm::Instr::Unreachable],
+            then_instructions: self.context.table().refuse_instrs(match signed {
+                true => Panic::IntCarrier,
+                false => Panic::NatCarrier,
+            }),
             else_instructions: vec![],
         });
 
@@ -607,7 +610,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_wasm::Instr::If {
                 label_name: self.context.table().special_label(),
                 block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![curios_wasm::Instr::Unreachable],
+                then_instructions: self.context.table().refuse_instrs(Panic::OutOfBounds),
                 else_instructions: vec![],
             },
             curios_wasm::Instr::LocalGet { local_name: imm },
@@ -1008,7 +1011,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         arities: &[usize],
     ) -> Vec<curios_wasm::Instr> {
         match arities {
-            [] => vec![curios_wasm::Instr::Unreachable],
+            // No arity at all: a value read through a cascade nothing constructed, which the door's padding makes impossible; reaching it is a compiler bug.
+            [] => self.context.table().refuse_instrs(Panic::Invariant),
             [last] => {
                 let type_name = self.context.table().find_tuple_type(*last);
                 self.context
@@ -1121,7 +1125,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
                     block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: vec![curios_wasm::Instr::Unreachable],
+                    then_instructions: self.context.table().refuse_instrs(Panic::NatCarrier),
                     else_instructions: vec![],
                 });
                 self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
@@ -1143,7 +1147,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
                     block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: vec![curios_wasm::Instr::Unreachable],
+                    then_instructions: self.context.table().refuse_instrs(Panic::OutOfBounds),
                     else_instructions: vec![],
                 });
                 self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Nat));
@@ -1208,7 +1212,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
                     block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: vec![curios_wasm::Instr::Unreachable],
+                    then_instructions: self.context.table().refuse_instrs(Panic::IntCarrier),
                     else_instructions: vec![],
                 });
                 self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
@@ -1380,7 +1384,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
                     block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: vec![curios_wasm::Instr::Unreachable],
+                    then_instructions: self.context.table().refuse_instrs(Panic::IntCarrier),
                     else_instructions: vec![],
                 });
                 self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
@@ -1405,7 +1409,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
                     block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: vec![curios_wasm::Instr::Unreachable],
+                    then_instructions: self.context.table().refuse_instrs(Panic::NatCarrier),
                     else_instructions: vec![],
                 });
                 self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
@@ -1479,7 +1483,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
                     block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: vec![curios_wasm::Instr::Unreachable],
+                    then_instructions: self.context.table().refuse_instrs(Panic::FltDecode),
                     else_instructions: vec![],
                 });
                 for shift in [0, 8, 16, 24] {
@@ -1515,7 +1519,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
                     block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: vec![curios_wasm::Instr::Unreachable],
+                    then_instructions: self.context.table().refuse_instrs(Panic::NatCarrier),
                     else_instructions: vec![],
                 });
                 self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
@@ -1542,7 +1546,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
                     block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: vec![curios_wasm::Instr::Unreachable],
+                    then_instructions: self.context.table().refuse_instrs(Panic::IntCarrier),
                     else_instructions: vec![],
                 });
                 self.emit_instr(curios_wasm::Instr::LocalGet { local_name });

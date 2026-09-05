@@ -522,7 +522,40 @@ pub enum CpsNode {
     Exit {
         value: Option<CpsAtom>,
     },
+    /// A deliberate runtime failure of the given class: the block ends by reporting it and never continues. A lowering seats one where the program can reach a state it has to refuse — today the knot's forcing state, a member read while its own initializer runs — and the emitter renders every class as its sentence through the `sys.panic` import. Distinct from [`CpsNode::Unreachable`], which marks an arm the theory proved impossible: reaching a `Panic` is the program's doing, reaching an `Unreachable` is the compiler's.
+    Panic(Panic),
+    /// An arm the theory proved impossible. Never reached by a sound compilation; the emitter renders it as [`Panic::Invariant`]'s sentence so that a compiler bug says so.
     Unreachable,
+}
+
+/// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `CpsNode::Panic` carries one; the emitter's own checks — an overflow, a read past the end, a `Flt` decode — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`into_wasm/refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Panic {
+    /// A `Nat` result or conversion the i31 carrier cannot hold.
+    NatCarrier,
+    /// An `Int` result or conversion the signed i31 carrier cannot hold.
+    IntCarrier,
+    /// A packed or list read, or a window, past the end of its value.
+    OutOfBounds,
+    /// A `Flt` decoded from a byte string that is not four bytes long.
+    FltDecode,
+    /// A recursive value read while its own initializer is still running — a cycle the eager verifier could not see through a closure, met by forcing.
+    Cycle,
+    /// An arm the theory proved impossible was taken: a compiler bug, never the program's.
+    Invariant,
+}
+
+impl fmt::Display for Panic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Panic::NatCarrier => "nat",
+            Panic::IntCarrier => "int",
+            Panic::OutOfBounds => "bounds",
+            Panic::FltDecode => "flt",
+            Panic::Cycle => "cycle",
+            Panic::Invariant => "invariant",
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1467,6 +1500,7 @@ impl CpsModule {
             | CpsNode::Cell { .. }
             | CpsNode::Intrinsic { .. }
             | CpsNode::Exit { .. }
+            | CpsNode::Panic(_)
             | CpsNode::Unreachable => {}
         }
         step
@@ -1537,6 +1571,7 @@ impl CpsModule {
                 | CpsNode::Cell { .. }
                 | CpsNode::Intrinsic { .. }
                 | CpsNode::Exit { .. }
+                | CpsNode::Panic(_)
                 | CpsNode::Unreachable => {}
             }
         }
@@ -1710,7 +1745,7 @@ impl CpsModule {
                     )));
                 }
             }
-            CpsNode::Exit { .. } | CpsNode::Unreachable => {}
+            CpsNode::Exit { .. } | CpsNode::Panic(_) | CpsNode::Unreachable => {}
         }
 
         for atom in atoms(node) {
@@ -1829,7 +1864,10 @@ pub(crate) fn atoms(node: &CpsNode) -> Vec<&CpsAtom> {
             }
         }
         CpsNode::Exit { value, .. } => output.extend(value),
-        CpsNode::LetFun { .. } | CpsNode::LetCont { .. } | CpsNode::Unreachable => {}
+        CpsNode::LetFun { .. }
+        | CpsNode::LetCont { .. }
+        | CpsNode::Panic(_)
+        | CpsNode::Unreachable => {}
     }
     output
 }
@@ -1866,7 +1904,10 @@ pub(crate) fn visit_atoms_mut(node: &mut CpsNode, visitor: &mut impl FnMut(&mut 
                 visitor(value);
             }
         }
-        CpsNode::LetFun { .. } | CpsNode::LetCont { .. } | CpsNode::Unreachable => {}
+        CpsNode::LetFun { .. }
+        | CpsNode::LetCont { .. }
+        | CpsNode::Panic(_)
+        | CpsNode::Unreachable => {}
     }
 }
 
@@ -2019,6 +2060,7 @@ impl fmt::Display for CpsDisplayNode<'_> {
                 write!(f, "intrinsic.{op:?}{args:?} -> {return_to}")
             }
             CpsNode::Exit { value } => write!(f, "exit {value:?}"),
+            CpsNode::Panic(panic) => write!(f, "panic {panic}"),
             CpsNode::Unreachable => f.write_str("unreachable"),
         }
     }

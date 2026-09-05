@@ -154,6 +154,7 @@ fn offers(module: &CpsModule) -> BTreeMap<CpsValueId, Offer> {
             | CpsNode::ApplyCont(_)
             | CpsNode::Switch { .. }
             | CpsNode::Exit { .. }
+            | CpsNode::Panic(_)
             | CpsNode::Unreachable => {}
         }
     }
@@ -261,6 +262,7 @@ pub(crate) fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
                 | CpsNode::Intrinsic { .. }
                 | CpsNode::LetFun { .. }
                 | CpsNode::LetCont { .. }
+                | CpsNode::Panic(_)
                 | CpsNode::Unreachable => {}
             }
         }

@@ -870,6 +870,7 @@ fn splice_dead_nodes(module: &mut CpsModule, redirect: &BTreeMap<CpsNodeId, CpsN
             | CpsNode::Cell { .. }
             | CpsNode::Intrinsic { .. }
             | CpsNode::Exit { .. }
+            | CpsNode::Panic(_)
             | CpsNode::Unreachable => {}
         }
     }
@@ -911,6 +912,7 @@ pub(super) fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId
             | CpsNode::Cell { .. }
             | CpsNode::Intrinsic { .. }
             | CpsNode::Exit { .. }
+            | CpsNode::Panic(_)
             | CpsNode::Unreachable => {}
         }
     }
