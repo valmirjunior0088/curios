@@ -16,7 +16,7 @@ mod tests;
 use {
     super::{
         CpsAtom, CpsCallee, CpsContId, CpsEdge, CpsFunId, CpsIntrinsic, CpsLiteral, CpsModule,
-        CpsNode, CpsNodeId, CpsSlot, CpsUseTarget, CpsValueExpr, CpsValueId, Demand, Origin,
+        CpsNode, CpsNodeId, CpsUseTarget, CpsValueExpr, CpsValueId, Demand, Origin,
         analysis::analyze_calls, demand_of, demands, optimize::PARAM_SPLIT_GROWTH_LIMIT, origins,
         simplify::rewire_node,
     },
@@ -256,8 +256,7 @@ fn apply_split(
                 chain.push((projection, index, source));
                 replacement.push(CpsAtom::Value(projection));
             }
-            // The per-edge filler, which says "no value" rather than naming one: the carrier this slot is held at is settled after this pass, so the zero it is materialised as is the emitter's to pick. See [`CpsAtom::Filler`].
-            replacement.resize(split.width, CpsAtom::Filler);
+            replacement.extend((carried..split.width).map(|index| module.pad(split.row, index)));
             edge.args
                 .splice(split.position..=split.position, replacement);
         }
@@ -323,14 +322,6 @@ fn admit_worker(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> O
                 continue;
             }
             if definition.params.len() - 1 + width > PARAM_SPLIT_GROWTH_LIMIT {
-                continue;
-            }
-            // A family's narrower constructors are padded, and a padded slot reads null; a continuation parameter carries that null and the head rebuild lands it back tolerantly, but a function parameter arrives through a `func/N` signature that admits no null, so projecting every slot at the call site traps the moment a narrower constructor is passed. `/std/Tui`'s `issue(c: Cmd)` was split this way once its callers' arguments became visible constructions, and a `Cmd/none` trapped at the call before `issue` could dispatch on it. A product row has no padding and stays eligible.
-            if origins
-                .get(&param)
-                .and_then(Origin::row)
-                .is_some_and(|row| module.row(row).slots.first() == Some(&CpsSlot::Tag))
-            {
                 continue;
             }
             if !calls
@@ -431,7 +422,7 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
             });
             replacement.push(CpsAtom::Value(projection));
         }
-        replacement.resize(worker.width, CpsAtom::Filler);
+        replacement.extend((carried..worker.width).map(|index| module.pad(worker.row, index)));
         let CpsNode::ApplyFun { args, .. } = &mut node else {
             unreachable!("the callers were selected as known applications");
         };

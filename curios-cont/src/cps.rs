@@ -40,9 +40,9 @@ pub enum CpsAtom {
     Value(CpsValueId),
     Fun(CpsFunId),
     Literal(CpsLiteral),
-    /// No value: a slot belonging to a wider constructor than the edge or call carrying it fills.
+    /// No value: a reference slot belonging to a wider constructor than the edge or call carrying it fills. It travels as null, which is what the field the constructor never wrote holds, and every reference position admits it; a register slot is padded with its zero literal instead, since a register has no null and the field holds zero there. [`CpsModule::pad`] is the one place that chooses.
     ///
-    /// It is not a literal zero, and was one until an `Option(Flt)` trapped on the `none` edge. The carrier a slot is held at is decided by `represent` during backend lowering, from the *uses* of the parameter it feeds — which is strictly after the passes that create fillers, so no constant chosen here can know it. A `Nat(0)` was therefore right only where the slot happened to be `Nat`-carried or boxed, and where it was a raw `Flt` the edge coerced the `i31` with a `ref.cast` that trapped. Saying "nothing" instead defers the choice to the one place the carrier is known: the emitter materialises it as the zero of whatever the destination holds.
+    /// The register the *parameter* is held at is decided by `represent` during backend lowering, from the uses of the parameter it feeds — strictly after the passes that create fillers — so a filler reaching a register-held parameter is the emitter's to materialise as that register's zero.
     Filler,
 }
 
@@ -826,6 +826,17 @@ impl CpsModule {
         self.rows[id.index()]
             .as_ref()
             .unwrap_or_else(|| panic!("{id} was reserved and never defined"))
+    }
+
+    /// What a transfer hands a slot its construction never wrote: what the constructed row's field holds there — zero for a register slot, since a register has no null, and null, as [`CpsAtom::Filler`], for a reference. `None` is a tuple, whose every field is a reference.
+    pub fn pad(&self, row: Option<CpsRowId>, index: usize) -> CpsAtom {
+        match row.map(|row| self.row(row).slots[index]) {
+            Some(CpsSlot::Tag | CpsSlot::Nat) => CpsAtom::Literal(CpsLiteral::Nat(0)),
+            Some(CpsSlot::Int) => CpsAtom::Literal(CpsLiteral::Int(0)),
+            Some(CpsSlot::Flt) => CpsAtom::Literal(CpsLiteral::Flt(Floating::zero(false))),
+            Some(CpsSlot::List | CpsSlot::Closure(_) | CpsSlot::Row(_) | CpsSlot::Opaque)
+            | None => CpsAtom::Filler,
+        }
     }
 
     /// The representation a read of `row`'s slot at `index` produces. The one result representation that is a fact of the module rather than of the operation, which is why [`CpsIntrinsic::result_repr`] cannot answer it alone.

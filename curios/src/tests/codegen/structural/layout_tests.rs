@@ -92,7 +92,7 @@ fn a_returned_constructor_is_delivered_as_its_fields() {
     assert!(
         advance
             .body
-            .contains("(result (ref any) (ref any) (ref any) (ref any))"),
+            .contains("(result (ref null any) (ref null any) (ref null any) (ref null any))"),
         "the callee must return the class's four slots: {}",
         advance.name,
     );

@@ -285,11 +285,11 @@ fn rename_tail(tail: &mut EmissionTail, renames: &HashMap<EmissionValueName, Emi
             }
         }
         EmissionTail::Call(EmissionCallTarget::Direct { params, .. }) => {
-            rename_names(params, renames)
+            rename_jump_args(params, renames)
         }
         EmissionTail::Call(EmissionCallTarget::Indirect { target, params, .. }) => {
             rename_name(target, renames);
-            rename_names(params, renames);
+            rename_jump_args(params, renames);
         }
         EmissionTail::Host(EmissionHostTarget::Foreign { operands, .. }) => {
             rename_names(operands, renames)

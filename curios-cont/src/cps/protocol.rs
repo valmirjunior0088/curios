@@ -202,7 +202,7 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
     for (node_id, sentinel, width) in returning {
         let mut node = module.node(node_id).unwrap().clone();
         for edge in return_edges_mut(&mut node, sentinel) {
-            edge.args = split_fields(&constructions, &edge.args, width);
+            edge.args = split_fields(module, &constructions, &edge.args, width);
         }
         module.nodes.set(node_id, node);
     }
@@ -254,6 +254,7 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
 
 /// The first `width` fields of the construction `args` names, filled out where the constructor is shorter than the class's width.
 fn split_fields(
+    module: &CpsModule,
     constructions: &BTreeMap<CpsValueId, (Vec<CpsAtom>, Option<CpsRowId>)>,
     args: &[CpsAtom],
     width: usize,
@@ -261,11 +262,16 @@ fn split_fields(
     let [CpsAtom::Value(value)] = args else {
         return args.to_vec();
     };
-    let Some((fields, _)) = constructions.get(value) else {
+    let Some((fields, row)) = constructions.get(value) else {
         return args.to_vec();
     };
     (0..width)
-        .map(|index| fields.get(index).cloned().unwrap_or(CpsAtom::Filler))
+        .map(|index| {
+            fields
+                .get(index)
+                .cloned()
+                .unwrap_or_else(|| module.pad(*row, index))
+        })
         .collect()
 }
 

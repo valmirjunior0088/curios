@@ -514,7 +514,7 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
         .map_err(|error| format!("failed to instantiate module: {error}"))?;
 
     let function = instance
-        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, ENTRY)
+        .get_typed_func::<(), Option<Rooted<AnyRef>>>(&mut store, ENTRY)
         .map_err(|error| format!("failed to access {ENTRY}: {error}"))?;
 
     match function.call(&mut store, ()) {

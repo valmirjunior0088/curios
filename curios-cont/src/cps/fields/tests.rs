@@ -1023,7 +1023,7 @@ fn a_window_region_with_a_hostile_use_declines() {
     );
 }
 
-/// `main` calls `consume(r)` twice with a construction of `row` each time — once full, once padded with a filler in slot 1 — and `consume` reads slot 1 under the tag. The worker split is admitted or declined by whether the row is a family.
+/// `main` calls `consume(r)` twice with a construction of `row` each time — once full, once padded with a filler in slot 1 — and `consume` reads slot 1 under the tag.
 fn row_consumer(slots: Vec<CpsSlot>, pad_second: bool) -> (CpsModule, CpsFunId) {
     let mut module = CpsModule::default();
     let row = module.add_row(CpsRow {
@@ -1134,17 +1134,18 @@ fn row_consumer(slots: Vec<CpsSlot>, pad_second: bool) -> (CpsModule, CpsFunId) 
     (module, consume)
 }
 
-/// A family's parameter is never taken apart at its callers: a padded slot reads null, and a `func/N` parameter cannot carry one. The product-row twin, with no tag and no padding, still splits.
+/// A family's parameter is taken apart at its callers exactly as a product's is: a padded slot crosses the function boundary as the null every parameter admits, so a narrower constructor at the call site is no obstacle.
 ///
-/// **A regression fixture with a runtime failure behind it.** `/std/Tui`'s `issue(c: Cmd)` was split into a worker over `Cmd`'s three slots once its callers' arguments became visible constructions, and the call site projected every slot of a `Cmd/none` — two of them the fillers the door pads a nullary constructor with — into non-null parameters: `null reference` in `drain`, before `issue` could dispatch on the tag.
+/// **A regression fixture with a runtime failure behind it.** `/std/Tui`'s `issue(c: Cmd)` was split into a worker over `Cmd`'s three slots once its callers' arguments became visible constructions, and the call site projected every slot of a `Cmd/none` — two of them the fillers the door pads a nullary constructor with — into what were then non-null parameters: `null reference` in `drain`, before `issue` could dispatch on the tag. The split was declined for families until every parameter became nullable; this pins that it is admitted again.
 #[test]
-fn a_family_parameter_is_not_split_into_a_worker() {
+fn a_family_parameter_is_split_into_a_worker() {
     let (mut module, consume) = row_consumer(vec![CpsSlot::Tag, CpsSlot::Opaque], true);
     assert!(
-        !split_workers(&mut module),
-        "a padded constructor's slot would cross a function boundary as null"
+        split_workers(&mut module),
+        "a padded constructor's slot crosses a function boundary as null"
     );
-    assert_eq!(module.function(consume).unwrap().params.len(), 1);
+    assert_eq!(module.function(consume).unwrap().params.len(), 2);
+    module.verify().expect("the split preserves the module");
 
     let (mut module, consume) = row_consumer(vec![CpsSlot::Nat, CpsSlot::Nat], false);
     assert!(split_workers(&mut module), "a product row has no padding");

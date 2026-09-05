@@ -90,15 +90,16 @@ impl<'a, 'b> Context<'a, 'b> {
     pub(crate) fn params(&self) -> HashMap<&'a EmissionValueName, LocalData> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks params"),
+            // A parameter arrives through a nullable signature, so a read of it asserts what it needs exactly as a read of a field or a block parameter does.
             Self::Closure { data, .. } => data
                 .params()
                 .into_iter()
-                .map(|(value_name, local_name)| (value_name, LocalData::new(local_name, false)))
+                .map(|(value_name, local_name)| (value_name, LocalData::new(local_name, true)))
                 .collect(),
             Self::Function { data, .. } => data
                 .params()
                 .into_iter()
-                .map(|(value_name, local_name)| (value_name, LocalData::new(local_name, false)))
+                .map(|(value_name, local_name)| (value_name, LocalData::new(local_name, true)))
                 .collect(),
         }
     }
@@ -317,11 +318,11 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    /// How a value must sit on the stack to be stored into `param`'s local: in its register carrier when that local is one, and as a reference otherwise.
+    /// How a value must sit on the stack to be stored into `param`'s local: in its register carrier when that local is one, and as a reference — null admitted, since the local is nullable — otherwise.
     fn param_load(&self, param: &EmissionValueName) -> LoadAs {
         match self.table().raw_carrier(param) {
             Some(carrier) => LoadAs::of(&carrier),
-            None => LoadAs::NonNull,
+            None => LoadAs::Null,
         }
     }
 
@@ -403,10 +404,10 @@ impl<'a, 'b> Context<'a, 'b> {
             for arg in &target.params {
                 output.extend(match arg {
                     EmissionArg::Value(value_name) => {
-                        self.load_value_instrs(value_name, LoadAs::NonNull)
+                        self.load_value_instrs(value_name, LoadAs::Null)
                     }
-                    // A resume block's parameters are held boxed by construction, so a return filler's carrier was never in question.
-                    EmissionArg::Filler => zero_instrs(None),
+                    // A return filler is absence, and a result admits null: it crosses as the null it is, and lands in the caller's slot as the null a padded slot holds.
+                    EmissionArg::Filler => null_instrs(),
                 });
             }
             output.push(curios_wasm::Instr::Return);
@@ -423,7 +424,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 EmissionArg::Value(value_name) => {
                     let load = match param {
                         Some(param) => self.param_load(param),
-                        None => LoadAs::NonNull,
+                        None => LoadAs::Null,
                     };
                     self.load_value_instrs(value_name, load)
                 }
@@ -581,7 +582,7 @@ impl<'a, 'b> Context<'a, 'b> {
     pub(crate) fn call_direct_instrs(
         &self,
         target: &'a EmissionFunctionName,
-        params: &'a [EmissionValueName],
+        params: &'a [EmissionArg],
         resume: &'a EmissionBlockName,
     ) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
@@ -595,8 +596,12 @@ impl<'a, 'b> Context<'a, 'b> {
             );
         }
 
-        for value_name in params {
-            output.extend(self.load_value_instrs(value_name, LoadAs::NonNull));
+        // A function's parameters arrive boxed through its signature — the representation analysis withholds its offer on them — so a filler is null with no register to consider.
+        for arg in params {
+            output.extend(match arg {
+                EmissionArg::Value(value_name) => self.load_value_instrs(value_name, LoadAs::Null),
+                EmissionArg::Filler => null_instrs(),
+            });
         }
 
         if self.is_resume(resume) {
@@ -617,7 +622,7 @@ impl<'a, 'b> Context<'a, 'b> {
     pub(crate) fn call_indirect_instrs(
         &self,
         target: &'a EmissionValueName,
-        params: &'a [EmissionValueName],
+        params: &'a [EmissionArg],
         resume: &'a EmissionBlockName,
     ) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
@@ -627,8 +632,12 @@ impl<'a, 'b> Context<'a, 'b> {
 
         output.extend(self.load_value_instrs(target, LoadAs::NonNull));
 
-        for value_name in params {
-            output.extend(self.load_value_instrs(value_name, LoadAs::NonNull));
+        // A closure's parameters arrive boxed through its arity's signature, so a filler is null with no register to consider.
+        for arg in params {
+            output.extend(match arg {
+                EmissionArg::Value(value_name) => self.load_value_instrs(value_name, LoadAs::Null),
+                EmissionArg::Filler => null_instrs(),
+            });
         }
 
         output.extend(self.load_value_instrs(target, LoadAs::Concrete(envr_type.clone())));
@@ -887,6 +896,13 @@ pub(crate) fn slot_zero_instrs(slot: CpsSlot) -> Vec<curios_wasm::Instr> {
         }
         CpsSlot::Opaque => zero_instrs(None),
     }
+}
+
+/// Absence as a reference: the null every nullable position admits, which is what a filler is wherever a reference rather than a register receives it.
+pub(crate) fn null_instrs() -> Vec<curios_wasm::Instr> {
+    vec![curios_wasm::Instr::RefNull {
+        heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::None),
+    }]
 }
 
 pub(crate) fn zero_instrs(carrier: Option<Repr>) -> Vec<curios_wasm::Instr> {

@@ -568,7 +568,9 @@ impl Lowerer<'_> {
                         .layout
                         .constructor_slots(&mut self.emitter.module, *constructor);
                     let width = self.layout.row_width(&mut self.emitter.module, owner);
-                    let mut atoms = vec![curios_cont::CpsAtom::Filler; width];
+                    let mut atoms = (0..width)
+                        .map(|index| self.emitter.module.pad(Some(row), index))
+                        .collect::<Vec<_>>();
                     let mut marked = vec![false; width];
                     for (field, &atom) in fields.iter().enumerate() {
                         atoms[places[field]] = self.emitter.lower_atom(atom);
@@ -598,12 +600,14 @@ impl Lowerer<'_> {
                     let tag = self.layout.constructor_tag(*constructor);
                     let owner = self.layout.constructor_family(*constructor);
                     let family = self.layout.row_identity(&mut self.emitter.module, owner);
-                    // Every construction of a family carries every slot, so a narrow constructor is the same heap type as its widest sibling and every read of the family is one exact cast. A slot this constructor does not write takes the filler, which carries no value — the destination's carrier is not known until the backend decides it.
+                    // Every construction of a family carries every slot, so a narrow constructor is the same heap type as its widest sibling and every read of the family is one exact cast. A slot this constructor does not write takes what its field holds — zero for a register slot, the filler for a reference — and this construction is the one place that decides, so every transfer a split copies the slot into carries the same.
                     let width = self.layout.row_width(&mut self.emitter.module, owner);
                     let places = self
                         .layout
                         .constructor_slots(&mut self.emitter.module, *constructor);
-                    let mut atoms = vec![curios_cont::CpsAtom::Filler; width];
+                    let mut atoms = (0..width)
+                        .map(|index| self.emitter.module.pad(Some(family), index))
+                        .collect::<Vec<_>>();
                     let mut marked = vec![false; width];
                     atoms[0] = curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(tag));
                     for (field, &atom) in fields.iter().enumerate() {

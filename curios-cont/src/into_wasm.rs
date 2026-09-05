@@ -145,11 +145,11 @@ pub(crate) struct EmissionJumpTarget {
 
 /// What one edge passes for one block parameter.
 ///
-/// A named value in every ordinary case. [`EmissionArg::Filler`] is the exception, and it exists because this is the first point at which the destination's carrier is knowable: an edge coerces each argument to the parameter's carrier (see `Context::jump_instrs`) and a variant construction to the slot's, so a filler chosen upstream as a literal would be coerced as one — which is what trapped an `i31` zero standing in a raw `Flt` slot.
+/// A named value in every ordinary case. [`EmissionArg::Filler`] is absence: null wherever the destination is a reference, and, where the destination is a parameter the representation analysis holds in a register, that register's zero — the one case a null cannot land, decided here because the carrier is decided after the filler was written.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionArg {
     Value(EmissionValueName),
-    /// No value: the slot belongs to a wider constructor than this edge's. Materialised as the zero of whatever carrier the destination parameter is held at.
+    /// No value: the slot belongs to a wider constructor than this edge's, and is a reference slot, so what the unwritten field holds is null.
     Filler,
 }
 
@@ -166,12 +166,12 @@ pub(crate) struct EmissionMatchTarget {
 pub(crate) enum EmissionCallTarget {
     Direct {
         target: EmissionFunctionName,
-        params: Vec<EmissionValueName>,
+        params: Vec<EmissionArg>,
         resume: EmissionBlockName,
     },
     Indirect {
         target: EmissionValueName,
-        params: Vec<EmissionValueName>,
+        params: Vec<EmissionArg>,
         resume: EmissionBlockName,
     },
 }

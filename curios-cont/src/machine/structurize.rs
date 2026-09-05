@@ -72,7 +72,7 @@ fn convert_wrapper(machine: &MachineModule, wrapper: &MachineWrapper) -> Emissio
     let call_params = fields
         .iter()
         .chain(&params)
-        .map(|argument| argument.name.clone())
+        .map(|argument| EmissionArg::Value(argument.name.clone()))
         .collect();
     EmissionClosure {
         fields,
@@ -237,7 +237,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 resume,
             } => EmissionTail::Call(EmissionCallTarget::Direct {
                 target: direct_name(self.machine, *function),
-                params: self.operands(args, values),
+                params: self.jump_args(args, values),
                 resume: self.resume_target(
                     *resume,
                     self.machine.functions[function].results,
@@ -247,7 +247,7 @@ impl<'a> MachineFunctionBridge<'a> {
             MachineTerminator::TailDirectCall { function, args } => {
                 EmissionTail::Call(EmissionCallTarget::Direct {
                     target: direct_name(self.machine, *function),
-                    params: self.operands(args, values),
+                    params: self.jump_args(args, values),
                     resume: self.resume.clone(),
                 })
             }
@@ -257,13 +257,13 @@ impl<'a> MachineFunctionBridge<'a> {
                 resume,
             } => EmissionTail::Call(EmissionCallTarget::Indirect {
                 target: value_name(*closure),
-                params: self.operands(args, values),
+                params: self.jump_args(args, values),
                 resume: self.resume_target(*resume, 1, blocks),
             }),
             MachineTerminator::TailIndirectCall { closure, args } => {
                 EmissionTail::Call(EmissionCallTarget::Indirect {
                     target: value_name(*closure),
-                    params: self.operands(args, values),
+                    params: self.jump_args(args, values),
                     resume: self.resume.clone(),
                 })
             }
@@ -434,7 +434,7 @@ impl<'a> MachineFunctionBridge<'a> {
         }
     }
 
-    /// The arguments an edge passes or a variant construction stores, with a filler left unmaterialised: these are the positions whose destination carrier is decided later, so they are the ones that may defer.
+    /// The arguments an edge or a call passes or a variant construction stores, with a filler left unmaterialised: these are the positions whose destination carrier is decided later, so they are the ones that may defer.
     fn jump_args(
         &mut self,
         operands: &[MachineOperand],
@@ -468,7 +468,7 @@ impl<'a> MachineFunctionBridge<'a> {
         match operand {
             MachineOperand::Value(value) => value_name(*value),
             MachineOperand::Literal(literal) => self.literal(literal, values),
-            // Every non-edge position a filler reaches is a function argument, and a function parameter arrives through a `func/N` signature that is uniformly `anyref` — so the carrier this one has to inhabit is settled here, and it is the boxed zero.
+            // Every transfer defers its fillers through `jump_args`; the positions left to this arm read a scalar — an intrinsic operand, a host operand, an exit code — and a filler never reaches one.
             MachineOperand::Filler => self.literal(&CpsLiteral::Nat(0), values),
         }
     }

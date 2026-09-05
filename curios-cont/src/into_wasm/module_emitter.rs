@@ -389,7 +389,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// One final func type per closure arity: every body of that arity is declared at it, and its arity's table is typed by it, so the `call_indirect` signature check is satisfied statically rather than at runtime.
+    /// One final func type per closure arity: every body of that arity is declared at it, and its arity's table is typed by it, so the `call_indirect` signature check is satisfied statically rather than at runtime. The environment is the one non-null position — a closure is always constructed — while the arguments and the result admit null, as every reference position a value crosses does: absence is null, and a padded slot's null travels through a call exactly as it travels through an edge.
     fn emit_clsr_arity_types(&mut self) {
         for (arity, type_name) in self.table.clsr_types() {
             self.module.add_type(
@@ -400,9 +400,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
                         inputs: curios_wasm::ResultType::from(
                             iter::once(Table::top_type(false))
-                                .chain((0..arity).map(|_| Table::top_type(false))),
+                                .chain((0..arity).map(|_| Table::top_type(true))),
                         ),
-                        outputs: curios_wasm::ResultType::from([Table::top_type(false)]),
+                        outputs: curios_wasm::ResultType::from([Table::top_type(true)]),
                     }),
                 },
             );
@@ -416,12 +416,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 curios_wasm::SubType {
                     is_final: true,
                     super_types: vec![],
+                    // Nullable in both directions, as every reference position is: a filler a split hands across a call or a return is null, and only a read asserts otherwise.
                     comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
                         inputs: curios_wasm::ResultType::from(
-                            (0..parameters).map(|_| Table::top_type(false)),
+                            (0..parameters).map(|_| Table::top_type(true)),
                         ),
                         outputs: curios_wasm::ResultType::from(
-                            (0..results).map(|_| Table::top_type(false)),
+                            (0..results).map(|_| Table::top_type(true)),
                         ),
                     }),
                 },

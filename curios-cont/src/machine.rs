@@ -28,7 +28,7 @@ id!(MachineValueId, "~v", mint);
 pub(crate) enum MachineOperand {
     Value(MachineValueId),
     Literal(CpsLiteral),
-    /// [`CpsAtom::Filler`] carried through unchanged: still no value, still waiting for the destination's carrier to be known.
+    /// [`CpsAtom::Filler`] carried through unchanged: null, unless the destination turns out to be a register-held parameter, which is known only once `represent` has run.
     Filler,
 }
 
