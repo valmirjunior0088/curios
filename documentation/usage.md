@@ -255,7 +255,17 @@ Only the umbrella is looked for further up, and only one that enumerates you gov
 
 ## Where things go
 
-Everything generated lands under `.curios/`, beside the governing manifest — built executables, materialized sources, compiled units, and precompiled payloads. It is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the content-addressed half.
+Everything generated lands under `.curios/`, beside the governing manifest, in five families each named for what it holds:
+
+| Family | Holds |
+| --- | --- |
+| `executables/<package>/<name>` | what `compile` emits |
+| `documentation/<package>/` | what `document` emits |
+| `sources/` | materialized dependency sources, keyed by hash |
+| `verdicts/` | judged units, one slot per unit |
+| `payloads/` | precompiled payloads, one slot per executable |
+
+It is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the content-addressed half — `sources/`, `verdicts/` and `payloads/`, whose keys say nothing about which project asked. `executables/` and `documentation/` are products of the package that declared them and always stay beside it.
 
 Set `CURIOS_CACHE` to share the content-addressed half across projects; unset, each project keeps its own. There is deliberately no divined default, because a toolchain that writes into a home directory nobody pointed it at is doing something the person who ran it did not ask for.
 

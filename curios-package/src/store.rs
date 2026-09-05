@@ -2,19 +2,22 @@
 //!
 //! `.curios/` sits beside the governing root — the umbrella's manifest when one governs the invocation, the package's otherwise — and it is **the only generated directory in the tree**: member directories hold user files and nothing else.
 //!
-//! It holds four families, each in its own subtree rather than sharing one namespace:
+//! It holds five families, each in its own subtree rather than sharing one namespace, and each named for what it holds:
 //!
 //! ```text
 //! .curios/
-//!   bin/      json/serve          what `curios compile` emits
-//!   src/      c1/<digest>/        materialized source trees, keyed by their manifest hash
-//!   unit/     <slot>/             compiled units, one slot per mount, compiler and predecessor chain
-//!   payload/  <slot>/             precompiled `.cwasm` payloads, one slot per executable, chain and engine
+//!   executables/    json/serve      what `curios compile` emits
+//!   documentation/  json/           what `curios document` emits
+//!   sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
+//!   verdicts/       <slot>/         judged units, one slot per mount, compiler and predecessor chain
+//!   payloads/       <slot>/         precompiled `.cwasm` payloads, one slot per executable, chain and engine
 //! ```
 //!
 //! Separated because the alternative re-invites a collision that nesting otherwise removes: a hash has to be transformed to sit in a directory name at all — `c1:<digest>` most naturally becoming `c1/<digest>` — and a package legitimately named `c1` would then land on top of it.
 //!
-//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `src/`, `unit/` and `payload/` families — never `bin/`, which belongs to the package that declares the executable — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
+//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `sources/`, `verdicts/` and `payloads/` families — never `executables/` or `documentation/`, which belong to the package that declared them — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
+//!
+//! The family names are the plural of their contents, and the words are the ones the rest of the toolchain already uses: the manifest's `[[executables]]`, the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing store rebuilds once.
 
 #[cfg(test)]
 mod tests;
@@ -29,9 +32,9 @@ use {
 /// The generated directory itself.
 pub const STORE: &str = ".curios";
 
-/// Where a project's generated things go: one family beside it, two in a cache it shares with every other project.
+/// Where a project's generated things go: two families beside it, three in a cache it shares with every other project.
 ///
-/// **The split is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a judged unit by an address over its mounts, its compiler and its predecessors, and a precompiled payload by an address over that chain, the executable's identity and the engine that will run it — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all three are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload's slot is opened the same way. A built executable is named by the package that declared it and belongs to the project that built it, so it stays local. Content-derived keys are what make an upper layer possible at all; a path-keyed store could only ever have been local.
+/// **The split is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a judged unit by an address over its mounts, its compiler and its predecessors, and a precompiled payload by an address over that chain, the executable's identity and the engine that will run it — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all three are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload's slot is opened the same way. A built executable and a package's documentation are named by the package that declared them and belong to the project that built them, so they stay local. Content-derived keys are what make an upper layer possible at all; a path-keyed store could only ever have been local.
 pub struct Store {
     /// The governing root — the umbrella's directory when one governs, the package's otherwise.
     project: PathBuf,
@@ -50,34 +53,39 @@ impl Store {
 
     /// Where a native executable is written: nested under the package that declares it, beside the project.
     ///
-    /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also fixes the path *inside* the store: `bin/<package>/<executable>` does not depend on what encloses the package, so joining an umbrella re-roots a binary without renaming it.
-    pub fn bin(&self, package: &str, executable: &str) -> PathBuf {
+    /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also fixes the path *inside* the store: `executables/<package>/<executable>` does not depend on what encloses the package, so joining an umbrella re-roots a binary without renaming it.
+    pub fn executable(&self, package: &str, executable: &str) -> PathBuf {
         self.project
             .join(STORE)
-            .join("bin")
+            .join("executables")
             .join(package)
             .join(executable)
+    }
+
+    /// Where a package's generated documentation is written: nested under the package, beside the project, for the reason an executable is.
+    pub fn documentation(&self, package: &str) -> PathBuf {
+        self.project.join(STORE).join("documentation").join(package)
     }
 
     /// Where a materialized source tree is placed, keyed by the hash it was accepted against.
     ///
     /// The scheme is a directory of its own rather than part of the leaf name, which is what lets a successor scheme sit beside `c1` during a transition instead of replacing it.
-    pub fn src(&self, hash: &TreeHash) -> PathBuf {
+    pub fn source(&self, hash: &TreeHash) -> PathBuf {
         let (scheme, digest) = hash.split();
 
-        self.shared.join("src").join(scheme).join(digest)
+        self.shared.join("sources").join(scheme).join(digest)
     }
 
-    /// Where a compiled unit is filed, under the address its mounts, its predecessors and the certifier decide. What it was compiled *from* is verified when the slot is opened rather than spelled here.
-    pub fn unit(&self, slot: &str) -> PathBuf {
-        self.shared.join("unit").join(slot)
+    /// Where a judged unit is filed, under the address its mounts, its predecessors and the certifier decide. What it was compiled *from* is verified when the slot is opened rather than spelled here.
+    pub fn verdict(&self, slot: &str) -> PathBuf {
+        self.shared.join("verdicts").join(slot)
     }
 
     /// Where an executable's precompiled payload is filed, under the address its predecessor chain, its own identity and the engine decide. What it was compiled *from* is verified when the slot is opened, exactly as a unit's is.
     ///
-    /// Shared rather than project-local, for the reason the type states: the address says nothing about which project asked. `bin/` stays local because a built executable's identity *is* project-relative; the payload inside it is not.
+    /// Shared rather than project-local, for the reason the type states: the address says nothing about which project asked. `executables/` stays local because a built executable's identity *is* project-relative; the payload inside it is not.
     pub fn payload(&self, slot: &str) -> PathBuf {
-        self.shared.join("payload").join(slot)
+        self.shared.join("payloads").join(slot)
     }
 
     /// Where this machine's memo of its compiler's digest lives — a fact about the machine, so it belongs beside the things every project shares.
@@ -95,7 +103,7 @@ fn shared() -> Option<PathBuf> {
     std::env::var_os("CURIOS_CACHE").map(PathBuf::from)
 }
 
-/// What version of the unit family's layout a key names.
+/// What version of the verdict family's layout a key names.
 ///
 /// In the key rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what a slot holds, or what a hit is verified against, changes.
 const SCHEMA: &str = "u4";

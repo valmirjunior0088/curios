@@ -280,7 +280,7 @@ impl Walk<'_> {
 
             // The store is where a fetchable dependency lives, and being *in* it is what "materialized" means — the hash it is filed under is the hash it was accepted against, so finding it there is the verification, already done.
             Dependency::Git { url, rev, hash } => {
-                let tree = self.governing.store().src(hash);
+                let tree = self.governing.store().source(hash);
 
                 match tree.is_dir() {
                     true => Ok(tree),

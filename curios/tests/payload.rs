@@ -65,7 +65,7 @@ fn reused(output: &Output) -> bool {
 
 /// The payload slots the project at `root` holds.
 fn slots(root: &Path) -> usize {
-    fs::read_dir(root.join(".curios").join("payload")).map_or(0, Iterator::count)
+    fs::read_dir(root.join(".curios").join("payloads")).map_or(0, Iterator::count)
 }
 
 /// The point of the thing, end to end: what the program does must not depend on whether it was compiled just now.
@@ -118,7 +118,7 @@ fn one_slot_serves_run_and_compile() {
     assert_eq!(slots(&root), 1, "one program, one slot, whoever asked");
 
     assert!(
-        root.join(".curios/bin/app/app").exists(),
+        root.join(".curios/executables/app/app").exists(),
         "and the bundle was written from it"
     );
 

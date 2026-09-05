@@ -40,7 +40,7 @@ fn a_delivery_matching_its_pin_is_placed() {
 
     accept(&scratch, &Store::at(root.clone()), &acquisition).expect("a delivery matching its pin");
 
-    let placed = Store::at(root.clone()).src(&hash);
+    let placed = Store::at(root.clone()).source(&hash);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
     assert!(!scratch.exists(), "the scratch directory is consumed");
 
@@ -72,7 +72,7 @@ fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
     assert!(refusal.contains(&delivered.to_string()), "{refusal}");
     assert!(
         !Store::at(root.clone())
-            .src(&acquisition.snapshot.hash)
+            .source(&acquisition.snapshot.hash)
             .exists(),
         "nothing is placed under a hash it does not have"
     );
@@ -202,7 +202,7 @@ fn a_fetched_revision_is_verified_and_placed() {
 
     fetch(&Store::at(root.clone()), &acquisition).expect("a revision this machine is serving");
 
-    let placed = Store::at(root.clone()).src(&expected);
+    let placed = Store::at(root.clone()).source(&expected);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
     assert!(
         !placed.join(".git").exists(),
@@ -322,7 +322,7 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
         fetch(&store, &pinned(&origin, rev, &expected)).unwrap_or_else(|refusal| {
             panic!("{rev} names a revision this remote holds: {refusal}")
         });
-        assert!(store.src(&expected).join("lib.crs").is_file(), "{rev}");
+        assert!(store.source(&expected).join("lib.crs").is_file(), "{rev}");
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -384,7 +384,13 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
     let fetched = curate(&governing).expect("a snapshot both mirrors serve");
 
     assert_eq!(fetched.len(), 1, "{fetched:?}");
-    assert!(governing.store().src(&expected).join("lib.crs").is_file());
+    assert!(
+        governing
+            .store()
+            .source(&expected)
+            .join("lib.crs")
+            .is_file()
+    );
 
     fs::remove_dir_all(measured).unwrap();
     fs::remove_dir_all(origin).unwrap();

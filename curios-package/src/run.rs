@@ -94,7 +94,7 @@ impl Target {
         Ok(Self::Executable {
             output: governing
                 .store()
-                .bin(&governing.package.name, &executable.name),
+                .executable(&governing.package.name, &executable.name),
             root: governing.root.clone(),
             name: executable.name.clone(),
             package: governing.package.name.clone(),

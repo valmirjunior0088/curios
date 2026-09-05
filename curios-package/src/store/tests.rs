@@ -6,20 +6,23 @@ fn a_binary_nests_under_its_package() {
     let store = Store::at(PathBuf::from("/w/u"));
 
     assert_eq!(
-        store.bin("json", "serve"),
-        PathBuf::from("/w/u/.curios/bin/json/serve")
+        store.executable("json", "serve"),
+        PathBuf::from("/w/u/.curios/executables/json/serve")
     );
-    assert_ne!(store.bin("json", "serve"), store.bin("other", "serve"));
+    assert_ne!(
+        store.executable("json", "serve"),
+        store.executable("other", "serve")
+    );
 }
 
 /// The path inside `.curios/` does not depend on what encloses the package, so a binary does not move when its package joins an umbrella — only the root it hangs from changes.
 #[test]
 fn joining_an_umbrella_moves_only_the_root() {
-    let alone = Store::at(PathBuf::from("/w/json")).bin("json", "serve");
-    let enclosed = Store::at(PathBuf::from("/w/u")).bin("json", "serve");
+    let alone = Store::at(PathBuf::from("/w/json")).executable("json", "serve");
+    let enclosed = Store::at(PathBuf::from("/w/u")).executable("json", "serve");
 
-    assert!(alone.ends_with(".curios/bin/json/serve"));
-    assert!(enclosed.ends_with(".curios/bin/json/serve"));
+    assert!(alone.ends_with(".curios/executables/json/serve"));
+    assert!(enclosed.ends_with(".curios/executables/json/serve"));
 }
 
 /// A hash's scheme is a directory of its own, which is what lets a successor sit beside `c1` rather than replace it.
@@ -28,26 +31,35 @@ fn a_materialized_tree_files_under_its_scheme() {
     let hash = TreeHash::parse(&format!("c1:{}", "a".repeat(64))).unwrap();
 
     assert_eq!(
-        Store::at(PathBuf::from("/w/u")).src(&hash),
-        PathBuf::from(format!("/w/u/.curios/src/c1/{}", "a".repeat(64)))
+        Store::at(PathBuf::from("/w/u")).source(&hash),
+        PathBuf::from(format!("/w/u/.curios/sources/c1/{}", "a".repeat(64)))
     );
 }
 
-/// The four families never share a namespace, so a package named `c1` cannot land on a scheme's directory and a unit slot cannot land on a payload's.
+/// The five families never share a namespace, so a package named `c1` cannot land on a scheme's directory and a unit slot cannot land on a payload's.
 #[test]
 fn the_families_do_not_share_a_namespace() {
     let root = PathBuf::from("/w/u");
     let store = Store::at(root.clone());
     let hash = TreeHash::parse(&format!("c1:{}", "b".repeat(64))).unwrap();
 
-    let binary = store.bin("c1", "tool");
-    let tree = store.src(&hash);
+    let binary = store.executable("c1", "tool");
+    let tree = store.source(&hash);
 
     assert!(!binary.starts_with(tree.parent().unwrap()));
-    assert!(!tree.starts_with(root.join(STORE).join("bin")));
-    assert!(!store.unit("key").starts_with(root.join(STORE).join("bin")));
+    assert!(!tree.starts_with(root.join(STORE).join("executables")));
+    assert!(
+        !store
+            .verdict("key")
+            .starts_with(root.join(STORE).join("executables"))
+    );
+    assert_eq!(
+        store.documentation("c1"),
+        PathBuf::from("/w/u/.curios/documentation/c1"),
+        "and documentation sits beside the executables, under its package"
+    );
     assert_ne!(
-        store.unit("key"),
+        store.verdict("key"),
         store.payload("key"),
         "one slot name, two families, two places"
     );

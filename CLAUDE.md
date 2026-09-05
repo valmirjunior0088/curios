@@ -30,7 +30,7 @@ CRS
 - `wonder stage <stage> -` reprints the program at one pipeline rung (`text`, `core`, `core-elab`, `ersd`, `ersd-optm`, `cont`, `cont-optm`, `wasm`, `wasm-optm`): the way to see what a lowering or an optimization actually produced.
 - A file target is placed in the unit that declares it: a module under a package's directory is analysed as that package's library, an executable's entry as that executable, anything else standalone.
 
-**Read the sources for the rest.** Every fact `wonder` does not answer is on disk: `documentation/syntax.md` is the normative surface reference, `curios-prelude-archive/std/` is the idiom reference and where a standard-library signature is read, and a dependency's sources are materialized under `.curios/src/`. Search with `rg`, read the narrowest authoritative source, and widen only when the evidence requires it. Do not reconstruct from memory what a file states.
+**Read the sources for the rest.** Every fact `wonder` does not answer is on disk: `documentation/syntax.md` is the normative surface reference, `curios-prelude-archive/std/` is the idiom reference and where a standard-library signature is read, and a dependency's sources are materialized under `.curios/sources/`. Search with `rg`, read the narrowest authoritative source, and widen only when the evidence requires it. Do not reconstruct from memory what a file states.
 
 **The binary is the tree's.** `cargo run --package curios --` runs the compiler this checkout builds, which is the one a change is being made to; it needs `cargo x runtime` once per checkout for the launcher it embeds. An installed `curios` on `PATH` is a different build and answers for it, not for the tree.
 

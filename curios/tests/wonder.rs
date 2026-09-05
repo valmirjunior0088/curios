@@ -289,7 +289,7 @@ fn a_warm_store_does_not_answer_for_the_buffer() {
         String::from_utf8_lossy(&built.stderr)
     );
     assert!(
-        root.join(".curios/unit").is_dir(),
+        root.join(".curios/verdicts").is_dir(),
         "a build files the library's unit"
     );
 

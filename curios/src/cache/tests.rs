@@ -70,7 +70,7 @@ fn project(name: &str) -> PathBuf {
 ///
 /// How both cross-project tests stage a shared store: by copying rather than by setting `CURIOS_CACHE`, since the store's own hermeticity rests on no test ever setting it, and what is under test is the verification, which cannot tell how a foreign slot arrived.
 fn stage(from: &std::path::Path, into: &std::path::Path) {
-    let (from, into) = (from.join(".curios/unit"), into.join(".curios/unit"));
+    let (from, into) = (from.join(".curios/verdicts"), into.join(".curios/verdicts"));
 
     let _ = fs::remove_dir_all(&into);
     fs::create_dir_all(&into).unwrap();
@@ -162,7 +162,7 @@ fn a_slot_does_not_answer_for_another_projects_source() {
 
 /// The other half of that clause, and the reason it checks containment rather than re-deriving the read set: a dependency materialized once and read from that same path by every project *is* shared, and must still hit.
 ///
-/// The dependency sits outside both projects, standing in for the `src/` tree `curate` materializes under a shared store — the only way two projects ever read one unit's source from one path. `mine` never compiles it before the staging, so a hit has nowhere to come from but the slot `theirs` filed.
+/// The dependency sits outside both projects, standing in for the `sources/` tree `curate` materializes under a shared store — the only way two projects ever read one unit's source from one path. `mine` never compiles it before the staging, so a hit has nowhere to come from but the slot `theirs` filed.
 #[test]
 fn a_slot_answers_for_a_dependency_both_projects_read() {
     let materialized = temporary("materialized");
@@ -202,7 +202,10 @@ fn a_record_does_not_vouch_for_a_unit_it_was_not_written_beside() {
     reused(&mine);
 
     // Their unit under my record, in the one slot both address.
-    let (from, into) = (theirs.join(".curios/unit"), mine.join(".curios/unit"));
+    let (from, into) = (
+        theirs.join(".curios/verdicts"),
+        mine.join(".curios/verdicts"),
+    );
     for slot in fs::read_dir(&from).expect("a store with units in it") {
         let slot = slot.unwrap().path();
         let name = slot.file_name().unwrap();
@@ -228,7 +231,7 @@ fn compiling_repeatedly_files_one_slot() {
         reused(&root);
     }
 
-    let slots = fs::read_dir(root.join(".curios").join("unit"))
+    let slots = fs::read_dir(root.join(".curios").join("verdicts"))
         .expect("a store with units in it")
         .count();
 

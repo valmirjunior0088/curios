@@ -242,7 +242,7 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
     let cold = cached(&app, None, Some(&store));
     assert_eq!(cold, b"42");
     assert!(
-        root.join(".curios/unit").is_dir(),
+        root.join(".curios/verdicts").is_dir(),
         "the dependency's verdict is recorded"
     );
 
@@ -289,7 +289,7 @@ fn a_library_test_declaration_rides_through_the_store() {
 
     assert_eq!(cached(&app, None, Some(&store)), b"42");
     assert!(
-        root.join(".curios/unit").is_dir(),
+        root.join(".curios/verdicts").is_dir(),
         "the dependency's verdict is recorded"
     );
     assert_eq!(cached(&app, None, Some(&Verdicts::at(root.clone()))), b"42");

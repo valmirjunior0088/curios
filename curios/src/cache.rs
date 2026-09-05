@@ -8,7 +8,7 @@
 //!
 //! **A slot is addressed, and a hit is verified.** The address ([`unit_slot`]) names a place — these mounts, this compiler, this predecessor chain — and holds no file contents at all, so a project has as many slots as it has units rather than one per compile. What the unit was compiled *from* rides in a [`Record`] beside it and is checked when the slot is opened: every file the compilation read, by the text it read, plus what each predecessor contained, plus what the slot itself holds — so a record vouches for the bytes it was written beside and for no others.
 //!
-//! That split is deliberate, and the previous scheme is why. It hashed the unit's whole source directory into the address — a directory that, for a package's own library, *contains this store*. Filing a unit therefore changed the address it would next be looked for under, so a package's own code never hit and `unit/` grew a directory per compile. The lesson is not "exclude the store from the walk": a key derived from a belief about what the inputs are goes wrong silently the day the belief does, and it goes wrong in the direction that hands back a stale unit. Here the inputs are not believed but recorded, at the one seam every module read passes through (`RootSource::reads`), so a compilation that reads something new records it without anything here being taught to expect it.
+//! That split is deliberate, and the previous scheme is why. It hashed the unit's whole source directory into the address — a directory that, for a package's own library, *contains this store*. Filing a unit therefore changed the address it would next be looked for under, so a package's own code never hit and `verdicts/` grew a directory per compile. The lesson is not "exclude the store from the walk": a key derived from a belief about what the inputs are goes wrong silently the day the belief does, and it goes wrong in the direction that hands back a stale unit. Here the inputs are not believed but recorded, at the one seam every module read passes through (`RootSource::reads`), so a compilation that reads something new records it without anything here being taught to expect it.
 
 mod payload;
 pub use payload::*;
@@ -125,7 +125,7 @@ impl Verdicts {
 
         for source in sources {
             let slot = self.slot(source, &placed)?;
-            let directory = self.store.unit(&slot);
+            let directory = self.store.verdict(&slot);
 
             let recorded = fs::read(directory.join(RECORD)).ok()?;
             let bytes = fs::read(directory.join(STORED)).ok()?;
@@ -183,7 +183,7 @@ impl Verdicts {
 impl Cache for Verdicts {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
         let slot = self.slot(source, &self.placed.borrow())?;
-        let directory = self.store.unit(&slot);
+        let directory = self.store.verdict(&slot);
 
         // Read before deserializing either: a slot whose record disagrees is not worth the unit's decode, and a slot missing one of the two files is a half-written store to ignore.
         let recorded = fs::read(directory.join(RECORD)).ok()?;
@@ -215,7 +215,7 @@ impl Cache for Verdicts {
             curios_archive::to_bytes(&recorded(source, &self.placed.borrow(), &placed.contained))
                 .map_err(io::Error::other)
                 .and_then(|record| {
-                    replace(&self.store.unit(&placed.slot), STORED, &bytes, &record)
+                    replace(&self.store.verdict(&placed.slot), STORED, &bytes, &record)
                 });
 
         // Best effort: a store that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit enters the chain below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.
@@ -235,7 +235,7 @@ impl Cache for Verdicts {
 ///
 /// Shared by both families, so the argument holds in one place rather than twice: a payload slot and a unit slot differ in what they hold and in nothing about how it is put there.
 fn replace(directory: &Path, stored: &str, bytes: &[u8], record: &[u8]) -> io::Result<()> {
-    // Every failure names the directory it happened in: an error reading `Permission denied` alone leaves a reader guessing which of the four families under `.curios/` refused.
+    // Every failure names the directory it happened in: an error reading `Permission denied` alone leaves a reader guessing which of the five families under `.curios/` refused.
     let at = |error: io::Error| io::Error::other(format!("{}: {error}", directory.display()));
 
     fs::create_dir_all(directory).map_err(at)?;

@@ -195,7 +195,7 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
     fs::write(delivered.join("lib.crs"), "").unwrap();
     let hash = TreeHash::of(&delivered).unwrap();
 
-    let placed = crate::Store::at(root.clone()).src(&hash);
+    let placed = crate::Store::at(root.clone()).source(&hash);
     fs::create_dir_all(placed.parent().unwrap()).unwrap();
     fs::rename(&delivered, &placed).unwrap();
 
@@ -277,7 +277,7 @@ fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
     fs::write(delivered.join("curios.toml"), "name = \"http\"\n").unwrap();
     fs::write(delivered.join("lib.crs"), "").unwrap();
     let hash = TreeHash::of(&delivered).unwrap();
-    let placed = crate::Store::at(root.clone()).src(&hash);
+    let placed = crate::Store::at(root.clone()).source(&hash);
     fs::create_dir_all(placed.parent().unwrap()).unwrap();
     fs::rename(&delivered, &placed).unwrap();
     let absent = TreeHash::parse(&format!("c1:{}", "e".repeat(64))).unwrap();

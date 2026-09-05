@@ -57,7 +57,7 @@ pub fn curate(governing: &Governing) -> Result<Vec<Acquisition>, String> {
         let wanted = acquisitions(governing)?;
         let absent = wanted
             .into_iter()
-            .filter(|acquisition| !store.src(acquisition.hash()).is_dir())
+            .filter(|acquisition| !store.source(acquisition.hash()).is_dir())
             .collect::<Vec<_>>();
 
         if absent.is_empty() {
@@ -113,7 +113,7 @@ fn acquisitions(governing: &Governing) -> Result<BTreeSet<Acquisition>, String> 
                         },
                     });
 
-                    governing.store().src(hash)
+                    governing.store().source(hash)
                 }
                 Dependency::Path { path } => base.join(path),
                 // A member is on disk already: `order` is what refuses a mismatched one, and this walk only needs somewhere further to look.
@@ -161,7 +161,7 @@ fn member(governing: &Governing, name: &str) -> Option<PathBuf> {
 ///
 /// The tree is hashed where it lands temporarily and moved into the store only once it has been accepted, so a failed or interrupted fetch cannot leave a directory the store would later read as a verified delivery.
 fn fetch(store: &Store, acquisition: &Acquisition) -> Result<(), String> {
-    let scratch = store.src(acquisition.hash()).with_extension("fetching");
+    let scratch = store.source(acquisition.hash()).with_extension("fetching");
     let _ = fs::remove_dir_all(&scratch);
     fs::create_dir_all(&scratch)
         .map_err(|error| format!("failed to create {}: {error}", scratch.display()))?;
@@ -213,7 +213,7 @@ fn accept(scratch: &Path, store: &Store, acquisition: &Acquisition) -> Result<()
         ));
     }
 
-    let placed = store.src(acquisition.hash());
+    let placed = store.source(acquisition.hash());
     if let Some(parent) = placed.parent() {
         fs::create_dir_all(parent)
             .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;

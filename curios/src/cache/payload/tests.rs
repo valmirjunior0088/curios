@@ -154,19 +154,19 @@ fn greeting(word: &str) -> String {
 
 /// The payload slots at `root`, counting a store that was never created as the none it holds — which is what a refusal to file leaves behind.
 fn filed(root: &Path) -> usize {
-    fs::read_dir(root.join(".curios").join("payload")).map_or(0, Iterator::count)
+    fs::read_dir(root.join(".curios").join("payloads")).map_or(0, Iterator::count)
 }
 
 /// The slots the payload family holds for the project at `root`.
 fn slots(root: &Path) -> usize {
-    fs::read_dir(root.join(".curios").join("payload"))
+    fs::read_dir(root.join(".curios").join("payloads"))
         .expect("a store with payloads in it")
         .count()
 }
 
 /// The one payload slot's directory, for a test that has to damage what is in it.
 fn slot_of(root: &Path) -> PathBuf {
-    let mut slots = fs::read_dir(root.join(".curios").join("payload"))
+    let mut slots = fs::read_dir(root.join(".curios").join("payloads"))
         .expect("a store with payloads in it")
         .map(|slot| slot.unwrap().path())
         .collect::<Vec<_>>();
@@ -388,7 +388,7 @@ fn every_half_written_slot_state_reads_as_a_miss() {
 
 /// A slot filed by one project must not answer for another's, even when both address it identically — which two projects declaring a package and an executable of one name, compiled by one compiler after one chain, always do.
 ///
-/// The store is shared whenever `CURIOS_CACHE` names one, so this is reachable. The dependency sits outside both projects and is read from that one path by each, standing in for the `src/` tree `curate` materializes — so the *units* legitimately cross and only the payload's own record can refuse this.
+/// The store is shared whenever `CURIOS_CACHE` names one, so this is reachable. The dependency sits outside both projects and is read from that one path by each, standing in for the `sources/` tree `curate` materializes — so the *units* legitimately cross and only the payload's own record can refuse this.
 #[test]
 fn a_slot_does_not_answer_for_another_projects_program() {
     let shape = temporary("aliasing-shape");
@@ -426,7 +426,7 @@ fn a_slot_does_not_answer_for_another_projects_program() {
 
 /// Copy every unit and payload slot `from`'s store holds into `into`'s, replacing whatever was there.
 fn stage(from: &Path, into: &Path) {
-    for family in ["unit", "payload"] {
+    for family in ["verdicts", "payloads"] {
         let (from, into) = (
             from.join(".curios").join(family),
             into.join(".curios").join(family),

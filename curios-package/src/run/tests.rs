@@ -184,7 +184,7 @@ fn a_declared_executable_builds_into_the_store() {
         panic!("an enumerated member is a declared executable");
     };
     assert!(
-        output.ends_with(".curios/bin/json/serve"),
+        output.ends_with(".curios/executables/json/serve"),
         "{}",
         output.display()
     );
