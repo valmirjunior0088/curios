@@ -1,0 +1,74 @@
+-- Two frames of one size into the bytes that carry the terminal from the first to the second. Every surveyed library that does not flicker diffs a cell grid, and this is that diff with the size in the type: both frames are `Frame(w, h)`, so the walk pairs row with row and cell with cell and has no bound to check.
+--
+-- A cell is written only where it differs from the previous frame's, with a cursor move only where the pen is not already there and an SGR only where the style changes from the last one written; a continuation cell writes nothing, since the wide symbol before it already covered its column. With no previous frame the screen is cleared and every cell written. The whole is bracketed in synchronized output (`CSI ? 2026 h` / `l`), which a terminal that lacks the mode ignores, so a frame lands at once rather than tearing. The cursor is hidden while cells are written and shown at its place after, where the program asked for one.
+use /std/{Nat, Bool, Str, Bytes, List, Vec, Option, Equal};
+use /std/Tui/{Style, Cell, Frame, ansi, text};
+
+struct Pen: Type {
+    out: Bytes,
+    style: Option(Style),
+    at: Option({Nat, Nat}),
+}
+
+-- One cell at `(x, y)`, written if it differs from `before` — `none` where there is no previous frame — and skipped where it is a continuation.
+let paint(pen: Pen, x: Nat, y: Nat, cell: Cell, before: Option(Cell)) -> Pen =
+    let same = match before | some(b) => b == cell | none() => false end;
+    let width = text/width(cell.symbol);
+    choose
+    | same => pen
+    | width == 0 => pen
+    | _ =>
+        let moved = match pen.at | some(p) => p.0 == x && p.1 == y | none() => false end;
+        let move = match moved | true => x[] | false => ansi/move_to(x, y) end;
+        let restyled = match pen.style | some(s) => s == cell.style | none() => false end;
+        let sgr = match restyled | true => x[] | false => ansi/sgr(cell.style) end;
+        Pen {
+            out = x[..pen.out, ..move, ..sgr, ..Str/to_bytes(cell.symbol)],
+            style = Option/some(cell.style),
+            at = Option/some((x + width, y)),
+        }
+    end;
+
+let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Cell, w), before: Option(Vec(Cell, w))) -> Pen =
+    let cells = List/zip(List/range(0, w), Vec/to_list(row));
+    let previous =
+        match before
+        | some(b) => List/map(Vec/to_list(b), Option/some)
+        | none() => List/replicate(w, Option/none())
+        end;
+    List/fold(
+        List/zip(cells, previous),
+        pen,
+        (entry, acc) => paint(acc, entry.0.0, y, entry.0.1, entry.1));
+
+pub let render(
+    @w: Nat,
+    @h: Nat,
+    previous: Option(Frame(w, h)),
+    next: Frame(w, h),
+    cursor: Option({x: Nat, y: Nat}),
+) -> Bytes =
+    let clear = match previous | some(_) => x[] | none() => ansi/clear end;
+    let rows = List/zip(List/range(0, h), Vec/to_list(next));
+    let before =
+        match previous
+        | some(p) => List/map(Vec/to_list(p), Option/some)
+        | none() => List/replicate(h, Option/none())
+        end;
+    let start =
+        Pen {
+            out = x[..ansi/sync_begin, ..ansi/cursor_hide, ..clear],
+            style = Option/none(),
+            at = Option/none(),
+        };
+    let painted =
+        List/fold(
+            List/zip(rows, before),
+            start,
+            (entry, acc) => paint_row(acc, entry.0.0, entry.0.1, entry.1));
+    let place =
+        match cursor
+        | some(c) => x[..ansi/move_to(c.x, c.y), ..ansi/cursor_show]
+        | none() => x[]
+        end;
+    x[..painted.out, ..ansi/reset, ..place, ..ansi/sync_end];

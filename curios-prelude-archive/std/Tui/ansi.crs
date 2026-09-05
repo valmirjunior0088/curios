@@ -1,0 +1,85 @@
+-- The escape sequences this library writes, in one place: a `CSI` is `ESC [` and a body, and every mode the session switches and every attribute the renderer paints is a body here. Bytes rather than `Str`, because `ESC` has no string escape and a frame is written as bytes anyway.
+use /std/{Nat, Bool, Str, Bytes, List, Byte};
+use /std/Tui/{Color, Style};
+
+pub let csi(body: Str) -> Bytes =
+    x[0x1B, '[', ..Str/to_bytes(body)];
+
+-- Put the cursor at column `x` of row `y`, both from zero; the terminal counts from one.
+pub let move_to(x: Nat, y: Nat) -> Bytes =
+    csi(Str/flatten([Nat/to_str(y + 1), ";", Nat/to_str(x + 1), "H"]));
+
+pub let clear: Bytes =
+    csi("2J");
+
+pub let sync_begin: Bytes =
+    csi("?2026h");
+
+pub let sync_end: Bytes =
+    csi("?2026l");
+
+pub let cursor_show: Bytes =
+    csi("?25h");
+
+pub let cursor_hide: Bytes =
+    csi("?25l");
+
+pub let alternate_on: Bytes =
+    csi("?1049h");
+
+pub let alternate_off: Bytes =
+    csi("?1049l");
+
+pub let paste_on: Bytes =
+    csi("?2004h");
+
+pub let paste_off: Bytes =
+    csi("?2004l");
+
+pub let kitty_push: Bytes =
+    csi(">1u");
+
+pub let kitty_pop: Bytes =
+    csi("<u");
+
+pub let reset: Bytes =
+    csi("0m");
+
+-- A colour's SGR parameters: `base` is 30 for a foreground and 40 for a background, and the bright eight of the palette sit sixty above the base.
+let color_params(c: Color, base: Nat) -> List(Str) =
+    match c
+    | default() => []
+    | ansi(n, @ok) =>
+        match n < 8
+        | true => [Nat/to_str(base + n)]
+        | false => [Nat/to_str(base + 60 + (n - 8))]
+        end
+    | indexed(b) => [Nat/to_str(base + 8), "5", Nat/to_str(Byte/to_nat(b))]
+    | rgb(r, g, b) =>
+        [
+            Nat/to_str(base + 8),
+            "2",
+            Nat/to_str(Byte/to_nat(r)),
+            Nat/to_str(Byte/to_nat(g)),
+            Nat/to_str(Byte/to_nat(b))]
+    end;
+
+-- The whole of a style as one SGR sequence, from a reset: the renderer emits it only where the style changes, so each is written absolutely rather than as a difference from the last.
+pub let sgr(s: Style) -> Bytes =
+    let flag(on: Bool, code: Str) -> List(Str) = match on | true => [code] | false => [] end;
+    csi(
+        Str/concat(
+            Str/join(
+                ";",
+                List/flatten(
+                    [
+                        ["0"],
+                        color_params(s.fg, 30),
+                        color_params(s.bg, 40),
+                        flag(s.bold, "1"),
+                        flag(s.dim, "2"),
+                        flag(s.italic, "3"),
+                        flag(s.underline, "4"),
+                        flag(s.reverse, "7"),
+                        flag(s.strike, "9")])),
+            "m"));

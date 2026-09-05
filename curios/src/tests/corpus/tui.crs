@@ -8,3 +8,5 @@ mod frame;
 mod layout;
 
 mod input;
+
+mod render;
