@@ -106,7 +106,7 @@ fn match_rejects_a_motive_on_tuple_head() {
     );
 }
 
-// A nested `Nat` pattern column missing its `0` case entirely. These four hardcoded carriers have no core-side exhaustiveness mechanism to fall back on, unlike an ordinary constructor tag.
+// A `Nat` column missing its `0` case entirely, reported by the case it lacks. These four hardcoded carriers have no core-side exhaustiveness mechanism to fall back on, unlike an ordinary constructor tag.
 #[test]
 fn match_rejects_incomplete_nat_pattern() {
     let source = r#"
@@ -120,7 +120,7 @@ fn match_rejects_incomplete_nat_pattern() {
 
     let error = error(source);
     assert!(
-        error.contains("both of its cases"),
+        error.contains("must also cover `0`"),
         "unexpected error: {error}"
     );
 }

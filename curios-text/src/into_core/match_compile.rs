@@ -496,8 +496,18 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
 
         // With a fallthrough default, a missing group's arm is the default (see [`Self::default`]); without one, both shapes are still required.
-        if (false_rows.is_empty() || true_rows.is_empty()) && self.default.is_none() {
-            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Bool" });
+        if self.default.is_none() {
+            let missing = match (false_rows.is_empty(), true_rows.is_empty()) {
+                (true, _) => Some("false"),
+                (_, true) => Some("true"),
+                _ => None,
+            };
+            if let Some(missing) = missing {
+                return Err(Error::MatrixIncompleteCarrierMatch {
+                    carrier: "Bool",
+                    missing,
+                });
+            }
         }
 
         let motive = self.motive_scope(top_motive.unwrap_or(&None))?;
@@ -563,7 +573,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         // Dispatch mode: no successor peeling, so `0`/`Lit(k)` are `switch` cases and the matrix default is the mandatory fallthrough (a `switch` over `Nat` is never exhaustive). Rows sharing a literal group and recurse together — a genuinely duplicated row falls to [`Self::compile`]'s leaf case, not silent last-wins.
         if succ_rows.is_empty() {
             let Some(default) = self.default.clone() else {
-                return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Nat" });
+                return Err(Error::MatrixNatDispatchNeedsDefault);
             };
             let mut groups: BTreeMap<Natural, Vec<MatrixRow<'_>>> = BTreeMap::new();
             for row in zero_rows {
@@ -586,7 +596,10 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             return Err(Error::MatrixMixedNatDispatch);
         }
         if zero_rows.is_empty() && self.default.is_none() {
-            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Nat" });
+            return Err(Error::MatrixIncompleteCarrierMatch {
+                carrier: "Nat",
+                missing: "0",
+            });
         }
 
         let zero_case = match zero_rows.is_empty() {
@@ -658,8 +671,18 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
         }
 
-        if (nil_rows.is_empty() || cons_rows.is_empty()) && self.default.is_none() {
-            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "List" });
+        if self.default.is_none() {
+            let missing = match (nil_rows.is_empty(), cons_rows.is_empty()) {
+                (true, _) => Some("[]"),
+                (_, true) => Some("[head, ..tail]"),
+                _ => None,
+            };
+            if let Some(missing) = missing {
+                return Err(Error::MatrixIncompleteCarrierMatch {
+                    carrier: "List",
+                    missing,
+                });
+            }
         }
 
         let motive = self.motive_scope(top_motive.unwrap_or(&None))?;
@@ -765,14 +788,20 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             }
         }
 
-        if (end_rows.is_empty() || byte_rows.is_empty()) && self.default.is_none() {
+        if self.default.is_none() {
             // Name the grain the rows actually wrote, not the family: `Bin` is an internal spelling the surface language does not contain. Every row agreed on a grain by here — the mixed case already returned above — and a column with no rows at all cannot reach this check.
-            let carrier = match grain {
-                Some(Grain::B) => "Bits",
-                _ => "Bytes",
+            let (carrier, empty, cons) = match grain {
+                Some(Grain::B) => ("Bits", "b[]", "b[head, ..tail]"),
+                _ => ("Bytes", "x[]", "x[head, ..tail]"),
             };
-
-            return Err(Error::MatrixIncompleteCarrierMatch { carrier });
+            let missing = match (end_rows.is_empty(), byte_rows.is_empty()) {
+                (true, _) => Some(empty),
+                (_, true) => Some(cons),
+                _ => None,
+            };
+            if let Some(missing) = missing {
+                return Err(Error::MatrixIncompleteCarrierMatch { carrier, missing });
+            }
         }
 
         let motive = self.motive_scope(top_motive.unwrap_or(&None))?;

@@ -88,10 +88,13 @@ pub enum Error {
     MatrixInconsistentShape,
     /// Two match-arm rows specify the exact same pattern in every column — including a flat, single-column match with a literally repeated constructor tag. Every arm must be reachable and distinct; "Path A" gives arms no priority order to break the tie with.
     MatrixDuplicateRow,
-    /// A nested `Bool`/`Nat`/`List`/`Bits`/`Bytes` leaf-pattern column split without both of its required cases present. Unlike an ordinary constructor tag (whose omission the matrix compiler defers entirely to `induct_match`'s vacuity inversion), these hardcoded carriers have no core-side exhaustiveness mechanism — the matrix compiler must enforce completeness itself.
+    /// A `Bool`/`Nat`/`List`/`Bits`/`Bytes` leaf-pattern column split without both of its required cases present and no `| _ =>` to stand in — `missing` is the spelling of the case the rows lack. Unlike an ordinary constructor tag (whose omission the matrix compiler defers entirely to `induct_match`'s vacuity inversion), these hardcoded carriers have no core-side exhaustiveness mechanism — the matrix compiler must enforce completeness itself. Raised for a column at any depth, so the report names neither.
     MatrixIncompleteCarrierMatch {
         carrier: &'static str,
+        missing: &'static str,
     },
+    /// A `Nat` column dispatching on literals with no `| _ =>` default. A `switch` over `Nat` is never exhaustive, so `documentation/syntax.md` makes the default mandatory for the dispatch form — a rule of its own, which the two-case message above misstated as a missing successor arm.
+    MatrixNatDispatchNeedsDefault,
     /// A `Nat` match-arm column mixes successor-peeling (`n + 1; ih`) with literal dispatch (`5`, `0x90`). A literal case peels no successor, so the two select incompatible core forms (the `Nat` eliminator vs. a value `switch`) and cannot share one column — write one or the other.
     MatrixMixedNatDispatch,
     /// A binary-pattern column mixes bit and byte grains. A single scrutinee has one binary type, so every row in the column must use the same prefix.
@@ -256,10 +259,16 @@ impl fmt::Display for Error {
                     "duplicate or overlapping match arm: every arm must be reachable and distinct"
                 )
             }
-            Error::MatrixIncompleteCarrierMatch { carrier } => {
+            Error::MatrixIncompleteCarrierMatch { carrier, missing } => {
                 write!(
                     f,
-                    "a nested `{carrier}` pattern column must cover both of its cases"
+                    "a `{carrier}` match must also cover `{missing}`, or end in `| _ =>`"
+                )
+            }
+            Error::MatrixNatDispatchNeedsDefault => {
+                write!(
+                    f,
+                    "a `Nat` dispatch over literals must end in `| _ =>`: no set of literals covers every natural"
                 )
             }
             Error::MatrixMixedNatDispatch => {

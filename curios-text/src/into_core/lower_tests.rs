@@ -142,6 +142,41 @@ fn a_match_shape_refusal_is_located_at_the_match() {
     }
 }
 
+/// An incomplete carrier match names the case it lacks, at whatever depth the column sits, and a literal dispatch names the rule it broke: the mandatory default. One message once served every site — "a nested column must cover both of its cases" — which was false at the top level and, for a dispatch, pointed at a successor arm the form does not have.
+#[test]
+fn an_incomplete_carrier_match_names_the_missing_case() {
+    for (source, expected) in [
+        (
+            "match b | true => 1 end",
+            "a `Bool` match must also cover `false`",
+        ),
+        (
+            "match b | [] => 0 end",
+            "a `List` match must also cover `[head, ..tail]`",
+        ),
+        (
+            "match b | p + 1 => p end",
+            "a `Nat` match must also cover `0`",
+        ),
+        (
+            "match b | x[] => 0 end",
+            "a `Bytes` match must also cover `x[head, ..tail]`",
+        ),
+        (
+            "match b | 0 => 1 | 1 => 2 end",
+            "a `Nat` dispatch over literals must end in `| _ =>`",
+        ),
+        (
+            "match b | wrap(5) => 1 | wrap(6) => 2 end",
+            "a `Nat` dispatch over literals must end in `| _ =>`",
+        ),
+    ] {
+        let error = run_err(source);
+        assert!(error.contains(expected), "{source:?} reported {error}");
+        assert!(!error.contains("nested"), "{source:?} reported {error}");
+    }
+}
+
 #[test]
 fn constant_atoms_fold_into_the_packed_run() {
     // A constant atom folds into the neighbouring run whether it is spelled as a numeral or as a `true`/`false` literal, so the literal stays one `Intrinsic::Bin` rather than an append onto one. Conversion equates the spellings either way — `core::spine` decodes a concrete appended atom as a length-1 literal run — so this pins the compaction, not the meaning. (Names need not resolve: lowering precedes name resolution.)
