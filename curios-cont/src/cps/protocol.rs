@@ -244,6 +244,7 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
             },
             next: body,
         });
+        module.mark_rebuilt(held);
         let definition = module.continuations.get_mut(resume).unwrap();
         definition.params = params;
         definition.body = rebuilt;

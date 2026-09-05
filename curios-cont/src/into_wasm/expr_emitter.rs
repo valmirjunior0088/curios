@@ -2,7 +2,7 @@ use {
     super::{
         BlockData, CodeEmitter, Context, EmissionArg, EmissionBlockName, EmissionBody,
         EmissionData, EmissionValue, EmissionValueName, Frame, ImmediateLayout, LayoutItem, LoadAs,
-        LocalData, region_layout, slot_zero_instrs,
+        LocalData, RowLoad, region_layout, slot_zero_instrs,
     },
     curios_utilities::{Grain, recurse},
     std::collections::{BTreeMap, HashMap, HashSet},
@@ -124,16 +124,51 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 });
             }
             // Each slot is filled at the carrier its row declares: a scalar goes in raw, a shaped reference through a null-admitting cast, and a slot this constructor does not write takes that slot's own zero rather than one chosen upstream.
-            EmissionData::Row(row, slots) => {
+            //
+            // A head rebuild loads its reference slots tolerantly instead: the value is tested against the slot's type first, and one that is not of it — the boxed `i31` a padded edge handed the field parameter — lands as the slot's null, exactly what the constructor that left the slot unwritten would have stored. The exact cast stays everywhere else, so a value that fails it there still traps where the fault is.
+            EmissionData::Row(row, slots, load) => {
                 let family_type = self.context.table().find_row_type(*row);
                 let carriers = self.context.table().row_slots(*row).to_vec();
 
                 for (slot, carrier) in slots.iter().zip(carriers) {
-                    self.emit_instrs(match slot {
-                        EmissionArg::Value(name) => self
-                            .context
-                            .load_value_instrs(name, self.context.table().slot_load_as(carrier)),
-                        EmissionArg::Filler => slot_zero_instrs(carrier),
+                    let load_as = self.context.table().slot_load_as(carrier);
+                    self.emit_instrs(match (slot, *load, load_as) {
+                        (
+                            EmissionArg::Value(name),
+                            RowLoad::Tolerant,
+                            LoadAs::ConcreteOrNull(type_name),
+                        ) => {
+                            let ref_type = curios_wasm::RefType {
+                                is_nullable: true,
+                                heap_type: curios_wasm::HeapType::Concrete(type_name.clone()),
+                            };
+                            let mut instrs = self.context.load_value_instrs(name, LoadAs::Null);
+                            instrs.push(curios_wasm::Instr::RefTest {
+                                ref_type: ref_type.clone(),
+                            });
+                            let mut then_instructions =
+                                self.context.load_value_instrs(name, LoadAs::Null);
+                            then_instructions.push(curios_wasm::Instr::RefCast {
+                                ref_type: ref_type.clone(),
+                            });
+                            instrs.push(curios_wasm::Instr::If {
+                                label_name: self.context.table().special_label(),
+                                block_type: curios_wasm::BlockType::Inline(
+                                    curios_wasm::ValType::Ref(ref_type),
+                                ),
+                                then_instructions,
+                                else_instructions: vec![curios_wasm::Instr::RefNull {
+                                    heap_type: curios_wasm::HeapType::Abstract(
+                                        curios_wasm::AbsHeapType::None,
+                                    ),
+                                }],
+                            });
+                            instrs
+                        }
+                        (EmissionArg::Value(name), _, load_as) => {
+                            self.context.load_value_instrs(name, load_as)
+                        }
+                        (EmissionArg::Filler, _, _) => slot_zero_instrs(carrier),
                     });
                 }
 

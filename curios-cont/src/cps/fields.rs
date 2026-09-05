@@ -228,6 +228,7 @@ fn apply_split(
         .get_mut(split.continuation)
         .expect("admitted continuation is live")
         .body = head;
+    module.mark_rebuilt(rebuilt);
     module.replace_atom(CpsUseTarget::Value(split.param), CpsAtom::Value(rebuilt));
     module.values.remove(split.param);
 
@@ -381,6 +382,7 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
         .get_mut(worker.function)
         .expect("admitted function is live")
         .body = head;
+    module.mark_rebuilt(rebuilt);
     module.replace_atom(CpsUseTarget::Value(worker.param), CpsAtom::Value(rebuilt));
     module.values.remove(worker.param);
 

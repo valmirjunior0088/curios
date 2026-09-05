@@ -139,8 +139,8 @@ impl<'a> MachineFunctionBridge<'a> {
                             EmissionData::Tuple(self.operands(elements, &mut values)),
                         ),
                         // A variant's slots are the second position that may defer a filler: the slot's carrier is the row's to declare, so materialising a zero here would pick the wrong one exactly where a slot is typed.
-                        MachineConstruct::Row(row, elements) => EmissionValue::Pure(
-                            EmissionData::Row(*row, self.jump_args(elements, &mut values)),
+                        MachineConstruct::Row(row, elements, load) => EmissionValue::Pure(
+                            EmissionData::Row(*row, self.jump_args(elements, &mut values), *load),
                         ),
                     };
                     values.push((value_name(*result), value));
@@ -552,7 +552,7 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
                 MachineConstruct::Literal(_) => {}
                 MachineConstruct::List(operands)
                 | MachineConstruct::Tuple(operands)
-                | MachineConstruct::Row(_, operands) => {
+                | MachineConstruct::Row(_, operands, _) => {
                     operands.iter().for_each(&mut insert);
                 }
             },

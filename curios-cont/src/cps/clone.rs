@@ -233,6 +233,10 @@ pub(super) fn copy_bodies(
     for old in owned {
         let definition = module.values.get(old).unwrap().clone();
         let fresh = module.add_value(definition.debug_name);
+        // A copied rebuild is still a rebuild: the tolerance its slots need is a fact of the construction, not of the copy.
+        if module.is_rebuilt(old) {
+            module.mark_rebuilt(fresh);
+        }
         values.insert(old, fresh);
     }
 

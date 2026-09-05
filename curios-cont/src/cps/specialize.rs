@@ -345,6 +345,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
         },
         next: clone_body,
     });
+    module.mark_rebuilt(old_param);
     params.splice(index..=index, field_params);
     let clone_function = module.functions.get_mut(clone).unwrap();
     clone_function.params = params;
@@ -553,6 +554,7 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
         },
         next: clone_body,
     });
+    module.mark_rebuilt(old_param);
     params.splice(index..=index, field_params);
     let clone_definition = module.continuations.get_mut(clone).unwrap();
     clone_definition.params = params;

@@ -37,7 +37,15 @@ pub(crate) enum MachineConstruct {
     Literal(CpsLiteral),
     List(Vec<MachineOperand>),
     Tuple(Vec<MachineOperand>),
-    Row(CpsRowId, Vec<MachineOperand>),
+    /// A row, and whether it is a head rebuild whose reference slots load tolerantly — see `CpsModule::mark_rebuilt`.
+    Row(CpsRowId, Vec<MachineOperand>, RowLoad),
+}
+
+/// How a row construction loads a value into a reference slot: through the slot's exact cast, or tolerantly, landing whatever fails the cast as the slot's null.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RowLoad {
+    Exact,
+    Tolerant,
 }
 
 #[derive(Debug, Clone)]
@@ -510,6 +518,10 @@ impl<'a> MachineFunctionLowerer<'a> {
                                 .iter()
                                 .map(|atom| self.lower_atom(atom, &mut instructions))
                                 .collect(),
+                            match self.source.is_rebuilt(*result) {
+                                true => RowLoad::Tolerant,
+                                false => RowLoad::Exact,
+                            },
                         ),
                     };
                     instructions.push(MachineInstruction::Construct {

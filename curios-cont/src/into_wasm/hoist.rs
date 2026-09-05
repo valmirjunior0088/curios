@@ -116,7 +116,8 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                     consts.renames.insert(name.clone(), interned);
                 }
             }
-            EmissionData::Row(row, slots) => {
+            // A tolerant rebuild is never a constant: its slots are field parameters, which `intern_slots` declines, so the load mode has no key to join.
+            EmissionData::Row(row, slots, load) => {
                 if let Some(canonical) = intern_slots(slots, interner, consts) {
                     let key = ConstKey::Row(
                         row.index(),
@@ -128,7 +129,7 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                             })
                             .collect(),
                     );
-                    let interned = interner.intern(key, EmissionData::Row(*row, canonical));
+                    let interned = interner.intern(key, EmissionData::Row(*row, canonical, *load));
                     consts.renames.insert(name.clone(), interned);
                 }
             }
@@ -256,7 +257,7 @@ fn rename_value(
             | EmissionData::Flt(_)
             | EmissionData::Bin(_, _) => {}
             EmissionData::List(elems) | EmissionData::Tuple(elems) => rename_names(elems, renames),
-            EmissionData::Row(_, slots) => rename_jump_args(slots, renames),
+            EmissionData::Row(_, slots, _) => rename_jump_args(slots, renames),
             EmissionData::Closure(_, fields) => rename_names(fields, renames),
         },
         EmissionValue::Eval(code) => match code {
