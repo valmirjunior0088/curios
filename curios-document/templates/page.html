@@ -1,4 +1,5 @@
 {#- A module's page. The rail holds the whole tree with this page's declarations under its module; the main column opens with the path and the lead, then the child modules, the declarations and the re-exports. -#}
+{%- import "signature.html" as sig -%}
 {%- import "prose.html" as words -%}
 <!doctype html>
 <html lang="en">
@@ -7,6 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ path }}</title>
 <link rel="stylesheet" href="{{ root }}static/style.css">
+<script src="{{ root }}static/script.js" defer></script>
 </head>
 <body>
 <div class="frame">
@@ -44,6 +46,14 @@
 {% for card in cards -%}
 {% include "card.html" %}
 {% endfor -%}
+{% endif -%}
+{% if !witnesses.is_empty() -%}
+<h2>Witnesses</h2>
+<ul class="witnesses">
+{% for witness in witnesses -%}
+<li id="{{ witness.anchor }}"><span class="line">{% call sig::segments(witness.signature) %}{% endcall %}</span>{% if witness.derived %}<span class="badge dashed">derived</span>{% endif %}{% for paragraph in witness.prose %}<span class="note">{% call words::paragraph(paragraph) %}{% endcall %}</span>{% endfor %}</li>
+{% endfor -%}
+</ul>
 {% endif -%}
 {% if !reexports.is_empty() -%}
 <h2>Re-exports</h2>

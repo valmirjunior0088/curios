@@ -1,4 +1,4 @@
-//! The pages `curios document` writes from a [`Documentation`] record: one page per module at its source path, the root's doubling as the landing page, and the static files every page shares. Pages are static, read from `file://`, fetch nothing, and carry no script.
+//! The pages `curios document` writes from a [`Documentation`] record: one page per module at its source path, the root's doubling as the landing page, and the static files every page shares. Pages are static, read from `file://`, fetch nothing, and are complete without script: the one script scrolls the rail to the page's own module, since a new page's rail starts at the top.
 //!
 //! **The templates hold the markup and the contexts hold the facts.** Each page is an Askama template under `templates/`, compiled into this crate, over a context [`context`] prepares from the record: every href, anchor, badge and keyword is decided in Rust, and a template loops, branches and escapes. What this module decides is the layout of the bundle and its addressing — where a module's page is, what a declaration's anchor is, and how a link from one page reaches another — because every page, whatever its design, renders into the same places. The stylesheet, the fonts and the mark are embedded with `include_bytes!` and written under `static/`, so a bundle is complete on disk and a binary needs nothing beside it.
 //!
@@ -20,6 +20,7 @@ use {
 /// What every bundle carries under `static/`, by the path it is written at.
 const STATIC: &[(&str, &[u8])] = &[
     ("style.css", include_bytes!("../static/style.css")),
+    ("script.js", include_bytes!("../static/script.js")),
     ("mark.svg", include_bytes!("../static/mark.svg")),
     (
         "fonts/geist.woff2",

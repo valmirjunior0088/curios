@@ -35,6 +35,8 @@ pub(super) struct Page {
     /// The child modules, as cards.
     modules: Vec<ModuleCard>,
     cards: Vec<Card>,
+    /// The module's witnesses, in source order.
+    witnesses: Vec<WitnessRow>,
     reexports: Vec<ReexportRow>,
     version: &'static str,
 }
@@ -82,6 +84,16 @@ struct Card {
     badges: Vec<Badge>,
     signature: Vec<Segment>,
     members: Vec<MemberRow>,
+    /// How the members are laid out, as a class: `cases` for constructors flush with the head, `fields` for fields and methods indented under it, nothing for a declaration without a block.
+    layout: &'static str,
+    /// What the source writes after the head, before its members: ` {` for a structure or a concept.
+    opener: &'static str,
+    /// What precedes each member: `| ` before a constructor.
+    lead: &'static str,
+    /// What follows each member: `,` after a field or a method.
+    trail: &'static str,
+    /// What closes the block: `end` after constructors, `}` after fields or methods.
+    closer: Option<&'static str>,
     prose: Vec<Paragraph>,
 }
 
@@ -105,6 +117,14 @@ enum Segment {
     Keyword(String),
     Link { href: String, text: String },
     Name(String),
+}
+
+/// One `satisfy` on a page: its head with its links, whether the compiler wrote its body, and the note written above it.
+struct WitnessRow {
+    anchor: String,
+    signature: Vec<Segment>,
+    derived: bool,
+    prose: Vec<Paragraph>,
 }
 
 /// A `pub use`: the name and where it leads, a link when the declaration has a page in this bundle.
@@ -166,28 +186,41 @@ pub(super) fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
         })
         .collect();
 
-    let mut witnesses = 0;
-    let cards = module
-        .declarations
-        .iter()
-        .map(|declaration| card(bundle, depth, declaration, &mut witnesses))
-        .collect::<Vec<_>>();
-    let contents = cards
-        .iter()
-        .zip(&module.declarations)
-        .map(|(card, declaration)| Entry {
-            keyword: card.keyword,
-            name: match declaration.kind {
-                Kind::Witness => declaration
-                    .signature
-                    .text
-                    .trim_start_matches("satisfy ")
-                    .to_string(),
-                _ => declaration.name.clone(),
-            },
-            anchor: card.anchor.clone(),
-        })
-        .collect();
+    // A witness is anonymous, so its anchor is its position among the module's witnesses; every other declaration's anchor is its name.
+    let mut witnesses = Vec::new();
+    let mut cards = Vec::new();
+    let mut contents = Vec::new();
+    for declaration in &module.declarations {
+        match declaration.kind {
+            Kind::Witness => {
+                let anchor = format!("satisfy-{}", witnesses.len() + 1);
+                contents.push(Entry {
+                    keyword: keyword(declaration.kind),
+                    name: declaration
+                        .signature
+                        .text
+                        .trim_start_matches("satisfy ")
+                        .to_string(),
+                    anchor: anchor.clone(),
+                });
+                witnesses.push(WitnessRow {
+                    anchor,
+                    signature: segments(bundle, depth, &declaration.signature),
+                    derived: declaration.derived,
+                    prose: paragraphs(declaration.prose.as_deref()),
+                });
+            }
+            _ => {
+                let built = card(bundle, depth, declaration);
+                contents.push(Entry {
+                    keyword: built.keyword,
+                    name: declaration.name.clone(),
+                    anchor: built.anchor.clone(),
+                });
+                cards.push(built);
+            }
+        }
+    }
 
     let modules = module
         .children
@@ -229,26 +262,13 @@ pub(super) fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
         contents,
         modules,
         cards,
+        witnesses,
         reexports,
         version: VERSION,
     }
 }
 
-fn card(
-    bundle: &Bundle<'_>,
-    depth: usize,
-    declaration: &Declaration,
-    witnesses: &mut usize,
-) -> Card {
-    // A witness is anonymous, so its anchor is its position among the module's witnesses.
-    let anchor = match declaration.kind {
-        Kind::Witness => {
-            *witnesses += 1;
-            format!("satisfy-{witnesses}")
-        }
-        _ => declaration.name.clone(),
-    };
-
+fn card(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration) -> Card {
     let mut badges = Vec::new();
     if matches!(
         declaration.kind,
@@ -265,26 +285,31 @@ fn card(
             },
         });
     }
-    if declaration.derived {
-        badges.push(Badge {
-            label: "derived",
-            tone: "dashed",
-        });
-    }
-
     let members = declaration
         .members
         .iter()
         .map(|member| member_row(bundle, depth, &declaration.name, member))
         .collect();
 
+    // The block as the source writes it, where the representation is shown: an inductive's constructors each after a bar and closed by `end`, a structure's fields and a concept's methods in braces, each with its comma. A sealed concept still lists its methods.
+    let (layout, opener, lead, trail, closer) = match (declaration.kind, declaration.opaque) {
+        (Kind::Inductive, false) => ("cases", "", "| ", "", Some("end")),
+        (Kind::Structure, false) | (Kind::Concept, _) => ("fields", " {", "", ",", Some("}")),
+        _ => ("", "", "", "", None),
+    };
+
     Card {
-        anchor,
+        anchor: declaration.name.clone(),
         keyword: keyword(declaration.kind),
         name: declaration.name.clone(),
         badges,
         signature: segments(bundle, depth, &declaration.signature),
         members,
+        layout,
+        opener,
+        lead,
+        trail,
+        closer,
         prose: paragraphs(declaration.prose.as_deref()),
     }
 }
