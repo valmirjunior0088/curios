@@ -1,0 +1,15 @@
+use /std/{Option, Io, Async};
+
+-- | A non-committing attempt at a value, and what to wait on while it declines. `Async/select` takes nothing out of a source until that source is the one it answers with, so an offer that loses a selection has consumed nothing.
+pub struct Offer(A: Type): pub Type {
+    try: Io(Option(A)),
+    wait: Io(Async/Wait),
+}
+
+-- | An offer that attempts `try` and waits on `wait` while it declines. The wait is a description rather than a value because it is asked again on every retry, so an offer against a deadline can name the time still left rather than the whole of it.
+pub let new(@A: Type, try: Io(Option(A)), wait: Io(Async/Wait)) -> Offer(A) =
+    Offer { try = try, wait = wait };
+
+-- | `f` applied to whatever the offer answers with.
+pub let map(@A: Type, @B: Type, o: Offer(A), f: (A) -> B) -> Offer(B) =
+    new(Io/bind(o.try, (m) => Io/pure(Option/map(m, f))), o.wait);

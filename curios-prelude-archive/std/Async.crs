@@ -11,6 +11,10 @@ pub use Future/{let Future};
 pub mod Signal;
 pub use Signal/{let Signal};
 
+-- | What a selection is written against: a non-committing attempt at a value and what to wait on while it declines.
+pub mod Offer;
+pub use Offer/{let Offer};
+
 -- | The loops that turn a raw handle's `would_block` into a park, for a stream type's own witness.
 pub mod raw;
 
@@ -30,7 +34,7 @@ struct Guard: Type {
 }
 
 -- | One thing a parked fiber waits for. A park names a list of them and resumes on whichever fires first.
-induct Wait: Type
+pub induct Wait: pub Type
 | readable(handle: /sys/Handle, interest: Nat)
 | elapsed(Duration)
 | woken(register: (Waker) -> Io({}))
@@ -573,40 +577,90 @@ pub let join_all(@A: Type, tasks: List(Async(A))) -> Async(List(A)) =
         end;
     go(0);
 
--- | The first task to answer, with its index; the others are cancelled.
-pub let select(@A: Type, tasks: List(Async(A))) -> Async({Nat, A}) =
-    let winner = Future/new()!;
-    let arm(i: Nat) -> Async(List(Token)) =
-        match Nat/Lt/try(i, List/len(tasks))
-        | none() => pure([])
-        | some(ok) =>
-            let c = Cell/new(false)!;
-            let t = Token { c };
-            let _ =
-                fork_with(
-                    Async {
-                        bind_raw(
-                            List/get(@Async(A), tasks, i, @ok).0,
-                            (a) => bind(lift(Future/fulfill(winner, (i, a))), (_) => pure(())).0),
-                    },
-                    t)!;
-            let rest = arm(i + 1)!;
-            pure([t, ..rest])
-        end;
-    let tokens = arm(0)!;
-    let w = await(winner)!;
-    let _ = cancel_all(tokens)!;
+let attempt(@A: Type, offers: List(Offer(A)), i: Nat) -> Io(Option({Nat, A})) =
+    match offers
+    | [] => Io/pure(Option/none())
+    | [o, ..more] =>
+        let got = o.try!;
+        match got
+        | some(a) => Io/pure(Option/some((i, a)))
+        | none() => attempt(more, i + 1)
+        end
+    end;
+
+let waits_of(@A: Type, offers: List(Offer(A))) -> Io(List(Wait)) =
+    match offers
+    | [] => Io/pure([])
+    | [o, ..more] =>
+        let w = o.wait!;
+        let ws = waits_of(more)!;
+        Io/pure([w, ..ws])
+    end;
+
+-- | The first offer to yield a value, with its index, parking on all of them while every one declines. Offers are tried in list order, so a selection is not fair, and nothing leaves a source until it is the answer, so an offer that loses has consumed nothing.
+pub let select(@A: Type, offers: List(Offer(A))) -> Async({Nat, A}) =
+    let taken = attempt(offers, 0)!;
+    match taken
+    | some(w) => pure(w)
+    | none() =>
+        let ws = waits_of(offers)!;
+        let _ = park(ws)!;
+        select(offers)
+    end;
+
+-- | An offer that yields once `d` has passed.
+pub let after(d: Duration) -> Io(Offer({})) =
+    let start = Duration/now()!;
+    let due = Duration/add(start, d);
+    Io/pure(
+        Offer/new(
+            Io/bind(
+                Duration/now(),
+                (t) =>
+                    Io/pure(
+                        match Duration/before(t, due)
+                        | true => Option/none()
+                        | false => Option/some(())
+                        end)),
+            Io/bind(Duration/now(), (t) => Io/pure(Wait/elapsed(Duration/sub(due, t))))));
+
+-- | An offer that yields the task's answer once it has one.
+pub let joined(@A: Type, task: Task(A)) -> Offer(A) =
+    Offer/new(
+        Future/poll(task.result),
+        Io/pure(Wait/woken((w) => Future/register(task.result, w))));
+
+let spawn_all(@A: Type, tasks: List(Async(A))) -> Async(List(Task(A))) =
+    match tasks
+    | [] => pure([])
+    | [t, ..more] =>
+        let h = spawn(t)!;
+        let rest = spawn_all(more)!;
+        pure([h, ..rest])
+    end;
+
+-- | The first of `tasks` to answer, with its index; the others are cancelled. A task abandoned part-way loses whatever it had taken and not yet answered with, which is what abandoning a running computation costs — a selection over `Offer`s takes nothing until it keeps it, and is the way to choose without paying that.
+pub let first(@A: Type, tasks: List(Async(A))) -> Async({Nat, A}) =
+    let running = spawn_all(tasks)!;
+    let w = select(List/map(running, (t: Task(A)) => joined(t)))!;
+    let _ = lift(cancel_all(List/map(running, (t: Task(A)) => t.token)))!;
     pure(w);
 
--- | The first task to answer; the others are cancelled.
+-- | The first of `tasks` to answer; the others are cancelled.
 pub let race(@A: Type, tasks: List(Async(A))) -> Async(A) =
-    map(select(tasks), (w) => w.1);
+    map(first(tasks), (w) => w.1);
 
--- | `body`'s answer, or `none` when `d` passes first, in which case `body` is cancelled.
+-- | `body`'s answer, or `none` when `d` passes first, in which case `body` is cancelled. An answer that lands after `d` is dropped, which is what a timeout means.
 pub let timeout(@A: Type, d: Duration, body: Async(A)) -> Async(Option(A)) =
-    map(
-        select([map(body, (a) => Option/some(a)), map(sleep(d), (_) => Option/none())]),
-        (w) => w.1);
+    let running = spawn(body)!;
+    let timer = lift(after(d))!;
+    let w =
+        select(
+            [
+                Offer/map(joined(running), (a) => Option/some(a)),
+                Offer/map(timer, (_) => Option/none())])!;
+    let _ = lift(cancel(running))!;
+    pure(w.1);
 
 satisfy Monad(Async) {
     pure = pure,

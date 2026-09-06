@@ -1,4 +1,4 @@
-use /std/{List, Cell, Io, Async};
+use /std/{List, Option, Cell, Io, Async};
 use /std/Async/{Waker};
 
 induct State: Type
@@ -34,21 +34,26 @@ pub let notify(s: Signal) -> Io({}) =
         wake_all(ws)
     end;
 
--- | Park until the flag is raised, then lower it. A flag already raised is lowered at once.
-pub let wait(s: Signal) -> Async({}) =
+let listen(s: Signal, w: Waker) -> Io({}) =
+    let now = Cell/get(s.0)!;
+    match now
+    | raised() => Waker/wake(w)
+    | idle(ws) => Cell/set(s.0, State/idle([w, ..ws]))
+    end;
+
+let lower(s: Signal) -> Io(Option({})) =
     let state = Cell/get(s.0)!;
     match state
-    | raised() => Async/lift(Cell/set(s.0, State/idle([])))
-    | idle(_) =>
-        let _ =
-            Async/on_waker(
-                (w) =>
-                    Io/bind(
-                        Cell/get(s.0),
-                        (now) =>
-                            match now
-                            | raised() => Waker/wake(w)
-                            | idle(ws) => Cell/set(s.0, State/idle([w, ..ws]))
-                            end))!;
-        wait(s)
+    | raised() =>
+        let _ = Cell/set(s.0, State/idle([]))!;
+        Io/pure(Option/some(()))
+    | idle(_) => Io/pure(Option/none())
     end;
+
+-- | An offer that yields once the flag is raised, lowering it.
+pub let offer(s: Signal) -> Async/Offer({}) =
+    Async/Offer/new(lower(s), Io/pure(Async/Wait/woken((w) => listen(s, w))));
+
+-- | Park until the flag is raised, then lower it. A flag already raised is lowered at once.
+pub let wait(s: Signal) -> Async({}) =
+    Async/map(Async/select([offer(s)]), (_) => ());

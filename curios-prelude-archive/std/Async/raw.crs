@@ -1,4 +1,20 @@
-use /std/{Bytes, Nat, Result, Io, Async, True, stream};
+use /std/{Bytes, Nat, Bool, List, Option, Result, Io, Async, True, stream};
+
+let ready_now(results: Nat, interest: Nat) -> Bool =
+    Nat/and(results, Nat/or(Nat/or(interest, /sys/event/err), /sys/event/hup)) > 0;
+
+-- | An offer that yields once `h` polls ready for the event `ev`.
+pub let ready(h: /sys/Handle, ev: Nat) -> Async/Offer({}) =
+    Async/Offer/new(
+        Io/bind(
+            /sys/Handle/poll([h], [ev], 0),
+            (results) =>
+                Io/pure(
+                    match ready_now(Option/unwrap_or(List/try_get(results, 0), 0), ev)
+                    | true => Option/some(())
+                    | false => Option/none()
+                    end)),
+        Io/pure(Async/Wait/readable(h, ev)));
 
 -- | Park until `h` polls ready for the event `ev`.
 pub let wait(h: /sys/Handle, ev: Nat) -> Async({}) =
