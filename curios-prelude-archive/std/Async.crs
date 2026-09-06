@@ -586,10 +586,7 @@ let attempt(@A: Type, offers: List(Offer(A)), i: Nat) -> Io(Option({Nat, A})) =
     | [] => Io/pure(Option/none())
     | [o, ..more] =>
         let got = o.try!;
-        match got
-        | some(a) => Io/pure(Option/some((i, a)))
-        | none() => attempt(more, i + 1)
-        end
+        match got | some(a) => Io/pure(Option/some((i, a))) | none() => attempt(more, i + 1) end
     end;
 
 let waits_of(@A: Type, offers: List(Offer(A))) -> Io(List(Wait)) =

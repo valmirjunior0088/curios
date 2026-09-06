@@ -36,10 +36,7 @@ pub let notify(s: Signal) -> Io({}) =
 
 let listen(s: Signal, w: Waker) -> Io({}) =
     let now = Cell/get(s.0)!;
-    match now
-    | raised() => Waker/wake(w)
-    | idle(ws) => Cell/set(s.0, State/idle([w, ..ws]))
-    end;
+    match now | raised() => Waker/wake(w) | idle(ws) => Cell/set(s.0, State/idle([w, ..ws])) end;
 
 let lower(s: Signal) -> Io(Option({})) =
     let state = Cell/get(s.0)!;

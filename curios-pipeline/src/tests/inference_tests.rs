@@ -155,10 +155,10 @@ fn a_dependent_result_action_auto_lifts_through_bang() {
 fn a_list_element_lambda_body_solves_against_the_element_metavariable() {
     // The inference spec's defect (a), same root cause as defect (b): checked as a list element, `map`'s result metavariable reaches the lambda body's conversion still spelling solved metavariables whose spines carry out-of-scope binders, and the unmaterialized scope check refused the ground `Option(A)`.
     let source = r#"
-        use /std/{Async, Option, Nat};
+        use /std/{Async, Option};
 
-        let probe(@A: Type, body: Async(A)) -> Async({Nat, Option(A)}) =
-            Async/select([Async/map(body, (a) => Option/some(a))]);
+        let probe(@A: Type, body: Async(A)) -> Async(Option(A)) =
+            Async/race([Async/map(body, (a) => Option/some(a))]);
 
         /std/Io/pure(())
     "#;
