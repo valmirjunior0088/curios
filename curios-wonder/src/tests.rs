@@ -300,13 +300,15 @@ fn a_library_reports_its_own_lints() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// A unit the overlay has not edited still comes from the store, however many units before it the overlay refused.
+/// A unit whose record still agrees comes from the store, however many units before it missed.
 ///
-/// **The regression for placing and filing having been one decision.** [`ReadOnly`] drops the write, and used to drop the placement with it — but a slot is addressed after the units placed before it, so the first refused unit shifted every later address by one and one declined hit became a miss for the whole tail. Two mounted units are the smallest shape that can show it: the second is what the first's absence from the chain moves.
+/// **The regression for placing and filing having been one decision.** [`ReadOnly`] drops the write, and used to drop the placement with it — but a slot is addressed after the units placed before it, so the first miss shifted every later address by one and one miss became a miss for the whole tail. Two mounted units are the smallest shape that can show it: the second is what the first's absence from the chain moves.
+///
+/// The miss is a slot taken out of the store rather than a document edited in the overlay. An edited predecessor recompiles into different bytes, and the successor's record — which vouches for the bytes every predecessor contained, since its arena is the whole prefix's — then disagrees on its own account, which reads exactly as a dropped placement would; a missing slot recompiles the same text into the same bytes, so the successor is reused precisely when it was placed after them. Which slot is the first unit's is not spelled here, so each is taken out in turn and the two outcomes are read together.
 ///
 /// Read off the fold's own progress events, as the store's own tests are: whether a unit was reused is exactly the question a caller asks, and asserting on a slot name would pass just as happily with the chain broken.
 #[test]
-fn refusing_one_units_hit_does_not_refuse_the_units_after_it() {
+fn a_miss_does_not_refuse_the_units_after_it() {
     let root = mounted_project("read-only-chain");
 
     // Filed by an ordinary build, since a query reads a store it never writes.
@@ -315,13 +317,49 @@ fn refusing_one_units_hit_does_not_refuse_the_units_after_it() {
     assert_eq!(
         folded(&root, &Overlay::default()),
         ["reused /alpha", "reused /beta"],
-        "both units are the store's when the overlay reaches neither"
+        "both units are the store's when nothing is missing"
     );
+
+    let slots = fs::read_dir(root.join(".curios/verdicts"))
+        .expect("a store with both units in it")
+        .map(|slot| slot.unwrap().path())
+        .collect::<Vec<_>>();
+    assert_eq!(slots.len(), 2, "one slot per unit: {slots:?}");
+
+    let mut outcomes = slots
+        .iter()
+        .map(|slot| {
+            let aside = slot.with_extension("aside");
+            fs::rename(slot, &aside).unwrap();
+            let events = folded(&root, &Overlay::default());
+            fs::rename(&aside, slot).unwrap();
+            events
+        })
+        .collect::<Vec<_>>();
+    outcomes.sort();
+
+    assert_eq!(
+        outcomes,
+        [
+            ["compiling /alpha", "reused /beta"],
+            ["reused /alpha", "compiling /beta"],
+        ],
+        "the unit after a missing one is still the store's, since the recompiled one was placed before it"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// An edited predecessor recompiles the units after it: a unit's arena is the whole prefix's, so its record vouches for the bytes every unit before it contained, and a predecessor that no longer contains them is a disagreement whether or not anything is imported from it.
+#[test]
+fn an_edited_unit_recompiles_the_units_after_it() {
+    let root = mounted_project("read-only-edited");
+    built(&root);
 
     assert_eq!(
         folded(&root, &edited(&root, "a/lib.crs")),
-        ["compiling /alpha", "reused /beta"],
-        "the overlay edits /alpha alone, so /beta is still the store's"
+        ["compiling /alpha", "compiling /beta"],
+        "the overlay edits /alpha alone, and /beta's record vouched for the /alpha it was compiled after"
     );
 
     fs::remove_dir_all(root).unwrap();
@@ -430,7 +468,7 @@ fn held(root: &Path, path: &str) -> Overlay {
     Overlay::of(BTreeMap::from([(path, text)]))
 }
 
-/// An overlay holding `path` with a line added: a document an editor has open and changed, still compiling as it did.
+/// An overlay holding `path` with a line added: a document an editor has open and changed.
 fn edited(root: &Path, path: &str) -> Overlay {
     let path = root.join(path);
     let text = fs::read_to_string(&path).expect("a written module");
