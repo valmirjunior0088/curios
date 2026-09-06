@@ -1,6 +1,6 @@
 use /std/{Nat, Bool, List, Option, Io, Try, Async};
 use /std/time/{Duration};
-use /std/Async/{Signal};
+use /std/Async/{Channel};
 
 -- | A terminal colour, in the four forms a terminal understands.
 pub mod Color;
@@ -126,18 +126,17 @@ pub let drive(
 pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
     Session/with(
         (s) =>
-            let queue: /std/Cell(List(Event(E))) = /std/Cell/new([])!;
-            let signal = Signal/new()!;
-            let push(e: Event(E)) -> Io({}) =
-                let current = /std/Cell/get(queue)!;
-                let _ = /std/Cell/set(queue, [..current, e])!;
-                Signal/notify(signal);
+            let queue: {Channel/Sender(Event(E)), Channel/Receiver(Event(E))} =
+                Channel/new(256)!;
+            let push(e: Event(E)) -> Async({}) =
+                let _ = Channel/send(queue.0, e)!;
+                Async/pure(());
             let reader() -> Async({}) =
                 let got = Session/read(@E, s)!;
                 match got
                 | none() => Async/pure(())
                 | some(events) =>
-                    let _ = Async/lift(List/each(events, push))!;
+                    let _ = List/each(events, push)!;
                     reader()
                 end;
             let ticker() -> Async({}) =
@@ -175,16 +174,26 @@ pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
                     | false => drain(next.0, more)
                     end
                 end;
+            -- Everything queued behind the event that woke the loop, so a burst still draws once.
+            let burst(acc: List(Event(E))) -> Async(List(Event(E))) =
+                let more = Async/lift(Channel/try_recv(queue.1))!;
+                match more
+                | none() => Async/pure(acc)
+                | some(e) => burst([..acc, e])
+                end;
             let loop(m: M) -> Async(M) =
-                let _ = Signal/wait(signal)!;
-                let events = /std/Cell/get(queue)!;
-                let _ = /std/Cell/set(queue, [])!;
-                let folded = drain(m, events)!;
-                match folded.1
-                | true => Async/pure(folded.0)
-                | false =>
-                    let _ = draw(folded.0)!;
-                    loop(folded.0)
+                let woke = Channel/recv(queue.1)!;
+                match woke
+                | none() => Async/pure(m)
+                | some(e) =>
+                    let events = burst([e])!;
+                    let folded = drain(m, events)!;
+                    match folded.1
+                    | true => Async/pure(folded.0)
+                    | false =>
+                        let _ = draw(folded.0)!;
+                        loop(folded.0)
+                    end
                 end;
             let _ = Async/go(reader())!;
             let _ = Async/go(ticker())!;
