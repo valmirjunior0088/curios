@@ -311,20 +311,26 @@ impl Overlay {
     }
 }
 
-/// The one spelling two paths to a file share: canonical when the file exists, and the canonical parent joined with the file name when it does not — so a document an editor has not saved yet still meets the `mod` declaration that will read it.
+/// The one spelling two paths to a file share: canonical when the file exists, and the canonical parent joined with the file name when it does not — so a document an editor has not saved yet still meets the `mod` declaration that will read it. A bare name's parent is the empty path, which spells the current directory and canonicalizes only when asked as one.
 pub fn identity(path: &Path) -> PathBuf {
     if let Ok(canonical) = path.canonicalize() {
         return canonical;
     }
 
     match (path.parent(), path.file_name()) {
-        (Some(parent), Some(name)) => parent
-            .canonicalize()
-            .map(|parent| parent.join(name))
-            .unwrap_or_else(|_| path.to_path_buf()),
+        (Some(parent), Some(name)) => match parent.as_os_str().is_empty() {
+            true => Path::new("."),
+            false => parent,
+        }
+        .canonicalize()
+        .map(|parent| parent.join(name))
+        .unwrap_or_else(|_| path.to_path_buf()),
         _ => path.to_path_buf(),
     }
 }
+
+#[cfg(test)]
+mod tests;
 
 /// The entry program's mount: the empty prefix, which is what makes it the entry.
 fn entry_mount() -> Mount {
