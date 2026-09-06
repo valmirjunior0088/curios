@@ -144,11 +144,11 @@ fn sole(package: &Package) -> Result<&Executable, String> {
     match package.executables.as_slice() {
         [executable] => Ok(executable),
         [] => Err(format!(
-            "{:?} declares no executable; `run` a `.crs` file by name, or declare one with `[[executables]]`",
+            "{:?} declares no executable: add `exe.crs`, or declare one with `[[executables]]`",
             package.name
         )),
         _ => Err(format!(
-            "{:?} declares more than one executable and no `default`, so a bare `run` means nothing in particular{}",
+            "{:?} declares more than one executable and no `default`, so a bare target means nothing in particular{}",
             package.name,
             candidates(package)
         )),

@@ -75,6 +75,8 @@ fn a_bare_run_needs_a_default_when_there_is_a_choice() {
         refusal.contains("\"serve\"") && refusal.contains("\"bench\""),
         "{refusal}"
     );
+    // `compile` and `wonder stage` resolve a bare target through the same call, so the refusal names no subcommand.
+    assert!(!refusal.contains("`run`"), "{refusal}");
     fs::remove_dir_all(ambiguous).unwrap();
 
     let decided = tree("run-default", &{
@@ -297,5 +299,21 @@ fn an_executable_compiles_against_its_package_and_its_dependencies() {
         vec!["/base".to_string(), "/app".to_string()]
     );
 
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A package declaring no executable refuses a bare target naming the two ways to declare one — and no subcommand, since `compile` and `wonder stage` reach the same refusal and `compile` takes no loose file.
+#[test]
+fn a_bare_target_on_a_package_of_a_library_alone_says_how_to_declare_one() {
+    let root = tree(
+        "run-no-executable",
+        &[("lib.crs", ""), ("curios.toml", "name = \"app\"\n")],
+    );
+
+    let refusal = entry(None, &root).expect_err("no executable to mean");
+    assert_eq!(
+        refusal,
+        "\"app\" declares no executable: add `exe.crs`, or declare one with `[[executables]]`"
+    );
     fs::remove_dir_all(root).unwrap();
 }
