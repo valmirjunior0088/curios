@@ -40,7 +40,7 @@ pub(super) struct Page {
     version: &'static str,
 }
 
-/// One segment of the path a page sits under: a link for every module above it, plain text for the page itself.
+/// One segment of the heading, which is the path the page sits under: a link for every module above it, plain text for the page itself.
 struct Crumb {
     text: String,
     href: Option<String>,

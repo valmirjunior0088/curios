@@ -1,4 +1,4 @@
-{#- A module's page. The rail holds the search field, then the whole tree with this page's declarations under its module. The field and the results that stand in for the tree while a query is live are hidden until the script shows them, so a page without script is the tree alone; the tree sits behind a checkbox and a chevron so that, as a bar at a narrow width, it starts folded without a script. The root prefix on the document is what the script prefixes every index address with. The main column opens with the path and the lead, then the child modules, the declarations and the re-exports. Every block tag trims the whitespace before it, so the indentation here reaches the page only ahead of a block element; inside an inline run every tag trims both sides, so the run renders as one line. -#}
+{#- A module's page. The rail holds the search field, then the whole tree with this page's declarations under its module. The field and the results that stand in for the tree while a query is live are hidden until the script shows them, so a page without script is the tree alone; the tree sits behind a checkbox and a chevron so that, as a bar at a narrow width, it starts folded without a script. The root prefix on the document is what the script prefixes every index address with. The main column opens with the path as its heading, every module above the page a link, then the lead, then the child modules, the declarations and the re-exports. Every block tag trims the whitespace before it, so the indentation here reaches the page only ahead of a block element; inside an inline run every tag trims both sides, so the run renders as one line. -#}
 {%- import "signature.html" as sig -%}
 {%- import "prose.html" as words -%}
 <!doctype html>
@@ -35,18 +35,16 @@
                 </div>
             </aside>
             <main>
-                <p class="crumbs">
-                    <span class="kind">module</span>
+                <h1>
                     {%- for crumb in crumbs -%}
                         <span class="sep">/</span>
                         {%- if let Some(href) = crumb.href -%}
                             <a href="{{ root }}{{ href }}">{{ crumb.text }}</a>
                         {%- else -%}
-                            <span class="here">{{ crumb.text }}</span>
+                            {{ crumb.text }}
                         {%- endif -%}
                     {%- endfor -%}
-                </p>
-                <h1>{{ path }}</h1>
+                </h1>
                 {%- for paragraph in lead %}
                     <p class="lead">{% call words::paragraph(paragraph) %}{% endcall %}</p>
                 {%- endfor %}

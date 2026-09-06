@@ -234,21 +234,7 @@ main {
 }
 
 /* The head of a page: where it sits, what it is, what it is for. */
-.crumbs {
-    margin: 0 0 20px;
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-57);
-}
-.crumbs .sep {
-    color: var(--ink-28);
-    margin: 0 6px;
-}
-.crumbs .here {
-    color: var(--ink-85);
-}
+/* The heading is the page's path, each module above the page a link and the separators dimmed. */
 h1 {
     margin: 0 0 32px;
     font-family: var(--mono);
@@ -257,6 +243,9 @@ h1 {
     line-height: 1.15;
     letter-spacing: -0.02em;
     overflow-wrap: break-word;
+}
+h1 .sep {
+    color: var(--ink-28);
 }
 h2 {
     margin: 40px 0 18px;
