@@ -50,6 +50,9 @@ pub(super) fn reify_check(
             if !scope.outward_ok(module, closure.function) {
                 return Err(Bail::Unsupported);
             }
+            if !scope.free_values_settled(module, closure) {
+                return Err(Bail::Unsupported);
+            }
             // A closure over nothing needs no specialized copy — see `reify_closure`.
             if closure.env.borrow().is_empty() && scope.is_item_bound(module, closure.function) {
                 return Ok(());
@@ -163,6 +166,10 @@ fn reify_closure(
     if !scope.outward_ok(module, closure.function) {
         return Err(Bail::Unsupported);
     }
+    // And it keeps an uncovered free *value* verbatim on the same reasoning, which holds only when that value is item-bound — see `ReifyScope::free_values_settled`.
+    if !scope.free_values_settled(module, closure) {
+        return Err(Bail::Unsupported);
+    }
     // A closure capturing nothing has an empty substitution, so the "specialized" copy would be byte-identical to a function the module already holds. Name the original instead -- provided it is item-bound, so it is in scope wherever this reification is spliced. Measured on a combinator-heavy prelude: 4,850 of 10,024 closure reifications in one round took this path.
     let captures = closure.env.borrow().clone();
     if captures.is_empty() && scope.is_item_bound(module, closure.function) {
@@ -227,6 +234,10 @@ type Specialization = (FunctionId, Vec<(ValueId, Atom)>);
 /// The two memos are the exception. Reifying a closure deep-copies its whole region, and the same specialization is reached along two independent axes: within one replacement, because a combinator names a sub-parser twice (`alt(a, a)`), and across replacements, because many definitions name one shared sub-parser. Measured on a generated grammar, the first axis costs `2^depth` copies without [`ReifyScope::local`] and one per level with it; the second costs five functions per referencing definition without [`ReifyScope::shared`]. Only the first is unconditionally safe to reuse, which is what [`ReifyScope::reusable`] arbitrates.
 pub(super) struct ReifyScope {
     item_bound: Option<BTreeSet<FunctionId>>,
+    /// The values top-level items bind, computed on first use like [`ReifyScope::item_bound`]. See [`ReifyScope::free_values_settled`].
+    item_values: Option<BTreeSet<ValueId>>,
+    /// Each region's free values, computed once per pass. See [`ReifyScope::free_values_settled`].
+    free_values: BTreeMap<FunctionId, Option<BTreeSet<ValueId>>>,
     weights: BTreeMap<FunctionId, Option<usize>>,
     outward: BTreeMap<FunctionId, bool>,
     local: HashMap<Specialization, Atom>,
@@ -245,6 +256,8 @@ impl ReifyScope {
     pub(super) fn new() -> Self {
         Self {
             item_bound: None,
+            item_values: None,
+            free_values: BTreeMap::new(),
             weights: BTreeMap::new(),
             outward: BTreeMap::new(),
             local: HashMap::new(),
@@ -323,6 +336,30 @@ impl ReifyScope {
         self.item_bound(module).contains(&function)
     }
 
+    /// Whether every value the copy would still name after substitution is one it can name from anywhere.
+    ///
+    /// **The assumption [`reify_closure`] states but nothing checked.** A free value the captures do not cover is kept verbatim on the reasoning that it is a top-level identity — and when it is not, the copy leaves the block that bound it still naming it. The source module verifies, so such a value is in scope *there*; the copy is spliced at the group's splice point and may be reused from any later candidate, and neither has to be inside that block. `outward_ok` asks this question about functions and deliberately not about values, because a free value is ordinarily substituted away; this asks it about the ones that are not.
+    pub(super) fn free_values_settled(&mut self, module: &Module, closure: &Closure) -> bool {
+        // Cached per function like [`ReifyScope::outward_ok`]'s answer and for the same reason: this walks the whole region, it is asked on the probe and again on the real run for every closure, and reification only appends, so a region's free set does not move within a pass. Uncached, it cost a hello-world compile three times its former wall clock.
+        let free = self
+            .free_values
+            .entry(closure.function)
+            .or_insert_with(|| free_references(module, closure.function).map(|(_, values)| values));
+        let Some(free) = free else {
+            return false;
+        };
+        if free.is_empty() {
+            return true;
+        }
+        let free = free.clone();
+        let covered: BTreeSet<ValueId> = closure.env.borrow().iter().map(|(id, _)| *id).collect();
+        let item_values = self
+            .item_values
+            .get_or_insert_with(|| item_bound_values(module));
+        free.iter()
+            .all(|value| covered.contains(value) || item_values.contains(value))
+    }
+
     /// Whether every function reachable from `function`'s region is in scope at an arbitrary splice site.
     ///
     /// Walks the whole region, and ran on the probe *and* again on the real run for every closure -- the last un-hoisted region walk in this path. Stable for a pass on the same argument as the others: reification only appends, and statements are rewritten in the tail.
@@ -389,6 +426,26 @@ fn knot_bound_functions(module: &Module) -> BTreeMap<FunctionId, BlockId> {
 /// Every function bound at item level.
 ///
 /// Computed once for a reification pass and handed to each check, because the item list does not change while a pass reifies: rebuilding it per closure walked the whole item list ten thousand times a round on a combinator-heavy module, which is a second cost with the same shape as the copying itself.
+pub(super) fn item_bound_values(module: &Module) -> BTreeSet<ValueId> {
+    let mut bound = BTreeSet::<ValueId>::new();
+    for &item in module.items() {
+        match module.statement(item) {
+            Some(Statement::Let { result, rhs }) => {
+                bound.insert(*result);
+                bound.extend(rhs.binders());
+            }
+            Some(Statement::Rec { group }) => {
+                if let Some(group) = module.rec_group(*group) {
+                    bound.extend(group.values.iter().map(|member| member.value));
+                }
+            }
+            _ => {}
+        }
+    }
+    bound
+}
+
+/// The functions top-level items bind.
 pub(super) fn item_bound_functions(module: &Module) -> BTreeSet<FunctionId> {
     let mut item_bound = BTreeSet::<FunctionId>::new();
     for &item in module.items() {
