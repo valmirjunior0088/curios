@@ -1060,3 +1060,24 @@ fn a_bound_over_a_widening_subject_stays_affordable() {
         "a bound over a wider subject costs disproportionately more — the universe-erased projection is walking a shared graph as a tree: {narrow:?} at 7 bits against {wide:?} at 23"
     );
 }
+
+/// A packed fold costs the elaborator linearly in the length folded. Its per-step bound is the decided `i < i + (kp + 1)`, settled by cancellation; when it was built as an inductive proof by recursion on the remaining length, every step paid the steps left, and a fold over a 2 KB literal at the type level ran out of budget where an indexed walk finished.
+#[test]
+fn a_packed_fold_costs_linearly_in_its_length() {
+    let program = |bytes: usize| {
+        let literal = "0123456789".repeat(bytes / 10);
+        format!(
+            "use /std/{{Str, Bytes, Nat, Eq}};\n\nlet counted: Eq(Bytes/fold(Str/to_bytes(\"{literal}\"), 0, (_, n) => n + 1), {bytes}) = Eq/refl();\n\n/std/print(\"ok\")\n"
+        )
+    };
+
+    let (short, ..) = declaration_cost(&program(300));
+    let (long, ..) = declaration_cost(&program(600));
+
+    assert!(
+        long.units() < short.units() * 3,
+        "300 bytes cost {} units and 600 cost {}; a linear fold doubles, a quadratic one quadruples",
+        short.units(),
+        long.units()
+    );
+}

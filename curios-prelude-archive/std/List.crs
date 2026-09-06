@@ -1,6 +1,7 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map};
-use /std/{Nat, Bool, Option, Eq, Equal, Str, Show, Spell, Monad, Ordering, Compare, Ordered, Test};
+use /std/{Nat, Bool, Option, Eq, Equal, Str, Show, Spell, Monad, Ordering, Compare, Ordered, Test,
+    True};
 
 -- | The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
@@ -29,8 +30,7 @@ pub let fold(@T: Type, @A: Type, l: List(T), init: A, f: (T, A) -> A) -> A =
         match k
         | 0 => acc
         | kp + 1 =>
-            let below =
-                Eq/subst((x) => Nat/Lt(i, x), inv, Nat/Lt/succ_of_ind(Nat/Le/Ind/add_r(i, kp)));
+            let below = Eq/subst((x) => Nat/Lt(i, x), inv, True/qed());
             go(kp, i + 1, f(get(@T, l, i, @below), acc), inv)
         end;
     go(n, 0, init, Eq/refl());

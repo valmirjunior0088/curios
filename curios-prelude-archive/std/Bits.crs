@@ -1,5 +1,5 @@
 pub use /sys/Bits/{let Bits, get, len, eql, slice};
-use /std/{List, Nat, Bool, Option, Eq, Str, Equal, Show, Spell, Test};
+use /std/{List, Nat, Bool, Option, Eq, Str, Equal, Show, Spell, Test, True};
 
 -- | The bit at `i`, or `none` past the end.
 pub let try_get(b: Bits, i: Nat) -> Option(Bool) =
@@ -16,8 +16,7 @@ pub let fold(@A: Type, b: Bits, init: A, f: (Bool, A) -> A) -> A =
         match k
         | 0 => acc
         | kp + 1 =>
-            let below =
-                Eq/subst((x) => Nat/Lt(i, x), inv, Nat/Lt/succ_of_ind(Nat/Le/Ind/add_r(i, kp)));
+            let below = Eq/subst((x) => Nat/Lt(i, x), inv, True/qed());
             go(kp, i + 1, f(get(b, i, @below), acc), inv)
         end;
     go(n, 0, init, Eq/refl());
