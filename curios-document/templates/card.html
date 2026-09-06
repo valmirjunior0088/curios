@@ -2,20 +2,27 @@
 {%- import "signature.html" as sig -%}
 {%- import "prose.html" as words -%}
 <article class="card" id="{{ card.anchor }}">
-<header><span class="kind">{{ card.keyword }}</span>{% if !card.name.is_empty() %}<span class="name">{{ card.name }}</span>{% endif %}{% for badge in card.badges %}<span class="badge {{ badge.tone }}">{{ badge.label }}</span>{% endfor %}</header>
-<div class="signature {{ card.layout }}">
-<div class="line">{% call sig::segments(card.signature) %}{% endcall %}{{ card.opener }}</div>
-{% for member in card.members -%}
-<div class="line member" id="{{ member.anchor }}">{{ card.lead }}{% call sig::segments(member.signature) %}{% endcall %}{{ card.trail }}</div>
-{% for paragraph in member.prose -%}
-<p class="note">{% call words::paragraph(paragraph) %}{% endcall %}</p>
-{% endfor -%}
-{% endfor -%}
-{% if let Some(closer) = card.closer -%}
-<div class="line"><span class="keyword">{{ closer }}</span></div>
-{% endif -%}
-</div>
-{% for paragraph in card.prose -%}
-<p class="prose">{% call words::paragraph(paragraph) %}{% endcall %}</p>
-{% endfor -%}
+    <header><span class="kind">{{ card.keyword }}</span>
+        {%- if !card.name.is_empty() -%}
+            <span class="name">{{ card.name }}</span>
+        {%- endif -%}
+        {%- for badge in card.badges -%}
+            <span class="badge {{ badge.tone }}">{{ badge.label }}</span>
+        {%- endfor -%}
+    </header>
+    <div class="signature {{ card.layout }}">
+        <div class="line">{% call sig::segments(card.signature) %}{% endcall %}{{ card.opener }}</div>
+        {%- for member in card.members %}
+            <div class="line member" id="{{ member.anchor }}">{{ card.lead }}{% call sig::segments(member.signature) %}{% endcall %}{{ card.trail }}</div>
+            {%- for paragraph in member.prose %}
+                <p class="note">{% call words::paragraph(paragraph) %}{% endcall %}</p>
+            {%- endfor %}
+        {%- endfor %}
+        {%- if let Some(closer) = card.closer %}
+            <div class="line"><span class="keyword">{{ closer }}</span></div>
+        {%- endif %}
+    </div>
+    {%- for paragraph in card.prose %}
+        <p class="prose">{% call words::paragraph(paragraph) %}{% endcall %}</p>
+    {%- endfor %}
 </article>

@@ -1,2 +1,11 @@
-{#- One paragraph of a documentation comment: text, with what a pair of backticks enclosed as code. -#}
-{% macro paragraph(paragraph) %}{% for span in paragraph.spans.iter() %}{% match span %}{% when Span::Text(text) %}{{ text }}{% when Span::Code(code) %}<code>{{ code }}</code>{% endmatch %}{% endfor %}{% endmacro %}
+{#- One paragraph of a documentation comment: text, with what a pair of backticks enclosed as code. Every tag trims both sides, so the spans join with nothing between them. -#}
+{%- macro paragraph(paragraph) -%}
+    {%- for span in paragraph.spans.iter() -%}
+        {%- match span -%}
+            {%- when Span::Text(text) -%}
+                {{ text }}
+            {%- when Span::Code(code) -%}
+                <code>{{ code }}</code>
+        {%- endmatch -%}
+    {%- endfor -%}
+{%- endmacro -%}
