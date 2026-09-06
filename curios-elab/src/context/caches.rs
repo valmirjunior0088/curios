@@ -97,6 +97,11 @@ impl Caches {
         }
         let key = self.reduction_erased.get(&term.erased_universes())?;
         let reduct = self.reduction.get(key)?;
+        // An entry recording that a term is its own weak-head form says the same of every spelling the door equates with it, and the asking spelling is the one to hand back: the stored one is another declaration's, and a Π-type served in its place carried that declaration's binder names into a report about this one.
+        if reduct == key {
+            curios_profile::sample!("reduction::across_levels", 1);
+            return Some(term.clone());
+        }
         let adapted = adapted_across_levels(key, term, reduct);
         curios_profile::sample!("reduction::across_levels", u64::from(adapted.is_some()));
         adapted

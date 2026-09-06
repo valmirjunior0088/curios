@@ -911,3 +911,28 @@ fn a_closed_reduct_is_served_across_universe_spellings() {
         "and served without a step, since the two spellings share one erased key"
     );
 }
+
+/// A spelling that is its own weak-head form keeps its binder names when the erased door answers for it: the stored entry belongs to another declaration's Π-type, α-equivalent and equal once universes are erased, and the answer is the asking spelling itself rather than that one. Served the stored spelling, `satisfy Show(Tree)`'s refusal read `(T: Type) -> Type` for a `Tree` declared over `A`.
+#[test]
+fn a_self_entry_served_across_spellings_keeps_the_asking_binder_names() {
+    let mut context = context();
+    let stored = Term::func_type(
+        [(Free::local(1, Some("T")), Term::type_at(Level::constant(0)))],
+        Term::type_at(Level::constant(0)),
+    );
+    assert_eq!(reduce(&mut context, stored.clone()), Ok(stored));
+
+    let asked = Term::func_type(
+        [(
+            Free::local(2, Some("A")),
+            Term::type_at(Level::meta(UniverseMetaId(3))),
+        )],
+        Term::type_at(Level::meta(UniverseMetaId(4))),
+    );
+    let answer = reduce(&mut context, asked.clone()).expect("a Π-type is its own form");
+    assert_eq!(answer, asked);
+    assert!(
+        answer.to_string().starts_with("(A: "),
+        "the asking spelling's binder, not the stored one's: {answer}"
+    );
+}
