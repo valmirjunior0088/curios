@@ -2,7 +2,7 @@
 
 # [Curios](https://valmirjunior0088.github.io/curios/)
 
-**A small language, fully dependent.**
+**Small language. Big opinions about your arithmetic.**
 
 Curios is a dependently typed programming language that compiles to WebAssembly. Types can depend on values, proofs live beside ordinary code, and the compiler is happy to double-check your math homework.
 
@@ -14,7 +14,7 @@ Curios is a dependently typed programming language that compiles to WebAssembly.
 
 </div>
 
-> **Status:** Curios is early, experimental, and under active development — syntax, standard library, and compiler may all change without notice. An independent kernel re-checks every compilation from the finished terms alone; what it covers, and what each rule it applies rests on, is tracked in the [soundness perimeter](documentation/soundness).
+> **Status:** Curios is early, experimental, and under active development — syntax, standard library, and compiler may all change without notice.
 
 ## A taste
 
@@ -106,6 +106,7 @@ use /std/{Str};
 pub let message: Str =
     "Hello, world!";
 ```
+
 ```crs
 -- exe.crs
 use /std/{Fmt};
@@ -114,7 +115,7 @@ use /hello/{message};
 Fmt/print("%\n")(message)
 ```
 
-Note what the program imports. `lib` and `exe` are spellings nothing can refer to, so `/hello` is unambiguously the *mount* — a package's own name never has to mean two things at once. Delete either file and the package is happily just the other one.
+Note what the program imports. `lib` and `exe` are spellings nothing can refer to, so `/hello` is unambiguously the _mount_ — a package's own name never has to mean two things at once. Delete either file and the package is happily just the other one.
 
 A package is also what gets folded into a standalone native executable, runtime and all:
 
@@ -141,7 +142,7 @@ The resulting CLI is `target/release/curios`. The build has two stages — a sli
 
 - [Language reference](documentation/syntax.md) — the complete surface language, when you want to know what something means or how to spell it
 - [Usage](documentation/usage.md) — every subcommand, flag, and package concept the command line offers
-- [Design decisions](documentation/design) — one file per decision, `language/` for what Curios is and `toolchain/` for how it is built and run, when you want to know *why* Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
+- [Design decisions](documentation/design) — one file per decision, `language/` for what Curios is and `toolchain/` for how it is built and run, when you want to know _why_ Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
 - [Soundness perimeter](documentation/soundness) — every rule that can admit a term, what it assumes, and how far it has actually been checked; [the claim it stands for](documentation/design/language/the-soundness-perimeter.md), and how to read a grade
 - [Development roadmap](documentation/roadmap.md) — what exists, what is pending, and the specifications for the pending half
 - [Benchmark methodology and results](benchmarks/README.md)
