@@ -1,6 +1,6 @@
 -- The renderer: what a first frame writes, what a diff writes, and what it skips.
 use /std/{Nat, Str, Bytes, Vec, Option, Test, Tui};
-use /std/Tui/{Style, Cell, Frame, render};
+use /std/Tui/{Style, Tile, Frame, render};
 
 let esc: Str =
     Option/unwrap_or(Str/of_bytes(x[0x1B]), "");
@@ -12,14 +12,14 @@ let shown(b: Bytes) -> Str =
 let none_at: Option({x: Nat, y: Nat}) =
     Option/none();
 
--- With no previous frame, the screen is cleared and every cell written, one move at the start and one style for the run.
+-- With no previous frame, the screen is cleared and every tile written, one move at the start and one style for the run.
 test a_first_frame_clears_and_writes_every_cell() =
     let f = Frame/of_lines(Style/plain, ["ab"], 2, 1);
     Test/equal(
         shown(render/render(Option/none(), f, none_at)),
         "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0mab^[[0m^[[?2026l");
 
--- Against a previous frame, only the cell that differs is written, with one move to it.
+-- Against a previous frame, only the tile that differs is written, with one move to it.
 test a_diff_writes_only_the_changed_cell() =
     let before = Frame/of_lines(Style/plain, ["ab", "cd"], 2, 2);
     let after = Frame/of_lines(Style/plain, ["ab", "cX"], 2, 2);
@@ -32,7 +32,7 @@ test an_unchanged_frame_writes_only_the_bracket() =
     let f = Frame/of_lines(Style/plain, ["ab"], 2, 1);
     Test/equal(shown(render/render(Option/some(f), f, none_at)), "^[[?2026h^[[?25l^[[0m^[[?2026l");
 
--- A wide symbol is written once and its continuation cell not at all; the pen knows it advanced two columns, so the cell after needs no move.
+-- A wide symbol is written once and its continuation tile not at all; the pen knows it advanced two columns, so the tile after needs no move.
 test a_wide_symbol_is_written_once() =
     let f = Frame/of_lines(Style/plain, ["日a"], 3, 1);
     Test/equal(
@@ -42,13 +42,13 @@ test a_wide_symbol_is_written_once() =
 -- The style is written where it changes, as the whole style from a reset.
 test a_style_change_is_written_whole() =
     let bold = Style { ..Style/plain, fg = Tui/Color/red, bold = true };
-    let row = Vec/cons(Cell/of_str(Style/plain, "a"), Vec/cons(Cell/of_str(bold, "b"), Vec/nil()));
+    let row = Vec/cons(Tile/of_str(Style/plain, "a"), Vec/cons(Tile/of_str(bold, "b"), Vec/nil()));
     let f: Frame(2, 1) = Vec/cons(row, Vec/nil());
     Test/equal(
         shown(render/render(Option/none(), f, none_at)),
         "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0ma^[[0;31;1mb^[[0m^[[?2026l");
 
--- A cursor is placed and shown after the cells, and hidden while they are written.
+-- A cursor is placed and shown after the tiles, and hidden while they are written.
 test the_cursor_is_placed_after_the_cells() =
     let f = Frame/of_lines(Style/plain, ["ab"], 2, 1);
     Test/equal(

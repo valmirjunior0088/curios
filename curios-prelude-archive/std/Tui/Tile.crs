@@ -1,0 +1,23 @@
+use /std/{Str, Equal};
+use /std/Tui/{Style};
+
+-- | One tile of the screen: a column of a row, with the text drawn in it and the style it is drawn in.
+pub struct Tile: pub Type {
+    -- | The text shown: one column's worth, with any combining marks.
+    symbol: Str,
+    style: Style,
+}
+
+satisfy Equal(Tile);
+
+-- | A space in the plain style.
+pub let blank: Tile =
+    Tile { symbol = " ", style = Style/plain };
+
+-- | The second half of a double-width symbol: no text, so the renderer writes nothing for it.
+pub let continuation: Tile =
+    Tile { symbol = "", style = Style/plain };
+
+-- | `s` in `style`. Nothing here checks that `s` is one column wide; `Frame/text` is where a string becomes tiles.
+pub let of_str(style: Style, s: Str) -> Tile =
+    Tile { symbol = s, style = style };

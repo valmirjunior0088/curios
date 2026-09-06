@@ -1,10 +1,10 @@
 use /std/{Nat, Str, List, Vec, Tui};
 use /std/Nat/{Lt};
-use /std/Tui/{Style, Cell};
+use /std/Tui/{Style, Tile};
 
--- | `h` rows of `w` cells.
+-- | `h` rows of `w` tiles.
 pub let Frame(w: Nat, h: Nat) -> Type =
-    Vec(Vec(Cell, w), h);
+    Vec(Vec(Tile, w), h);
 
 let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T, n)) -> Vec(T, m) =
     (match m: (k) => (j: Nat, Vec(T, j)) -> Vec(T, k)
@@ -23,12 +23,12 @@ let drop_upto(@T: Type, l: List(T), k: Nat) -> List(T) =
     | _p + 1; ih => match ih | [] => [] | [_, ..rest] => rest end
     end;
 
--- | `w` by `h` of blank cells.
+-- | `w` by `h` of blank tiles.
 pub let blank(w: Nat, h: Nat) -> Frame(w, h) =
-    Vec/replicate(h, Vec/replicate(w, Cell/blank));
+    Vec/replicate(h, Vec/replicate(w, Tile/blank));
 
 -- | `w` by `h` of `c`.
-pub let filled(c: Cell, w: Nat, h: Nat) -> Frame(w, h) =
+pub let filled(c: Tile, w: Nat, h: Nat) -> Frame(w, h) =
     Vec/replicate(h, Vec/replicate(w, c));
 
 -- | `a` then `b`, left to right. The heights agree in the type.
@@ -41,14 +41,14 @@ pub let above(@w: Nat, @h1: Nat, @h2: Nat, a: Frame(w, h1), b: Frame(w, h2)) -> 
 
 -- | `frame` at `w` by `h`: cropped where it overflows, padded with blanks where it falls short.
 pub let fit(@w0: Nat, @h0: Nat, frame: Frame(w0, h0), w: Nat, h: Nat) -> Frame(w, h) =
-    resize(Vec/replicate(w, Cell/blank), h, Vec/map((row) => resize(Cell/blank, w, row), frame));
+    resize(Vec/replicate(w, Tile/blank), h, Vec/map((row) => resize(Tile/blank, w, row), frame));
 
--- | `f` on every cell's style.
+-- | `f` on every tile's style.
 pub let restyle(@w: Nat, @h: Nat, f: (Style) -> Style, frame: Frame(w, h)) -> Frame(w, h) =
-    Vec/map((row) => Vec/map((c) => Cell { ..c, style = f(c.style) }, row), frame);
+    Vec/map((row) => Vec/map((c) => Tile { ..c, style = f(c.style) }, row), frame);
 
-let cells_of(style: Style, s: Str) -> {n: Nat, Vec(Cell, n)} =
-    let empty: List(Cell) = [];
+let tiles_of(style: Style, s: Str) -> {n: Nat, Vec(Tile, n)} =
+    let empty: List(Tile) = [];
     let reversed =
         List/fold(
             Str/to_list(s),
@@ -59,32 +59,32 @@ let cells_of(style: Style, s: Str) -> {n: Nat, Vec(Cell, n)} =
                     match acc
                     | [] => acc
                     | [prev, ..rest] =>
-                        [Cell { ..prev, symbol = Str/concat(prev.symbol, Str/of_char(c)) }, ..rest]
+                        [Tile { ..prev, symbol = Str/concat(prev.symbol, Str/of_char(c)) }, ..rest]
                     end
-                | 1 => [Cell/of_str(style, Str/of_char(c)), ..acc]
-                | _ => [Cell/continuation, Cell/of_str(style, Str/of_char(c)), ..acc]
+                | 1 => [Tile/of_str(style, Str/of_char(c)), ..acc]
+                | _ => [Tile/continuation, Tile/of_str(style, Str/of_char(c)), ..acc]
                 end);
     Vec/of_list(List/reverse(reversed));
 
 -- | One row of `s` in `style`, at whatever width it turns out to be.
 pub let text(style: Style, s: Str) -> {w: Nat, frame: Frame(w, 1)} =
-    let cells = cells_of(style, s);
-    (w = cells.0, frame = Vec/cons(cells.1, Vec/nil()));
+    let tiles = tiles_of(style, s);
+    (w = tiles.0, frame = Vec/cons(tiles.1, Vec/nil()));
 
 -- | A frame of `w` by `h` from `lines`, one per row, each fitted to `w` and the whole fitted to `h`.
 pub let of_lines(style: Style, lines: List(Str), w: Nat, h: Nat) -> Frame(w, h) =
-    let row_of(l: Str) -> Vec(Cell, w) = resize(Cell/blank, w, cells_of(style, l).1);
-    resize(Vec/replicate(w, Cell/blank), h, Vec/of_list(List/map(lines, row_of)).1);
+    let row_of(l: Str) -> Vec(Tile, w) = resize(Tile/blank, w, tiles_of(style, l).1);
+    resize(Vec/replicate(w, Tile/blank), h, Vec/of_list(List/map(lines, row_of)).1);
 
--- | The frame as text, one string per row. A continuation cell contributes nothing.
+-- | The frame as text, one string per row. A continuation tile contributes nothing.
 pub let to_lines(@w: Nat, @h: Nat, frame: Frame(w, h)) -> List(Str) =
     List/map(Vec/to_list(frame), (r) => Str/flatten(List/map(Vec/to_list(r), (c) => c.symbol)));
 
 -- | Row `y`, under the evidence that it is within the height.
-pub let row(@w: Nat, @h: Nat, frame: Frame(w, h), y: Nat, ok: Lt(y, h)) -> Vec(Cell, w) =
-    Vec/get(@Vec(Cell, w), @h, frame, y, @ok);
+pub let row(@w: Nat, @h: Nat, frame: Frame(w, h), y: Nat, ok: Lt(y, h)) -> Vec(Tile, w) =
+    Vec/get(@Vec(Tile, w), @h, frame, y, @ok);
 
--- | The cell at `x`, `y`, under the evidence that both are within the frame.
+-- | The tile at `x`, `y`, under the evidence that both are within the frame.
 pub let get(
     @w: Nat,
     @h: Nat,
@@ -93,8 +93,8 @@ pub let get(
     y: Nat,
     ok_x: Lt(x, w),
     ok_y: Lt(y, h),
-) -> Cell =
-    Vec/get(@Cell, @w, Vec/get(@Vec(Cell, w), @h, frame, y, @ok_y), x, @ok_x);
+) -> Tile =
+    Vec/get(@Tile, @w, Vec/get(@Vec(Tile, w), @h, frame, y, @ok_y), x, @ok_x);
 
 -- | `top` painted onto `base` with its upper-left corner at `x`, `y`, clipped to `base`. Nothing is required to fit.
 pub let overlay(
@@ -108,7 +108,7 @@ pub let overlay(
     y: Nat,
 ) -> Frame(w, h) =
     let patches = List/map(Vec/to_list(top), Vec/to_list);
-    let splice(index: Nat, under: List(Cell)) -> List(Cell) =
+    let splice(index: Nat, under: List(Tile)) -> List(Tile) =
         match List/try_get(patches, index - y)
         | none() => under
         | some(patch) =>
@@ -118,11 +118,11 @@ pub let overlay(
                 List/flatten([List/take(under, x), patch, drop_upto(under, x + List/len(patch))])
             end
         end;
-    let row_of(r: {Nat, Vec(Cell, w)}) -> Vec(Cell, w) =
+    let row_of(r: {Nat, Vec(Tile, w)}) -> Vec(Tile, w) =
         let spliced = Vec/of_list(splice(r.0, Vec/to_list(r.1)));
-        resize(Cell/blank, w, spliced.1);
+        resize(Tile/blank, w, spliced.1);
     let rows = Vec/of_list(List/map(List/zip(List/range(0, h), Vec/to_list(base)), row_of));
-    resize(Vec/replicate(w, Cell/blank), h, rows.1);
+    resize(Vec/replicate(w, Tile/blank), h, rows.1);
 
 -- | The rows from `y` and the columns from `x` on, at whatever size is left.
 pub let crop(
@@ -137,6 +137,6 @@ pub let crop(
             drop_upto(Vec/to_list(frame), y),
             (r) => Vec/of_list(drop_upto(Vec/to_list(r), x)));
     let cw = w - x;
-    let fitted = List/map(rows, (r) => resize(Cell/blank, cw, r.1));
+    let fitted = List/map(rows, (r) => resize(Tile/blank, cw, r.1));
     let stacked = Vec/of_list(fitted);
     (cw = cw, ch = stacked.0, frame = stacked.1);

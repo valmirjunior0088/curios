@@ -1,14 +1,14 @@
 use /std/{Nat, Str};
-use /std/Tui/{Style, Cell, Frame, text};
+use /std/Tui/{Style, Tile, Frame, text};
 
 let edge(style: Style, left: Str, middle: Str, right: Str, w: Nat) -> Frame(w + 2, 1) =
     Frame/beside(
         Frame/beside(
-            Frame/filled(Cell/of_str(style, left), 1, 1),
+            Frame/filled(Tile/of_str(style, left), 1, 1),
             Frame/fit(Frame/text(style, middle).frame, w, 1)),
-        Frame/filled(Cell/of_str(style, right), 1, 1));
+        Frame/filled(Tile/of_str(style, right), 1, 1));
 
--- | `inner` in a box one cell wide on every side, with `title` in the top edge where there is room.
+-- | `inner` in a box one tile wide on every side, with `title` in the top edge where there is room.
 pub let around(
     @w: Nat,
     @h: Nat,
@@ -23,6 +23,6 @@ pub let around(
             Str/repeat("─", w - text/width(text/truncate(title, w))));
     let middle =
         Frame/beside(
-            Frame/beside(Frame/filled(Cell/of_str(style, "│"), 1, h), inner),
-            Frame/filled(Cell/of_str(style, "│"), 1, h));
+            Frame/beside(Frame/filled(Tile/of_str(style, "│"), 1, h), inner),
+            Frame/filled(Tile/of_str(style, "│"), 1, h));
     Frame/above(Frame/above(edge(style, "┌", top, "┐", w), middle), edge(style, "└", bar, "┘", w));

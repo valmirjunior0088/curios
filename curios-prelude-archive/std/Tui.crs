@@ -6,13 +6,13 @@ use /std/Async/{Channel};
 pub mod Color;
 pub use Color/{let Color};
 
--- | How a cell is painted: two colours and six attributes.
+-- | How a tile is painted: two colours and six attributes.
 pub mod Style;
 pub use Style/{let Style};
 
--- | One position on the screen: its text and its style.
-pub mod Cell;
-pub use Cell/{let Cell};
+-- | One tile of the screen: a column of a row, with its text and its style.
+pub mod Tile;
+pub use Tile/{let Tile};
 
 -- | How wide a string is on a terminal, and truncation and wrapping over that measurement.
 pub mod text;
@@ -126,8 +126,7 @@ pub let drive(
 pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
     Session/with(
         (s) =>
-            let queue: {Channel/Sender(Event(E)), Channel/Receiver(Event(E))} =
-                Channel/new(256)!;
+            let queue: {Channel/Sender(Event(E)), Channel/Receiver(Event(E))} = Channel/new(256)!;
             let push(e: Event(E)) -> Async({}) =
                 let _ = Channel/send(queue.0, e)!;
                 Async/pure(());
@@ -177,10 +176,7 @@ pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
             -- Everything queued behind the event that woke the loop, so a burst still draws once.
             let burst(acc: List(Event(E))) -> Async(List(Event(E))) =
                 let more = Async/lift(Channel/try_recv(queue.1))!;
-                match more
-                | none() => Async/pure(acc)
-                | some(e) => burst([..acc, e])
-                end;
+                match more | none() => Async/pure(acc) | some(e) => burst([..acc, e]) end;
             let loop(m: M) -> Async(M) =
                 let woke = Channel/recv(queue.1)!;
                 match woke

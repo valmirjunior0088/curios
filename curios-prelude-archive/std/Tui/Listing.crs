@@ -1,6 +1,6 @@
 use /std/{Nat, Str, List, Vec, Option};
 use /std/Nat/{Lt};
-use /std/Tui/{Style, Cell, Frame};
+use /std/Tui/{Style, Tile, Frame};
 use /std/Tui/Key/{Code};
 
 -- | Items with one selected, or none when there are no items.
@@ -56,7 +56,7 @@ pub let draw(l: Listing, style: Style, highlight: Style, w: Nat, h: Nat) -> Fram
                 List/zip(List/range(0, List/len(l.items)), l.items),
                 (e) => e.0 < first),
             h);
-    let row(entry: {Nat, Str}) -> Vec(Cell, w) =
+    let row(entry: {Nat, Str}) -> Vec(Tile, w) =
         let s = match entry.0 == chosen | true => highlight | false => style end;
         Vec/first(Frame/fit(Frame/text(s, entry.1).frame, w, 1));
     Frame/fit(Vec/of_list(List/map(shown, row)).1, w, h);

@@ -1,4 +1,4 @@
--- Cell width, and the truncation and wrapping written over it.
+-- Tile width, and the truncation and wrapping written over it.
 use /std/{Nat, Str, Test};
 use /std/Tui/{text};
 

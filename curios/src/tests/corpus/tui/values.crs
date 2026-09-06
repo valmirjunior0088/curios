@@ -1,6 +1,6 @@
--- Colours, styles and cells: what the palette bound admits, and what compares equal.
+-- Colours, styles and tiles: what the palette bound admits, and what compares equal.
 use /std/{Test};
-use /std/Tui/{Color, Style, Cell};
+use /std/Tui/{Color, Style, Tile};
 
 -- `ansi` carries an irrelevant proof beside its index, so the derived comparison is the index comparison and the named value agrees with the numbered spelling. A literal past the sixteen is refused where it is written, which no test here can state because a corpus unit that does not compile has no tests to run.
 test a_named_colour_is_its_palette_index() =
@@ -12,5 +12,5 @@ test a_style_compares_field_by_field() =
 
 test a_cell_compares_by_symbol_and_style() =
     Test/check(
-        Cell/blank == Cell { symbol = " ", style = Style/plain }
-            && Cell/blank != Cell/continuation);
+        Tile/blank == Tile { symbol = " ", style = Style/plain }
+            && Tile/blank != Tile/continuation);

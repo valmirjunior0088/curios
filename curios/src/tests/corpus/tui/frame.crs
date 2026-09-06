@@ -40,7 +40,7 @@ test overlay_clips_a_patch_at_the_edge() =
                 render(Frame/overlay(base, patch, 9, 9))]),
         "..../.XX./.XX. ..../..../...X ..../..../....");
 
--- Reading one cell back, under the bounds the frame's own type decides.
+-- Reading one tile back, under the bounds the frame's own type decides.
 test a_cell_is_read_under_the_frames_own_bounds() =
     let f = Frame/of_lines(Style/plain, ["ab", "cd"], 2, 2);
     let at(x: Nat, y: Nat) -> Str =

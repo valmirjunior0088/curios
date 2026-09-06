@@ -1,5 +1,5 @@
 use /std/{Nat, Str, Bytes, List, Vec, Option};
-use /std/Tui/{Style, Cell, Frame, ansi, text};
+use /std/Tui/{Style, Tile, Frame, ansi, text};
 
 struct Pen: Type {
     out: Bytes,
@@ -7,37 +7,37 @@ struct Pen: Type {
     at: Option({Nat, Nat}),
 }
 
-let paint(pen: Pen, x: Nat, y: Nat, cell: Cell, before: Option(Cell)) -> Pen =
-    let same = match before | some(b) => b == cell | none() => false end;
-    let width = text/width(cell.symbol);
+let paint(pen: Pen, x: Nat, y: Nat, tile: Tile, before: Option(Tile)) -> Pen =
+    let same = match before | some(b) => b == tile | none() => false end;
+    let width = text/width(tile.symbol);
     choose
     | same => pen
     | width == 0 => pen
     | _ =>
         let moved = match pen.at | some(p) => p.0 == x && p.1 == y | none() => false end;
         let move = match moved | true => x[] | false => ansi/move_to(x, y) end;
-        let restyled = match pen.style | some(s) => s == cell.style | none() => false end;
-        let sgr = match restyled | true => x[] | false => ansi/sgr(cell.style) end;
+        let restyled = match pen.style | some(s) => s == tile.style | none() => false end;
+        let sgr = match restyled | true => x[] | false => ansi/sgr(tile.style) end;
         Pen {
-            out = x[..pen.out, ..move, ..sgr, ..Str/to_bytes(cell.symbol)],
-            style = Option/some(cell.style),
+            out = x[..pen.out, ..move, ..sgr, ..Str/to_bytes(tile.symbol)],
+            style = Option/some(tile.style),
             at = Option/some((x + width, y)),
         }
     end;
 
-let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Cell, w), before: Option(Vec(Cell, w))) -> Pen =
-    let cells = List/zip(List/range(0, w), Vec/to_list(row));
+let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Tile, w), before: Option(Vec(Tile, w))) -> Pen =
+    let tiles = List/zip(List/range(0, w), Vec/to_list(row));
     let previous =
         match before
         | some(b) => List/map(Vec/to_list(b), Option/some)
         | none() => List/replicate(w, Option/none())
         end;
     List/fold(
-        List/zip(cells, previous),
+        List/zip(tiles, previous),
         pen,
         (entry, acc) => paint(acc, entry.0.0, y, entry.0.1, entry.1));
 
--- | The bytes that take the terminal from `previous` to `next`, cells written only where they differ, and the cursor placed at `cursor` or hidden. With no previous frame the screen is cleared and every cell written.
+-- | The bytes that take the terminal from `previous` to `next`, tiles written only where they differ, and the cursor placed at `cursor` or hidden. With no previous frame the screen is cleared and every tile written.
 pub let render(
     @w: Nat,
     @h: Nat,
