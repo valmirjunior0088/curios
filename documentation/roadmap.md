@@ -239,6 +239,10 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Parking on a handle, a timer or a waker, and `yield_now`, driven by the poll-based run loop (`block_on`/`run`); the handle and waker parks are the library's own, reached by a program through the stream types, `sleep` and `join`
   - [x] Scoped resource ownership (`using`), a finalizer run exactly once on both exits
   - [x] Deadlock detection (no runnable job, nothing blocked on a handle, no sleeper — reported with how many fibers wait on a waker nothing will fire, rather than hung)
+- [ ] Channels, local and remote, under one vocabulary
+  - [ ] [A channel owns its state, and a fiber parks with none](roadmap/channels/01-channel-spec.md) (nothing lets two fibers hand a value to each other, and `Async/select` discards a losing arm's answer; designed and prototyped, not started)
+  - [ ] [A remote channel is a codec and a framing over a stream](roadmap/channels/02-remote-spec.md) (the same vocabulary over a child's pipe or a socket, with what a process boundary costs written down; researched, not designed)
+  - [ ] [A protocol is data, and its handlers are computed from it](roadmap/channels/03-session-spec.md) (conformance without linearity, by `/std/Cli`'s computed record; researched and probed, not designed)
 - [x] Purity through an opaque `Io` monad (three intrinsics: `Io(T)`, `pure`, `bind`)
   - [x] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness)
   - [x] Stage 2: the flip — `/std` retyped and the certifier's purity analysis deleted
