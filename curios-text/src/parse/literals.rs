@@ -176,14 +176,15 @@ fn parse_unicode_escape<'a>() -> Parser<'a, char> {
     take_exact("u{").and_keep(
         take_while(|char: char| char.is_ascii_hexdigit())
             .flat_map(|digits| {
-                let scalar = (1..=6)
-                    .contains(&digits.len())
-                    .then(|| u32::from_str_radix(digits, 16).ok())
-                    .flatten()
-                    .and_then(char::from_u32);
-                match scalar {
+                // Two faults, two sentences: a reader who wrote four digits and is told to write one to six would count them again.
+                if !(1..=6).contains(&digits.len()) {
+                    return fail("\\u{...} takes one to six hex digits");
+                }
+                match u32::from_str_radix(digits, 16).ok().and_then(char::from_u32) {
                     Some(char) => pure(char),
-                    None => fail("\\u{...} takes one to six hex digits naming a Unicode scalar"),
+                    None => fail(format!(
+                        "\\u{{{digits}}} names no Unicode scalar: a surrogate, U+D800 through U+DFFF, or a value past U+10FFFF"
+                    )),
                 }
             })
             .and_drop(take_exact("}")),

@@ -237,6 +237,17 @@ fn a_malformed_braced_escape_is_refused() {
     ] {
         assert!(source.parse::<Term>().is_err(), "{source}");
     }
+    // The fault is named: a digit count, or a value that is no scalar — a reader told to write one to six digits when they wrote four would only count them again.
+    let report = "'\\u{D800}'".parse::<Term>().unwrap_err().format();
+    assert!(
+        report.contains("\\u{D800} names no Unicode scalar: a surrogate"),
+        "reported {report}"
+    );
+    let report = "'\\u{0000041}'".parse::<Term>().unwrap_err().format();
+    assert!(
+        report.contains("takes one to six hex digits") && !report.contains("scalar"),
+        "reported {report}"
+    );
 }
 
 #[test]
