@@ -423,6 +423,7 @@ module.exports = grammar({
         $.boolean,
         $.number,
         $.character,
+        $.block_string,
         $.string,
         $.packed_literal,
         $.list_literal,
@@ -519,6 +520,23 @@ module.exports = grammar({
           ),
         ),
         token.immediate('"'),
+      ),
+
+    // A block string literal: `"""` and a newline, the lines, a newline and `"""`. The opener outranks the one-line form's opener by length. A content run stops at a newline, so each line break is its own token and the closer is reached with nothing eaten past it; a mid-line `"""` outranks the quote token by length and closes, which is what the compiler refuses. Highlighting is all this serves, so the closer's own line is not checked here.
+    block_string: ($) =>
+      seq(
+        token(seq('"""', /[ \t]*\n/)),
+        repeat(
+          choice(
+            $.escape_sequence,
+            token.immediate(prec(1, /[^"\\\n]+/)),
+            token.immediate(/\\[^\n]/),
+            token.immediate(/\\\n/),
+            token.immediate(/""?/),
+            token.immediate(/\n[ \t]*/),
+          ),
+        ),
+        token.immediate('"""'),
       ),
 
     escape_sequence: (_) =>

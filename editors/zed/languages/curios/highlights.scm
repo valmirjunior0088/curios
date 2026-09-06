@@ -24,6 +24,7 @@
 (boolean) @boolean
 (number) @number
 (string) @string
+(block_string) @string
 (escape_sequence) @string.escape
 (character) @string.special.symbol
 ; A goal is punctuation, not `punctuation.special`: the default themes paint the latter red, and a hole the author wrote on purpose is not an alarm.

@@ -268,3 +268,27 @@ a
       (comment)
       (path
         (identifier)))))
+
+================================================================================
+A block string literal is one string node, its escapes named
+================================================================================
+
+let page =
+    """
+    <p class="x">
+      one \u{20} "two" ""three\"""
+    </p>
+    """;
+page
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (block_string
+        (escape_sequence)
+        (escape_sequence)))
+    (path
+      (identifier))))

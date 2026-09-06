@@ -234,6 +234,28 @@
 #                                                                                                           ^ source.curios keyword.operator.goal.curios
 #                                                                                                            ^ source.curios punctuation.bracket.curios
 #                                                                                                             ^ source.curios punctuation.separator.curios
+>let page =
+#^^^ source.curios keyword.control.curios
+#   ^ source.curios
+#    ^^^^ source.curios entity.name.function.curios
+#        ^ source.curios
+#         ^ source.curios keyword.operator.assignment.curios
+>    """
+#^^^^ source.curios
+#    ^^^ source.curios string.quoted.triple.curios
+>    <p class="x">
+#^^^^^^^^^^^^^^^^^^ source.curios string.quoted.triple.curios
+>      one \u{20} "two" ""three\"""
+#^^^^^^^^^^ source.curios string.quoted.triple.curios
+#          ^^^^^^ source.curios string.quoted.triple.curios constant.character.escape.curios
+#                ^^^^^^^^^^^^^^ source.curios string.quoted.triple.curios
+#                              ^^ source.curios string.quoted.triple.curios constant.character.escape.curios
+#                                ^^^ source.curios string.quoted.triple.curios
+>    </p>
+#^^^^^^^^^ source.curios string.quoted.triple.curios
+>    """;
+#^^^^^^^ source.curios string.quoted.triple.curios
+#       ^ source.curios punctuation.separator.curios
 >let packed = b[0, 1, ..rest];
 #^^^ source.curios keyword.control.curios
 #   ^ source.curios

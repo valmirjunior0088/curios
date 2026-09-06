@@ -18,6 +18,12 @@ pub mod Internal
 end
 
 let literals = ("a \"q\" \n \% b \u{301} \u", '\'', 'c', '\u{1F600}', 1.5e3, -42, 0xFF, 0b10, true, false, ?);
+let page =
+    """
+    <p class="x">
+      one \u{20} "two" ""three\"""
+    </p>
+    """;
 let packed = b[0, 1, ..rest];
 let bytes = x[0x48, ..suffix];
 let list = [1, ..more];

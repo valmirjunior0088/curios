@@ -7,6 +7,9 @@
       "include": "#comment"
     },
     {
+      "include": "#block_string"
+    },
+    {
       "include": "#string"
     },
     {
@@ -47,6 +50,17 @@
     "comment": {
       "name": "comment.line.double-dash.curios",
       "match": "--(?: .*)?$"
+    },
+    "block_string": {
+      "name": "string.quoted.triple.curios",
+      "begin": "\"\"\"[ \\t]*$",
+      "end": "^[ \\t]*\"\"\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.curios",
+          "match": "\\\\(?:[ntr\\\\\"]|u\\{[0-9a-fA-F]+\\})"
+        }
+      ]
     },
     "string": {
       "name": "string.quoted.double.curios",
