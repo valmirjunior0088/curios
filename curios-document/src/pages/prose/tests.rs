@@ -19,7 +19,7 @@ fn a_comment_splits_at_empty_lines_and_backtick_pairs() {
         "Whether `m` holds a value.".to_string(),
         "Decided at `some`.".to_string(),
         String::new(),
-        "Unpaired ` stays, and `` is nothing.".to_string(),
+        "An empty pair `` is nothing, and an unpaired ` stays.".to_string(),
     ];
     let split = paragraphs(Some(&lines[..]));
 
@@ -28,7 +28,11 @@ fn a_comment_splits_at_empty_lines_and_backtick_pairs() {
         rendered(&split[0]),
         "Whether <m> holds a value. Decided at <some>."
     );
-    assert_eq!(rendered(&split[1]), "Unpaired ` stays, and  is nothing.");
+    // Pairs are read left to right, so the unpaired backtick is the one nothing follows.
+    assert_eq!(
+        rendered(&split[1]),
+        "An empty pair  is nothing, and an unpaired ` stays."
+    );
 }
 
 #[test]
