@@ -24,7 +24,6 @@ pub(super) struct Page {
     root: String,
     /// The module's path, `/std/Option`; the landing page's is the prefix itself.
     path: String,
-    landing: bool,
     /// The unit's description on the landing page, the module's prose elsewhere.
     lead: Vec<Paragraph>,
     crumbs: Vec<Crumb>,
@@ -51,7 +50,7 @@ struct Crumb {
 struct RailRow {
     /// How far below the root the module is: what the row is indented by.
     depth: usize,
-    /// The root's whole path, and every other module's last segment.
+    /// The module's last segment — the root's too, as the crumb spells it: a mount's name is what the reader knows it by, and the leading `/` of its canonical spelling names nothing here.
     name: String,
     href: String,
     current: bool,
@@ -176,10 +175,7 @@ pub(super) fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
             let depth = listed.path.segments().len() - prefix;
             RailRow {
                 depth,
-                name: match depth {
-                    0 => listed.path.join(),
-                    _ => listed.path.last().to_string(),
-                },
+                name: listed.path.last().to_string(),
                 href: bundle.page_path(&listed.path),
                 current: listed.path == module.path,
             }
@@ -245,7 +241,6 @@ pub(super) fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
     Page {
         root,
         path: module.path.join(),
-        landing,
         lead,
         crumbs,
         rail,
