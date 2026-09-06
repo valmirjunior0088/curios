@@ -1,4 +1,4 @@
-{#- A module's page. The rail holds the whole tree with this page's declarations under its module; the main column opens with the path and the lead, then the child modules, the declarations and the re-exports. -#}
+{#- A module's page. The rail holds the whole tree with this page's declarations under its module, behind a checkbox and its label so that, stacked at a narrow width, it starts folded without a script; the main column opens with the path and the lead, then the child modules, the declarations and the re-exports. -#}
 {%- import "signature.html" as sig -%}
 {%- import "prose.html" as words -%}
 <!doctype html>
@@ -13,8 +13,9 @@
 <body>
 <div class="frame">
 <aside class="rail">
-<details class="tree" open>
-<summary>Index</summary>
+<div class="tree">
+<input type="checkbox" id="rail-toggle" class="toggle" hidden>
+<label for="rail-toggle">Index</label>
 <nav>
 {% for row in rail -%}
 <a class="module{% if row.current %} current{% endif %}" style="--depth: {{ row.depth }}" href="{{ root }}{{ row.href }}">{{ row.name }}</a>
@@ -25,7 +26,7 @@
 {% endif -%}
 {% endfor -%}
 </nav>
-</details>
+</div>
 </aside>
 <main>
 <p class="crumbs"><span class="kind">{% if landing %}package{% else %}module{% endif %}</span>{% for crumb in crumbs %}<span class="sep">/</span>{% if let Some(href) = crumb.href %}<a href="{{ root }}{{ href }}">{{ crumb.text }}</a>{% else %}<span class="here">{{ crumb.text }}</span>{% endif %}{% endfor %}</p>
