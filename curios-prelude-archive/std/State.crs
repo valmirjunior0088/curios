@@ -1,17 +1,19 @@
 use /std/{Monad};
 
--- | Pure, deterministic state threading: a `State(S, A)` is a function from a state to a value and the successor state, and running one is ordinary application. Deliberately *no* `Lift(Io, State(S))` edge exists — a `State` region provably performs nothing, which is the whole difference from a `Cell` in `Io`. The parameter order is deliberate too: the result parameter sits last so the family partially applies as a monad, `(A: Type) => State(S, A)`.
+-- | A computation over a state `S` answering an `A` and the next state.
 pub struct State(S: Type, A: Type): Type {
     (S) -> {A, S},
 }
 
--- | The general carrier constructor: any state transformer, as a `State` action.
+-- | Any state transformer as a `State` action.
 pub let state(@S: Type, @A: Type, f: (S) -> {A, S}) -> State(S, A) =
     State { f };
 
+-- | `a`, with the state untouched.
 pub let pure(@S: Type, @A: Type, a: A) -> State(S, A) =
     State { (s) => (a, s) };
 
+-- | `m`, then `f` on its answer from the state it left.
 pub let bind(@S: Type, @A: Type, @B: Type, m: State(S, A), f: (A) -> State(S, B)) -> State(S, B) =
     State {
         (s) =>
@@ -19,15 +21,19 @@ pub let bind(@S: Type, @A: Type, @B: Type, m: State(S, A), f: (A) -> State(S, B)
             f(r.0).0(r.1),
     };
 
+-- | The current state.
 pub let get(@S: Type) -> State(S, S) =
     State { (s) => (s, s) };
 
+-- | `s` as the state.
 pub let put(@S: Type, s: S) -> State(S, {}) =
     State { (_) => ((), s) };
 
+-- | `f` on the current state.
 pub let modify(@S: Type, f: (S) -> S) -> State(S, {}) =
     bind(get(), (s) => put(f(s)));
 
+-- | `m` from `init`: its answer and the final state.
 pub let run(@S: Type, @A: Type, m: State(S, A), init: S) -> {A, S} =
     m.0(init);
 

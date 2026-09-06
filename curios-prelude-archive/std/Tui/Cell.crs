@@ -1,25 +1,23 @@
--- One position on the screen: the text it shows and how that text is painted.
---
--- The symbol is a `Str` rather than a `Char` because a combining mark has nowhere else to live — `"e\u{301}"` is one cell and two scalars, and a `Char` cell would have to drop the mark or invent a second field for it. This is ratatui's and notcurses's cell, and it is what makes `Tui/text/width` the only authority on how many columns a cell occupies.
---
--- A symbol two columns wide occupies its own cell and the next, which holds `Cell/continuation` — a symbol of no text at all. The renderer writes the wide symbol and skips the continuation, so the two cells and the two columns stay in step; a program that splits a wide symbol across a pane boundary gets the continuation alone, which paints as a blank rather than as half a glyph.
 use /std/{Str, Equal};
 use /std/Tui/{Style};
 
+-- | One position on the screen.
 pub struct Cell: pub Type {
+    -- | The text shown: one column's worth, with any combining marks.
     symbol: Str,
     style: Style,
 }
 
 satisfy Equal(Cell);
 
+-- | A space in the plain style.
 pub let blank: Cell =
     Cell { symbol = " ", style = Style/plain };
 
--- | The second half of a double-width symbol: no text, so the renderer emits nothing for it and the column the wide symbol already covered is not written twice.
+-- | The second half of a double-width symbol: no text, so the renderer writes nothing for it.
 pub let continuation: Cell =
     Cell { symbol = "", style = Style/plain };
 
--- | One cell of `s` in `style`. Nothing here checks that `s` is one symbol wide; `Tui/Frame/text` is where a string becomes cells and is where the measurement happens.
+-- | `s` in `style`. Nothing here checks that `s` is one column wide; `Frame/text` is where a string becomes cells.
 pub let of_str(style: Style, s: Str) -> Cell =
     Cell { symbol = s, style = style };

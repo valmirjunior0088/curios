@@ -1,22 +1,25 @@
--- Arbitrary-precision naturals over the packed `Bits` substrate. A `BigNat` is a transparent record pairing an LSB-first `Bits` word with a `Canonical` proof that the word is trimmed (no redundant high zero bit), so equality is decided at the `.bits` level and the certificate erases away. `View` (zero / succ low tail) is the structural accessor consumers and single-operand recursions go through; two-operand ops match `.bits` directly and build a raw result. One whose ripple can untrim (`mul`, `sub`) routes it through `of_bits` — a single `trim` — at the public boundary; `add`'s cannot, so it carries the `raw_trimmed` certificate through `of_trimmed_bits` and pays no trim at all.
 use /std/{Nat, Bool, Bits, Eq, False, True};
 use /std/Bool/{false_neq_true};
 
+-- | Whether `bits` has no redundant high zero bit.
 pub let is_trimmed(bits: Bits) -> Bool =
     match bits
     | b[] => true
     | b[head, ..tail]; ih => match tail | b[] => head | b[_, .._] => ih end
     end;
 
+-- | The proposition that `bits` is trimmed.
 pub let Canonical(bits: Bits) -> Prop =
     match is_trimmed(bits) | true => True | false => False end;
 
+-- | `t` with `head` as a new low bit, trimmed: `combine(false, b[])` is `b[]`.
 pub let combine(head: Bool, t: Bits) -> Bits =
     match t
     | b[] => match head | true => b[head] | false => b[] end
     | b[_, .._] => b[head, ..t]
     end;
 
+-- | `bits` with its redundant high zero bits removed.
 pub let trim(bits: Bits) -> Bits =
     match bits | b[] => b[] | b[head, .._tail]; ih => combine(head, ih) end;
 
@@ -34,6 +37,7 @@ let combine_is_trimmed(
     | b[_, .._] => p
     end;
 
+-- | `trim` answers a trimmed word.
 pub let trim_is_trimmed(bits: Bits) -> Eq(is_trimmed(trim(bits)), true) =
     match bits: (r) => Eq(is_trimmed(trim(r)), true)
     | b[] => Eq/refl()
@@ -49,14 +53,17 @@ let canonical_of_is_trimmed(bits: Bits, p: Eq(is_trimmed(bits), true)) -> Canoni
 let canonical_of_trim(bits: Bits) -> Canonical(trim(bits)) =
     canonical_of_is_trimmed(trim(bits), trim_is_trimmed(bits));
 
+-- | A trimmed word beside its certificate.
 pub struct BigNat: pub Type {
     bits: Bits,
     canonical: Canonical(bits),
 }
 
+-- | The number a word denotes, trimmed on the way in.
 pub let of_bits(bits: Bits) -> BigNat =
     BigNat { bits = trim(bits), canonical = canonical_of_trim(bits) };
 
+-- | A number as zero, or a low bit over the rest.
 pub induct View: pub Type
 | zero()
 | succ(low: Bool, tail: BigNat)
@@ -69,15 +76,18 @@ let tail_is_trimmed(
 ) -> Eq(is_trimmed(tail), true) =
     match tail: (t) => Eq(is_trimmed(t), true) | b[] => Eq/refl() | b[_, .._] => p end;
 
+-- | The certificate as a decided equation.
 pub let is_trimmed_of_canonical(bits: Bits, c: Canonical(bits)) -> Eq(is_trimmed(bits), true) =
     match is_trimmed(bits): (r) => Eq(r, true)
     | true => Eq/refl()
     | false => match c end
     end;
 
+-- | The number of a word already known to be trimmed, with no trim spent.
 pub let of_trimmed_bits(bits: Bits, p: Eq(is_trimmed(bits), true)) -> BigNat =
     BigNat { bits = bits, canonical = canonical_of_is_trimmed(bits, p) };
 
+-- | `a` as zero, or its low bit over the rest.
 pub let view(a: BigNat) -> View =
     match a.bits
     | b[] => View/zero()
@@ -92,17 +102,17 @@ pub let view(a: BigNat) -> View =
 let refl_at(@A: Type, x: A) -> Eq(x, x) =
     Eq/refl();
 
+-- | Zero.
 pub let zero: BigNat =
     of_bits(b[]);
 
+-- | Whether `a` is zero.
 pub let is_zero(a: BigNat) -> Bool =
     match view(a) | zero() => true | succ(_, _) => false end;
 
--- | The raw double survives `dbl`'s restatement as `mul`'s proof vocabulary: the ladder laws relate `dbl` to the raw ripple through this spelling.
 let dbl_raw(x: Bits) -> Bits =
     b[0, ..x];
 
--- | `combine` already answers the one case a doubling can untrim — a false head over an empty word — so the smart constructors and `of_nat` take the `of_trimmed_bits` door with `combine_is_trimmed` as certificate, costing one head test where `of_bits` walks the whole word.
 let dbl(a: BigNat) -> BigNat =
     of_trimmed_bits(
         combine(false, a.bits),
@@ -113,6 +123,7 @@ let dbl_succ(a: BigNat) -> BigNat =
         combine(true, a.bits),
         combine_is_trimmed(true, a.bits, is_trimmed_of_canonical(a.bits, a.canonical)));
 
+-- | The number `n` denotes.
 pub let of_nat(n: Nat) -> BigNat =
     match n == 0
     | true => zero
@@ -126,6 +137,7 @@ pub let of_nat(n: Nat) -> BigNat =
                 is_trimmed_of_canonical(tail.bits, tail.canonical)))
     end;
 
+-- | The sum bit of a full adder.
 pub let xor3(a: Bool, b: Bool, c: Bool) -> Bool =
     match a
     | true =>
@@ -140,18 +152,21 @@ pub let xor3(a: Bool, b: Bool, c: Bool) -> Bool =
         end
     end;
 
+-- | The carry bit of a full adder.
 pub let maj3(a: Bool, b: Bool, c: Bool) -> Bool =
     match a
     | true => match b | true => true | false => c end
     | false => match b | true => c | false => false end
     end;
 
+-- | Equal words are equal numbers.
 pub let eq(a: BigNat, b: BigNat, p: Eq(a.bits, b.bits)) -> Eq(a, b) =
     Eq/subst(
         (r: Bits) => (c: Canonical(r)) -> Eq(a, BigNat { bits = r, canonical = c }),
         p,
         (_c: Canonical(a.bits)) => Eq/refl())(b.canonical);
 
+-- | Congruence for a word extended by two bits.
 pub let cong_cons2(
     @h1: Bool,
     @h2: Bool,
@@ -165,6 +180,7 @@ pub let cong_cons2(
         match pt: (a2, b2, _q2) => Eq(b[h1, ..a2], b[h1, ..b2]) | refl(@_z2) => Eq/refl() end
     end;
 
+-- | Congruence of `combine` in its tail.
 pub let cong_combine(h: Bool, @s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(combine(h, s), combine(h, t)) =
     Eq/cong((w) => combine(h, w), p);
 
@@ -212,6 +228,7 @@ let is_trimmed_cons(
     | b[_, .._] => pt
     end;
 
+-- | A trimmed word is its own trim.
 pub let trim_of_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
     match x: (a) => Eq(trim(a), a)
     | b[] => Eq/refl()
@@ -226,19 +243,23 @@ pub let trim_of_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
         end
     end;
 
--- | Each operation family is a facade: the module's namesake binding is the operation, and the laws about it nest underneath — `BigNat/add` adds, `BigNat/add/assoc` is its associativity, `BigNat/add/raw` is the raw `Bits` ladder it is built from.
+-- | Addition, with its laws beneath.
 pub mod add;
 pub use add/{let add};
 
+-- | The successor, with its laws beneath.
 pub mod succ;
 pub use succ/{let succ};
 
+-- | Comparison, with its laws beneath.
 pub mod cmp;
 pub use cmp/{let cmp};
 
+-- | Multiplication, with its laws beneath.
 pub mod mul;
 pub use mul/{let mul};
 
+-- | Subtraction, truncated at zero.
 pub mod sub;
 pub use sub/{let sub};
 

@@ -1,4 +1,3 @@
--- A frame in a box: one line of border on every side, with a title in the top edge where there is room for one. The result is two wider and two taller than what it wraps, and the type says so, which is the off-by-one every surveyed issue tracker has a page of.
 use /std/{Nat, Str};
 use /std/Tui/{Style, Cell, Frame, text};
 
@@ -9,6 +8,7 @@ let edge(style: Style, left: Str, middle: Str, right: Str, w: Nat) -> Frame(w + 
             Frame/fit(Frame/text(style, middle).frame, w, 1)),
         Frame/filled(Cell/of_str(style, right), 1, 1));
 
+-- | `inner` in a box one cell wide on every side, with `title` in the top edge where there is room.
 pub let around(
     @w: Nat,
     @h: Nat,

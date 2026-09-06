@@ -1,189 +1,290 @@
+-- | Decidable equality: the concept `==` and `!=` dispatch to.
+-- |
+-- | A witness supplies both methods, since `!=` is not the negation of `eql`. A declared type derives its witness with `satisfy Equal(T);`.
 pub mod Equal;
 pub use Equal/{let Equal};
 
+-- | Addition: the concept `+` dispatches to.
 pub mod Add;
 pub use Add/{let Add};
 
+-- | Subtraction: the concept `-` dispatches to. Below zero is the carrier's own law: `Nat` truncates, `Int` and `Flt` go negative.
 pub mod Subtract;
 pub use Subtract/{let Subtract};
 
+-- | Multiplication: the concept `*` dispatches to.
 pub mod Multiply;
 pub use Multiply/{let Multiply};
 
+-- | Division: the concept `/` dispatches to, under the precondition `Ok` each carrier states on its divisor.
+-- |
+-- | A literal divisor discharges the precondition by reduction and a computed one behind a guard. A carrier whose division is total states `True`.
 pub mod Divide;
 pub use Divide/{let Divide};
 
+-- | Remainder: the concept `%` dispatches to, under the same precondition as division.
 pub mod Remainder;
 pub use Remainder/{let Remainder};
 
+-- | Conjunction: the concept `&&` dispatches to.
 pub mod And;
 pub use And/{let And};
 
+-- | Disjunction: the concept `||` dispatches to.
 pub mod Or;
 pub use Or/{let Or};
 
+-- | The four ordered comparisons: the concept `<`, `<=`, `>` and `>=` dispatch to, each answering a `Bool`.
 pub mod Compare;
 pub use Compare/{let Compare};
 
+-- | Sequencing: the concept postfix `!` is a call to, in the monad of its region.
+-- |
+-- | A region's monad is read from the region's type, never from an action sequenced in it. An action of another monad reaches the region through `Lift`.
 pub mod Monad;
 pub use Monad/{let Monad};
 
+-- | The embedding of one monad into another, inserted by a `!` on an action of a monad other than its region's.
+-- |
+-- | One witness per ordered pair of monads across a program, and embeddings never chain: a composite embedding is declared by the author of the outer monad.
 pub mod Lift;
 pub use Lift/{let Lift};
 
+-- | Pure state threading: a computation that reads and writes a state and performs nothing.
+-- |
+-- | The value parameter sits last so the family partially applies as a monad. There is no edge from `Io` into a `State` region.
 pub mod State;
 pub use State/{let State};
 
+-- | A description of a computation that touches the host, never its result.
+-- |
+-- | Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. `Error` is the failure every host operation reports.
 pub mod Io;
 pub use Io/{let Io};
 
+-- | A value's rendering for a reader.
 pub mod Show;
 pub use Show/{let Show};
 
--- | A value's rendering as source that reads back: `spell(v)` is Curios text that denotes `v` at its type — a literal, or a constructor spelled by its type's own name, `Ordering/lt()` — which re-parses wherever the type's name is visible unqualified, the one place a value of it can be written at all, and reads in a test report as the author would have written it. `Show` stays the human-facing display; the two coincide only where a value's display already is its literal.
+-- | A value's rendering as source that reads back: a literal, or a constructor spelled by its type's own name.
+-- |
+-- | The text re-parses wherever the type's name is visible unqualified, and a test report spells a value with it. A declared type derives its witness with `satisfy Spell(T);`.
 pub mod Spell;
 pub use Spell/{let Spell};
 
+-- | A total order, over an `Equal` superclass: what sorting and ordered collections ask for.
 pub mod Ordered;
 pub use Ordered/{let Ordered};
 
+-- | Natural numbers: unbounded in the language, carried on the machine's word at run time, so a value past the carrier refuses rather than wraps.
+-- |
+-- | Subtraction truncates at zero. Division and remainder carry the precondition `Lt(0, b)`. `Lt` and `Le` beneath are the decided propositions every bound in the library is stated in.
 pub mod Nat;
 pub use Nat/{let Nat};
 
+-- | One octet, `0` through `255`.
 pub mod Byte;
 pub use Byte/{let Byte};
 
+-- | Signed integers on the machine's word, with `NonNeg` as the decided bound the narrowing to `Nat` carries.
 pub mod Int;
 pub use Int/{let Int};
 
+-- | IEEE binary32 floating point.
+-- |
+-- | Every comparison is IEEE's, so a NaN fails them all. Division is total. The narrowings to `Int` and `Nat` carry the decided bounds `Finite` and `NonNeg`, and the decimal conversions are exact in both directions.
 pub mod Flt;
 pub use Flt/{let Flt};
 
+-- | A packed bit string, least-significant first, written `b[...]`.
 pub mod Bits;
 pub use Bits/{let Bits};
 
+-- | A packed byte string, written `x[...]`: what every host operation hands over and takes.
 pub mod Bytes;
 pub use Bytes/{let Bytes};
 
+-- | The cons list, written `[...]` with `..` spreads.
+-- |
+-- | `fold` walks left to right with `f(elem, acc)`; the right fold is the language's `; ih` binding on a list arm.
 pub mod List;
 pub use List/{let List};
 
+-- | A mutable cell in `Io`: the one mutable state a program has.
 pub mod Cell;
 pub use Cell/{let Cell};
 
+-- | A regular file the program opened.
+-- |
+-- | Every operation is `Io`, since the disk answers at once, and what can fail is `Try` over `Io`. Inside a fiber a file is a stream like any other.
 pub mod File;
 pub use File/{let File};
 
+-- | A child process to run: the program, its arguments, and how its streams are wired.
+-- |
+-- | A child started inside a fiber is killed when the task around it ends.
 pub mod Command;
 pub use Command/{let Command};
 
+-- | Cooperative tasks over the host's scheduler: a fiber that parks on a handle, a timer or a signal and resumes when it is ready.
+-- |
+-- | `run` drives a root fiber to its answer or reports a deadlock, and `using` brackets a resource so that a cancelled task releases it. An `Io` action sequences inside an `Async` region as it is.
 pub mod Async;
 pub use Async/{let Async};
 
+-- | One Unicode scalar value, certified against the surrogate range. Classification and case conversion are ASCII-only.
 pub mod Char;
 pub use Char/{let Char};
 
+-- | Success or failure, the failure first, so the family is its own short-circuiting monad: `!` on one is early return.
+-- |
+-- | A `Result` region performs nothing; a fallible action is a `Try`.
 pub mod Result;
 pub use Result/{let Result};
 
+-- | The error channel over a monad: an `M(Result(E, A))` sequenced so that a failure stops the region.
+-- |
+-- | A bare `Result`, an action of the base monad, and an `Io` action where the base admits one all sequence in a `Try` region with `!`. Every host operation that can fail is a `Try` over its base.
 pub mod Try;
 pub use Try/{let Try};
 
+-- | A value that may be absent, with `IsSome` as the decided proposition that says which.
 pub mod Option;
 pub use Option/{let Option};
 
+-- | The three-way answer a comparison gives.
 pub mod Ordering;
 pub use Ordering/{let Ordering};
 
+-- | Arbitrary-precision naturals.
+-- |
+-- | Each operation is a facade with its laws beneath it: `BigNat/add` adds and `BigNat/add/assoc` is its associativity.
 pub mod BigNat;
 pub use BigNat/{let BigNat};
 
+-- | Strictly positive arbitrary-precision naturals, the invariant carried as a proof.
 pub mod BigPos;
 pub use BigPos/{let BigPos};
 
+-- | Arbitrary-precision integers.
 pub mod BigInt;
 pub use BigInt/{let BigInt};
 
+-- | A list that carries its length in its type.
 pub mod Vec;
 pub use Vec/{let Vec};
 
+-- | A map keyed on the byte string a `Key` witness produces.
+-- |
+-- | The key type is forgotten: the byte string is the identity, so two key types encoding alike are the same key, and the keys handed back are `Bytes`. A `Key` witness proves its encoding injective.
 pub mod Map;
 pub use Map/{let Map};
 
+-- | A set of keys, with the surface of `Map` and the value elided.
 pub mod Set;
 pub use Set/{let Set};
 
+-- | Well-founded recursion, as a proof principle: the recursion lives in the accessibility proof, which erasure deletes, so it serves proofs and not programs.
 pub mod WellFounded;
 pub use WellFounded/{let WellFounded};
 
+-- | Propositional equality, with `refl` as its one constructor. The value-level decision behind `==` is `Equal`.
 pub mod Eq;
 pub use Eq/{let Eq};
 
+-- | The empty proposition, whose elimination proves anything.
 pub mod False;
 pub use False/{let False};
 
+-- | The trivial proposition, inhabited by `qed`: what a decided bound reduces to when it holds.
 pub mod True;
 pub use True/{let True};
 
+-- | Text as certified UTF-8, counted in Unicode scalar values rather than bytes. Comparison is code-point order.
 pub mod Str;
 pub use Str/{let Str};
 
+-- | A host path as the host holds it: bytes with `/` as the separator, never decoded on the way. `to_str` is where a program decodes one or refuses it.
 pub mod Path;
 pub use Path/{let Path};
 
+-- | The two-valued type.
 pub mod Bool;
 pub use Bool/{let Bool};
 
+-- | The witnesses for the positional tuple shapes, up to eight fields. A labeled product wanting the same is a `struct`.
 pub mod Tuple;
 
+-- | A parser monad over bytes.
+-- |
+-- | A parser declines when the input is not its shape, and `or` tries the alternative; once `commit` has said the input is its shape, a refusal is reported instead. A parser that must consume everything ends with `eof`.
 pub mod Parse;
 pub use Parse/{let Parse};
 
+-- | JSON, decoded and encoded through `Parse`. Numbers are binary32 `Flt`: an integer above `2^24` decodes inexactly, and a non-finite value encodes as `null`.
 pub mod Json;
 pub use Json/{let Json};
 
+-- | A TOML 1.0.0 codec over native `Int` and binary32 `Flt`.
+-- |
+-- | `decode` reads one whole document under the table-construction rules; `encode` writes one deterministic document, which decodes back to the same value.
 pub mod Toml;
 pub use Toml/{let Toml};
 
+-- | A command-line interface as a value: the arguments a program declares, and the record a line parses into, whose type the declaration decides.
+-- |
+-- | A field is read by name, and a name the declaration lacks is refused where it is written. The token grammar is GNU's.
 pub mod Cli;
 pub use Cli/{let Cli};
 
+-- | Interpolation against a format string, checked at the call: one argument per `%`, each at any type with a `Show`, and `\%` for a literal percent. A missing or surplus argument is refused where the call is written.
 pub mod Fmt;
 pub use Fmt/{let Fmt};
 
--- | Claims the runner discharges. A `Test` is a description — a theorem the kernel settled, a verdict passed or failed, or an action that performs and then says — and, like `Io`, it has no eliminator outside its owner: a program builds one through the combinators here and only `main` schedules it.
+-- | Claims the runner discharges: a theorem the kernel settled, a verdict, or an action that performs and then says.
 -- |
--- | `prove` and `refl` close a proposition the checker discharged into a theorem, carrying nothing but that it held. `Settled` is the proposition that a description was settled by the kernel, `True` on a theorem and `False` otherwise, and `settled` closes a parameterized description settled at every argument into one theorem: its evidence is `(a) => True/qed()` exactly when the body reduces to a theorem under the open binder, which is how a proved family is closed by hand and how `curios test` reports `proved` for one. `check` and `equal` are verdicts, the latter spelling both sides through `Spell` when they differ. `perform` takes a thunk rather than a bare `Io(Test)` so that an inline action's `!` binds in `Io`, and `try` is the same over a fallible action, whose raise is the test's failure with the error's `Show`.
--- |
--- | `all` is the conjunction of descriptions, which closes a family of cases — a parameterized test applied to a table of arguments — into one test: every theorem is a theorem, the empty list included; a verdict beside a theorem is that verdict; the first failure is the report, naming its position; and an action on either side sequences what follows under it. `property` closes anything `Property` judges — a nullary `Test`, or a function whose arguments the roster draws — into a description, probed over a fixed case count from a fixed seed so that a property's verdict is a function of the sources alone; a description is one case, so an action cannot be probed and says so. `main` is the selection protocol: argv[1] names one test by index and the run exits with its outcome; no argument runs every test in declaration order and exits 1 when any failed.
+-- | A parameterized test the kernel settles under its whole telescope reports proved; any other is a property, exhausted over a small domain or probed over drawn arguments. `Seed`, `Draw` and `Property` beneath are the property-testing library.
 pub mod Test;
 pub use Test/{let Test};
 
+-- | TCP over the host's sockets: connections and listeners as streams, parking the fiber wherever a peer decides.
 pub mod tcp;
 
+-- | HTTP/1.1, one connection per request.
 pub mod http;
 
+-- | Clocks: `Instant` is an opaque reading of the monotonic clock, good for measuring alone; `Timestamp` is a moment that means something; `Duration` is the distance between two of either, with no sign. The two moments do not convert.
 pub mod time;
 
+-- | Randomness from the host, in `Io`. What a property test draws from is `Test/Seed`.
 pub mod rand;
 
+-- | This process: its arguments, its environment, and its exit.
 pub mod proc;
 
+-- | The terminal this process's standard input is attached to: raw mode, its size, and the bracket a terminal session runs inside.
 pub mod tty;
 
+-- | The filesystem beyond a file's contents: what is at a path, a directory's entries, and making, moving and removing things. Every operation is `Io`, and `Try` over it where it can fail.
 pub mod fs;
 
+-- | What a stream is to a program: the concepts a file, a socket, a child's pipe and the standard streams satisfy, and the operations written once over them.
 pub mod stream;
 
+-- | A terminal interface: a screen is a frame whose size is in its type, and a program is a model, an `update` and a `view` that the loop drives.
+-- |
+-- | A frame that does not fill its pane is refused where it is written; `Frame/fit` is the one coercion where a runtime size meets a typed one. `drive` is the loop with no terminal, for a test.
 pub mod Tui;
 pub use Tui/{let Tui};
 
+-- | `s` to standard output. A failed write is dropped.
 pub let print(s: Str) -> Io({}) =
     Io/write(Io/stdout, Str/to_bytes(s));
 
+-- | `s` to standard error.
 pub let print_err(s: Str) -> Io({}) =
     Io/write(Io/stderr, Str/to_bytes(s));
 
--- | One line of standard input, without its newline; `none` at the end of the input.
+-- | One line of standard input without its newline; `none` at the end of the input.
 pub let read() -> Io(Option(Bytes)) =
     Io/read_line(Io/stdin);

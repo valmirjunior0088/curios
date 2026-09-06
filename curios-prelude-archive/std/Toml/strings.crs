@@ -1,7 +1,6 @@
 use /std/{Nat, Bool, Byte, Bytes, Char, Str, Option, Parse};
 use /std/Toml/scan/{hex_val};
 
--- | One hex digit of an escape. The two ways of not finding one are different errors here -- running out of input truncates the escape, a wrong byte spells it wrongly -- so this peeks rather than labelling a single refusal.
 let hex_digit: Parse(Nat) =
     let next = Parse/peek!;
     match next
@@ -29,7 +28,6 @@ let scalar_utf8(code: Nat) -> Parse(Bytes) =
     | none() => Parse/fail("invalid Unicode scalar in escape")
     end;
 
--- | one basic-string escape, the backslash already consumed
 let escape: Parse(Bytes) =
     let next = Parse/peek!;
     match next
@@ -54,7 +52,6 @@ let escape: Parse(Bytes) =
         end
     end;
 
--- | A carriage return is only ever legal as the first half of a CRLF, so consuming one is all-or-nothing: `optional` gives a lone one back, and every caller turns that into the same refusal.
 let crlf: Parse(Option({Byte, Byte})) =
     Parse/optional(Parse/and(Parse/take_byte(0xD), Parse/take_byte(0xA)));
 
@@ -115,7 +112,6 @@ let literal_str_scan: Parse(Bytes) =
     let _ = Parse/label(Parse/take_byte(0x27), "expected string")!;
     literal_body(x[]);
 
--- | after a line-ending backslash: whitespace, then at least one newline, then any further whitespace and newlines
 let trim_run(seen_nl: Bool) -> Parse({}) =
     let stop: Parse({}) =
         match seen_nl | true => Parse/pure(()) | false => Parse/fail("invalid escape") end;
@@ -144,7 +140,6 @@ let trim_run(seen_nl: Bool) -> Parse({}) =
         end
     end;
 
--- | A multiline string's opening delimiter may be followed by one newline, which is not part of the content.
 let skip_opening_newline: Parse({}) =
     let lf = Parse/optional(Parse/take_byte(0xA))!;
     match lf
@@ -154,7 +149,6 @@ let skip_opening_newline: Parse({}) =
         Parse/pure(())
     end;
 
--- | The closing delimiter is three quotes, but a run of up to five ends the string with the surplus kept as content -- so the whole run is read at once and its length decides, rather than a quote at a time.
 let ml_basic_body(acc: Bytes) -> Parse(Bytes) =
     let next = Parse/peek!;
     match next

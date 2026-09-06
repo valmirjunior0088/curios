@@ -1,10 +1,8 @@
--- Addition of strictly-positive naturals. The magnitude adds as an ordinary `BigNat`; the work here is carrying the nonzero certificate through the same raw ripple-carry the `BigNat` ladder runs. `trim_non_zero` is the one helper a sibling needs — `mul` reduces its own certificate to an addition — so it is the only one this module exports.
 use /std/{Bool, Bits, Eq, True, BigNat, BigPos};
 use /std/Bool/{false_neq_true};
 use /std/BigNat/{is_trimmed, trim, xor3, maj3};
 use /std/BigPos/{is_cons, trim_head_non_zero, trim_head_true};
 
--- | the raw sum of a cons-headed left operand is cons-headed
 let raw_cons(x: Bits, y: Bits, c: Bool, ne: is_cons(x)) -> is_cons(BigNat/add/raw(x, y, c)) =
     match x: (r) => is_cons(BigNat/add/raw(r, y, c))
     | b[] => match ne end
@@ -15,7 +13,6 @@ let raw_cons(x: Bits, y: Bits, c: Bool, ne: is_cons(x)) -> is_cons(BigNat/add/ra
         end
     end;
 
--- | incrementing any suffix from an empty low half leaves something cons-headed
 let carry_non_zero(x: Bits) -> is_cons(trim(BigNat/add/raw(b[], x, true))) =
     match x
     | b[] => True/qed()
@@ -26,6 +23,7 @@ let carry_non_zero(x: Bits) -> is_cons(trim(BigNat/add/raw(b[], x, true))) =
         end
     end;
 
+-- | A nonempty word stays nonempty through a trim.
 pub let trim_non_zero(
     a: Bits,
     b: Bits,
@@ -82,15 +80,17 @@ pub let trim_non_zero(
         end
     end;
 
--- | `BigNat/add` answers with its raw ripple untrimmed, so the certificate is `raw_cons` directly — no transport across a trim. The `+` here is also this file's regression proof for the scheduler's witness edges: the certificate's type only converts by unfolding the addition within this very declaration, which orders correctly only because an operator use now depends on its concept's witness rows.
+-- | The sum.
 pub let add(p: BigPos, q: BigPos) -> BigPos =
     BigPos {
         value = p.value + q.value,
         non_zero = raw_cons(p.value.bits, q.value.bits, false, p.non_zero),
     };
 
+-- | Commutativity.
 pub let comm(p: BigPos, q: BigPos) -> Eq(add(p, q), add(q, p)) =
     BigPos/eq(add(p, q), add(q, p), BigNat/add/comm(p.value, q.value));
 
+-- | Associativity.
 pub let assoc(p: BigPos, q: BigPos, r: BigPos) -> Eq(add(add(p, q), r), add(p, add(q, r))) =
     BigPos/eq(add(add(p, q), r), add(p, add(q, r)), BigNat/add/assoc(p.value, q.value, r.value));

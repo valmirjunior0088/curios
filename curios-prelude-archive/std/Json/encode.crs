@@ -1,9 +1,6 @@
 use /std/{Bytes, Byte, Str, Bool, Char, Flt, Option, List};
 use /std/Json/{Json};
 
--- | `to_str` writes `+inf`, `-inf` and `NaN`, and JSON has a literal for none of them -- RFC 8259's number is a decimal numeral, so writing one produced a document no consumer accepts, this module's own `decode` included. They render as `null`, the reading `JSON.stringify` has and the only one a writer with no `Result` to return can give. `is_finite` decides all three at once: it is written as a pair of comparisons, and `==` on `Flt` being IEEE is what makes `NaN` fail them too.
--- |
--- | The sign is the other half: `to_str` marks a non-negative value `+`, which JSON's grammar does not admit either.
 let encode_num(n: Flt) -> Str =
     match Flt/is_finite(n)
     | false => "null"
@@ -39,6 +36,7 @@ let encode_str(s: Str) -> Str =
     let body = Bytes/fold(Str/to_bytes(s), x[], (byte, acc) => x[..acc, ..escape_byte(byte)]);
     Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bytes(body), "")), "\"");
 
+-- | `v` as a document on one line. A non-finite number is written as `null`.
 pub let encode(v: Json) -> Str =
     match v
     | null() => "null"

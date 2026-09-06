@@ -1,4 +1,1 @@
--- The facade programs import `/syn/Spell` through, so `Spell` is reached under the root every other rendering concept is found in. The concept lives in `/syn` because a derived witness body names it, and a compiler-emitted name lives there; its renderers stay there too, compiler vocabulary with no row here.
---
--- Each carrier's witness lives in the module that owns the carrier, beside that module's `Show`, and the positional tuple shapes are in `/std/Tuple`. `/std/Option`, `/std/Result` and `/std/Ordering` derive theirs, so every workspace check exercises the derivation over the prelude; the intrinsic carriers are written by hand by design.
 pub use /syn/Spell/{Spell, spell};

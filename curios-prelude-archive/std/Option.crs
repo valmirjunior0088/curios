@@ -1,6 +1,7 @@
 use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, Compare, Ordered,
     List, Test};
 
+-- | A value that may be absent.
 pub induct Option(A: Type): pub Type
 | some(A)
 | none()
@@ -8,46 +9,60 @@ end
 
 pub use Option/*;
 
+-- | `f` on the value, or `none`.
 pub let bind(@A: Type, @B: Type, m: Option(A), f: (A) -> Option(B)) -> Option(B) =
     match m | some(a) => f(a) | none() => Option/none() end;
 
+-- | `f` on the value, kept as an option.
 pub let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) =
     match m | some(a) => Option/some(f(a)) | none() => Option/none() end;
 
+-- | The value, or `default` when there is none.
 pub let unwrap_or(@A: Type, m: Option(A), default: A) -> A =
     match m | some(a) => a | none() => default end;
 
+-- | Whether a value is present.
 pub let is_some(@A: Type, m: Option(A)) -> Bool =
     match m | some(_) => true | none() => false end;
 
+-- | Whether no value is present.
 pub let is_none(@A: Type, m: Option(A)) -> Bool =
     match m | some(_) => false | none() => true end;
 
+-- | `m` when it holds a value, `other` otherwise.
 pub let or(@A: Type, m: Option(A), other: Option(A)) -> Option(A) =
     match m | some(a) => Option/some(a) | none() => other end;
 
+-- | `m` when it holds a value, otherwise what `other` answers.
 pub let or_else(@A: Type, m: Option(A), other: () -> Option(A)) -> Option(A) =
     match m | some(a) => Option/some(a) | none() => other() end;
 
+-- | The value when `pred` accepts it, `none` otherwise or when there is none.
 pub let filter(@A: Type, m: Option(A), pred: (A) -> Bool) -> Option(A) =
     match m
     | some(a) => match pred(a) | true => Option/some(a) | false => Option/none() end
     | none() => Option/none()
     end;
 
+-- | An option of an option collapsed to one.
 pub let flatten(@A: Type, m: Option(Option(A))) -> Option(A) =
     match m | some(inner) => inner | none() => Option/none() end;
 
+-- | The value as a success, or `e` as the failure.
 pub let to_result(@A: Type, @E: Type, m: Option(A), e: E) -> Result(E, A) =
     match m | some(a) => Result/success(a) | none() => Result/failure(e) end;
 
+-- | The value, or what `default` answers when there is none.
 pub let unwrap_or_else(@A: Type, m: Option(A), default: () -> A) -> A =
     match m | some(a) => a | none() => default() end;
 
--- | Whether `m` holds a value, as a decided proposition: `True` at `some` and `False` at `none`, so `get` on a literal discharges by reduction and `get` on an opaque option names the binder it could not fill — the shape `Nat/Lt` gives `Str/get`.
+-- | Whether `m` holds a value, as a decided proposition: `True` at `some` and `False` at `none`.
+-- |
+-- | A literal discharges it by reduction, and an option a guard has refined discharges it with nothing written.
 pub let IsSome(@A: Type, m: Option(A)) -> Prop =
     match m | some(_) => True | none() => False end;
 
+-- | The value, under the evidence that there is one.
 pub let get(@A: Type, m: Option(A), @ok: IsSome(m)) -> A =
     match m
     | some(a) => a
@@ -71,7 +86,7 @@ satisfy Monad(Option) {
     bind = bind,
 }
 
--- | `none` below `some`.
+-- | `none` below `some`, and two values by `A`'s order.
 pub let cmp(@A: Type, use Ordered(A), a: Option(A), b: Option(A)) -> Ordering =
     match a
     | none() => match b | none() => Ordering/eq() | some(_) => Ordering/lt() end
@@ -89,7 +104,7 @@ satisfy (@A: Type, use Ordered(A)) => Ordered(Option(A)) {
     cmp = cmp,
 }
 
--- | `none` one case in four, so a drawn option is usually inhabited and the empty case still turns up early.
+-- | `none` one draw in four.
 satisfy (@A: Type, use Test/Draw(A)) => Test/Draw(Option(A)) {
     all() =
         map(Test/Draw/all(@A)(), (xs) => [Option/none(), ..List/map(xs, (a) => Option/some(a))]),

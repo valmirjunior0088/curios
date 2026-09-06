@@ -1,11 +1,13 @@
 use /std/{Bool};
 use /std/BigNat/{BigNat, view, zero};
 
+-- | Whether `a` is even.
 pub let is_even(a: BigNat) -> Bool =
     match view(a)
     | zero() => true
     | succ(low, _) => match low | true => false | false => true end
     end;
 
+-- | `a` halved, the remainder dropped.
 pub let div2(a: BigNat) -> BigNat =
     match view(a) | zero() => zero | succ(_, tail) => tail end;

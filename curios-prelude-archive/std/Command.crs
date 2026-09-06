@@ -1,22 +1,27 @@
--- A program to run, and the ways to run it. `new(program, args)` inherits everything, and the rest — a working directory, environment overrides laid over the inherited environment, and each stream's wiring — is a struct update. `spawn` starts the child synchronously, since the host answers the row at once, and hands back a `Child` whose life is its own; `run` and `status` are the brackets over one inside a fiber, where a task that ends kills what it started.
 use /std/{Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async, stream};
 
+-- | How a child's standard stream is wired.
 pub mod Stdio;
 pub use Stdio/{let Stdio};
 
+-- | A running child process.
 pub mod Child;
 pub use Child/{let Child};
 
+-- | A program to run, and how to run it.
 pub struct Command: pub Type {
     program: Str,
     args: List(Str),
+    -- | The working directory, or the parent's.
     cwd: Option(Path),
+    -- | Entries laid over the inherited environment.
     env: List({Str, Str}),
     stdin: Stdio,
     stdout: Stdio,
     stderr: Stdio,
 }
 
+-- | `program` with `args`, inheriting the working directory, the environment and every stream.
 pub let new(program: Str, args: List(Str)) -> Command =
     Command {
         program = program,
@@ -35,11 +40,9 @@ let stdio_of(s: Stdio) -> Nat =
     | null() => /sys/stdio_mode/null
     end;
 
--- | `NAME=VALUE`, which is `execve`'s own shape for an environment entry.
 let env_entry(entry: {Str, Str}) -> Bytes =
     x[..Str/to_bytes(entry.0), '=', ..Str/to_bytes(entry.1)];
 
--- | A piped stream is fetched from the child by its `stdio` index, filed non-blocking by the host. An unpiped stream has no handle to keep, so the row is not asked.
 let pipe(child: /sys/Handle, which: Nat, mode: Stdio) -> Try(Io, Io/Error, Option(/sys/Handle)) =
     match mode
     | piped() =>
@@ -51,7 +54,7 @@ let pipe(child: /sys/Handle, which: Nat, mode: Stdio) -> Try(Io, Io/Error, Optio
     | _ => Try/pure(Option/none())
     end;
 
--- | Start `cmd`. Nothing guards the child here: `Child/with` is the bracket that kills it when the task around it ends, and `run` and `status` are written over that bracket.
+-- | Start `cmd`. Nothing guards the child: `Child/with` is the bracket that kills it when the task around it ends.
 pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
     let r =
         /sys/proc/spawn(
@@ -73,7 +76,6 @@ pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
 let drain(p: Option(Child/Pipe)) -> Async(Result(Io/Error, Bytes)) =
     match p | some(p) => stream/read_all(p) | none() => Async/pure(Result/success(x[])) end;
 
--- | Both outputs to their end, each drained in a task of its own and both joined before the child is waited for: draining one to its end while the other fills is the deadlock every process library documents, and `select` would cancel whichever drain finished second.
 let capture(
     child: Child,
 ) -> Try(Async, Io/Error, {exit: Child/Exit, stdout: Bytes, stderr: Bytes}) =
@@ -86,14 +88,14 @@ let capture(
     let exit = Child/wait(child)!;
     Try/pure((exit = exit, stdout = stdout, stderr = stderr));
 
--- | Run `cmd` to its end with both outputs captured and how it ended.
+-- | `cmd` run to its end with both outputs captured, and how it ended.
 pub let run(
     cmd: Command,
 ) -> Try(Async, Io/Error, {exit: Child/Exit, stdout: Bytes, stderr: Bytes}) =
     let child = spawn(Command { ..cmd, stdout = Stdio/piped(), stderr = Stdio/piped() })!;
     Child/with(child, capture(child));
 
--- | Run `cmd` with every stream as `cmd` wires it and report how it ended.
+-- | `cmd` run with its streams as wired, and how it ended.
 pub let status(cmd: Command) -> Try(Async, Io/Error, Child/Exit) =
     let child = spawn(cmd)!;
     Child/with(child, Child/wait(child));

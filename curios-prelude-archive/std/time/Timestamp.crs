@@ -1,14 +1,14 @@
--- A specific moment in time: seconds since the Unix epoch, as the wall clock and a file's modification time report it, split base-10⁹ into two limbs so each fits the envelope. This is the type for *when* — it prints, compares and is stored — where `Instant` is an opaque reading of the monotonic clock, good for measuring only, and the two do not convert. The representation is private for its invariant, every limb below 10⁹, which `of_unix` establishes by carrying so that `before` and `diff` can compare limb by limb.
 use /std/{Nat, Bool, Str, Io, Equal, Show};
 use /std/time/{Duration};
 
+-- | A moment, as seconds since the Unix epoch.
 pub struct Timestamp: Type {
     secs_hi: Nat,
     secs_lo: Nat,
     nanos: Nat,
 }
 
--- | Canonicalising: nanoseconds past 10⁹ carry into the seconds and seconds past 10⁹ into the high limb, so whatever limbs a host row or a program hands over become the one stored form.
+-- | The moment at `secs_hi` billion plus `secs_lo` seconds and `nanos` nanoseconds since the epoch, with overflowing limbs carried.
 pub let of_unix(secs_hi: Nat, secs_lo: Nat, nanos: Nat) -> Timestamp =
     let lo = secs_lo + nanos / 1000000000;
     Timestamp {
@@ -17,14 +17,16 @@ pub let of_unix(secs_hi: Nat, secs_lo: Nat, nanos: Nat) -> Timestamp =
         nanos = nanos % 1000000000,
     };
 
+-- | The wall clock now.
 pub let now() -> Io(Timestamp) =
     let r = /sys/clock/wall!;
     Io/pure(of_unix(r.secs_hi, r.secs_lo, r.nanos));
 
--- | The canonical limbs back: the seconds since the epoch, high and low, and the nanoseconds within the second.
+-- | The seconds since the epoch, as two base-billion limbs, and the nanoseconds within the second.
 pub let to_unix(t: Timestamp) -> {secs_hi: Nat, secs_lo: Nat, nanos: Nat} =
     (secs_hi = t.secs_hi, secs_lo = t.secs_lo, nanos = t.nanos);
 
+-- | Whether `a` is earlier than `b`.
 pub let before(a: Timestamp, b: Timestamp) -> Bool =
     choose
     | a.secs_hi < b.secs_hi => true
@@ -40,7 +42,7 @@ let sub_digit(x: Nat, y: Nat) -> {digit: Nat, borrow: Nat} =
     | false => (digit = x - y, borrow = 0)
     end;
 
--- | `a - b` as a duration, and zero when `a` is not after `b`: a `Duration` has no sign. Limb by limb with a borrow, as the representation is laid out.
+-- | `a - b` as a duration, and zero when `a` is not after `b`.
 pub let diff(a: Timestamp, b: Timestamp) -> Duration =
     match before(a, b)
     | true => Duration/zero
@@ -53,7 +55,7 @@ pub let diff(a: Timestamp, b: Timestamp) -> Duration =
 
 satisfy Equal(Timestamp);
 
--- | `secs.nanos`: the seconds unbroken, the nanoseconds padded to nine digits, so `1700000000.000000500` reads as the number it is.
+-- | `secs.nanos`, the nanoseconds padded to nine digits.
 satisfy Show(Timestamp) {
     show(t) =
         let secs =

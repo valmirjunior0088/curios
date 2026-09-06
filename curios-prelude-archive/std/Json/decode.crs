@@ -70,7 +70,6 @@ let parse_unicode: Parse(Bytes) =
         end
     end;
 
--- | The backslash commits: past it, an unknown letter is a bad escape, not the end of a string segment to be closed by a quote that is not there.
 let escape_fields: Parse(Bytes) =
     let byte = Parse/any_byte!;
     match Byte/to_nat(byte)
@@ -124,7 +123,6 @@ let symbol(b: Byte) -> Parse(Byte) =
     let _ = ws!;
     Parse/take_byte(b);
 
--- | A comma commits to the element after it, so `[1,]` is refused at the missing value. `Parse/sep_by0` instead backtracks a declined element to before its separator, which is the right reading for a Toml array, where a trailing comma is legal, and the wrong one here, where it surfaced as the bracket refusing the comma.
 let after_comma(@A: Type, elem: Parse(A)) -> Parse(A) =
     let _ = symbol(0x2C)!;
     Parse/commit(elem);
@@ -134,7 +132,6 @@ let elements(@A: Type, elem: Parse(A)) -> Parse(List(A)) =
         elem,
         (first) => Parse/map(Parse/many0(after_comma(elem)), (rest) => [first, ..rest]));
 
--- | The byte after the opening bracket decides between its two continuations -- the closing bracket, or elements the aggregate then commits to -- so an empty aggregate is recognized rather than backtracked to, and `[x]` reports the value it expected instead of the bracket an `or` would have tried next. `after` is the refusal once an element has been read, where either a separator or the close would do.
 let bracketed(@A: Type, open: Byte, elem: Parse(A), close: Byte, after: Str) -> Parse(List(A)) =
     let _ = symbol(open)!;
     let _ = ws!;
@@ -150,7 +147,6 @@ let bracketed(@A: Type, open: Byte, elem: Parse(A), close: Byte, after: Str) -> 
 let is_num_start(byte: Byte) -> Bool =
     match Byte/to_nat(byte) | 45 => true | _ => Nat/in_range(Byte/to_nat(byte), 0x30, 0x39) end;
 
--- | The dispatch reads the first byte without consuming it, so each arm parses the value whole -- including the byte that selected it.
 let value: Parse(Json) =
     let _ = ws!;
     let byte = Parse/peek_byte!;
@@ -167,7 +163,6 @@ and parse_arr: Parse(Json) =
     Parse/map(bracketed(0x5B, value, 0x5D, "expected ',' or ']'"), (elems) => Json/arr(elems))
 and parse_obj: Parse(Json) =
     Parse/map(bracketed(0x7B, parse_pair, 0x7D, "expected ',' or '}'"), (pairs) => Json/obj(pairs))
--- | A key commits to its colon and value: past `"a"`, the input is a member or malformed, never something else.
 and parse_pair: Parse({Str, Json}) =
     let _ = ws!;
     let key = parse_raw_str!;
@@ -177,7 +172,7 @@ and member_value(key: Str) -> Parse({Str, Json}) =
     let val = value!;
     Parse/pure((key, val));
 
--- | A whole document, which is what the module's two entry points are a pair for: `value` is composable and reads one value, and past it `nulll`, `truex`, `1 garbage` and `"a""b"` each read as their prefix and the rest went unmentioned -- `Parse/run` hands back no position, so a caller could not even learn a prefix had been taken. `Toml/decode` reaches its own end the same way. `ws` first, since every value parser consumes only the trivia *before* it.
+-- | A whole document, surrounding whitespace included; anything after the value is refused.
 pub let decode: Parse(Json) =
     let parsed = value!;
     let _ = ws!;

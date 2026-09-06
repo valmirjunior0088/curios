@@ -1,6 +1,6 @@
--- A key as a program sees it: a code — a character or a named key — and the three modifiers a terminal reports. The End key is `end_key` because `end` is a reserved word and cannot be a path segment. `shift` on a character is redundant with its case and is reported only where the terminal says it, which the legacy encoding never does for a plain letter; the kitty protocol does.
 use /std/{Nat, Bool, Char, Equal, Spell};
 
+-- | A character, or a named key. The End key is `end_key`, since `end` is a reserved word.
 pub induct Code: pub Type
 | char(Char)
 | enter()
@@ -26,6 +26,7 @@ satisfy Equal(Code);
 
 satisfy Spell(Code);
 
+-- | A code and its modifiers.
 pub struct Key: pub Type {
     code: Code,
     shift: Bool,
@@ -37,11 +38,14 @@ satisfy Equal(Key);
 
 satisfy Spell(Key);
 
+-- | `code` with no modifier.
 pub let plain(code: Code) -> Key =
     Key { code = code, shift = false, alt = false, ctrl = false };
 
+-- | `code` with Ctrl.
 pub let with_ctrl(code: Code) -> Key =
     Key { code = code, shift = false, alt = false, ctrl = true };
 
+-- | `code` with Alt.
 pub let with_alt(code: Code) -> Key =
     Key { code = code, shift = false, alt = true, ctrl = false };

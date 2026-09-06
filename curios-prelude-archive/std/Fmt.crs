@@ -1,11 +1,13 @@
 use /std/{Bytes, Byte, Str, Nat, Show, Io};
 
+-- | A parsed format string: literal pieces, and the places an argument goes.
 pub induct Fmt: pub Type
 | nil()
 | lit(piece: Str, rest: Fmt)
 | show(Fmt)
 end
 
+-- | The type of a function taking one `Show`-able argument per place in `f` and answering a `T`.
 pub let format_type_with(T: Type, f: Fmt) -> Type =
     match f
     | nil() => T
@@ -13,9 +15,6 @@ pub let format_type_with(T: Type, f: Fmt) -> Type =
     | show(rest) => (@A: Type, use Show(A), a: A) -> format_type_with(T, rest)
     end;
 
--- | The window's bound is tested rather than demanded, because the callers below reach here from arms where they hold no evidence about how far the literal ran — the exhausted-fuel arm and the past-the-end arm both flush what they have. A window that runs past the end yields no literal, which is the answer this already gave when the bytes were not text.
--- |
--- | One test, where a `(start, end)` window took two: the scan below counts what the literal has taken, so the ordering half is not a fact about this call at all — it cannot be spelled.
 let flush(bytes: Bytes, start: Nat, count: Nat, rest: Fmt) -> Fmt =
     match Nat/Le/try(start + count, Bytes/len(bytes))
     | none() => Fmt/nil()
@@ -26,11 +25,6 @@ let flush(bytes: Bytes, start: Nat, count: Nat, rest: Fmt) -> Fmt =
         end
     end;
 
--- | These three recur on `pos + 1` and `pos + 2` with `bytes` fixed, so nothing about their arguments gets structurally smaller and no size-change checker can accept them. `parse` feeds `format_type_with(Str, parse(s))`, the result type of `render` and `print`, which puts them in a *type* position — and everything a type reaches has to be total, or type formation may not terminate. The descending `fuel` is what supplies the decrease.
--- |
--- | Each step either advances the position or hands off at the same one (`parse_at` to `parse_lit_at` to `parse_esc_at`), so three units per byte plus a constant is a bound the parse cannot reach; the `0` arms are unreachable in practice and terminate the format rather than truncating a directive mid-way.
--- |
--- | Inside a literal the walk carries how much it has *taken* rather than where it has reached, so the window `flush` opens is the one the walk already holds. The position is `start + taken` wherever a byte is read, which is what the two used to be tracked separately to say.
 let parse_at(bytes: Bytes, pos: Nat, fuel: Nat) -> Fmt =
     match fuel
     | 0 => Fmt/nil()
@@ -73,6 +67,7 @@ and parse_esc_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
         end
     end;
 
+-- | The format `s` spells: `%` is a place, `\%` a literal percent.
 pub let parse(s: Str) -> Fmt =
     let bytes = Str/to_bytes(s);
     parse_at(bytes, 0, 3 * Bytes/len(bytes) + 3);
@@ -84,11 +79,14 @@ let go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T
     | show(rest) => (use w, a) => go_with(T, finish, rest, Str/concat(acc, Show/show(a)))
     end;
 
+-- | The text of `s` with its places filled by the arguments that follow.
 pub let render(s: Str) -> format_type_with(Str, parse(s)) =
     go_with(Str, (x) => x, parse(s), "");
 
+-- | The text of `s` with its places filled, written to standard output.
 pub let print(s: Str) -> format_type_with(Io({}), parse(s)) =
     go_with(Io({}), (x) => /std/print(x), parse(s), "");
 
+-- | The text of `s` with its places filled, written to standard error.
 pub let print_err(s: Str) -> format_type_with(Io({}), parse(s)) =
     go_with(Io({}), (x) => /std/print_err(x), parse(s), "");

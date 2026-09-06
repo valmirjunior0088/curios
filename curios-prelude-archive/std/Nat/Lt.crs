@@ -1,32 +1,34 @@
--- `a < b` as a decided proposition: `True` when the machine comparison holds and `False` otherwise, so a proof reduces away on any concrete pair rather than being built constructor by constructor. `Nat/Lt` is the proposition, `Nat/Lt/try` decides it, and the remaining laws bridge it to `Nat/Le/Ind`.
 pub use /syn/Nat/{Lt};
 use /std/{Nat, Option, True, False};
 use /std/Nat/{Le};
 use /std/Nat/Le/{Ind};
 
+-- | The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
     match a < b: (r) => Option(match r: (_) => Prop | true => True | false => False end)
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
--- | `0 < n` and `1 <= n` are one fact, but the two decided propositions scrutinise different machine comparisons, and cancellation relates operands rather than operators — so neither reduces into the other. Casing on `n` settles it without induction: at zero the hypothesis is already `False`, and above it the shared successor cancels on both sides.
+-- | `0 < n` gives `1 <= n`.
 pub let le_one_of_positive(@n: Nat, p: Lt(0, n)) -> Nat/Le(1, n) =
     match n
     | 0 => match p end
     | _pred + 1 => True/qed()
     end;
 
+-- | `a <= b` by induction gives `a < b + 1`.
 pub let succ_of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Lt(a, b + 1) =
     match p: (x, y, _w) => Lt(x, y + 1)
     | z(@_) => True/qed()
     | s(@_, @_, prev) => succ_of_ind(prev)
     end;
 
+-- | `a + 1 <= b` by induction gives `a < b`.
 pub let of_ind_succ(@a: Nat, @b: Nat, p: Ind(a + 1, b)) -> Lt(a, b) =
     match p: (x, y, _w) => Lt(x - 1, y) | s(@_a2, @_b2, prev) => succ_of_ind(prev) end;
 
--- | The strict bound weakened into the inductive family, so a `<` guard can reach the laws that recurse over `Nat/Le/Ind`. The `ind_`/`le_` prefixes across this module say which form a law hands back; they used to be `lte_`/`le_`, which said only that the two were spelled differently. The zero case is immediate, the case where the bound has run out is `False` under the hypothesis, and the successor case is the hypothesis itself — `a + 1 < b + 1` and `a < b` are one term once the shared floor cancels.
+-- | `a < b` as the inductive `Ind(a, b)`: the strict bound weakened into the family a proof can recurse over.
 pub let ind_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Ind(a, b) =
     match a
     | 0 => Ind/z()
@@ -37,22 +39,22 @@ pub let ind_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Ind(a, b) =
         end
     end;
 
--- | `a < b` gives `a <= b`, through the inductive family both decided forms are related by.
+-- | `a < b` gives `a <= b`.
 pub let le_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Nat/Le(a, b) =
     Le/of_ind(ind_of_lt(a, b, p));
 
--- | `a < b` gives `a + 1 <= b`: the strict bound is exactly the non-strict one on the successor. Lived in `/std/Str/utf8` until the windows needed it too — a fact about `Nat`, homed with the rest of them.
+-- | `i < n` gives `i + 1 <= n` by induction.
 pub let ind_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Ind(i + 1, n) =
     match n
     | 0 => match p end
     | np + 1 => match i | 0 => Ind/s(Ind/z()) | ip + 1 => Ind/s(ind_succ_of_lt(ip, np, p)) end
     end;
 
--- | The same, decided: what a window opened just past a checked index demands.
+-- | `i < n` gives `i + 1 <= n`, decided: what a window opened just past a checked index demands.
 pub let le_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Nat/Le(i + 1, n) =
     Le/of_ind(ind_succ_of_lt(i, n, p));
 
--- | Course-of-values induction: the step may assume `P` at every `m` below `n`, not only at the predecessor. Proved by ordinary induction on a bound `k` under `n <= k`, which needs no new judgment: at `k = 0` the bound forces `n = 0` and nothing lies below it, and at `k + 1` a call on `m < n <= k + 1` descends to `m <= k` through `le_succ_of_lt`, `Le/trans` and the cancellation of the shared successor. One function at a `Type`-valued motive; a `Prop`-valued `P` is served through cumulativity. It lives under `Lt` because the hypothesis it hands the step is `Lt(m, n)` — the bound is the mechanism, not the principle.
+-- | Course-of-values induction: the step may assume `P` at every `m` below `n`, not only at the predecessor.
 pub let strong(
     P: (Nat) -> Type,
     step: (n: Nat, ih: (m: Nat, lt: Lt(m, n)) -> P(m)) -> P(n),

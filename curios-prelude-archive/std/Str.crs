@@ -4,31 +4,34 @@ use /syn/{True};
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Equal, Show, Spell, Ordering, Compare,
     Ordered, Test};
 
--- | The scan-witness machinery every operation below rests on.
+-- | The scan witness a string carries, and the lemmas the operations rest on.
 pub mod utf8;
 use utf8/{check, concat_closed, drop_width, drop_width_within, drop_valid, take_valid, peel_byte,
     certify_decoded, decode_head, count_scalars};
 
+-- | The UTF-8 bytes.
 pub let to_bytes(s: Str) -> Bytes =
     s.bytes;
 
+-- | The text the bytes encode, or `none` unless they are UTF-8.
 pub let of_bytes(b: Bytes) -> Option(Str) =
     match check(Scan/lead(), b)
     | some(v) => Option/some(Str { bytes = b, valid = v })
     | none() => Option/none()
     end;
 
--- | The one-scalar string. `Char/to_utf8` encodes exactly the sequences `check` accepts, so the fallback is unreachable; the four bytes are re-checked rather than certified because no lemma relates the encoder to the scan.
+-- | The one-character string.
 pub let of_char(c: Char) -> Str =
     Option/unwrap_or(of_bytes(Char/to_utf8(c)), "");
 
--- | Storage decides identity: the scan witness is proof-irrelevant, so two strings over the same bytes are the same string. The `BigNat/eq` and `Char/eq_of_code` construction at a third carrier — transport the field equality under a motive abstracting the dependent field, then apply the result to the right-hand witness.
+-- | Equal bytes are equal strings.
 pub let eq_of_bytes(a: Str, b: Str, p: Eq(a.bytes, b.bytes)) -> Eq(a, b) =
     Eq/subst(
         (bytes: Bytes) => (valid: Valid(bytes)) -> Eq(a, Str { bytes = bytes, valid = valid }),
         p,
         (_valid: Valid(a.bytes)) => Eq/refl())(b.valid);
 
+-- | `a` then `b`.
 pub let concat(a: Str, b: Str) -> Str =
     Str { bytes = x[..a.bytes, ..b.bytes], valid = concat_closed(a.valid, b.valid) };
 
@@ -53,17 +56,18 @@ let take_n(n: Nat, s: Str) -> Str =
         valid = take_valid(n, Scan/lead(), s.valid),
     };
 
--- | A window of `n` characters from `x`, saturating at either end: `take_n` and `drop_n` both stop at what is there, so a window running past the end is the tail rather than a refusal. Unbounded, so it owes no proof — and count-based like the bounded windows, which is what a reversed range being unspellable buys: `slice(s, 5, 3)` used to compute `take_n(0, ..)` on truncating subtraction and answer the empty string for a range nobody meant.
+-- | The `n` characters from `x`, stopping at either end, so a window past the end is what is there.
 pub let slice(s: Str, x: Nat, n: Nat) -> Str =
     take_n(n, drop_n(x, s));
 
+-- | The concatenation, in order.
 pub let flatten(parts: List(Str)) -> Str =
     List/fold(parts, "", (p, acc) => concat(acc, p));
 
+-- | Whether the two are equal.
 pub let eql(a: Str, b: Str) -> Bool =
     Bytes/eql(to_bytes(a), to_bytes(b));
 
--- | ASCII-insensitive equality folds only encoded ASCII letters. Every non-ASCII UTF-8 byte is left untouched, so this is not Unicode case folding.
 let lower_ascii_byte(byte: Byte) -> Byte =
     let n = Byte/to_nat(byte);
     match Nat/in_range(n, 0x41, 0x5A) | true => Nat/to_byte(n + 0x20) | false => byte end;
@@ -71,15 +75,15 @@ let lower_ascii_byte(byte: Byte) -> Byte =
 let lower_ascii_bytes(b: Bytes) -> Bytes =
     Bytes/fold(b, x[], (byte, acc) => x[..acc, lower_ascii_byte(byte)]);
 
+-- | Equality with ASCII letters compared regardless of case; every other character exactly.
 pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
     Bytes/eql(lower_ascii_bytes(to_bytes(a)), lower_ascii_bytes(to_bytes(b)));
 
+-- | `s` written `n` times.
 pub let repeat(s: Str, n: Nat) -> Str =
     List/balanced(n, "", (_i) => s, (l, r) => concat(l, r));
 
--- | The accumulator is threaded by the recursion, not by the motive, and that is the whole of why this is a `rec` rather than an induction over `s.bytes`.
--- |
--- | Written as an induction, the result of folding the tail has to be a *function* of the scan state and the accumulator, because a right fold cannot carry a value leftwards any other way. That makes every step return a closure, so a walk of N characters allocates N of them and applies the composition once — the cost is in the encoding, not in the work. Here `sc` and `acc` are ordinary parameters that the tail call carries forward, and the scan witness rides along as a third, transported one byte at a time by `peel_byte` exactly as it was before. `at` below walks the same way, for the same reason.
+-- | Left to right over the characters with `f(char, acc)`.
 pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
     let go(sc: Scan, b: Bytes, valid: Utf8(sc, b), acc: {A, Nat}) -> {A, Nat} =
         match b
@@ -111,16 +115,19 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
         end;
     go(Scan/lead(), s.bytes, s.valid, (init, 0)).0;
 
+-- | The characters.
 pub let to_list(s: Str) -> List(Char) =
     fold(s, [], (c, acc) => [..acc, c]);
 
+-- | How many characters, not bytes.
 pub let len(s: Str) -> Nat =
     count_scalars(Scan/lead(), s.bytes);
 
--- | Emptiness without the walk `len` performs, and it decides exactly that question: a `Str` carries a scan from `lead()`, so it holds no scalars precisely when it holds no bytes. Empty bytes count none, and nonempty bytes have their first byte read in the `lead()` state — the only arm `count_scalars` increments on — so the count is at least one. `Bytes/len` reads a stored length, so this settles in constant time what `len(s) == 0` settles in a pass over every byte.
+-- | Whether there are no characters.
 pub let is_empty(s: Str) -> Bool =
     Bytes/len(to_bytes(s)) == 0;
 
+-- | The index of the first character `pred` accepts, or `none`.
 pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(Nat) =
     let (_, found): {Nat, Option(Nat)} =
         fold(
@@ -136,9 +143,11 @@ pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(Nat) =
                 end);
     found;
 
+-- | The index of the first `target`, or `none`.
 pub let find(s: Str, target: Char) -> Option(Nat) =
     find_index(s, (codepoint) => codepoint == target);
 
+-- | The character at `i`, or `none` past the end.
 pub let try_get(s: Str, i: Nat) -> Option(Char) =
     let (_, found): {Nat, Option(Char)} =
         fold(
@@ -155,6 +164,7 @@ pub let try_get(s: Str, i: Nat) -> Option(Char) =
                 end);
     found;
 
+-- | The character at `i`, under the evidence that `i` is within the length.
 pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
     let go(
         sc: Scan,
@@ -191,6 +201,7 @@ pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
         i,
         Nat/Lt/ind_succ_of_lt(i, count_scalars(Scan/lead(), s.bytes), ok));
 
+-- | `parts` with `sep` between each pair.
 pub let join(sep: Str, parts: List(Str)) -> Str =
     List/balanced(
         List/len(parts),
@@ -213,25 +224,28 @@ let trim_bounds(s: Str) -> {Nat, Nat} =
                 end);
     (start, stop);
 
+-- | Without leading and trailing whitespace.
 pub let trim(s: Str) -> Str =
     let (lo, hi) = trim_bounds(s);
     match lo < hi | true => slice(s, lo, hi - lo) | false => "" end;
 
+-- | Without leading whitespace.
 pub let trim_start(s: Str) -> Str =
     drop_n(trim_bounds(s).0, s);
 
+-- | Without trailing whitespace.
 pub let trim_end(s: Str) -> Str =
     take_n(trim_bounds(s).1, s);
 
--- | Decomposition. Everything below works over scalar windows through `take_n` and `drop_n`, so each result carries the proof `slice` threads and nothing re-validates. Two windows are compared by `eql`, bytewise: UTF-8 is self-synchronizing, so encoded bytes agree exactly when the scalars they encode agree, and nothing is decoded. The searches recurse on a strictly shorter suffix, which is general recursion, so a type may not mention them.
+-- | Whether `s` begins with `prefix`.
 pub let starts_with(s: Str, prefix: Str) -> Bool =
     eql(take_n(len(prefix), s), prefix);
 
--- | Truncating subtraction settles the short case: when `suffix` is longer than `s` nothing is dropped, and the comparison is of two strings of different lengths.
+-- | Whether `s` ends with `suffix`.
 pub let ends_with(s: Str, suffix: Str) -> Bool =
     eql(drop_n(len(s) - len(suffix), s), suffix);
 
--- | The text before the first occurrence of `sep` and the text after it; `none` when it does not occur. An empty separator occurs at once, before the first scalar.
+-- | The text before the first `sep` and the text after it, or `none` when `sep` does not occur.
 pub let split_once(s: Str, sep: Str) -> Option({Str, Str}) =
     let m = len(sep);
     let go(i: Nat, rest: Str) -> Option({Str, Str}) =
@@ -242,10 +256,11 @@ pub let split_once(s: Str, sep: Str) -> Option({Str, Str}) =
         end;
     go(0, s);
 
+-- | Whether `needle` occurs in `s`.
 pub let contains(s: Str, needle: Str) -> Bool =
     Option/is_some(split_once(s, needle));
 
--- | The pieces between occurrences of `sep`, the separators dropped; an empty separator splits into scalars, which is the guard's answer rather than the search's -- `split_once` finds an empty needle at once and forever, so walking one would never advance.
+-- | The pieces between occurrences of `sep`, the separators dropped; an empty separator splits into characters.
 pub let split(s: Str, sep: Str) -> List(Str) =
     match is_empty(sep)
     | true => List/map(to_list(s), of_char)
@@ -256,9 +271,7 @@ pub let split(s: Str, sep: Str) -> List(Str) =
         end
     end;
 
--- | Every occurrence of `from` replaced by `to`, left to right and without rescanning what `to` inserted.
--- |
--- | An empty `from` comes back unchanged, and the guard is what says so rather than the search: `split_once` finds an empty needle *at once*, before the first scalar, which is why `contains(s, "")` is true -- so the recursion below would split at position zero forever. `split` takes the same guard to the other answer, scalars, because there the walk has one; here it does not, and the identity is the only terminating reading.
+-- | Every occurrence of `from` replaced by `to`, left to right; an empty `from` changes nothing.
 pub let replace(s: Str, from: Str, to: Str) -> Str =
     match is_empty(from)
     | true => s
@@ -269,7 +282,7 @@ pub let replace(s: Str, from: Str, to: Str) -> Str =
         end
     end;
 
--- | The lines of `s`: split on `'\n'`, one trailing `'\r'` dropped from each, and a final terminator closes the last line rather than opening an empty one, so `"a\nb\n"` has two lines and `""` none.
+-- | The lines: split on newlines, one trailing carriage return dropped from each, and a final newline closing the last line rather than opening an empty one.
 pub let lines(s: Str) -> List(Str) =
     let strip(line: Str) -> Str =
         match ends_with(line, "\r") | true => take_n(len(line) - 1, line) | false => line end;
@@ -278,10 +291,11 @@ pub let lines(s: Str) -> List(Str) =
     | none() => match is_empty(s) | true => [] | false => [strip(s)] end
     end;
 
--- | `s` widened to `n` scalars with copies of `c` at the front; a string already that wide comes back as it is.
+-- | `s` widened to `n` characters with `c` at the front; a string already that wide is unchanged.
 pub let pad_start(s: Str, n: Nat, c: Char) -> Str =
     concat(repeat(of_char(c), n - len(s)), s);
 
+-- | `s` widened to `n` characters with `c` at the end; a string already that wide is unchanged.
 pub let pad_end(s: Str, n: Nat, c: Char) -> Str =
     concat(s, repeat(of_char(c), n - len(s)));
 
@@ -294,6 +308,7 @@ satisfy Show(Str) {
     show(s) = s,
 }
 
+-- | A string literal, escaped where the literal grammar needs it.
 satisfy Spell(Str) {
     spell(s) =
         let body =
@@ -314,7 +329,7 @@ satisfy Spell(Str) {
         concat("\"", concat(body, "\"")),
 }
 
--- | Code-point order without decoding: UTF-8 bytewise order is scalar-value order, so the comparison is `Bytes/cmp` over the storage and `sort` on strings means code-point order.
+-- | Code-point order.
 pub let cmp(a: Str, b: Str) -> Ordering =
     Bytes/cmp(to_bytes(a), to_bytes(b));
 
@@ -337,7 +352,7 @@ let chars(seed: Test/Seed, size: Nat, count: Nat) -> {Str, Test/Seed} =
         (concat(acc, of_char(c)), rest)
     end;
 
--- | At most `size` characters, each drawn as a `Char`.
+-- | Up to `size` printable ASCII characters.
 satisfy Test/Draw(Str) {
     all() = Option/none(),
     draw(seed, size) =

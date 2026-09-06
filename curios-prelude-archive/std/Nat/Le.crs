@@ -1,23 +1,19 @@
--- `a <= b` as a decided proposition, and the crossings between it and `Nat/Le/Ind`.
---
--- The proposition itself is `/syn/Nat/Le`, because the compiler states window bounds in it and so must be able to spell it. The two forms are not interchangeable and neither reduces into the other: this one is decided, so a guard already taken discharges it for free but nothing can recurse over it; `Ind` is inductive, so a proof can walk its constructors but no comparison settles it. Everything here is the passage between them, which is what lets a bound be *established* by induction and then *stated* in the form a precondition wants.
---
--- The inductive form is a *child* of this module rather than its sibling, and the names say which is which: `Nat/Le` is the relation, `Nat/Le/Ind` is the relation done by induction. The pair used to be `Nat/Le` and `Nat/Le/Ind`, two spellings of one abbreviation that named the difference nowhere.
 pub use /syn/Nat/{Le};
 use /std/{Nat, Option, True, False, Eq};
 
+-- | `a <= b` as an inductive proposition: `z` proves `0 <= n` and `s` lifts `a <= b` to `a + 1 <= b + 1`, so a proof can recurse over the evidence.
 pub mod Ind;
 pub use Ind/{let Ind};
 
--- | Immediate: `le(n, n)` is decided by the shared inner alone, whatever `n` is.
+-- | `n <= n`.
 pub let refl(n: Nat) -> Le(n, n) =
     True/qed();
 
--- | Both arms land on something the comparison settles — `0 <= n` outright, and a shared successor by cancellation — so the recursion only walks the evidence it was handed.
+-- | The inductive form as the decided one.
 pub let of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Le(a, b) =
     match p: (x, y, _w) => Le(x, y) | z(@_) => True/qed() | s(@_, @_, prev) => of_ind(prev) end;
 
--- | The other direction, by cases rather than by walking evidence there is none of: a decided proposition has no constructors, so the recursion is on the numbers, and the case where the bound has run out is `False` under the hypothesis.
+-- | The decided form as the inductive one.
 pub let to_ind(a: Nat, b: Nat, p: Le(a, b)) -> Ind(a, b) =
     match a
     | 0 => Ind/z()
@@ -28,24 +24,22 @@ pub let to_ind(a: Nat, b: Nat, p: Le(a, b)) -> Ind(a, b) =
         end
     end;
 
--- | Weakening on the right, for a bound that has to survive the index advancing past it.
+-- | `a <= b` gives `a <= b + 1`.
 pub let succ_r(a: Nat, b: Nat, p: Le(a, b)) -> Le(a, b + 1) =
     of_ind(Ind/succ_r(to_ind(a, b, p)));
 
--- | The procedure that decides it, the `Le` twin of `Nat/Lt/try`. What a caller reaches for when it holds a position some other computation produced: the bound is a fact about that value, not about the code that made it, so it is settled by testing rather than by threading evidence back through the producer.
+-- | The procedure that decides `a <= b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Nat, b: Nat) -> Option(Le(a, b)) =
     match a <= b: (r) => Option(match r: (_) => Prop | true => True | false => False end)
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
--- | Transitivity, through the family that has constructors to recurse over.
+-- | Transitivity.
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
     of_ind(Ind/trans(to_ind(a, b, p), to_ind(b, c, q)));
 
--- | `a + (b - a) = b`, which holds only under `a <= b`: `Nat` subtraction truncates, so at every `a > b` the difference is zero and the identity fails. It is the bridge a caller holding an *end* needs to reach the count-style window bound, and it is a lemma rather than a reduction for exactly that reason — the hypothesis is what makes it true, and a reduction law cannot carry one.
--- |
--- | The recursion is on the numbers rather than on the evidence, like `to_ind`'s and for the same reason: a decided proposition has no constructors to walk. The successor case passes the hypothesis down untouched, because the comparison cancels the shared floor and `a + 1 <= b + 1` already *is* `a <= b`.
+-- | `a + (b - a) = b` under `a <= b`, which is what makes it true, since `Nat` subtraction truncates.
 pub let add_sub_cancel(a: Nat, b: Nat, p: Le(a, b)) -> Eq(a + (b - a), b) =
     match a
     | 0 => Eq/refl()

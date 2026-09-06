@@ -1,5 +1,6 @@
 use /std/{Str};
 
+-- | A value's rendering for a reader.
 pub concept Show(A: Type): pub Type {
     show(A) -> Str,
 }

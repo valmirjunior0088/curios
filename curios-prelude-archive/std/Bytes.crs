@@ -2,14 +2,15 @@ pub use /sys/Bytes/{let Bytes, get, len, eql, slice};
 use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Equal, Show, Spell, Ordering, Compare,
     Ordered, Test};
 
+-- | The byte at `i`, or `none` past the end.
 pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
     match i < len(b) | true => Option/some(get(b, i)) | false => Option/none() end;
 
--- | Minimal big-endian bytes of `n` — empty for zero, no leading zero otherwise — so distinct naturals encode to distinct sequences, and the result serves as a map key under `Key(Bytes)`'s identity witness with no proof obligation of its own. The dividing recursion is `Nat/to_str`'s shape at base 256, and `of_nat`'s bound needs no refinement here: the reducer knows `n % 256` by its remainder bound, so the comparison decides definitionally and the proof is written nowhere.
+-- | The minimal big-endian encoding of `n`: empty for zero, no leading zero otherwise, so distinct numbers encode distinctly.
 pub let of_nat(n: Nat) -> Bytes =
     match n == 0 | true => x[] | false => x[..of_nat(n / 256), Byte/of_nat(n % 256)] end;
 
--- | Everything from `k` on, which is what a window over "the rest" is: `slice`'s count is `len(b) - k`, and the bound that count needs is `k + (len(b) - k) <= len(b)` — an identity only under the hypothesis, since `Nat` subtraction truncates. Spending `Nat/Le/add_sub_cancel` here is what keeps every caller stating the fact it actually holds (`k` is inside `b`) rather than the one the primitive wants.
+-- | Everything from `k` on, under the evidence that `k` is within the length.
 pub let drop(b: Bytes, k: Nat, @ok: Nat/Le(k, len(b))) -> Bytes =
     slice(
         b,
@@ -20,15 +21,16 @@ pub let drop(b: Bytes, k: Nat, @ok: Nat/Le(k, len(b))) -> Bytes =
             Eq/sym(Nat/Le/add_sub_cancel(k, len(b), ok)),
             Nat/Le/refl(len(b))));
 
+-- | The concatenation, in order.
 pub let flatten(parts: List(Bytes)) -> Bytes =
     List/fold(parts, x[], (b, acc) => x[..acc, ..b]);
 
+-- | Left to right with `f(byte, acc)`.
 pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
     let n = len(b);
     let go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
         match k
         | 0 => acc
-        -- `i < n` transported along the loop invariant: `i + (kp + 1) = n` gives `i ≤ i + kp`, whose successor is the bound `at` demands.
         | kp + 1 =>
             let below =
                 Eq/subst((x) => Nat/Lt(i, x), inv, Nat/Lt/succ_of_ind(Nat/Le/Ind/add_r(i, kp)));
@@ -36,6 +38,7 @@ pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
         end;
     go(n, 0, init, Eq/refl());
 
+-- | The index of the first byte `pred` accepts, or `none`.
 pub let find_index(b: Bytes, pred: (Byte) -> Bool) -> Option(Nat) =
     let (_, found): {Nat, Option(Nat)} =
         fold(
@@ -49,6 +52,7 @@ pub let find_index(b: Bytes, pred: (Byte) -> Bool) -> Option(Nat) =
                 end);
     found;
 
+-- | `parts` with `sep` between each pair.
 pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
     List/balanced(
         List/len(parts),
@@ -56,7 +60,7 @@ pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
         (i) => Option/unwrap_or(List/try_get(parts, i), x[]),
         (l, r) => x[..l, ..sep, ..r]);
 
--- | Bytewise, the shorter prefix first. Each index is scrutinised against the length it reads through, which is what discharges `get`'s bound with nothing written.
+-- | Bytewise, a proper prefix first.
 pub let cmp(a: Bytes, b: Bytes) -> Ordering =
     let go(i: Nat) -> Ordering =
         match i < len(a)
@@ -87,6 +91,7 @@ satisfy Ordered(Bytes) {
     cmp = cmp,
 }
 
+-- | Hexadecimal, two digits per byte.
 satisfy Show(Bytes) {
     show(b) =
         Option/unwrap_or(
@@ -116,6 +121,7 @@ let bytes(seed: Test/Seed, count: Nat) -> {Bytes, Test/Seed} =
         (x[..acc, byte], rest)
     end;
 
+-- | Up to `size` bytes.
 satisfy Test/Draw(Bytes) {
     all() = Option/none(),
     draw(seed, size) =

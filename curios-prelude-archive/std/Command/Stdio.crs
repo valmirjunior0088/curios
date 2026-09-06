@@ -1,4 +1,4 @@
--- | How a child's standard stream is wired: shared with this process, piped to a `Child/Pipe` the parent holds, or attached to the null device — the shape Lean's `Stdio`, Haskell's `StdStream`, Rust's `Stdio` and Zig's `StdIo` share.
+-- | Shared with this process, piped to the parent, or attached to the null device.
 pub induct Stdio: pub Type
 | inherit()
 | piped()

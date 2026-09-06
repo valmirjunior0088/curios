@@ -23,7 +23,6 @@ let key_path(acc: List(Str)) -> Parse(List(Str)) =
     | none() => Parse/pure(acc2)
     end;
 
--- | A `[[` header is read as two separate brackets, so the second one's absence is the doubled form's own error rather than the single form's.
 let header(double: Bool) -> Parse(List(Str)) =
     let _ = ws!;
     let path = key_path([])!;
@@ -67,6 +66,7 @@ let stmts(acc: List(Stmt)) -> Parse(List(Stmt)) =
         stmts([..acc, s])
     end;
 
+-- | Exactly one whole document as its root table; anything after it is refused, as is a document that breaks the table-construction rules.
 pub let decode(source: Str) -> Result(Str, Map(Toml)) =
     match Parse/run(stmts([]), Str/to_bytes(source))
     | failure(msg) => Result/failure(msg)

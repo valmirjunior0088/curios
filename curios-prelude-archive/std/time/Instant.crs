@@ -1,18 +1,20 @@
--- An opaque moment in time, read off the monotonic clock: two instants compare and subtract, and that is all they do. There is no calendar behind one and no way to build one but `now`, so every `Instant` in a program is a reading of the same clock and `diff` and `before` mean what they say. A moment that means something on its own — a file's modification time, a deadline to print — is a `Timestamp`, and the two do not convert.
 use /std/{Bool, Io};
 use /std/time/{Duration};
 
+-- | A reading of the monotonic clock.
 pub struct Instant: Type {
     elapsed: Duration,
 }
 
+-- | The clock now.
 pub let now() -> Io(Instant) =
     let e = Duration/now()!;
     Io/pure(Instant { elapsed = e });
 
--- | `a - b`, and zero when `a` is not after `b`: a `Duration` has no sign.
+-- | `a - b`, and zero when `a` is not after `b`.
 pub let diff(a: Instant, b: Instant) -> Duration =
     Duration/sub(a.elapsed, b.elapsed);
 
+-- | Whether `a` was read before `b`.
 pub let before(a: Instant, b: Instant) -> Bool =
     Duration/before(a.elapsed, b.elapsed);

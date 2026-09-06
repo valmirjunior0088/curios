@@ -1,4 +1,3 @@
--- Why `Str`'s operations are sound. Every function here manipulates a `Utf8` scan witness rather than bytes alone: `check` decides one, `seq` concatenates two, `drop_valid`/`take_valid` transport one across a slice, and the `*_uninhabited` lemmas rule out the states a well-formed scan cannot reach. `Str` is the parent, not a descendant, so it cannot see a private name in here — everything the public API calls is exported.
 use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /syn/{True, False};
 use /std/{Char, Nat, Byte, Bytes, Eq, Option};
@@ -9,10 +8,11 @@ let seq(@s: Scan, @a: Bytes, @b: Bytes, va: Utf8(s, a), vb: Valid(b)) -> Utf8(s,
     | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
     end;
 
+-- | Valid bytes concatenate to valid bytes.
 pub let concat_closed(@a: Bytes, @b: Bytes, va: Valid(a), vb: Valid(b)) -> Valid(x[..a, ..b]) =
     seq(va, vb);
 
--- | The scan is threaded by the recursion, not by the motive, for the reason `/std/Str/fold` gives: written as an induction, every step returns a *function* of the scan, so validating N bytes allocates N closures and applies the chain once. Here the state is an ordinary parameter the tail call carries forward, exactly as `/syn/Str/scan_from` walks the same recursion.
+-- | The procedure that decides whether `b` scans from `s`: the witness when it does, `none` otherwise.
 pub let check(s: Scan, b: Bytes) -> Option(Utf8(s, b)) =
     match b
     | x[] =>
@@ -28,6 +28,7 @@ pub let check(s: Scan, b: Bytes) -> Option(Utf8(s, b)) =
         end
     end;
 
+-- | How many bytes the first `n` characters take from scan state `s`.
 pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
     match b
     | x[] => 0
@@ -39,7 +40,7 @@ pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
         end
     end;
 
--- | `drop_width` peels at most one byte per step and stops when `b` runs out, so its count never passes `b`'s length. Every window the transports below open is `slice(b, drop_width(..), len(b))`, and this is the ordering half of what that slice demands. Each arm is decided outright — the empty scan counts nothing, an exhausted `n` counts nothing — and the recursive arms cancel a shared successor against the hypothesis at the tail.
+-- | `drop_width` never passes the end.
 pub let drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, b), Bytes/len(b)) =
     match b: (v) => Nat/Le(drop_width(n, s, v), Bytes/len(v))
     | x[] => True/qed()
@@ -55,6 +56,7 @@ pub let drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, 
         end
     end;
 
+-- | The witness carried past the first `n` characters.
 pub let drop_valid(
     n: Nat,
     s: Scan,
@@ -76,6 +78,7 @@ pub let drop_valid(
     | bad() => match d | more(c, _st, _t, rest) => drop_valid(n, step(c, Scan/bad()), rest) end
     end;
 
+-- | The witness carried onto the first `n` characters.
 pub let take_valid(
     n: Nat,
     s: Scan,
@@ -129,9 +132,11 @@ pub let take_valid(
         end
     end;
 
+-- | Nothing scans from the bad state.
 pub let bad_uninhabited(@x: Bytes, w: Utf8(Scan/bad(), x)) -> False =
     match w | more(_c, _st, _t, rest) => bad_uninhabited(rest) end;
 
+-- | Inside a sequence, at least the remaining continuation bytes follow.
 pub let cont_len(
     k: Nat,
     @lo: Nat,
@@ -156,6 +161,7 @@ pub let cont_len(
         end
     end;
 
+-- | A sequence never waits on zero continuation bytes.
 pub let cont0_uninhabited(
     @lo: Nat,
     @hi: Nat,
@@ -170,6 +176,7 @@ pub let cont0_uninhabited(
         end
     end;
 
+-- | The continuation bytes from `off`, folded into `acc`.
 pub let take_continuations(
     b: Bytes,
     off: Nat,
@@ -195,6 +202,7 @@ pub let take_continuations(
             bound)
     end;
 
+-- | The witness advanced past the first byte.
 pub let peel_byte(
     @s: Scan,
     @b: Bytes,
@@ -206,6 +214,7 @@ pub let peel_byte(
     | more(_c, _st, _t, rest) => rest
     end;
 
+-- | How many characters `b` holds from scan state `s`.
 pub let count_scalars(s: Scan, b: Bytes) -> Nat =
     match b
     | x[] => 0
@@ -217,7 +226,6 @@ pub let count_scalars(s: Scan, b: Bytes) -> Nat =
         end
     end;
 
--- | The scan a lead byte's class transitions to: `step(c, lead())` computed on the class rather than the byte, so `step_scans` below is definitional and each `decode_head_raw` arm receives its witness at the constructor's own scan by plain iota.
 let scan_of_class(cl: Class) -> Scan =
     match cl
     | ascii() => Scan/lead()
@@ -228,7 +236,7 @@ let scan_of_class(cl: Class) -> Scan =
 let step_scans(c: Byte) -> Eq(step(c, Scan/lead()), scan_of_class(classify(c))) =
     Eq/refl();
 
--- | The convoy spelling, deliberately: the motive abstracts the class so the witness rides into each arm at that constructor's scan. The built-in refinement also accepts the direct spelling, but its recorded equation is replayable only under the elaborator's own reduction order — this form is the strategy-independent statement of the same fact, and the one the independent kernel certifies.
+-- | The code point of the first character, as a number.
 pub let decode_head_raw(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> Nat =
     let peeled = Eq/subst((sc: Scan) => Utf8(sc, t), step_scans(c), peel_byte(True/qed(), w));
     (match classify(c): (cl) => (w2: Utf8(scan_of_class(cl), t)) -> Nat
@@ -237,8 +245,10 @@ pub let decode_head_raw(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> 
     | bad() => (w2) => match bad_uninhabited(w2) end
     end)(peeled);
 
+-- | A decoded code point as a character.
 pub let certify_decoded(code: Nat) -> Char =
     Option/unwrap_or(Char/of_nat(code), '?');
 
+-- | The first character.
 pub let decode_head(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> Char =
     certify_decoded(decode_head_raw(c, w));

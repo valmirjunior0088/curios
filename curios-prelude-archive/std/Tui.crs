@@ -1,56 +1,65 @@
--- A terminal program draws a screen and reads keys.
---
--- The design is Notty's drawing algebra with the size in the type and brick's model-update-view above it: a screen is a value of `Frame(w, h)`, built by joining smaller frames whose sizes the type checks and split by a `Layout` whose sizes mirror it, and a program is a `Tui` record the loop drives. Nothing here is a command to a screen — a `Frame` is data, `Tui/render` turns two of them into the bytes that carry one to the other, and only `Tui/Session` touches the terminal.
---
--- **The size is in the type because that is the class of bug this library exists to remove.** A column that does not fill its pane, a widget that overflows it, a border off by one: every surveyed library's issue tracker is full of them, and the two that are honest about it — Notty and brick — pad the mismatch away silently. Here `beside` and `above` refuse a mismatched join where it is written, `view` must produce exactly the frame it was asked for, and the renderer's diff walks two frames of one type with no bound to check. The cost is one coercion, `Tui/Frame/fit`, wherever a runtime-sized value meets a typed one.
---
--- **The loop is the program's model, its `update` and its `view`, driven by one queue.** `run` reads keys, the terminal's size and the answers of the program's own `Cmd/perform`s into a queue, parks on an `Async/Signal` until something is there, folds the queue through `update`, and draws once per burst, so ten keys in one read cost one frame. `drive` is the same fold with no terminal: a test hands it events and reads the model and the frame back, which is how a whole program is asserted as a `test` declaration.
 use /std/{Nat, Bool, List, Option, Io, Try, Async};
 use /std/time/{Duration};
 use /std/Async/{Signal};
 
+-- | A terminal colour, in the four forms a terminal understands.
 pub mod Color;
 pub use Color/{let Color};
 
+-- | How a cell is painted: two colours and six attributes.
 pub mod Style;
 pub use Style/{let Style};
 
+-- | One position on the screen: its text and its style.
 pub mod Cell;
 pub use Cell/{let Cell};
 
+-- | How wide a string is on a terminal, and truncation and wrapping over that measurement.
 pub mod text;
 
+-- | A screen or a part of one, with its size in its type, and the algebra that builds one.
 pub mod Frame;
 pub use Frame/{let Frame};
 
+-- | A tree of named panes, and the sizes a frame splits into along it.
 pub mod Layout;
 pub use Layout/{let Layout};
 
+-- | A key as a program sees it: a code and three modifiers.
 pub mod Key;
 pub use Key/{let Key};
 
+-- | What reaches a program's `update`.
 pub mod Event;
 pub use Event/{let Event};
 
+-- | The bytes a terminal sends, read as the keys and pastes they encode.
 pub mod input;
 
 mod ansi;
 
+-- | Two frames of one size into the bytes that carry the terminal from the first to the second.
 pub mod render;
 
+-- | The terminal taken and given back, and what a program with a loop of its own writes it over.
 pub mod Session;
 pub use Session/{let Session};
 
+-- | A frame in a box.
 pub mod Border;
 
+-- | Styled text wrapped into a pane.
 pub mod Paragraph;
 
+-- | A list with one selected entry.
 pub mod Listing;
 pub use Listing/{let Listing};
 
+-- | A single line of text being edited.
 pub mod Input;
 pub use Input/{let Input};
 
+-- | A window onto a larger frame.
 pub mod Viewport;
 
 -- | What an `update` asks the loop to do beside the new model: nothing, stop, run an `Async` and hand its answer back as `Event/custom`, or several of those.
@@ -61,15 +70,16 @@ pub induct Cmd(E: Type): pub Type
 | batch(List(Cmd(E)))
 end
 
--- | A program: its first model and command, how an event changes the model, and what the model looks like at a size. `view` is typed at the size it is given, so a frame that does not fill the terminal is refused where it is written and `run` never crops; `cursor` places the terminal's cursor, or hides it.
+-- | A program: its first model and command, how an event changes the model, what the model looks like at a size, and where the cursor goes.
 pub struct Tui(M: Type, E: Type): pub Type {
     init: {M, Cmd(E)},
     update: (model: M, event: Event(E)) -> {M, Cmd(E)},
+    -- | Typed at the size it is given, so a frame that does not fill the terminal is refused where it is written.
     view: (model: M, w: Nat, h: Nat) -> Frame(w, h),
+    -- | Where the terminal's cursor goes, or hidden.
     cursor: (model: M, w: Nat, h: Nat) -> Option({x: Nat, y: Nat}),
 }
 
--- | A command flattened: whether it stops the loop, and the `Async`s it asks for.
 let flatten(@E: Type, c: Cmd(E)) -> {quit: Bool, pending: List(Async(E))} =
     match c
     | none() => (quit = false, pending = [])
@@ -84,7 +94,7 @@ let flatten(@E: Type, c: Cmd(E)) -> {quit: Bool, pending: List(Async(E))} =
                 (quit = acc.quit || f.quit, pending = [..acc.pending, ..f.pending]))
     end;
 
--- | The program's fold with no terminal: `events` through `update` from `init`, stopping at the first `quit`. Answers the model, whether it quit, the frame `view` gives at `w` by `h`, and every `perform` it asked for, unrun — which is what a test of a program wants to assert.
+-- | The program's fold with no terminal: `events` through `update` from the initial model, stopping at the first `quit`. Answers the model, whether it quit, the frame at `w` by `h`, and every `perform` it asked for, unrun.
 pub let drive(
     @M: Type,
     @E: Type,
@@ -112,7 +122,7 @@ pub let drive(
         frame = app.view(state.model, w, h),
         pending = state.pending);
 
--- | Run the program in a session until it quits, answering its last model. Three kinds of fiber feed one queue and one signal: the reader, which parks on standard input and pushes each burst's events; the ticker, which reads the size every hundred milliseconds and pushes a `resize` only when it changed; and one per `perform`. The loop waits on the signal, drains the queue through `update`, and draws once per drain.
+-- | Run the program in a session until it quits, answering its last model. Keys, resizes and the answers of the program's own commands feed one queue, and the screen is drawn once per burst.
 pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
     Session/with(
         (s) =>

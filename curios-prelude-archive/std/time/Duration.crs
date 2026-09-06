@@ -1,37 +1,45 @@
 use /std/{Nat, Bool, Io};
 
+-- | A length of time, with no sign.
 pub struct Duration: Type {
     secs: Nat,
     nanos: Nat,
 }
 
--- | Normalized on the way in, so every stored `Duration` carries `nanos < 10^9` and `before`'s secs-first comparison is the value order: without the carry, `of(0, 1500000000)` and `of(1, 500000000)` spell one duration that compares as two, and a sleep deadline built from the first sorts ahead of shorter ones.
+-- | `secs` and `nanos`, with nanoseconds past a second carried.
 pub let of(secs: Nat, nanos: Nat) -> Duration =
     Duration { secs = secs + nanos / 1000000000, nanos = nanos % 1000000000 };
 
+-- | No time.
 pub let zero: Duration =
     Duration { secs = 0, nanos = 0 };
 
+-- | `secs` seconds.
 pub let of_secs(secs: Nat) -> Duration =
     Duration { secs = secs, nanos = 0 };
 
+-- | `ms` milliseconds.
 pub let of_millis(ms: Nat) -> Duration =
     Duration { secs = ms / 1000, nanos = ms % 1000 * 1000000 };
 
--- | The monotonic clock, read as elapsed time since an arbitrary origin. `Instant/now` wraps this reading as an opaque moment; the wall clock is `Timestamp/now`.
+-- | The monotonic clock, as the time since an arbitrary origin.
 pub let now() -> Io(Duration) =
     let r = /sys/clock/mono!;
     Io/pure(of(r.secs, r.nanos));
 
+-- | The whole seconds.
 pub let secs(d: Duration) -> Nat =
     d.secs;
 
+-- | The nanoseconds within the second.
 pub let nanos(d: Duration) -> Nat =
     d.nanos;
 
+-- | The whole milliseconds.
 pub let to_millis(d: Duration) -> Nat =
     d.secs * 1000 + d.nanos / 1000000;
 
+-- | The sum.
 pub let add(a: Duration, b: Duration) -> Duration =
     let nanos = a.nanos + b.nanos;
     match nanos < 1000000000
@@ -39,9 +47,11 @@ pub let add(a: Duration, b: Duration) -> Duration =
     | false => Duration { secs = a.secs + b.secs + 1, nanos = nanos - 1000000000 }
     end;
 
+-- | Whether `a` is shorter than `b`.
 pub let before(a: Duration, b: Duration) -> Bool =
     choose | a.secs < b.secs => true | a.secs > b.secs => false | _ => a.nanos < b.nanos end;
 
+-- | `a - b`, and zero when `a` is not longer than `b`.
 pub let sub(a: Duration, b: Duration) -> Duration =
     match before(a, b)
     | true => zero

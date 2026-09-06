@@ -1,7 +1,7 @@
--- The filesystem beyond a file's contents: what is at a path, the names in a directory, and making, moving and removing things. Every function takes a `Path` and hands one back where the host names something, so a listing's entry or the working directory is exactly the bytes the host holds, and decoding is `Path/to_str`'s and the caller's. The rows are synchronous and hold no handle — the disk answers them — so every function here is `Io`, and what can fail is `Try` over `Io` with `Io/Error` as the failure. The pure algebra over paths is `Path`'s.
 use /std/{Nat, Bool, List, Option, Path, Try, Io, Equal, Show};
 use /std/time/{Timestamp};
 
+-- | What is at a path.
 pub induct Kind: pub Type
 | file()
 | directory()
@@ -29,19 +29,23 @@ let kind_of(code: Nat) -> Kind =
     | _ => Kind/other()
     end;
 
--- | `size` is the pair of base-10⁹ limbs the row hands over: a `Nat` cannot hold a file size at runtime and `BigNat` is more than a size needs. `size_nat` reads it inside the envelope. `mtime` is a `Timestamp`, a moment with a meaning, not an `Instant`, which is a reading of the monotonic clock and could not compare with one.
+-- | What `stat` reports.
 pub struct Metadata: pub Type {
     kind: Kind,
+    -- | The size in bytes, as two base-billion limbs.
     size: {hi: Nat, lo: Nat},
+    -- | When the contents last changed.
     mtime: Timestamp,
 }
 
+-- | The size as one number, or `none` past the carrier.
 pub let size_nat(m: Metadata) -> Option(Nat) =
     match m.size.hi == 0 | true => Option/some(m.size.lo) | false => Option/none() end;
 
 let outcome(status: Nat) -> Try(Io, Io/Error, {}) =
     match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
+-- | What is at `path`.
 pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
     let r = /sys/file/stat(Path/to_bytes(path))!;
     match Io/Error/of(r.status)
@@ -55,7 +59,6 @@ pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
             })
     end;
 
--- | `not_found` is the answer `false`; every other failure is the failure it is.
 let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
     let r = Try/run(stat(path))!;
     match r
@@ -63,12 +66,15 @@ let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
     | failure(e) => match e | not_found() => Try/pure(false) | _ => Try/raise(e) end
     end;
 
+-- | Whether anything is at `path`.
 pub let exists(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (_k) => true);
 
+-- | Whether a regular file is at `path`.
 pub let is_file(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (k) => k == Kind/file());
 
+-- | Whether a directory is at `path`.
 pub let is_dir(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (k) => k == Kind/directory());
 
@@ -80,22 +86,27 @@ pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
     | none() => Try/pure(List/map(r.names, Path/of_bytes))
     end;
 
+-- | A directory at `path`, whose parent must exist.
 pub let create_dir(path: Path) -> Try(Io, Io/Error, {}) =
     let status = /sys/dir/create(Path/to_bytes(path))!;
     outcome(status);
 
+-- | Remove the empty directory at `path`.
 pub let remove_dir(path: Path) -> Try(Io, Io/Error, {}) =
     let status = /sys/dir/remove(Path/to_bytes(path))!;
     outcome(status);
 
+-- | Remove the file at `path`.
 pub let remove_file(path: Path) -> Try(Io, Io/Error, {}) =
     let status = /sys/file/remove(Path/to_bytes(path))!;
     outcome(status);
 
+-- | Move what is at `from` to `to`.
 pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
     let status = /sys/file/rename(Path/to_bytes(from), Path/to_bytes(to))!;
     outcome(status);
 
+-- | The working directory.
 pub let cwd: Try(Io, Io/Error, Path) =
     let r = /sys/proc/cwd!;
     match Io/Error/of(r.status)
@@ -103,7 +114,7 @@ pub let cwd: Try(Io, Io/Error, Path) =
     | none() => Try/pure(Path/of_bytes(r.path))
     end;
 
--- | `path` and every missing prefix of it, one that already exists left as it is: a `not_found` from the row is a missing parent, made first and then the directory tried again. Written over the rows with no row of its own, since a majority of the surveyed libraries ship it and the host pays nothing for it.
+-- | A directory at `path` and every missing parent; one that already exists is left as it is.
 pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =
     let r = Try/run(create_dir(path))!;
     match r
@@ -122,7 +133,7 @@ pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =
         end
     end;
 
--- | Everything at `path`, a directory's entries first. Written over `list` at `Path`, so a name that is not UTF-8 is removed like any other.
+-- | Remove what is at `path`, a directory's entries first.
 pub let remove_all(path: Path) -> Try(Io, Io/Error, {}) =
     let m = stat(path)!;
     match m.kind

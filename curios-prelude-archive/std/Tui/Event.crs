@@ -1,7 +1,7 @@
--- What reaches a program's `update`: a key, the terminal's new size, a pasted text, or a value of the program's own `E` — the answer a `Cmd/perform` came back with.
 use /std/{Nat, Str, Equal, Spell};
 use /std/Tui/{Key};
 
+-- | A key, the terminal's new size, a pasted text, or a value of the program's own `E`: the answer a `Cmd/perform` came back with.
 pub induct Event(E: Type): pub Type
 | key(Key)
 | resize(cols: Nat, rows: Nat)

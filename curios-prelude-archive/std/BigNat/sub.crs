@@ -7,6 +7,7 @@ let borrow_out(a: Bool, b: Bool, bw: Bool) -> Bool =
     | false => match b | true => true | false => bw end
     end;
 
+-- | The difference of two words with a borrow in, and the borrow out.
 pub let raw(x: Bits, y: Bits, borrow: Bool) -> {Bits, Bool} =
     match x
     | b[] =>
@@ -27,6 +28,7 @@ pub let raw(x: Bits, y: Bits, borrow: Bool) -> {Bits, Bool} =
         end
     end;
 
+-- | The difference, truncated at zero.
 pub let sub(a: BigNat, b: BigNat) -> BigNat =
     let (bits, borrow) = raw(a.bits, b.bits, false);
     match borrow | true => zero | false => of_bits(bits) end;

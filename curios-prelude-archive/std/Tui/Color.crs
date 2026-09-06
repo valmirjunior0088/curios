@@ -1,9 +1,7 @@
--- A terminal colour, in the four forms every terminal understands: the default it was configured with, one of the sixteen the SGR palette names, one of the 256-colour cube's entries, and a direct 24-bit triple. Which of them a terminal actually honours is the terminal's business; the renderer emits the escape and says nothing about the result.
---
--- The sixteen are one constructor under a bound rather than sixteen constructors. `ansi(n)` states `Nat/Lt(n, 16)` as a decided proposition, so a literal spelling discharges it by reduction and nothing outside the palette can be built, while a computed index reaches the same constructor through `try` exactly as `Str/get` is reached. The names below are ordinary values, which keeps `Color/red` as readable as a constructor would be and leaves the renderer one arm to match instead of sixteen.
 use /std/{Nat, Byte, Equal};
 use /std/Nat/{Lt};
 
+-- | The terminal's default, one of the sixteen the palette names, one of the 256-colour cube, or a direct 24-bit triple.
 pub induct Color: pub Type
 | default()
 | ansi(n: Nat, @ok: Lt(n, 16))
@@ -13,53 +11,68 @@ end
 
 pub use Color/*;
 
--- | The proof payload is irrelevant, so the derived comparison is the index comparison.
 satisfy Equal(Color);
 
+-- | Palette colour 0.
 pub let black: Color =
     Color/ansi(0);
 
+-- | Palette colour 1.
 pub let red: Color =
     Color/ansi(1);
 
+-- | Palette colour 2.
 pub let green: Color =
     Color/ansi(2);
 
+-- | Palette colour 3.
 pub let yellow: Color =
     Color/ansi(3);
 
+-- | Palette colour 4.
 pub let blue: Color =
     Color/ansi(4);
 
+-- | Palette colour 5.
 pub let magenta: Color =
     Color/ansi(5);
 
+-- | Palette colour 6.
 pub let cyan: Color =
     Color/ansi(6);
 
+-- | Palette colour 7.
 pub let white: Color =
     Color/ansi(7);
 
+-- | Palette colour 8.
 pub let bright_black: Color =
     Color/ansi(8);
 
+-- | Palette colour 9.
 pub let bright_red: Color =
     Color/ansi(9);
 
+-- | Palette colour 10.
 pub let bright_green: Color =
     Color/ansi(10);
 
+-- | Palette colour 11.
 pub let bright_yellow: Color =
     Color/ansi(11);
 
+-- | Palette colour 12.
 pub let bright_blue: Color =
     Color/ansi(12);
 
+-- | Palette colour 13.
 pub let bright_magenta: Color =
     Color/ansi(13);
 
+-- | Palette colour 14.
 pub let bright_cyan: Color =
     Color/ansi(14);
 
+-- | Palette colour 15.
 pub let bright_white: Color =
     Color/ansi(15);

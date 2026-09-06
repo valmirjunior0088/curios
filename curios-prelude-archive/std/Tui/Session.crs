@@ -1,6 +1,3 @@
--- The effectful floor: the terminal taken and given back. `with` is the bracket — raw mode through `tty/with_raw_async`, then the alternate screen, the hidden cursor, bracketed paste and the kitty keyboard flag, each undone in reverse on the way out, whichever way the body ends — and `size`, `draw` and `read` are what a program with a loop of its own writes it over. `Tui/run` is one such program.
---
--- **A session remembers three things**, and nothing else touches the terminal: the bytes a chunk ended inside, so the next chunk completes them; the previous frame beside its size, so a draw is a diff; and the size last read, so a loop can ask for it without another `ioctl`. The previous frame is kept at the size it had, and a draw at the same size runs the diff at the shared type through `Frame/fit`, which is the identity there; a draw at a new size clears and writes the whole frame, since what the terminal shows after a resize is not the previous frame anyway.
 use /std/{Nat, Bytes, List, Option, Cell, Io, Try, Async, tty, stream};
 use /std/time/{Duration};
 use /std/Tui/{Frame, Event, input, render, ansi};
@@ -11,6 +8,7 @@ struct Held: Type {
     frame: Frame(w, h),
 }
 
+-- | A terminal taken: what it remembers between draws and reads.
 pub struct Session: Type {
     rest: Cell(Bytes),
     previous: Cell(Option(Held)),
@@ -27,7 +25,7 @@ let leave: Io({}) =
         Io/stdout,
         x[..ansi/kitty_pop, ..ansi/paste_off, ..ansi/cursor_show, ..ansi/alternate_off]);
 
--- | The bracket. Raw mode first, so a terminal that is not one fails here with `ENOTTY` before anything is written; the modes are switched inside it and released by `Async/using` on both scheduler exits, and raw mode after them.
+-- | The bracket: raw mode, the alternate screen, the hidden cursor, bracketed paste and the kitty keyboard flag, each undone in reverse whichever way `body` ends.
 pub let with(@A: Type, body: (Session) -> Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
     tty/with_raw_async(
         let first = tty/size!;
@@ -40,17 +38,17 @@ pub let with(@A: Type, body: (Session) -> Try(Async, Io/Error, A)) -> Try(Async,
         let a = outcome!;
         Try/pure(a));
 
--- | The terminal's size now, recorded for `last_size`.
+-- | The terminal's size now.
 pub let size(s: Session) -> Try(Async, Io/Error, tty/Size) =
     let now = tty/size!;
     let _ = Cell/set(s.size, now)!;
     Try/pure(now);
 
--- | The size last read, by `with` or `size`.
+-- | The size last read.
 pub let last_size(s: Session) -> Io(tty/Size) =
     Cell/get(s.size);
 
--- | Write `frame` as the difference from the previous one where the size is unchanged, and whole where it is not, then remember it.
+-- | `frame` written as the difference from the previous one where the size is unchanged, and whole where it is not.
 pub let draw(
     @w: Nat,
     @h: Nat,
@@ -71,7 +69,7 @@ pub let draw(
     let _ = Io/write(Io/stdout, render/render(before, frame, cursor))!;
     Cell/set(s.previous, Option/some(Held { w = w, h = h, frame = frame }));
 
--- | The next burst of input as events, parking until one arrives; `none` once standard input has ended. A burst that ends inside a sequence is given a short interval for the rest to follow, and settled by `input/flush` when nothing does — a lone Escape becomes the Escape key here and nowhere else.
+-- | The next burst of input as events, parking until one arrives; `none` once standard input has ended.
 pub let read(@E: Type, s: Session) -> Async(Option(List(Event(E)))) =
     let carried = Cell/get(s.rest)!;
     let got = stream/Read/read(Io/stdin, 1024)!;
@@ -84,7 +82,6 @@ pub let read(@E: Type, s: Session) -> Async(Option(List(Event(E)))) =
         | true =>
             let _ = Cell/set(s.rest, x[])!;
             Async/pure(Option/some(d.events))
-        -- Nothing more came: the tail is settled as it stands.
         | false =>
             let settle() -> Async(Option(List(Event(E)))) =
                 let _ = Cell/set(s.rest, x[])!;

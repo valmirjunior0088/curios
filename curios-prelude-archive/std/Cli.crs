@@ -1,22 +1,17 @@
--- A command-line interface is a value, and the record it parses into is a type computed from that value. A program writes a `Cli` -- a name, a list of `Arg`, and a handler -- and the module reads a line against it: `parse` turns the arguments into a `Values(args)`, `get(v, name)` reads one field at a type the specification decides, and a name the specification does not contain is refused where it is written rather than at run time. `select` picks a subcommand, `help` and `usage` render the screens, and `report` renders a refusal.
---
--- The token grammar is GNU's. In the order a token is tried: `--` makes every later token a positional; a lone `-` is an ordinary positional; `--name=value` is the option `name`, the first `=` splitting it and every later one belonging to the value; `--name` is the flag `name`, or the option `name` taking the next token verbatim; `-abc` is the flags `a` and `b` followed by `c` as a flag or as an option taking the rest of the token or the next one; anything else is a positional, filled in declaration order and then collected by `rest`. A long name is matched whole -- there is no abbreviation and no single-dash long option.
---
--- An option written twice keeps its last value, `many` keeps every value, and a flag written twice is set. `-h` or `--help` anywhere on the line answers help before any failure is reported, and `--version` likewise when the command declares one.
---
--- `main` is the entry a program hands its `Cli` to: it reads `/std/proc/args`, drops the program name, decodes each argument with `Str/of_bytes` and refuses a non-UTF-8 one by its position rather than converting it lossily, prints `help` or the version to standard output and exits 0, prints `report` to standard error and exits 2, and otherwise applies the command's own `run` to the parsed record. A program with subcommands reaches `select` first and hands the chosen one its remaining line.
 use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, True, False};
 
--- | A reader is data rather than a witness, so a program's own type joins a specification by supplying one rather than by declaring an instance. `A` is a field because the carrier a specification entry contributes is read off the entry itself; see `Carrier`.
+-- | How an argument's text is read into a value: the placeholder shown in help, and the reader.
 pub struct Value: pub Type {
     A: Type,
     metavar: Str,
     read: (Str) -> Result(Str, A),
 }
 
+-- | A string, as written.
 pub let str: Value =
     Value { A = Str, metavar = "S", read = (s) => Result/success(s) };
 
+-- | A natural number in decimal.
 pub let nat: Value =
     Value {
         A = Nat,
@@ -29,6 +24,7 @@ pub let nat: Value =
                 end,
     };
 
+-- | An integer in decimal, with an optional sign.
 pub let int: Value =
     Value {
         A = Int,
@@ -41,6 +37,7 @@ pub let int: Value =
                 end,
     };
 
+-- | A floating-point number.
 pub let flt: Value =
     Value {
         A = Flt,
@@ -53,16 +50,18 @@ pub let flt: Value =
                 end,
     };
 
+-- | A reader of a program's own type, shown as `metavar` in help.
 pub let reader(@A: Type, metavar: Str, f: (Str) -> Result(Str, A)) -> Value =
     Value { A = A, metavar = metavar, read = f };
 
--- | Whether an option must appear, may be absent, or stands in for a value when absent. `default` carries the value at the reader's own type, which is what makes a defaulted option's carrier `A` rather than `Option(A)`.
+-- | Whether an option must appear, may be absent, or stands for `a` when absent.
 pub induct Presence(A: Type): pub Type
 | required()
 | optional()
 | default(a: A)
 end
 
+-- | What an argument is: a flag, an option taking a value, an option taking every value it is given, a positional, or the collector of every remaining positional.
 pub induct Kind: pub Type
 | flag()
 | option(v: Value, presence: Presence(v.A))
@@ -71,6 +70,7 @@ pub induct Kind: pub Type
 | rest(v: Value)
 end
 
+-- | One argument a program declares: its long name, an optional short one, its help line and its kind.
 pub struct Arg: pub Type {
     long: Str,
     short: Option(Char),
@@ -78,10 +78,11 @@ pub struct Arg: pub Type {
     kind: Kind,
 }
 
--- | The smart constructors write the common shapes. A short alias or another metavariable is a structure update over one of them -- `Arg { ..Cli/flag("verbose", "Log every request"), short = Option/some('v') }` -- so there is no builder to learn and no half-built state to get wrong.
+-- | A flag `--long`.
 pub let flag(long: Str, help: Str) -> Arg =
     Arg { long = long, short = Option/none(), help = help, kind = Kind/flag() };
 
+-- | A required option `--long VALUE`.
 pub let option(long: Str, v: Value, help: Str) -> Arg =
     Arg {
         long = long,
@@ -90,6 +91,7 @@ pub let option(long: Str, v: Value, help: Str) -> Arg =
         kind = Kind/option(v, Presence/required()),
     };
 
+-- | An option that may be absent, read as an `Option`.
 pub let optional(long: Str, v: Value, help: Str) -> Arg =
     Arg {
         long = long,
@@ -98,6 +100,7 @@ pub let optional(long: Str, v: Value, help: Str) -> Arg =
         kind = Kind/option(v, Presence/optional()),
     };
 
+-- | An option that stands for `fallback` when absent.
 pub let default(long: Str, v: Value, fallback: v.A, help: Str) -> Arg =
     Arg {
         long = long,
@@ -106,16 +109,18 @@ pub let default(long: Str, v: Value, fallback: v.A, help: Str) -> Arg =
         kind = Kind/option(v, Presence/default(fallback)),
     };
 
+-- | An option that keeps every value it is given.
 pub let many(long: Str, v: Value, help: Str) -> Arg =
     Arg { long = long, short = Option/none(), help = help, kind = Kind/many(v) };
 
+-- | A required positional, filled in declaration order.
 pub let positional(long: Str, v: Value, help: Str) -> Arg =
     Arg { long = long, short = Option/none(), help = help, kind = Kind/positional(v) };
 
+-- | The collector of every positional after the declared ones. At most one, and after every positional.
 pub let rest(long: Str, v: Value, help: Str) -> Arg =
     Arg { long = long, short = Option/none(), help = help, kind = Kind/rest(v) };
 
--- | What one *kind* contributes to the parsed record. Stated over the kind rather than over the whole entry because the function that builds a field walks the kind under a motive, and a motive can only name what the scrutinee refines: `Carrier(a)` would leave the arm's type stuck on `a` while the match refines `a.kind`.
 let KindCarrier(k: Kind) -> Type =
     match k
     | flag() => Bool
@@ -126,7 +131,7 @@ let KindCarrier(k: Kind) -> Type =
     | rest(v) => List(v.A)
     end;
 
--- | What one entry contributes to the parsed record. A flag is always answered, a required or defaulted option and a positional carry the reader's type bare, an optional one carries `Option`, and the two collecting kinds carry a list.
+-- | The type a parsed argument has in the record: `Bool` for a flag, the reader's type for a required or defaulted option and a positional, an `Option` for an optional one, and a list for `many` and `rest`.
 pub let Carrier(a: Arg) -> Type =
     KindCarrier(a.kind);
 
@@ -136,13 +141,13 @@ let is_positional(k: Kind) -> Bool =
 let is_rest(k: Kind) -> Bool =
     match k | rest(_) => true | _ => false end;
 
--- | The parsed record, indexed by the specification it was parsed against. An inductive rather than a computed tuple, so `get(v, name)` reads the specification off `v`'s own type and a handler needs no annotation.
+-- | The record a line parsed into, indexed by the arguments it was parsed against.
 pub induct Values: (List(Arg)) -> pub Type
 | nil(): ([])
 | cons(@a: Arg, @rest: List(Arg), head: Carrier(a), tail: Values(rest)): ([a, ..rest])
 end
 
--- | The type `get` answers at `name`, walked at elaboration. The `[]` case is `{}` and unreachable: `Has` refuses the walk before it can arrive there.
+-- | The type `get` answers for `name` in `spec`.
 pub let Lookup(spec: List(Arg), name: Str) -> Type =
     match spec
     | [] => {}
@@ -150,16 +155,14 @@ pub let Lookup(spec: List(Arg), name: Str) -> Type =
         match Str/eql(a.long, name) | true => Carrier(a) | false => Lookup(rest, name) end
     end;
 
--- | That `name` is one of `spec`'s long names, decided by reduction: `True` where the walk finds it and `False` at the end, so a literal specification discharges it silently and a misspelling is refused where it is written.
+-- | That `name` is one of `spec`'s long names, decided by reduction: a name the declaration lacks is refused where it is written.
 pub let Has(spec: List(Arg), name: Str) -> Prop =
     match spec
     | [] => False
     | [a, ..rest] => match Str/eql(a.long, name) | true => True | false => Has(rest, name) end
     end;
 
--- | Read one field by name. The specification is implicit because it is the index of `v`'s type, so a handler writes `Cli/get(v, "port")` and gets the type the specification gives that name.
--- |
--- | Both matches carry a motive that refines the bound alongside the result: the value walk eliminates into a function of the evidence rather than consuming it, because the arm that finds the name and the arm that keeps looking need the evidence at two different types.
+-- | The field named `name`, at the type its argument decides.
 pub let get(
     @spec: List(Arg),
     v: Values(spec),
@@ -184,9 +187,7 @@ pub let get(
         end;
     walk(ok);
 
--- | What a program declares. A command either has arguments and a handler or has subcommands; sharing an argument between subcommands is writing the same `Arg` value into both lists, since a specification is a value.
--- |
--- | `run` is typed by the `args` written two fields above it, so inside a literal the handler's parameter already carries that specification and `Cli/get(v, "port")` there needs no annotation.
+-- | What a program declares: its name and description, an optional version, its arguments and the handler that takes them, or its subcommands.
 pub struct Cli: pub Type {
     name: Str,
     about: Str,
@@ -218,7 +219,6 @@ let no_repeat_short(spec: List(Arg)) -> Bool =
         end
     end;
 
--- | `help`, `h` and `version` are the entry's own, spelled here so that a cluster carrying `h` can be read as help before the line is understood at all.
 let no_reserved(spec: List(Arg)) -> Bool =
     List/all(
         spec,
@@ -226,7 +226,6 @@ let no_reserved(spec: List(Arg)) -> Bool =
             Bool/not(Str/eql(a.long, "help")) && Bool/not(Str/eql(a.long, "version"))
                 && (match a.short | some(c) => Bool/not(Char/eql(c, 'h')) | none() => true end));
 
--- | At most one `rest`, and every positional before it: once a `rest` has been seen nothing may fill from the bare tokens again, which is what makes "the next unfilled positional, then `rest`" a total rule rather than a race.
 let rest_comes_last(spec: List(Arg), seen: Bool) -> Bool =
     match spec
     | [] => true
@@ -247,7 +246,6 @@ let no_repeat_name(subs: List(Cli)) -> Bool =
         Bool/not(List/any(more, (d) => Str/eql(c.name, d.name))) && no_repeat_name(more)
     end;
 
--- | Stated flat rather than recursively: the size order grades a constructor payload below its constructor and does not grade a projection below the struct it came from, so a `WellFormed` reached through `cli.commands` is refused as not terminating. One level is what this rule admits, and `main` dispatches exactly that far.
 let sound(cli: Cli) -> Bool =
     no_repeat_long(cli.args) && no_repeat_short(cli.args) && no_reserved(cli.args)
         && rest_comes_last(cli.args, false)
@@ -263,11 +261,11 @@ let sound(cli: Cli) -> Bool =
                             && rest_comes_last(c.args, false))
         end);
 
--- | Decided by reduction and demanded by `main`, so a specification that could never be parsed unambiguously is refused where it is written rather than at the first run that trips over it.
+-- | That the declaration parses unambiguously: no reserved names, one `rest` after every positional, and subcommands one level deep. Decided by reduction and demanded by `main`.
 pub let WellFormed(cli: Cli) -> Prop =
     match sound(cli) | true => True | false => False end;
 
--- | Why a line was refused. Each carries what the report needs to name the offender and nothing more; `usage` renders them.
+-- | Why a line was refused.
 pub induct Failure: pub Type
 | unknown_option(token: Str)
 | missing_value(name: Str)
@@ -278,7 +276,7 @@ pub induct Failure: pub Type
 | missing_command(known: List(Str))
 end
 
--- | What a line came to. `parse` answers one of these and performs nothing; `main` is what turns each into a stream and an exit status.
+-- | What a line came to: a parsed record, a request for help or the version, or a refusal.
 pub induct Outcome(spec: List(Arg)): pub Type
 | parsed(Values(spec))
 | help()
@@ -286,7 +284,6 @@ pub induct Outcome(spec: List(Arg)): pub Type
 | failure(Failure)
 end
 
--- | Every entry gathers the same shape -- the raw strings the line supplied for it, in order -- and `field` decides what that shape means at each kind. A flag gathers its own name once per occurrence, so "was it written" is "is this list nonempty", and an option written twice keeps its last because `field` reads the last.
 let no_occurrences: List(Str) =
     [];
 
@@ -321,7 +318,6 @@ let name_at(spec: List(Arg), i: Nat) -> Str =
 let wants_a_value(spec: List(Arg), i: Nat) -> Bool =
     Option/unwrap_or(Option/map(List/try_get(spec, i), (a) => takes_value(a.kind)), false);
 
--- | The indices of the positional entries in declaration order: the order bare tokens fill them.
 let positional_indices(spec: List(Arg)) -> List(Nat) =
     let walk(rest: List(Arg), at: Nat) -> List(Nat) =
         match rest
@@ -337,7 +333,6 @@ let positional_indices(spec: List(Arg)) -> List(Nat) =
 let rest_index(spec: List(Arg)) -> Option(Nat) =
     List/find_index(spec, (a) => is_rest(a.kind));
 
--- | `-h`, `--help`, or an `h` inside a short cluster. `WellFormed` reserves `h` and `help`, so an `h` in a cluster is never a program's own flag -- which is what lets help be decided before the line is understood at all, and so before any failure in it can be reported.
 let wants_help(argv: List(Str)) -> Bool =
     List/any(
         argv,
@@ -349,21 +344,18 @@ let wants_help(argv: List(Str)) -> Bool =
 let wants_version(argv: List(Str)) -> Bool =
     List/any(argv, (t) => Str/eql(t, "--version"));
 
--- | What the token walk threads: what each entry has gathered, how many positional entries are filled, and whether `--` has been seen.
 struct Walk: Type {
     slots: List(List(Str)),
     filled: Nat,
     literal: Bool,
 }
 
--- | What a short cluster left behind. `needs` is the last character asking for the following token, which the caller supplies: the walk cannot fetch it itself and stay structural, since the list it would then recurse on is a value rather than a payload of the list it is matching.
 induct Cluster: Type
 | settled(w: Walk)
 | needs(w: Walk, at: Nat, name: Str)
 | broke(f: Failure)
 end
 
--- | One bare token: the next unfilled positional in declaration order, then `rest`, and otherwise a refusal naming it.
 let place(spec: List(Arg), w: Walk, token: Str) -> Result(Failure, Walk) =
     match List/try_get(positional_indices(spec), w.filled)
     | some(i) =>
@@ -400,7 +392,6 @@ let run_cluster(spec: List(Arg), w: Walk, chars: List(Char), whole: Str) -> Clus
         end
     end;
 
--- | The token walk. Every recursive call is on the tail of the list being matched, the two that consume a following token as a value included -- which is why `run_cluster` reports `needs` rather than fetching that token itself.
 let step(spec: List(Arg), w: Walk, tokens: List(Str)) -> Result(Failure, List(List(Str))) =
     match tokens
     | [] => Result/success(w.slots)
@@ -462,7 +453,6 @@ let step(spec: List(Arg), w: Walk, tokens: List(Str)) -> Result(Failure, List(Li
         end
     end;
 
--- | One field of the parsed record, at the type its kind decides. The motive is over the *kind* -- what the match refines -- which is why `KindCarrier` is stated there rather than over the whole entry.
 let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCarrier(k)) =
     let last_of = List/last(occurrences);
     let read_with(v: Value, s: Str) -> Result(Failure, v.A) =
@@ -496,7 +486,6 @@ let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCar
     | rest(v) => List/traverse(occurrences, (s) => read_with(v, s))
     end;
 
--- | The specification and the gathered slots walked in lockstep. `spec` carries the motive because it is what the answer is indexed by; the slots are an ordinary list beside it, and the two are the same length by construction -- `empty_slots` made one per entry and `push_at` never changes the length.
 let fill(spec: List(Arg), slots: List(List(Str))) -> Result(Failure, Values(spec)) =
     match spec: (s) => Result(Failure, Values(s))
     | [] => Result/success(Values/nil())
@@ -508,7 +497,7 @@ let fill(spec: List(Arg), slots: List(List(Str))) -> Result(Failure, Values(spec
             (head) => Result/map_success(fill(more, later), (tail) => Values/cons(head, tail)))
     end;
 
--- | The pure core: a line in, an outcome out, nothing performed. Help wins over every other reading of the line, and a version is answered only where the command declares one.
+-- | A line read against `spec`, performing nothing. Help wins over every other reading of the line, and a version is answered only when `versioned`.
 pub let parse(spec: List(Arg), argv: List(Str), versioned: Bool) -> Outcome(spec) =
     match wants_help(argv)
     | true => Outcome/help()
@@ -527,7 +516,6 @@ pub let parse(spec: List(Arg), argv: List(Str), versioned: Bool) -> Outcome(spec
         end
     end;
 
--- | The placeholder an entry stands behind in the usage line and the option rows: a positional is its own name shouted, an option is its reader's metavariable, and a flag has none.
 let shout(s: Str) -> Str =
     Str/flatten(List/map(Str/to_list(s), (c) => Str/of_char(Char/to_ascii_upper(c))));
 
@@ -540,7 +528,6 @@ let metavar_of(k: Kind) -> Option(Str) =
     | rest(_v) => Option/none()
     end;
 
--- | `Usage: name [OPTIONS] <ROOT> [REST]...`, with the bracket telling required from collected.
 let placeholder(a: Arg) -> Option(Str) =
     match a.kind
     | positional(_) => Option/some(Str/flatten(["<", shout(a.long), ">"]))
@@ -569,6 +556,7 @@ let command_rows(subs: List(Cli)) -> List({Str, Str}) =
 let has_options(spec: List(Arg)) -> Bool =
     List/any(spec, (a) => Bool/not(is_positional(a.kind) || is_rest(a.kind)));
 
+-- | The one-line usage.
 pub let usage(cli: Cli) -> Str =
     let head =
         match has_options(cli.args) | true => [cli.name, "[OPTIONS]"] | false => [cli.name] end;
@@ -576,7 +564,6 @@ pub let usage(cli: Cli) -> Str =
     let commands = match cli.commands | [] => [] | [_, .._] => ["<COMMAND>"] end;
     Str/flatten(["Usage: ", Str/join(" ", List/flatten([head, tail, commands]))]);
 
--- | One option row's left column: `-v, --verbose`, or four spaces where there is no short, so the long names line up whether or not their neighbours have one.
 let option_head(a: Arg) -> Str =
     let short =
         match a.short | some(c) => Str/flatten(["-", Str/of_char(c), ", "]) | none() => "    " end;
@@ -584,7 +571,6 @@ let option_head(a: Arg) -> Str =
         match metavar_of(a.kind) | some(m) => Str/flatten([" <", m, ">"]) | none() => "" end;
     Str/flatten([short, "--", a.long, value]);
 
--- | A section is its rows padded to the widest left column in *that* section, two spaces before the help. Per section rather than across all three: a lone `<ROOT>` beside a long option row would otherwise carry the option column's padding into a heading it has nothing to do with. An empty section prints nothing at all rather than a bare heading.
 let widest(rows: List({Str, Str})) -> Nat =
     List/fold(rows, 0, ((left, _), so_far) => Nat/max(Str/len(left), so_far));
 
@@ -598,7 +584,6 @@ let section(heading: Str, rows: List({Str, Str})) -> List(Str) =
         List/flatten([[heading, "\n"], List/map(rows, render), ["\n"]])
     end;
 
--- | The two rows every command answers, whatever it declares. They are in the help because `main` answers them, and `WellFormed` reserves their names so nothing can collide with them.
 let builtin_rows(cli: Cli) -> List({Str, Str}) =
     let help_row: {Str, Str} = ("-h, --help", "Print help");
     match cli.version
@@ -606,6 +591,7 @@ let builtin_rows(cli: Cli) -> List({Str, Str}) =
     | some(_) => [help_row, ("    --version", "Print version")]
     end;
 
+-- | The help screen: usage, then the positionals, the options and the subcommands with their help lines.
 pub let help(cli: Cli) -> Str =
     let arguments = positional_rows(cli.args);
     let options = List/flatten([option_rows(cli.args), builtin_rows(cli)]);
@@ -631,11 +617,12 @@ let complaint(f: Failure) -> Str =
         Str/flatten(["a subcommand is required\n  available: ", Str/join(", ", known)])
     end;
 
+-- | A refusal rendered for standard error, with the usage.
 pub let report(cli: Cli, f: Failure) -> Str =
     Str/flatten(
         ["error: ", complaint(f), "\n\n", usage(cli), "\n\nFor more information, try '--help'.\n"]);
 
--- | What choosing a subcommand came to. It mirrors `Outcome` deliberately: help is decided before the first token is read as a name, so a parent answers `--help` rather than refusing it as an unknown command, and a caller dispatches on one shape either way.
+-- | What choosing a subcommand came to: the subcommand and its line, a request for help or the version, or a refusal.
 pub induct Chosen: pub Type
 | chose(sub: Cli, rest: List(Str))
 | wanted_help()
@@ -653,7 +640,7 @@ let named(subs: List(Cli), name: Str) -> Option(Cli) =
         match Str/eql(c.name, name) | true => Option/some(c) | false => named(more, name) end
     end;
 
--- | The first token names the subcommand and everything after it is that subcommand's line. One level deep: `WellFormed` requires every child's own `commands` to be empty, so what this hands back is a command that parses rather than one that selects again.
+-- | The subcommand the first token names, and the rest of the line as its own.
 pub let select(cli: Cli, argv: List(Str)) -> Chosen =
     let names = command_names(cli.commands);
     match wants_help(argv)
@@ -673,7 +660,6 @@ pub let select(cli: Cli, argv: List(Str)) -> Chosen =
         end
     end;
 
--- | Arguments arrive as `Bytes` because the host does not promise text. One that is not UTF-8 is refused by its position rather than lossily converted, which is what a carrier narrowing by refusal means for a command line.
 let decode(raw: List(Bytes)) -> Result(Nat, List(Str)) =
     let walk(rest: List(Bytes), at: Nat) -> Result(Nat, List(Str)) =
         match rest
@@ -690,7 +676,7 @@ let fail_with(text: Str) -> Io({}) =
     let _ = Io/write(Io/stderr, Str/to_bytes(text))!;
     /std/proc/exit(2);
 
--- | The entry a program hands its `Cli` to. Help and a version answer on standard output and exit 0; a line the specification refuses prints to standard error and exits 2; anything else runs the handler. The bound is demanded here rather than inside, so a specification that could never be parsed unambiguously is refused where the program is written.
+-- | The entry a program hands its `Cli` to: arguments read, help and the version answered on standard output with exit 0, a refusal reported on standard error with exit 2, and otherwise the handler run.
 pub let main(cli: Cli, @_ok: WellFormed(cli)) -> Io({}) =
     let raw = /std/proc/args!;
     let dropped = match raw | [] => [] | [_, ..more] => more end;

@@ -1,19 +1,23 @@
--- Comparison of strictly-positive naturals. Every law is a one-line delegation: the magnitudes decide the order, and `BigPos/eq` lifts a magnitude equality back to the record, since the certificate is proof-irrelevant.
 use /std/{Ordering, Eq, BigNat, BigPos};
 use /std/Ordering/{cong_flip};
 
+-- | The order of the two.
 pub let cmp(p: BigPos, q: BigPos) -> Ordering =
     BigNat/cmp/cmp(p.value, q.value);
 
+-- | A positive compares equal to itself.
 pub let refl(p: BigPos) -> Eq(cmp(p, p), Ordering/eq()) =
     BigNat/cmp/refl(p.value);
 
+-- | Positives that compare equal are equal.
 pub let to_eq(p: BigPos, q: BigPos, w: Eq(cmp(p, q), Ordering/eq())) -> Eq(p, q) =
     BigPos/eq(p, q, BigNat/cmp/to_eq(p.value, q.value, w));
 
+-- | Swapping the operands flips the answer.
 pub let flip(p: BigPos, q: BigPos) -> Eq(cmp(q, p), Ordering/flip(cmp(p, q))) =
     BigNat/cmp/flip(p.value, q.value);
 
+-- | Transitivity.
 pub let trans(
     p: BigPos,
     q: BigPos,
@@ -23,6 +27,7 @@ pub let trans(
 ) -> Eq(cmp(p, r), Ordering/lt()) =
     BigNat/cmp/trans(p.value, q.value, r.value, u, v);
 
+-- | `gt` one way is `lt` the other.
 pub let gt_to_lt(
     p: BigPos,
     q: BigPos,

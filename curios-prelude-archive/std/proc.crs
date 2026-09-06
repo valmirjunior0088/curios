@@ -1,7 +1,7 @@
--- This process: its arguments, its environment, and its end. Starting another is `Command`'s, and the child it starts is `Child`'s.
 pub use /sys/proc/{args};
 use /std/{Bytes, Nat, Str, Option, Io};
 
+-- | The environment variable `name`, or `none` when it is unset.
 pub let env(name: Str) -> Io(Option(Bytes)) =
     let r = /sys/proc/env(Str/to_bytes(name))!;
     Io/pure(
@@ -10,6 +10,6 @@ pub let env(name: Str) -> Io(Option(Bytes)) =
         | false => Option/none()
         end);
 
--- | The description ends the process and yields whatever the region wanted, so an exiting arm can end a region of any type. Sound because `Io` has no eliminator: nothing takes an `Io(A)` apart, so the value it never produces is never forged.
+-- | End the process with `code`. The description yields whatever the region wanted, so an exiting arm can end a region of any type.
 pub let exit(@A: Type, code: Nat) -> Io(A) =
     /sys/proc/exit(code);

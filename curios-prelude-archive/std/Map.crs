@@ -1,4 +1,3 @@
--- A crit-bit (Patricia) trie keyed on the byte string a `Key` witness produces. The map deliberately does not remember `K`: the trie's identity *is* that byte string, so two key types serializing alike are the same key. `Key` is therefore a write-side injection only — `entries`, `keys`, and `fold` hand back `Bytes`, and a caller wanting typed keys decodes at the boundary.
 use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq, Equal, Show, Spell};
 
 induct Node(V: Type): Type
@@ -6,34 +5,32 @@ induct Node(V: Type): Type
 | fork(crit: Nat, zero: Node(V), one: Node(V))
 end
 
+-- | A map from encoded keys to values.
 pub struct Map(V: Type): Type {
     size: Nat,
     root: Option(Node(V)),
 }
 
--- | The trie's identity is the byte string, so a `to_bytes` that collides silently merges two keys into one entry. `injective` is that obligation stated where it can be checked: a witness cannot register without proving its own encoding distinguishes what the key type distinguishes.
+-- | How a key type encodes to the byte string that identifies it.
 pub concept Key(K: Type): pub Type {
+    -- | The encoding.
     to_bytes(K) -> Bytes,
+    -- | Distinct keys encode distinctly.
     injective(a: K, b: K, same: Eq(to_bytes(a), to_bytes(b))) -> Eq(a, b),
 }
 
+-- | The identity encoding.
 satisfy Key(Bytes) {
     to_bytes(b) = b,
-    -- The identity encoding: the goal reduces to the hypothesis.
     injective(_a, _b, same) = same,
 }
 
+-- | The UTF-8 bytes.
 satisfy Key(Str) {
     to_bytes = Str/to_bytes,
     injective(a, b, same) = Str/eq_of_bytes(a, b, same),
 }
 
--- | No `Key(Nat)`. Its base-256 encoding recursed on `x / 256`, and intrinsic `Nat` eliminates only by unary successor, so no induction principle reaches that recursion: the injectivity is unprovable with or without the division reduction laws.
--- |
--- | Rocq's answer is not to encode into a binary representation but to *work* in one — `positive` is this library's `BigPos` and `N` its `BigNat` — where digit injectivity comes from the representation rather than from arithmetic. Its bridge from unary `nat` is proved by successor (`Pos.of_nat (S n) = Pos.succ (Pos.of_nat n)`), which is affordable exactly because that bridge is only ever needed inside proofs. Agda and Lean instead give the digit expansion its own well-founded or fuel-based recursion, and neither form exists here.
--- |
--- | So a caller wanting numeric keys encodes them at the boundary, and a future `Key` for a binary carrier is the shape worth building.
--- | The range test is written `g < len` rather than as a refuted `g >= len` so that the in-range arm can index through `Bytes/get`: `Nat/Lt` is decided on exactly this comparison, so refining it to `true` reduces the proposition away and the bound is discharged with nothing written. Spelling the same fact the other way round leaves the refinement on `>=`, where nothing reduces `<`, and the index becomes unpayable.
 let bit(k: Bytes, j: Nat) -> Nat =
     let g = j / 9;
     let o = j % 9;
@@ -52,7 +49,6 @@ let crit(a: Bytes, b: Bytes) -> Nat =
         | true => bits(x, y, g, o + 1)
         | false => g * 9 + o
         end;
-    -- Nested rather than conjoined, for the reason `bit` states: a refinement records the term it scrutinised, so a true `x && y` says nothing about `x`, and each bound has to be refined on its own before `Bytes/get` will take it. Both exhausted branches agree, so the split changes nothing but what is provable inside them.
     let bytes(g: Nat) -> Nat =
         match g < Bytes/len(a)
         | false => g * 9
@@ -76,11 +72,6 @@ let lookup(@V: Type, t: Node(V), k: Bytes) -> {Bytes, V} =
 let wedge(@V: Type, c: Nat, b: Nat, k: Bytes, v: V, t: Node(V)) -> Node(V) =
     match b | 0 => Node/fork(c, Node/leaf(k, v), t) | _ => Node/fork(c, t, Node/leaf(k, v)) end;
 
--- | One descent per insert, deciding on the way back up. `insert1` answers the rebuilt subtree, a crit position, and one of three states: 0 placed, 1 pending, 2 replaced. The state is what keeps `size` right, and `pending` is what lets a single walk find an attachment point the descent could not have known.
--- |
--- | Why the return side can decide it: the leaf reached by following `k`'s bits sits in the branch matching `k` at every fork on the path, so it agrees with `k` at every crit there, and `c = crit(k, k0)` is therefore never equal to a path crit. Crits increase strictly downward, so the wedge point — the shallowest fork whose crit exceeds `c` — is the child of the *deepest* fork whose crit is below `c`, and climbing from the leaf reaches that fork before any other with a crit below `c`. A fork still pending returns its own node untouched, so nothing above the wedge point is rebuilt and nothing below it was.
--- |
--- | This was the retired map-wall campaign's step 3, held back there because the qp reshape would have replaced the crit descent outright. That reshape was built, measured and declined, so nothing supersedes it any more.
 let insert1(@V: Type, t: Node(V), k: Bytes, v: V) -> {Node(V), Nat, Nat} =
     match t
     | leaf(k0, v0) =>
@@ -113,7 +104,6 @@ let insert1(@V: Type, t: Node(V), k: Bytes, v: V) -> {Node(V), Nat, Nat} =
         end
     end;
 
--- | The same single descent for removal, over three states: 0 unchanged, 1 removed, 2 emptied. A fork whose child emptied answers its other child, which is the collapse that keeps the shape canonical; `emptied` reaching the root means the map held exactly this one entry. The node answered alongside `emptied` is the untouched original and is never read.
 let remove1(@V: Type, t: Node(V), k: Bytes) -> {Node(V), Nat} =
     match t
     | leaf(k0, _v0) => match Bytes/eql(k0, k) | true => (t, 2) | false => (t, 0) end
@@ -128,12 +118,15 @@ let remove1(@V: Type, t: Node(V), k: Bytes) -> {Node(V), Nat} =
         end
     end;
 
+-- | The empty map.
 pub let empty(@V: Type) -> Map(V) =
     Map { size = 0, root = Option/none() };
 
+-- | How many entries.
 pub let len(@V: Type, m: Map(V)) -> Nat =
     m.size;
 
+-- | The value at `key`, or `none`.
 pub let get(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Option(V) =
     let k = Key/to_bytes(key);
     match m.root
@@ -143,9 +136,11 @@ pub let get(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Option(V) =
         match Bytes/eql(k0, k) | true => Option/some(v0) | false => Option/none() end
     end;
 
+-- | Whether `key` has an entry.
 pub let has(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Bool =
     Option/is_some(get(m, key));
 
+-- | `m` with `key` at `v`, replacing an entry under the same key.
 pub let insert(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, v: V) -> Map(V) =
     let k = Key/to_bytes(key);
     match m.root
@@ -159,6 +154,7 @@ pub let insert(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, v: V) -> Map(V
         end
     end;
 
+-- | `m` without `key`; unchanged when absent.
 pub let remove(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Map(V) =
     let k = Key/to_bytes(key);
     match m.root
@@ -172,6 +168,7 @@ pub let remove(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Map(V) =
         end
     end;
 
+-- | Over the entries in key order with `f(key, value, acc)`, the keys as encoded.
 pub let fold(@V: Type, @A: Type, m: Map(V), init: A, f: (Bytes, V, A) -> A) -> A =
     match m.root
     | none() => init
@@ -181,22 +178,27 @@ pub let fold(@V: Type, @A: Type, m: Map(V), init: A, f: (Bytes, V, A) -> A) -> A
         go(n, init)
     end;
 
+-- | The entries in key order, the keys as encoded.
 pub let entries(@V: Type, m: Map(V)) -> List({Bytes, V}) =
     fold(m, [], (k, v, acc) => [..acc, (k, v)]);
 
+-- | The keys in order, as encoded.
 pub let keys(@V: Type, m: Map(V)) -> List(Bytes) =
     fold(m, [], (k, _, acc) => [..acc, k]);
 
+-- | The values in key order.
 pub let values(@V: Type, m: Map(V)) -> List(V) =
     fold(m, [], (_, v, acc) => [..acc, v]);
 
+-- | The map of the pairs, a later pair replacing an earlier one under the same key.
 pub let of(@K: Type, @V: Type, use Key(K), l: List({K, V})) -> Map(V) =
     List/fold(l, empty(), ((k, v), acc) => insert(acc, k, v));
 
+-- | The value at `key`, or `default`.
 pub let get_or(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, default: V) -> V =
     Option/unwrap_or(get(m, key), default);
 
--- | The one rewriting entry point: `f` sees the current value or `none`, and answers the value to keep or `none` to remove.
+-- | The entry at `key` rewritten by `f`, which sees the current value or `none` and answers the value to keep or `none` to remove.
 pub let update(
     @K: Type,
     @V: Type,
@@ -207,28 +209,27 @@ pub let update(
 ) -> Map(V) =
     match f(get(m, key)) | some(v) => insert(m, key, v) | none() => remove(m, key) end;
 
--- | Over the values alone: the keys are the trie's and stay where they are, so the shape is rebuilt node for node.
 let map_node(@V: Type, @W: Type, t: Node(V), f: (V) -> W) -> Node(W) =
     match t
     | leaf(k, v) => Node/leaf(k, f(v))
     | fork(c, z, o) => Node/fork(c, map_node(z, f), map_node(o, f))
     end;
 
+-- | `f` on every value.
 pub let map(@V: Type, @W: Type, m: Map(V), f: (V) -> W) -> Map(W) =
     Map { size = m.size, root = Option/map(m.root, (n: Node(V)) => map_node(n, f)) };
 
--- | Rebuilt entry by entry, since a removed leaf collapses its fork and a filtered shape is easier to rebuild than to repair.
+-- | The entries `pred` accepts.
 pub let filter(@V: Type, m: Map(V), pred: (Bytes, V) -> Bool) -> Map(V) =
     fold(
         m,
         empty(),
         (k, v, acc) => match pred(k, v) | true => insert(acc, k, v) | false => acc end);
 
--- | Right-biased: an entry of `b` replaces `a`'s under the same key.
+-- | Every entry of either, `b`'s winning under a shared key.
 pub let union(@V: Type, a: Map(V), b: Map(V)) -> Map(V) =
     fold(b, a, (k, v, acc) => insert(acc, k, v));
 
--- | Entry lists compared pairwise through the value witness alone. Going through `Equal(List({Bytes, V}))` instantiates the tuple witness at a second universe instance of `V`, which the kernel refuses to identify with the premise's; the direct walk asks the premise itself.
 let same_entries(@V: Type, use Equal(V), xs: List({Bytes, V}), ys: List({Bytes, V})) -> Bool =
     match xs
     | [] => match ys | [] => true | _ => false end
@@ -239,7 +240,7 @@ let same_entries(@V: Type, use Equal(V), xs: List({Bytes, V}), ys: List({Bytes, 
         end
     end;
 
--- | The trie is canonical, so two maps are equal exactly when their entries are; the keys compared and shown are the `Bytes` the trie holds.
+-- | Entry by entry.
 satisfy (@V: Type, use Equal(V)) => Equal(Map(V)) {
     eql(a, b) = same_entries(entries(a), entries(b)),
     neq(a, b) = Bool/not(same_entries(entries(a), entries(b))),
@@ -258,7 +259,7 @@ satisfy (@V: Type, use Show(V)) => Show(Map(V)) {
                 "}"]),
 }
 
--- | Spelled over the `Bytes` the trie holds, which is what `of` takes back through `Key(Bytes)`: the map forgets `K`, so the byte string is the only key there is to write, and the identity encoding rebuilds the same trie.
+-- | As `Map/of` over the encoded keys.
 satisfy (@V: Type, use Spell(V)) => Spell(Map(V)) {
     spell(m) =
         Str/flatten(

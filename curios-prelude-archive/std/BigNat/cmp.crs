@@ -3,6 +3,7 @@ use /std/Bool/{false_neq_true};
 use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, cong_cons2, eq};
 
+-- | The order of two words.
 pub let raw(x: Bits, y: Bits) -> Ordering =
     match x
     | b[] => match y | b[] => Ordering/eq() | b[_, .._] => Ordering/lt() end
@@ -22,21 +23,27 @@ pub let raw(x: Bits, y: Bits) -> Ordering =
         end
     end;
 
+-- | The order of the two.
 pub let cmp(a: BigNat, b: BigNat) -> Ordering =
     raw(a.bits, b.bits);
 
+-- | Whether the two are equal.
 pub let eql(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | eq() => true | _ => false end;
 
+-- | Whether `a` is below `b`.
 pub let lt(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | lt() => true | _ => false end;
 
+-- | Whether `a` is at most `b`.
 pub let le(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | gt() => false | _ => true end;
 
+-- | Whether `a` is above `b`.
 pub let gt(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | gt() => true | _ => false end;
 
+-- | Whether `a` is at least `b`.
 pub let ge(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | lt() => false | _ => true end;
 
@@ -58,6 +65,7 @@ let absorb_eq(
         Eq/sym(p),
         Eq/refl());
 
+-- | A word compares equal to itself.
 pub let raw_refl(x: Bits) -> Eq(raw(x, x), Ordering/eq()) =
     match x: (a) => Eq(raw(a, a), Ordering/eq())
     | b[] => Eq/refl()
@@ -102,6 +110,7 @@ let cong_cmp_match(
     | refl(@_z) => Eq/refl()
     end;
 
+-- | Words that compare equal are equal.
 pub let raw_to_eq(x: Bits, y: Bits, p: Eq(raw(x, y), Ordering/eq())) -> Eq(x, y) =
     match x
     | b[] =>
@@ -159,6 +168,7 @@ let flip_heads(
     | false => match yh | true => Eq/refl() | false => Eq/refl() end
     end;
 
+-- | Swapping the operands flips the answer.
 pub let raw_flip(x: Bits, y: Bits) -> Eq(raw(y, x), Ordering/flip(raw(x, y))) =
     match x: (a) => Eq(raw(y, a), Ordering/flip(raw(a, y)))
     | b[] =>
@@ -340,6 +350,7 @@ let trans_cons(
         end
     end;
 
+-- | Transitivity of the word order.
 pub let raw_trans(
     x: Bits,
     y: Bits,
@@ -376,15 +387,19 @@ pub let raw_trans(
         end
     end;
 
+-- | A number compares equal to itself.
 pub let refl(a: BigNat) -> Eq(cmp(a, a), Ordering/eq()) =
     raw_refl(a.bits);
 
+-- | Numbers that compare equal are equal.
 pub let to_eq(a: BigNat, b: BigNat, p: Eq(cmp(a, b), Ordering/eq())) -> Eq(a, b) =
     eq(a, b, raw_to_eq(a.bits, b.bits, p));
 
+-- | Swapping the operands flips the answer.
 pub let flip(a: BigNat, b: BigNat) -> Eq(cmp(b, a), Ordering/flip(cmp(a, b))) =
     raw_flip(a.bits, b.bits);
 
+-- | Transitivity.
 pub let trans(
     a: BigNat,
     b: BigNat,

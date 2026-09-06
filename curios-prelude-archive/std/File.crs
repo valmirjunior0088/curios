@@ -1,16 +1,18 @@
--- A file the program opened: its handle behind a private representation, the mode it was opened in, and the operations a program wants over it. Every operation here is `Io`, because a regular file never waits on a peer — the disk answers it — so a read or a write is one synchronous row, and what can fail is `Try` over `Io`. The stream witnesses lift the same operations into a fiber, where a `File` reads and writes like any other stream. `with` is the bracket a file lives inside; `with_async` is the same bracket registered with the scheduler, so a cancelled task closes what it opened.
 use /std/{Bytes, Nat, Path, Try, Async, Io, True, stream};
 
+-- | An open file.
 pub struct File: Type {
     /sys/Handle,
 }
 
+-- | How a file is opened: to read, to write from the start, or to append.
 pub induct Mode: pub Type
 | read()
 | write()
 | append()
 end
 
+-- | The host's code for `mode`.
 pub let of_mode(mode: Mode) -> Nat =
     match mode
     | read() => /sys/open_mode/read
@@ -18,6 +20,7 @@ pub let of_mode(mode: Mode) -> Nat =
     | append() => /sys/open_mode/append
     end;
 
+-- | The file at `path`, opened in `mode`.
 pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
     let r = /sys/file/open(Path/to_bytes(path), of_mode(mode))!;
     match Io/Error/of(r.status)
@@ -25,10 +28,11 @@ pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
     | none() => Try/pure(File { r.handle })
     end;
 
+-- | Close `f`.
 pub let close(f: File) -> Io({}) =
     /sys/Handle/close(f.0);
 
--- | Up to `n` bytes, synchronously: the disk answers a regular file at once.
+-- | Up to `n` bytes.
 pub let read(f: File, n: Nat) -> Io(stream/Chunk) =
     let r = /sys/Handle/read(f.0, n)!;
     Io/pure(stream/of_status(r.status, r.bytes));
@@ -56,7 +60,7 @@ satisfy stream/Write(File) {
     write(f, b) = Async/lift(Try/run(write(f, b))),
 }
 
--- | `body` over an open file, closed whichever way the body ends; the body's own failure is the answer after the close.
+-- | `body` over the file at `path`, closed whichever way the body ends; the body's own failure is the answer after the close.
 pub let with(
     @A: Type,
     path: Path,
@@ -73,7 +77,7 @@ pub let with(
     let _ = close(f)!;
     Try/pure(a);
 
--- | The same bracket inside a fiber, registered with the scheduler: a cancelled task closes what it opened, and the body may park.
+-- | The same bracket inside a fiber, registered with the scheduler, so a cancelled task closes the file.
 pub let with_async(
     @A: Type,
     path: Path,
@@ -95,9 +99,10 @@ let read_to_end(f: File) -> Try(Io, Io/Error, Bytes) =
         end;
     go(x[]);
 
+-- | The whole file at `path`.
 pub let read_all(path: Path) -> Try(Io, Io/Error, Bytes) =
     with(path, Mode/read(), read_to_end);
 
--- | The whole file in one call, the twin of `read_all`: created if absent, replaced if present.
+-- | `b` as the whole file at `path`: created if absent, replaced if present.
 pub let write_all(path: Path, b: Bytes) -> Try(Io, Io/Error, {}) =
     with(path, Mode/write(), (f) => write(f, b));

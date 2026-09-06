@@ -1,13 +1,10 @@
 use /std/{Result, Nat, Byte, Bytes, Str, Bool, List, Option, Monad};
 
--- | A parser is a step from a position in the input to a position and a value, or a message. The representation is *sealed*: a `Parse` is built and consumed only through the combinators below, so no consumer can depend on the step function being what a parser is.
--- |
--- | Sealing it is what makes the carrier free to change. Nothing outside this module names a position, so a later representation carrying more -- the position a failure occurred at, a defunctionalized step -- is this module's decision alone rather than an edit to every parser in `/std`. The committed flag was the first such addition, and it landed as `Refusal` without an edit outside this file.
+-- | A parser: from a position in the input to a position and a value, or a refusal.
 pub struct Parse(A: Type): Type {
     run(input: Bytes, pos: Nat) -> Result(Refusal, {Nat, A}),
 }
 
--- | How a parser refused. A parser *declines* when the input is simply not its shape, and `or` then restores the position and tries its alternative; it refuses *committed* once it has recognized enough to know the input is its shape and malformed, and then `or` reports that reason rather than letting a later alternative read the same bytes as something else -- which is how a date with a bad day was once rejected as an integer followed by junk. Every primitive declines; only `commit` promotes.
 induct Refusal: Type
 | declined(Str)
 | committed(Str)
@@ -16,21 +13,22 @@ end
 let message(refusal: Refusal) -> Str =
     match refusal | declined(msg) => msg | committed(msg) => msg end;
 
--- | Run `p` from the start of `input` and answer its value, or the message it refused with.
--- |
--- | **A parser that stops early still succeeds, and what it left is not reported.** Where it stopped is a position, and a position never leaves this module -- the seal above is what keeps the representation free to change -- so there is nothing for this to hand back and nothing a caller could test. A parser is therefore run over a whole input by *being* one: compose it with `eof`, as `Json/decode` and `Toml/decode` each do. `Json/decode` did not, and read `nulll` as `null` and `1 garbage` as `1`, which is what the sentence above is here to prevent.
+-- | `p` from the start of `input`: its value, or the message it refused with. A parser that stops early still succeeds, so a parser that must consume everything ends with `eof`.
 pub let run(@A: Type, p: Parse(A), input: Bytes) -> Result(Str, A) =
     match p.run(input, 0)
     | success((_, a)) => Result/success(a)
     | failure(refusal) => Result/failure(message(refusal))
     end;
 
+-- | `a`, consuming nothing.
 pub let pure(@A: Type, a: A) -> Parse(A) =
     Parse { run(_input, pos) = Result/success((pos, a)) };
 
+-- | Decline with `msg`, consuming nothing.
 pub let fail(@A: Type, msg: Str) -> Parse(A) =
     Parse { run(_input, _pos) = Result/failure(Refusal/declined(msg)) };
 
+-- | `f` on the value.
 pub let map(@A: Type, @B: Type, p: Parse(A), f: (A) -> B) -> Parse(B) =
     Parse {
         run(input, pos) =
@@ -40,6 +38,7 @@ pub let map(@A: Type, @B: Type, p: Parse(A), f: (A) -> B) -> Parse(B) =
             end,
     };
 
+-- | `p`, then `f` on its value from where it stopped.
 pub let bind(@A: Type, @B: Type, p: Parse(A), f: (A) -> Parse(B)) -> Parse(B) =
     Parse {
         run(input, pos) =
@@ -49,6 +48,7 @@ pub let bind(@A: Type, @B: Type, p: Parse(A), f: (A) -> Parse(B)) -> Parse(B) =
             end,
     };
 
+-- | `p`, or `q` from the same position when `p` declines. A committed refusal is reported as it is.
 pub let or(@A: Type, p: Parse(A), q: Parse(A)) -> Parse(A) =
     Parse {
         run(input, pos) =
@@ -59,7 +59,7 @@ pub let or(@A: Type, p: Parse(A), q: Parse(A)) -> Parse(A) =
             end,
     };
 
--- | Run `p` as the shape the input has already been recognized to have: a refusal inside it is committed, so an enclosing `or` reports `p`'s reason instead of trying its alternative over the same bytes. Wrap only what follows the recognizing prefix -- a date's fields after `DDDD-`, not the four digits that might still be an integer's.
+-- | `p` as the shape the input has been recognized to have: a refusal inside it is committed, so an enclosing `or` reports it rather than trying an alternative.
 pub let commit(@A: Type, p: Parse(A)) -> Parse(A) =
     Parse {
         run(input, pos) =
@@ -69,14 +69,15 @@ pub let commit(@A: Type, p: Parse(A)) -> Parse(A) =
             end,
     };
 
--- | Report `msg` in place of whatever `p` declined with. `or` restores the position before its second branch, so the fallback sees exactly the input `p` was given and simply fails there with a better reason. A committed refusal keeps its own reason, since by then `p` knew what it was reading.
+-- | `p`, declining with `msg` in place of its own reason.
 pub let label(@A: Type, p: Parse(A), msg: Str) -> Parse(A) =
     or(p, fail(msg));
 
--- | Run `p`, but treat its failure as an absent value rather than a failed parse. Nothing is consumed when it fails, so this is the parser spelling of "optionally".
+-- | `p`'s value, or `none` when it declines, consuming nothing then.
 pub let optional(@A: Type, p: Parse(A)) -> Parse(Option(A)) =
     or(map(p, (a) => Option/some(a)), pure(Option/none()));
 
+-- | `p` then `q`, their values paired.
 pub let and(@A: Type, @B: Type, p: Parse(A), q: Parse(B)) -> Parse({A, B}) =
     Parse {
         run(input, pos) =
@@ -90,6 +91,7 @@ pub let and(@A: Type, @B: Type, p: Parse(A), q: Parse(B)) -> Parse({A, B}) =
             end,
     };
 
+-- | The next byte; declines at the end of the input.
 pub let any_byte: Parse(Byte) =
     Parse {
         run(input, pos) =
@@ -99,12 +101,13 @@ pub let any_byte: Parse(Byte) =
             end,
     };
 
--- | Consume one byte, but only when it passes `pred`. The position is untouched on refusal, since a failing parser never advances one.
+-- | The next byte when `pred` accepts it; declines otherwise, consuming nothing.
 pub let take_if(pred: (Byte) -> Bool) -> Parse(Byte) =
     bind(
         any_byte,
         (byte) => match pred(byte) | true => pure(byte) | false => fail("unexpected byte") end);
 
+-- | The next byte without consuming it; declines at the end of the input.
 pub let peek_byte: Parse(Byte) =
     Parse {
         run(input, pos) =
@@ -114,11 +117,10 @@ pub let peek_byte: Parse(Byte) =
             end,
     };
 
--- | Look at the next byte without consuming it, and without failing at the end of input. This is the shape a scanning loop wants: `none()` is the loop's stop condition rather than an error, which `peek_byte` cannot express because running out of input is the only thing it can do about it.
+-- | The next byte without consuming it, or `none` at the end of the input.
 pub let peek: Parse(Option(Byte)) =
     or(map(peek_byte, (b) => Option/some(b)), pure(Option/none()));
 
--- | How a byte reads in a refusal: as the character it prints as when it has one, and by its number otherwise.
 let byte_spelling(byte: Byte) -> Str =
     match Str/of_bytes(x[byte])
     | some(s) =>
@@ -129,7 +131,7 @@ let byte_spelling(byte: Byte) -> Str =
     | none() => Str/concat("byte ", Nat/to_str(Byte/to_nat(byte)))
     end;
 
--- | The refusal is spelled when the parser is built rather than when it declines, since a `many0` or `or` declines the same parser once per byte it stops at.
+-- | The byte `expected`; declines on any other.
 pub let take_byte(expected: Byte) -> Parse(Byte) =
     let refusal = Refusal/declined(Str/concat("expected ", byte_spelling(expected)));
     Parse {
@@ -145,6 +147,7 @@ pub let take_byte(expected: Byte) -> Parse(Byte) =
             end,
     };
 
+-- | The bytes of `literal`, exactly; declines on anything else.
 pub let take_literal(literal: Str) -> Parse({}) =
     let refusal = Refusal/declined(Str/flatten(["expected \"", literal, "\""]));
     Parse {
@@ -175,6 +178,7 @@ pub let take_literal(literal: Str) -> Parse({}) =
             end,
     };
 
+-- | The end of the input; declines while anything remains.
 pub let eof: Parse({}) =
     Parse {
         run(input, pos) =
@@ -184,11 +188,9 @@ pub let eof: Parse({}) =
             end,
     };
 
+-- | The longest run of bytes `pred` accepts, possibly empty.
 pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
     Parse {
-        -- The walk carries the window's bound rather than testing for it: it counts what it has taken and only ever advances past an index `Nat/Lt/try` has already checked. Only the starting position is tested, because it is the one fact the caller supplies and `Parse` deliberately accepts an unchecked one — the same reason `any_byte` tests rather than demanding a bounded position.
-        --
-        -- Counting rather than tracking a stop is what leaves one invariant where there were two. `Nat/Le(pos + taken, len input)` *is* the window's bound, so it is carried into the slice with nothing done to it, and the ordering half the old `(start, end)` window also demanded has no proposition left to state. The count is what the loop naturally produces; the stop is recovered once, at the end, for the position the parse continues from.
         run(input, pos) =
             match Nat/Le/try(pos, Bytes/len(input))
             | none() => Result/failure(Refusal/declined("position past the end of input"))
@@ -220,9 +222,7 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
             end,
     };
 
--- | Run `p` for its result but not for its effect on the position: the input is left exactly where `p` started.
--- |
--- | This is the one shape the rest of this module cannot express. `or` restores a position only when its first branch *fails*, so it can look ahead by failing but never by succeeding -- and deciding between two parsers on more than the single byte `peek` shows needs exactly that.
+-- | `p` for its value alone: the position is left where `p` started.
 pub let lookahead(@A: Type, p: Parse(A)) -> Parse(A) =
     Parse {
         run(input, pos) =
@@ -232,7 +232,7 @@ pub let lookahead(@A: Type, p: Parse(A)) -> Parse(A) =
             end,
     };
 
--- | Everything from the current position to the end of input. Always succeeds where the position is legal, yielding the empty slice at the end.
+-- | Everything from the current position to the end of the input.
 pub let rest: Parse(Bytes) =
     Parse {
         run(input, pos) =
@@ -242,9 +242,7 @@ pub let rest: Parse(Bytes) =
             end,
     };
 
--- | The next `n` bytes, or everything that remains when fewer than `n` are left.
--- |
--- | The clamp `min(pos + n, len input)` is a branch rather than an arithmetic minimum, because the two cases want different windows: `n` bytes when they are all there, and everything that remains when they are not. Testing the window's own bound is what decides which, so the clamp and the proof are one test instead of two.
+-- | The next `n` bytes, or everything that remains when fewer are left.
 pub let take(n: Nat) -> Parse(Bytes) =
     Parse {
         run(input, pos) =
@@ -254,6 +252,7 @@ pub let take(n: Nat) -> Parse(Bytes) =
             end,
     };
 
+-- | `p` repeated until it declines or consumes nothing, the values collected.
 pub let many0(@A: Type, p: Parse(A)) -> Parse(List(A)) =
     Parse {
         run(input, pos) =
@@ -270,6 +269,7 @@ pub let many0(@A: Type, p: Parse(A)) -> Parse(List(A)) =
             go([], pos),
     };
 
+-- | `elem` separated by `sep`, zero or more times, the elements collected. A declined element after a separator gives the separator back.
 pub let sep_by0(@A: Type, @S: Type, elem: Parse(A), sep: Parse(S)) -> Parse(List(A)) =
     Parse {
         run(input, pos) =

@@ -1,15 +1,16 @@
--- Well-founded recursion for proofs. `WellFounded(R)` is the claim that every element is accessible under `R` — the constructive definition Rocq, Agda, Idris and Lean share — and `Accessible(R, x)` the predicate beneath it: `x` is accessible when everything below it is. `recurse` is the fixpoint over the predicate, and it is a proof principle only: its motive is `Prop`-valued because the recursion lives in the accessibility proof, which erasure deletes, so a program recursing through it would have nothing to run — programs recurse freely wherever erasure keeps the result. The names are adjectives about the thing they qualify, as `/std` names its propositions (`Finite`, `Valid`, `Canonical`): `WellFounded` is the claim a user makes about their own relation.
 use /std/{Nat};
 use /std/Nat/{Le};
 
+-- | `x` is accessible under `R`: everything below it is.
 pub induct Accessible(@A: Type, R: (A, A) -> Prop): (A) -> pub Prop
 | intro(@x: A, below: (y: A, r: R(y, x)) -> Accessible(R, y)): (x)
 end
 
+-- | Every element is accessible under `R`.
 pub let WellFounded(@A: Type, R: (A, A) -> Prop) -> Prop =
     (x: A) -> Accessible(R, x);
 
--- | The fixpoint: the step may assume `P` at every `y` below `x`, and the call descends through `below`, a constructor payload applied — which the totality analysis grades as a decrease, and which is what makes this usable in a proof position.
+-- | The fixpoint over accessibility: the step may assume `P` at every `y` below `x`.
 pub let recurse(
     @A: Type,
     @R: (A, A) -> Prop,
@@ -22,7 +23,6 @@ pub let recurse(
     | intro(@w, below) => step(w, (y, r) => recurse(P, step, y, below(y, r)))
     end;
 
--- | `<` on `Nat` is well-founded, by induction on a bound `k` under `n <= k`: nothing lies below zero, and below an `n <= k + 1` everything is `<= k`. The descent `Nat/Lt/strong` makes, written directly at `Prop` so the whole proof erases together.
 let lt_below(k: Nat, n: Nat, le: Le(n, k)) -> Accessible((a: Nat, b: Nat) => Nat/Lt(a, b), n) =
     match k
     | 0 =>
@@ -36,5 +36,6 @@ let lt_below(k: Nat, n: Nat, le: Le(n, k)) -> Accessible((a: Nat, b: Nat) => Nat
         Accessible/intro((m, lt) => lt_below(kp, m, Le/trans(Nat/Lt/le_succ_of_lt(m, n, lt), le)))
     end;
 
+-- | `<` on `Nat` is well-founded.
 pub let lt: WellFounded((a: Nat, b: Nat) => Nat/Lt(a, b)) =
     (n) => lt_below(n, n, Le/refl(n));

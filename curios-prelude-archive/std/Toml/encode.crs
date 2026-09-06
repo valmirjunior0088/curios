@@ -78,18 +78,13 @@ let offset_str(mins: Int) -> Str =
         Str/flatten([sign, pad(mag / 60, 2), ":", pad(mag % 60, 2)])
     end;
 
--- | Codec-owned rendering: `Int/to_str` negates through `Int/abs`, which sends the minimum value's magnitude (+2^30) outside the boxed envelope; render the minimum from its literal spelling instead of negating it.
 let int_str(n: Int) -> Str =
     choose
     | n >= +0 => Nat/to_str(Int/to_nat(n))
     | n == -1073741824 => "-1073741824"
-    -- The magnitude is `Int/abs`'s to compute now that the one value it cannot carry has its own arm above.
     | _ => Str/concat("-", Nat/to_str(Int/abs(n)))
     end;
 
--- | TOML has all three non-finites, and spells them `inf`, `-inf` and `nan`; a finite value takes `to_str`'s digits with the `+` dropped and a point added, since TOML's float must carry one.
--- |
--- | The four cases are told apart the way `/std/Flt`'s own `Spell` tells them apart: `is_finite` is one ordered pair between the infinities, and the sign then separates those two, with a NaN failing both comparisons because every IEEE comparison with one is false. This used to re-decode `to_le_bytes` into exponent and mantissa fields -- `Flt/to_str`'s own first four lines, with the mantissa test spelled differently -- so the same fact was written twice from the bit layout and could drift apart in either place.
 let flt_str(f: Flt) -> Str =
     choose
     | Bool/not(Flt/is_finite(f)) => choose | f > +0.0 => "inf" | f < +0.0 => "-inf" | _ => "nan" end
@@ -229,5 +224,6 @@ let encode_table(prefix: List(Str), m: Map(Toml)) -> Result(Str, Str) =
         end
     end;
 
+-- | `m` as one deterministic document: the root's plain values first, then its tables. A key that is not UTF-8 or an invalid calendar value is refused rather than written.
 pub let encode(m: Map(Toml)) -> Result(Str, Str) =
     encode_table([], m);

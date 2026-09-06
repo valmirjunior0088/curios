@@ -1,11 +1,11 @@
--- What the property runner draws an argument from: `draw(seed, size)` yields one value of the type and the seed that follows it, the value no larger than `size` admits, so a run that grows its size meets small counterexamples first. `all()` is the whole roster when the type is small enough to enumerate — `Bool`, `Ordering`, `Byte`, the unit, and `Option`, `Result` and the tuple shapes over rosters — so a property over such arguments is exhausted rather than sampled; a carrier whose enumeration is not cheap (`Char` has a million code points, `Nat` has no end) says `none` and is sampled. A thunk rather than a value, so a witness that is a global constant builds nothing at program start, and a roster's body allocates no closure, because a witness the prelude keeps is code every program carries.
---
--- Each carrier's witness lives in the module that owns the carrier, beside that module's `Spell`, and the positional tuple shapes are in `/std/Tuple`. Every carrier `Spell` renders is drawn but `Flt`, whose distribution — the non-finite values included — is a decision nobody has taken; the tuple shapes are drawn through arity 3, the shapes `Spell` renders.
 use /std/{Nat, Option, List};
 use /std/Test/{Seed};
 
+-- | How a value of `A` is drawn for a property test.
 pub concept Draw(A: Type): pub Type {
+    -- | Every value, when the type is small enough to enumerate; `none` otherwise.
     all() -> Option(List(A)),
+    -- | One value no larger than the size admits, and the seed after it.
     draw(Seed, Nat) -> {A, Seed},
 }
 

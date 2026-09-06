@@ -74,12 +74,12 @@ struct Bundle<'a> {
 }
 
 impl Bundle<'_> {
-    /// Where a module's page is, relative to the bundle: the module's path under the unit's prefix with `.html`, so `/json/parse/lexer` is `parse/lexer.html`. The root has no path of its own under the prefix and is the landing page, `index.html`.
+    /// Where a module's page is, relative to the bundle: the module's path under the unit's prefix with `.crs.html`, so `/json/parse/lexer` is `parse/lexer.crs.html`. The root has no path of its own under the prefix and is the landing page, `index.html`; the suffix is what keeps a module named `index` from landing on it, and a module page from ever sharing a name with a static file.
     fn page_path(&self, module: &Qualifier) -> String {
         let below = &module.segments()[self.record.prefix.segments().len()..];
         match below.is_empty() {
             true => "index.html".to_string(),
-            false => format!("{}.html", below.join("/")),
+            false => format!("{}.crs.html", below.join("/")),
         }
     }
 

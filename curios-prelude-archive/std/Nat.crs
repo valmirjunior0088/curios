@@ -19,12 +19,14 @@ let single_digit(d: Nat) -> Str =
     | _ => "0"
     end;
 
+-- | The decimal digits of `n`.
 pub let to_str(n: Nat) -> Str =
     match n < 10
     | true => single_digit(n)
     | false => Str/concat(to_str(n / 10), single_digit(n % 10))
     end;
 
+-- | The number a nonempty run of decimal digits spells, or `none` for any other text.
 pub let of_str(s: Str) -> Option(Nat) =
     match Str/is_empty(s)
     | true => Option/none()
@@ -40,42 +42,48 @@ pub let of_str(s: Str) -> Option(Nat) =
                 end)
     end;
 
+-- | `a - 1`, and `0` at zero.
 pub let pred(a: Nat) -> Nat =
     a - 1;
 
+-- | The smaller of the two.
 pub let min(a: Nat, b: Nat) -> Nat =
     match a < b | true => a | false => b end;
 
+-- | The larger of the two.
 pub let max(a: Nat, b: Nat) -> Nat =
     match a < b | true => b | false => a end;
 
--- | Structural on the exponent, so a type may mention it.
+-- | `base` to the power `exp`.
 pub let pow(base: Nat, exp: Nat) -> Nat =
     match exp | 0 => 1 | _pred + 1; acc => acc * base end;
 
--- | Euclid's algorithm. The recursion is on a remainder, which nothing grades as a decrease: `gcd` is general recursion, classified partial and retained, and a type may not mention it. Casing on `b` rather than testing `b == 0` is what discharges the remainder's bound — `0 < bp + 1` is decided by the successor, where `b == 0 = false` says nothing the comparison can use.
+-- | The greatest common divisor, with `gcd(a, 0)` as `a`. General recursion, so a type may not mention it.
 pub let gcd(a: Nat, b: Nat) -> Nat =
     match b | 0 => a | bp + 1 => gcd(bp + 1, a % (bp + 1)) end;
 
--- | `lcm(0, 0)` is `0`, the one case whose divisor is zero.
+-- | The least common multiple, with `lcm(0, 0)` as `0`.
 pub let lcm(a: Nat, b: Nat) -> Nat =
     match gcd(a, b) | 0 => 0 | g + 1 => a * b / (g + 1) end;
 
--- | The exponent of the highest power of two not above `n`, with `log2(0)` answering `0` because the total spelling wants an answer. The recursion halves under a guard that rules zero out, which the arithmetic rung reads as a decrease, so unlike `gcd` and `sqrt` this one is total.
+-- | The exponent of the highest power of two not above `n`, and `0` at zero.
 pub let log2(n: Nat) -> Nat =
     match n < 2 | true => 0 | false => log2(n / 2) + 1 end;
 
--- | The floor of the square root, found by counting up: a step per root rather than Newton's iteration, whose division by a computed value would owe a bound at every step. General recursion, so partial and retained.
+-- | The floor of the square root. General recursion, so a type may not mention it.
 pub let sqrt(n: Nat) -> Nat =
     let go(r: Nat) -> Nat = match (r + 1) * (r + 1) <= n | true => go(r + 1) | false => r end;
     go(0);
 
+-- | Whether `n` is even.
 pub let is_even(n: Nat) -> Bool =
     n % 2 == 0;
 
+-- | Whether `lo <= c <= hi`.
 pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
     match c >= lo | true => c <= hi | false => false end;
 
+-- | The order of the two.
 pub let cmp(x: Nat, y: Nat) -> Ordering =
     choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
@@ -103,11 +111,13 @@ satisfy Multiply(Nat) {
     mul = mul,
 }
 
+-- | The divisor must be positive: `Lt(0, b)`.
 satisfy Divide(Nat) {
     Ok(b) = /syn/Nat/Lt(0, b),
     div = div,
 }
 
+-- | The divisor must be positive: `Lt(0, b)`.
 satisfy Remainder(Nat) {
     Ok(b) = /syn/Nat/Lt(0, b),
     rem = rem,
@@ -125,7 +135,7 @@ satisfy Ordered(Nat) {
     cmp = cmp,
 }
 
--- | A number in `0 ..= size`: the size is the bound, so the first cases are the smallest numbers.
+-- | A number from `0` to `size`, so the smallest cases come first. No roster: the type has no end.
 satisfy Test/Draw(Nat) {
     all() = Option/none(),
     draw(seed, size) =
@@ -133,9 +143,14 @@ satisfy Test/Draw(Nat) {
         (n % (size + 1), rest),
 }
 
--- | The two ordering propositions are facades: the module's namesake binding is the proposition and the laws about it nest underneath — `Nat/Lt` is the decided `a < b` and `Nat/Lt/try` the procedure that decides it, `Nat/Le` the decided `a <= b` and `Nat/Le/trans` its transitivity. `<=` has a second form beneath the first, `Nat/Le/Ind`, which is the same relation by induction; a path now says which of the two it is, where the old `Nat/Le`/`Nat/Le/Ind` pair said only that they were spelled differently.
+-- | `a < b` as a decided proposition, and its bridges to the inductive order.
+-- |
+-- | `True` when the comparison holds and `False` otherwise, so a literal pair discharges it by reduction and a comparison a guard has taken discharges it with nothing written. Where a proof has to recurse, `ind_of_lt` crosses into `Le/Ind`.
 pub mod Lt;
 pub use Lt/{let Lt};
 
+-- | `a <= b` as a decided proposition, and its crossings with the inductive form beneath it.
+-- |
+-- | Decided, so a guard already taken discharges it for free but nothing can recurse over it; `Ind` is the same relation by induction, which a proof can walk. `of_ind` and `to_ind` are the passage between the two.
 pub mod Le;
 pub use Le/{let Le};

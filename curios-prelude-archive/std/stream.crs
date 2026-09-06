@@ -1,13 +1,13 @@
--- What a stream is to a program: something read and written in chunks, where a read may park the fiber until a peer answers. `Chunk` is one read's answer; `Read` and `Write` are the concepts every stream type satisfies — a `File`, a `Socket`, a child's pipe, the standard streams — and the functions below are written once over them. The loops that turn a raw handle's `would_block` into a park live in `/std/Async/raw`, where a type's witness reaches them; a program holds no raw handle, so it reaches a stream only through a type that does.
 use /std/{Bytes, Byte, Nat, Option, Result, Io, Async};
 
+-- | One read's answer: bytes, the end of the stream, or a failure.
 pub induct Chunk: pub Type
 | chunk(Bytes)
 | eof()
 | error(Io/Error)
 end
 
--- | One read row's answer as a chunk: `eof` at the end of the stream, an `error` for a failure status, and the bytes otherwise. A `would_block` status is a failure here — the synchronous reads that reach this never wait, and `Async/raw` parks on it before decoding.
+-- | A read row's status and bytes as a chunk; a `would_block` status is a failure here.
 pub let of_status(status: Nat, bytes: Bytes) -> Chunk =
     match Io/Error/of(status)
     | some(e) => Chunk/error(e)
@@ -15,20 +15,21 @@ pub let of_status(status: Nat, bytes: Bytes) -> Chunk =
         match status == /sys/status/eof | true => Chunk/eof() | false => Chunk/chunk(bytes) end
     end;
 
+-- | What a stream is read through: up to `n` bytes, parking the fiber until some arrive.
 pub concept Read(S: Type): pub Type {
     read(S, Nat) -> Async(Chunk),
 }
 
--- | A write takes the whole of its bytes, resending a short write, so its outcome is a status alone.
+-- | What a stream is written through: the whole of the bytes, a short write resent.
 pub concept Write(S: Type): pub Type {
     write(S, Bytes) -> Async(Result(Io/Error, {})),
 }
 
--- | Everything up to the end of the stream. `eof` is the stream's orderly terminator; an `error` means it ended without one, so the accumulated prefix is not the content and is dropped rather than passed off as complete.
+-- | Everything up to the end of the stream; a failure before the end drops what was read.
 pub let read_all(@S: Type, use Read(S), s: S) -> Async(Result(Io/Error, Bytes)) =
     Async/drain((n) => Read/read(s, n));
 
--- | The bytes before the first `delimiter`, which is consumed and dropped, or everything read when the stream ends first. One byte per read, so nothing past the delimiter is taken from the stream: cheap at a serial line's pace, and the buffered reader that reads ahead is the deferred form.
+-- | The bytes before the first `delimiter`, which is consumed and dropped, or everything read when the stream ends first.
 pub let read_until(@S: Type, use Read(S), s: S, delimiter: Byte) -> Async(Result(Io/Error, Bytes)) =
     let go(acc: Bytes) -> Async(Result(Io/Error, Bytes)) =
         let c = Read/read(s, 1)!;

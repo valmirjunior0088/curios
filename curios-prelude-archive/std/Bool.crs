@@ -3,12 +3,15 @@ pub use /sys/Bool/{and, or, xor, eql};
 use /std/{Nat, Str, Option, Eq, False, True, Equal, Or, And, Show, Spell, Ordering, Compare,
     Ordered, Test};
 
+-- | The other value.
 pub let not(b: Bool) -> Bool =
     xor(b, true);
 
+-- | `true` or `false`, as written.
 pub let to_str(b: Bool) -> Str =
     match b | true => "true" | false => "false" end;
 
+-- | The value `to_str` writes, or `none` for any other text.
 pub let of_str(s: Str) -> Option(Bool) =
     choose
     | s == "true" => Option/some(true)
@@ -16,11 +19,10 @@ pub let of_str(s: Str) -> Option(Bool) =
     | _ => Option/none()
     end;
 
--- | The two boolean constructors are distinct: a proof otherwise is absurd. Every `match b : Prop` decision procedure discharges its impossible branch through this.
+-- | `false` and `true` are distinct: the absurdity every decision procedure over a `Bool` discharges its impossible arm with.
 pub let false_neq_true(p: Eq(false, true)) -> False =
     Eq/subst((b: Bool) => match b | true => False | false => True end, p, True/qed());
 
--- | `xor` is disequality on one bit, so `!=` needs no negation here.
 satisfy Equal(Bool) {
     eql = eql,
     neq = xor,

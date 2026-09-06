@@ -1,6 +1,5 @@
 use /std/{Io};
 
--- | The resume action is a description rather than a `() -> {}` thunk: delaying an effect is what `Io` is for, so the hand-rolled thunk that used to spell it here has nothing left to do.
 pub struct Waker: Type {
     Io({}),
 }

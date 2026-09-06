@@ -85,7 +85,7 @@ fn document_writes_the_bundle_under_the_store() {
         landing.contains("Shapes &amp; their areas."),
         "the manifest's description, escaped: {landing}"
     );
-    assert!(landing.contains("href=\"geometry.html\""), "{landing}");
+    assert!(landing.contains("href=\"geometry.crs.html\""), "{landing}");
     assert!(landing.contains("id=\"Shape\""), "{landing}");
     assert!(landing.contains("id=\"Shape/circle\""), "{landing}");
     assert!(
@@ -102,7 +102,7 @@ fn document_writes_the_bundle_under_the_store() {
     );
 
     let geometry =
-        fs::read_to_string(bundle.join("geometry.html")).expect("the child module's page");
+        fs::read_to_string(bundle.join("geometry.crs.html")).expect("the child module's page");
     assert!(
         geometry.contains("<p class=\"lead\">Points.</p>"),
         "{geometry}"
@@ -129,7 +129,7 @@ fn output_names_another_directory() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(site.join("index.html").is_file());
-    assert!(site.join("geometry.html").is_file());
+    assert!(site.join("geometry.crs.html").is_file());
     assert!(
         !root.join(".curios/documentation").exists(),
         "the store holds nothing when the pages went elsewhere"
@@ -163,11 +163,11 @@ fn the_prelude_image_documents_the_standard_library_into_output() {
         landing.contains("The standard library"),
         "the image's description: {landing}"
     );
-    assert!(landing.contains("href=\"Result.html\""), "{landing}");
-    let result = fs::read_to_string(site.join("Result.html")).expect("a module's page");
+    assert!(landing.contains("href=\"Result.crs.html\""), "{landing}");
+    let result = fs::read_to_string(site.join("Result.crs.html")).expect("a module's page");
     assert!(result.contains("id=\"Result/success\""), "{result}");
     // A nested module's page climbs back to the bundle's static files and the landing page.
-    let signal = fs::read_to_string(site.join("Async/Signal.html")).expect("a nested page");
+    let signal = fs::read_to_string(site.join("Async/Signal.crs.html")).expect("a nested page");
     assert!(
         signal.contains("href=\"../static/style.css\"")
             && signal.contains("href=\"../index.html\""),

@@ -5,13 +5,16 @@ pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xo
 use /std/{Nat, Str, Option, Ordering, Equal, Compare, Add, Subtract, Multiply, Divide, Remainder,
     Show, Spell, Ordered, True, False, Test};
 
+-- | The value with its sign written, `+3` or `-3`, so the text re-parses as an `Int` without context.
 pub let to_str(n: Int) -> Str =
     let mag = Nat/to_str(abs(n));
     match n >= +0 | true => Str/concat("+", mag) | false => Str/concat("-", mag) end;
 
+-- | The bitwise complement.
 pub let not(x: Int) -> Int =
     xor(x, -1);
 
+-- | The number an optional sign and a nonempty run of decimal digits spell, or `none` for any other text.
 pub let of_str(s: Str) -> Option(Int) =
     match Str/is_empty(s)
     | true => Option/none()
@@ -30,26 +33,29 @@ pub let of_str(s: Str) -> Option(Int) =
         end
     end;
 
--- | The procedure that decides `0 <= n`, the `Int` twin of `Nat/Lt/try`. `Int` carries no inductive ordering family — `Nat/Le/Ind` has constructors a proof can recurse over, and there is no counterpart here — so an `Int` bound is *decided* or it is not had at all.
+-- | The procedure that decides `0 <= n`: the evidence when it holds, `none` otherwise.
 pub let non_neg(n: Int) -> Option(NonNeg(n)) =
     match n >= +0: (r) => Option(match r: (_) => Prop | true => True | false => False end)
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
--- | Both branches decide their own bound rather than deriving the second from the first. That `0 - n` is non-negative whenever `n` is not would need `Int` arithmetic reasoning the library has no family to carry, so the negated branch asks the same question again — and its own failure, which no `Int` can reach, answers zero rather than pretending to a magnitude it did not compute.
+-- | The magnitude, as a `Nat`.
 pub let abs(n: Int) -> Nat =
     match non_neg(n)
     | some(ok) => to_nat(n, @ok)
     | none() => match non_neg(+0 - n) | some(ok) => to_nat(+0 - n, @ok) | none() => 0 end
     end;
 
+-- | The order of the two.
 pub let cmp(x: Int, y: Int) -> Ordering =
     choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
+-- | The smaller of the two.
 pub let min(a: Int, b: Int) -> Int =
     match a < b | true => a | false => b end;
 
+-- | The larger of the two.
 pub let max(a: Int, b: Int) -> Int =
     match a < b | true => b | false => a end;
 
@@ -81,11 +87,13 @@ satisfy Multiply(Int) {
     mul = mul,
 }
 
+-- | The divisor must be nonzero.
 satisfy Divide(Int) {
     Ok(b) = NonZero(b),
     div = div,
 }
 
+-- | The divisor must be nonzero.
 satisfy Remainder(Int) {
     Ok(b) = NonZero(b),
     rem = rem,
@@ -95,7 +103,6 @@ satisfy Show(Int) {
     show = to_str,
 }
 
--- | `to_str` already writes an explicit sign, which is exactly what keeps the text `Int`-typed without context: a bare `3` would re-parse as `Nat`.
 satisfy Spell(Int) {
     spell = to_str,
 }
@@ -104,7 +111,7 @@ satisfy Ordered(Int) {
     cmp = cmp,
 }
 
--- | A magnitude drawn as a `Nat`, and one more bit for the sign.
+-- | A magnitude drawn as a `Nat`, with either sign.
 satisfy Test/Draw(Int) {
     all() = Option/none(),
     draw(seed, size) =

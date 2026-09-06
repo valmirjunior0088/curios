@@ -1,5 +1,6 @@
 use /std/{Ordering, Equal};
 
+-- | A total order: `cmp` decides `lt`, `eq` or `gt`, and `Equal` is its superclass.
 pub concept Ordered(A: Type): pub Type {
     use Equal(A),
     cmp(A, A) -> Ordering,

@@ -1,8 +1,6 @@
--- `a <= b` as an inductive proposition: `z` proves `0 <= n` and `s` lifts `a <= b` to `a + 1 <= b + 1`. The family is this module's namesake, so `Nat/Le/Ind` is the proposition, `Nat/Le/Ind/z` and `Nat/Le/Ind/s` are its constructors, and the laws about it sit alongside them.
---
--- It lives under `Nat/Le` rather than beside it because the two are one relation in two forms, and the old pair of names said which was which nowhere: `Nat/Le` is `a <= b` decided, this is `a <= b` by induction, and a reader meeting either now sees the other in its path.
 use /std/{Nat};
 
+-- | `a <= b`, built from `0 <= n` and `a <= b` gives `a + 1 <= b + 1`.
 pub induct Ind: (Nat, Nat) -> pub Prop
 | z(@n: Nat): (0, n)
 | s(@a: Nat, @b: Nat, prev: Ind(a, b)): (a + 1, b + 1)
@@ -10,23 +8,28 @@ end
 
 pub use Ind/*;
 
+-- | `n <= n`.
 pub let refl(n: Nat) -> Ind(n, n) =
     match n: (m) => Ind(m, m) | 0 => Ind/z() | _pred + 1; ih => Ind/s(ih) end;
 
+-- | `a <= b` gives `a <= b + 1`.
 pub let succ_r(@a: Nat, @b: Nat, p: Ind(a, b)) -> Ind(a, b + 1) =
     match p: (x, y, _w) => Ind(x, y + 1)
     | z(@_) => Ind/z()
     | s(@_, @_, prev) => Ind/s(succ_r(prev))
     end;
 
+-- | `a <= a + k`.
 pub let add_r(a: Nat, k: Nat) -> Ind(a, a + k) =
     match k: (m) => Ind(a, a + m) | 0 => refl(a) | _pred + 1; ih => succ_r(ih) end;
 
+-- | Transitivity.
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Ind(a, b), q: Ind(b, c)) -> Ind(a, c) =
     match p
     | z(@_) => Ind/z()
     | s(@_a2, @_b2, prev) => match q | s(@_b3, @_c3, q2) => Ind/s(trans(prev, q2)) end
     end;
 
+-- | `a <= b` gives `n + a <= n + b`.
 pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Ind(a, b)) -> Ind(n + a, n + b) =
     match n: (m) => Ind(m + a, m + b) | 0 => p | _m + 1; ih => Ind/s(ih) end;

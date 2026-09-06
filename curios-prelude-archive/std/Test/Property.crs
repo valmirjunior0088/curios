@@ -1,14 +1,17 @@
--- The per-case judgment behind a property test: `probe(prop, seed, size)` puts one drawn case to the claim and answers in `Verdict`, purely — only `/syn/Test`'s own witness sees a `Test`, since a description is matched nowhere else. `extent` is how many cases the claim has when every argument has a roster (`Draw/all`), capped so no product leaves the envelope, and `exhaust` puts each of those cases to the claim, so `run` enumerates a small finite domain instead of sampling it. The witnesses at the function shapes draw every argument, apply, and hand the result to the premise on the result type, so a curried spelling composes through recursion while a declaration's uncurried type finds its arity directly; the result type is not part of a function key, so `-> Test` at each arity is the concept's one canonical discipline. The ceiling is eight parameters, matching the tuple shapes'.
 use /std/{Nat, Str, List, Option, Spell};
 use /std/Test/{Seed, Draw, Verdict};
 
+-- | How a claim is judged case by case.
 pub concept Property(A: Type): pub Type {
+    -- | One drawn case put to the claim.
     probe(A, Seed, Nat) -> Verdict,
+    -- | How many cases the claim has when every argument has a roster, or `none`.
     extent() -> Option(Nat),
+    -- | Every case put to the claim, in roster order.
     exhaust(A) -> List(Verdict),
 }
 
--- | A claim whose extent fits the case budget is decided by every case it has, in roster order; any other is probed `cases` times from a seed split once per case, the case's index as its size. The first failure ends the run either way.
+-- | The claim decided by every case it has when its extent fits `cases`, and probed `cases` times from `seed` otherwise. The first failure ends the run.
 pub let run(@A: Type, use Property(A), prop: A, seed: Seed, cases: Nat) -> Verdict =
     match Property/extent(@A)()
     | some(extent) =>
@@ -43,14 +46,12 @@ let first_failure(verdicts: List(Verdict)) -> Verdict =
         Verdict/passed(),
         (here, acc) => match acc | passed() => here | failed(_) => acc end);
 
--- | A roster past this many cases is as good as none: nothing would enumerate it, and keeping every factor at or below the ceiling is what keeps a product of two inside the i31 envelope before it is compared.
 let ceiling: Nat =
     1024;
 
 let bounded(n: Nat) -> Option(Nat) =
     match n <= ceiling | true => Option/some(n) | false => Option/none() end;
 
--- | The roster's size, `none` when the type has no roster or its size is past the ceiling.
 let roster(@A: Type, use Draw(A)) -> Option(Nat) =
     Option/bind(Draw/all(@A)(), (xs) => bounded(List/len(xs)));
 
@@ -62,11 +63,9 @@ let product(a: Option(Nat), b: Option(Nat)) -> Option(Nat) =
                 b,
                 (y) => match y <= ceiling | true => bounded(x * y) | false => Option/none() end));
 
--- | Every value of the roster, or nothing when there is none: what `exhaust` walks, and consulted only under an extent that fits.
 let values(@A: Type, use Draw(A)) -> List(A) =
     Option/unwrap_or(Draw/all(@A)(), []);
 
--- | A failure names the case that produced it: the arguments, spelled in parameter order, before the inner report.
 let counterexample(arguments: List(Str), verdict: Verdict) -> Verdict =
     match verdict
     | passed() => Verdict/passed()
@@ -75,6 +74,7 @@ let counterexample(arguments: List(Str), verdict: Verdict) -> Verdict =
             Str/concat("for ", Str/concat(Str/join(", ", arguments), Str/concat(": ", message))))
     end;
 
+-- | A function is judged by drawing its argument and judging the result; a failure names the argument.
 satisfy (@A: Type, @R: Type, use Draw(A), use Spell(A), use Property(R)) => Property((A) -> R) {
     probe(prop, seed, size) =
         let (a, rest) = Draw/draw(@A, seed, size);

@@ -1,18 +1,17 @@
 use /std/{Bytes, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io, stream};
 use /std/time/{Duration};
 
--- | Both are scheduler plumbing: their operations exist so this module and its descendants can drive a fiber, not so a program can complete someone else's future. The modules stay private and only the two type names are re-exported, which leaves `Future/fulfill` and friends reachable within `/std/Async` alone.
 mod Waker;
 pub use Waker/{let Waker};
 
 mod Future;
 pub use Future/{let Future};
 
--- | The one park a program may take on its own account: a flag raised by one fiber and waited on by another, with no handle or timer beneath it. Public where `Future` is not because an event loop has a use for it — park until something was queued — and it completes nothing of anyone else's.
+-- | A flag one fiber raises and another parks on: the one park a program takes that waits on no handle and no timer.
 pub mod Signal;
 pub use Signal/{let Signal};
 
--- | The would-block loops over a raw handle, public so a stream type's witness reaches them from its own module; it is also where `wait` stays reachable for the modules that park on a handle of their own.
+-- | The loops that turn a raw handle's `would_block` into a park, for a stream type's own witness.
 pub mod raw;
 
 struct Token: Type {
@@ -25,15 +24,11 @@ let cancel_token(t: Token) -> Io({}) =
 let is_cancelled(t: Token) -> Io(Bool) =
     Cell/get(t.0);
 
--- | A finalizer and whether it has run. The flag, not a key, is what makes a release idempotent: the first to reach the guard — the fiber's own `using` on its way out, or the scheduler reclaiming a fiber that never came back — runs the finalizer and marks it, and every later reach is a no-op. Nothing identifies a guard from outside, so a program brackets a resource without holding anything the scheduler could be handed.
 struct Guard: Type {
     done: Cell(Bool),
     release: Io({}),
 }
 
--- | `Step` is the suspension, and it recurses through `Io` because computing what comes next is itself a host effect — reading a socket to decide whether to yield. That is the whole of what `Pause/defer` used to spell with a `() -> Async(A)` thunk: delay, hand-rolled, with no type behind it.
--- |
--- | A struct cannot join an `induct … and …` group, so `fork` names the raw continuation rather than `Fiber`. `Pause` is private, so nothing about that reaches a consumer.
 induct Pause: Type
 | wait(handle: /sys/Handle, interest: Nat)
 | sleep(Duration)
@@ -46,16 +41,16 @@ and Step(A: Type): Type
 | step(pause: Pause, next: Io(Step(A)))
 end
 
--- | Nominal, not a transparent alias for `Io(Step(A))`: a witness is keyed by the rigid head of its concept's parameters, and an alias would reduce to `Io`'s head and collide with `Monad(Io)`. The newtype is what lets `Async` own its own key, and so its own `!`.
--- |
--- | Its representation stays private, which keeps `Step` out of the public interface entirely.
+-- | A fiber: a computation that may park and resume.
 pub struct Async(A: Type): Type {
     Io(Step(A)),
 }
 
+-- | A fiber that answers nothing.
 pub let Fiber: Type =
     Async({});
 
+-- | `a`, with no suspension.
 pub let pure(@A: Type, a: A) -> Async(A) =
     Async { Io/pure(Step/done(a)) };
 
@@ -63,31 +58,32 @@ let bind_raw(@A: Type, @B: Type, m: Io(Step(A)), f: (A) -> Io(Step(B))) -> Io(St
     let s = m!;
     match s | done(a) => f(a) | step(p, k) => Io/pure(Step/step(p, bind_raw(k, f))) end;
 
+-- | `m`, then `f` on its answer.
 pub let bind(@A: Type, @B: Type, m: Async(A), f: (A) -> Async(B)) -> Async(B) =
     Async { bind_raw(m.0, (a) => f(a).0) };
 
+-- | `f` on the answer.
 pub let map(@A: Type, @B: Type, m: Async(A), f: (A) -> B) -> Async(B) =
     bind(m, (a) => pure(f(a)));
 
--- | The seam between the two monads: an `Io` action as one non-suspending step. Every host operation a fiber performs arrives through here.
--- |
--- | Built with an explicit `Io/bind` rather than `!`: a struct literal's field is not its own region, so a `!` here would hoist into this body — which is `Async`-typed — and ask for `Monad(Io)` where `Monad(Async)` is wanted.
+-- | An `Io` action as one step that never parks.
 pub let lift(@A: Type, action: Io(A)) -> Async(A) =
     Async { Io/bind(action, (a) => Io/pure(Step/done(a))) };
 
 let suspend(p: Pause) -> Async({}) =
     Async { Io/pure(Step/step(p, Io/pure(Step/done(())))) };
 
--- | Park until `h` polls ready for `ev`. Private: a program holds no handle, and `/std`'s own stream modules reach it through `raw`.
 let wait(h: /sys/Handle, ev: Nat) -> Async({}) =
     suspend(Pause/wait(h, ev));
 
+-- | Park for `d`.
 pub let sleep(d: Duration) -> Async({}) =
     suspend(Pause/sleep(d));
 
 let park(register: (Waker) -> Io({})) -> Async({}) =
     suspend(Pause/park(register));
 
+-- | Park once, letting every other runnable fiber take a turn.
 pub let yield_now: Async({}) =
     suspend(Pause/yield_now());
 
@@ -97,7 +93,7 @@ let acquire(g: Guard) -> Async({}) =
 let fork_with(child: Fiber, t: Token) -> Async({}) =
     suspend(Pause/fork(child.0, t));
 
--- | `body` with `fin` registered as what runs when it is over: on the way out here, or by the scheduler when the task is cancelled, dropped at the root's end, or found parked at a deadlock — both exits, exactly once.
+-- | `body` with `fin` run when it is over: on the way out, or by the scheduler when the task is cancelled, dropped at the root's end, or found parked at a deadlock. Both exits, exactly once.
 pub let using(@A: Type, fin: Io({}), body: Async(A)) -> Async(A) =
     let done = Cell/new(false)!;
     let g = Guard { done = done, release = fin };
@@ -106,11 +102,12 @@ pub let using(@A: Type, fin: Io({}), body: Async(A)) -> Async(A) =
     let _ = run_guard(g)!;
     pure(a);
 
+-- | Fork `body` as a fiber of its own, which runs before the forker takes another step.
 pub let go(body: Fiber) -> Async({}) =
     let c = Cell/new(false)!;
     fork_with(body, Token { c });
 
--- | `eof` is the stream's orderly terminator; an `error` means it ended without one, so the accumulated prefix is not the content and is dropped rather than passed off as complete.
+-- | Everything `read` yields up to the end of the stream; a failure before the end drops what was read.
 pub let drain(read: (Nat) -> Async(stream/Chunk)) -> Async(Result(Io/Error, Bytes)) =
     let go(acc: Bytes) -> Async(Result(Io/Error, Bytes)) =
         let r = read(4096)!;
@@ -121,6 +118,7 @@ pub let drain(read: (Nat) -> Async(stream/Chunk)) -> Async(Result(Io/Error, Byte
         end;
     go(x[]);
 
+-- | The value `f` is fulfilled with, parking until it is.
 pub let await(@A: Type, f: Future(A)) -> Async(A) =
     let polled = Future/poll(f)!;
     match polled
@@ -171,7 +169,6 @@ let run_guards(gs: List(Guard)) -> Io({}) =
         run_guards(more)
     end;
 
--- | The guards not yet run, so a fiber that brackets in a loop does not carry every guard it has already released.
 let live_guards(gs: List(Guard)) -> Io(List(Guard)) =
     match gs
     | [] => Io/pure([])
@@ -260,7 +257,6 @@ let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parke
             | true =>
                 let _ = run_guards(p.guards)!;
                 walk(tail, i + 1, woken, still)
-            -- The index is in range because `poll` answers one result per handle, which is the host's promise rather than a fact about this program: `results` crosses the boundary, so it is read through the checked accessor and a missing entry reads as no events, leaving the job parked.
             | false =>
                 match is_ready(Option/unwrap_or(List/try_get(results, i), 0), p.interest)
                 | true =>
@@ -330,12 +326,11 @@ let expire_sleepers(sleeping: List(Sleeper)) -> Io({List(Job), List(Sleeper)}) =
         end;
     walk(sleeping, [], []);
 
--- | No runnable job, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. `parked` is how many fibers were waiting on a waker nothing will fire — the one place a fiber can still be at that point, so the number that says what was stuck.
+-- | No runnable fiber, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. `parked` is how many fibers wait on a waker nothing will fire.
 pub struct Deadlock: pub Type {
     parked: Nat,
 }
 
--- | The scheduler's four work queues, named together rather than threaded as loose cells through one closure. The root's result cell is deliberately *not* a field: it is the only piece that knows the answer type, so keeping it out leaves every function that merely moves fibers around monomorphic.
 struct Queues: Type {
     runq: Cell(List(Job)),
     blocked: Cell(List(Parked)),
@@ -343,7 +338,6 @@ struct Queues: Type {
     parked: Cell(List(Slot)),
 }
 
--- | Appends, and `drive` pops the head, so the run queue is FIFO — which is what makes `yield_now` yield. Prepending made it a stack: the yielder came back off the top ahead of every fiber already waiting, so a yield loop starved its siblings and a wake resumed fibers in reverse arrival order.
 let enqueue(q: Queues, j: Job) -> Io({}) =
     let current = Cell/get(q.runq)!;
     Cell/set(q.runq, [..current, j]);
@@ -380,8 +374,6 @@ let park_on_waker(q: Queues, job: Job, register: (Waker) -> Io({})) -> Io({}) =
     let slot = Cell/new(Option/some(job))!;
     let current = Cell/get(q.parked)!;
     let _ = Cell/set(q.parked, [slot, ..current])!;
-    -- Built with explicit `bind`, not `!`: the waker is a description the scheduler runs when the slot is woken, and a `!` here would hoist the reads into *this* region and perform them now.
-    -- Emptying the slot before enqueueing is what makes a second wake a no-op.
     let waker =
         Io/bind(
             Cell/get(slot),
@@ -392,7 +384,6 @@ let park_on_waker(q: Queues, job: Job, register: (Waker) -> Io({})) -> Io({}) =
                 end);
     register(Waker/new(waker));
 
--- | Run one fiber until it suspends, finishes, or is found cancelled. A cancelled or finished fiber releases its guards and is not requeued; a suspended one is handed to `resume_after` with the continuation that will resume it.
 let serve(q: Queues, job: Job) -> Io({}) =
     let dead = is_cancelled(job.token)!;
     match dead
@@ -404,25 +395,21 @@ let serve(q: Queues, job: Job) -> Io({}) =
         | step(pause, next) => resume_after(q, job, pause, next)
         end
     end
--- | Where each suspension reason decides what becomes of the fiber. `resumed` is the same job with its continuation in place — every arm needs it, so it is built once here rather than six times below.
 and resume_after(q: Queues, job: Job, pause: Pause, next: Io(Step({}))) -> Io({}) =
     let resumed = Job { ..job, resume = Async { next } };
     match pause
     | wait(h, interest) => block_on_handle(q, resumed, h, interest)
     | sleep(d) => sleep_until(q, resumed, d)
-    -- The child ahead of the forker's continuation: a `go` child runs — and acquires whatever its body acquires — before the forker takes another step, which is what lets a root that finishes immediately still hand a just-forked handler its first turn. The stack queue gave this ordering by accident; the FIFO queue states it.
     | fork(child, child_token) =>
         let _ = enqueue(q, Job { resume = Async { child }, token = child_token, guards = [] })!;
         enqueue(q, resumed)
     | park(register) => park_on_waker(q, resumed, register)
-    -- Acquiring a guard is bookkeeping, not suspension: the fiber is served again immediately rather than going back through the queue. The guards it already released are dropped on the way.
     | acquire(g) =>
         let kept = live_guards(job.guards)!;
         serve(q, Job { ..resumed, guards = [g, ..kept] })
     | yield_now() => enqueue(q, resumed)
     end;
 
--- | Release every guard still held anywhere in the scheduler. Runs on both exits — the root finishing and the deadlock — so a handle opened by a fiber that never resumes is still closed.
 let release_everything(q: Queues) -> Io({}) =
     let runnable = Cell/get(q.runq)!;
     let _ = drain_jobs(runnable)!;
@@ -438,13 +425,11 @@ let forget_cancelled_wakers(q: Queues) -> Io({}) =
     let live = sweep_parked(slots)!;
     Cell/set(q.parked, live);
 
--- | Nothing runnable and nothing that could become runnable: no handle to poll and no timer to expire. This is the deadlock condition.
 let is_stalled(q: Queues) -> Io(Bool) =
     let blocked = Cell/get(q.blocked)!;
     let sleeping = Cell/get(q.sleeping)!;
     Io/pure(List/len(blocked) == 0 && List/len(sleeping) == 0);
 
--- | Block until a handle is ready or the earliest timer is due, then move everything woken onto the run queue.
 let wake_ready(q: Queues) -> Io({}) =
     let sleeping = Cell/get(q.sleeping)!;
     let timeout = sleep_timeout(sleeping)!;
@@ -455,7 +440,6 @@ let wake_ready(q: Queues) -> Io({}) =
     let _ = Cell/set(q.blocked, polled.1)!;
     Cell/set(q.sleeping, expired.1);
 
--- | The root fiber, wrapped so that finishing it records the answer where `drive` will find it. This is the only place the answer type appears in the scheduler.
 let root_job(@A: Type, root: Async(A), answer: Cell(Option(A)), token: Token) -> Job =
     Job {
         resume = bind(root, (a) => bind(lift(Cell/set(answer, Option/some(a))), (_) => pure(()))),
@@ -463,7 +447,6 @@ let root_job(@A: Type, root: Async(A), answer: Cell(Option(A)), token: Token) ->
         guards = [],
     };
 
--- | The scheduler loop: serve whatever is runnable, and when nothing is, either wait for the host or report that nothing ever will be.
 let drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(Deadlock, A)) =
     let finished = Cell/get(answer)!;
     match finished
@@ -477,7 +460,6 @@ let drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(Deadlock, A
             let _ = forget_cancelled_wakers(q)!;
             let stalled = is_stalled(q)!;
             match stalled
-            -- Reported to the caller rather than fatal: terminating the process is `run`'s decision, not the scheduler's.
             | true =>
                 let slots = Cell/get(q.parked)!;
                 let _ = release_everything(q)!;
@@ -493,6 +475,7 @@ let drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(Deadlock, A
         end
     end;
 
+-- | Drive `root` to its answer, or to the deadlock that stops it.
 pub let block_on(@A: Type, root: Async(A)) -> Io(Result(Deadlock, A)) =
     let runq: Cell(List(Job)) = Cell/new([])!;
     let blocked: Cell(List(Parked)) = Cell/new([])!;
@@ -504,6 +487,7 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(Deadlock, A)) =
     let _ = enqueue(q, root_job(root, answer, Token { root_cancelled }))!;
     drive(q, answer);
 
+-- | Drive `main` to its end; a deadlock is reported on standard error and exits with 1.
 pub let run(main: Async({})) -> Io({}) =
     let outcome = block_on(main)!;
     match outcome
@@ -519,11 +503,13 @@ pub let run(main: Async({})) -> Io({}) =
         /sys/proc/exit(1)
     end;
 
+-- | A spawned fiber: its answer, and the means to cancel it.
 pub struct Task(A: Type): Type {
     result: Future(A),
     token: Token,
 }
 
+-- | Fork `body` as a task whose answer `join` waits for.
 pub let spawn(@A: Type, body: Async(A)) -> Async(Task(A)) =
     let f = Future/new()!;
     let c = Cell/new(false)!;
@@ -535,9 +521,11 @@ pub let spawn(@A: Type, body: Async(A)) -> Async(Task(A)) =
             t)!;
     pure(task);
 
+-- | The task's answer, parking until it has one.
 pub let join(@A: Type, task: Task(A)) -> Async(A) =
     await(task.result);
 
+-- | Ask the task to stop; its guards are released when the scheduler finds it cancelled.
 pub let cancel(@A: Type, task: Task(A)) -> Io({}) =
     cancel_token(task.token);
 
@@ -549,6 +537,7 @@ let cancel_all(ts: List(Token)) -> Io({}) =
         cancel_all(more)
     end;
 
+-- | Every task's answer, in order, each spawned before the next is waited for.
 pub let join_all(@A: Type, tasks: List(Async(A))) -> Async(List(A)) =
     let go(i: Nat) -> Async(List(A)) =
         match Nat/Lt/try(i, List/len(tasks))
@@ -561,6 +550,7 @@ pub let join_all(@A: Type, tasks: List(Async(A))) -> Async(List(A)) =
         end;
     go(0);
 
+-- | The first task to answer, with its index; the others are cancelled.
 pub let select(@A: Type, tasks: List(Async(A))) -> Async({Nat, A}) =
     let winner = Future/new()!;
     let arm(i: Nat) -> Async(List(Token)) =
@@ -585,9 +575,11 @@ pub let select(@A: Type, tasks: List(Async(A))) -> Async({Nat, A}) =
     let _ = cancel_all(tokens)!;
     pure(w);
 
+-- | The first task to answer; the others are cancelled.
 pub let race(@A: Type, tasks: List(Async(A))) -> Async(A) =
     map(select(tasks), (w) => w.1);
 
+-- | `body`'s answer, or `none` when `d` passes first, in which case `body` is cancelled.
 pub let timeout(@A: Type, d: Duration, body: Async(A)) -> Async(Option(A)) =
     map(
         select([map(body, (a) => Option/some(a)), map(sleep(d), (_) => Option/none())]),
@@ -602,7 +594,6 @@ satisfy Lift(Io, Async) {
     lift = lift,
 }
 
--- | The identity edge, for a witness whose premise is `Lift(Async, M)` at `M = Async`, as `/std/Io`'s is for `Lift(Io, M)`.
 satisfy Lift(Async, Async) {
     lift(@_A, m) = m,
 }

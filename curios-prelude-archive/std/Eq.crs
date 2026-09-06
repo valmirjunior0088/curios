@@ -1,17 +1,22 @@
+-- | Propositional equality: `x` and `y` are one value.
 pub induct Eq(@A: Type): (A, A) -> pub Prop
 | refl(@z: A): (z, z)
 end
 
 pub use Eq/*;
 
+-- | Symmetry.
 pub let sym(@A: Type, @x: A, @y: A, p: Eq(x, y)) -> Eq(y, x) =
     match p: (s, t, _q) => Eq(t, s) | refl(@_z) => Eq/refl() end;
 
+-- | Transitivity.
 pub let trans(@A: Type, @x: A, @y: A, @z: A, p: Eq(x, y), q: Eq(y, z)) -> Eq(x, z) =
     match q | refl(@_w) => p end;
 
+-- | Equal arguments give equal results under any `f`.
 pub let cong(@A: Type, @B: Type, @x: A, @y: A, f: (A) -> B, p: Eq(x, y)) -> Eq(f(x), f(y)) =
     match p | refl(@_z) => Eq/refl() end;
 
+-- | A `P(x)` carried to `P(y)` along an equality.
 pub let subst(@A: Type, @x: A, @y: A, P: (A) -> Type, p: Eq(x, y), v: P(x)) -> P(y) =
     match p | refl(@_z) => v end;

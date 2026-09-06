@@ -1,9 +1,9 @@
--- A list with one selected entry. The selection carries the proof that it is in range, so `selected` never reads past the end and `move` past either end is a no-op rather than a wrap; an empty listing has no selection, and the type says so.
 use /std/{Nat, Str, List, Vec, Option};
 use /std/Nat/{Lt};
 use /std/Tui/{Style, Cell, Frame};
 use /std/Tui/Key/{Code};
 
+-- | Items with one selected, or none when there are no items.
 pub struct Listing: pub Type {
     items: List(Str),
     cursor: Option({i: Nat, ok: Lt(i, List/len(items))}),
@@ -15,16 +15,19 @@ let at(items: List(Str), i: Nat) -> Option({i: Nat, ok: Lt(i, List/len(items))})
     | some(ok) => Option/some((i = i, ok = ok))
     end;
 
+-- | `items` with the first selected.
 pub let new(items: List(Str)) -> Listing =
     Listing { items = items, cursor = at(items, 0) };
 
+-- | The selected index, or `none`.
 pub let index(l: Listing) -> Option(Nat) =
     Option/map(l.cursor, (c) => c.i);
 
+-- | The selected item, or `none`.
 pub let selected(l: Listing) -> Option(Str) =
     Option/map(l.cursor, (c) => List/get(@Str, l.items, c.i, @c.ok));
 
--- | Up, down, home and end move the selection; any other key leaves it. A move that would leave the list is not taken.
+-- | Up, down, home and end move the selection; any other key leaves it. A move past either end is not taken.
 pub let move(l: Listing, code: Code) -> Listing =
     match l.cursor
     | none() => l
@@ -43,7 +46,7 @@ pub let move(l: Listing, code: Code) -> Listing =
         end
     end;
 
--- | The entries as rows, the selected one in `highlight`, scrolled so the selection is in view.
+-- | The items as rows, the selected one in `highlight`, scrolled so the selection is in view.
 pub let draw(l: Listing, style: Style, highlight: Style, w: Nat, h: Nat) -> Frame(w, h) =
     let chosen = Option/unwrap_or(index(l), 0);
     let first = match chosen < h | true => 0 | false => chosen + 1 - h end;

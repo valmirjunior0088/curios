@@ -1,8 +1,11 @@
+-- | An opaque reading of the monotonic clock, good for measuring alone.
 pub mod Instant;
 pub use Instant/{let Instant};
 
+-- | A length of time, with no sign.
 pub mod Duration;
 pub use Duration/{let Duration};
 
+-- | A moment that means something: seconds since the Unix epoch, as the wall clock and a file's modification time report it.
 pub mod Timestamp;
 pub use Timestamp/{let Timestamp};

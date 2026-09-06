@@ -1,9 +1,7 @@
--- How a cell is painted: two colours and the six SGR attributes every surveyed library agrees on. There is no builder — `Style/plain` is the neutral value and every other style is a struct update from it, `Style { ..Style/plain, bold = true, fg = Color/red }`, which is the language's own record syntax rather than a vocabulary to learn.
---
--- Blink, conceal and the alternative fonts are deliberately absent: no two terminals agree on them, and a style the renderer cannot emit faithfully is worse than one a program never writes.
 use /std/{Bool, Equal};
 use /std/Tui/{Color};
 
+-- | Two colours and six attributes. Every style is a struct update from `plain`.
 pub struct Style: pub Type {
     fg: Color,
     bg: Color,
@@ -15,9 +13,9 @@ pub struct Style: pub Type {
     strike: Bool,
 }
 
--- | Structural, which is what the renderer's diff asks: two cells differ when their styles differ in any field.
 satisfy Equal(Style);
 
+-- | The terminal's default colours and no attribute.
 pub let plain: Style =
     Style {
         fg = Color/default(),

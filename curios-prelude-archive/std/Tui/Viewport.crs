@@ -1,7 +1,7 @@
--- A window onto a larger frame: the part from `(x, y)` on, at the pane's size — `Frame/crop` then `Frame/fit`, so a window past the edge shows blank rather than failing.
 use /std/{Nat};
 use /std/Tui/{Frame};
 
+-- | The part of `frame` from `x`, `y` on, at `w` by `h`; a window past the edge shows blank.
 pub let draw(
     @w0: Nat,
     @h0: Nat,

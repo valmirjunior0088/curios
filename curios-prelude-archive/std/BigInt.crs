@@ -1,30 +1,32 @@
--- Arbitrary-precision integers: a sign tag over a strictly-positive `BigPos` magnitude (or the distinguished `zero`). Every operation dispatches on the sign constructors and delegates the magnitude arithmetic to `BigPos`/`BigNat`. Signed subtraction (`pos_sub`) reads the sign straight off `non_zero_cmp` and takes the truncating `BigNat/sub` of the larger minus the smaller magnitude, so no borrow/compare bridge is needed. The algebraic lemma corpus is deferred until a consumer needs it (see documentation/roadmap/big-flt-dyadic-proofs/01-big-int-laws-spec.md).
 use /std/{Nat, Int, Bool, Str, Option, True, False, Ordering, BigNat, BigPos, Equal, Compare, Add,
     Subtract, Multiply, Show, Ordered, Spell};
 
+-- | A sign over a positive magnitude, or zero.
 pub induct BigInt: pub Type
 | neg(BigPos)
 | zero()
 | pos(BigPos)
 end
 
+-- | Zero.
 pub let zero: BigInt =
     BigInt/zero();
 
+-- | Whether `a` is zero.
 pub let is_zero(a: BigInt) -> Bool =
     match a | neg(_) => false | zero() => true | pos(_) => false end;
 
--- | attach a sign to a BigNat magnitude, collapsing a zero magnitude to BigInt/zero
 let signed(negative: Bool, a: BigNat) -> BigInt =
     match BigPos/of_big_nat(a)
     | zero() => BigInt/zero()
     | pos(t) => match negative | true => BigInt/neg(t) | false => BigInt/pos(t) end
     end;
 
+-- | `a` as a non-negative integer.
 pub let of_big_nat(a: BigNat) -> BigInt =
     signed(false, a);
 
--- | x - y for positive x, y: the sign is non_zero_cmp, the magnitude is the truncating BigNat difference of the larger minus the smaller.
+-- | `x - y` for two positives, signed.
 pub let pos_sub(x: BigPos, y: BigPos) -> BigInt =
     match BigPos/cmp(x, y)
     | lt() => signed(true, y.value - x.value)
@@ -32,6 +34,7 @@ pub let pos_sub(x: BigPos, y: BigPos) -> BigInt =
     | gt() => signed(false, x.value - y.value)
     end;
 
+-- | The sum.
 pub let add(a: BigInt, b: BigInt) -> BigInt =
     match (a, b)
     | (neg(p), neg(q)) => BigInt/neg(BigPos/add(p, q))
@@ -43,18 +46,23 @@ pub let add(a: BigInt, b: BigInt) -> BigInt =
     | (pos(p), pos(q)) => BigInt/pos(BigPos/add(p, q))
     end;
 
+-- | The negation.
 pub let neg(a: BigInt) -> BigInt =
     match a | neg(p) => BigInt/pos(p) | zero() => BigInt/zero() | pos(p) => BigInt/neg(p) end;
 
+-- | The difference.
 pub let sub(a: BigInt, b: BigInt) -> BigInt =
     add(a, neg(b));
 
+-- | The magnitude, as a non-negative integer.
 pub let abs(a: BigInt) -> BigInt =
     match a | neg(p) => BigInt/pos(p) | zero() => BigInt/zero() | pos(p) => BigInt/pos(p) end;
 
+-- | The magnitude, as a natural.
 pub let magnitude(a: BigInt) -> BigNat =
     match a | neg(p) => p.value | zero() => BigNat/zero | pos(p) => p.value end;
 
+-- | The product.
 pub let mul(a: BigInt, b: BigInt) -> BigInt =
     match (a, b)
     | (neg(p), neg(q)) => BigInt/pos(BigPos/mul(p, q))
@@ -66,6 +74,7 @@ pub let mul(a: BigInt, b: BigInt) -> BigInt =
     | (pos(p), pos(q)) => BigInt/pos(BigPos/mul(p, q))
     end;
 
+-- | The order of the two.
 pub let cmp(a: BigInt, b: BigInt) -> Ordering =
     match (a, b)
     | (neg(p), neg(q)) => BigPos/cmp(q, p)
@@ -79,31 +88,40 @@ pub let cmp(a: BigInt, b: BigInt) -> Ordering =
     | (pos(p), pos(q)) => BigPos/cmp(p, q)
     end;
 
+-- | Whether the two are equal.
 pub let eql(a: BigInt, b: BigInt) -> Bool =
     match cmp(a, b) | eq() => true | _ => false end;
 
+-- | Whether `a` is below `b`.
 pub let lt(a: BigInt, b: BigInt) -> Bool =
     match cmp(a, b) | lt() => true | _ => false end;
 
+-- | Whether `a` is at most `b`.
 pub let le(a: BigInt, b: BigInt) -> Bool =
     match cmp(a, b) | gt() => false | _ => true end;
 
+-- | Whether `a` is above `b`.
 pub let gt(a: BigInt, b: BigInt) -> Bool =
     match cmp(a, b) | gt() => true | _ => false end;
 
+-- | Whether `a` is at least `b`.
 pub let ge(a: BigInt, b: BigInt) -> Bool =
     match cmp(a, b) | lt() => false | _ => true end;
 
+-- | `n` as an integer.
 pub let of_nat(n: Nat) -> BigInt =
     of_big_nat(BigNat/of_nat(n));
 
+-- | `n` as an arbitrary-precision integer.
 pub let of_int(n: Int) -> BigInt =
     let mag = of_big_nat(BigNat/of_nat(Int/abs(n)));
     match n < +0 | true => neg(mag) | false => mag end;
 
+-- | Whether `a` is even.
 pub let is_even(a: BigInt) -> Bool =
     BigNat/is_even(magnitude(a));
 
+-- | `a` halved, the remainder dropped.
 pub let div2(a: BigInt) -> BigInt =
     match a
     | neg(p) => neg(of_big_nat(BigNat/div2(p.value)))
@@ -111,6 +129,7 @@ pub let div2(a: BigInt) -> BigInt =
     | pos(p) => of_big_nat(BigNat/div2(p.value))
     end;
 
+-- | The decimal digits, with `-` on a negative.
 pub let to_str(a: BigInt) -> Str =
     match a
     | neg(p) => Str/concat("-", BigNat/to_str(p.value))
@@ -118,26 +137,25 @@ pub let to_str(a: BigInt) -> Str =
     | pos(p) => Str/concat("+", BigNat/to_str(p.value))
     end;
 
--- | The magnitude of `s`, any leading sign dropped. Both the bound and the parser read `s` through this one split, so the two cannot disagree about where the digits start.
 let digits(s: Str) -> Str =
     match Str/starts_with(s, "+") || Str/starts_with(s, "-")
     | true => Str/slice(s, 1, Str/len(s) - 1)
     | false => s
     end;
 
--- | What `of_decimal` accepts: an optional sign on a nonempty run of decimal digits, which is what `to_str` above writes.
+-- | Whether `s` is an optional sign on a nonempty run of decimal digits.
 pub let is_decimal(s: Str) -> Bool =
     BigNat/is_decimal(digits(s));
 
--- | The bound `of_decimal` carries, on the same terms as `BigNat/Decimal`.
+-- | The decided proposition that `s` is an optional sign on a nonempty run of decimal digits.
 pub let Decimal(s: Str) -> Prop =
     match is_decimal(s) | true => True | false => False end;
 
--- | The inverse of `to_str`: the sign is read off the head and the magnitude delegated, as every operation here delegates it. `ok` discharges the magnitude's own bound because the two are the same claim.
+-- | The integer `s` spells, under the evidence that it is decimal.
 pub let of_decimal(s: Str, @ok: Decimal(s)) -> BigInt =
     signed(Str/starts_with(s, "-"), BigNat/of_decimal(digits(s), @ok));
 
--- | The fallible form, spelled as its peers are; the guard is what discharges `of_decimal`'s bound.
+-- | The integer `s` spells, or `none` for any other text.
 pub let of_str(s: Str) -> Option(BigInt) =
     match is_decimal(s) | true => Option/some(of_decimal(s)) | false => Option/none() end;
 

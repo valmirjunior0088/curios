@@ -1,6 +1,3 @@
--- Two frames of one size into the bytes that carry the terminal from the first to the second. Every surveyed library that does not flicker diffs a cell grid, and this is that diff with the size in the type: both frames are `Frame(w, h)`, so the walk pairs row with row and cell with cell and has no bound to check.
---
--- A cell is written only where it differs from the previous frame's, with a cursor move only where the pen is not already there and an SGR only where the style changes from the last one written; a continuation cell writes nothing, since the wide symbol before it already covered its column. With no previous frame the screen is cleared and every cell written. The whole is bracketed in synchronized output (`CSI ? 2026 h` / `l`), which a terminal that lacks the mode ignores, so a frame lands at once rather than tearing. The cursor is hidden while cells are written and shown at its place after, where the program asked for one.
 use /std/{Nat, Str, Bytes, List, Vec, Option};
 use /std/Tui/{Style, Cell, Frame, ansi, text};
 
@@ -10,7 +7,6 @@ struct Pen: Type {
     at: Option({Nat, Nat}),
 }
 
--- | One cell at `(x, y)`, written if it differs from `before` — `none` where there is no previous frame — and skipped where it is a continuation.
 let paint(pen: Pen, x: Nat, y: Nat, cell: Cell, before: Option(Cell)) -> Pen =
     let same = match before | some(b) => b == cell | none() => false end;
     let width = text/width(cell.symbol);
@@ -41,6 +37,7 @@ let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Cell, w), before: Option(Vec(C
         pen,
         (entry, acc) => paint(acc, entry.0.0, y, entry.0.1, entry.1));
 
+-- | The bytes that take the terminal from `previous` to `next`, cells written only where they differ, and the cursor placed at `cursor` or hidden. With no previous frame the screen is cleared and every cell written.
 pub let render(
     @w: Nat,
     @h: Nat,

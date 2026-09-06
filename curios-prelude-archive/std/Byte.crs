@@ -3,7 +3,6 @@ pub use /sys/Byte/{to_nat, eql, lt, le, gt, ge};
 use /sys/Bytes/{let Bytes, get};
 use /std/{Ordering, Equal, Compare, Nat, Bool, Show, Spell, Ordered, Option, List, Test};
 
--- | The 256 byte values in order, so a computed `Nat` becomes a `Byte` by indexing.
 let atoms: Bytes =
     x[0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 0x10, 0x11,
         0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20,
@@ -23,10 +22,11 @@ let atoms: Bytes =
         0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF, 0xF0, 0xF1, 0xF2,
         0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF];
 
--- | The computed inverse of `to_nat`. The proof parameter mirrors `Bytes/get`'s: a closed argument discharges by reduction, and an open one by refining `n < 256` at the call site — and once `len` of the table reduces, the bound demanded here is exactly the bound `get` demands, so the body is a pass-through. Refusal rather than saturation or wrapping is the carrier law's choice: a value never changes to fit its carrier.
+-- | The byte with value `n`, under the evidence that `n < 256`.
 pub let of_nat(n: Nat, @ok: Nat/Lt(n, 256)) -> Byte =
     get(atoms, n, @ok);
 
+-- | The order of the two values.
 pub let cmp(a: Byte, b: Byte) -> Ordering =
     choose | lt(a, b) => Ordering/lt() | eql(a, b) => Ordering/eq() | _ => Ordering/gt() end;
 
@@ -54,11 +54,9 @@ satisfy Ordered(Byte) {
     cmp = cmp,
 }
 
--- | Every byte in order, by a plain recursion rather than a `List/map` over a lambda: the witness below is a global the prelude keeps for every program, so its body must allocate no closure.
 let every_byte(count: Nat, next: Nat) -> List(Byte) =
     match count | 0 => [] | more + 1 => [of_nat(next % 256), ..every_byte(more, next + 1)] end;
 
--- | `n % 256` is known to the reducer by its remainder bound, so `of_nat`'s precondition decides definitionally.
 satisfy Test/Draw(Byte) {
     all() = Option/some(every_byte(256, 0)),
     draw(seed, _size) =
