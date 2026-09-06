@@ -536,7 +536,7 @@ pub enum Syn {
     Str(StrLit),
 }
 
-/// A string literal's value with the spelling it was written in, so the printer rounds a block back to a block. Purely presentational, as a numeral's [`Radix`](crate::Radix) is: dropped at lowering, where both spellings are the same `/syn/Str`.
+/// A string literal's value with the spelling it was written in, so the printer rounds a block back to a block. Purely presentational, as a numeral's [`Radix`] is: dropped at lowering, where both spellings are the same `/syn/Str`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrLit {
     pub value: String,

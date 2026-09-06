@@ -139,7 +139,7 @@ fn a_program_that_compiles_reports_nothing() {
 
 #[test]
 fn a_parse_failure_is_one_error_at_the_offset_the_parser_stopped() {
-    let reports = of("/std/print(\"unclosed\n");
+    let reports = of("/std/print(\n");
     let [report] = reports.as_slice() else {
         panic!("one diagnostic, got {reports:?}");
     };
