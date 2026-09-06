@@ -1,0 +1,154 @@
+use /std/{Nat, Bool, List, Option, Cell, Io, Async};
+use /std/Async/{Waker, Offer};
+
+-- | A queue two fibers hand values through, bounded by the capacity it was made with.
+pub struct Channel(A: Type): Type {
+    capacity: Nat,
+    items: Cell(List(A)),
+    senders: Cell(List(Waker)),
+    receivers: Cell(List(Waker)),
+    closed: Cell(Bool),
+}
+
+-- | The end values are put in.
+pub struct Sender(A: Type): Type {
+    Channel(A),
+}
+
+-- | The end values are taken from.
+pub struct Receiver(A: Type): Type {
+    Channel(A),
+}
+
+-- | A channel holding at most `capacity` values, and the two ends of it. A capacity of zero is a rendezvous: a send waits for a receiver to be waiting before it completes.
+pub let new(@A: Type, capacity: Nat) -> Io({Sender(A), Receiver(A)}) =
+    let items: Cell(List(A)) = Cell/new([])!;
+    let senders: Cell(List(Waker)) = Cell/new([])!;
+    let receivers: Cell(List(Waker)) = Cell/new([])!;
+    let closed = Cell/new(false)!;
+    let c =
+        Channel {
+            capacity = capacity,
+            items = items,
+            senders = senders,
+            receivers = receivers,
+            closed = closed,
+        };
+    Io/pure((Sender { c }, Receiver { c }));
+
+let wake_all(ws: List(Waker)) -> Io({}) =
+    match ws
+    | [] => Io/pure(())
+    | [w, ..more] =>
+        let _ = Waker/wake(w)!;
+        wake_all(more)
+    end;
+
+let wake_receivers(@A: Type, c: Channel(A)) -> Io({}) =
+    let ws = Cell/get(c.receivers)!;
+    let _ = Cell/set(c.receivers, [])!;
+    wake_all(ws);
+
+let wake_senders(@A: Type, c: Channel(A)) -> Io({}) =
+    let ws = Cell/get(c.senders)!;
+    let _ = Cell/set(c.senders, [])!;
+    wake_all(ws);
+
+let has_room(@A: Type, c: Channel(A)) -> Io(Bool) =
+    let held = Cell/get(c.items)!;
+    match c.capacity == 0
+    | true =>
+        let waiting = Cell/get(c.receivers)!;
+        Io/pure(List/len(waiting) > 0 && List/len(held) == 0)
+    | false => Io/pure(List/len(held) < c.capacity)
+    end;
+
+-- | Put `a` in without parking: `true` when it was taken, `false` when the channel is full or closed.
+pub let try_send(@A: Type, s: Sender(A), a: A) -> Io(Bool) =
+    let shut = Cell/get(s.0.closed)!;
+    match shut
+    | true => Io/pure(false)
+    | false =>
+        let room = has_room(s.0)!;
+        match room
+        | false => Io/pure(false)
+        | true =>
+            let held = Cell/get(s.0.items)!;
+            let _ = Cell/set(s.0.items, [..held, a])!;
+            let _ = wake_receivers(s.0)!;
+            Io/pure(true)
+        end
+    end;
+
+-- | Take the next value without parking: `none` when nothing is queued.
+pub let try_recv(@A: Type, r: Receiver(A)) -> Io(Option(A)) =
+    let held = Cell/get(r.0.items)!;
+    match held
+    | [] => Io/pure(Option/none())
+    | [a, ..rest] =>
+        let _ = Cell/set(r.0.items, rest)!;
+        let _ = wake_senders(r.0)!;
+        Io/pure(Option/some(a))
+    end;
+
+-- | A receiver about to park wakes the senders, because at a capacity of zero its arrival is what makes room.
+let listen_receiver(@A: Type, c: Channel(A), w: Waker) -> Io({}) =
+    let ws = Cell/get(c.receivers)!;
+    let _ = Cell/set(c.receivers, [w, ..ws])!;
+    wake_senders(c);
+
+let listen_sender(@A: Type, c: Channel(A), w: Waker) -> Io({}) =
+    let ws = Cell/get(c.senders)!;
+    Cell/set(c.senders, [w, ..ws]);
+
+-- | An offer that yields the next value, or `none` once the channel is closed and drained.
+pub let recv_offer(@A: Type, r: Receiver(A)) -> Offer(Option(A)) =
+    Offer/new(
+        Io/bind(
+            try_recv(r),
+            (got) =>
+                match got
+                | some(a) => Io/pure(Option/some(Option/some(a)))
+                | none() =>
+                    Io/bind(
+                        Cell/get(r.0.closed),
+                        (shut) =>
+                            match shut
+                            | true => Io/pure(Option/some(Option/none()))
+                            | false => Io/pure(Option/none())
+                            end)
+                end),
+        Io/pure(Async/Wait/woken((w) => listen_receiver(r.0, w))));
+
+-- | An offer that yields `true` once `a` has been put in, or `false` if the channel closed first.
+pub let send_offer(@A: Type, s: Sender(A), a: A) -> Offer(Bool) =
+    Offer/new(
+        Io/bind(
+            Cell/get(s.0.closed),
+            (shut) =>
+                match shut
+                | true => Io/pure(Option/some(false))
+                | false =>
+                    Io/bind(
+                        try_send(s, a),
+                        (sent) =>
+                            match sent
+                            | true => Io/pure(Option/some(true))
+                            | false => Io/pure(Option/none())
+                            end)
+                end),
+        Io/pure(Async/Wait/woken((w) => listen_sender(s.0, w))));
+
+-- | The next value, parking while there is none; `none` once the channel is closed and drained.
+pub let recv(@A: Type, r: Receiver(A)) -> Async(Option(A)) =
+    Async/map(Async/select([recv_offer(r)]), (w) => w.1);
+
+-- | Put `a` in, parking while the channel is full; `false` when it is closed.
+pub let send(@A: Type, s: Sender(A), a: A) -> Async(Bool) =
+    Async/map(Async/select([send_offer(s, a)]), (w) => w.1);
+
+-- | Close the channel. A receiver drains what is already queued and then answers `none`, and a send answers `false`.
+pub let close(@A: Type, s: Sender(A)) -> Io({}) =
+    let _ = Cell/set(s.0.closed, true)!;
+    let _ = wake_receivers(s.0)!;
+    wake_senders(s.0);

@@ -15,6 +15,10 @@ pub use Signal/{let Signal};
 pub mod Offer;
 pub use Offer/{let Offer};
 
+-- | A bounded queue two fibers hand values through.
+pub mod Channel;
+pub use Channel/{let Channel};
+
 -- | The loops that turn a raw handle's `would_block` into a park, for a stream type's own witness.
 pub mod raw;
 
