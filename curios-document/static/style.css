@@ -513,6 +513,10 @@ footer img {
     .tree .toggle:checked ~ nav {
         display: flex;
     }
+    /* Under the top bar the footer has no column to sit under, so it is centred. */
+    footer {
+        justify-content: center;
+    }
     .results,
     .tree nav {
         position: absolute;
