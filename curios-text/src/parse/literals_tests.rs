@@ -30,6 +30,20 @@ fn integer_literals_are_polymorphic_num_lits() {
     );
 }
 
+/// `5.` is not a float literal, and the refusal says what one is rather than reporting the dot as the token the enclosing form did not expect.
+#[test]
+fn a_numeral_with_a_dangling_dot_is_refused_by_the_rule() {
+    let report = "5.".parse::<Term>().unwrap_err().format();
+    assert!(
+        report.contains(
+            "a floating-point literal has a decimal point followed by at least one digit"
+        ),
+        "reported {report}"
+    );
+    assert!(report.ends_with("1 | 5.\n      |  ^"), "reported {report}");
+    assert!("5.0".parse::<Term>().is_ok());
+}
+
 #[test]
 fn rejects_a_float_literal_that_overflows_to_infinity() {
     // The model rounds an overflowing magnitude to the infinity of its sign, which the grammar cannot spell — the literal is refused outright rather than backtracked into a different parse of the same digits.

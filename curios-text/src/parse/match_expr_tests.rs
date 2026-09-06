@@ -319,11 +319,21 @@ fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
             .parse::<Term>()
             .is_ok()
     );
-    assert!(
-        "match o | some(n+1; ih) => n | some(0) => n | none() => n end"
-            .parse::<Term>()
-            .is_err()
-    );
+    // Glued on either side, the refusal names the rule rather than the `+1` the arm grammar did not expect, with the caret on the `+`.
+    for source in [
+        "match o | some(n+1; ih) => n | some(0) => n | none() => n end",
+        "match n | 0 => 0 | p +1 => p end",
+    ] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(
+            report.contains("a successor pattern takes whitespace on both sides of its `+`"),
+            "{source:?} reported {report}"
+        );
+        assert!(
+            !report.contains("Expected '=>'"),
+            "{source:?} reported {report}"
+        );
+    }
 }
 
 /// A constructor pattern names its constructor bare, and the refusal says so rather than blaming the token the fall-through reached.

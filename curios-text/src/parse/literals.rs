@@ -32,6 +32,36 @@ pub(super) fn parse_num_lit<'a>() -> Parser<'a, Term> {
     .map(Into::into)
 }
 
+// `5.` refused by the rule, rather than read as the numeral `5` — or the name `5`, since a digit is an identifier character — with a `.` left over for the enclosing form to report as the token it did not expect. A dot followed by a digit is a float literal; anything else after a numeral's dot is nothing the grammar spells. Tried before the float and the numeral, since a committed refusal that ties a caught sibling on offset loses [`Parser::or`]'s tie-break to it, and the dot is consumed so the failure is past the choice point, with the caret on it.
+pub(super) fn refuse_dangling_dot<'a>() -> Parser<'a, Term> {
+    catch(
+        take_while(|char: char| char.is_ascii_digit())
+            .flat_map(|digits| match digits.is_empty() {
+                true => fail("expected a numeral"),
+                false => pure(()),
+            })
+            .and_keep(mark())
+            .and_drop(take_exact("."))
+            .and_drop(not_ahead_digit()),
+    )
+    .flat_map(|start| {
+        fail_from(
+            &start,
+            "a floating-point literal has a decimal point followed by at least one digit — `5.0` — and `5.` is not one",
+        )
+    })
+}
+
+// Succeeds, consuming nothing, when the input does not go on with a digit.
+fn not_ahead_digit<'a>() -> Parser<'a, ()> {
+    look_ahead(take_while(|char: char| char.is_ascii_digit())).flat_map(|digits| {
+        match digits.is_empty() {
+            true => pure(()),
+            false => fail("a digit follows"),
+        }
+    })
+}
+
 // A character literal is a monomorphic, proof-certified `/syn/Char` value.
 pub(super) fn parse_char_lit<'a>() -> Parser<'a, Term> {
     catch(

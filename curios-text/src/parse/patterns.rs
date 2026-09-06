@@ -228,6 +228,26 @@ pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     })
 }
 
+// `p+1` and `p +1` refused by the rule, rather than read as the binder `p` with `+1` left over for the arm grammar to report as the token it did not expect. Tried after the spaced successor form, so reaching a label with a `+` ahead means the spacing is what failed, and before the binder the label would otherwise become; the `+` is consumed so the refusal is past the choice point, and the caret underlines it with its digits.
+fn refuse_glued_successor<'a>() -> Parser<'a, MatchPattern> {
+    catch(
+        parse_label().and_drop(look_ahead(
+            take_while(char::is_whitespace).and(take_exact("+")),
+        )),
+    )
+    .and_keep(mark())
+    .flat_map(|start| {
+        // The digits are consumed too: the spaced form's own refusal, caught, sits right after the `+`, and a committed refusal that ties it on offset loses [`Parser::or`]'s tie-break.
+        take_while(char::is_whitespace)
+            .and_drop(take_exact("+"))
+            .and_drop(take_while(|char: char| char.is_ascii_digit()))
+            .and_keep(fail_from(
+                &start,
+                "a successor pattern takes whitespace on both sides of its `+` — `p + 1` — and `p+1` is the binder `p` followed by the literal `+1`",
+            ))
+    })
+}
+
 // The literal-dispatch leaf `k` of a `Nat` match-arm pattern (`| 5 =>`, `| 0x90 =>`). Reads the numeral by value, so hex literals dispatch by value; a column of these (with no `pred + 1; ih` arm) lowers to a `switch`. `0` is rejected here: it is always the `Zero` leaf (tried earlier in `parse_match_pattern`), keeping one canonical leaf per value. Tried before the generic `Binder` fallback, which would otherwise swallow a bare digit as an identifier.
 //
 // The numeral is kept whole. Narrowing it to the erased `u32` here made the parser choose `curios-ersd`'s width, and the failure was caught along with "this is not a numeral" — so an oversized dispatch case fell through to `Binder`, a digit run being an identifier, rather than refusing. Where that width is chosen is `curios-elab`'s erase boundary, which refuses what it cannot represent.
@@ -333,6 +353,7 @@ fn parse_match_pattern_inner<'a>() -> Parser<'a, MatchPattern> {
         .or(catch(parse_literal("("))
             .and_keep(lazy(parse_match_pattern))
             .and_drop(parse_literal(")")))
+        .or(refuse_glued_successor())
         .or(parse_binder().map(MatchPattern::Binder))
 }
 
