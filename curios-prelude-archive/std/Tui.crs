@@ -56,8 +56,8 @@ pub mod Listing;
 pub use Listing/{let Listing};
 
 -- | A single line of text being edited.
-pub mod Input;
-pub use Input/{let Input};
+pub mod Field;
+pub use Field/{let Field};
 
 -- | A window onto a larger frame.
 pub mod Viewport;

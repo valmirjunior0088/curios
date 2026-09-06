@@ -1,6 +1,6 @@
 -- The widget five, each a pure function of its state and its size.
 use /std/{Nat, Str, Option, Test};
-use /std/Tui/{Style, Frame, Key, Border, Paragraph, Listing, Input, Viewport};
+use /std/Tui/{Style, Frame, Key, Border, Paragraph, Listing, Field, Viewport};
 use /std/Tui/Key/{Code};
 
 let render(@w: Nat, @h: Nat, f: Frame(w, h)) -> Str =
@@ -31,18 +31,18 @@ test a_listing_moves_within_its_bounds_and_scrolls_to_its_selection() =
 -- An input edits at its cursor, which never passes its text.
 test an_input_edits_at_its_cursor() =
     let i =
-        Input/handle(
-            Input/handle(Input/of_str("ab"), Key/plain(Code/left())),
+        Field/handle(
+            Field/handle(Field/of_str("ab"), Key/plain(Code/left())),
             Key/plain(Code/char('X')));
-    let drawn = Input/draw(i, Style/plain, 5);
-    let past = Input/handle(Input/handle(i, Key/plain(Code/right())), Key/plain(Code/right()));
+    let drawn = Field/draw(i, Style/plain, 5);
+    let past = Field/handle(Field/handle(i, Key/plain(Code/right())), Key/plain(Code/right()));
     Test/all(
         [
             Test/equal(
                 Str/flatten([render(drawn.frame), ":", Nat/to_str(drawn.cursor_x)]),
                 "aXb  :2"),
             Test/equal(past.cursor, 3),
-            Test/equal(Input/handle(past, Key/plain(Code/backspace())).text, "aX")]);
+            Test/equal(Field/handle(past, Key/plain(Code/backspace())).text, "aX")]);
 
 -- A viewport is a window onto a larger frame, blank past its edge.
 test a_viewport_windows_a_larger_frame() =

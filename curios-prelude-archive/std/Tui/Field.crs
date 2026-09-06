@@ -3,28 +3,28 @@ use /std/Nat/{Le};
 use /std/Tui/{Style, Frame, Key, text};
 
 -- | A line of text and a cursor within it.
-pub struct Input: pub Type {
+pub struct Field: pub Type {
     text: Str,
     cursor: Nat,
     ok: Le(cursor, Str/len(text)),
 }
 
 -- | No text.
-pub let empty: Input =
-    Input { text = "", cursor = 0, ok = Le/refl(0) };
+pub let empty: Field =
+    Field { text = "", cursor = 0, ok = Le/refl(0) };
 
 -- | `s` with the cursor at its end.
-pub let of_str(s: Str) -> Input =
-    Input { text = s, cursor = Str/len(s), ok = Le/refl(Str/len(s)) };
+pub let of_str(s: Str) -> Field =
+    Field { text = s, cursor = Str/len(s), ok = Le/refl(Str/len(s)) };
 
-let place(s: Str, at: Nat) -> Input =
+let place(s: Str, at: Nat) -> Field =
     match Le/try(at, Str/len(s))
-    | some(ok) => Input { text = s, cursor = at, ok = ok }
+    | some(ok) => Field { text = s, cursor = at, ok = ok }
     | none() => of_str(s)
     end;
 
--- | Insert a character, delete before or after the cursor, or move it; any other key leaves the input.
-pub let handle(i: Input, k: Key) -> Input =
+-- | Insert a character, delete before or after the cursor, or move it; any other key leaves the field.
+pub let handle(i: Field, k: Key) -> Field =
     let before = Str/slice(i.text, 0, i.cursor);
     let after = Str/slice(i.text, i.cursor, Str/len(i.text) - i.cursor);
     match k.code
@@ -44,7 +44,7 @@ pub let handle(i: Input, k: Key) -> Input =
     end;
 
 -- | One row of the text, scrolled so the cursor is in view, and the column the cursor is at.
-pub let draw(i: Input, style: Style, w: Nat) -> {frame: Frame(w, 1), cursor_x: Nat} =
+pub let draw(i: Field, style: Style, w: Nat) -> {frame: Frame(w, 1), cursor_x: Nat} =
     let ahead = text/width(Str/slice(i.text, 0, i.cursor));
     let first = match ahead < w | true => 0 | false => ahead + 1 - w end;
     let shown = Str/slice(i.text, first, Str/len(i.text) - first);
