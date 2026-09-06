@@ -425,3 +425,90 @@ fn a_signal_parks_the_waiter_until_it_is_notified_and_keeps_an_early_notify() {
         String::from_utf8_lossy(&output)
     );
 }
+
+// A selection takes nothing out of a source that does not win it. Both channels hold a value and both offers would answer, so the losing offer is what proves the discipline: under the fork-and-cancel selection this replaced, both arms ran, both took, and the loser's answer reached `Future/fulfill`'s already-ready arm and was dropped.
+#[test]
+fn a_selection_keeps_the_value_of_the_offer_it_did_not_take() {
+    assert_eq!(
+        run(r#"
+        use /std/{Str, Nat, Option, Io, Async};
+        use /std/Async/{Channel};
+        let shown(o: Option(Nat)) -> Str =
+            match o | some(n) => Nat/to_str(n) | none() => "none" end;
+        let fiber: Async({}) =
+            let a = Channel/new(@Nat, 4)!;
+            let b = Channel/new(@Nat, 4)!;
+            let _ = Channel/send(a.0, 10)!;
+            let _ = Channel/send(b.0, 20)!;
+            let w = Async/select([Channel/recv_offer(a.1), Channel/recv_offer(b.1)])!;
+            let rest_a = Async/lift(Channel/try_recv(a.1))!;
+            let rest_b = Async/lift(Channel/try_recv(b.1))!;
+            /std/print(
+                Str/flatten(
+                    [Nat/to_str(w.0), " ", shown(w.1), " ", shown(rest_a), " ", shown(rest_b)]));
+        Async/run(fiber)
+        "#),
+        b"0 10 none 20"
+    );
+}
+
+// A capacity of zero is a rendezvous: the send cannot complete until a receiver is waiting to take it, so the forked feeder's own report lands after the receiver has parked rather than before it.
+#[test]
+fn a_rendezvous_send_completes_only_once_a_receiver_waits() {
+    assert_eq!(
+        run(r#"
+        use /std/{Str, Nat, Option, Io, Async};
+        use /std/Async/{Channel};
+        let feeder(s: Channel/Sender(Nat)) -> Async({}) =
+            let _ = Channel/send(s, 7)!;
+            /std/print("sent ");
+        let fiber: Async({}) =
+            let c = Channel/new(@Nat, 0)!;
+            let _ = Async/go(feeder(c.0))!;
+            let _ = /std/print("waiting ")!;
+            let got = Channel/recv(c.1)!;
+            /std/print(match got | some(n) => Nat/to_str(n) | none() => "none" end);
+        Async/run(fiber)
+        "#),
+        b"waiting sent 7"
+    );
+}
+
+// Closing hands back what is already queued before it ends the stream, so a reader drains rather than losing the tail. Beside it: a send at capacity is refused without parking, and one after the close is refused for good.
+#[test]
+fn a_closed_channel_drains_before_it_ends() {
+    assert_eq!(
+        run(r#"
+        use /std/{Str, Nat, Bool, Option, Io, Async};
+        use /std/Async/{Channel};
+        let shown(o: Option(Nat)) -> Str =
+            match o | some(n) => Nat/to_str(n) | none() => "end" end;
+        let said(b: Bool) -> Str =
+            match b | true => "true" | false => "false" end;
+        let fiber: Async({}) =
+            let c = Channel/new(@Nat, 2)!;
+            let _ = Channel/send(c.0, 1)!;
+            let _ = Channel/send(c.0, 2)!;
+            let full = Async/lift(Channel/try_send(c.0, 3))!;
+            let _ = Async/lift(Channel/close(c.0))!;
+            let first = Channel/recv(c.1)!;
+            let second = Channel/recv(c.1)!;
+            let ended = Channel/recv(c.1)!;
+            let after = Channel/send(c.0, 4)!;
+            /std/print(
+                Str/flatten(
+                    [
+                        said(full),
+                        " ",
+                        shown(first),
+                        " ",
+                        shown(second),
+                        " ",
+                        shown(ended),
+                        " ",
+                        said(after)]));
+        Async/run(fiber)
+        "#),
+        b"false 1 2 end false"
+    );
+}
