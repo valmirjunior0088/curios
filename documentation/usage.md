@@ -161,7 +161,7 @@ It writes every part a package has: the manifest, `lib.crs`, and `exe.crs`, plus
 
 | Query | Answers |
 | --- | --- |
-| `diagnostics [TARGET]` | every diagnostic and goal, each rendered as `run` would report it, a blank line between; nothing when the target compiles. A unit that declares tests is also checked as its test program, so a parameterized test whose parameter nothing draws is reported here as `test` would report it |
+| `diagnostics [TARGET]` | every diagnostic, goal and lint — the errors and goals rendered as `run` reports them, each lint after them as [Linting](#linting) describes — a blank line between; nothing when the target compiles clean. A unit that declares tests is also checked as its test program, so a parameterized test whose parameter nothing draws is reported here as `test` would report it |
 | `tests [TARGET]` | every test the target declares, one path per line, in declaration order — the library's, then each executable's, for the package entire; nothing when it declares none, and nothing executes |
 | `stage <STAGE> [TARGET]` | the program's representation at one rung of the pipeline, reprinted. A rung the compilation reached is answered even when a later stage refuses: the rendering goes to stdout, what stopped the program goes to stderr, and the exit is 0. Only a program that stops *before* the rung has not answered, and exits 1 |
 | `server` | the same questions over the language server protocol, on standard input and output — what an editor integration launches |
