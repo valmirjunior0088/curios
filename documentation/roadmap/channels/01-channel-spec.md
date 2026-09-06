@@ -44,22 +44,20 @@ One sentence: **a channel owns every value it holds, and a fiber selecting over 
 
 **Every readiness is an offer.** A channel's receive and its send, a `Signal`, a `Future`, a handle's readiness through a zero-timeout poll, and a timer. That uniformity is the whole point of preferring a first-class offer to a built-in selection, and it is what a built-in `select` cannot be extended to cover.
 
-**What it replaces.** `Async/select`'s fork-and-cancel is deleted rather than left standing beside a correct one, and `select`, `race` and `timeout` are re-expressed over offers. A second selection primitive with different loss behaviour beside the first is the worse outcome.
+**What it replaces.** `Async/select` over `List(Async(A))` is dropped rather than kept beside the offer-based one, because selection stops running anything at all: it observes readiness, while running computations concurrently stays `spawn` and abandoning one stays `cancel`. `race` and `timeout` keep their signatures and are re-expressed as a `spawn` selected against a task's offer — a timeout over an arbitrary computation genuinely requires running and abandoning it, so it is not expressible as an offer and does not pretend to be.
 
-## What has to be decided
+## What was decided
 
-Each with the recommendation first.
-
-- **Where the module lives.** A package built on `Async/Signal`, proven, and moved into `/std/Async/Channel` afterwards; or `/std/Async/Channel` from the start, reaching `Async/park` directly. The prototype makes the first available and it is the lower-risk order, at the cost of one allocation per park until the move.
-- **Whether the scheduler's parks become waker-shaped.** `Pause/wait` and `Pause/sleep` resume a fiber directly, so a handle and a timer cannot be offers without a helper fiber. Making both carry a `Waker` would make every readiness uniform and delete the helper. It is a rewrite of `Pause`, `Job`, `serve` and both wait queues, and the measurement above says it buys efficiency and uniformity rather than capability — cross-kind selection already works. Recommended as a second cut, not a first.
-- **Sender and receiver as distinct types, or one type with two views.** Distinct, so that closing is expressible and so that [02](02-remote-spec.md) has one end to serialize.
-- **What `send` does to a closed channel.** Recommend a refusal the caller can see rather than a silent drop; the shape is a decision this specification does not make.
-- **The order `select` tries its offers in.** First match wins in list order is the simplest and is what the prototype does. It is not fair, and fairness is a decision rather than an implementation detail.
-- **Whether spurious wakeups are permitted.** Recommend yes, since the retry loop makes them harmless and forbidding them costs bookkeeping in every source.
+- **The module is `/std/Async/Channel`.** It is a descendant of `/std/Async`, so it reaches the private `park` directly and needs no `Signal` indirection; the prototype's `Signal`-per-park was a consequence of living outside the subtree, not a design.
+- **The scheduler's parks are collapsed into one.** `Pause` becomes `park(List(Wait))` beside `fork`, `acquire` and `yield_now`, where a `Wait` is a handle's readability, an elapsed duration, or a waker registration. `wait` and `sleep` become one-element parks. Serving a park builds one slot holding the job, and the first wait to fire claims it — the mechanism `park_on_waker` already used, generalized. Every readiness is then an offer, and cross-kind selection needs no helper fiber.
+- **`Sender` and `Receiver` are distinct types**, so that closing is expressible and so that [02](02-remote-spec.md) has one end to serialize.
+- **`send` answers a `Bool`**, `false` meaning the channel is closed, mirroring `recv`'s `Option` rather than inventing a type for the same fact.
+- **`select` tries its offers in list order.** It is therefore not fair, and that is a stated property rather than an accident.
+- **Spurious wakeups are permitted**, since the retry loop makes them harmless and forbidding them would cost bookkeeping in every source.
 
 ## Prerequisites
 
-- **`Async/select` discards a losing arm's answer.** Reproduced above. It is fixed by this specification's design rather than beside it, and it is the reason the shipped `select` is deleted rather than kept. Until then, no `/std` function may be written that selects over a shared, consuming source.
+- **`Async/select` discards a losing arm's answer.** Reproduced above, and not repairable in its own shape: an arm is an opaque `Async(A)`, and running it is what consumes, so no amount of earlier cancellation can prevent a loser from having taken. It is resolved by dropping that selection rather than by fixing it. What survives the drop is `race`, where abandoning a running computation is the meaning of the operation rather than a defect, and where the doc comment must say so.
 
 ## Deliberately not specified
 
