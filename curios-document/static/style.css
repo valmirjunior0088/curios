@@ -76,8 +76,6 @@ h2 { margin: 40px 0 18px; font-family: var(--serif); font-style: italic; font-we
 .signature .keyword { color: var(--amber); }
 .signature .name { color: var(--ink-70); }
 .signature .note { margin: 0 0 6px 2em; font-family: var(--sans); font-size: 14px; line-height: 1.6; color: var(--ink-57); white-space: normal; }
-.card header:last-child { border-bottom: none; }
-.card header + .prose { padding-top: 16px; }
 .card .prose { margin: 0; padding: 0 22px 20px; max-width: 68ch; font-size: 15px; line-height: 1.65; color: var(--ink-70); text-wrap: pretty; }
 
 /* The witnesses, and what a module exposes from elsewhere: one row each, in one box. */
