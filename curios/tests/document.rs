@@ -80,7 +80,10 @@ fn document_writes_the_bundle_under_the_store() {
     let bundle = root.join(".curios/documentation/shapes");
     // The landing page is the root module's page: the description, the module cards, then the root's own declarations.
     let landing = fs::read_to_string(bundle.join("index.html")).expect("a landing page");
-    assert!(landing.contains("<h1>/shapes</h1>"), "{landing}");
+    assert!(
+        landing.contains(r#"<h1><span class="sep">/</span>shapes</h1>"#),
+        "{landing}"
+    );
     assert!(
         landing.contains("Shapes &#38; their areas."),
         "the manifest's description, escaped: {landing}"
@@ -163,7 +166,10 @@ fn the_prelude_image_documents_the_standard_library_into_output() {
 
     let site = root.join("site");
     let landing = fs::read_to_string(site.join("index.html")).expect("a landing page");
-    assert!(landing.contains("<h1>/std</h1>"), "{landing}");
+    assert!(
+        landing.contains(r#"<h1><span class="sep">/</span>std</h1>"#),
+        "{landing}"
+    );
     assert!(
         landing.contains("The standard library"),
         "the image's description: {landing}"
@@ -212,7 +218,10 @@ fn a_verdict_slot_documents_the_unit_it_holds() {
         String::from_utf8_lossy(&output.stderr)
     );
     let landing = fs::read_to_string(root.join("site/index.html")).expect("a landing page");
-    assert!(landing.contains("<h1>/shapes</h1>"), "{landing}");
+    assert!(
+        landing.contains(r#"<h1><span class="sep">/</span>shapes</h1>"#),
+        "{landing}"
+    );
 
     fs::remove_dir_all(root).unwrap();
 }
