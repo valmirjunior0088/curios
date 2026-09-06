@@ -912,18 +912,25 @@ pub(crate) fn print_term(term: Term) -> Printer {
     })
 }
 
-/// The offset past the whitespace and line comments that follow `span` — the extent `parse_whitespace` consumed after the term, recovered from the text.
+/// The offset past the whitespace and line comments that follow `span` — the extent `parse_whitespace` consumed after the term, recovered from the text — and past one `,` or `;` among them.
+///
+/// **The separator is stepped over so a comment written after it is the term's to report.** The separator is emitted by the enclosing printer, and so is the break after it; a reach that stopped at the separator left a comment riding that line owed to no mark until the next element began, which is past the break — so every comment after a local `let`'s `;`, a list element's `,` or a call argument's `,` surfaced one line down, and one line further on every run. Reported here, it is paid onto the line the separator ends, wherever the enclosing printer breaks. One separator and no more: two in a row never follow one term, and what follows the separator is the next term's own.
 fn past_trailing(span: &Span) -> usize {
     let text = &span.source.text;
     let mut end = span.end;
+    let mut separated = false;
     loop {
         let rest = &text[end..];
         let trimmed = rest.trim_start();
         end += rest.len() - trimmed.len();
         // A `-- |` is syntax rather than a comment, so a term's reach stops before it exactly as the parser's whitespace does.
-        match trimmed.starts_with("--") && !trimmed.starts_with("-- |") {
-            true => end += trimmed.find('\n').unwrap_or(trimmed.len()),
-            false => return end,
+        if trimmed.starts_with("--") && !trimmed.starts_with("-- |") {
+            end += trimmed.find('\n').unwrap_or(trimmed.len());
+        } else if !separated && (trimmed.starts_with(',') || trimmed.starts_with(';')) {
+            separated = true;
+            end += 1;
+        } else {
+            return end;
         }
     }
 }

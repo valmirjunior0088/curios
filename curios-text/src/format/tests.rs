@@ -162,6 +162,33 @@ fn a_comment_relocated_into_an_arm_body_is_lifted_back_out() {
     assert_eq!(formatted(&output), output);
 }
 
+/// A trailing comment written after a separator — a local `let`'s `;`, a list element's, a call argument's or a tuple field's `,` — rides the line the separator ends, on every run.
+///
+/// **The regression for a comment surfacing one construct down per run.** A term reported its reach up to the separator and no further, and the separator and the break after it are the enclosing printer's; so the comment was owed to no mark until the next element began, past the break, and each run carried it one line further — `-- after a` documented `b`, `-- one` closed the list, and the tail's comment was paid inside the call that followed.
+#[test]
+fn a_trailing_comment_after_a_separator_rides_the_line_it_was_written_on() {
+    let source = "let f(n: /std/Nat) -> /std/Nat =\n    let a = 1; -- after a\n    let b = [\n        1, -- one\n        2, -- two\n    ];\n    g(\n        a, -- first\n        n); -- the call\n\nf(1)\n";
+    let output = formatted(source);
+
+    for (comment, rides) in [
+        ("-- after a", "let a = 1;"),
+        ("-- one", "1,"),
+        ("-- two", "2"),
+        ("-- first", "a,"),
+        ("-- the call", "n);"),
+    ] {
+        let line = output
+            .lines()
+            .find(|line| line.contains(comment))
+            .unwrap_or_else(|| panic!("{comment} survives: {output}"));
+        assert!(
+            line.trim_start().starts_with(rides),
+            "{comment} rides the line ending in `{rides}`: {output}"
+        );
+    }
+    assert_eq!(formatted(&output), output);
+}
+
 /// A trailing comment stays on the arm it was written on, however many arms carry one.
 ///
 /// **The regression for a trailing comment drifting to the next break.** Claimed by the node that *follows* it, it was prefixed to that node's document and reached the suffix channel after the newline closing its own line had gone out — so each comment surfaced one arm down, and the last one, having no break left inside the construct, flushed at the document's end past `end;`. Here `-- affirmative` documented the negative arm and `-- negative` documented the declaration.

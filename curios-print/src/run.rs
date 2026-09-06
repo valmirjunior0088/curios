@@ -173,7 +173,7 @@ struct Measured<'a> {
     filling: bool,
 }
 
-/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision. Within the group a hard [`Printer::Line`], or a [`Printer::Mark`] that a comment is due at, fails the scan outright: a group containing a mandatory break never renders flat, which is what replaces build-time break propagation.
+/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision. Within the group a hard [`Printer::Line`] fails the scan outright, and so does a [`Printer::Mark`] that a comment is due at once any text follows it inside the group: a group containing a mandatory break never renders flat, which is what replaces build-time break propagation. A due mark that nothing inside the group follows leaves the group flat — the comment rides the end of the line either way, and only text after it within the group would be carried past the comment by a flat rendering, which is what the break exists to prevent.
 ///
 /// The scan does not stop at the group's edge: a group that fits exactly while unbreakable content trails it would otherwise overrun the line, so measurement continues into `rest` — the renderer's remaining work, in its recorded modes — until the line provably ends. Beyond the group the polarity of a mandatory break flips: a hard line, a text newline, or a soft [`Printer::Line`] in broken surroundings simply ends the line, deciding the scan in favor, and a pending suffix is skipped rather than counted — a trailing comment never reflows the code it rides.
 ///
@@ -188,6 +188,8 @@ fn fits(
     owed: Option<(usize, bool)>,
 ) -> bool {
     let mut used = 0usize;
+    // A comment is due on this line from here on: the next text inside the group would render past it, so it decides the scan against flatness — and text beyond the group, the enclosing printer's own punctuation, does not.
+    let mut due = false;
     let mut stack = Vec::from([Measured {
         node: root,
         flat: true,
@@ -254,6 +256,9 @@ fn fits(
 
         match &mut *node {
             Printer::Text(text) | Printer::Named(text) => {
+                if inside && due && !text.is_empty() {
+                    return false;
+                }
                 for char in text.chars() {
                     if char == '\n' {
                         return true;
@@ -275,6 +280,9 @@ fn fits(
                     // Broken surroundings render this as a newline, ending the line within budget. Unreachable inside the group, whose subtree is measured flat throughout.
                     return true;
                 }
+                if inside && due && !spelling.is_empty() {
+                    return false;
+                }
                 used += spelling.chars().count();
                 if used > available {
                     return filling;
@@ -286,18 +294,21 @@ fn fits(
                 broken,
             } => {
                 let spelling = if flat { &*on_flat } else { &*broken };
+                if inside && due && !spelling.is_empty() {
+                    return false;
+                }
                 used += spelling.chars().count();
                 if used > available {
                     return filling;
                 }
             }
-            // Zero width, but not always silent: a mark reached at or past the earliest comment still owed means one is about to be placed on this line, so the line must end here. That is the comment-is-a-hard-break law, and this is the only place it is stated now that a comment is never a node of the document.
+            // Zero width, but not always silent: a mark reached at or past the earliest comment still owed means one is about to be placed on this line, so the line must end before anything inside the group follows it. That is the comment-is-a-hard-break law, and this is the only place it is stated now that a comment is never a node of the document.
             Printer::Mark { at, begins } => {
                 // Only a comment this mark would actually place ends the line, by the same rule `PrinterState::reached` pays by: a mark that merely reports how far the source has been consumed pays nothing waiting for the next element to begin, so it must not break a line on its behalf either.
-                let due =
-                    owed.is_some_and(|(owed, own_line)| owed <= *at && (*begins || !own_line));
-                if inside && due {
-                    return false;
+                if inside
+                    && owed.is_some_and(|(owed, own_line)| owed <= *at && (*begins || !own_line))
+                {
+                    due = true;
                 }
             }
             // Reversed, because the stack pops last-in first.
