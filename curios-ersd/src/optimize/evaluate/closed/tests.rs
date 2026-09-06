@@ -457,3 +457,76 @@ fn a_fold_step_sees_the_suffix_after_its_element() {
 
     assert_eq!(folded(builder, candidate), Constant::Nat(3));
 }
+
+/// `id(f) = f`, bound as an item, so applying it to a function yields that function as a closure over nothing.
+fn define_identity(builder: &mut ErsdBuilder) -> FunctionId {
+    let id = builder.reserve_function();
+    let f = builder.value(Some("f".into()));
+    builder.open_block();
+    let body = builder.seal_block(Terminator::Return(Atom::Value(f)));
+    builder.define_function(id, Some("id".into()), vec![f], body);
+    builder.item_functions(vec![id]);
+    id
+}
+
+/// A block that binds `z`, then a function over `z`, then hands that function through `id`.
+///
+/// The candidate is `id(inner)`. Both operands are closed, so it folds — to a closure over `inner` capturing *nothing*, because the interpreter reaches `inner` as a function identity rather than by evaluating the block that binds `z`. `inner`'s body still names `z`, which is bound in a block and nowhere else.
+fn a_closure_over_a_block_bound_value() -> Module {
+    let mut builder = ErsdBuilder::new();
+    let id = define_identity(&mut builder);
+    let host = builder.reserve_function();
+    let inner = builder.reserve_function();
+    let y = builder.value(Some("y".into()));
+
+    builder.open_block();
+    let z = builder.let_value(
+        Some("z".into()),
+        Rhs::Sequence {
+            operation: SequenceOp::ListBuild,
+            operands: vec![],
+        },
+    );
+    builder.open_block();
+    let inner_body = builder.seal_block(Terminator::Return(Atom::Value(z)));
+    builder.define_function(inner, Some("inner".into()), vec![y], inner_body);
+    builder.let_functions(vec![inner]);
+    let handed = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(id),
+            arguments: vec![Atom::Function(inner)],
+        },
+    );
+    let host_body = builder.seal_block(Terminator::Return(Atom::Value(handed)));
+    builder.define_function(host, Some("host".into()), vec![], host_body);
+    builder.item_functions(vec![host]);
+
+    let zero = builder.constant(Constant::Nat(0));
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+    builder.set_entry(entry);
+    builder.finalize().expect("the fixture verifies")
+}
+
+/// A copy is refused when it would carry a free value out of the block that binds it.
+///
+/// **The assumption `reify_closure` states and this is what checks it.** An uncovered free value is kept verbatim on the reasoning that it is a top-level identity; `z` is not one, so a copy of `inner` bound anywhere but inside `host`'s own block names a value nothing in scope binds. `outward_ok` does not catch it — it asks the question about reachable *functions*, and deliberately not about values, since a free value is ordinarily covered by the captures and substituted away. Here the captures are empty.
+///
+/// **What this pins, and what it does not.** Mutation-checked by making `free_values_settled` answer `true`: the candidate then folds and a copy of `inner` appears, which is what the count asserts. The module still verifies under that mutation, because here the group is spliced into `host`'s own block and `z` is in scope there — so this is a pin on the *decision*, not a reproduction of the miscompilation. The dangling reference needs the copy to travel, which takes a later round reusing it from another block; `curios`'s `a_deadlock_reports_how_many_fibers_wait_on_a_waker` is what reaches that end to end, through `/std/Async`'s selection over no offers.
+#[test]
+fn a_closure_whose_uncovered_free_value_is_block_bound_is_not_reified() {
+    let mut module = a_closure_over_a_block_bound_value();
+    let before = live_functions(&module);
+
+    evaluate_closed_terms(&mut module);
+    module
+        .verify()
+        .expect("the pass leaves a verifiable module:\n{module}");
+
+    assert_eq!(
+        live_functions(&module),
+        before,
+        "expected no copy of `inner`:\n{module}"
+    );
+}
