@@ -82,7 +82,7 @@ fn document_writes_the_bundle_under_the_store() {
     let landing = fs::read_to_string(bundle.join("index.html")).expect("a landing page");
     assert!(landing.contains("<h1>/shapes</h1>"), "{landing}");
     assert!(
-        landing.contains("Shapes &amp; their areas."),
+        landing.contains("Shapes &#38; their areas."),
         "the manifest's description, escaped: {landing}"
     );
     assert!(landing.contains("href=\"geometry.crs.html\""), "{landing}");

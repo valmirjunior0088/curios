@@ -79,7 +79,7 @@ fn the_standard_library_documents_from_the_archive() {
         induct
             .prose
             .as_ref()
-            .is_some_and(|lines| lines[0].starts_with("Error first, value last")),
+            .is_some_and(|lines| lines[0].starts_with("Success or failure")),
         "the type's prose is the `-- |` block written above it: {:?}",
         induct.prose
     );
