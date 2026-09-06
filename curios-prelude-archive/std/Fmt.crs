@@ -1,18 +1,20 @@
-use /std/{Bytes, Byte, Str, Nat, Show, Io};
+use /std/{Bytes, Byte, Str, Nat, Show, Spell, Io};
 
--- | A parsed format string: literal pieces, and the places an argument goes.
+-- | A parsed format string: literal pieces, and the places an argument goes — shown at a `%`, spelled at a `#`.
 pub induct Fmt: pub Type
 | nil()
 | lit(piece: Str, rest: Fmt)
 | show(Fmt)
+| spell(Fmt)
 end
 
--- | The type of a function taking one `Show`-able argument per place in `f` and answering a `T`.
+-- | The type of a function taking one argument per place in `f` — a `Show`-able one at a `%`, a `Spell`-able one at a `#` — and answering a `T`.
 pub let format_type_with(T: Type, f: Fmt) -> Type =
     match f
     | nil() => T
     | lit(_, rest) => format_type_with(T, rest)
     | show(rest) => (@A: Type, use Show(A), a: A) -> format_type_with(T, rest)
+    | spell(rest) => (@A: Type, use Spell(A), a: A) -> format_type_with(T, rest)
     end;
 
 let flush(bytes: Bytes, start: Nat, count: Nat, rest: Fmt) -> Fmt =
@@ -34,6 +36,7 @@ let parse_at(bytes: Bytes, pos: Nat, fuel: Nat) -> Fmt =
         | some(ok) =>
             match Byte/to_nat(Bytes/get(bytes, pos, @ok))
             | 37 => Fmt/show(parse_at(bytes, pos + 1, rest))
+            | 35 => Fmt/spell(parse_at(bytes, pos + 1, rest))
             | _ => parse_lit_at(bytes, pos, 0, rest)
             end
         end
@@ -47,6 +50,7 @@ and parse_lit_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
         | some(ok) =>
             match Byte/to_nat(Bytes/get(bytes, start + taken, @ok))
             | 37 => flush(bytes, start, taken, Fmt/show(parse_at(bytes, start + taken + 1, rest)))
+            | 35 => flush(bytes, start, taken, Fmt/spell(parse_at(bytes, start + taken + 1, rest)))
             | 92 => parse_esc_at(bytes, start, taken, rest)
             | _ => parse_lit_at(bytes, start, taken + 1, rest)
             end
@@ -62,12 +66,14 @@ and parse_esc_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
             match Byte/to_nat(Bytes/get(bytes, start + taken + 1, @ok))
             | 37 =>
                 flush(bytes, start, taken, Fmt/lit("%", parse_at(bytes, start + taken + 2, rest)))
+            | 35 =>
+                flush(bytes, start, taken, Fmt/lit("#", parse_at(bytes, start + taken + 2, rest)))
             | _ => parse_lit_at(bytes, start, taken + 1, rest)
             end
         end
     end;
 
--- | The format `s` spells: `%` is a place, `\%` a literal percent.
+-- | The format `s` spells: `%` is a place an argument is shown at and `#` one it is spelled at; `\%` and `\#` are the literal characters.
 pub let parse(s: Str) -> Fmt =
     let bytes = Str/to_bytes(s);
     parse_at(bytes, 0, 3 * Bytes/len(bytes) + 3);
@@ -77,6 +83,7 @@ let go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T
     | nil() => finish(acc)
     | lit(piece, rest) => go_with(T, finish, rest, Str/concat(acc, piece))
     | show(rest) => (use w, a) => go_with(T, finish, rest, Str/concat(acc, Show/show(a)))
+    | spell(rest) => (use w, a) => go_with(T, finish, rest, Str/concat(acc, Spell/spell(a)))
     end;
 
 -- | The text of `s` with its places filled by the arguments that follow.

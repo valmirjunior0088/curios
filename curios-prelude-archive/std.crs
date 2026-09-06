@@ -237,7 +237,7 @@ pub use Toml/{let Toml};
 pub mod Cli;
 pub use Cli/{let Cli};
 
--- | Interpolation against a format string, checked at the call: one argument per `%`, each at any type with a `Show`, and `\%` for a literal percent. A missing or surplus argument is refused where the call is written.
+-- | Interpolation against a format string, checked at the call: one argument per place, shown at a `%` by any type's `Show` and spelled at a `#` by its `Spell`, with `\%` and `\#` for the literal characters. A missing or surplus argument is refused where the call is written.
 pub mod Fmt;
 pub use Fmt/{let Fmt};
 
