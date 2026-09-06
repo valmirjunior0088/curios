@@ -119,9 +119,27 @@ fn infix_requires_spaces_and_disambiguates_signs() {
         })
         .into()
     );
-    // No space ⇒ the operator is not recognised, leaving a trailing token: a parse error rather than a silent reinterpretation.
-    assert!("a-42".parse::<Term>().is_err());
-    assert!("a +42".parse::<Term>().is_err());
+    // A space missing on either side ⇒ the operator is not recognised, and the refusal names the rule rather than the token the enclosing form wanted next: `parse_infix_op`'s own refusal is caught so the loop can end, so the probe after it is what says why.
+    for source in ["a-42", "a +42", "a/ 2", "a -2", "a- 2", "a+b", "a==b"] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(
+            report.contains("an infix operator takes whitespace on both sides"),
+            "{source:?} reported {report}"
+        );
+    }
+    // The caret underlines the symbol alone. A symbol followed by punctuation rather than an operand — `->`, `--` — keeps the enclosing form's report, and so does a `/` opening an absolute path after a space, which is what a missing `end` looks like.
+    let report = "a- 2".parse::<Term>().unwrap_err().format();
+    assert!(
+        report.ends_with("1 | a- 2\n      |  ^"),
+        "reported {report}"
+    );
+    for source in ["a ->2", "a /std/x"] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(
+            !report.contains("whitespace on both sides"),
+            "{source:?} reported {report}"
+        );
+    }
     // `!=` is the not-equal operator, not a postfix bang followed by `=`.
     assert_eq!(
         "a != b".parse::<Term>().unwrap(),

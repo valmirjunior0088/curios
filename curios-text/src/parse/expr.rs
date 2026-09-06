@@ -321,10 +321,54 @@ pub(super) fn parse_infix_rest<'a>(left: Term, min_prec: u8) -> Parser<'a, Term>
             parse_infix_expr(precedence + 1).map(move |right| (op, right))
         }))
     })
+    .and_drop(refuse_asymmetric_operator())
     .map(move |pairs| {
         pairs.into_iter().fold(left, |left, (op, right)| {
             Subterm::Infix(Infix { op, left, right }).into()
         })
+    })
+}
+
+// What begins an operand, as far as this probe needs to tell one from punctuation: a name, a literal, a bracket, a plicity mark. `->`, `--` and `<-` all fail it, so a term followed by one keeps its own report.
+fn starts_operand(char: char) -> bool {
+    char.is_alphanumeric() || matches!(char, '_' | '(' | '[' | '{' | '"' | '\'' | '@' | '/')
+}
+
+// An infix symbol glued to an operand on either side is refused by the rule, once the loop above has ended. `parse_infix_op` refuses it with the reason already — `preceded_by_space` and `require_space` each name the missing whitespace — but the loop's arm is caught so the loop can end at a non-operator, a caught failure is discarded, and the enclosing form then reported the token it wanted: `Expected ';', obtained '/'` for `a/ 2`, the spelling the reference warns about, and for the glued `a+b` every other language writes. Probed without consuming, so a symbol spaced on both sides is left for the loop or an enclosing level exactly as before; only the refusal consumes, reading the symbol raw so the caret underlines it alone and the failure is past the choice point.
+fn refuse_asymmetric_operator<'a>() -> Parser<'a, ()> {
+    // The term's own parser has consumed the whitespace after it, so the probe stands at the symbol and asks the byte before it, as `parse_infix_op` does.
+    look_ahead(
+        preceded_by_space()
+            .map(|()| true)
+            .or(pure(false))
+            .and(mark())
+            .and(catch(parse_infix_symbol()))
+            .and(look_ahead(take_while(|char: char| !char.is_whitespace()))),
+    )
+    .map(Some)
+    .or(pure(None))
+    .flat_map(|probed| {
+        let Some((((spaced_before, start), op), after)) = probed else {
+            return pure(());
+        };
+        let spaced_after = after.is_empty();
+        let glued_to_operand = after.chars().next().is_some_and(starts_operand);
+        // `a /std/print(1)` is a term followed by an absolute path — what a missing `end` looks like — so a `/` opening one is left to the enclosing form, which names the keyword it wanted.
+        let opens_a_path = op == InfixOp::Div && spaced_before && !spaced_after;
+        match (
+            spaced_before && spaced_after || opens_a_path,
+            spaced_after || glued_to_operand,
+        ) {
+            (false, true) => take_exact(op.symbol())
+                .and_keep(fail_from(
+                    &start,
+                    format!(
+                        "an infix operator takes whitespace on both sides — `a {op} b` — and `{op}` glued to an operand is not one: `a/b` is a path and `-1` a signed literal",
+                        op = op.symbol()
+                    ),
+                )),
+            _ => pure(()),
+        }
     })
 }
 
