@@ -82,6 +82,11 @@ fn an_undeclared_cycle_is_refused_with_the_way_out() {
             && report.contains("join them with `and`"),
         "expected the cycle named with its way out:\n{report}"
     );
+    // Located at the first member's written name, in the sugar spelling whose synthesized type has no span of its own.
+    assert!(
+        report.contains("let f(n : Nat) -> Nat = g(n);"),
+        "expected the snippet at `f`'s declaration:\n{report}"
+    );
 }
 
 // Read outside every lambda, the self-reference is an initializer evaluating itself, which the erased verifier refuses. The refusal stays at the erase boundary on purpose: forcing on first use is what a recursive value means, and no syntactic net can tell this from the knots the language admits — a member read through a closure, a later member forced first, a self-knot nothing ever forces.

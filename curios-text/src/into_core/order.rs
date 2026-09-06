@@ -358,13 +358,14 @@ pub(super) fn order_flat_items(
             witness_dep_nodes(n, &items[n], &names, &wrapper_owner, &rest_rows, syntax),
         );
     }
-    // Refused at the first member's declaration: the report names every definition on the cycle, and the source position it needs is one the reader can act on.
+    // Refused at the first member's written name, which is what the reader prefixes with `and`: the report names every definition on the cycle, and the source position it needs is one the reader can act on. The written type is the fallback for a definition the compiler named, since function sugar synthesizes a type with no span of its own.
     let rest_order = topological_order(&rest, &rest_deps, &rest_soft_deps).map_err(|cycle| {
         let error = Error::UndeclaredCycle {
             names: cycle_names(&items, &cycle),
         };
-        match first_let(&items[cycle[0]]).type_.span() {
-            Some(span) => error.at(span.clone()),
+        let first = first_let(&items[cycle[0]]);
+        match first.span.clone().or_else(|| first.type_.span()) {
+            Some(span) => error.at(span),
             None => error,
         }
     })?;
