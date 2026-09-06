@@ -26,6 +26,17 @@ fn a_module_file_without_a_tail_formats() {
     );
 }
 
+/// A program whose tail is garbled is refused where the tail's own parse stopped, naming what it expected there — as the compiler refuses it — and not at the top of the file expecting its end, which is what the optional tail reported while a `catch` discarded the term's failure.
+#[test]
+fn a_garbled_tail_is_refused_where_the_compiler_refuses_it() {
+    let refusal = Formatted::from_source(&Source::inline("let x = (\n")).expect_err("garbled tail");
+    assert!(
+        refusal.starts_with("Expected ')', obtained 'end-of-file'"),
+        "{refusal}"
+    );
+    assert!(refusal.contains("\n    2 | "), "{refusal}");
+}
+
 #[test]
 fn a_derived_witness_stays_a_declaration() {
     // The formatter leaves the body-less form unexpanded, alone and inside a mixed group: `;` is the whole of what was written, so nothing is there to break across lines.

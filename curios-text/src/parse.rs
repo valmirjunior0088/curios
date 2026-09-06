@@ -102,9 +102,9 @@ pub(crate) fn take_comments() -> Vec<Span> {
     })
 }
 
-/// The formatter's optional tail: a whole term when one follows, `None` at end of input. `catch` downgrades a mid-term failure so the alternative backtracks — a garbled tail then surfaces as the entry's end-of-input error at the right position.
+/// The formatter's optional tail: a whole term when one follows, `None` at end of input. The term comes first so that a tail garbled past its first token commits under [`Parser::or`]'s progress rule and is refused with the term's own message at its own position — what the compiler reports for the same program. A module file's items end at end of input, where the term fails without progress, and the alternative answers `None`.
 pub(crate) fn parse_optional_term<'a>() -> Parser<'a, Option<Term>> {
-    catch(lazy(parse_term)).map(Some).or(pure(None))
+    lazy(parse_term).map(Some).or(take_eof().map(|()| None))
 }
 
 /// What refuses a `--` glued to what follows it: the plain comment is `-- `, with the space, or a bare `--` ending its line.
