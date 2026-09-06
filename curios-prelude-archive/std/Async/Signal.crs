@@ -41,7 +41,7 @@ pub let wait(s: Signal) -> Async({}) =
     | raised() => Async/lift(Cell/set(s.0, State/idle([])))
     | idle(_) =>
         let _ =
-            Async/park(
+            Async/on_waker(
                 (w) =>
                     Io/bind(
                         Cell/get(s.0),

@@ -29,11 +29,16 @@ struct Guard: Type {
     release: Io({}),
 }
 
+-- | One thing a parked fiber waits for. A park names a list of them and resumes on whichever fires first.
+induct Wait: Type
+| readable(handle: /sys/Handle, interest: Nat)
+| elapsed(Duration)
+| woken(register: (Waker) -> Io({}))
+end
+
 induct Pause: Type
-| wait(handle: /sys/Handle, interest: Nat)
-| sleep(Duration)
+| park(waits: List(Wait))
 | fork(child: Io(Step({})), token: Token)
-| park((Waker) -> Io({}))
 | acquire(Guard)
 | yield_now()
 and Step(A: Type): Type
@@ -73,15 +78,18 @@ pub let lift(@A: Type, action: Io(A)) -> Async(A) =
 let suspend(p: Pause) -> Async({}) =
     Async { Io/pure(Step/step(p, Io/pure(Step/done(())))) };
 
+let park(waits: List(Wait)) -> Async({}) =
+    suspend(Pause/park(waits));
+
 let wait(h: /sys/Handle, ev: Nat) -> Async({}) =
-    suspend(Pause/wait(h, ev));
+    park([Wait/readable(h, ev)]);
 
 -- | Park for `d`.
 pub let sleep(d: Duration) -> Async({}) =
-    suspend(Pause/sleep(d));
+    park([Wait/elapsed(d)]);
 
-let park(register: (Waker) -> Io({})) -> Async({}) =
-    suspend(Pause/park(register));
+let on_waker(register: (Waker) -> Io({})) -> Async({}) =
+    park([Wait/woken(register)]);
 
 -- | Park once, letting every other runnable fiber take a turn.
 pub let yield_now: Async({}) =
@@ -124,7 +132,7 @@ pub let await(@A: Type, f: Future(A)) -> Async(A) =
     match polled
     | some(a) => pure(a)
     | none() =>
-        let _ = park((w) => Future/register(f, w))!;
+        let _ = on_waker((w) => Future/register(f, w))!;
         await(f)
     end;
 
@@ -134,22 +142,28 @@ struct Job: Type {
     guards: List(Guard),
 }
 
+-- | Where a parked job waits to be claimed. Every registration one park makes points at the same slot, so the first wait to fire takes the job and every other finds it gone.
 let Slot: Type =
     Cell(Option(Job));
+
+let claim(s: Slot) -> Io(Option(Job)) =
+    let held = Cell/get(s)!;
+    match held
+    | none() => Io/pure(Option/none())
+    | some(j) =>
+        let _ = Cell/set(s, Option/none())!;
+        Io/pure(Option/some(j))
+    end;
 
 struct Parked: Type {
     handle: /sys/Handle,
     interest: Nat,
-    resume: Fiber,
-    token: Token,
-    guards: List(Guard),
+    slot: Slot,
 }
 
 struct Sleeper: Type {
     due: Duration,
-    resume: Fiber,
-    token: Token,
-    guards: List(Guard),
+    slot: Slot,
 }
 
 let run_guard(g: Guard) -> Io({}) =
@@ -186,27 +200,11 @@ let drain_jobs(js: List(Job)) -> Io({}) =
         drain_jobs(more)
     end;
 
-let drain_parked(ps: List(Parked)) -> Io({}) =
-    match ps
-    | [] => Io/pure(())
-    | [p, ..more] =>
-        let _ = run_guards(p.guards)!;
-        drain_parked(more)
-    end;
-
-let drain_sleeping(ss: List(Sleeper)) -> Io({}) =
-    match ss
-    | [] => Io/pure(())
-    | [s, ..more] =>
-        let _ = run_guards(s.guards)!;
-        drain_sleeping(more)
-    end;
-
 let drain_slots(ss: List(Slot)) -> Io({}) =
     match ss
     | [] => Io/pure(())
     | [s, ..more] =>
-        let held = Cell/get(s)!;
+        let held = claim(s)!;
         match held
         | none() => drain_slots(more)
         | some(j) =>
@@ -252,20 +250,26 @@ let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parke
         match rest
         | [] => Io/pure((woken, still))
         | [p, ..tail] =>
-            let dead = is_cancelled(p.token)!;
-            match dead
-            | true =>
-                let _ = run_guards(p.guards)!;
-                walk(tail, i + 1, woken, still)
-            | false =>
-                match is_ready(Option/unwrap_or(List/try_get(results, i), 0), p.interest)
+            let held = Cell/get(p.slot)!;
+            match held
+            | none() => walk(tail, i + 1, woken, still)
+            | some(j) =>
+                let dead = is_cancelled(j.token)!;
+                match dead
                 | true =>
-                    walk(
-                        tail,
-                        i + 1,
-                        [Job { resume = p.resume, token = p.token, guards = p.guards }, ..woken],
-                        still)
-                | false => walk(tail, i + 1, woken, [p, ..still])
+                    let _ = claim(p.slot)!;
+                    let _ = run_guards(j.guards)!;
+                    walk(tail, i + 1, woken, still)
+                | false =>
+                    match is_ready(Option/unwrap_or(List/try_get(results, i), 0), p.interest)
+                    | true =>
+                        let taken = claim(p.slot)!;
+                        match taken
+                        | none() => walk(tail, i + 1, woken, still)
+                        | some(k) => walk(tail, i + 1, [k, ..woken], still)
+                        end
+                    | false => walk(tail, i + 1, woken, [p, ..still])
+                    end
                 end
             end
         end;
@@ -308,19 +312,26 @@ let expire_sleepers(sleeping: List(Sleeper)) -> Io({List(Job), List(Sleeper)}) =
         match rest
         | [] => Io/pure((woken, still))
         | [s, ..tail] =>
-            let dead = is_cancelled(s.token)!;
-            match dead
-            | true =>
-                let _ = run_guards(s.guards)!;
-                walk(tail, woken, still)
-            | false =>
-                match Duration/before(now, s.due)
-                | true => walk(tail, woken, [s, ..still])
+            let held = Cell/get(s.slot)!;
+            match held
+            | none() => walk(tail, woken, still)
+            | some(j) =>
+                let dead = is_cancelled(j.token)!;
+                match dead
+                | true =>
+                    let _ = claim(s.slot)!;
+                    let _ = run_guards(j.guards)!;
+                    walk(tail, woken, still)
                 | false =>
-                    walk(
-                        tail,
-                        [Job { resume = s.resume, token = s.token, guards = s.guards }, ..woken],
-                        still)
+                    match Duration/before(now, s.due)
+                    | true => walk(tail, woken, [s, ..still])
+                    | false =>
+                        let taken = claim(s.slot)!;
+                        match taken
+                        | none() => walk(tail, woken, still)
+                        | some(k) => walk(tail, [k, ..woken], still)
+                        end
+                    end
                 end
             end
         end;
@@ -335,54 +346,44 @@ struct Queues: Type {
     runq: Cell(List(Job)),
     blocked: Cell(List(Parked)),
     sleeping: Cell(List(Sleeper)),
-    parked: Cell(List(Slot)),
+    waiting: Cell(List(Slot)),
 }
 
 let enqueue(q: Queues, j: Job) -> Io({}) =
     let current = Cell/get(q.runq)!;
     Cell/set(q.runq, [..current, j]);
 
-let block_on_handle(q: Queues, job: Job, h: /sys/Handle, interest: Nat) -> Io({}) =
-    let current = Cell/get(q.blocked)!;
-    Cell/set(
-        q.blocked,
-        [
-            Parked {
-                handle = h,
-                interest = interest,
-                resume = job.resume,
-                token = job.token,
-                guards = job.guards,
-            },
-            ..current]);
-
-let sleep_until(q: Queues, job: Job, d: Duration) -> Io({}) =
-    let now = Duration/now()!;
-    let current = Cell/get(q.sleeping)!;
-    Cell/set(
-        q.sleeping,
-        [
-            Sleeper {
-                due = Duration/add(now, d),
-                resume = job.resume,
-                token = job.token,
-                guards = job.guards,
-            },
-            ..current]);
-
-let park_on_waker(q: Queues, job: Job, register: (Waker) -> Io({})) -> Io({}) =
-    let slot = Cell/new(Option/some(job))!;
-    let current = Cell/get(q.parked)!;
-    let _ = Cell/set(q.parked, [slot, ..current])!;
-    let waker =
+let waker_for(q: Queues, slot: Slot) -> Waker =
+    Waker/new(
         Io/bind(
-            Cell/get(slot),
-            (held) =>
-                match held
-                | none() => Io/pure(())
-                | some(j) => Io/bind(Cell/set(slot, Option/none()), (_) => enqueue(q, j))
-                end);
-    register(Waker/new(waker));
+            claim(slot),
+            (held) => match held | none() => Io/pure(()) | some(j) => enqueue(q, j) end));
+
+let register_wait(q: Queues, slot: Slot, w: Wait) -> Io({}) =
+    match w
+    | readable(h, interest) =>
+        let current = Cell/get(q.blocked)!;
+        Cell/set(q.blocked, [Parked { handle = h, interest = interest, slot = slot }, ..current])
+    | elapsed(d) =>
+        let now = Duration/now()!;
+        let current = Cell/get(q.sleeping)!;
+        Cell/set(q.sleeping, [Sleeper { due = Duration/add(now, d), slot = slot }, ..current])
+    | woken(register) => register(waker_for(q, slot))
+    end;
+
+let register_waits(q: Queues, slot: Slot, ws: List(Wait)) -> Io({}) =
+    match ws
+    | [] => Io/pure(())
+    | [w, ..more] =>
+        let _ = register_wait(q, slot, w)!;
+        register_waits(q, slot, more)
+    end;
+
+let park_job(q: Queues, job: Job, ws: List(Wait)) -> Io({}) =
+    let slot = Cell/new(Option/some(job))!;
+    let current = Cell/get(q.waiting)!;
+    let _ = Cell/set(q.waiting, [slot, ..current])!;
+    register_waits(q, slot, ws);
 
 let serve(q: Queues, job: Job) -> Io({}) =
     let dead = is_cancelled(job.token)!;
@@ -398,12 +399,10 @@ let serve(q: Queues, job: Job) -> Io({}) =
 and resume_after(q: Queues, job: Job, pause: Pause, next: Io(Step({}))) -> Io({}) =
     let resumed = Job { ..job, resume = Async { next } };
     match pause
-    | wait(h, interest) => block_on_handle(q, resumed, h, interest)
-    | sleep(d) => sleep_until(q, resumed, d)
+    | park(ws) => park_job(q, resumed, ws)
     | fork(child, child_token) =>
         let _ = enqueue(q, Job { resume = Async { child }, token = child_token, guards = [] })!;
         enqueue(q, resumed)
-    | park(register) => park_on_waker(q, resumed, register)
     | acquire(g) =>
         let kept = live_guards(job.guards)!;
         serve(q, Job { ..resumed, guards = [g, ..kept] })
@@ -413,17 +412,40 @@ and resume_after(q: Queues, job: Job, pause: Pause, next: Io(Step({}))) -> Io({}
 let release_everything(q: Queues) -> Io({}) =
     let runnable = Cell/get(q.runq)!;
     let _ = drain_jobs(runnable)!;
-    let blocked = Cell/get(q.blocked)!;
-    let _ = drain_parked(blocked)!;
-    let sleeping = Cell/get(q.sleeping)!;
-    let _ = drain_sleeping(sleeping)!;
-    let parked = Cell/get(q.parked)!;
-    drain_slots(parked);
+    let waiting = Cell/get(q.waiting)!;
+    drain_slots(waiting);
 
-let forget_cancelled_wakers(q: Queues) -> Io({}) =
-    let slots = Cell/get(q.parked)!;
+let forget_cancelled(q: Queues) -> Io({}) =
+    let slots = Cell/get(q.waiting)!;
     let live = sweep_parked(slots)!;
-    Cell/set(q.parked, live);
+    Cell/set(q.waiting, live);
+
+let live_blocked(ps: List(Parked)) -> Io(List(Parked)) =
+    match ps
+    | [] => Io/pure([])
+    | [p, ..more] =>
+        let held = Cell/get(p.slot)!;
+        let rest = live_blocked(more)!;
+        Io/pure(match held | none() => rest | some(_) => [p, ..rest] end)
+    end;
+
+let live_sleeping(ss: List(Sleeper)) -> Io(List(Sleeper)) =
+    match ss
+    | [] => Io/pure([])
+    | [s, ..more] =>
+        let held = Cell/get(s.slot)!;
+        let rest = live_sleeping(more)!;
+        Io/pure(match held | none() => rest | some(_) => [s, ..rest] end)
+    end;
+
+-- | Forget the registrations of a job some other wait already claimed, so one park over several waits leaves nothing behind it.
+let prune(q: Queues) -> Io({}) =
+    let blocked = Cell/get(q.blocked)!;
+    let kept_blocked = live_blocked(blocked)!;
+    let _ = Cell/set(q.blocked, kept_blocked)!;
+    let sleeping = Cell/get(q.sleeping)!;
+    let kept_sleeping = live_sleeping(sleeping)!;
+    Cell/set(q.sleeping, kept_sleeping);
 
 let is_stalled(q: Queues) -> Io(Bool) =
     let blocked = Cell/get(q.blocked)!;
@@ -457,11 +479,12 @@ let drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(Deadlock, A
         let runnable = Cell/get(q.runq)!;
         match runnable
         | [] =>
-            let _ = forget_cancelled_wakers(q)!;
+            let _ = forget_cancelled(q)!;
+            let _ = prune(q)!;
             let stalled = is_stalled(q)!;
             match stalled
             | true =>
-                let slots = Cell/get(q.parked)!;
+                let slots = Cell/get(q.waiting)!;
                 let _ = release_everything(q)!;
                 Io/pure(Result/failure(Deadlock { parked = List/len(slots) }))
             | false =>
@@ -480,8 +503,8 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(Deadlock, A)) =
     let runq: Cell(List(Job)) = Cell/new([])!;
     let blocked: Cell(List(Parked)) = Cell/new([])!;
     let sleeping: Cell(List(Sleeper)) = Cell/new([])!;
-    let parked: Cell(List(Slot)) = Cell/new([])!;
-    let q = Queues { runq = runq, blocked = blocked, sleeping = sleeping, parked = parked };
+    let waiting: Cell(List(Slot)) = Cell/new([])!;
+    let q = Queues { runq = runq, blocked = blocked, sleeping = sleeping, waiting = waiting };
     let answer: Cell(Option(A)) = Cell/new(Option/none())!;
     let root_cancelled: Cell(Bool) = Cell/new(false)!;
     let _ = enqueue(q, root_job(root, answer, Token { root_cancelled }))!;
