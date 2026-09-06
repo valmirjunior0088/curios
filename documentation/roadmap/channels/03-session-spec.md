@@ -2,7 +2,7 @@
 
 ## Status
 
-Researched and probed, not designed. The obligations this would have to satisfy were traced against the compiler this checkout builds rather than argued from the documents, and the trace is recorded below with the refusals it produced. Depends on [01](01-channel-spec.md) for the channel and, where a session runs across a process boundary, on [02](02-remote-spec.md) for the codec.
+Researched and probed, not designed. The obligations this would have to satisfy were traced against the compiler this checkout builds rather than argued from the documents, and the trace is recorded below with the refusals it produced. Depends on `/std/Async/Channel` for the channel and, where a session runs across a process boundary, on [02](02-remote-spec.md) for the codec.
 
 ## Why it exists
 

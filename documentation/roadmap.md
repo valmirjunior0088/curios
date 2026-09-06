@@ -234,13 +234,13 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [TOML's numbers are wider than the carriers under them](roadmap/toml-full-conformance-spec.md) (the gap is named; the float carrier is not chosen)
 - [x] Structured concurrency in `/std/Async`
   - [x] `map`, and `sleep`/`timeout`
-  - [x] Concurrent `race`/`select`, and `join_all` over a list of tasks
+  - [x] Concurrent `race`/`first` over spawned tasks, `select` over offers, and `join_all` over a list of tasks
   - [x] Fibers (`go`) and tasks (`spawn`/`join`/`cancel`), over `Future`/`await`
-  - [x] Parking on a handle, a timer or a waker, and `yield_now`, driven by the poll-based run loop (`block_on`/`run`); the handle and waker parks are the library's own, reached by a program through the stream types, `sleep` and `join`
+  - [x] One park over a list of waits — a handle's readability, an elapsed duration, or a waker registration — resumed by whichever fires first and claimed once, with `yield_now` beside it, driven by the poll-based run loop (`block_on`/`run`); the park is the library's own, reached by a program through the stream types, `sleep`, `join` and `select`
   - [x] Scoped resource ownership (`using`), a finalizer run exactly once on both exits
   - [x] Deadlock detection (no runnable job, nothing blocked on a handle, no sleeper — reported with how many fibers wait on a waker nothing will fire, rather than hung)
 - [ ] Channels, local and remote, under one vocabulary
-  - [ ] [A channel owns its state, and a fiber parks with none](roadmap/channels/01-channel-spec.md) (nothing lets two fibers hand a value to each other, and `Async/select` discards a losing arm's answer; designed and prototyped, not started)
+  - [x] A channel owns its state, and a fiber parks with none (`/std/Async/Channel` — a bounded queue with `Sender` and `Receiver` ends, a rendezvous at capacity zero, and `recv` answering `none` once it is closed and drained; every park is one `park` over a list of waits claimed once, so a handle, a timer, a `Signal`, a `Future` and either end of a channel are all `Async/Offer`s, and `select` over them takes nothing out of a source until that source is the answer. `race` and `timeout` keep their signatures over spawned tasks, where abandoning a running computation is the operation's meaning rather than a defect, and `/std/Tui` feeds its loop through a channel)
   - [ ] [A remote channel is a codec and a framing over a stream](roadmap/channels/02-remote-spec.md) (the same vocabulary over a child's pipe or a socket, with what a process boundary costs written down; researched, not designed)
   - [ ] [A protocol is data, and its handlers are computed from it](roadmap/channels/03-session-spec.md) (conformance without linearity, by `/std/Cli`'s computed record; researched and probed, not designed)
 - [x] Purity through an opaque `Io` monad (three intrinsics: `Io(T)`, `pure`, `bind`)

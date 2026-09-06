@@ -2,11 +2,11 @@
 
 ## Status
 
-Researched, not designed. The survey is settled and the transport inventory is read off `curios-abi`; the shape below is a proposal, and the questions under *What has to be decided* outnumber the paragraphs that answer any. Depends on [01](01-channel-spec.md), which owns the local channel this one bridges.
+Researched, not designed. The survey is settled and the transport inventory is read off `curios-abi`; the shape below is a proposal, and the questions under *What has to be decided* outnumber the paragraphs that answer any. Depends on `/std/Async/Channel`, which owns the local channel this one bridges.
 
 ## Why it exists
 
-Two Curios processes have no way to talk that is not bytes on a handle. `/std/tcp` and `/std/Command/Child` hand a program a stream, and everything above that — where a message begins and ends, what a value looks like on the wire, which end may travel — is written again by every program that needs it. A channel whose two ends sit in different processes is the same vocabulary [01](01-channel-spec.md) defines, with the costs of a process boundary stated rather than hidden.
+Two Curios processes have no way to talk that is not bytes on a handle. `/std/tcp` and `/std/Command/Child` hand a program a stream, and everything above that — where a message begins and ends, what a value looks like on the wire, which end may travel — is written again by every program that needs it. A channel whose two ends sit in different processes is the same vocabulary `/std/Async/Channel` already defines, with the costs of a process boundary stated rather than hidden.
 
 ## What the survey settled
 
