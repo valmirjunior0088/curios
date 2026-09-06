@@ -450,3 +450,23 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
         "two subjects, two facts, got {different:?}"
     );
 }
+
+/// A file target the disk does not hold could not be asked about: the one-shot transport refuses it before membership places it, in `run`'s words, rather than answering with the read failure as a diagnostic and exit 0 — or, under a package, placing the missing file as a library module and answering about the library.
+#[test]
+fn a_file_target_the_disk_does_not_hold_is_refused_before_it_is_placed() {
+    let missing = std::env::temp_dir()
+        .join("curios-wonder-missing")
+        .join("nothing.crs");
+    let refusal = crate::file_target(missing.clone()).unwrap_err();
+    assert!(
+        refusal.starts_with(&format!("failed to read {}: ", missing.display())),
+        "{refusal}"
+    );
+
+    let directory = std::env::temp_dir();
+    let refusal = crate::file_target(directory.clone()).unwrap_err();
+    assert!(
+        refusal.starts_with(&format!("failed to read {}: ", directory.display())),
+        "{refusal}"
+    );
+}

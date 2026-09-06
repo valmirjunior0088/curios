@@ -10,11 +10,11 @@ use {
         diagnosed, diagnostics, stage,
     },
     curios_package::{Form, Governing, LIBRARY, Membership, Target, mounted, order},
-    curios_text::{Overlay, RootSource},
+    curios_text::{LoadError, Overlay, RootSource},
     curios_verdicts::Verdicts,
     std::{
         collections::BTreeSet,
-        io,
+        fs, io,
         path::{Path, PathBuf},
     },
 };
@@ -146,7 +146,7 @@ pub(crate) fn resolve(
 ) -> Result<Vec<Asked>, String> {
     Ok(match Form::of(target) {
         Form::Stdin => vec![Asked::about_stdin(mounted, read_stdin()?)?],
-        Form::File(path) => vec![Asked::about_file(&path, mounted, manifest)?],
+        Form::File(path) => vec![Asked::about_file(&file_target(path)?, mounted, manifest)?],
         Form::Named(Some(name)) => {
             vec![Asked::about_executable(Some(&name), mounted, manifest)?]
         }
@@ -224,7 +224,7 @@ pub fn wonder_stage(
 
     let asked = match Form::of(target) {
         Form::Stdin => Asked::about_stdin(mounted, read_stdin()?)?,
-        Form::File(path) => Asked::about_file(&path, mounted, manifest)?,
+        Form::File(path) => Asked::about_file(&file_target(path)?, mounted, manifest)?,
         Form::Named(name) => Asked::about_executable(name.as_deref(), mounted, manifest)?,
     };
 
@@ -260,6 +260,19 @@ pub fn wonder_stage(
     }
 
     Ok(())
+}
+
+/// A file the question can be about: one the disk holds. A path that cannot be read is "no such target" — the question could not be asked, and the exit says so — refused here, before membership places it, in the words `run` uses for the same fault. The engine would otherwise answer it as one diagnostic and exit 0, and under a package directory would place the missing file as a library module and answer about the library. The server never comes through here: a document an editor holds may not be on disk yet, which is why the check is this transport's and not `Asked`'s.
+pub(crate) fn file_target(path: PathBuf) -> Result<PathBuf, String> {
+    let readable = fs::metadata(&path).and_then(|metadata| match metadata.is_dir() {
+        true => Err(io::Error::from(io::ErrorKind::IsADirectory)),
+        false => Ok(()),
+    });
+
+    match readable {
+        Ok(()) => Ok(path),
+        Err(error) => Err(LoadError::Read { path, error }.format()),
+    }
 }
 
 /// Every `--unit DIR`'s library, in the order written — which is the order they are compiled in.
