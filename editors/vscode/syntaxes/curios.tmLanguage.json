@@ -46,7 +46,7 @@
   "repository": {
     "comment": {
       "name": "comment.line.double-dash.curios",
-      "match": "--.*$"
+      "match": "--(?: .*)?$"
     },
     "string": {
       "name": "string.quoted.double.curios",

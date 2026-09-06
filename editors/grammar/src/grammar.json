@@ -30,15 +30,24 @@
     "comment": {
       "type": "TOKEN",
       "content": {
-        "type": "SEQ",
+        "type": "CHOICE",
         "members": [
+          {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "-- "
+              },
+              {
+                "type": "PATTERN",
+                "value": ".*"
+              }
+            ]
+          },
           {
             "type": "STRING",
             "value": "--"
-          },
-          {
-            "type": "PATTERN",
-            "value": ".*"
           }
         ]
       }
