@@ -113,6 +113,11 @@ fn document_writes_the_bundle_under_the_store() {
     );
     assert!(bundle.join("static/style.css").is_file());
     assert!(bundle.join("static/fonts/geist.woff2").is_file());
+    let index = fs::read_to_string(bundle.join("static/index.js")).expect("the search index");
+    assert!(
+        index.contains("\"/shapes/Shape/circle\",\"index.html#Shape/circle\"]"),
+        "a member is indexed at its anchor: {index}"
+    );
 
     fs::remove_dir_all(root).unwrap();
 }
@@ -170,6 +175,8 @@ fn the_prelude_image_documents_the_standard_library_into_output() {
     let signal = fs::read_to_string(site.join("Async/Signal.crs.html")).expect("a nested page");
     assert!(
         signal.contains("href=\"../static/style.css\"")
+            && signal.contains("src=\"../static/index.js\"")
+            && signal.contains("data-root=\"../\"")
             && signal.contains("href=\"../index.html\""),
         "{signal}"
     );

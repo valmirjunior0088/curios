@@ -1,19 +1,23 @@
-//! The bundle's addressing: a mark's referent is found where the record shows the declaration, which for a facade is the re-exporting module's page.
+//! The bundle's addressing and what it writes: a mark's referent is found where the record shows the declaration, which for a facade is the re-exporting module's page; the index lists every module, named declaration and member at that address; and a page carries the field the script shows.
 
 use {
     super::*,
     crate::{Declaration, Kind, Member, ModuleDocumentation, Signature},
+    std::time::{SystemTime, UNIX_EPOCH},
 };
 
-fn declaration(name: &str, home: &[&str], members: &[&str]) -> Declaration {
-    let signature = |text: &str| Signature {
+fn signature(text: &str) -> Signature {
+    Signature {
         text: text.to_string(),
         marks: Vec::new(),
-    };
+    }
+}
+
+fn declaration(kind: Kind, name: &str, home: &[&str], members: &[&str]) -> Declaration {
     Declaration {
         name: name.to_string(),
         home: Qualifier::from(home.iter().copied()),
-        kind: Kind::Inductive,
+        kind,
         signature: signature(name),
         prose: None,
         members: members
@@ -29,9 +33,22 @@ fn declaration(name: &str, home: &[&str], members: &[&str]) -> Declaration {
     }
 }
 
-#[test]
-fn a_referent_is_found_where_the_record_shows_it() {
-    let record = Documentation {
+fn witness(text: &str) -> Declaration {
+    Declaration {
+        name: String::new(),
+        home: Qualifier::from(["shapes"]),
+        kind: Kind::Witness,
+        signature: signature(text),
+        prose: None,
+        members: Vec::new(),
+        opaque: false,
+        derived: false,
+    }
+}
+
+/// A root with an inductive and a concept of its own, a facade for a declaration of a private module, a witness, and one child module. The concept's first member is its superclass constraint, which the record keeps nameless so the block prints it.
+fn record() -> Documentation {
+    Documentation {
         prefix: Qualifier::from(["shapes"]),
         description: None,
         modules: vec![
@@ -40,9 +57,11 @@ fn a_referent_is_found_where_the_record_shows_it() {
                 prose: None,
                 children: vec![Qualifier::from(["shapes", "geometry"])],
                 declarations: vec![
-                    declaration("Shape", &["shapes"], &["circle"]),
+                    declaration(Kind::Inductive, "Shape", &["shapes"], &["circle"]),
+                    declaration(Kind::Concept, "Area", &["shapes"], &["", "area"]),
+                    witness("satisfy Show(Shape)"),
                     // Declared in the private `hidden`, shown here through `pub use hidden/{Token}`.
-                    declaration("Token", &["shapes", "hidden"], &["token"]),
+                    declaration(Kind::Inductive, "Token", &["shapes", "hidden"], &["token"]),
                 ],
                 reexports: Vec::new(),
             },
@@ -50,11 +69,21 @@ fn a_referent_is_found_where_the_record_shows_it() {
                 path: Qualifier::from(["shapes", "geometry"]),
                 prose: None,
                 children: Vec::new(),
-                declarations: vec![declaration("origin", &["shapes", "geometry"], &[])],
+                declarations: vec![declaration(
+                    Kind::Definition,
+                    "origin",
+                    &["shapes", "geometry"],
+                    &[],
+                )],
                 reexports: Vec::new(),
             },
         ],
-    };
+    }
+}
+
+#[test]
+fn a_referent_is_found_where_the_record_shows_it() {
+    let record = record();
     let bundle = Bundle::new(&record);
     let href = |depth, path: &[&str]| bundle.href(depth, &Qualifier::from(path.iter().copied()));
 
@@ -85,4 +114,62 @@ fn a_referent_is_found_where_the_record_shows_it() {
     );
     // A declaration nothing shows has no address, rather than an anchor no page defines.
     assert_eq!(href(0, &["shapes", "hidden", "unseen"]), None);
+}
+
+#[test]
+fn the_index_lists_every_address_and_a_page_carries_the_field() {
+    let record = record();
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let directory =
+        std::env::temp_dir().join(format!("curios-document-{}-{nanos}", std::process::id()));
+    write_documentation(&record, &directory).unwrap();
+
+    // The record's order, a member beneath its declaration by what its kind calls one, the facade at its home, and no row for the witness or the nameless constraint.
+    let index = fs::read_to_string(directory.join("static").join("index.js")).unwrap();
+    assert_eq!(
+        index,
+        concat!(
+            "window.curiosIndex=[",
+            "[\"mod\",\"/shapes\",\"index.html\"],",
+            "[\"induct\",\"/shapes/Shape\",\"index.html#Shape\"],",
+            "[\"case\",\"/shapes/Shape/circle\",\"index.html#Shape/circle\"],",
+            "[\"concept\",\"/shapes/Area\",\"index.html#Area\"],",
+            "[\"method\",\"/shapes/Area/area\",\"index.html#Area/area\"],",
+            "[\"induct\",\"/shapes/hidden/Token\",\"index.html#Token\"],",
+            "[\"case\",\"/shapes/hidden/Token/token\",\"index.html#Token/token\"],",
+            "[\"mod\",\"/shapes/geometry\",\"geometry.crs.html\"],",
+            "[\"let\",\"/shapes/geometry/origin\",\"geometry.crs.html#origin\"]",
+            "];\n"
+        )
+    );
+
+    // The page loads the index before the script, tells the script where the root is, and holds the field hidden; the rail lists the named declarations and not the witness.
+    let landing = fs::read_to_string(directory.join("index.html")).unwrap();
+    assert!(
+        landing.contains("<html lang=\"en\" data-root=\"\">"),
+        "{landing}"
+    );
+    assert!(
+        landing.contains("<script src=\"static/index.js\" defer></script>"),
+        "{landing}"
+    );
+    assert!(
+        landing.contains("<form class=\"search\" role=\"search\" hidden>"),
+        "{landing}"
+    );
+    assert!(
+        landing.contains("<div class=\"results\" hidden></div>"),
+        "{landing}"
+    );
+    assert!(landing.contains("href=\"#Token\""), "{landing}");
+    assert!(landing.contains("id=\"satisfy-1\""), "{landing}");
+    assert!(
+        !landing.contains("href=\"#satisfy-1\""),
+        "a witness is anonymous and stays out of the rail: {landing}"
+    );
+
+    fs::remove_dir_all(directory).unwrap();
 }

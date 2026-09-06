@@ -1,21 +1,27 @@
-{#- A module's page. The rail holds the whole tree with this page's declarations under its module, behind a checkbox and its label so that, stacked at a narrow width, it starts folded without a script; the main column opens with the path and the lead, then the child modules, the declarations and the re-exports. Every block tag trims the whitespace before it, so the indentation here reaches the page only ahead of a block element; inside an inline run every tag trims both sides, so the run renders as one line. -#}
+{#- A module's page. The rail holds the search field, then the whole tree with this page's declarations under its module. The field and the results that stand in for the tree while a query is live are hidden until the script shows them, so a page without script is the tree alone; the tree sits behind a checkbox and a chevron so that, as a bar at a narrow width, it starts folded without a script. The root prefix on the document is what the script prefixes every index address with. The main column opens with the path and the lead, then the child modules, the declarations and the re-exports. Every block tag trims the whitespace before it, so the indentation here reaches the page only ahead of a block element; inside an inline run every tag trims both sides, so the run renders as one line. -#}
 {%- import "signature.html" as sig -%}
 {%- import "prose.html" as words -%}
 <!doctype html>
-<html lang="en">
+<html lang="en" data-root="{{ root }}">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>{{ path }}</title>
         <link rel="stylesheet" href="{{ root }}static/style.css">
+        <script src="{{ root }}static/index.js" defer></script>
         <script src="{{ root }}static/script.js" defer></script>
     </head>
     <body>
         <div class="frame">
             <aside class="rail">
                 <div class="tree">
+                    <form class="search" role="search" hidden>
+                        <input type="search" placeholder="Search" aria-label="Search the index" autocomplete="off" spellcheck="false">
+                        <button type="button" class="clear" aria-label="Clear" hidden><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8"/></svg></button>
+                    </form>
                     <input type="checkbox" id="rail-toggle" class="toggle" hidden>
-                    <label for="rail-toggle">Index</label>
+                    <label for="rail-toggle" title="Index"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg></label>
+                    <div class="results" hidden></div>
                     <nav>
                         {%- for row in rail %}
                             <a class="module{% if row.current %} current{% endif %}" style="--depth: {{ row.depth }}" href="{{ root }}{{ row.href }}">{{ row.name }}</a>

@@ -37,6 +37,9 @@
     --well-deep: rgba(0, 0, 0, 0.34);
     --amber-wash: rgba(247, 197, 119, 0.14);
     --amber-edge: rgba(247, 197, 119, 0.5);
+    --amber-ring: rgba(247, 197, 119, 0.28);
+    --rail: #122d38;
+    --well-flat: #102933;
     --sans: Geist, system-ui, sans-serif;
     --mono: "Geist Mono", ui-monospace, monospace;
     --serif: Faustina, Georgia, serif;
@@ -62,7 +65,7 @@ a:hover {
     color: var(--amber-bright);
 }
 ::selection {
-    background: rgba(247, 197, 119, 0.28);
+    background: var(--amber-ring);
 }
 code {
     font-family: var(--mono);
@@ -78,15 +81,16 @@ code {
     min-height: 100vh;
 }
 .rail {
-    flex: 0 0 260px;
+    flex: 0 0 300px;
     position: sticky;
     top: 0;
+    min-height: 100vh;
     max-height: 100vh;
     overflow-y: auto;
     box-sizing: border-box;
-    background: rgba(0, 0, 0, 0.12);
+    background: var(--rail);
     border-right: 1px solid var(--edge);
-    padding: 22px 0;
+    padding: 0 0 16px;
 }
 main {
     flex: 1 1 480px;
@@ -95,7 +99,69 @@ main {
     padding: 22px clamp(20px, 4vw, 40px) 96px;
 }
 
-/* The rail: the tree, every row a link; the current module carries the page's declarations beneath it. The label and the checkbox it toggles exist for the narrow layout alone. */
+/* The rail: the search field pinned at its top, then the tree, every row a link; the current module carries the page's declarations beneath it. While a query is live the results stand in for the tree, as rows of the same shape. The label and the checkbox it toggles exist for the narrow layout alone. */
+.search {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 16px;
+    background: var(--well-flat);
+}
+.search input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 40px 9px 12px;
+    border: 1px solid var(--edge);
+    border-radius: 4px;
+    background: var(--well);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 16px;
+    line-height: 1.3;
+    appearance: none;
+    -webkit-appearance: none;
+}
+.search input::-webkit-search-decoration,
+.search input::-webkit-search-cancel-button {
+    display: none;
+}
+.search input::placeholder {
+    color: var(--ink-57);
+}
+.search input:focus {
+    outline: none;
+    border-color: var(--amber-edge);
+    box-shadow: 0 0 0 3px var(--amber-ring);
+}
+/* The cross that empties the field, inside its right edge, present only while there is something to clear. */
+.search .clear {
+    position: absolute;
+    top: 50%;
+    right: 22px;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: none;
+    color: var(--ink-57);
+    cursor: pointer;
+}
+.search .clear:hover {
+    color: var(--amber);
+}
+.search .clear[hidden] {
+    display: none;
+}
+/* Without script the field never shows, and the tree keeps the top edge the field would have carried. */
+.search[hidden] ~ nav {
+    padding-top: 16px;
+}
 .tree label {
     display: none;
 }
@@ -103,13 +169,18 @@ main {
     display: flex;
     flex-direction: column;
 }
+.results {
+    display: none;
+    flex-direction: column;
+    --depth: 0;
+}
 .tree a {
     flex: none;
     display: flex;
     align-items: baseline;
     gap: 10px;
-    padding: 6px 20px;
-    padding-left: calc(20px + var(--depth) * 22px);
+    padding: 6px 16px;
+    padding-left: calc(16px + var(--depth) * 22px);
     font-family: var(--mono);
     font-size: 12.5px;
     color: var(--ink-70);
@@ -130,11 +201,36 @@ main {
     color: rgba(247, 197, 119, 0.85);
 }
 .tree .entry .label {
-    flex: 1;
+    flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+/* The module a hit lives in gives way before the hit's own name does. */
+.tree .entry .where {
+    flex: 0 4 auto;
+    min-width: 0;
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: var(--ink-57);
+}
+.tree mark {
+    background: none;
+    color: var(--amber-bright);
+}
+.results a[aria-current] {
+    background: var(--amber-wash);
+    color: var(--amber);
+}
+.results .none {
+    padding: 6px 16px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink-57);
 }
 
 /* The head of a page: where it sits, what it is, what it is for. */
@@ -372,33 +468,84 @@ footer img {
     display: block;
 }
 
-/* Below 900px the rail stacks above the main column and the tree starts folded behind its label, which toggles the checkbox that shows it. */
+/* Below 900px the rail is a bar pinned above the main column, the field and a chevron on one row; the tree starts folded behind the chevron, which toggles the checkbox that shows it, and the tree or the results open as a flap over the content rather than pushing it down. A followed anchor keeps clear of the bar. */
 @media (max-width: 900px) {
     .rail {
         flex: 1 1 100%;
-        position: static;
+        z-index: 2;
+        min-height: 0;
         max-height: none;
+        overflow: visible;
         border-right: none;
         border-bottom: 1px solid var(--edge);
-        padding: 14px 0;
+        padding: 0;
+    }
+    .tree {
+        position: relative;
+        display: flex;
+        align-items: center;
+        background: var(--well-flat);
+    }
+    .search {
+        flex: 1 1 auto;
+        min-width: 0;
+        position: relative;
+        padding: 16px 8px 16px 16px;
+    }
+    .search .clear {
+        right: 14px;
     }
     .tree label {
-        display: block;
-        padding: 6px 20px;
-        font-family: var(--mono);
-        font-size: 10.5px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
+        display: flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        margin-right: 8px;
+        border: 1px solid transparent;
+        border-radius: 4px;
         color: var(--ink-70);
         cursor: pointer;
     }
+    .tree label svg {
+        transition: transform 0.15s ease;
+    }
+    .tree .toggle:checked ~ label {
+        color: var(--amber);
+    }
+    .tree .toggle:checked ~ label svg {
+        transform: rotate(180deg);
+    }
     .tree nav {
         display: none;
-        padding-top: 8px;
-        max-height: 62vh;
-        overflow-y: auto;
     }
     .tree .toggle:checked ~ nav {
         display: flex;
     }
+    .results,
+    .tree nav {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        padding: 8px 0 12px;
+        max-height: 62vh;
+        overflow-y: auto;
+        background: var(--rail);
+        border-bottom: 1px solid var(--edge);
+    }
+    .card,
+    .signature .member,
+    .witnesses li {
+        scroll-margin-top: 82px;
+    }
+}
+
+/* While a query is live the results stand in for the tree, whatever the width and whatever the toggle says: these come last so they outrank the toggle's rule above. */
+.tree.live .results {
+    display: flex;
+}
+.tree.live nav {
+    display: none;
 }

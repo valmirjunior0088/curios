@@ -57,10 +57,9 @@ struct RailRow {
     current: bool,
 }
 
-/// One declaration in the rail, under the page's module.
+/// One named declaration in the rail, under the page's module. A witness has no name and is not listed.
 struct Entry {
     keyword: &'static str,
-    /// The declared name, or a witness's signature past the keyword, since a witness has no name.
     name: String,
     anchor: String,
 }
@@ -193,18 +192,8 @@ pub(super) fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
     for declaration in &module.declarations {
         match declaration.kind {
             Kind::Witness => {
-                let anchor = format!("satisfy-{}", witnesses.len() + 1);
-                contents.push(Entry {
-                    keyword: keyword(declaration.kind),
-                    name: declaration
-                        .signature
-                        .text
-                        .trim_start_matches("satisfy ")
-                        .to_string(),
-                    anchor: anchor.clone(),
-                });
                 witnesses.push(WitnessRow {
-                    anchor,
+                    anchor: format!("satisfy-{}", witnesses.len() + 1),
                     signature: segments(bundle, depth, &declaration.signature),
                     derived: declaration.derived,
                     prose: paragraphs(declaration.prose.as_deref()),
@@ -344,7 +333,7 @@ fn segments(bundle: &Bundle<'_>, depth: usize, signature: &Signature) -> Vec<Seg
 }
 
 /// The keyword a declaration is written with.
-fn keyword(kind: Kind) -> &'static str {
+pub(super) fn keyword(kind: Kind) -> &'static str {
     match kind {
         Kind::Definition => "let",
         Kind::Inductive => "induct",
@@ -352,6 +341,16 @@ fn keyword(kind: Kind) -> &'static str {
         Kind::Concept => "concept",
         Kind::Witness => "satisfy",
         Kind::Foreign => "foreign",
+    }
+}
+
+/// What a member of a declaration of `kind` is called in the index: a constructor a case, a field a field, a concept's method a method. The other kinds expose no members, so the word for one is never shown.
+pub(super) fn member_kind(kind: Kind) -> &'static str {
+    match kind {
+        Kind::Inductive => "case",
+        Kind::Structure => "field",
+        Kind::Concept => "method",
+        Kind::Definition | Kind::Witness | Kind::Foreign => "member",
     }
 }
 
