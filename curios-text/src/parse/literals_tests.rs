@@ -179,7 +179,7 @@ fn a_padded_numeral_keeps_the_width_it_was_written_at() {
 fn string_literal_is_str() {
     assert_eq!(
         "\"a\"".parse::<Term>().unwrap(),
-        Term::from(Subterm::Syn(Syn::Str("a".to_string())))
+        Term::from(Subterm::Syn(Syn::Str(StrLit::line("a"))))
     );
 }
 
@@ -187,7 +187,7 @@ fn string_literal_is_str() {
 fn unrecognized_string_escape_is_literal_backslash_and_char() {
     assert_eq!(
         "\"\\%\"".parse::<Term>().unwrap(),
-        Term::from(Subterm::Syn(Syn::Str("\\%".to_string())))
+        Term::from(Subterm::Syn(Syn::Str(StrLit::line("\\%"))))
     );
 }
 
@@ -202,7 +202,7 @@ fn a_braced_unicode_escape_names_a_scalar_in_a_string() {
     ] {
         assert_eq!(
             source.parse::<Term>().unwrap(),
-            Term::from(Subterm::Syn(Syn::Str(expected.to_string()))),
+            Term::from(Subterm::Syn(Syn::Str(StrLit::line(expected)))),
             "{source}"
         );
     }
@@ -229,7 +229,7 @@ fn a_backslash_u_without_a_brace_still_stands_for_itself() {
     ] {
         assert_eq!(
             source.parse::<Term>().unwrap(),
-            Term::from(Subterm::Syn(Syn::Str(expected.to_string()))),
+            Term::from(Subterm::Syn(Syn::Str(StrLit::line(expected)))),
             "{source}"
         );
     }
@@ -571,5 +571,78 @@ fn list_bits_and_bytes_spreads_round_trip() {
 
     for removed in [r"\00", r"\0", r"\\", r"\..xs", r"[\00]"] {
         assert!(removed.parse::<Term>().is_err());
+    }
+}
+
+fn block(value: &str) -> Term {
+    Term::from(Subterm::Syn(Syn::Str(StrLit::block(value))))
+}
+
+/// A block's value is the lines between its delimiters with the indentation they share with the closer removed: a block reads at the indentation of the code around it.
+#[test]
+fn a_block_string_is_the_lines_between_its_delimiters_dedented() {
+    for (source, expected) in [
+        (
+            "\"\"\"\n    <ul>\n      <li>\n    </ul>\n    \"\"\"",
+            "<ul>\n  <li>\n</ul>",
+        ),
+        // Content indented past the closer keeps the difference: the closer's column is the dial.
+        ("\"\"\"\n        a\n        b\n    \"\"\"", "    a\n    b"),
+        // A whitespace-only line becomes an empty line and takes no part in the prefix.
+        ("\"\"\"\n    a\n  \n    b\n    \"\"\"", "a\n\nb"),
+        // Trailing whitespace is stripped; `\u{20}` is translated after the stripping and stays.
+        ("\"\"\"\n    a   \n    b\\u{20}\n    \"\"\"", "a\nb "),
+        // A backslash before a newline joins the lines, keeping the space before it.
+        ("\"\"\"\n    a \\\n    b\n    \"\"\"", "a b"),
+        // An escape at a line's start ends its leading whitespace, so one escape keeps every line's indentation.
+        (
+            "\"\"\"\n    \\u{20}   a\n        b\n    \"\"\"",
+            "    a\n    b",
+        ),
+        // A quote is itself; three are spelled with an escape.
+        (
+            "\"\"\"\n    say \"hi\" and \"\"\\\"\n    \"\"\"",
+            "say \"hi\" and \"\"\"",
+        ),
+        // Nothing between the delimiters is the empty string.
+        ("\"\"\"\n\"\"\"", ""),
+    ] {
+        assert_eq!(source.parse::<Term>().unwrap(), block(expected), "{source}");
+    }
+}
+
+/// The delimiters own their newlines, so a closer sharing a line with content and an opener followed by content are each refused by name, and a one-line literal that spans lines is sent to the block form.
+#[test]
+fn a_string_that_spans_lines_is_a_block_or_is_refused() {
+    for (source, expected) in [
+        ("\"\"\"\n    a\"\"\"", "closes with a newline"),
+        ("\"\"\"a\n\"\"\"", "opens with `\"\"\"` and a newline"),
+        ("\"a\nb\"", "ends before its line does"),
+    ] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(report.contains(expected), "{source} reported {report}");
+    }
+}
+
+/// A block prints as a block: its lines one level in from the opener, the closer at that level, and what a reader would strip, mistake or close on escaped — so the printed text reads back as the value it prints.
+#[test]
+fn a_block_string_prints_as_a_block_that_reads_back() {
+    for (value, printed) in [
+        ("a\nb", "\"\"\"\n    a\n    b\n    \"\"\""),
+        // Shared leading whitespace sits right of the closer, which is exactly what the reader keeps.
+        ("  a\n  b", "\"\"\"\n      a\n      b\n    \"\"\""),
+        // A trailing space, a tab and a third consecutive quote are escaped; a lone quote is not.
+        (
+            "a \n\t\"b\"\n\"\"\"\"",
+            "\"\"\"\n    a\\u{20}\n    \\t\"b\"\n    \"\"\\\"\"\n    \"\"\"",
+        ),
+        // An empty line prints empty, and a whitespace-only one as escapes.
+        (
+            "a\n\n \nb",
+            "\"\"\"\n    a\n\n    \\u{20}\n    b\n    \"\"\"",
+        ),
+    ] {
+        assert_eq!(block(value).to_string(), printed, "{value:?}");
+        assert_eq!(printed.parse::<Term>().unwrap(), block(value), "{printed}");
     }
 }

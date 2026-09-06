@@ -20,7 +20,7 @@ fn inductive_match_nullary_and_unary() {
                         tag: "null".to_string(),
                         args: vec![],
                     },
-                    body: Subterm::Syn(Syn::Str("null".to_string())).into(),
+                    body: Subterm::Syn(Syn::Str(StrLit::line("null"))).into(),
                 },
                 MatrixArm {
                     pattern: MatchPattern::Variant {

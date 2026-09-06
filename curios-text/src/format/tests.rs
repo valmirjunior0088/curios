@@ -520,3 +520,13 @@ fn collect_sources(directory: &std::path::Path, sources: &mut Vec<std::path::Pat
         }
     }
 }
+
+/// A block string literal is laid out by the formatter: its lines and its closer one level in from the opener's line, wherever the author left them, and the value unchanged because the closer's column is what a reader strips.
+#[test]
+fn a_block_string_literal_takes_the_canonical_indentation() {
+    let source = "use /std/{Str};\n\nlet page: Str =\n    \"\"\"\n    <p>\n      x\n    </p>\n    \"\"\";\n\npage\n";
+    assert_eq!(
+        formatted(source),
+        "use /std/{Str};\n\nlet page: Str =\n    \"\"\"\n        <p>\n          x\n        </p>\n        \"\"\";\n\npage\n"
+    );
+}

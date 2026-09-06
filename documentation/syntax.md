@@ -122,6 +122,21 @@ A string literal has type `Str`.
 
 String escapes are `\n`, `\t`, `\r`, `\\`, `\"`, and `\u{…}` as in a character literal. An unrecognized escape in a string literal is not an error: the backslash and the following character both stand for themselves, so `"\%"` is the two-character string `\%`, and so is `"\u"` — only the brace reserves the Unicode form, and a malformed `\u{…}` is a parse error. This is unlike a character literal, where every unrecognized escape is a parse error.
 
+A block string literal spans lines. It opens with `"""` followed by a newline and closes with a newline, optional whitespace and `"""`; both delimiters take their newline, so the value is exactly the lines between, joined by newlines, with no newline before the first or after the last.
+
+```crs
+let page: Str =
+    """
+    <ul>
+        <li>one</li>
+    </ul>
+    """;
+```
+
+The leading whitespace the non-blank lines and the closer's line share is removed from each line, so a block reads at the indentation of the code around it, and content indented past the closer keeps the difference. A whitespace-only line becomes an empty line and takes no part in that prefix. Trailing whitespace is stripped from every line. Escapes are the one-line form's, translated after the stripping, so `\u{20}` spells a space the stripping would otherwise take; a backslash before a newline joins the two lines. A `"` inside is itself, and three quotes are spelled `\"""`. The two spellings differ in nothing else: the value above is `"<ul>\n    <li>one</li>\n</ul>"`.
+
+A one-line string literal does not span lines: a raw newline inside `"…"` is refused, naming the block form.
+
 `Str` stores certified UTF-8 bytes. Its logical length, indexing, slicing, folding, and search operations count Unicode scalar values (`Char`), not bytes or grapheme clusters.
 
 ### Boolean literals
@@ -1112,6 +1127,7 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `use value` | Explicitly supplied witness argument or superclass field |
 | `?` | Written elaboration goal that always reports and fails compilation |
 | `term!` | Monadic bind through `Monad`, lifting a cross-monad action through `Lift` |
+| `"""` … `"""` | Block string literal — the lines between the delimiters, their shared indentation removed |
 | `b[...]` | `Bits` literal — grain letter glued to the bracket |
 | `x[...]` | `Bytes` literal |
 | `Name { ... }` | Structure or concept literal |

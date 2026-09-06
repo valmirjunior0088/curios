@@ -7,6 +7,8 @@ pub(super) fn parse_intrinsic<'a>() -> Parser<'a, Term> {
         .or(parse_flt_value())
         .or(parse_char_lit())
         .or(parse_num_lit())
+        // The block form is tried first, since its opener begins with the one-line form's.
+        .or(parse_block_string_literal())
         .or(parse_string_literal())
         .or(parse_bin_literal())
         .or(parse_list_literal())

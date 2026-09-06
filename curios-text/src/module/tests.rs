@@ -3,8 +3,8 @@ use {super::Entrypoint, crate::Error, curios_utilities::Qualifier};
 /// Text has no file, but it has line numbers — so a diagnostic about it still says where, with the label standing exactly where a path would.
 #[test]
 fn supplied_text_names_itself_in_diagnostics() {
-    let Err(error) = Entrypoint::supplied("<stdin>", "/std/print(\"unclosed\n") else {
-        panic!("the string literal never closes");
+    let Err(error) = Entrypoint::supplied("<stdin>", "/std/print(\n") else {
+        panic!("the call never closes");
     };
 
     let error = error.format();

@@ -168,6 +168,46 @@ fn riding_call(head: Term, arguments: Vec<Argument>) -> Printer {
     ])
 }
 
+/// A block string literal, printed as the lines of its value one level in from the opener's line, with the closer at that level. Each line prints as itself: the leading whitespace lines share puts them right of the closer, which is exactly what a reader strips, so nothing is removed here — while trailing whitespace, tabs, carriage returns, backslashes and every third consecutive quote are escaped, since the reader would strip, mistake or close on them. A scalar prints as itself, as in the one-line form.
+fn print_block_string(value: &str) -> Printer {
+    let mut body = Vec::new();
+    for line in value.split('\n') {
+        body.push(hard_line());
+        body.push(pure(spell_block_line(line)));
+    }
+    body.push(hard_line());
+    body.push(pure("\"\"\""));
+    flat([pure("\"\"\""), indent(flat(body))])
+}
+
+/// One line of a block string literal's value, spelled so that it reads back as itself.
+fn spell_block_line(line: &str) -> String {
+    let kept = line.trim_end_matches(' ').len();
+    let mut spelled = String::with_capacity(line.len());
+    let mut quotes = 0;
+    for (offset, character) in line.char_indices() {
+        match character {
+            '"' if quotes == 2 => {
+                spelled.push_str("\\\"");
+                quotes = 0;
+                continue;
+            }
+            '"' => quotes += 1,
+            '\\' => spelled.push_str("\\\\"),
+            '\t' => spelled.push_str("\\t"),
+            '\r' => spelled.push_str("\\r"),
+            ' ' if offset >= kept => spelled.push_str("\\u{20}"),
+            _ => spelled.push(character),
+        }
+        if character == '"' {
+            spelled.push('"');
+        } else {
+            quotes = 0;
+        }
+    }
+    spelled
+}
+
 /// The always-broken brace block a `struct`, `concept`, or `satisfy` body is: one field per line at the next indent with a trailing comma, the closing brace at the opening's column, regardless of how little would fit flat. An empty body prints the bare delimiters.
 fn listed_hard(
     open: &'static str,
@@ -1054,9 +1094,11 @@ fn print_term_inner(term: Term) -> Printer {
         // Never parsed: the witness lowering mints it, and a `satisfy` prints its `;` from the declaration, not from here.
         Subterm::Derive => pure("derive"),
         Subterm::Syn(Syn::Char(character)) => print_char_literal(character),
-        Subterm::Syn(Syn::Str(content)) => pure(format!(
+        Subterm::Syn(Syn::Str(literal)) if literal.block => print_block_string(&literal.value),
+        Subterm::Syn(Syn::Str(literal)) => pure(format!(
             "\"{}\"",
-            content
+            literal
+                .value
                 .chars()
                 .map(|character| match character {
                     '"' => "\\\"".to_string(),

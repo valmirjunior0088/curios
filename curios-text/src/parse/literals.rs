@@ -181,22 +181,36 @@ fn decimal_parts(digits: &str) -> Option<(Natural, i32)> {
 
 pub(super) fn parse_string_chunk<'a>() -> Parser<'a, String> {
     catch(
-        take_while(|char| char != '\\' && char != '"').flat_map(|chunk| match chunk.is_empty() {
-            true => fail("empty chunk"),
-            false => pure(chunk.to_string()),
-        }),
+        take_while(|char| char != '\\' && char != '"' && char != '\n').flat_map(
+            |chunk| match chunk.is_empty() {
+                true => fail("empty chunk"),
+                false => pure(chunk.to_string()),
+            },
+        ),
     )
-    .or(catch(take_exact("\\")).and_keep(
-        take_exact("n")
-            .map(|_| "\n".to_string())
-            .or(take_exact("t").map(|()| "\t".to_string()))
-            .or(take_exact("r").map(|()| "\r".to_string()))
-            .or(take_exact("\\").map(|()| "\\".to_string()))
-            .or(take_exact("\"").map(|()| "\"".to_string()))
-            .or(parse_unicode_escape().map(|char| char.to_string()))
-            // An unrecognized escape is not an error: the backslash and the following character both stand for themselves, so e.g. `\%` in source yields the two literal characters `\` and `%`. `\u` alone is one of them; only `\u{` is reserved, above.
-            .or(take_n(1).map(|char| format!("\\{char}"))),
-    ))
+    .or(catch(take_exact("\\")).and_keep(parse_escape_tail()))
+}
+
+/// What follows a backslash, in either string spelling: the five one-letter escapes and the braced Unicode scalar translated, and any other character standing beside its backslash — an unrecognized escape is not an error, so e.g. `\%` in source yields the two literal characters `\` and `%`. `\u` alone is one of them; only `\u{` is reserved, below.
+fn parse_escape_tail<'a>() -> Parser<'a, String> {
+    take_exact("n")
+        .map(|_| "\n".to_string())
+        .or(take_exact("t").map(|()| "\t".to_string()))
+        .or(take_exact("r").map(|()| "\r".to_string()))
+        .or(take_exact("\\").map(|()| "\\".to_string()))
+        .or(take_exact("\"").map(|()| "\"".to_string()))
+        .or(parse_unicode_escape().map(|char| char.to_string()))
+        .or(take_n(1).map(|char| format!("\\{char}")))
+}
+
+/// A raw newline inside a one-line string literal, refused by name: the block form is the spelling for text that spans lines, and accepting the newline here would give one value two spellings for the formatter to choose between.
+fn refuse_line_break_in_string<'a>() -> Parser<'a, ()> {
+    mark().and_drop(take_exact("\n")).flat_map(|start| {
+        fail_from(
+            &start,
+            "a string literal ends before its line does: close it with `\"`, or spell text that spans lines as a block string literal — `\"\"\"`, a newline, the lines, a newline and `\"\"\"`",
+        )
+    })
 }
 
 /// The braced Unicode escape both literal forms share: `\u{…}` with one to six hex digits naming a scalar — a surrogate, a value past `U+10FFFF`, an empty brace or a stray character is refused. It is tried only once `\u{` is read, so the brace is what reserves the form: in a string `\u` before anything else still stands for itself, and the only source this changes the meaning of is source that spelled `\u{` literally, which none did.
@@ -244,10 +258,164 @@ pub(super) fn parse_char_value<'a>() -> Parser<'a, char> {
 pub(super) fn parse_string_literal<'a>() -> Parser<'a, Term> {
     catch(take_exact("\""))
         .and_keep(many0(parse_string_chunk))
-        .and_drop(take_exact("\""))
+        .and_drop(take_exact("\"").or(refuse_line_break_in_string()))
         .and_drop(parse_whitespace())
-        .map(|chunks| Subterm::Syn(Syn::Str(chunks.concat())))
+        .map(|chunks| Subterm::Syn(Syn::Str(StrLit::line(chunks.concat()))))
         .map(Into::into)
+}
+
+/// One piece of a block string literal's body, read before the block's rules are applied.
+enum BlockPiece<'a> {
+    /// A run holding no quote, backslash or newline.
+    Text(&'a str),
+    /// A `"` that does not begin the closer.
+    Quote,
+    Newline,
+    /// A backslash before a newline: the line joins the next.
+    Join,
+    /// A translated escape.
+    Escape(String),
+}
+
+fn parse_block_piece<'a>() -> Parser<'a, BlockPiece<'a>> {
+    catch(
+        take_while(|char| char != '"' && char != '\\' && char != '\n').flat_map(|run| {
+            match run.is_empty() {
+                true => fail("empty run"),
+                false => pure(BlockPiece::Text(run)),
+            }
+        }),
+    )
+    .or(catch(take_exact("\n")).map(|()| BlockPiece::Newline))
+    // Tried before the general escape, where a backslash before a newline would stand beside it.
+    .or(catch(take_exact("\\\n")).map(|()| BlockPiece::Join))
+    .or(catch(take_exact("\\")).and_keep(parse_escape_tail().map(BlockPiece::Escape)))
+    .or(catch(take_exact("\"").and_drop(not_ahead("\"\""))).map(|()| BlockPiece::Quote))
+}
+
+/// A block string literal: `"""` and a newline, the lines, then a newline, optional whitespace and `"""`. Both delimiters take their newline, so the value is exactly the lines between, joined by newlines.
+///
+/// The rules the body is read under, in order: the leading whitespace the non-blank lines and the closer's line share is removed from each line, so a block reads at the indentation of the code around it and content indented past the closer keeps the difference; a whitespace-only line becomes an empty line and takes no part in that prefix; trailing whitespace is stripped from every line; then the escapes stand, translated after the stripping so `\u{20}` spells a space the stripping would take, and a backslash before a newline joins the two lines. The escapes are the one-line form's — a `"` inside is itself and three quotes are spelled `\"""` — so the two spellings differ in nothing but the newlines and the indentation.
+///
+/// Refusals are the delimiters': an opener followed by anything but a newline, and a closer that is not alone on its line, each named from where it stands.
+pub(super) fn parse_block_string_literal<'a>() -> Parser<'a, Term> {
+    mark()
+        .flat_map(|open| {
+            take_exact("\"\"\"")
+                .and_drop(take_while(|char| char == ' ' || char == '\t'))
+                // The refusal consumes the offending character before failing, so it stands past the choice point and wins the tie a same-offset failure would lose.
+                .and_drop(take_exact("\n").or(take_n(1).flat_map(move |_| {
+                    fail_from(
+                        &open,
+                        "a block string literal opens with `\"\"\"` and a newline; its text begins on the next line",
+                    )
+                })))
+                .and_keep(many0(parse_block_piece))
+                .and(mark())
+                .and_drop(take_exact("\"\"\""))
+                .flat_map(|(pieces, close)| match assemble_block(pieces) {
+                    Ok(value) => pure(Subterm::Syn(Syn::Str(StrLit::block(value)))),
+                    Err(message) => fail_from(&close, message),
+                })
+        })
+        .and_drop(parse_whitespace())
+        .map(Into::into)
+}
+
+/// The value a block's pieces spell, under the rules `parse_block_string_literal` states, or the refusal for a closer that shares its line with content.
+fn assemble_block(pieces: Vec<BlockPiece<'_>>) -> Result<String, &'static str> {
+    // The physical lines, each with whether a backslash joined it to the next; the last is the closer's.
+    let mut lines: Vec<(Vec<BlockPiece<'_>>, bool)> = vec![(Vec::new(), false)];
+    for piece in pieces {
+        match piece {
+            BlockPiece::Newline => lines.push((Vec::new(), false)),
+            BlockPiece::Join => {
+                lines.last_mut().expect("one line at least").1 = true;
+                lines.push((Vec::new(), false));
+            }
+            piece => lines.last_mut().expect("one line at least").0.push(piece),
+        }
+    }
+
+    let (closer, _) = lines.pop().expect("one line at least");
+    let closer_indent = match closer.as_slice() {
+        [] => "",
+        [BlockPiece::Text(text)] if is_whitespace(text) => text,
+        _ => {
+            return Err(
+                "a block string literal closes with a newline, its indentation and `\"\"\"`; three quotes inside it are spelled `\\\"\"\"`",
+            );
+        }
+    };
+
+    let is_blank = |line: &[BlockPiece<'_>]| match line {
+        [] => true,
+        [BlockPiece::Text(text)] => is_whitespace(text),
+        _ => false,
+    };
+
+    let shared = lines
+        .iter()
+        .filter(|(line, _)| !is_blank(line))
+        .map(|(line, _)| indent_of(line))
+        .chain([closer_indent])
+        .reduce(common_prefix)
+        .unwrap_or("");
+
+    let mut value = String::new();
+    for (index, (line, joined)) in lines.iter().enumerate() {
+        if !is_blank(line) {
+            let last = line.len() - 1;
+            for (position, piece) in line.iter().enumerate() {
+                match piece {
+                    BlockPiece::Text(text) => {
+                        let mut text: &str = text;
+                        if position == 0 {
+                            text = &text[shared.len()..];
+                        }
+                        if position == last && !joined {
+                            text = text.trim_end_matches([' ', '\t']);
+                        }
+                        value.push_str(text);
+                    }
+                    BlockPiece::Quote => value.push('"'),
+                    BlockPiece::Escape(escaped) => value.push_str(escaped),
+                    BlockPiece::Newline | BlockPiece::Join => unreachable!("split above"),
+                }
+            }
+        }
+        if index + 1 < lines.len() && !joined {
+            value.push('\n');
+        }
+    }
+
+    Ok(value)
+}
+
+/// The whitespace a line opens with: the part of a leading run that the shared prefix is taken from.
+fn indent_of<'s>(line: &[BlockPiece<'s>]) -> &'s str {
+    match line.first() {
+        Some(BlockPiece::Text(text)) => {
+            &text[..text.len() - text.trim_start_matches([' ', '\t']).len()]
+        }
+        _ => "",
+    }
+}
+
+fn is_whitespace(text: &str) -> bool {
+    text.trim_matches([' ', '\t']).is_empty()
+}
+
+/// The longest prefix `a` and `b` share, as a slice of `a`.
+fn common_prefix<'s>(a: &'s str, b: &str) -> &'s str {
+    let shared = a
+        .char_indices()
+        .zip(b.chars())
+        .take_while(|((_, x), y)| x == y)
+        .map(|((offset, x), _)| offset + x.len_utf8())
+        .last()
+        .unwrap_or(0);
+    &a[..shared]
 }
 
 // One entry of a `Bits`/`Bytes` literal, mirroring `parse_list_entry`: a `..` spread contributing a whole packed value, or a plain term contributing a single atom. A constant atom has no spelling of its own — `1` in a `Bits` literal and `0x48` in a `Bytes` literal are ordinary numeral terms realized at `Bool` and `Byte` by elaboration, and lowering folds adjacent constants into a packed run rather than a chain of appends (see `into_core`'s `lower_bin_literal`).

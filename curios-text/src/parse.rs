@@ -42,7 +42,7 @@ use {
         ConceptField, Doc, Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam,
         GroupItem, Infix, Intrinsic, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry,
         ListPattern, Match, MatchPattern, MatchPatternField, MatrixArm, Module, Name, NatLiteral,
-        NatPattern, NumLit, Pattern, PatternField, Proj, Radix, StructField, StructLit,
+        NatPattern, NumLit, Pattern, PatternField, Proj, Radix, StrLit, StructField, StructLit,
         StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
         TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType,
         TupleTypeParam, UseGroup, WitnessEntry, WitnessField,

@@ -533,5 +533,31 @@ pub enum Subterm {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Syn {
     Char(char),
-    Str(String),
+    Str(StrLit),
+}
+
+/// A string literal's value with the spelling it was written in, so the printer rounds a block back to a block. Purely presentational, as a numeral's [`Radix`](crate::Radix) is: dropped at lowering, where both spellings are the same `/syn/Str`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StrLit {
+    pub value: String,
+    /// Written as a block — `"""`, a newline, the lines, a newline and `"""` — rather than on one line.
+    pub block: bool,
+}
+
+impl StrLit {
+    /// The one-line spelling of `value`.
+    pub fn line(value: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            block: false,
+        }
+    }
+
+    /// The block spelling of `value`.
+    pub fn block(value: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            block: true,
+        }
+    }
 }

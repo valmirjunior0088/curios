@@ -294,7 +294,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         match syn {
             // A character literal is a polymorphic literal like a numeral: elaboration realizes it — `/syn/Char` by default, a numeric carrier where one is expected — so the certified value is built there, not here.
             Syn::Char(character) => Ok(curios_core::Term::num_lit_char(*character)),
-            Syn::Str(string) => Ok(self.str_literal(string.as_bytes())),
+            Syn::Str(string) => Ok(self.str_literal(string.value.as_bytes())),
         }
     }
 
