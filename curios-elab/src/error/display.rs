@@ -165,9 +165,15 @@ impl fmt::Display for Displayed<'_> {
             Error::UniverseInvariant(message) => {
                 write!(f, "invalid inferred universe state: {message}")
             }
-            Error::NotAFunction { head_type } => {
-                let head_type = head_type.spelled(spelling);
-                write!(f, "applied a non-function\n  head has type: {head_type}")
+            Error::NotAFunction { head_type, reduced } => {
+                let reduced = reduced.spelled(spelling).to_string();
+                let head_type = head_type.spelled(spelling).to_string();
+                write!(f, "applied a non-function\n  head has type: {head_type}")?;
+                // The reduced form is not spelled: it is the unfolded definition stuck on its argument, and the written type is what the reader can act on.
+                if reduced != head_type {
+                    write!(f, "\n  which does not reduce to a function type")?;
+                }
+                Ok(())
             }
             Error::NotAFunctionType { expected } => {
                 let expected = expected.spelled(spelling);
@@ -592,11 +598,18 @@ impl fmt::Display for Displayed<'_> {
                 binder,
                 bound,
                 proposition,
+                reduct,
             } => {
                 let bound = bound.spelled(spelling);
                 // A proposition is a bound, and what was asked for is the fact nothing established. Anything else is a value or a type the arguments and the expectation left undetermined, which is a different fault with a different remedy.
                 let why = match proposition {
-                    true => format!("nothing discharged {bound}"),
+                    true => match reduct {
+                        Some(reduct) => {
+                            let reduct = reduct.spelled(spelling);
+                            format!("nothing discharged {bound}, which reduces to {reduct}")
+                        }
+                        None => format!("nothing discharged {bound}"),
+                    },
                     false => {
                         format!("no argument or expected type determined it (its type is {bound})")
                     }

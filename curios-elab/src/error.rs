@@ -147,8 +147,10 @@ pub enum Error {
         action: Box<Term>,
         expected: Box<Term>,
     },
+    /// A call whose head's type, reduced, is no function type. `head_type` is the type as written and `reduced` what it came to: a reader recognizes the first — `format_type_with(Str, Fmt/parse(s))` — where the second is the unfolded definition stuck on its argument, so the report spells the first and says only that the second is not a function type.
     NotAFunction {
         head_type: Box<Term>,
+        reduced: Box<Term>,
     },
     NotAFunctionType {
         expected: Box<Term>,
@@ -387,6 +389,8 @@ pub enum Error {
         binder: String,
         bound: Box<Term>,
         proposition: bool,
+        /// What `bound` reduced to when it was asked at the mint, kept when that is an inductive type: `Has(spec, "prot")` reduces to `False`, and the reduct is the sentence the spelling alone does not say.
+        reduct: Option<Box<Term>>,
     },
     /// A settle-synthesized lambda's domain that nothing ever pinned — not the body, not anything the settled type met. Carries only the binder's name: the metavariable is elaboration state the reader cannot see, and the parameter is what they can annotate.
     DomainNeverDetermined {
@@ -610,9 +614,10 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_a_function<U: Into<Term>>(head_type: U) -> Self {
+    pub(crate) fn not_a_function<U: Into<Term>, V: Into<Term>>(head_type: U, reduced: V) -> Self {
         Self::NotAFunction {
             head_type: Box::new(head_type.into()),
+            reduced: Box::new(reduced.into()),
         }
     }
 
@@ -907,12 +912,14 @@ impl Error {
         binder: String,
         bound: Term,
         proposition: bool,
+        reduct: Option<Term>,
     ) -> Self {
         Self::UninferredImplicit {
             func,
             binder,
             bound: Box::new(bound),
             proposition,
+            reduct: reduct.map(Box::new),
         }
     }
 
@@ -1309,8 +1316,11 @@ impl Error {
                 out.push(action);
                 out.push(expected);
             }
-            Self::NotAFunction { head_type }
-            | Self::NotATuple { head_type }
+            Self::NotAFunction { head_type, reduced } => {
+                out.push(head_type);
+                out.push(reduced);
+            }
+            Self::NotATuple { head_type }
             | Self::NotNatType { head_type }
             | Self::NotBoolType { head_type }
             | Self::NotListType { head_type }
@@ -1323,7 +1333,12 @@ impl Error {
             Self::InformativePropStruct { field_type, .. } => out.push(field_type),
             Self::NotStrictlyPositive { site_type, .. } => out.push(site_type),
             Self::OperatorUndefined { type_, .. } => out.push(type_),
-            Self::UninferredImplicit { bound, .. } => out.push(bound),
+            Self::UninferredImplicit { bound, reduct, .. } => {
+                out.push(bound);
+                if let Some(reduct) = reduct {
+                    out.push(reduct);
+                }
+            }
             Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),
             Self::UnboundVariable { term } => out.push(term),
             Self::Underivable { key, .. } => out.push(key),

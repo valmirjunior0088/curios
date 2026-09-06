@@ -999,6 +999,7 @@ fn zonk_level(context: &Context, term: &Term) -> Result<Term, Error> {
                             origin.binder.clone(),
                             bound,
                             entry.is_some_and(|entry| entry.proposition),
+                            entry.and_then(|entry| entry.reduct.clone()),
                         )
                     }
                     MetavarOrigin::Witness(origin) => {

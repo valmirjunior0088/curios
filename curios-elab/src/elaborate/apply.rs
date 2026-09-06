@@ -80,18 +80,20 @@ pub(super) fn insert_auto_argument(
 
     match plicity {
         // An obligation already decided in the goal's favour is filled here rather than deferred, because *here* is where the facts that decide it are in scope. A scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established at the call and nowhere afterwards — a hole minted now and swept at the item boundary would be reduced with the refinement already out of scope, and would report as uninferred against a caller who did establish it.
-        Plicity::Implicit => Ok(trivially_inhabited(context, type_)
-            .map_err(|error| {
+        Plicity::Implicit => {
+            let (reduced, inhabitant) = trivially_inhabited(context, type_).map_err(|error| {
                 exhausted_bound(
                     context,
                     error,
                     type_,
                     format!("the bound '{binder}' of '{func}'"),
                 )
-            })?
-            .unwrap_or_else(|| {
-                // Whether the slot is a bound or a value is decided here, where the sort can still be asked, and kept on the birth record for the report an unsolved one becomes.
+            })?;
+            Ok(inhabitant.unwrap_or_else(|| {
+                // Whether the slot is a bound or a value is decided here, where the sort can still be asked, and kept on the birth record for the report an unsolved one becomes — with what the bound reduced to, when that is an inductive type the report can name.
                 let proposition = crate::is_prop(context, type_).unwrap_or(false);
+                let reduct =
+                    (proposition && matches!(&*reduced, Subterm::InductType(_))).then_some(reduced);
                 context.fresh_metavar(
                     type_.clone(),
                     origin.span(),
@@ -100,8 +102,10 @@ pub(super) fn insert_auto_argument(
                         binder: binder.clone(),
                     },
                     proposition,
+                    reduct,
                 )
-            })),
+            }))
+        }
         Plicity::Witness => {
             let provenance = WitnessOrigin {
                 func: func.to_string(),
@@ -147,8 +151,8 @@ pub(super) fn elaborate_apply(
     }
     let func_label = innermost_reference(head).unwrap_or_else(|| "<function>".to_string());
 
-    let (mut head, head_type) = elaborate(context, head, Mode::Infer)?;
-    let mut head_type = reduce_with(context, &head_type)?;
+    let (mut head, written_type) = elaborate(context, head, Mode::Infer)?;
+    let mut head_type = reduce_with(context, &written_type)?;
 
     // The three call-site queues: plain arguments fill explicit binders in telescope order, `@`-arguments fill implicit binders, `use`-arguments fill witness binders — each matched independently, so the relative position of a marked argument among the plain ones carries no meaning.
     let mut plain: VecDeque<Term> = VecDeque::new();
@@ -167,7 +171,7 @@ pub(super) fn elaborate_apply(
     let ft = loop {
         let ft = match &*head_type {
             Subterm::FuncType(ft) => ft.clone(),
-            other => return Err(Error::not_a_function(other.clone())),
+            other => return Err(Error::not_a_function(written_type.clone(), other.clone())),
         };
 
         let all_auto = !ft.plicities().is_empty()

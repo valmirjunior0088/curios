@@ -23,6 +23,8 @@ pub(crate) struct MetaEntry {
     pub kind: MetaKind,
     /// Whether `result` is a proposition, decided once where an omitted implicit is minted. It is what tells a *bound* nothing discharged — `Nat/Lt(i, n)`, the whole of why a call was refused — from a type argument nothing determined, `@T: Type`, which never was an obligation; the report reads differently for the two, and zonk, which raises it, holds the context immutably and cannot ask the sort itself.
     pub proposition: bool,
+    /// What `result` reduced to when the mint asked whether it was decided, kept when that is an inductive type: the reduct — `False` — is what the unsolved report says beside the bound's spelling, and the report cannot reduce for itself.
+    pub reduct: Option<Term>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,6 +136,7 @@ impl Solutions {
             solution: None,
             kind,
             proposition: false,
+            reduct: None,
         });
     }
 
@@ -141,6 +144,13 @@ impl Solutions {
     pub(crate) fn mark_proposition(&mut self, id: MetavarId) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0) {
             entry.proposition = true;
+        }
+    }
+
+    /// Record what `id`'s `result` reduced to, for the report an unsolved one becomes.
+    pub(crate) fn note_reduct(&mut self, id: MetavarId, reduct: Term) {
+        if let Some(Some(entry)) = self.entries.get_mut(id.0) {
+            entry.reduct = Some(reduct);
         }
     }
 

@@ -1170,10 +1170,14 @@ impl Context {
         span: Option<Span>,
         origin: ImplicitOrigin,
         proposition: bool,
+        reduct: Option<Term>,
     ) -> Term {
         let (id, metavar) = self.fresh_metavar_with(result, span, MetavarOrigin::Implicit(origin));
         if proposition {
             self.solutions.mark_proposition(id);
+        }
+        if let Some(reduct) = reduct {
+            self.solutions.note_reduct(id, reduct);
         }
         metavar
     }

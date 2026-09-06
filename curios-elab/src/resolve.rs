@@ -516,6 +516,7 @@ fn instantiate(
                                 binder,
                             },
                             proposition,
+                            None,
                         )
                     }
                     Plicity::Witness => {

@@ -76,6 +76,7 @@ pub(super) fn elaborate_struct_type(
                     binder,
                 },
                 proposition,
+                None,
             );
             tele = rest.open(&[&arg]);
             resolved.push(arg);
@@ -335,6 +336,7 @@ pub(super) fn resolve_struct_params(
                         binder,
                     },
                     proposition,
+                    None,
                 )
             }
         };

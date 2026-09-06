@@ -13,7 +13,10 @@ fn display_unbound_variable() {
 
 #[test]
 fn display_not_a_function() {
-    let err = Error::not_a_function(Subterm::Intrinsic(Intrinsic::NatType));
+    let err = Error::not_a_function(
+        Subterm::Intrinsic(Intrinsic::NatType),
+        Subterm::Intrinsic(Intrinsic::NatType),
+    );
     assert_eq!(
         err.to_string(),
         "applied a non-function\n  head has type: Nat"

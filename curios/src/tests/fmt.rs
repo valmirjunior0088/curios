@@ -208,3 +208,34 @@ fn runtime_args_leave_no_formatter_in_cont() {
         &cont_optm[..cont_optm.len().min(4000)]
     );
 }
+
+/// A format string the program reads at run time has a type nothing can reduce, and the refusal spells that type as written — `format_type_with(Str, Fmt/parse(s))` — rather than as the unfolded definition stuck on `s`, which is what the reduced form is.
+#[test]
+fn a_runtime_format_string_is_refused_by_its_written_type() {
+    let refused = super::error(
+        r#"
+        use /std/{Str, Fmt, Io};
+
+        match Io/read(Io/stdin, 1024)! : (_) => /std/Io({})
+        | chunk(bytes) =>
+            match Str/of_bytes(bytes) : (_) => /std/Io({})
+            | some(s) => Fmt/print(s)(3)
+            | none() => /std/print("invalid input")
+            end
+        | eof() => /std/print("invalid input")
+        | error(_) => /std/print("invalid input")
+        end
+        "#,
+    );
+
+    assert!(refused.contains("applied a non-function"), "{refused}");
+    assert!(
+        refused.contains("head has type: Fmt/format_type_with(Io({}), Fmt/parse(s))"),
+        "the type as written:\n{refused}"
+    );
+    assert!(
+        refused.contains("which does not reduce to a function type"),
+        "{refused}"
+    );
+    assert!(!refused.contains("rec #"), "no unfolding:\n{refused}");
+}

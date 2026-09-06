@@ -25,6 +25,10 @@ fn a_misspelled_name_is_refused_rather_than_answered() {
         refused.contains("Has"),
         "the refusal names the bound nothing discharged:\n{refused}"
     );
+    assert!(
+        refused.contains("which reduces to False"),
+        "and says what the bound came to:\n{refused}"
+    );
 }
 
 /// `WellFormed` is decided by reduction, so a specification naming one long name twice is refused at the entry that demands it rather than at the first line it would misparse.
