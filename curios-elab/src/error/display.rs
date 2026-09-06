@@ -789,42 +789,38 @@ impl fmt::Display for Displayed<'_> {
                     "concept '{concept}' names '{target}' as a superclass, but '{target}' is not a registered concept"
                 )
             }
-            Error::InvalidWitnessHead {
-                witness,
-                position,
-                head,
-            } => {
+            Error::InvalidWitnessHead { position, head } => {
                 let head = head.spelled(spelling);
                 write!(
                     f,
-                    "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every parameter's head must be an inductive, a struct, an intrinsic type, a tuple type, or a function type",
+                    "this witness cannot be keyed: its concept's parameter {n} reduces to {head}\n  every parameter's head must be an inductive, a struct, an intrinsic type, a tuple type, or a function type",
                     n = position + 1
                 )
             }
-            Error::ParameterlessWitnessConcept { witness, concept } => {
+            Error::ParameterlessWitnessConcept { concept } => {
                 write!(
                     f,
-                    "witness '{witness}' cannot be registered: concept '{concept}' has no parameters to key on\n  a global witness keys on its concept's parameter heads; supply a parameterless concept through a local 'use' binder instead"
+                    "this witness cannot be registered: concept '{concept}' has no parameters to key on\n  a global witness keys on its concept's parameter heads; supply a parameterless concept through a local 'use' binder instead"
                 )
             }
-            Error::NotAConcept { witness, found } => {
+            Error::NotAConcept { found } => {
                 let found = found.spelled(spelling);
                 write!(
                     f,
-                    "witness '{witness}' does not witness a concept\n  its annotation elaborates to: {found}"
+                    "this witness does not witness a concept\n  its annotation elaborates to: {found}"
                 )
             }
-            Error::NonRegularWitnessPremise { witness, premise } => {
+            Error::NonRegularWitnessPremise { premise } => {
                 let premise = premise.spelled(spelling);
                 write!(
                     f,
-                    "witness '{witness}' has a non-regular premise: {premise}\n  every 'use' premise must be smaller than the witness's own concept application: its variables bound by the witness's parameters, none used more often than there, and fewer nodes in all"
+                    "this witness has a non-regular premise: {premise}\n  every 'use' premise must be smaller than the witness's own concept application: its variables bound by the witness's parameters, none used more often than there, and fewer nodes in all"
                 )
             }
-            Error::ExplicitWitnessParam { witness } => {
+            Error::ExplicitWitnessParam => {
                 write!(
                     f,
-                    "witness '{witness}' declares an explicit parameter\n  witness parameters must be implicit ('@') or 'use' premises — nothing supplies explicit arguments during resolution"
+                    "this witness declares an explicit parameter\n  witness parameters must be implicit ('@') or 'use' premises — nothing supplies explicit arguments during resolution"
                 )
             }
             Error::NatOverflow { value } => {

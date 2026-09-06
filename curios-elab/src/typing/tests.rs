@@ -34,10 +34,10 @@ fn display_type_mismatch_shows_both_types() {
 // A witness for a parameterless concept once reused `InvalidWitnessHead` at a fabricated position 0, telling the user "parameter 1" of a concept that has none; the dedicated variant states the actual rule — key on parameter heads, or supply the concept through a local `use` binder.
 #[test]
 fn display_parameterless_witness_concept_states_the_rule() {
-    let err = Error::parameterless_witness_concept("w", "Nothing");
+    let err = Error::parameterless_witness_concept("Nothing");
     assert_eq!(
         err.to_string(),
-        "witness 'w' cannot be registered: concept 'Nothing' has no parameters to key on\n  a global witness keys on its concept's parameter heads; supply a parameterless concept through a local 'use' binder instead"
+        "this witness cannot be registered: concept 'Nothing' has no parameters to key on\n  a global witness keys on its concept's parameter heads; supply a parameterless concept through a local 'use' binder instead"
     );
 }
 

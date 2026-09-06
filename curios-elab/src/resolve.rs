@@ -769,7 +769,7 @@ pub(crate) fn register_witness(
                     unreachable!("plicities parallel the telescope");
                 };
                 if matches!(plicity, Plicity::Explicit) {
-                    return Err(Error::explicit_witness_param(name.symbol()));
+                    return Err(Error::ExplicitWitnessParam);
                 }
                 let binder = context.fresh(rest.first_hint());
                 tele = rest.open(&[&Term::free_var(&binder)]);
@@ -790,24 +790,21 @@ pub(crate) fn register_witness(
         ..
     }) = &*terminal
     else {
-        return Err(Error::not_a_concept(name.symbol(), terminal.clone()));
+        return Err(Error::not_a_concept(terminal.clone()));
     };
     if context.concept(concept_name).is_none() {
-        return Err(Error::not_a_concept(name.symbol(), terminal.clone()));
+        return Err(Error::not_a_concept(terminal.clone()));
     }
 
     // Key on every parameter: each must reduce to a rigid, keyable head. A parameterless concept has no head to key on at all — it is supplied through a local `use` binder, never the global table.
     if params.is_empty() {
-        return Err(Error::parameterless_witness_concept(
-            name.symbol(),
-            concept_name.symbol(),
-        ));
+        return Err(Error::parameterless_witness_concept(concept_name.symbol()));
     }
     let mut heads = Vec::with_capacity(params.len());
     for (position, param) in params.iter().enumerate() {
         let head = reduce_with(context, param)?;
         let Some(head) = HeadKey::of_whnf(&head) else {
-            return Err(Error::invalid_witness_head(name.symbol(), position, head));
+            return Err(Error::invalid_witness_head(position, head));
         };
         heads.push(head);
     }
@@ -827,16 +824,10 @@ pub(crate) fn register_witness(
             ..
         }) = &*premise
         else {
-            return Err(Error::non_regular_witness_premise(
-                name.symbol(),
-                premise.clone(),
-            ));
+            return Err(Error::non_regular_witness_premise(premise.clone()));
         };
         if context.concept(premise_concept).is_none() {
-            return Err(Error::non_regular_witness_premise(
-                name.symbol(),
-                premise.clone(),
-            ));
+            return Err(Error::non_regular_witness_premise(premise.clone()));
         }
         let bound = premise_args.iter().all(|arg| {
             arg.free_vars_shared()
@@ -851,10 +842,7 @@ pub(crate) fn register_witness(
                     .is_some_and(|in_head| count <= in_head)
             });
         if !(bound && decreasing) {
-            return Err(Error::non_regular_witness_premise(
-                name.symbol(),
-                premise.clone(),
-            ));
+            return Err(Error::non_regular_witness_premise(premise.clone()));
         }
     }
 

@@ -459,29 +459,23 @@ pub enum Error {
     },
     /// A witness's concept parameter at `position` (0-based) does not reduce to a rigid nominal or intrinsic head — nothing to key the table entry on.
     InvalidWitnessHead {
-        witness: String,
         position: usize,
         head: Box<Term>,
     },
     /// A witness for a parameterless concept: with no parameter heads there is nothing to key the global table entry on, so such a concept is supplied through a local `use` binder instead.
     ParameterlessWitnessConcept {
-        witness: String,
         concept: String,
     },
     /// A witness's annotation does not elaborate to an application of a registered concept.
     NotAConcept {
-        witness: String,
         found: Box<Term>,
     },
     /// A `use` premise of a witness applies its concept to something other than the witness's own parameters — resolution through it would not be structurally decreasing.
     NonRegularWitnessPremise {
-        witness: String,
         premise: Box<Term>,
     },
     /// A witness telescope declares an explicit parameter; nothing could supply it at resolution time.
-    ExplicitWitnessParam {
-        witness: String,
-    },
+    ExplicitWitnessParam,
     NatOverflow {
         value: Natural,
     },
@@ -1034,48 +1028,28 @@ impl Error {
         }
     }
 
-    pub(crate) fn invalid_witness_head<N: Into<String>, T: Into<Term>>(
-        witness: N,
-        position: usize,
-        head: T,
-    ) -> Self {
+    pub(crate) fn invalid_witness_head<T: Into<Term>>(position: usize, head: T) -> Self {
         Self::InvalidWitnessHead {
-            witness: witness.into(),
             position,
             head: Box::new(head.into()),
         }
     }
 
-    pub(crate) fn parameterless_witness_concept<N: Into<String>, C: Into<String>>(
-        witness: N,
-        concept: C,
-    ) -> Self {
+    pub(crate) fn parameterless_witness_concept<C: Into<String>>(concept: C) -> Self {
         Self::ParameterlessWitnessConcept {
-            witness: witness.into(),
             concept: concept.into(),
         }
     }
 
-    pub(crate) fn not_a_concept<N: Into<String>, T: Into<Term>>(witness: N, found: T) -> Self {
+    pub(crate) fn not_a_concept<T: Into<Term>>(found: T) -> Self {
         Self::NotAConcept {
-            witness: witness.into(),
             found: Box::new(found.into()),
         }
     }
 
-    pub(crate) fn non_regular_witness_premise<N: Into<String>, T: Into<Term>>(
-        witness: N,
-        premise: T,
-    ) -> Self {
+    pub(crate) fn non_regular_witness_premise<T: Into<Term>>(premise: T) -> Self {
         Self::NonRegularWitnessPremise {
-            witness: witness.into(),
             premise: Box::new(premise.into()),
-        }
-    }
-
-    pub(crate) fn explicit_witness_param<N: Into<String>>(witness: N) -> Self {
-        Self::ExplicitWitnessParam {
-            witness: witness.into(),
         }
     }
 
