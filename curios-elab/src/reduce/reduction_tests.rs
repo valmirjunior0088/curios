@@ -873,3 +873,41 @@ fn an_unchanged_universe_scheme_keeps_the_reduction_cache_warm() {
         "a changed scheme clears the cache, so the third reduction is paid again"
     );
 }
+
+/// A closed reduct is served across universe spellings: a definition unfolded at a universe metavariable and then at a constant is one computation, the second answered from the first through the cache's erased second key with the reduct's level rewritten to the asking spelling. Before this, checking wrote a term with metavariables and totality read it with them solved, and every fold over a literal ran once per phase and per mention.
+#[test]
+fn a_closed_reduct_is_served_across_universe_spellings() {
+    let mut context = context();
+    // A global rather than a minted local: the second door serves closed terms alone, since a local-bearing reduct dies with its declaration.
+    let poly = Free::Global(nominal("poly"));
+    let parameter = Level::param(UniverseParam(0));
+    context.assume(&poly, &Term::type_at(parameter.succ().unwrap()));
+    context.define(&poly, &Term::type_at(parameter), None);
+    context.set_assumption_universe_context(
+        &poly,
+        UniverseContext {
+            parameter_count: 1,
+            constraints: Vec::new(),
+        },
+    );
+
+    let meta = Level::meta(UniverseMetaId(7));
+    assert_eq!(
+        reduce(&mut context, Term::instance_of(&poly, vec![meta.clone()])),
+        Ok(Term::type_at(meta.clone()))
+    );
+    let spent = context.consumed().units();
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::instance_of(&poly, vec![Level::constant(3)])
+        ),
+        Ok(Term::type_at(Level::constant(3))),
+        "the reduct is rewritten to the asking spelling's level"
+    );
+    assert_eq!(
+        context.consumed().units(),
+        spent,
+        "and served without a step, since the two spellings share one erased key"
+    );
+}

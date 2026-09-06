@@ -25,6 +25,7 @@ use {
         Atom, Bound, Enter, Free, Global, Intrinsic, Level, Many, Nat, Scope, SelfReference,
         Spelled, Spelling, Telescope, Three, Two, UniverseContext, UniverseError, UniverseMetaId,
         UniverseScheme, Var, Visit, instantiate_universe_levels_scoped, print_term,
+        project_erased_universes,
     },
     curios_abi::ForeignFunction,
     curios_num::{Floating, Integer, Natural},
@@ -68,6 +69,9 @@ struct Node {
     /// The one derivation left lazy. A `BTreeSet<Free>` per node would dominate the archive it is stored in, and unlike the scalars it is wanted by a minority of nodes on a given compilation.
     #[archived_with(curios_archive::Skip)]
     frees: FreeCache,
+    /// The node's universe-erased projection, filled on first demand and only for a node that carries universe data — a node that carries none projects to itself and stores nothing. What the elaborator's reduction cache keys on beside the exact term, so that two spellings of one term differing in nothing but their levels — the one checking wrote with metavariables and the one totality reads with them solved — reach one entry.
+    #[archived_with(curios_archive::Skip)]
+    erased: std::cell::OnceCell<Term>,
     subterm: Subterm,
 }
 
@@ -76,6 +80,7 @@ impl Node {
         Node {
             scalars: ScalarCache::default(),
             frees: FreeCache::default(),
+            erased: std::cell::OnceCell::new(),
             subterm,
         }
     }
@@ -162,6 +167,17 @@ impl Term {
     /// Cached and filled on the explicit post-order stack like the other scalar derivations, so universe-only passes can structurally share a deep universe-free data spine without consuming one native frame per node.
     pub fn has_universe_data(&self) -> bool {
         self.scalars().has_universe_data
+    }
+
+    /// This term's universe-erased projection — [`project_erased_universes`] — memoized on the node, so a cache keyed on it pays the projection once per node rather than once per probe. A term carrying no universe data is its own projection and is handed back without a walk or a store.
+    pub fn erased_universes(&self) -> Term {
+        if !self.has_universe_data() {
+            return self.clone();
+        }
+        self.inner
+            .erased
+            .get_or_init(|| project_erased_universes(self))
+            .clone()
     }
 
     pub fn universe_metas(&self) -> BTreeSet<UniverseMetaId> {

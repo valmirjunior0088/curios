@@ -5,9 +5,9 @@
 //! The *policies* — what is cacheable, and what a probe's groundness gate admits — stay on `Context`, which alone can read the solution and universe stores they consult. This type owns the storage and the write discipline.
 
 use {
-    curios_core::{Free, Term},
+    curios_core::{Free, Level, LevelHead, Term, UniverseMetaId, rewrite_universe_levels_scoped},
     curios_utilities::Entropy,
-    std::collections::HashMap,
+    std::{cell::RefCell, collections::HashMap, rc::Rc},
 };
 
 /// Key of one memoized `elaborate` call: the lowered term, the `Check` expected type (`None` for `Infer`), and whether an island's representation-privacy checks were live. Validity under suppressed privacy is directional — an entry that passed strict checks would be valid under suppression, but not the reverse — so checked and suppressed runs each answer only their own partition.
@@ -36,6 +36,8 @@ pub(crate) struct ElaborationStamp {
 pub(crate) struct Caches {
     /// Reducts of terms mentioning no local binder — the table that survives item boundaries, so closed reducts stay warm across the definitions reduction and erasure mint, and the one the retention allowance prices.
     reduction: HashMap<Term, Term>,
+    /// The closed table's second door: each universe-erased spelling to the first exact key stored under it. A reduct is the same function of its term whatever the levels in it, so two spellings differing only in their levels — the one checking wrote with universe metavariables and the one totality reads with them solved — are one computation; the exact table cannot see that, and every phase re-ran the fold. A probe that misses the exact table asks here, and a hit is served through [`adapted_across_levels`], which rewrites the stored reduct's levels to the asking spelling's or declines.
+    reduction_erased: HashMap<Term, Term>,
     /// Reducts of terms mentioning a local binder. Declaration-scoped by nature — a binder is minted once and never recurs, so no later declaration can ask about one — and therefore bounded by the work budget that built every node it holds rather than by the retention allowance: [`Caches::begin_declaration`] clears it where the budget is restored, and nothing charges an insertion. Apart from the closed table so the clear is one operation rather than a walk.
     reduction_local: HashMap<Term, Term>,
     /// A registered refinement key against the canonical form the escalation compares it at (`reduce::canonical_scrutinee`: head verbatim, arguments and operands in weak-head normal form).
@@ -87,22 +89,34 @@ impl Caches {
     }
 
     pub(crate) fn reduction_get(&self, term: &Term) -> Option<Term> {
-        match term.has_local_free() {
-            true => self.reduction_local.get(term).cloned(),
-            false => self.reduction.get(term).cloned(),
+        if term.has_local_free() {
+            return self.reduction_local.get(term).cloned();
         }
+        if let Some(reduct) = self.reduction.get(term) {
+            return Some(reduct.clone());
+        }
+        let key = self.reduction_erased.get(&term.erased_universes())?;
+        let reduct = self.reduction.get(key)?;
+        let adapted = adapted_across_levels(key, term, reduct);
+        curios_profile::sample!("reduction::across_levels", u64::from(adapted.is_some()));
+        adapted
     }
 
     pub(crate) fn reduction_insert(&mut self, term: Term, reduct: Term) {
-        match term.has_local_free() {
-            true => self.reduction_local.insert(term, reduct),
-            false => self.reduction.insert(term, reduct),
-        };
+        if term.has_local_free() {
+            self.reduction_local.insert(term, reduct);
+            return;
+        }
+        self.reduction_erased
+            .entry(term.erased_universes())
+            .or_insert_with(|| term.clone());
+        self.reduction.insert(term, reduct);
     }
 
     /// Every reduct, whichever table holds it. The two tables differ in lifetime and in what prices them, never in what invalidates them: a write that could change a reduct changes a local-bearing one exactly as it changes a closed one, so every protocol below that clears reducts clears both through this, and [`Caches::retain_reductions_without`] retains on both.
     fn clear_reductions(&mut self) {
         self.reduction.clear();
+        self.reduction_erased.clear();
         self.reduction_local.clear();
     }
 
@@ -172,6 +186,10 @@ impl Caches {
     pub(crate) fn retain_reductions_without(&mut self, name: &Free) {
         self.reduction
             .retain(|_, reduct| !reduct.mentions_free(name));
+        // The second door indexes exact keys, so it keeps exactly the ones the exact table kept.
+        let reduction = &self.reduction;
+        self.reduction_erased
+            .retain(|_, key| reduction.contains_key(key));
         self.reduction_local
             .retain(|_, reduct| !reduct.mentions_free(name));
         // A canonical key is a reduct of the same kind, retained by the same test.
@@ -233,5 +251,69 @@ impl Caches {
     /// Universe constraints were discarded at a transaction boundary with actual solver-state change: elaboration entries may have certified purity against constraints that no longer exist.
     pub(crate) fn invalidate_for_universe_transaction(&mut self) {
         self.elaboration.clear();
+    }
+}
+
+/// `reduct`, stored under `key`, as the answer for `query`, which shares `key`'s universe-erased projection: the stored spelling's levels are matched to the asking spelling's position by position, and the reduct's levels rewritten through the metavariables that differ.
+///
+/// **Sound by level-parametricity.** No reduction rule reads a level — `Type u` is a payload, never a scrutinee — so a reduct is the same function of its term whatever the levels in it, and rewriting the stored reduct's levels through the map the two spellings determine yields exactly what reducing the asking spelling would have. The map is exact or the hit is declined: a stored level that is not a bare metavariable and differs from the asked one, a metavariable asked for two levels, or spellings whose level positions do not align — one carrying an instance the other erased, which projection equates and this cannot map — each decline, and the caller reduces as it would have.
+fn adapted_across_levels(key: &Term, query: &Term, reduct: &Term) -> Option<Term> {
+    if !key.has_universe_data() || !query.has_universe_data() {
+        return None;
+    }
+
+    let stored = levels_in_order(key);
+    let asked = levels_in_order(query);
+    if stored.len() != asked.len() {
+        return None;
+    }
+
+    let mut map: HashMap<UniverseMetaId, Level> = HashMap::new();
+    for (stored, asked) in stored.iter().zip(&asked) {
+        if stored == asked {
+            continue;
+        }
+        let meta = bare_meta(stored)?;
+        match map.insert(meta, asked.clone()) {
+            Some(previous) if &previous != asked => return None,
+            _ => {}
+        }
+    }
+
+    if map.is_empty() {
+        return Some(reduct.clone());
+    }
+
+    rewrite_universe_levels_scoped(reduct, move |_, level| {
+        level.substitute(|head| match head {
+            LevelHead::Meta(meta) => map.get(&meta).cloned(),
+            LevelHead::Param(_) => None,
+        })
+    })
+    .ok()
+}
+
+/// Every level a term carries, in the order the level-rewriting walk meets them — the order two spellings of one term share.
+fn levels_in_order(term: &Term) -> Vec<Level> {
+    let levels = Rc::new(RefCell::new(Vec::new()));
+    let sink = Rc::clone(&levels);
+    let _ = rewrite_universe_levels_scoped(term, move |_, level: &Level| {
+        sink.borrow_mut().push(level.clone());
+        Ok::<_, ()>(level.clone())
+    });
+    Rc::try_unwrap(levels)
+        .map(RefCell::into_inner)
+        .unwrap_or_else(|shared| shared.borrow().clone())
+}
+
+/// The metavariable `level` is, when it is one bare metavariable and nothing else.
+fn bare_meta(level: &Level) -> Option<UniverseMetaId> {
+    if level.constant != 0 {
+        return None;
+    }
+    let mut atoms = level.atoms();
+    match (atoms.next(), atoms.next()) {
+        (Some((LevelHead::Meta(meta), 0)), None) => Some(meta),
+        _ => None,
     }
 }

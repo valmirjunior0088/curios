@@ -173,17 +173,27 @@ pub(crate) fn unfold_rec_apply(
 /// Testing the head alone, as this once did, conflates *neutral because stuck* with *neutral because that is the answer*: `go(0, acc)` reduces correctly to `acc` and a bare `Var` was thrown away, which made the base case of any lemma about an accumulator unprovable in decided form. Testing occurrence alone would conflate *restuck* with *productive* and discard `cons(x, go(k, …))`. Counted once, by an `eprintln!` per arm here and one `cargo build -p curios-prelude`: of 613,610 decisions over the fixed prelude, 6,472 reach this arm head-exposed and 16,919 reach it as a bare `Var`, so each half of the rule is load-bearing at scale rather than in principle.
 ///
 /// The group is `folded`'s own, deliberately: what this protects is the idempotence of forcing *this* term, so the cycle to rule out is the reduct re-mentioning the group whose call was demanded. All three outcomes are idempotent — `force(force(t)) = force(t)` — so what this clause decides is completeness, not whether the reducer stops; the budget spent per iteration already does that.
+/// A folded recursive spelling: a `rec` projection, a `rec` block, or an application headed by a projection — the one weak-head value a forced demand must not be served.
+fn is_folded(term: &Term) -> bool {
+    term.as_rec_proj().is_some()
+        || matches!(&**term, Subterm::Rec(_))
+        || matches!(&**term, Subterm::Apply(apply) if apply.head.as_rec_proj().is_some())
+}
+
 fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
     //
     // The forced value is stored in the compilation-scoped reduction cache unless it is a folded recursive spelling — a `reduce` probe must never be served a fold it expects to keep folded, but any other forced value is a weak-head form like any cached reduct. Without this store the elaborator re-ran the machine for every position that demanded the same closed value — checking, conversion, and re-validation each paid a `Str` literal's full scan while the kernel replayed its memo — and the two checkers' costs for one literal drifted to a multiple.
     if machine_admissible(context, &term) {
+        // The store below is what a later demand for the same value hits, and this is where it hits: a probe that finds an unfolded value answers without a run, while one that finds the folded spelling — a plain reduct stored under itself — has nothing to serve and runs.
+        if let Some(cached) = context.cached_reduced(&term)
+            && !is_folded(&cached)
+        {
+            return Ok(cached);
+        }
         let entry = term.clone();
         let result = reduce_closed(context, term, Demand::Forced)?;
-        let folded = result.as_rec_proj().is_some()
-            || matches!(&*result, Subterm::Rec(_))
-            || matches!(&*result, Subterm::Apply(apply) if apply.head.as_rec_proj().is_some());
-
+        let folded = is_folded(&result);
         if !folded {
             context.reduce(entry, &result);
         }
