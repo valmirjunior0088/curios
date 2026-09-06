@@ -300,7 +300,7 @@ fn a_library_reports_its_own_lints() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// A unit the overlay does not reach still comes from the store, however many units before it the overlay refused.
+/// A unit the overlay has not edited still comes from the store, however many units before it the overlay refused.
 ///
 /// **The regression for placing and filing having been one decision.** [`ReadOnly`] drops the write, and used to drop the placement with it — but a slot is addressed after the units placed before it, so the first refused unit shifted every later address by one and one declined hit became a miss for the whole tail. Two mounted units are the smallest shape that can show it: the second is what the first's absence from the chain moves.
 ///
@@ -319,9 +319,34 @@ fn refusing_one_units_hit_does_not_refuse_the_units_after_it() {
     );
 
     assert_eq!(
-        folded(&root, &held(&root, "a/lib.crs")),
+        folded(&root, &edited(&root, "a/lib.crs")),
         ["compiling /alpha", "reused /beta"],
-        "the overlay reaches /alpha alone, so /beta is still the store's"
+        "the overlay edits /alpha alone, so /beta is still the store's"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A hit is verified against the text the compilation would read, so an open document refuses it only when its text differs from what the unit was compiled from — and a document the unit never read, wherever it lies, refuses nothing. The containment rule this replaced refused a package's library whenever any document under its directory was open, which is where every executable of the package lives.
+#[test]
+fn an_open_document_refuses_a_hit_only_when_it_is_edited() {
+    let root = mounted_project("read-only-overlay");
+    built(&root);
+
+    assert_eq!(
+        folded(&root, &held(&root, "a/lib.crs")),
+        ["reused /alpha", "reused /beta"],
+        "an open document holding the disk's text is the text the unit was compiled from"
+    );
+
+    let beside = Overlay::of(BTreeMap::from([(
+        root.join("a/exe.crs"),
+        "-- a program beside the library".to_string(),
+    )]));
+    assert_eq!(
+        folded(&root, &beside),
+        ["reused /alpha", "reused /beta"],
+        "a document the unit never read leaves the hit standing"
     );
 
     fs::remove_dir_all(root).unwrap();
@@ -397,12 +422,20 @@ fn mounted(root: &Path) -> Vec<curios_text::RootSource> {
     curios_package::mounted(&[root.join("a"), root.join("b")]).expect("two mountable packages")
 }
 
-/// An overlay holding `path`'s own text: a document an editor has open and has not yet changed, which is a refused hit all the same — the store's re-read knows only the disk.
+/// An overlay holding `path`'s own text: a document an editor has open and has not yet changed.
 fn held(root: &Path, path: &str) -> Overlay {
     let path = root.join(path);
     let text = fs::read_to_string(&path).expect("a written module");
 
     Overlay::of(BTreeMap::from([(path, text)]))
+}
+
+/// An overlay holding `path` with a line added: a document an editor has open and changed, still compiling as it did.
+fn edited(root: &Path, path: &str) -> Overlay {
+    let path = root.join(path);
+    let text = fs::read_to_string(&path).expect("a written module");
+
+    Overlay::of(BTreeMap::from([(path, format!("{text}\n-- edited\n"))]))
 }
 
 fn write(root: &Path, path: &str, contents: &str) {

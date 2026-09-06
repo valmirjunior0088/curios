@@ -188,9 +188,9 @@ pub(crate) fn overlaid(units: Vec<RootSource>, overlay: &Overlay) -> Vec<RootSou
         .collect()
 }
 
-/// A cache that answers about the disk alone and never records: what a query is allowed to do with the store.
+/// A cache that answers about the text the compilation would read and never records: what a query is allowed to do with the store.
 ///
-/// **A unit the overlay reaches is a miss.** A stored unit is believed on a re-read of every file it was compiled from, and that re-read knows only the disk — so a unit whose source an editor holds unsaved would be handed back against text nobody asked about, and the document being edited is exactly the one whose verdicts were asked for. Refusing the hit costs that one unit's compilation; every unit the overlay does not reach still comes from the store, which is what keeps a check per keystroke from rebuilding a package's dependencies.
+/// **A stored unit is verified through the overlay.** A unit is believed on a re-read of every file it was compiled from, and here that re-read takes an open document's text over the disk's (`Verdicts::get_overlaid`), so a unit whose source an editor holds edited is a miss and one whose source is merely open is not. The rule is exact because the record lists what the unit read: a document the unit never read — an executable beside a package's library, in the very directory the library reads from — leaves the hit standing. Refusing on containment instead cost the language server that library on every keystroke in a program file.
 pub(crate) struct ReadOnly<'a> {
     pub(crate) cache: &'a Verdicts,
     pub(crate) overlay: &'a Overlay,
@@ -198,10 +198,7 @@ pub(crate) struct ReadOnly<'a> {
 
 impl Cache for ReadOnly<'_> {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
-        match self.overlay.reaches(&source.directories()) {
-            true => None,
-            false => self.cache.get(source),
-        }
+        self.cache.get_overlaid(source, self.overlay)
     }
 
     /// Placed, not filed — and this is why the store itself is held rather than a `dyn Cache`.

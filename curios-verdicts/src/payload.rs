@@ -148,7 +148,7 @@ fn agrees(program: &Program<'_>, record: &Record, placed: &[Placed], bytes: &[u8
     record.payload == digest(bytes)
         && chained(&record.predecessors, placed)
         && record.entry == (canonical(program.entry), digest(program.text.as_bytes()))
-        && read_within(&program.loader.directories(), &record.reads)
+        && read_within(&program.loader.directories(), &record.reads, None)
 }
 
 /// A path as a record spells it: canonical, so the same file reached through a relative invocation and an absolute one is one entry.

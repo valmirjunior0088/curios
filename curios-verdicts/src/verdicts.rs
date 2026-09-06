@@ -11,7 +11,7 @@ use {
     crate::{replace, segments},
     curios_package::{Store, compiler, digest, unit_slot},
     curios_pipeline::Cache,
-    curios_text::UnitSource,
+    curios_text::{Overlay, UnitSource},
     curios_unit::Unit,
     curios_utilities::Source,
     std::{
@@ -116,7 +116,7 @@ impl Verdicts {
             let (recorded, bytes) = segments(&filed)?;
             let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
-            if !agrees(source, &record, &placed, bytes) {
+            if !agrees(source, &record, &placed, bytes, None) {
                 return None;
             }
 
@@ -127,6 +127,38 @@ impl Verdicts {
         }
 
         Some(placed)
+    }
+
+    /// [`Cache::get`] for a compilation reading through `overlay`: the record is verified against the text the compilation would read, which for a file the overlay holds is the overlay's and for every other the disk's.
+    ///
+    /// **Exact where a containment guess was not.** The record lists every file the unit was compiled from, so an open file the unit never read — an executable beside a package's library — leaves the hit standing, an open file it did read hits while its text is unchanged and misses the moment it is edited, and nothing about what a unit reads has to be believed twice. The `wonder` engine, which answers a question from an editor's unsaved buffers, is the consumer.
+    pub fn get_overlaid(&self, source: &UnitSource<'_>, overlay: &Overlay) -> Option<Unit> {
+        self.hit(source, Some(overlay))
+    }
+
+    /// The stored unit for `source` when its record still agrees, read through `overlay` where there is one, placed in the chain on a hit.
+    fn hit(&self, source: &UnitSource<'_>, overlay: Option<&Overlay>) -> Option<Unit> {
+        let slot = self.slot(source, &self.placed.borrow())?;
+
+        // The record is judged before the unit is decoded: a slot whose record disagrees is not worth the decode, and a file that is not a slot is a store to ignore.
+        let filed = fs::read(self.store.verdict(&slot)).ok()?;
+        let (recorded, bytes) = segments(&filed)?;
+
+        // A stored unit that will not read back is a store to ignore, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
+        let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
+
+        if !agrees(source, &record, &self.placed.borrow(), bytes, overlay) {
+            return None;
+        }
+
+        let restored = curios_archive::from_bytes::<Unit>(bytes).ok()?;
+
+        self.placed.borrow_mut().push(Placed {
+            slot,
+            contained: digest(bytes),
+        });
+
+        Some(restored)
     }
 
     /// Place `unit` in the chain without filing it: what a caller that may read the store but not write it — the `wonder` engine, answering a question — does with a unit it had to compile.
@@ -167,27 +199,7 @@ impl Verdicts {
 
 impl Cache for Verdicts {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
-        let slot = self.slot(source, &self.placed.borrow())?;
-
-        // The record is judged before the unit is decoded: a slot whose record disagrees is not worth the decode, and a file that is not a slot is a store to ignore.
-        let filed = fs::read(self.store.verdict(&slot)).ok()?;
-        let (recorded, bytes) = segments(&filed)?;
-
-        // A stored unit that will not read back is a store to ignore, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
-        let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
-
-        if !agrees(source, &record, &self.placed.borrow(), bytes) {
-            return None;
-        }
-
-        let restored = curios_archive::from_bytes::<Unit>(bytes).ok()?;
-
-        self.placed.borrow_mut().push(Placed {
-            slot,
-            contained: digest(bytes),
-        });
-
-        Some(restored)
+        self.hit(source, None)
     }
 
     fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
@@ -209,17 +221,23 @@ impl Cache for Verdicts {
     }
 }
 
-/// Whether `record` still describes the world: the slot holds the bytes it was written with, every file it names still holds the text it was read as, and every predecessor still contains what it did.
+/// Whether `record` still describes the world: the slot holds the bytes it was written with, every file it names still holds the text it was read as — through `overlay`, where the compilation reads through one — and every predecessor still contains what it did.
 ///
 /// The slot's own digest comes first, as the payload family orders its check: it decides a torn or damaged slot before any file is opened.
 ///
 /// A file that has since vanished, changed, or become unreadable is a disagreement like any other. So is a shorter or longer read list, which is what catches a module added or removed — though that alone never has to catch it, since a module can only join a unit through a `mod` in a header that is itself on this list.
 ///
 /// **A recorded file must also be one `source` could itself have read**, and that clause is what keeps a *shared* store from admitting across projects. The address carries no file contents, so two projects that each hold a package of one name, compiled by one compiler after one chain, address the same slot; without this, the second opens the first's record, finds the first's files unchanged on disk because nothing touched them, and is handed a unit compiled from source it has never seen. Checking containment rather than re-deriving the read set keeps the check exact: a git dependency is materialized once under the shared store and read from that same path by every project, so genuine sharing survives.
-fn agrees(source: &UnitSource<'_>, record: &Record, placed: &[Placed], bytes: &[u8]) -> bool {
+fn agrees(
+    source: &UnitSource<'_>,
+    record: &Record,
+    placed: &[Placed],
+    bytes: &[u8],
+    overlay: Option<&Overlay>,
+) -> bool {
     record.unit == digest(bytes)
         && chained(&record.predecessors, placed)
-        && read_within(&source.directories(), &record.reads)
+        && read_within(&source.directories(), &record.reads, overlay)
 }
 
 /// What `source` read after `placed`, as the record of it, ahead of a unit whose bytes digest to `contained`.
@@ -243,10 +261,14 @@ pub(crate) fn chained(recorded: &[String], placed: &[Placed]) -> bool {
             .all(|(recorded, placed)| recorded == &placed.contained)
 }
 
-/// Whether every file in `reads` lies under one of `directories` and still holds the text it was recorded as.
+/// Whether every file in `reads` lies under one of `directories` and still holds the text it was recorded as — the overlay's text for a file `overlay` holds, since that is what the compilation would read, and the disk's for every other.
 ///
 /// The containment half is what keeps a shared store from admitting across projects; see [`agrees`] for why it is a containment check rather than a re-derivation of the read set.
-pub(crate) fn read_within(directories: &[&Path], reads: &[(String, String)]) -> bool {
+pub(crate) fn read_within(
+    directories: &[&Path],
+    reads: &[(String, String)],
+    overlay: Option<&Overlay>,
+) -> bool {
     // Canonical on both sides, because a record's paths are canonical and a source's directories are however the manifest walk spelled them.
     let within = directories
         .iter()
@@ -257,16 +279,22 @@ pub(crate) fn read_within(directories: &[&Path], reads: &[(String, String)]) -> 
         })
         .collect::<Vec<_>>();
 
-    reads
-        .iter()
-        .all(|read| within.iter().any(|directory| holds(directory, read)))
+    reads.iter().all(|read| {
+        within
+            .iter()
+            .any(|directory| holds(directory, read, overlay))
+    })
 }
 
-/// Whether `read`'s file lies under `directory` and still holds the text it was recorded as.
-fn holds(directory: &Path, (path, recorded): &(String, String)) -> bool {
+/// Whether `read`'s file lies under `directory` and still holds the text it was recorded as, read through `overlay` where there is one.
+fn holds(directory: &Path, (path, recorded): &(String, String), overlay: Option<&Overlay>) -> bool {
     let path = Path::new(path);
 
-    path.starts_with(directory) && fs::read(path).is_ok_and(|bytes| &digest(&bytes) == recorded)
+    path.starts_with(directory)
+        && match overlay.and_then(|overlay| overlay.get(path)) {
+            Some(text) => &digest(text.as_bytes()) == recorded,
+            None => fs::read(path).is_ok_and(|bytes| &digest(&bytes) == recorded),
+        }
 }
 
 /// A read log as it is recorded: each file by canonical path, with the digest of the text that was parsed from it.

@@ -6,7 +6,10 @@ use {
     super::*,
     curios_pipeline::{Progress, compile_with_units},
     curios_text::Entrypoint,
-    std::time::{SystemTime, UNIX_EPOCH},
+    std::{
+        collections::BTreeMap,
+        time::{SystemTime, UNIX_EPOCH},
+    },
 };
 
 /// The entry every project here compiles: it uses the dependency, so the dependency is a unit of the compilation.
@@ -19,6 +22,31 @@ fn reused(root: &std::path::Path) -> bool {
 
 /// The same, for a project whose dependency is mounted from somewhere other than beside it.
 fn reused_from(root: &std::path::Path, shape: &std::path::Path) -> bool {
+    let verdicts = Verdicts::at(root.to_path_buf());
+
+    reused_through(root, shape, &verdicts)
+}
+
+/// The same, for a compilation reading through `overlay` — what the `wonder` engine asks, verified by [`Verdicts::get_overlaid`] and placed without filing.
+fn reused_overlaid(root: &std::path::Path, overlay: &Overlay) -> bool {
+    struct Overlaid<'a>(&'a Verdicts, &'a Overlay);
+
+    impl Cache for Overlaid<'_> {
+        fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
+            self.0.get_overlaid(source, self.1)
+        }
+
+        fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+            self.0.place(source, unit);
+        }
+    }
+
+    let verdicts = Verdicts::at(root.to_path_buf());
+
+    reused_through(root, &root.join("shape"), &Overlaid(&verdicts, overlay))
+}
+
+fn reused_through(root: &std::path::Path, shape: &std::path::Path, cache: &dyn Cache) -> bool {
     let library = curios_package::mounted(&[shape.to_path_buf()]).expect("a mountable package");
     let (entrypoint, loader, _source) =
         Entrypoint::opened(&root.join("exe.crs")).expect("an openable entrypoint");
@@ -29,7 +57,7 @@ fn reused_from(root: &std::path::Path, shape: &std::path::Path) -> bool {
         &library,
         &entrypoint,
         &loader,
-        Some(&Verdicts::at(root.to_path_buf()) as &dyn Cache),
+        Some(cache),
         |_| {},
         |progress| {
             if matches!(progress, Progress::Reused(_)) {
@@ -113,6 +141,34 @@ fn writing_into_the_store_does_not_invalidate_it() {
 
     write(&root, ".curios/unrelated", "not a source file");
     assert!(reused(&root), "and neither is anything else under it");
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A compilation reading through an overlay is verified against the text it would read: a file the unit was compiled from hits while the editor's text is the disk's and misses once it differs, and an open file the unit never read — the executable beside a package's library, in the directory the library reads from — is no reason to compile the library again. That last case used to cost the language server the whole library on every keystroke in a program file, since the hit was refused whenever any open document lay under the unit's directory.
+#[test]
+fn an_overlaid_compilation_is_verified_by_the_text_it_would_read() {
+    let root = project("overlaid");
+    let held = |path: &str, text: String| Overlay::of(BTreeMap::from([(root.join(path), text)]));
+
+    reused(&root);
+    assert!(reused(&root), "stored by the first compile");
+
+    assert!(
+        reused_overlaid(&root, &held("shape/lib.crs", library("first"))),
+        "an open file holding the text on disk is the text the unit was compiled from"
+    );
+    assert!(
+        !reused_overlaid(&root, &held("shape/lib.crs", library("second"))),
+        "and one the editor has changed is not"
+    );
+    assert!(
+        reused_overlaid(
+            &root,
+            &held("shape/exe.crs", "-- a program beside the library".into())
+        ),
+        "a file the unit never read leaves the hit standing, wherever it lies"
+    );
 
     fs::remove_dir_all(root).unwrap();
 }
