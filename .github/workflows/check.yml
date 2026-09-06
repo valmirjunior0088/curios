@@ -84,8 +84,8 @@ jobs:
       - name: Run doctests
         run: cargo test --workspace --doc --all-features
 
-  docs:
-    name: Documentation
+  rust-docs:
+    name: Rust documentation
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -96,9 +96,22 @@ jobs:
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
-      - name: Build Rust docs
+      - name: Build docs
         run: cargo x rust-docs
-      - name: Build standard library docs
+
+  std-docs:
+    name: Standard library documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: |
+            curios/.artifacts
+            curios-binaryen/.artifacts
+      - name: Build docs
         run: cargo x std-docs
 
   wasm:
