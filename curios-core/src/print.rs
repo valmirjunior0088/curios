@@ -498,11 +498,24 @@ fn string_literal(name: &Global, fields: &[Term], spelling: &Rc<Spelling>) -> Op
         return None;
     };
 
-    Some(format!(
-        "\"{}\"",
-        escaped(&String::from_utf8(packed.to_bytes()?).ok()?)
-    ))
+    let text = String::from_utf8(packed.to_bytes()?).ok()?;
+
+    // A diagnostic quoting a page of text whole says nothing a prefix does not, and a report is where this spelling is read: the rest is counted rather than shown.
+    let shown = text.chars().count();
+    if shown > ELIDED_LITERAL_CHARACTERS {
+        let head: String = text.chars().take(ELIDED_LITERAL_CHARACTERS).collect();
+        return Some(format!(
+            "\"{}…\" ({} more characters)",
+            escaped(&head),
+            shown - ELIDED_LITERAL_CHARACTERS
+        ));
+    }
+
+    Some(format!("\"{}\"", escaped(&text)))
 }
+
+/// How much of a certified string a report spells before eliding the rest.
+const ELIDED_LITERAL_CHARACTERS: usize = 64;
 
 /// A string's characters under the surface's escapes, so a rendered literal reads back as the one it came from.
 fn escaped(text: &str) -> String {

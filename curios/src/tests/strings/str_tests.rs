@@ -45,3 +45,25 @@ fn a_string_literal_spells_as_itself_in_a_report() {
     assert!(error.contains(r#"Named("body")"#), "{error}");
     assert!(!error.contains("of_scan_eq"), "{error}");
 }
+
+/// A report spells a literal's first characters and counts the rest, so a page of text in a type does not become a page of diagnostic.
+#[test]
+fn a_long_literal_is_elided_in_a_report() {
+    let literal = "0123456789".repeat(10);
+    let source = format!(
+        r#"
+        use /std/{{Str, Eq}};
+        let same: Eq("{literal}", "x") = Eq/refl();
+        /std/print("unreachable")
+        "#
+    );
+    let refused = crate::tests::error(&source);
+
+    assert!(
+        refused.contains(&format!("\"{}…\" (36 more characters)", &literal[..64])),
+        "{refused}"
+    );
+    // The source excerpt under the message quotes the line as written; the message itself never spells the literal whole.
+    let message = refused.split("\n\n").next().unwrap_or(&refused);
+    assert!(!message.contains(&literal), "{refused}");
+}
