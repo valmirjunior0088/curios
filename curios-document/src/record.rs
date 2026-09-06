@@ -62,10 +62,11 @@ pub struct Declaration {
     pub derived: bool,
 }
 
-/// One constructor, field or concept method.
+/// One constructor, field or concept method — or a concept's superclass edge, `use Equal(A),`, which the language declares as an anonymous field and which stays a member so the block prints it where it was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Member {
+    /// The label, or empty for a superclass edge: an anonymous member has no anchor, no address and no row in the search index.
     pub name: String,
     pub signature: Signature,
     pub prose: Option<Vec<String>>,

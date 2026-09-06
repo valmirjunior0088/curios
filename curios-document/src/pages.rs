@@ -97,6 +97,9 @@ impl<'a> Bundle<'a> {
                 }
                 let path = declaration.home.with(&declaration.name);
                 for member in &declaration.members {
+                    if member.name.is_empty() {
+                        continue;
+                    }
                     bundle.addresses.entry(path.with(&member.name)).or_insert((
                         page.clone(),
                         Some(format!("{}/{}", declaration.name, member.name)),

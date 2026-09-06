@@ -103,9 +103,10 @@ struct Badge {
     tone: &'static str,
 }
 
-/// One constructor, field or method under its declaration.
+/// One constructor, field or method under its declaration, or the superclass edge a concept lists among them.
 struct MemberRow {
-    anchor: String,
+    /// `owner/member`, or none for an anonymous member, which nothing can link to.
+    anchor: Option<String>,
     signature: Vec<Segment>,
     prose: Vec<Paragraph>,
 }
@@ -305,7 +306,7 @@ fn card(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration) -> Card {
 
 fn member_row(bundle: &Bundle<'_>, depth: usize, owner: &str, member: &Member) -> MemberRow {
     MemberRow {
-        anchor: format!("{owner}/{}", member.name),
+        anchor: (!member.name.is_empty()).then(|| format!("{owner}/{}", member.name)),
         signature: segments(bundle, depth, &member.signature),
         prose: paragraphs(member.prose.as_deref()),
     }

@@ -13,7 +13,7 @@
     <div class="signature {{ card.layout }}">
         <div class="line">{% call sig::segments(card.signature) %}{% endcall %}{{ card.opener }}</div>
         {%- for member in card.members %}
-            <div class="line member" id="{{ member.anchor }}">{{ card.lead }}{% call sig::segments(member.signature) %}{% endcall %}{{ card.trail }}</div>
+            <div class="line member"{% if let Some(anchor) = member.anchor %} id="{{ anchor }}"{% endif %}>{{ card.lead }}{% call sig::segments(member.signature) %}{% endcall %}{{ card.trail }}</div>
             {%- for paragraph in member.prose %}
                 <p class="note">{% call words::paragraph(paragraph) %}{% endcall %}</p>
             {%- endfor %}

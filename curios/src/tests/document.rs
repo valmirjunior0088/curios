@@ -109,6 +109,35 @@ fn the_standard_library_documents_from_the_archive() {
     assert_eq!(map.kind, Kind::Structure);
     assert!(map.opaque && map.members.is_empty(), "{map:?}");
 
+    // A concept's superclass edge is an anonymous field in the language and an anonymous member in the record, in its written place among the methods.
+    let ordered = documentation
+        .modules
+        .iter()
+        .find(|module| module.path.join() == "/std/Ordered")
+        .and_then(|module| {
+            module
+                .declarations
+                .iter()
+                .find(|declaration| declaration.name == "Ordered")
+        })
+        .expect("the Ordered concept");
+    assert_eq!(ordered.kind, Kind::Concept);
+    assert_eq!(
+        ordered
+            .members
+            .iter()
+            .map(|member| member.name.as_str())
+            .collect::<Vec<_>>(),
+        ["", "cmp"],
+        "{:?}",
+        ordered.members
+    );
+    assert!(
+        ordered.members[0].signature.text.starts_with("use "),
+        "{:?}",
+        ordered.members[0].signature
+    );
+
     // A signature's reference to a declaration of the same unit links within the bundle.
     let pure = result
         .declarations

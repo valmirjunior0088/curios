@@ -166,6 +166,12 @@ fn the_index_lists_every_address_and_a_page_carries_the_field() {
     );
     assert!(landing.contains("href=\"#Token\""), "{landing}");
     assert!(landing.contains("id=\"satisfy-1\""), "{landing}");
+    // The concept's superclass edge prints as a member line and, being anonymous, carries no anchor.
+    assert!(landing.contains("id=\"Area/area\""), "{landing}");
+    assert!(
+        !landing.contains("id=\"Area/\""),
+        "an anonymous member has no anchor: {landing}"
+    );
     assert!(
         !landing.contains("href=\"#satisfy-1\""),
         "a witness is anonymous and stays out of the rail: {landing}"
