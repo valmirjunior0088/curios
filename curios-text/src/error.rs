@@ -1,14 +1,16 @@
 use {
     curios_parse::ParserError,
-    curios_utilities::{Report, Span},
+    curios_utilities::{Qualifier, Report, Span},
     std::{fmt, io, path::PathBuf},
 };
 
 /// Everything that can go wrong between a parsed surface tree and a core module: module discovery and loading, `use`/name resolution and visibility, and the structural checks `into_core` lowering enforces. As an error propagates it is wrapped in `Located` with the *innermost* relevant span (`at` never overwrites an existing location), which [`Error::format`] renders as a source snippet.
 #[derive(Debug)]
 pub enum Error {
+    /// A relative path's head names no module in scope. `candidates` are the modules in the public interfaces that carry the name, shortest paths only, so the report can spell the way out as the elaborator's `unbound variable` does.
     UnresolvedQualifier {
         qualifier: String,
+        candidates: Vec<Qualifier>,
     },
     ModuleNotFound {
         path: String,
@@ -175,8 +177,15 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::UnresolvedQualifier { qualifier } => {
-                write!(f, "unresolved qualifier: {qualifier}")
+            Error::UnresolvedQualifier {
+                qualifier,
+                candidates,
+            } => {
+                write!(f, "unresolved qualifier: {qualifier}")?;
+                for candidate in candidates {
+                    write!(f, "\n{}", candidate.reach_hint(qualifier))?;
+                }
+                Ok(())
             }
             Error::ModuleNotFound { path } => write!(f, "module not found: {path}"),
             Error::ChildModuleNotFound { segment } => {

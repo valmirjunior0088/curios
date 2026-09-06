@@ -173,6 +173,23 @@ impl Qualifier {
         Self::of(segments[..segments.len().saturating_sub(1)].to_vec())
     }
 
+    /// The line a report adds under an unresolved `written` that this qualifier could have meant: reached by its absolute path or its own import, and — nested below a root — through its parent's name too, `Eq/cong` once `Eq` is in scope; a root's direct child has no route shorter than the import or the absolute path. The `unbound variable` and `unresolved qualifier` reports both spell the way out with this one line, so the two cannot drift.
+    pub fn reach_hint(&self, written: &str) -> String {
+        let module = self.without_last();
+        let import = format!("`use {}/{{{written}}};`", module.join());
+        match module.segments().len() {
+            0 | 1 => format!(
+                "  `{written}` is `{}`: write it absolute, or {import}",
+                self.join()
+            ),
+            _ => format!(
+                "  `{written}` is `{}`: write `{parent}/{written}` if `{parent}` is imported, or {import}",
+                self.join(),
+                parent = module.last()
+            ),
+        }
+    }
+
     /// The qualifier suffix — everything but the leading (root) segment — a root's own qualifier for content nested under it. `[a, b, c]` → `[b, c]`; a single-segment or already-empty qualifier drops to empty.
     pub fn without_first(&self) -> Qualifier {
         Self::of(self.segments_slice().iter().skip(1).cloned().collect())

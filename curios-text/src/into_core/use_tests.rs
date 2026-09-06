@@ -353,6 +353,30 @@ fn glob_imports_child_modules_as_qualifiers() {
     "#);
 }
 
+/// A sibling module is not in scope bare, and the refusal says where it is, as the elaborator's `unbound variable` does for a binding: the absolute path and the import.
+#[test]
+fn an_unresolved_qualifier_names_the_modules_it_could_mean() {
+    let report = run_err(
+        r#"
+        pub mod Owner
+            pub mod Worker
+                pub let secret : Type = Type;
+            end
+            pub mod Other
+                pub let peek : Type = Worker/secret;
+            end
+        end
+        ()
+    "#,
+    );
+    assert!(
+        report.contains(
+            "unresolved qualifier: Worker\n  `Worker` is `/Owner/Worker`: write it absolute, or `use /Owner/{Worker};`"
+        ),
+        "reported {report}"
+    );
+}
+
 #[test]
 fn glob_skips_private_child_modules() {
     assert!(

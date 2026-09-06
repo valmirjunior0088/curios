@@ -1221,7 +1221,7 @@ impl Error {
         self.reports(&spelling, suggestion)
     }
 
-    /// The lines an `unbound variable` report adds from the text stage's table, or `None` for any other error or an unknown binder. A candidate nested below a root is offered both ways it can be reached — through its parent's name, `Eq/cong` once `Eq` is in scope, and by its own import; a root's direct child has no route shorter than the import or the absolute path.
+    /// The lines an `unbound variable` report adds from the text stage's table, or `None` for any other error or an unknown binder — one [`Qualifier::reach_hint`] per candidate, the line the text stage's `unresolved qualifier` report spells its own candidates with.
     fn unbound_suggestion(
         &self,
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
@@ -1242,21 +1242,7 @@ impl Error {
 
         let lines = candidates
             .iter()
-            .map(|candidate| {
-                let module = candidate.without_last();
-                let import = format!("`use {}/{{{written}}};`", module.join());
-                match module.segments().len() {
-                    0 | 1 => format!(
-                        "  `{written}` is `{}`: write it absolute, or {import}",
-                        candidate.join()
-                    ),
-                    _ => format!(
-                        "  `{written}` is `{}`: write `{parent}/{written}` if `{parent}` is imported, or {import}",
-                        candidate.join(),
-                        parent = module.last()
-                    ),
-                }
-            })
+            .map(|candidate| candidate.reach_hint(&written))
             .collect::<Vec<_>>();
         (!lines.is_empty()).then(|| lines.join("\n"))
     }

@@ -528,6 +528,20 @@ impl<'a> Context<'a> {
         binder
     }
 
+    /// Every public child module in scope that carries `label` — what an unresolved qualifier could have meant, gathered as [`Context::unbound_binder`] gathers a binding's candidates: off the public interfaces, shortest paths only, in the path's own order.
+    fn unbound_qualifier(&self, label: &str) -> Vec<Qualifier> {
+        let mut found = self
+            .public
+            .iter()
+            .filter(|(_, interface)| interface.children.contains_key(label))
+            .map(|(module, _)| module.with(label))
+            .collect::<Vec<_>>();
+        found.sort_by_key(|path| (path.segments().len(), path.join()));
+        let shortest = found.first().map(|path| path.segments().len());
+        found.retain(|path| Some(path.segments().len()) == shortest);
+        found
+    }
+
     pub(super) fn insert_scope(&mut self, qualifier: String, name: Qualifier) -> Result<(), Error> {
         if self.qualifiers.contains_key(&qualifier) {
             return Err(Error::QualifierConflict { qualifier });
@@ -594,6 +608,7 @@ impl<'a> Context<'a> {
                 .get(head)
                 .ok_or_else(|| Error::UnresolvedQualifier {
                     qualifier: head.to_string(),
+                    candidates: self.unbound_qualifier(head),
                 })?
                 .clone();
             self.note_qualifier_use(head);
