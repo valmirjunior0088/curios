@@ -18,8 +18,8 @@
                 <p class="note">{% call words::paragraph(paragraph) %}{% endcall %}</p>
             {%- endfor %}
         {%- endfor %}
-        {%- if let Some(closer) = card.closer %}
-            <div class="line"><span class="keyword">{{ closer }}</span></div>
+        {%- if !card.closer.is_empty() %}
+            <div class="line">{% call sig::segments(card.closer) %}{% endcall %}</div>
         {%- endif %}
     </div>
     {%- for paragraph in card.prose %}

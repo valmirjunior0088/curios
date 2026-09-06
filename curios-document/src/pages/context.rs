@@ -90,8 +90,8 @@ struct Card {
     lead: &'static str,
     /// What follows each member: `,` after a field or a method.
     trail: &'static str,
-    /// What closes the block: `end` after constructors, `}` after fields or methods.
-    closer: Option<&'static str>,
+    /// What closes the block, as the segments it is spelled by: the keyword `end` after constructors, the plain `}` after fields or methods — punctuation, like the opener, and set apart no more than it is. Empty when nothing closes it.
+    closer: Vec<Segment>,
     prose: Vec<Paragraph>,
 }
 
@@ -278,9 +278,11 @@ fn card(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration) -> Card {
 
     // The block as the source writes it, where the representation is shown: an inductive's constructors each after a bar and closed by `end`, a structure's fields and a concept's methods in braces, each with its comma. A sealed concept still lists its methods.
     let (layout, opener, lead, trail, closer) = match (declaration.kind, declaration.opaque) {
-        (Kind::Inductive, false) => ("cases", "", "| ", "", Some("end")),
-        (Kind::Structure, false) | (Kind::Concept, _) => ("fields", " {", "", ",", Some("}")),
-        _ => ("", "", "", "", None),
+        (Kind::Inductive, false) => ("cases", "", "| ", "", vec![Segment::Keyword("end".into())]),
+        (Kind::Structure, false) | (Kind::Concept, _) => {
+            ("fields", " {", "", ",", vec![Segment::Text("}".into())])
+        }
+        _ => ("", "", "", "", Vec::new()),
     };
 
     Card {
