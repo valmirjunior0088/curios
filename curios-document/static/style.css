@@ -73,7 +73,7 @@ code {
     color: var(--ink-85);
 }
 
-/* The frame: a rail and a main column side by side, stacked when the width runs out. */
+/* The frame: a rail and a main column side by side, stacked when the width runs out. The footer closes the main column rather than the body, so the frame reaches the page's end and the sticky rail is never pushed up by anything below it. */
 .frame {
     display: flex;
     align-items: flex-start;
@@ -96,7 +96,7 @@ main {
     flex: 1 1 480px;
     min-width: 0;
     max-width: 1040px;
-    padding: 22px clamp(20px, 4vw, 40px) 96px;
+    padding: 22px clamp(20px, 4vw, 40px) 40px;
 }
 
 /* The rail: the search field pinned at its top, then the tree, every row a link; the current module carries the page's declarations beneath it. While a query is live the results stand in for the tree, as rows of the same shape. The label and the checkbox it toggles exist for the narrow layout alone. */
@@ -456,7 +456,8 @@ footer {
     display: flex;
     align-items: center;
     gap: 18px;
-    padding: 28px clamp(20px, 4vw, 40px);
+    margin-top: 72px;
+    padding: 28px 0 0;
     border-top: 1px solid var(--edge);
     font-family: var(--mono);
     font-size: 11px;
