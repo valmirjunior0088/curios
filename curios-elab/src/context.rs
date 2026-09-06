@@ -369,7 +369,7 @@ impl Context {
     }
 
     /// What the declaration being elaborated has consumed so far.
-    fn consumed(&self) -> Consumption {
+    pub(crate) fn consumed(&self) -> Consumption {
         Consumption::new(self.budget - self.remaining.get(), self.peak_depth.get())
     }
 
@@ -797,11 +797,16 @@ impl Context {
     }
 
     /// [`Frames::set_assumption_universe_context`], with the redefinition cache protocol — a scheme rewritten in place makes cached entries through the old scheme unsound.
+    ///
+    /// A write of the scheme already registered rewrites nothing and clears nothing. Replaying an established scope writes every declaration's scheme once more, and the clear it used to take on each — a wholesale one, thousands of times per compilation — was what kept the reduction cache from ever holding a reduct across the mentions of one literal.
     pub(crate) fn set_assumption_universe_context(
         &mut self,
         name: &Free,
         universe_context: UniverseContext,
     ) {
+        if self.frames.assumption_universe_context(name).as_ref() == Some(&universe_context) {
+            return;
+        }
         self.frames
             .set_assumption_universe_context(name, universe_context);
         self.caches.invalidate_for_redefinition();

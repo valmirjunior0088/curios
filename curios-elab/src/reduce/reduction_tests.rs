@@ -828,3 +828,48 @@ fn normalizing_a_solution_that_reaches_itself_is_refused_rather_than_overflowing
 
     assert!(normalize(&mut context, hole).is_err());
 }
+
+/// Writing the universe scheme a name already has rewrites nothing, so the reduction cache keeps its reducts: the second reduction of a closed term across such a write costs no steps. A scheme that does change still clears, since a reduct through the old scheme is unsound.
+#[test]
+fn an_unchanged_universe_scheme_keeps_the_reduction_cache_warm() {
+    let mut context = context();
+    let poly = context.fresh(Some("poly"));
+    let scheme = UniverseContext {
+        parameter_count: 1,
+        constraints: Vec::new(),
+    };
+    context.assume(
+        &poly,
+        &Term::type_at(Level::param(UniverseParam(0)).succ().unwrap()),
+    );
+    context.define(&poly, &Term::type_at(Level::param(UniverseParam(0))), None);
+    context.set_assumption_universe_context(&poly, scheme.clone());
+
+    let term = Term::intrinsic(Intrinsic::nat_add(
+        nat(3),
+        Term::intrinsic(Intrinsic::nat_add(nat(2), nat(2))),
+    ));
+    assert_eq!(reduce(&mut context, term.clone()), Ok(nat(7)));
+    let spent = context.consumed().units();
+
+    context.set_assumption_universe_context(&poly, scheme.clone());
+    assert_eq!(reduce(&mut context, term.clone()), Ok(nat(7)));
+    assert_eq!(
+        context.consumed().units(),
+        spent,
+        "an unchanged scheme leaves the reduct cached, so the second reduction is a hit"
+    );
+
+    context.set_assumption_universe_context(
+        &poly,
+        UniverseContext {
+            parameter_count: 2,
+            constraints: Vec::new(),
+        },
+    );
+    assert_eq!(reduce(&mut context, term), Ok(nat(7)));
+    assert!(
+        context.consumed().units() > spent,
+        "a changed scheme clears the cache, so the third reduction is paid again"
+    );
+}
