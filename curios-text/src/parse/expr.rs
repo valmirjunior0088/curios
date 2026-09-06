@@ -93,8 +93,17 @@ pub(super) fn parse_optional_name_signature<'a>() -> Parser<'a, LetSignature> {
 }
 
 // Parses the part of a `let` binding after its name where a type is **required**: the function sugar, or the `: T = body` form. Used for top-level `let` and for every member after `and`, whose types cannot be inferred.
+//
+// The local spelling, `= body` with no type, is refused by the rule rather than by the token: both forms above fail at the `=` without consuming it, so the report was the sugar's `Expected '('`, which names one of the two tokens that would have served and reads as a demand for a parameter list. The `=` is consumed before the failure so this arm is the furthest and wins [`Parser::or`]'s tie-break, as `refuse_declaration_head` does, and read raw so the caret underlines the `=` alone.
 pub(super) fn parse_let_signature<'a>() -> Parser<'a, LetSignature> {
-    parse_func_let_signature().or(parse_required_name_signature())
+    parse_func_let_signature()
+        .or(parse_required_name_signature())
+        .or(mark().and_drop(take_exact("=")).flat_map(|start| {
+            fail_from(
+                &start,
+                "this definition states no type; a top-level `let` and every member after `and` state theirs — `: T = …`, or `(params) -> T = …` — and only a local `let` may leave its type out",
+            )
+        }))
 }
 
 // Like `parse_let_signature`, but the plain form's type annotation may be omitted. Used only by local `let`, where the body's type can be inferred.

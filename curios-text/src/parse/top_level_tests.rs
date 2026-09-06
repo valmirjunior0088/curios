@@ -230,25 +230,40 @@ fn top_inductive_and_chain() {
     ));
 }
 
+/// The optional-type form is local-only: a module-level `let` without a type is refused by the rule, with the caret on the `=`, rather than by the sugar's `Expected '('`, which named one of the two tokens that would have served.
 #[test]
 fn let_requires_a_type() {
-    // The optional-type form is local-only: a module-level `let` without a type is a parse error.
-    assert!("let x = Type;".parse::<Module>().is_err());
+    let report = "let x = Type;".parse::<Module>().unwrap_err().format();
+    assert!(
+        report.contains("this definition states no type")
+            && report.contains("only a local `let` may leave its type out"),
+        "reported {report}"
+    );
+    assert!(
+        report.ends_with("    1 | let x = Type;\n      |       ^"),
+        "reported {report}"
+    );
+    assert!(!report.contains("Expected '('"), "reported {report}");
 }
 
+/// A member after `and` cannot have its type inferred from a body that may mention its siblings, so a typeless one is refused by the same rule — at the top level and locally.
 #[test]
 fn a_group_member_states_its_type() {
-    // A member after `and` cannot have its type inferred from a body that may mention its siblings, so a typeless one is a parse error — at the top level and locally.
-    assert!(
-        "let f : Type = Type and g = Type;"
-            .parse::<Module>()
-            .is_err()
-    );
-    assert!(
-        "let f : Type = Type and g = Type; f"
-            .parse::<Term>()
-            .is_err()
-    );
+    let module = "let f : Type = Type and g = Type;"
+        .parse::<Module>()
+        .unwrap_err()
+        .format();
+    let local = "let f : Type = Type and g = Type; f"
+        .parse::<Term>()
+        .unwrap_err()
+        .format();
+    for report in [module, local] {
+        assert!(
+            report.contains("every member after `and` state theirs"),
+            "reported {report}"
+        );
+        assert!(!report.contains("Expected '('"), "reported {report}");
+    }
 }
 
 #[test]
