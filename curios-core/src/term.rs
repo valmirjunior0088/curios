@@ -1322,7 +1322,16 @@ impl PartialEq for Term {
         if self.get_or_init_hash() != other.get_or_init_hash() {
             return false;
         }
-        // Past both O(1) verdicts: this comparison does structural work.
+        // Past both O(1) verdicts, one more before anything is allocated: two nodes whose children are pairwise one allocation differ, if at all, in their own payload — variant, names, plicities, levels, scope labels, arities — which the derived comparison settles at once, every child's comparison being the pointer verdict above. This is the memo probe's common case, a key rebuilt one step later over the same operands, and the loop below answered it by allocating a placeholder, a work vector and a visited set to compare one node: a 20 KB literal folded at the type level made three and a half million such comparisons and eleven thousand allocations a byte.
+        match children_pairwise_shared(&self.inner.subterm, &other.inner.subterm) {
+            Some(true) => {
+                curios_profile::sample!("term_eq::shallow", 1);
+                return self.inner.subterm == other.inner.subterm;
+            }
+            Some(false) => return false,
+            None => {}
+        }
+        // Past the shallow verdict: this comparison does structural work.
         curios_profile::sample!("term_eq::structural", 1);
         // One visit for the whole comparison: the placeholder is allocated once, and each node's children are taken off it in turn.
         let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
@@ -1371,6 +1380,36 @@ impl PartialEq for Term {
 }
 
 impl Eq for Term {}
+
+/// Whether two nodes' children are the same allocations pair by pair: `Some(true)` when every child is, `Some(false)` when the counts differ — the nodes cannot be equal — and `None` when some pair is two allocations, which only a structural walk can settle.
+fn children_pairwise_shared(this: &Subterm, that: &Subterm) -> Option<bool> {
+    let mut these = Vec::new();
+    this.any_child_term(&mut |child| {
+        these.push(Rc::as_ptr(&child.inner));
+        false
+    });
+
+    let mut index = 0;
+    let mut shared = true;
+    let same_count = !that.any_child_term(&mut |child| {
+        match these.get(index) {
+            Some(pointer) if std::ptr::eq(*pointer, Rc::as_ptr(&child.inner)) => {}
+            Some(_) => shared = false,
+            None => {
+                index = usize::MAX;
+                return true;
+            }
+        }
+        index += 1;
+        false
+    }) && index == these.len();
+
+    match (same_count, shared) {
+        (false, _) => Some(false),
+        (true, true) => Some(true),
+        (true, false) => None,
+    }
+}
 
 impl AsRef<Subterm> for Term {
     fn as_ref(&self) -> &Subterm {
