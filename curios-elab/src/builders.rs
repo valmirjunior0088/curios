@@ -5,9 +5,9 @@
 use {
     crate::{Context, Mode, convert, elaborate},
     curios_core::{
-        Apply, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, NumLit, Scope,
-        Struct, StructEntry, StructType, Subterm, Telescope, Term, Transient, Tuple, Var,
-        instantiate_universe_levels_scoped,
+        Apply, Bang, Free, Func, FuncType, Global, Infix, InstanceHead, Intrinsic, Level, Many,
+        NumLit, Scope, Struct, StructEntry, StructType, Subterm, Telescope, Term, Transient, Tuple,
+        Var, instantiate_universe_levels_scoped,
     },
     curios_num::Natural,
     curios_utilities::{Grain, InfixOp, PackedBin, Plicity, Sign, Span, StringSyntax, SyntaxName},
@@ -28,8 +28,12 @@ pub fn str_literal(syntax: &StringSyntax, bytes: &[u8]) -> Term {
         PackedBin::from_bytes(bytes.to_vec()),
     ));
 
-    let valid = syn_call(
-        syntax.of_scan_eq,
+    // The certificate is built at universe zero rather than as a bare reference. A bare `of_scan_eq` is instantiated at a fresh level metavariable wherever elaboration meets it, and the level is the one thing that differed between two spellings of one literal — so every mention was a distinct term to the reduction cache, and a fold over the literal at the type level ran once per mention. The declaration has exactly one universe parameter, the `Eq` its premise is stated in, and the fixed prelude's build is what holds this arity: a literal it lowers refuses at the instance the day the scheme moves.
+    let valid = Term::apply(
+        Term::instance(
+            InstanceHead::Var(Var::free(Free::global(syntax.of_scan_eq.qualifier()))),
+            vec![Level::constant(0)],
+        ),
         [packed.clone(), syn_call(syntax.refl_scan, [packed.clone()])],
     );
 

@@ -587,6 +587,29 @@ fn cost_row(label: &str, source: &str) {
     );
 }
 
+/// A literal folded at the type level is folded once however many types mention it. Its certificate is built at a fixed universe, so every mention is one term to the reduction cache; when the certificate was instantiated at a fresh level per mention, the four mentions here were four keys and four full folds.
+#[test]
+fn a_literal_mentioned_in_several_types_is_folded_once() {
+    let literal = "0123456789".repeat(30);
+    let program = |uses: usize| {
+        let types = vec![format!("Eq(Str/len(\"{literal}\"), 300)"); uses].join(", ");
+        let proofs = vec!["Eq/refl()"; uses].join(", ");
+        format!(
+            "use /std/{{Str, Eq, Nat}};\n\nlet q: {{{types}}} = ({proofs},);\n\n/std/print(\"ok\")\n"
+        )
+    };
+
+    let (one, ..) = declaration_cost(&program(1));
+    let (four, ..) = declaration_cost(&program(4));
+
+    assert!(
+        four.units() < one.units() * 2,
+        "one mention costs {} units and four cost {}",
+        one.units(),
+        four.units()
+    );
+}
+
 /// What a `Str` literal costs to check, and which row of the price list it spends on.
 ///
 /// ```sh
