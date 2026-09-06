@@ -87,9 +87,10 @@ pub fn serve(budget: u64, mounted: &[PathBuf], manifest: Option<&Path>) -> Resul
         .join()
         .unwrap_or_else(|_| Err("the analyst panicked".to_string()));
     drop(connection);
-    io.join().map_err(|error| error.to_string())?;
+    // The session's own error first: dropping the connection closes the reader's channel, so the reader fails on whatever the editor had already written, and reporting that would name a channel where the session ended on something else.
+    let joined = io.join().map_err(|error| error.to_string());
 
-    served.and(analysed)
+    served.and(analysed).and(joined)
 }
 
 /// Whether `message` is the shutdown request — answered here, and followed by waiting for the `exit` that ends the session.
@@ -124,16 +125,23 @@ impl Server {
                 let Request { id, method, params } = request;
                 match method.as_str() {
                     Formatting::METHOD => {
-                        let params: DocumentFormattingParams =
-                            serde_json::from_value(params).map_err(|error| error.to_string())?;
-                        let response = match self.format(&params.text_document.uri) {
-                            Ok(edits) => Response::new_ok(id, edits),
-                            Err(message) => Response::new_err(
-                                id,
-                                lsp_server::ErrorCode::RequestFailed as i32,
-                                message,
-                            ),
-                        };
+                        // One request the editor got wrong is that request failing, with the protocol's own code for it — never the session ending, which costs every open document its diagnostics until the editor restarts the server.
+                        let response =
+                            match serde_json::from_value::<DocumentFormattingParams>(params) {
+                                Err(error) => Response::new_err(
+                                    id,
+                                    lsp_server::ErrorCode::InvalidParams as i32,
+                                    error.to_string(),
+                                ),
+                                Ok(params) => match self.format(&params.text_document.uri) {
+                                    Ok(edits) => Response::new_ok(id, edits),
+                                    Err(message) => Response::new_err(
+                                        id,
+                                        lsp_server::ErrorCode::RequestFailed as i32,
+                                        message,
+                                    ),
+                                },
+                            };
                         connection
                             .sender
                             .send(Message::Response(response))
@@ -157,11 +165,17 @@ impl Server {
             .map_err(|_| "the analyst is gone".to_string())
     }
 
+    /// A notification whose params do not deserialize is dropped, with a line on stderr for the editor's log: it has no reply to fail, and the session is not what is wrong.
     fn notified(&mut self, notification: Notification) -> Result<(), String> {
-        match notification.method.as_str() {
+        let Notification { method, params } = notification;
+        let dropped = |error: &serde_json::Error| eprintln!("{method}: {error}; ignored");
+        match method.as_str() {
             DidOpenTextDocument::METHOD => {
-                let params: DidOpenTextDocumentParams = serde_json::from_value(notification.params)
-                    .map_err(|error| error.to_string())?;
+                let Ok(params) = serde_json::from_value::<DidOpenTextDocumentParams>(params)
+                    .inspect_err(dropped)
+                else {
+                    return Ok(());
+                };
                 if let Some(path) = path_of(&params.text_document.uri) {
                     self.documents
                         .insert(path.clone(), params.text_document.text);
@@ -169,9 +183,11 @@ impl Server {
                 }
             }
             DidChangeTextDocument::METHOD => {
-                let params: DidChangeTextDocumentParams =
-                    serde_json::from_value(notification.params)
-                        .map_err(|error| error.to_string())?;
+                let Ok(params) = serde_json::from_value::<DidChangeTextDocumentParams>(params)
+                    .inspect_err(dropped)
+                else {
+                    return Ok(());
+                };
                 if let Some(path) = path_of(&params.text_document.uri)
                     && let Some(change) = params.content_changes.into_iter().last()
                 {
@@ -180,8 +196,11 @@ impl Server {
                 }
             }
             DidSaveTextDocument::METHOD => {
-                let params: DidSaveTextDocumentParams = serde_json::from_value(notification.params)
-                    .map_err(|error| error.to_string())?;
+                let Ok(params) = serde_json::from_value::<DidSaveTextDocumentParams>(params)
+                    .inspect_err(dropped)
+                else {
+                    return Ok(());
+                };
                 if let Some(path) = path_of(&params.text_document.uri) {
                     if let Some(text) = params.text {
                         self.documents.insert(path.clone(), text);
@@ -190,9 +209,11 @@ impl Server {
                 }
             }
             DidCloseTextDocument::METHOD => {
-                let params: DidCloseTextDocumentParams =
-                    serde_json::from_value(notification.params)
-                        .map_err(|error| error.to_string())?;
+                let Ok(params) = serde_json::from_value::<DidCloseTextDocumentParams>(params)
+                    .inspect_err(dropped)
+                else {
+                    return Ok(());
+                };
                 if let Some(path) = path_of(&params.text_document.uri) {
                     self.documents.remove(&path);
                 }
