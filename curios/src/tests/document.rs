@@ -136,7 +136,7 @@ fn the_standard_library_documents_from_the_archive() {
     );
 }
 
-/// Every rule of the record on one package: a private module and a private definition are absent, an opaque representation shows no constructors, prose attaches where it was written, a module's prose is the `mod` declaration's, a re-export is a link, and a signature's names resolve to where they were declared — within the unit or in the standard library.
+/// Every rule of the record on one package: a private module and a private definition are absent, an opaque representation shows no constructors, prose attaches where it was written, a module's prose is the `mod` declaration's, a re-export is a link — or, out of a private module, the declaration itself on the facade's page — and a signature's names resolve to where they were declared — within the unit or in the standard library.
 #[test]
 fn a_package_documents_its_interface_for_its_consumers() {
     let root = tree(
@@ -151,7 +151,8 @@ fn a_package_documents_its_interface_for_its_consumers() {
                 concat!(
                     "use /std/{Nat, Option};\n\n",
                     "-- | Geometry.\npub mod geometry;\n\n",
-                    "mod hidden;\n\n",
+                    "mod hidden;\n",
+                    "pub use hidden/{unseen, Token};\n\n",
                     "-- | A shape.\n-- |\n-- | Round or square.\n",
                     "pub induct Shape: pub Type\n-- | Round.\n| circle(Nat)\n| square(Nat)\nend\n\n",
                     "pub induct Secret: Type\n| hidden(Nat)\nend\n\n",
@@ -159,6 +160,8 @@ fn a_package_documents_its_interface_for_its_consumers() {
                     "pub let area(@A: Type, s: Shape, fallback: Option(A)) -> Nat =\n",
                     "    match s | circle(r) => r * r | square(w) => w * w end;\n\n",
                     "let helper: Nat =\n    1;\n\n",
+                    "-- | Mint one.\n",
+                    "pub let mint(t: Token) -> Nat =\n    1;\n\n",
                     "pub use geometry/{origin};\n",
                 ),
             ),
@@ -166,7 +169,15 @@ fn a_package_documents_its_interface_for_its_consumers() {
                 "geometry.crs",
                 "use /std/{Nat};\n\n-- | Where it starts.\npub let origin: Nat =\n    0;\n",
             ),
-            ("hidden.crs", "pub let unseen: /std/Nat =\n    2;\n"),
+            (
+                "hidden.crs",
+                concat!(
+                    "pub let unseen: /std/Nat =\n    2;\n\n",
+                    "-- | A token.\n",
+                    "pub induct Token: pub Type\n| token(/std/Nat)\nend\n\n",
+                    "pub let kept: /std/Nat =\n    3;\n",
+                ),
+            ),
         ],
     );
     let governing = Governing::found(None, &root).expect("a governed package");
@@ -201,8 +212,39 @@ fn a_package_documents_its_interface_for_its_consumers() {
             .iter()
             .map(|declaration| declaration.name.as_str())
             .collect::<Vec<_>>(),
-        ["Shape", "Secret", "area"],
-        "a private definition is absent"
+        ["Shape", "Secret", "area", "mint", "Token", "unseen"],
+        "a private definition is absent; a declaration re-exported out of the private module is shown here, after the module's own and sorted by name"
+    );
+    for declaration in &library.declarations[..4] {
+        assert_eq!(declaration.home, Qualifier::from(["shapes"]));
+    }
+
+    // The facade: `Token` and `unseen` are declared in `hidden`, which has no page, so their cards are the root's, at the home a mark names them under, with the prose and members written there.
+    let token = &library.declarations[4];
+    assert_eq!(token.home, Qualifier::from(["shapes", "hidden"]));
+    assert_eq!(token.kind, Kind::Inductive);
+    assert_eq!(token.prose, Some(vec!["A token.".to_string()]));
+    assert_eq!(
+        token
+            .members
+            .iter()
+            .map(|member| member.name.as_str())
+            .collect::<Vec<_>>(),
+        ["token"]
+    );
+    assert_eq!(library.declarations[5].name, "unseen");
+    let mint = &library.declarations[3];
+    assert_eq!(
+        mint.signature
+            .marks
+            .iter()
+            .map(|mark| (mark.referent.join(), mark.within))
+            .collect::<Vec<_>>(),
+        [
+            ("/shapes/hidden/Token".to_string(), true),
+            ("/sys/Nat/Nat".to_string(), false)
+        ],
+        "a mark names the declaration's home, and the renderer finds it where the record shows it"
     );
 
     let shape = &library.declarations[0];
@@ -268,7 +310,8 @@ fn a_package_documents_its_interface_for_its_consumers() {
                 reexport.within
             ))
             .collect::<Vec<_>>(),
-        [("origin", "/shapes/geometry/origin".to_string(), true)]
+        [("origin", "/shapes/geometry/origin".to_string(), true)],
+        "a re-export out of a module with a page is a link; one out of a private module is a declaration of this page instead"
     );
 
     let geometry = &documentation.modules[1];

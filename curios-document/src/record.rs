@@ -1,6 +1,6 @@
 //! What a unit's interface is, read for a page: one record per module the unit exposes, each declaration's head printed as the author wrote it with every name it mentions resolved, and the prose attached to each — plain data a renderer walks and a transport encodes. The text lowering builds it from the tables it just built, as the last thing it does, and it rides on the unit: the prelude image, a verdict slot, the browser bundle, so a unit is documented from its stored form without its sources.
 //!
-//! **A library is documented for its consumers.** That is the one audience this record knows: which modules and declarations appear is the export view the lowering resolved to a fixed point, so a private declaration is absent rather than hidden and a re-export is a link to the declaration it names; a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one.
+//! **A library is documented for its consumers.** That is the one audience this record knows: which modules and declarations appear is the export view the lowering resolved to a fixed point, so a private declaration is absent rather than hidden and a re-export is a link to the declaration it names — or, when the declaration's own module has no page, the facade pattern, the declaration itself, documented where the re-export puts it and reached by every mark that names its home; a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one.
 
 use curios_utilities::Qualifier;
 
@@ -25,9 +25,9 @@ pub struct ModuleDocumentation {
     pub prose: Option<Vec<String>>,
     /// The public child modules, in declaration order.
     pub children: Vec<Qualifier>,
-    /// The declarations written here that a consumer can see, in source order.
+    /// The declarations written here that a consumer can see, in source order, then — sorted by name — the ones this module exposes out of a module with no page of its own, each at its [`Declaration::home`].
     pub declarations: Vec<Declaration>,
-    /// The names this module exposes that are declared elsewhere — a `pub use` — each a link to where the declaration lives, sorted by name.
+    /// The names this module exposes that are declared on another page — a `pub use` — each a link to where the declaration lives, sorted by name. A `pub use` out of a module with no page is not listed here: its declaration is among `declarations` instead.
     pub reexports: Vec<Reexport>,
 }
 
@@ -49,6 +49,8 @@ pub enum Kind {
 pub struct Declaration {
     /// The declared label — and the anchor a link to it names. Empty for a witness, which is anonymous by design.
     pub name: String,
+    /// The module that declares it, which a mark's referent names it under: the page's own module, or, for a declaration the page exposes out of a module with no page of its own, that module. This is what lets a link find the declaration where it is shown rather than where it was written.
+    pub home: Qualifier,
     pub kind: Kind,
     pub signature: Signature,
     pub prose: Option<Vec<String>>,

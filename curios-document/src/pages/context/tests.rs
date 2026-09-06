@@ -44,6 +44,7 @@ fn a_signature_sets_its_keywords_apart_and_keeps_every_other_byte() {
 fn a_module_card_tallies_kinds_in_keyword_order() {
     let declaration = |kind| Declaration {
         name: String::new(),
+        home: curios_utilities::Qualifier::empty(),
         kind,
         signature: Signature {
             text: String::new(),
