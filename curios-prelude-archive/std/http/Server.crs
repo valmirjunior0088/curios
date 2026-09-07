@@ -1,0 +1,127 @@
+use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, Try, Async, Io, Parse};
+use /std/tcp/{Socket, Listener};
+use /std/http/{Request, Response, Reply};
+use /std/http/Reply/{Stage};
+
+-- | A bound server: the listener its connections arrive on.
+pub struct Server: Type {
+    Listener,
+}
+
+-- | The handler a server runs per request: given the request and a reply not yet begun, it returns the reply finished.
+pub let Handler: Type =
+    (Request, Reply(Stage/start())) -> Try(Async, Io/Error, Reply(Stage/done()));
+
+-- | A server bound to `host` at `port`.
+pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Server) =
+    let l = Listener/listen(host, port)!;
+    Try/pure(Server { l });
+
+-- | Close `s`.
+pub let close(s: Server) -> Io({}) =
+    Listener/close(s.0);
+
+-- | Where the blank line ending the headers begins in `b`, if it has arrived.
+let blank_line(b: Bytes) -> Option(Nat) =
+    let n = Bytes/len(b);
+    let at(i: Nat, byte: Nat) -> Bool =
+        match Bytes/try_get(b, i) | some(x) => Byte/to_nat(x) == byte | none() => false end;
+    let go(i: Nat, fuel: Nat) -> Option(Nat) =
+        match fuel
+        | 0 => Option/none()
+        | rest + 1 =>
+            match i + 3 < n
+            | false => Option/none()
+            | true =>
+                match at(i, '\r') && at(i + 1, '\n') && at(i + 2, '\r') && at(i + 3, '\n')
+                | true => Option/some(i)
+                | false => go(i + 1, rest)
+                end
+            end
+        end;
+    go(0, n + 1);
+
+-- | How many bytes the request needs in all once its headers are in hand: the head, then `Content-Length` bytes.
+let needed(acc: Bytes, head_end: Nat) -> Option(Nat) =
+    let head_len = head_end + 4;
+    match Nat/Le/try(head_len, Bytes/len(acc))
+    | none() => Option/none()
+    | some(within) =>
+        let head = Bytes/slice(acc, 0, head_len, @within);
+        match Parse/run(Request/decode, head)
+        | failure(_) => Option/none()
+        | success(request) =>
+            let length =
+                Option/unwrap_or(
+                    Option/bind(Request/header(request, "Content-Length"), Nat/of_str),
+                    0);
+            Option/some(head_len + length)
+        end
+    end;
+
+-- | The bytes `c` sends, read until the headers and the body they state have arrived, or the peer closes.
+let read_request(c: Socket) -> Async(Result(Io/Error, Bytes)) =
+    let go(acc: Bytes, fuel: Nat) -> Async(Result(Io/Error, Bytes)) =
+        let complete =
+            match blank_line(acc)
+            | none() => false
+            | some(head_end) =>
+                match needed(acc, head_end)
+                | some(total) => total <= Bytes/len(acc)
+                | none() => true
+                end
+            end;
+        match complete || fuel == 0
+        | true => Async/pure(Result/success(acc))
+        | false =>
+            let next = Socket/read(c, 4096)!;
+            match next
+            | chunk(bytes) => go(x[..acc, ..bytes], fuel - 1)
+            | eof() => Async/pure(Result/success(acc))
+            | error(e) => Async/pure(Result/failure(e))
+            end
+        end;
+    go(x[], 1024);
+
+-- | The request `c` sent, or `none` when it does not read, in which case the connection is answered `400`.
+let request_of(c: Socket) -> Async(Option(Request)) =
+    let read = read_request(c)!;
+    let parsed =
+        match read
+        | failure(_) => Option/none()
+        | success(bytes) =>
+            match Parse/run(Request/decode, bytes)
+            | success(request) => Option/some(request)
+            | failure(_) => Option/none()
+            end
+        end;
+    match parsed
+    | some(request) => Async/pure(Option/some(request))
+    | none() =>
+        let _ = Try/run(Reply/send(Reply/open(c), Response/of_text(400, "bad request")))!;
+        Async/pure(Option/none())
+    end;
+
+-- | The next request: a connection taken, its request read, and both handed back with the reply not yet begun; the caller finishes the reply and closes it. A connection whose request does not read is answered `400` and closed, and the next one is taken.
+pub let accept(s: Server) -> Try(Async, Io/Error, {Request, Reply(Stage/start())}) =
+    let c = Listener/accept(s.0)!;
+    let request = Try/attempt(Async/map(request_of(c), Result/success))!;
+    match request
+    | some(r) => Try/pure((r, Reply/open(c)))
+    | none() =>
+        let _ = Try/attempt(Async/map(Async/lift(Socket/close(c)), Result/success))!;
+        accept(s)
+    end;
+
+let answer(c: Socket, handler: Handler) -> Async({}) =
+    let request = request_of(c)!;
+    match request
+    | none() => Async/pure(())
+    | some(r) =>
+        let _ = Try/run(handler(r, Reply/open(c)))!;
+        Async/pure(())
+    end;
+
+-- | Every connection to `host` at `port` answered by `handler`, one request per connection in a fiber of its own, the connection closed whichever way the handler ends, until an accept fails. Written over `Listener/serve` rather than `accept` so a slow request holds up no other connection.
+pub let serve(host: Str, port: Nat, handler: Handler) -> Try(Async, Io/Error, {}) =
+    Listener/serve(host, port, (c) => answer(c, handler));

@@ -20,6 +20,14 @@ pub use Response/{let Response};
 pub mod Client;
 pub use Client/{let Client};
 
+-- | A reply written to one connection in the order the protocol states, each step refused where the order is broken.
+pub mod Reply;
+pub use Reply/{let Reply};
+
+-- | A bound server: requests accepted one by one, or every connection answered by a handler.
+pub mod Server;
+pub use Server/{let Server};
+
 -- | Why an exchange failed: the wire, a reply the decoder refuses, the deadline, or a redirect chain past the client's limit.
 pub induct Error: pub Type
 | net(Io/Error)

@@ -1,0 +1,122 @@
+use /std/{Bytes, Str, Nat, Char, Try, Async, Io};
+use /std/tcp/{Socket};
+use /std/http/{Response};
+use /std/http/Response/{Status};
+
+-- | Where a reply stands: nothing written, the status written and headers going out, a body of a stated length with so many bytes still owed, a chunked body open, or finished.
+pub induct Stage: pub Type
+| start()
+| headers()
+| fixed(remaining: Nat)
+| chunked()
+| done()
+end
+
+-- | A reply being written to one connection, at the stage the protocol says it is in. A header after the body began, a body longer or shorter than it said, and a reply left unfinished are each refused where they are written.
+pub induct Reply: (Stage) -> Type
+| at(@s: Stage, socket: Socket): (s)
+end
+
+-- | A reply not yet begun, on `c`.
+pub let open(c: Socket) -> Reply(Stage/start()) =
+    Reply/at(@Stage/start(), c);
+
+let socket_of(@s: Stage, r: Reply(s)) -> Socket =
+    match r | at(@_, c) => c end;
+
+let put(c: Socket, b: Bytes) -> Try(Async, Io/Error, {}) =
+    Try/attempt(Socket/write(c, b));
+
+let put_str(c: Socket, s: Str) -> Try(Async, Io/Error, {}) =
+    put(c, Str/to_bytes(s));
+
+-- | The status line.
+pub let status(r: Reply(Stage/start()), s: Status) -> Try(Async, Io/Error, Reply(Stage/headers())) =
+    let c = socket_of(r);
+    let _ = put_str(c, Str/flatten([s.version, " ", Nat/to_str(s.code), " ", s.reason, "\r\n"]))!;
+    Try/pure(Reply/at(@Stage/headers(), c));
+
+-- | One header.
+pub let header(
+    r: Reply(Stage/headers()),
+    name: Str,
+    value: Str,
+) -> Try(Async, Io/Error, Reply(Stage/headers())) =
+    let c = socket_of(r);
+    let _ = put_str(c, Str/flatten([name, ": ", value, "\r\n"]))!;
+    Try/pure(Reply/at(@Stage/headers(), c));
+
+-- | The headers end and a body of exactly `n` bytes follows.
+pub let body(r: Reply(Stage/headers()), n: Nat) -> Try(Async, Io/Error, Reply(Stage/fixed(n))) =
+    let c = socket_of(r);
+    let _ = put_str(c, Str/flatten(["Content-Length: ", Nat/to_str(n), "\r\n\r\n"]))!;
+    Try/pure(Reply/at(@Stage/fixed(n), c));
+
+-- | Some of the fixed body; what remains is the index, so the write that reaches zero is the last.
+pub let write(
+    @n: Nat,
+    r: Reply(Stage/fixed(n)),
+    b: Bytes,
+    @fits: Nat/Le(Bytes/len(b), n),
+) -> Try(Async, Io/Error, Reply(Stage/fixed(n - Bytes/len(b)))) =
+    let c = socket_of(r);
+    let _ = put(c, b)!;
+    Try/pure(Reply/at(@Stage/fixed(n - Bytes/len(b)), c));
+
+-- | A fixed body whose every byte is written is finished.
+pub let finish(r: Reply(Stage/fixed(0))) -> Try(Async, Io/Error, Reply(Stage/done())) =
+    Try/pure(Reply/at(@Stage/done(), socket_of(r)));
+
+-- | The headers end and a chunked body follows.
+pub let stream(r: Reply(Stage/headers())) -> Try(Async, Io/Error, Reply(Stage/chunked())) =
+    let c = socket_of(r);
+    let _ = put_str(c, "Transfer-Encoding: chunked\r\n\r\n")!;
+    Try/pure(Reply/at(@Stage/chunked(), c));
+
+let hex(n: Nat) -> Str =
+    let go(k: Nat, acc: Str, fuel: Nat) -> Str =
+        match fuel
+        | 0 => acc
+        | rest + 1 =>
+            match k
+            | 0 => acc
+            | _ => go(k / 16, Str/concat(Str/of_char(Char/hex_digit(k % 16)), acc), rest)
+            end
+        end;
+    match n | 0 => "0" | _ => go(n, "", 64) end;
+
+-- | One chunk. An empty one is skipped, since on the wire it would end the body.
+pub let chunk(r: Reply(Stage/chunked()), b: Bytes) -> Try(Async, Io/Error, Reply(Stage/chunked())) =
+    let c = socket_of(r);
+    let write =
+        match Bytes/len(b)
+        | 0 => Try/pure(())
+        | _ =>
+            put(
+                c,
+                x[
+                    ..Str/to_bytes(Str/concat(hex(Bytes/len(b)), "\r\n")),
+                    ..b,
+                    ..Str/to_bytes("\r\n")])
+        end;
+    let _ = write!;
+    Try/pure(Reply/at(@Stage/chunked(), c));
+
+-- | The empty chunk that ends a chunked body.
+pub let last(r: Reply(Stage/chunked())) -> Try(Async, Io/Error, Reply(Stage/done())) =
+    let c = socket_of(r);
+    let _ = put_str(c, "0\r\n\r\n")!;
+    Try/pure(Reply/at(@Stage/done(), c));
+
+-- | Close the connection a finished reply was written on.
+pub let close(r: Reply(Stage/done())) -> Io({}) =
+    Socket/close(socket_of(r));
+
+-- | A whole response, written as `Response/render` spells it, in one call.
+pub let send(
+    r: Reply(Stage/start()),
+    response: Response,
+) -> Try(Async, Io/Error, Reply(Stage/done())) =
+    let c = socket_of(r);
+    let _ = put(c, Response/render(response))!;
+    Try/pure(Reply/at(@Stage/done(), c));
