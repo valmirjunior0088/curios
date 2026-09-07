@@ -48,19 +48,3 @@ pub let write(h: /sys/Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
             end
         end;
     go(b);
-
--- | The next connection on the listening `l`, parking until one arrives.
-pub let accept(l: /sys/Handle) -> Async(Result(Io/Error, /sys/Handle)) =
-    let go() -> Async(Result(Io/Error, /sys/Handle)) =
-        let r = /sys/socket/accept(l)!;
-        match r.status == /sys/status/would_block
-        | true =>
-            let _ = wait(l, /sys/event/read)!;
-            go()
-        | false =>
-            match Io/Error/of(r.status)
-            | some(e) => Async/pure(Result/failure(e))
-            | none() => Async/pure(Result/success(r.handle))
-            end
-        end;
-    go();

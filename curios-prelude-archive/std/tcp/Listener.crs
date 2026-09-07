@@ -1,4 +1,4 @@
-use /std/{Bytes, Str, Nat, Try, Async, Io};
+use /std/{Bytes, Str, Nat, Result, Try, Async, Io};
 use /std/tcp/{resolve, Socket};
 
 -- | A bound, listening socket.
@@ -28,9 +28,25 @@ pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Listener) =
     let addr = resolve(host, port)!;
     bind_listen(addr);
 
+-- | The next connection on `l`, parking until a peer arrives; the handle is the library's, so this stays private and `accept` hands out a `Socket`.
+let accepted(l: Listener) -> Async(Result(Io/Error, /sys/Handle)) =
+    let go() -> Async(Result(Io/Error, /sys/Handle)) =
+        let r = /sys/socket/accept(l.0)!;
+        match r.status == /sys/status/would_block
+        | true =>
+            let _ = Async/park([Async/Wait/readable(l.0, /sys/event/read)])!;
+            go()
+        | false =>
+            match Io/Error/of(r.status)
+            | some(e) => Async/pure(Result/failure(e))
+            | none() => Async/pure(Result/success(r.handle))
+            end
+        end;
+    go();
+
 -- | The next connection, parking until a peer arrives.
 pub let accept(l: Listener) -> Try(Async, Io/Error, Socket) =
-    let h = Try/attempt(Async/raw/accept(l.0))!;
+    let h = Try/attempt(accepted(l))!;
     Try/pure(Socket/new(h));
 
 -- | Close `l`.
@@ -39,7 +55,7 @@ pub let close(l: Listener) -> Io({}) =
 
 let accept_loop(l: Listener, on_conn: (/sys/Handle) -> Async({})) -> Async({}) =
     let go() -> Async({}) =
-        let r = Async/raw/accept(l.0)!;
+        let r = accepted(l)!;
         match r
         | failure(_) => Async/pure(())
         | success(h) =>
