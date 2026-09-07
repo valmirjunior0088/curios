@@ -128,7 +128,7 @@ jobs:
         with:
           key: xtask
       - name: Install dependencies
-        run: cargo x grammar ci
+        run: cargo x grammar clean-install
       - name: Run grammar tests
         run: cargo x grammar test
 
@@ -148,7 +148,7 @@ jobs:
         with:
           key: xtask
       - name: Install dependencies
-        run: cargo x vscode ci
+        run: cargo x vscode clean-install
       - name: Run grammar snapshot tests
         run: cargo x vscode test
       - name: Package the extension
