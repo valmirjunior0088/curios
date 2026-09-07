@@ -112,16 +112,23 @@ cargo x runtime
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 cargo test --workspace --all-targets --all-features
-cargo test --workspace --doc --all-features
 cargo x rust-docs
+cargo x std-docs
+cargo x js
+cargo x grammar clean-install
+cargo x grammar test
+cargo x vscode clean-install
+cargo x vscode test
+cargo x vscode run package
+cargo x zed fmt --all -- --check
+cargo x zed clippy --target wasm32-wasip2 -- -Dwarnings
+cargo x zed build --release --target wasm32-wasip2
 ```
 
-`cargo check` is deliberately absent: `clippy` is the same compilation with more lints. The doctest step is separate because `--all-targets` excludes `--doc`, so nothing above it compiles a documentation example. The documentation build is `cargo doc --workspace --no-deps --document-private-items` behind one recipe — the check workflow's and the release's spelling as well as this gate's — and has been red on its own while every step above it was green: rustdoc's lints — a broken intra-doc link above all — are checked by no other step. It carries `--document-private-items` because these crates state their invariants on `pub(crate)` items: without it the step lints the public surface alone, which in this tree is a small fraction of the prose it exists to check. Its denial is `[workspace.lints.rustdoc] all = "deny"` in the root manifest, inherited by every crate through `[lints] workspace = true`, so neither this gate nor CI carries an environment variable that can be forgotten in one of them. Measure a step and name the step; never quote a whole-gate total.
+`cargo check` is deliberately absent from this gate and from the check workflow: `clippy` is the same compilation with more lints. The doctest step is absent because there is nothing for it to run: no crate in the workspace carries a documentation example, so `cargo test --workspace --doc` passes over an empty set. The check workflow keeps it as the tripwire for the day one is written. The documentation build is `cargo doc --workspace --no-deps --document-private-items` behind one recipe — the check workflow's and the release's spelling as well as this gate's — and has been red on its own while every step above it was green: rustdoc's lints — a broken intra-doc link above all — are checked by no other step. It carries `--document-private-items` because these crates state their invariants on `pub(crate)` items: without it the step lints the public surface alone, which in this tree is a small fraction of the prose it exists to check. Its denial is `[workspace.lints.rustdoc] all = "deny"` in the root manifest, inherited by every crate through `[lints] workspace = true`, so neither this gate nor CI carries an environment variable that can be forgotten in one of them. `cargo x std-docs` is the same check for the other half of the documentation: it renders `/std`'s pages from the prelude image the compiler was built with, so a doc comment the record cannot carry and a page the renderer cannot lay out are caught here and not by the check workflow, which runs it beside `rust-docs`. It is the one step that builds `curios` in release, and it re-renders only when the image or the compiler is newer than the pages, so it costs nothing on a change that touched neither. The last seven steps are the browser and editor trees, which no cargo invocation above them reaches: `cargo x js` builds the bundle for `wasm32-unknown-unknown`, the two npm bridges install from their lock file before testing, spelled `clean-install` because npm's short name for it reads as something it is not, and it is what makes a local run and CI's the same run, and the Zed extension is formatted, linted and built for `wasm32-wasip2`. They need both targets installed and `npm` on `PATH`. One thing the check workflow's Zed job does stays CI-only: verifying that the grammar rev pinned in `editors/zed/extension.toml` publishes this tree's `editors/grammar`, which reads a pushed commit and so cannot pass before the push it guards. Measure a step and name the step; never quote a whole-gate total.
 
 ### Additional gates
 
-- Changes to `curios-js` or its dependencies must also pass `cargo x js`.
-- Changes to the standard library's sources, the documentation record or its pages must also pass `cargo x std-docs`, which renders `/std`'s pages from the prelude image the compiler was built with; the check workflow runs it beside `rust-docs`.
 - Changes to `curios-binaryen/build.rs` must verify an empty-cache build and a cache hit from a different Cargo mode or build-script fingerprint.
 - Changes to runtime dependencies must rebuild through `cargo x runtime` and confirm that neither `cranelift-codegen` nor `curios-binaryen` entered its graph — name those crates, since Wasmtime's runtime legitimately pulls the `cranelift-bitset`, `cranelift-bforest` and `cranelift-entity` utility crates.
 - Changes to the bundle format must run the ignored end-to-end test in `curios/tests/bundle.rs` explicitly.
