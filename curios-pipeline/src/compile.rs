@@ -533,8 +533,8 @@ where
     curios_profile::profile!("lower_from_ersd");
     observe(Stage::Ersd(&ersd_module));
 
-    // Shrink before lowering: drop the items the program neither reaches nor runs for effect, so Cont's whole-module fixpoint sees only the live slice (see `curios_ersd::optimize`).
-    curios_ersd::optimize(&mut ersd_module);
+    // Shrink before lowering: drop the items the program neither reaches nor runs for effect, so Cont's whole-module fixpoint sees only the live slice (see `curios_ersd::optimize`). Verified rather than verifying: erasure sealed this very module through `finalize`, which verified it.
+    curios_ersd::optimize_verified(&mut ersd_module);
 
     observe(Stage::ErsdOptm(&ersd_module));
 

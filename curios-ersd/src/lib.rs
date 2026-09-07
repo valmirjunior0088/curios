@@ -53,4 +53,4 @@ pub use summary::*;
 mod remap;
 
 mod optimize;
-pub use optimize::optimize;
+pub use optimize::{optimize, optimize_verified};

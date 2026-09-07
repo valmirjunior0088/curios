@@ -17,6 +17,15 @@ pub fn optimize(module: &mut Module) {
     module
         .verify()
         .expect("a module entering optimization verifies");
+    optimize_verified(module);
+}
+
+/// [`optimize`] over a module the caller has just verified, skipping the entry check.
+///
+/// **The check it skips is a second reading of the same bytes.** A program's module arrives here straight from [`ErsdBuilder::finalize`](crate::ErsdBuilder::finalize), which verifies the whole module and hands it over unmutated; verifying again walks the entire prelude a second time to reach the same verdict, and on a hello-world compile that walk is a twelfth of the whole pipeline. Every other verification stays: erasure's, the one after closed-term evaluation, and the one each prune and compaction ends with.
+///
+/// Not a debug assertion either. Restating the check under `cfg(debug_assertions)` would put the whole cost back exactly where the suite runs, in exchange for a verdict the line above it already gave.
+pub fn optimize_verified(module: &mut Module) {
     let analysis = Analysis::analyze(module);
     prune::prune_unreachable(module, &analysis);
     compact(module);
