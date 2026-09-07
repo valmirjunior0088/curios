@@ -23,7 +23,7 @@ let exchange(request: Request) -> Try(Async, Error, Response) =
     let bytes = Try/map_error(Socket/call(open, Request/render(request)), (e) => Error/net(e))!;
     match Parse/run(Response/decode, bytes)
     | success(response) => Try/pure(response)
-    | failure(message) => Try/raise(Error/malformed(message))
+    | failure(e) => Try/raise(Error/malformed(e))
     end;
 
 let is_redirect(code: Nat) -> Bool =

@@ -5,14 +5,14 @@ use /std/{Json, Parse, Str, Flt, Test};
 let decoded(input: Str) -> Str =
     match Parse/run(Json/decode, Str/to_bytes(input)): (_) => Str
     | success(value) => Json/encode(value)
-    | failure(msg) => msg
+    | failure(e) => e.message
     end;
 
 -- The string a document carries, for the escape rows below, or the refusal that stopped it.
 let decoded_str(input: Str) -> Str =
     match Parse/run(Json/decode, Str/to_bytes(input)): (_) => Str
     | success(value) => match value: (_) => Str | str(s) => s | _ => "wrong" end
-    | failure(msg) => msg
+    | failure(e) => e.message
     end;
 
 -- Each rejection is pinned to its reason. The backslash commits the escape parser, so a malformed escape reports itself rather than ending the string segment and failing on a closing quote that is not there — `many0(or(escape, segment))` once reported every one of these as `unexpected byte`.
@@ -78,7 +78,7 @@ test a_non_finite_number_encodes_as_null() =
         let text = Json/encode(value);
         match Parse/run(Json/decode, Str/to_bytes(text)): (_) => Str
         | success(_) => text
-        | failure(msg) => Str/concat("NOT JSON: ", msg)
+        | failure(e) => Str/concat("NOT JSON: ", e.message)
         end;
     Test/equal(
         Str/join(

@@ -174,7 +174,7 @@ pub let text(r: Response) -> Option(Str) =
     Str/of_bytes(r.body);
 
 -- | The body decoded as JSON, or the decoder's refusal.
-pub let json(r: Response) -> Result(Str, Json) =
+pub let json(r: Response) -> Result(Parse/Error, Json) =
     Parse/run(Json/decode, r.body);
 
 let reason_of(code: Nat) -> Str =

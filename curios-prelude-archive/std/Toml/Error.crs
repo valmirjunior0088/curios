@@ -1,0 +1,84 @@
+use /std/{Str, Bytes, List, Parse, Show, Equal, Spell};
+use /std/Toml/{Toml};
+
+-- | A table-construction rule a document breaks; `invariant` is a state the builder cannot reach, named so that it is reported rather than swallowed if it ever is.
+pub induct Rule: pub Type
+| duplicate_key()
+| table_defined_twice()
+| extends_inline_table()
+| extends_dotted_table()
+| extends_table_defined_elsewhere()
+| redefines_dotted_table()
+| redefines_array_as_table()
+| redefines_table_as_array()
+| appends_to_static_array()
+| extends_static_array()
+| extends_array_with_dotted_keys()
+| conflicts_with_value()
+| empty_key_path()
+| invariant(Str)
+end
+
+pub use Rule/*;
+
+satisfy Equal(Rule);
+
+satisfy Spell(Rule);
+
+-- | Why a document did not decode — its text is not TOML, or the key path broke a construction rule — or a table did not encode: a key that is not UTF-8, or a date or time that does not spell.
+pub induct Error: pub Type
+| syntax(Parse/Error)
+| rule(List(Str), Rule)
+| invalid_key(Bytes)
+| invalid_value(Toml)
+end
+
+pub use Error/*;
+
+let rule_message(r: Rule) -> Str =
+    match r
+    | duplicate_key() => "duplicate key"
+    | table_defined_twice() => "table defined more than once"
+    | extends_inline_table() => "cannot extend an inline table"
+    | extends_dotted_table() => "cannot extend a table created by dotted keys"
+    | extends_table_defined_elsewhere() =>
+        "cannot extend a table defined elsewhere with dotted keys"
+    | redefines_dotted_table() => "cannot redefine a table created by dotted keys"
+    | redefines_array_as_table() => "cannot redefine an array as a table"
+    | redefines_table_as_array() => "cannot redefine a table as an array of tables"
+    | appends_to_static_array() => "cannot append to a static array"
+    | extends_static_array() => "cannot extend a static array"
+    | extends_array_with_dotted_keys() => "cannot extend an array of tables with dotted keys"
+    | conflicts_with_value() => "key conflicts with an existing value"
+    | empty_key_path() => "empty key path"
+    | invariant(what) => what
+    end;
+
+-- | The reason alone, without where.
+pub let message(e: Error) -> Str =
+    match e
+    | syntax(p) => p.message
+    | rule(_, r) => rule_message(r)
+    | invalid_key(_) => "map key is not valid UTF-8"
+    | invalid_value(v) =>
+        match v
+        | offset_date_time(_) => "invalid date-time value"
+        | local_date_time(_) => "invalid date-time value"
+        | local_date(_) => "invalid date value"
+        | local_time(_) => "invalid time value"
+        | _ => "invalid value"
+        end
+    end;
+
+-- | The reason, then where: the byte offset of a syntax refusal, the key path of a broken rule.
+pub let to_str(e: Error) -> Str =
+    match e
+    | syntax(p) => Parse/Error/to_str(p)
+    | rule(path, r) => Str/flatten([rule_message(r), " at key ", Str/join(".", path)])
+    | _ => message(e)
+    end;
+
+-- | Shown as `to_str` spells it.
+satisfy Show(Error) {
+    show = to_str,
+}

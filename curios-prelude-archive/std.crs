@@ -217,7 +217,7 @@ pub mod Tuple;
 
 -- | A parser monad over bytes.
 -- |
--- | A parser declines when the input is not its shape, and `or` tries the alternative; once `commit` has said the input is its shape, a refusal is reported instead. A parser that must consume everything ends with `eof`.
+-- | A parser declines when the input is not its shape, and `or` tries the alternative; once `commit` has said the input is its shape, a refusal is reported instead. A parser that must consume everything ends with `eof`. A refusal is a `Parse/Error`: what was wanted and the byte offset it was wanted at.
 pub mod Parse;
 pub use Parse/{let Parse};
 

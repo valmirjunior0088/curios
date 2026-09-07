@@ -72,7 +72,7 @@ and inline_items(acc: List({List(Str), Toml})) -> Parse(Toml) =
         | some(_) =>
             match inline_fold(acc2)
             | success(m) => Parse/pure(Toml/table(m))
-            | failure(msg) => Parse/fail(msg)
+            | failure(e) => Parse/fail(/std/Toml/Error/message(e))
             end
         | none() => Parse/fail("expected ',' or '}' in inline table")
         end

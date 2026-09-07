@@ -1,5 +1,5 @@
 use /std/{Bool, Str, List, Map, Result, Parse};
-use /std/Toml/{Toml, let Build};
+use /std/Toml/{Toml, Error, let Build};
 use /std/Toml/build/{apply_assign, apply_header, apply_aot, build_empty};
 use /std/Toml/scan/{line_end, trivia, ws};
 use /std/Toml/keys/{key_part};
@@ -67,11 +67,11 @@ let stmts(acc: List(Stmt)) -> Parse(List(Stmt)) =
     end;
 
 -- | Exactly one whole document as its root table; anything after it is refused, as is a document that breaks the table-construction rules.
-pub let decode(source: Str) -> Result(Str, Map(Toml)) =
+pub let decode(source: Str) -> Result(Error, Map(Toml)) =
     match Parse/run(stmts([]), Str/to_bytes(source))
-    | failure(msg) => Result/failure(msg)
+    | failure(e) => Result/failure(Error/syntax(e))
     | success(parsed) =>
-        let start: Result(Str, Build) = Result/success(build_empty);
+        let start: Result(Error, Build) = Result/success(build_empty);
         match List/fold(
             parsed,
             start,

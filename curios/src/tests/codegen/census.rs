@@ -1314,7 +1314,7 @@ match input: (_) => Io({})
     | some(s) =>
         match Toml/decode(s): (_) => Io({})
         | success(m) => /std/print(Nat/to_str(Map/len(m)))
-        | failure(e) => /std/print(e)
+        | failure(e) => /std/print(Toml/Error/to_str(e))
         end
     | none() => /std/print("invalid utf-8")
     end

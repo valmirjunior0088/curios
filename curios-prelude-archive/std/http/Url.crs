@@ -97,11 +97,11 @@ let url: Parse(Url) =
     end;
 
 -- | `s` read as a URL, or why it is not: a scheme other than `http` and `https`, a missing host, or a port that is not a number.
-pub let of_str(s: Str) -> Result(Str, Url) =
+pub let of_str(s: Str) -> Result(Parse/Error, Url) =
     Parse/run(url, Str/to_bytes(s));
 
 -- | That `r` is a URL that read.
-pub let Read(r: Result(Str, Url)) -> Prop =
+pub let Read(r: Result(Parse/Error, Url)) -> Prop =
     match r | success(_) => True | failure(_) => False end;
 
 -- | That `s` reads as a URL, decided by reduction: a literal that does not is refused where it is written.

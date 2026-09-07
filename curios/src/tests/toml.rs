@@ -540,11 +540,11 @@ fn program() -> String {
             end;
         let canon(input : Str) -> Str =
             match Toml/decode(input)
-            | failure(msg) => Str/concat("reject:", msg)
+            | failure(e) => Str/concat("reject:", Toml/Error/message(e))
             | success(root) =>
                 match Toml/encode(root)
                 | success(out) => out
-                | failure(msg) => Str/concat("encode-fail:", msg)
+                | failure(e) => Str/concat("encode-fail:", Toml/Error/message(e))
                 end
             end;
         let decoded(input : Str) -> Str =
@@ -553,12 +553,12 @@ fn program() -> String {
             | success(root) =>
                 match Toml/encode(root)
                 | success(out) => out
-                | failure(msg) => Str/concat("encode-fail:", msg)
+                | failure(e) => Str/concat("encode-fail:", Toml/Error/message(e))
                 end
             end;
         let reason(input : Str) -> Str =
             match Toml/decode(input)
-            | failure(msg) => msg
+            | failure(e) => Toml/Error/message(e)
             | success(_) => "accept"
             end;
         let verdict(input : Str) -> Str =
@@ -656,7 +656,7 @@ fn encode_rejects_a_non_utf8_key() {
         let outcome : Str =
             match Toml/encode(Map/insert(Map/empty(@Toml), x[0xff], Toml/int(opaque)))
             | success(_) => "accepted"
-            | failure(msg) => msg
+            | failure(e) => Toml/Error/message(e)
             end;
         /std/print(outcome)
         "#;

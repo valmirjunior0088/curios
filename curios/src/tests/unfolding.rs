@@ -93,7 +93,7 @@ match input: (_) => Io({})
         | some(s) => /std/print(s)
         | none() => /std/print("invalid utf-8\n")
         end
-    | failure(m) => /std/print(m)
+    | failure(e) => /std/print(e.message)
     end
 | none() => /std/print("no input\n")
 end

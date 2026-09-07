@@ -1,4 +1,4 @@
-use /std/{Str, Nat, Try, Async, Io};
+use /std/{Nat, Try, Async, Io, Parse};
 
 -- | The request's method.
 pub mod Method;
@@ -23,7 +23,7 @@ pub use Client/{let Client};
 -- | Why an exchange failed: the wire, a reply the decoder refuses, the deadline, or a redirect chain past the client's limit.
 pub induct Error: pub Type
 | net(Io/Error)
-| malformed(Str)
+| malformed(Parse/Error)
 | timeout()
 | redirected(Nat)
 end

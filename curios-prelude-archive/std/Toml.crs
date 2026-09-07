@@ -63,6 +63,10 @@ struct Build: Type {
     scope: List(Seg),
 }
 
+-- | Why a document did not decode or a table did not encode.
+pub mod Error;
+pub use Error/{let Error};
+
 mod calendar;
 
 mod build;

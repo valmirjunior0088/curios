@@ -36,7 +36,7 @@ fn std_parse_threads_bangs_left_to_right() {
 
         match Parse/run(parser, /std/Str/to_bytes("BA")) : (_) => /std/Io({})
         | success(n) => /std/print(Nat/to_str(n))
-        | failure(msg) => /std/print(msg)
+        | failure(e) => /std/print(e.message)
         end
         "#;
 
@@ -68,7 +68,7 @@ fn region_mixes_action_types() {
             | some(t) => /std/print(t)
             | none() => /std/print("invalid utf-8")
             end
-        | failure(msg) => /std/print(msg)
+        | failure(e) => /std/print(e.message)
         end
         "#;
 

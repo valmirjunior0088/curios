@@ -1,0 +1,29 @@
+use /std/{Str, Nat, Bool, Show, Equal, Spell};
+
+-- | Why a parser refused: what it wanted, the byte offset it stopped at, and whether the refusal is committed — the input recognized as the shape the parser was reading, so an enclosing `or` reports it rather than trying an alternative.
+pub struct Error: pub Type {
+    message: Str,
+    offset: Nat,
+    committed: Bool,
+}
+
+satisfy Equal(Error);
+
+satisfy Spell(Error);
+
+-- | A refusal at `offset`, open to an alternative.
+pub let declined(message: Str, offset: Nat) -> Error =
+    Error { message = message, offset = offset, committed = false };
+
+-- | `e` as committed.
+pub let commit(e: Error) -> Error =
+    Error { message = e.message, offset = e.offset, committed = true };
+
+-- | The refusal as a line: the message, then where.
+pub let to_str(e: Error) -> Str =
+    Str/flatten([e.message, " at byte ", Nat/to_str(e.offset)]);
+
+-- | Shown as `to_str` spells it.
+satisfy Show(Error) {
+    show = to_str,
+}

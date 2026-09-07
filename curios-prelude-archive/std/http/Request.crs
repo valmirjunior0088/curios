@@ -126,7 +126,7 @@ let url_of(headers: List({Str, Str}), target: Str) -> Parse(Url) =
     let authority = Option/unwrap_or(lookup(headers, "Host"), "localhost");
     match Url/of_str(Str/flatten(["http://", authority, target]))
     | success(u) => Parse/pure(u)
-    | failure(why) => Parse/fail(why)
+    | failure(why) => Parse/fail(why.message)
     end;
 
 -- | A whole request as a server reads it: the request line, the headers, then `Content-Length` bytes of body or none. The URL is rebuilt from `Host` and the target, under `http`, since the wire does not say.

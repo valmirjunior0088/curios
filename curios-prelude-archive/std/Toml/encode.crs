@@ -1,5 +1,5 @@
 use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result};
-use /std/Toml/{Toml, Date, Time};
+use /std/Toml/{Toml, Date, Time, Error};
 use /std/Toml/calendar/{date_ok, offset_ok, time_ok};
 use /std/Toml/scan/{is_bare_byte};
 
@@ -34,9 +34,9 @@ let quote_str(s: Str) -> Str =
     let body = Bytes/fold(Str/to_bytes(s), x[], (byte, acc) => x[..acc, ..escape_content(byte)]);
     Str/flatten(["\"", Option/unwrap_or(Str/of_bytes(body), ""), "\""]);
 
-let spell_key(kb: Bytes) -> Result(Str, Str) =
+let spell_key(kb: Bytes) -> Result(Error, Str) =
     match Str/of_bytes(kb)
-    | none() => Result/failure("map key is not valid UTF-8")
+    | none() => Result/failure(Error/invalid_key(kb))
     | some(s) =>
         match bare_ok(s) | true => Result/success(s) | false => Result/success(quote_str(s)) end
     end;
@@ -101,7 +101,7 @@ let flt_str(f: Flt) -> Str =
         end
     end;
 
-let value_str(v: Toml) -> Result(Str, Str) =
+let value_str(v: Toml) -> Result(Error, Str) =
     match v
     | str(s) => Result/success(quote_str(s))
     | int(n) => Result/success(int_str(n))
@@ -113,25 +113,25 @@ let value_str(v: Toml) -> Result(Str, Str) =
             Result/success(
                 Str/flatten(
                     [date_str(odt.date), "T", time_str(odt.time), offset_str(odt.offset_minutes)]))
-        | false => Result/failure("invalid date-time value")
+        | false => Result/failure(Error/invalid_value(v))
         end
     | local_date_time(ldt) =>
         match date_ok(ldt.date) && time_ok(ldt.time)
         | true => Result/success(Str/flatten([date_str(ldt.date), "T", time_str(ldt.time)]))
-        | false => Result/failure("invalid date-time value")
+        | false => Result/failure(Error/invalid_value(v))
         end
     | local_date(d) =>
         match date_ok(d)
         | true => Result/success(date_str(d))
-        | false => Result/failure("invalid date value")
+        | false => Result/failure(Error/invalid_value(v))
         end
     | local_time(t) =>
         match time_ok(t)
         | true => Result/success(time_str(t))
-        | false => Result/failure("invalid time value")
+        | false => Result/failure(Error/invalid_value(v))
         end
     | arr(items) =>
-        let start: Result(Str, List(Str)) = Result/success([]);
+        let start: Result(Error, List(Str)) = Result/success([]);
         match List/fold(
             items,
             start,
@@ -152,8 +152,8 @@ let value_str(v: Toml) -> Result(Str, Str) =
             end
         end
     end
-and pairs_str(entries: List({Bytes, Toml})) -> Result(Str, Str) =
-    let start: Result(Str, List(Str)) = Result/success([]);
+and pairs_str(entries: List({Bytes, Toml})) -> Result(Error, Str) =
+    let start: Result(Error, List(Str)) = Result/success([]);
     match List/fold(
         entries,
         start,
@@ -171,9 +171,9 @@ and pairs_str(entries: List({Bytes, Toml})) -> Result(Str, Str) =
     | failure(msg) => Result/failure(msg)
     end;
 
-let encode_table(prefix: List(Str), m: Map(Toml)) -> Result(Str, Str) =
+let encode_table(prefix: List(Str), m: Map(Toml)) -> Result(Error, Str) =
     let entries = Map/entries(m);
-    let start: Result(Str, List(Str)) = Result/success([]);
+    let start: Result(Error, List(Str)) = Result/success([]);
     match List/fold(
         entries,
         start,
@@ -225,5 +225,5 @@ let encode_table(prefix: List(Str), m: Map(Toml)) -> Result(Str, Str) =
     end;
 
 -- | `m` as one deterministic document: the root's plain values first, then its tables. A key that is not UTF-8 or an invalid calendar value is refused rather than written.
-pub let encode(m: Map(Toml)) -> Result(Str, Str) =
+pub let encode(m: Map(Toml)) -> Result(Error, Str) =
     encode_table([], m);

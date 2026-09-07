@@ -5,7 +5,7 @@ use /std/http/{Method, Url, Request, Response};
 -- A URL reads into its parts; the fragment is dropped, the port is the scheme's when unwritten, and the path is `/` when empty.
 test a_url_reads_into_its_parts() =
     match Url/of_str("https://example.com:8443/a/b?x=1&y=two+words#frag")
-    | failure(why) => Test/check(Str/is_empty(why))
+    | failure(why) => Test/check(Str/is_empty(why.message))
     | success(u) =>
         Test/all(
             [
@@ -85,14 +85,14 @@ test a_request_renders_and_decodes() =
                 Option/some(
                     "POST / HTTP/1.1\r\nHost: h:81\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi"))]);
 
-let reply(s: Str) -> Result(Str, Response) =
+let reply(s: Str) -> Result(Parse/Error, Response) =
     Parse/run(Response/decode, Str/to_bytes(s));
 
 -- A reply's body is `Content-Length` bytes when the header is there, and a header is found without regard to case.
 test a_reply_decodes_by_length() =
     match reply(
         "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello AND MORE")
-    | failure(why) => Test/check(Str/is_empty(why))
+    | failure(why) => Test/check(Str/is_empty(why.message))
     | success(r) =>
         Test/all(
             [
@@ -107,7 +107,7 @@ test a_reply_decodes_by_length() =
 test a_reply_decodes_by_chunks() =
     match reply(
         "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\nE\r\n in\r\n\r\nchunks.\r\n0\r\nExpires: never\r\n\r\n")
-    | failure(why) => Test/check(Str/is_empty(why))
+    | failure(why) => Test/check(Str/is_empty(why.message))
     | success(r) => Test/equal(Response/text(r), Option/some("Wikipedia in\r\n\r\nchunks."))
     end;
 
