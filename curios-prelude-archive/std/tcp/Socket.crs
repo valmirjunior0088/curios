@@ -18,11 +18,11 @@ pub let read(c: Socket, n: Nat) -> Async(Io/Chunk) =
 pub let write(c: Socket, b: Bytes) -> Async(Result(Io/Error, {})) =
     Async/raw/write(c.0, b);
 
-satisfy Async/Read(Socket) {
+satisfy Async/Read(Async, Socket) {
     read(c, n) = read(c, n),
 }
 
-satisfy Async/Write(Socket) {
+satisfy Async/Write(Async, Socket) {
     write(c, b) = write(c, b),
 }
 

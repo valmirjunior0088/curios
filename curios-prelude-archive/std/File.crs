@@ -52,11 +52,19 @@ pub let write(f: File, b: Bytes) -> Try(Io, Io/Error, {}) =
         end
     end;
 
-satisfy Async/Read(File) {
+satisfy Async/Read(Io, File) {
+    read(f, n) = read(f, n),
+}
+
+satisfy Async/Read(Async, File) {
     read(f, n) = Async/lift(read(f, n)),
 }
 
-satisfy Async/Write(File) {
+satisfy Async/Write(Io, File) {
+    write(f, b) = Try/run(write(f, b)),
+}
+
+satisfy Async/Write(Async, File) {
     write(f, b) = Async/lift(Try/run(write(f, b))),
 }
 

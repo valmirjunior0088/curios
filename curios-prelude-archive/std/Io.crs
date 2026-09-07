@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Lift, Bytes, Byte, Nat, Option, Async, True};
+use /std/{Monad, Lift, Bytes, Byte, Nat, Option, Result, Async, True};
 
 -- | The failure every host operation reports.
 pub mod Error;
@@ -77,20 +77,37 @@ pub let read_line(i: Input) -> Io(Option(Bytes)) =
         end;
     go(x[]);
 
--- | The whole of `b`, a short write resent and a failure dropped.
-pub let write(o: Output, b: Bytes) -> Io({}) =
+-- | The whole of `b`, a short write resent; the first failure is the answer.
+let written(o: Output, b: Bytes) -> Io(Result(Error, {})) =
     let r = /sys/Handle/write(o.0, b)!;
     choose
-    | r.status != /sys/status/ok => Io/pure(())
+    | r.status != /sys/status/ok =>
+        Io/pure(
+            match Error/of(r.status)
+            | some(e) => Result/failure(e)
+            | none() => Result/success(())
+            end)
     | r.written < Bytes/len(b) =>
-        write(o, Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
-    | _ => Io/pure(())
+        written(o, Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
+    | _ => Io/pure(Result/success(()))
     end;
 
-satisfy Async/Read(Input) {
+-- | The whole of `b`, a short write resent and a failure dropped.
+pub let write(o: Output, b: Bytes) -> Io({}) =
+    Io/bind(written(o, b), (_) => Io/pure(()));
+
+satisfy Async/Read(Io, Input) {
+    read(i, n) = read(i, n),
+}
+
+satisfy Async/Read(Async, Input) {
     read(i, n) = Async/raw/read(i.0, n),
 }
 
-satisfy Async/Write(Output) {
+satisfy Async/Write(Io, Output) {
+    write(o, b) = written(o, b),
+}
+
+satisfy Async/Write(Async, Output) {
     write(o, b) = Async/raw/write(o.0, b),
 }

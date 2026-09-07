@@ -127,62 +127,83 @@ pub let go(body: Fiber) -> Async({}) =
     fork_with(body, Token { c });
 
 -- | Everything `read` yields up to the end of the stream; a failure before the end drops what was read.
-pub let drain(read: (Nat) -> Async(Io/Chunk)) -> Async(Result(Io/Error, Bytes)) =
-    let go(acc: Bytes) -> Async(Result(Io/Error, Bytes)) =
+pub let drain(
+    @M: (Type) -> Type,
+    use Monad(M),
+    read: (Nat) -> M(Io/Chunk),
+) -> M(Result(Io/Error, Bytes)) =
+    let go(acc: Bytes) -> M(Result(Io/Error, Bytes)) =
         let r = read(4096)!;
         match r
         | chunk(bytes) => go(x[..acc, ..bytes])
-        | eof() => pure(Result/success(acc))
-        | error(e) => pure(Result/failure(e))
+        | eof() => Monad/pure(Result/success(acc))
+        | error(e) => Monad/pure(Result/failure(e))
         end;
     go(x[]);
 
--- | What a stream is read through: up to `n` bytes, parking the fiber until some arrive.
-pub concept Read(S: Type): pub Type {
-    read(S, Nat) -> Async(Io/Chunk),
+-- | What a stream is read through, in the monad the region is written in: `Async` parks the fiber until bytes arrive, `Io` waits on this program's own behalf.
+-- |
+-- | A carrier whose progress a peer decides declares only the `Async` witness, so reading it in an `Io` region is refused where it is written.
+pub concept Read(M: (Type) -> Type, S: Type): pub Type {
+    read(S, Nat) -> M(Io/Chunk),
 }
 
 -- | What a stream is written through: the whole of the bytes, a short write resent.
-pub concept Write(S: Type): pub Type {
-    write(S, Bytes) -> Async(Result(Io/Error, {})),
+pub concept Write(M: (Type) -> Type, S: Type): pub Type {
+    write(S, Bytes) -> M(Result(Io/Error, {})),
 }
 
 -- | Everything up to the end of the stream; a failure before the end drops what was read.
-pub let read_all(@S: Type, use Read(S), s: S) -> Async(Result(Io/Error, Bytes)) =
+pub let read_all(
+    @M: (Type) -> Type,
+    @S: Type,
+    use Monad(M),
+    use Read(M, S),
+    s: S,
+) -> M(Result(Io/Error, Bytes)) =
     drain((n) => Read/read(s, n));
 
 -- | The bytes before the first `delimiter`, which is consumed and dropped, or everything read when the stream ends first.
-pub let read_until(@S: Type, use Read(S), s: S, delimiter: Byte) -> Async(Result(Io/Error, Bytes)) =
-    let go(acc: Bytes) -> Async(Result(Io/Error, Bytes)) =
+pub let read_until(
+    @M: (Type) -> Type,
+    @S: Type,
+    use Monad(M),
+    use Read(M, S),
+    s: S,
+    delimiter: Byte,
+) -> M(Result(Io/Error, Bytes)) =
+    let go(acc: Bytes) -> M(Result(Io/Error, Bytes)) =
         let c = Read/read(s, 1)!;
         match c
         | chunk(b) =>
             match Option/unwrap_or(Bytes/try_get(b, 0), delimiter) == delimiter
-            | true => pure(Result/success(acc))
+            | true => Monad/pure(Result/success(acc))
             | false => go(x[..acc, ..b])
             end
-        | eof() => pure(Result/success(acc))
-        | error(e) => pure(Result/failure(e))
+        | eof() => Monad/pure(Result/success(acc))
+        | error(e) => Monad/pure(Result/failure(e))
         end;
     go(x[]);
 
 -- | Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer.
 pub let copy(
+    @M: (Type) -> Type,
     @S: Type,
     @T: Type,
-    use Read(S),
-    use Write(T),
+    use Monad(M),
+    use Read(M, S),
+    use Write(M, T),
     from: S,
     to: T,
-) -> Async(Result(Io/Error, {})) =
-    let go() -> Async(Result(Io/Error, {})) =
+) -> M(Result(Io/Error, {})) =
+    let go() -> M(Result(Io/Error, {})) =
         let c = Read/read(from, 4096)!;
         match c
         | chunk(b) =>
             let w = Write/write(to, b)!;
-            match w | success(_) => go() | failure(e) => pure(Result/failure(e)) end
-        | eof() => pure(Result/success(()))
-        | error(e) => pure(Result/failure(e))
+            match w | success(_) => go() | failure(e) => Monad/pure(Result/failure(e)) end
+        | eof() => Monad/pure(Result/success(()))
+        | error(e) => Monad/pure(Result/failure(e))
         end;
     go();
 
