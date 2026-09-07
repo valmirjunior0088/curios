@@ -1,16 +1,15 @@
 use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, Try, Async, Io, Parse};
 use /std/tcp/{Socket, Listener};
-use /std/http/{Request, Response, Reply};
-use /std/http/Reply/{Stage};
+use /std/http/{Request, Response};
 
 -- | A bound server: the listener its connections arrive on.
 pub struct Server: Type {
     Listener,
 }
 
--- | The handler a server runs per request: given the request and a reply not yet begun, it returns the reply finished.
+-- | The handler a server runs per request: given the request, it answers with the response to send. The server writes it and closes the connection.
 pub let Handler: Type =
-    (Request, Reply(Stage/start())) -> Try(Async, Io/Error, Reply(Stage/done()));
+    (Request) -> Try(Async, Io/Error, Response);
 
 -- | A server bound to `host` at `port`.
 pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Server) =
@@ -60,7 +59,7 @@ let needed(acc: Bytes, head_end: Nat) -> Option(Nat) =
     end;
 
 -- | The bytes `c` sends, read until the headers and the body they state have arrived, or the peer closes.
-let read_request(c: Socket) -> Async(Result(Io/Error, Bytes)) =
+let request_bytes(c: Socket) -> Async(Result(Io/Error, Bytes)) =
     let go(acc: Bytes, fuel: Nat) -> Async(Result(Io/Error, Bytes)) =
         let complete =
             match blank_line(acc)
@@ -83,45 +82,38 @@ let read_request(c: Socket) -> Async(Result(Io/Error, Bytes)) =
         end;
     go(x[], 1024);
 
--- | The request `c` sent, or `none` when it does not read, in which case the connection is answered `400`.
-let request_of(c: Socket) -> Async(Option(Request)) =
-    let read = read_request(c)!;
-    let parsed =
-        match read
+-- | The request `c` sent, or `none` where its bytes do not read as one. A wire failure is raised, and `c` is left open either way for the caller to answer and close.
+pub let read_request(c: Socket) -> Try(Async, Io/Error, Option(Request)) =
+    let bytes = Try/attempt(request_bytes(c))!;
+    Try/pure(
+        match Parse/run(Request/decode, bytes)
+        | success(request) => Option/some(request)
         | failure(_) => Option/none()
-        | success(bytes) =>
-            match Parse/run(Request/decode, bytes)
-            | success(request) => Option/some(request)
-            | failure(_) => Option/none()
-            end
-        end;
-    match parsed
-    | some(request) => Async/pure(Option/some(request))
-    | none() =>
-        let _ = Try/run(Reply/send(Reply/open(c), Response/of_text(400, "bad request")))!;
-        Async/pure(Option/none())
-    end;
+        end);
 
--- | The next request: a connection taken, its request read, and both handed back with the reply not yet begun; the caller finishes the reply and closes it. A connection whose request does not read is answered `400` and closed, and the next one is taken.
-pub let accept(s: Server) -> Try(Async, Io/Error, {Request, Reply(Stage/start())}) =
-    let c = Listener/accept(s.0)!;
-    let request = Try/attempt(Async/map(request_of(c), Result/success))!;
-    match request
-    | some(r) => Try/pure((r, Reply/open(c)))
-    | none() =>
-        let _ = Try/attempt(Async/map(Async/lift(Socket/close(c)), Result/success))!;
-        accept(s)
-    end;
+let send(c: Socket, response: Response) -> Async(Result(Io/Error, {})) =
+    Socket/write(c, Response/render(response));
 
 let answer(c: Socket, handler: Handler) -> Async({}) =
-    let request = request_of(c)!;
-    match request
-    | none() => Async/pure(())
-    | some(r) =>
-        let _ = Try/run(handler(r, Reply/open(c)))!;
-        Async/pure(())
+    let read = Try/run(read_request(c))!;
+    match read
+    | failure(_) => Async/pure(())
+    | success(parsed) =>
+        match parsed
+        | none() =>
+            let _ = send(c, Response/of_text(400, "bad request"))!;
+            Async/pure(())
+        | some(request) =>
+            let answered = Try/run(handler(request))!;
+            match answered
+            | success(response) =>
+                let _ = send(c, response)!;
+                Async/pure(())
+            | failure(_) => Async/pure(())
+            end
+        end
     end;
 
--- | Every connection to `host` at `port` answered by `handler`, one request per connection in a fiber of its own, the connection closed whichever way the handler ends, until an accept fails. Written over `Listener/serve` rather than `accept` so a slow request holds up no other connection.
+-- | Every connection to `host` at `port` answered by `handler`, one request per connection in a fiber of its own, the connection closed whichever way the handler ends, until an accept fails. Written over `Listener/serve`, so a slow request holds up no other connection.
 pub let serve(host: Str, port: Nat, handler: Handler) -> Try(Async, Io/Error, {}) =
     Listener/serve(host, port, (c) => answer(c, handler));

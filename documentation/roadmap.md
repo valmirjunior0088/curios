@@ -246,7 +246,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Purity through an opaque `Io` monad (three intrinsics: `Io(T)`, `pure`, `bind`)
   - [x] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness)
   - [x] Stage 2: the flip — `/std` retyped and the certifier's purity analysis deleted
-- [x] HTTP client and server (`std/http`, built on `tcp` + `Async` — a literal URL refused where it does not read, a reply written in the order the protocol states with each step typed by its stage, a server accepting requests one by one or answering every connection through a handler)
+- [x] HTTP client and server (`std/http`, built on `tcp` + `Async` — a literal URL refused where it does not read, and every connection answered by a handler that takes the request and returns the response, which the server writes and closes behind)
+- [ ] [What a value may do next is part of its type](roadmap/typestate-spec.md) (`http`'s reply staging carried it and was removed, taking chunked responses with it; the routes are surveyed and region parameters are probed, nothing is designed)
 - [x] HTML as a tree (`/std/Html` — one type for an element, text, a comment or a run of trees, rendered escaped and read back as a browser reads it)
 - [x] Host-service modules (`std/time`, `std/proc`, `std/rand`, `std/fs`, and the terminal rows in `std/Io`)
 - [x] Command-line interfaces (`/std/Cli`) — a specification is a list of `Arg` values, the record a line parses into is `Values(spec)` computed from it, `get(v, name)` is typed by a type-level lookup and refuses a name the specification does not contain, `WellFormed` is decided by reduction, and `main` reads the process arguments against all of it: `parse` and `select` for the line, `help` and `usage` for the screens, `report` and exit 2 for a refusal
