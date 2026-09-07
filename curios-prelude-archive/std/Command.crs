@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async};
+use /std/{Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async, Handle};
 
 -- | How a child's standard stream is wired.
 pub mod Stdio;
@@ -43,7 +43,7 @@ let stdio_of(s: Stdio) -> Nat =
 let env_entry(entry: {Str, Str}) -> Bytes =
     x[..Str/to_bytes(entry.0), '=', ..Str/to_bytes(entry.1)];
 
-let pipe(child: /sys/Handle, which: Nat, mode: Stdio) -> Try(Io, Io/Error, Option(/sys/Handle)) =
+let pipe(child: Handle, which: Nat, mode: Stdio) -> Try(Io, Io/Error, Option(Handle)) =
     match mode
     | piped() =>
         let s = /sys/proc/stream(child, which)!;

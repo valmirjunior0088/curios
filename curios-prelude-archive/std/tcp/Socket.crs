@@ -1,22 +1,22 @@
-use /std/{Bytes, Str, Nat, Bool, Result, Try, Async, Io};
+use /std/{Bytes, Str, Nat, Bool, Result, Try, Async, Io, Handle};
 use /std/tcp/{resolve};
 
 -- | A connected socket.
 pub struct Socket: Type {
-    /sys/Handle,
+    Handle,
 }
 
 -- | A socket over an accepted handle. The seam `Listener/accept` builds one through.
-pub let new(h: /sys/Handle) -> Socket =
+pub let new(h: Handle) -> Socket =
     Socket { h };
 
 -- | Up to `n` bytes, parking until some arrive.
 pub let read(c: Socket, n: Nat) -> Async(Io/Chunk) =
-    Async/raw/read(c.0, n);
+    Async/Read/read(c.0, n);
 
 -- | The whole of `b`, parking while the peer cannot take more.
 pub let write(c: Socket, b: Bytes) -> Async(Result(Io/Error, {})) =
-    Async/raw/write(c.0, b);
+    Async/Write/write(c.0, b);
 
 satisfy Async/Read(Async, Socket) {
     read(c, n) = read(c, n),
@@ -28,16 +28,16 @@ satisfy Async/Write(Async, Socket) {
 
 -- | Close `c`.
 pub let close(c: Socket) -> Io({}) =
-    /sys/Handle/close(c.0);
+    Handle/close(c.0);
 
 let ok(status: Nat) -> Try(Io, Io/Error, {}) =
     match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
-let close_raising(@A: Type, h: /sys/Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
-    let _ = /sys/Handle/close(h)!;
+let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
+    let _ = Handle/close(h)!;
     Try/raise(e);
 
-let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {/sys/Handle, Bool}) =
+let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
     let s = /sys/socket/open(addr)!;
     let _ = ok(s.status)!;
     let status = /sys/socket/connect(s.handle, addr)!;
@@ -46,13 +46,13 @@ let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {/sys/Handle, Bool}) =
     | _ =>
         match Io/Error/of(status)
         | some(e) =>
-            let _ = /sys/Handle/close(s.handle)!;
+            let _ = Handle/close(s.handle)!;
             Try/raise(e)
         | none() => Try/pure((s.handle, false))
         end
     end;
 
-let settle(h: /sys/Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
+let settle(h: Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
     match pending
     | false => Try/pure(())
     | true =>
@@ -61,7 +61,7 @@ let settle(h: /sys/Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
         choose | status == /sys/status/would_block => settle(h, true) | _ => ok(status) end
     end;
 
-let upgrade(h: /sys/Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
+let upgrade(h: Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
     match tls
     | true =>
         let status = /sys/tls/start(h, Str/to_bytes(host))!;

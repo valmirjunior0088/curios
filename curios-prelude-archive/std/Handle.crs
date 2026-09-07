@@ -1,0 +1,81 @@
+use /std/{Bytes, Nat, Result, Io, Async, True};
+pub use /sys/{Handle};
+pub use /sys/Handle/{poll, close, stdin, stdout, stderr};
+
+-- | Up to `n` bytes, waited for on this program's own behalf: a host that would block is polled until it would not.
+let read_waiting(h: Handle, n: Nat) -> Io(Io/Chunk) =
+    let r = /sys/Handle/read(h, n)!;
+    choose
+    | r.status == /sys/status/would_block =>
+        let _ = poll([h], [/sys/event/read], -1)!;
+        read_waiting(h, n)
+    | _ => Io/pure(Io/Chunk/of(r.status, r.bytes))
+    end;
+
+-- | The whole of `b`, waited for on this program's own behalf, a short write resent; the first failure is the answer.
+let write_waiting(h: Handle, b: Bytes) -> Io(Result(Io/Error, {})) =
+    let r = /sys/Handle/write(h, b)!;
+    choose
+    | r.status != /sys/status/ok =>
+        Io/pure(
+            match Io/Error/of(r.status)
+            | some(e) => Result/failure(e)
+            | none() => Result/success(())
+            end)
+    | r.written < Bytes/len(b) =>
+        write_waiting(
+            h,
+            Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
+    | _ => Io/pure(Result/success(()))
+    end;
+
+let park_on(h: Handle, interest: Nat) -> Async({}) =
+    Async/park([Async/Wait/readable(h, interest)]);
+
+-- | Up to `n` bytes, parking the fiber while the host would block.
+let read_parking(h: Handle, n: Nat) -> Async(Io/Chunk) =
+    let r = /sys/Handle/read(h, n)!;
+    choose
+    | r.status == /sys/status/would_block =>
+        let _ = park_on(h, /sys/event/read)!;
+        read_parking(h, n)
+    | _ => Async/pure(Io/Chunk/of(r.status, r.bytes))
+    end;
+
+-- | The whole of `b`, parking while the host would block and resending a short write.
+let write_parking(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
+    let r = /sys/Handle/write(h, b)!;
+    choose
+    | r.status == /sys/status/would_block =>
+        let _ = park_on(h, /sys/event/write)!;
+        write_parking(h, b)
+    | _ =>
+        match Io/Error/of(r.status)
+        | some(e) => Async/pure(Result/failure(e))
+        | none() =>
+            match r.written < Bytes/len(b)
+            | true =>
+                let _ = park_on(h, /sys/event/write)!;
+                write_parking(
+                    h,
+                    Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
+            | false => Async/pure(Result/success(()))
+            end
+        end
+    end;
+
+satisfy Async/Read(Io, Handle) {
+    read(h, n) = read_waiting(h, n),
+}
+
+satisfy Async/Read(Async, Handle) {
+    read(h, n) = read_parking(h, n),
+}
+
+satisfy Async/Write(Io, Handle) {
+    write(h, b) = write_waiting(h, b),
+}
+
+satisfy Async/Write(Async, Handle) {
+    write(h, b) = write_parking(h, b),
+}

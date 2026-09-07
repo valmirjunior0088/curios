@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Lift, Bytes, Byte, Nat, Option, Result, Async, True};
+use /std/{Monad, Lift, Bytes, Byte, Nat, Option, Result, Async, Handle};
 
 -- | The failure every host operation reports.
 pub mod Error;
@@ -22,44 +22,29 @@ pub use Chunk/{let Chunk};
 
 -- | An input stream of this process.
 pub struct Input: Type {
-    /sys/Handle,
+    Handle,
 }
 
 -- | An output stream of this process.
 pub struct Output: Type {
-    /sys/Handle,
+    Handle,
 }
 
 -- | Standard input.
 pub let stdin: Input =
-    Input { /sys/Handle/stdin };
+    Input { Handle/stdin };
 
 -- | Standard output.
 pub let stdout: Output =
-    Output { /sys/Handle/stdout };
+    Output { Handle/stdout };
 
 -- | Standard error.
 pub let stderr: Output =
-    Output { /sys/Handle/stderr };
+    Output { Handle/stderr };
 
 -- | Up to `n` bytes, waited for on this program's own behalf. Inside a fiber, `Async/Read`'s `read` parks instead.
 pub let read(i: Input, n: Nat) -> Io(Chunk) =
-    let r = /sys/Handle/read(i.0, n)!;
-    choose
-    | r.status == /sys/status/would_block =>
-        let _ = /sys/Handle/poll([i.0], [/sys/event/read], -1)!;
-        read(i, n)
-    | _ =>
-        Io/pure(
-            match Error/of(r.status)
-            | some(e) => Chunk/error(e)
-            | none() =>
-                match r.status == /sys/status/eof
-                | true => Chunk/eof()
-                | false => Chunk/chunk(r.bytes)
-                end
-            end)
-    end;
+    Async/Read/read(i.0, n);
 
 -- | One line without its newline, `none` at the end of the input. An error ends the input as the end does, and what was read before it is still the line.
 pub let read_line(i: Input) -> Io(Option(Bytes)) =
@@ -79,18 +64,7 @@ pub let read_line(i: Input) -> Io(Option(Bytes)) =
 
 -- | The whole of `b`, a short write resent; the first failure is the answer.
 let written(o: Output, b: Bytes) -> Io(Result(Error, {})) =
-    let r = /sys/Handle/write(o.0, b)!;
-    choose
-    | r.status != /sys/status/ok =>
-        Io/pure(
-            match Error/of(r.status)
-            | some(e) => Result/failure(e)
-            | none() => Result/success(())
-            end)
-    | r.written < Bytes/len(b) =>
-        written(o, Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
-    | _ => Io/pure(Result/success(()))
-    end;
+    Async/Write/write(o.0, b);
 
 -- | The whole of `b`, a short write resent and a failure dropped.
 pub let write(o: Output, b: Bytes) -> Io({}) =
@@ -101,7 +75,7 @@ satisfy Async/Read(Io, Input) {
 }
 
 satisfy Async/Read(Async, Input) {
-    read(i, n) = Async/raw/read(i.0, n),
+    read(i, n) = Async/Read/read(i.0, n),
 }
 
 satisfy Async/Write(Io, Output) {
@@ -109,5 +83,5 @@ satisfy Async/Write(Io, Output) {
 }
 
 satisfy Async/Write(Async, Output) {
-    write(o, b) = Async/raw/write(o.0, b),
+    write(o, b) = Async/Write/write(o.0, b),
 }

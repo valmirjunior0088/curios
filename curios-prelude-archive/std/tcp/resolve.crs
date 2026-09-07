@@ -1,6 +1,6 @@
-use /std/{Str, Nat, Bytes, Result, Option, List, Try, Async, Io};
+use /std/{Str, Nat, Bytes, Result, Option, List, Try, Async, Io, Handle};
 
-let resolved_address(h: /sys/Handle) -> Async(Result(Io/Error, Bytes)) =
+let resolved_address(h: Handle) -> Async(Result(Io/Error, Bytes)) =
     let _ = Async/park([Async/Wait/readable(h, /sys/event/read)])!;
     let a = /sys/dns/resolve(h)!;
     match Io/Error/of(a.status)
@@ -14,7 +14,7 @@ pub let resolve(host: Str, port: Nat) -> Try(Async, Io/Error, Bytes) =
     match Io/Error/of(r.status)
     | some(e) => Try/raise(e)
     | none() =>
-        let a = Async/using(/sys/Handle/close(r.handle), resolved_address(r.handle))!;
+        let a = Async/using(Handle/close(r.handle), resolved_address(r.handle))!;
         let addr = a!;
         Try/pure(addr)
     end;

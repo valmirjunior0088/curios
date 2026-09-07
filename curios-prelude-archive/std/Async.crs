@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io};
+use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io, Handle};
 use /std/time/{Duration};
 
 -- | The handle a parked fiber is resumed through: a primitive registers one while it parks and wakes it when its own event arrives.
@@ -21,9 +21,6 @@ pub use Offer/{let Offer};
 pub mod Channel;
 pub use Channel/{let Channel};
 
--- | The loops that turn a raw handle's `would_block` into a park, for a stream type's own witness.
-pub mod raw;
-
 struct Token: Type {
     Cell(Bool),
 }
@@ -41,7 +38,7 @@ struct Guard: Type {
 
 -- | One thing a parked fiber waits for. A park names a list of them and resumes on whichever fires first.
 pub induct Wait: pub Type
-| readable(handle: /sys/Handle, interest: Nat)
+| readable(handle: Handle, interest: Nat)
 | elapsed(Duration)
 | woken(register: (Waker) -> Io({}))
 end
@@ -237,7 +234,7 @@ let claim(s: Slot) -> Io(Option(Job)) =
     end;
 
 struct Parked: Type {
-    handle: /sys/Handle,
+    handle: Handle,
     interest: Nat,
     slot: Slot,
 }
@@ -321,7 +318,7 @@ let is_ready(results: Nat, interest: Nat) -> Bool =
 let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parked)}) =
     let handles = List/map(blocked, (p: Parked) => p.handle);
     let events = List/map(blocked, (p: Parked) => p.interest);
-    let results = /sys/Handle/poll(handles, events, timeout)!;
+    let results = Handle/poll(handles, events, timeout)!;
     let walk(
         rest: List(Parked),
         i: Nat,

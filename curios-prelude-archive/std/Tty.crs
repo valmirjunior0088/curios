@@ -1,13 +1,13 @@
-use /std/{Nat, Bool, Str, Try, Async, Io, Equal, Show};
+use /std/{Nat, Bool, Str, Try, Async, Io, Handle, Equal, Show};
 
 -- | A terminal this process holds a handle on.
 pub struct Tty: Type {
-    /sys/Handle,
+    Handle,
 }
 
 -- | The terminal behind standard input.
 pub let stdin: Tty =
-    Tty { /sys/Handle/stdin };
+    Tty { Handle/stdin };
 
 -- | The terminal's size in cells.
 pub struct Size: pub Type {

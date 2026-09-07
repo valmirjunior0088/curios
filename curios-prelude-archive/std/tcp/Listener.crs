@@ -1,16 +1,16 @@
-use /std/{Bytes, Str, Nat, Result, Try, Async, Io};
+use /std/{Bytes, Str, Nat, Result, Try, Async, Io, Handle};
 use /std/tcp/{resolve, Socket};
 
 -- | A bound, listening socket.
 pub struct Listener: Type {
-    /sys/Handle,
+    Handle,
 }
 
 let ok(status: Nat) -> Try(Io, Io/Error, {}) =
     match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
-let close_raising(@A: Type, h: /sys/Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
-    let _ = /sys/Handle/close(h)!;
+let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
+    let _ = Handle/close(h)!;
     Try/raise(e);
 
 let bind_listen(addr: Bytes) -> Try(Io, Io/Error, Listener) =
@@ -29,8 +29,8 @@ pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Listener) =
     bind_listen(addr);
 
 -- | The next connection on `l`, parking until a peer arrives; the handle is the library's, so this stays private and `accept` hands out a `Socket`.
-let accepted(l: Listener) -> Async(Result(Io/Error, /sys/Handle)) =
-    let go() -> Async(Result(Io/Error, /sys/Handle)) =
+let accepted(l: Listener) -> Async(Result(Io/Error, Handle)) =
+    let go() -> Async(Result(Io/Error, Handle)) =
         let r = /sys/socket/accept(l.0)!;
         match r.status == /sys/status/would_block
         | true =>
@@ -51,9 +51,9 @@ pub let accept(l: Listener) -> Try(Async, Io/Error, Socket) =
 
 -- | Close `l`.
 pub let close(l: Listener) -> Io({}) =
-    /sys/Handle/close(l.0);
+    Handle/close(l.0);
 
-let accept_loop(l: Listener, on_conn: (/sys/Handle) -> Async({})) -> Async({}) =
+let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
     let go() -> Async({}) =
         let r = accepted(l)!;
         match r
@@ -64,19 +64,19 @@ let accept_loop(l: Listener, on_conn: (/sys/Handle) -> Async({})) -> Async({}) =
         end;
     go();
 
-let serve_conn(h: /sys/Handle, handler: (Socket) -> Async({})) -> Async({}) =
-    Async/go(Async/using(/sys/Handle/close(h), handler(Socket/new(h))));
+let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
+    Async/go(Async/using(Handle/close(h), handler(Socket/new(h))));
 
 -- | Every connection to `host` at `port` handed to `handler` in a fiber of its own, until an accept fails; the listener is closed whichever way the task ends.
 pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Try(Async, Io/Error, {}) =
     let l = listen(host, port)!;
     Async/using(close(l), accept_loop(l, (h) => serve_conn(h, handler)));
 
-let serve_tls_conn(h: /sys/Handle, cfg: /sys/Handle, handler: (Socket) -> Async({})) -> Async({}) =
+let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> Async({}) =
     let status = /sys/tls/start_server(h, cfg)!;
     match status == /sys/status/ok
     | true => serve_conn(h, handler)
-    | false => Async/lift(/sys/Handle/close(h))
+    | false => Async/lift(Handle/close(h))
     end;
 
 -- | `serve` under TLS, every connection upgraded with `cert` and `key` before `handler` sees it.
@@ -91,5 +91,5 @@ pub let serve_tls(
     let _ = ok(cfg.status)!;
     let l = listen(host, port)!;
     Async/using(
-        /sys/Handle/close(cfg.handle),
+        Handle/close(cfg.handle),
         Async/using(close(l), accept_loop(l, (h) => serve_tls_conn(h, cfg.handle, handler))));

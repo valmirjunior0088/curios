@@ -114,6 +114,10 @@ pub use List/{let List};
 pub mod Cell;
 pub use Cell/{let Cell};
 
+-- | A host resource this program holds: a stream, a lookup, a child, a configuration.
+pub mod Handle;
+pub use Handle/{let Handle};
+
 -- | A regular file the program opened.
 -- |
 -- | Every operation is `Io`, since the disk answers at once, and what can fail is `Try` over `Io`. Inside a fiber a file is a stream like any other.

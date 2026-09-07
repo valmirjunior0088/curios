@@ -1,4 +1,4 @@
-use /std/{Option, Try, Async, Io};
+use /std/{Option, Try, Async, Io, Handle};
 
 -- | How a child ended: with an exit code, or by a signal.
 pub mod Exit
@@ -27,20 +27,20 @@ pub use Exit/{let Exit};
 
 -- | One end of a pipe to the child, read and written as a stream.
 pub struct Pipe: Type {
-    /sys/Handle,
+    Handle,
 }
 
 satisfy Async/Read(Async, Pipe) {
-    read(p, n) = Async/raw/read(p.0, n),
+    read(p, n) = Async/Read/read(p.0, n),
 }
 
 satisfy Async/Write(Async, Pipe) {
-    write(p, b) = Async/raw/write(p.0, b),
+    write(p, b) = Async/Write/write(p.0, b),
 }
 
 -- | A running child, and whichever of its streams were piped.
 pub struct Child: Type {
-    handle: /sys/Handle,
+    handle: Handle,
     stdin: Option(Pipe),
     stdout: Option(Pipe),
     stderr: Option(Pipe),
@@ -48,10 +48,10 @@ pub struct Child: Type {
 
 -- | A child over the handles the host handed back. The seam `Command/spawn` builds one through.
 pub let new(
-    handle: /sys/Handle,
-    stdin: Option(/sys/Handle),
-    stdout: Option(/sys/Handle),
-    stderr: Option(/sys/Handle),
+    handle: Handle,
+    stdin: Option(Handle),
+    stdout: Option(Handle),
+    stderr: Option(Handle),
 ) -> Child =
     Child {
         handle = handle,
@@ -73,7 +73,7 @@ pub let stderr(c: Child) -> Option(Pipe) =
     c.stderr;
 
 let close_pipe(p: Option(Pipe)) -> Io({}) =
-    match p | some(p) => /sys/Handle/close(p.0) | none() => Io/pure(()) end;
+    match p | some(p) => Handle/close(p.0) | none() => Io/pure(()) end;
 
 let close_pipes(c: Child) -> Io({}) =
     let _ = close_pipe(c.stdin)!;
