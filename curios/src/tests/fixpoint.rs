@@ -5,7 +5,7 @@
 use {
     super::codegen::TOML_DRIVER,
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
-    curios_profile::capture,
+    curios_profile::{Destination, fold, trace},
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -93,19 +93,45 @@ use {
 /// **Most of the time was paid by passes that did nothing.** The passes that fired on eight rounds or fewer summed to about 1.64 s, 57% of the fixpoint, and 9.7 M of its 15.5 M allocations: each rebuilt its whole-module analysis on every round, and 57 rounds bought that analysis 57 times for a handful of rewrites.
 ///
 /// **No pass pair undid the other's work.** The only passes firing in lockstep were the split and the forwarding and dead-binding removal that finish it — the designed sequence, one candidate at a time.
+/// The stream, kept in memory so the fold reads it back without a file.
+#[derive(Clone, Default)]
+struct Rows(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl Rows {
+    fn rows(&self) -> Vec<u8> {
+        self.0.lock().expect("rows lock").clone()
+    }
+}
+
+impl std::io::Write for Rows {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().expect("rows lock").extend_from_slice(bytes);
+
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[test]
 #[ignore = "measurement: reports what each pass of the fixpoint costs rather than asserting"]
 fn fixpoint_pass_measurements() {
     let entrypoint = TOML_DRIVER.parse::<Entrypoint>().expect("driver parses");
-    let (outcome, report) = capture(|| {
+    // The stream goes to a buffer and is folded back here: this test wants the aggregate, which is now one consumer of the rows rather than what a capture returns.
+    let rows = Rows::default();
+    let outcome = trace(Destination::Stream(Box::new(rows.clone())), || {
         compile_with_prelude(
             DEFAULT_STEP_BUDGET,
             &entrypoint,
             &RootSource::none(),
             |_| {},
         )
-    });
+    })
+    .expect("a stream destination opens");
     outcome.expect("driver compiles");
+    let report = fold(rows.rows().as_slice()).expect("the rows fold");
 
     println!(
         "{:>10} {:>6} {:>9} {:>9}  name",

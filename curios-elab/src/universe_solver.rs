@@ -1586,9 +1586,8 @@ impl UniverseSolver {
         // Accepting is always justified: a satisfying branch assignment is a model of the original constraints, so any `Ok` here is sound however few branches were explored. Only *refuting* needs the whole tree, so exhausting the budget means "not decided", and the caller reports it rather than continuing an exponential walk.
         const SEARCH_BUDGET: u64 = 200_000;
         let mut budget = SEARCH_BUDGET;
-        let consistency = curios_profile::profile_span!(
-            "universe::choose",
-            choose(&branches, 0, &mut search, &mut budget)
+        let consistency = curios_profile::profile!(
+            "universe::choose" => choose(&branches, 0, &mut search, &mut budget)
         );
 
         consistency.map_err(|path| match path {

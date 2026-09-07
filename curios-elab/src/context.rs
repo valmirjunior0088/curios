@@ -682,7 +682,7 @@ impl Context {
             .is_none_or(|context| context.parameter_count != levels.len())
         {
             let (frames, holders) = self.frames.assumption_universe_holders(name);
-            curios_profile::tracing::debug!(
+            curios_profile::note!(
                 target: "curios_elab::universe",
                 %name,
                 registered = found.is_some(),
@@ -725,7 +725,7 @@ impl Context {
     ) -> Result<B, UniverseError> {
         #[cfg(feature = "profile")]
         if levels.len() != universe_context.parameter_count {
-            curios_profile::tracing::debug!(
+            curios_profile::note!(
                 target: "curios_elab::universe",
                 expected = universe_context.parameter_count,
                 got = levels.len(),
@@ -748,7 +748,7 @@ impl Context {
 
         #[cfg(feature = "profile")]
         if levels.len() != induct_decl.universe_context.parameter_count {
-            curios_profile::tracing::debug!(
+            curios_profile::note!(
                 target: "curios_elab::universe",
                 module = ?induct_decl.module,
                 expected = induct_decl.universe_context.parameter_count,
@@ -779,7 +779,7 @@ impl Context {
 
         #[cfg(feature = "profile")]
         if levels.len() != struct_decl.universe_context.parameter_count {
-            curios_profile::tracing::debug!(
+            curios_profile::note!(
                 target: "curios_elab::universe",
                 module = ?struct_decl.module,
                 expected = struct_decl.universe_context.parameter_count,

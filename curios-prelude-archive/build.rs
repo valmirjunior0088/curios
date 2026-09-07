@@ -28,43 +28,27 @@ const STD_DESCRIPTION: &str = "The standard library: what every Curios program g
 static ALLOCATOR: curios_profile::CountingAllocator = curios_profile::CountingAllocator;
 
 fn main() {
-    // Under the `profile` feature the whole build runs inside a programmatic capture — the report lands in `OUT_DIR/profile.tsv`, announced with one warning. There is deliberately no environment switch: the feature is the switch, and it is specified where every other build input is.
+    // Under the `profile` feature the whole build runs under a record stream, filed beside the archive it builds. There is deliberately no environment switch: the feature is the switch, and it is specified where every other build input is.
     #[cfg(feature = "profile")]
     {
-        let ((), report) = curios_profile::capture(build);
-        let out = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("profile.tsv");
-        let mut rendered = String::from(
-            "total_ms\tcalls\tretained_mb\tallocated_mb\tallocs\ttarget\tname\tgroup\n",
-        );
-        for summary in &report.summaries {
-            rendered.push_str(&format!(
-                "{:.3}\t{}\t{:.1}\t{:.1}\t{}\t{}\t{}\t{}\n",
-                summary.total.as_secs_f64() * 1_000.0,
-                summary.calls,
-                summary.retained as f64 / (1024.0 * 1024.0),
-                summary.allocated as f64 / (1024.0 * 1024.0),
-                summary.allocations,
-                summary.target,
-                summary.name,
-                summary.group.as_deref().unwrap_or(""),
-            ));
-        }
-        if !report.samples.is_empty() {
-            rendered.push_str("\ncount\ttotal\tmin\tmean\tmax\ttarget\tname\n");
-            for sample in &report.samples {
-                rendered.push_str(&format!(
-                    "{}\t{}\t{}\t{:.1}\t{}\t{}\t{}\n",
-                    sample.count,
-                    sample.total,
-                    sample.min,
-                    sample.mean(),
-                    sample.max,
-                    sample.target,
-                    sample.name,
-                ));
-            }
-        }
-        fs::write(&out, rendered).expect("failed to write the build profile");
+        let artifacts =
+            PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap()).join(".artifacts");
+        fs::create_dir_all(&artifacts).expect("failed to create the .artifacts directory");
+        // Filed here rather than under `OUT_DIR` because it is read after the build that wrote it, which is `.artifacts`'s rule; a hung prelude build is the case it exists for, and that build never reaches the summary below.
+        let out = artifacts.join("profile.tsv");
+
+        curios_profile::trace(
+            curios_profile::Destination::Rotating {
+                path: out.clone(),
+                cap: 512 * 1024 * 1024,
+            },
+            build,
+        )
+        .expect("failed to open the build profile");
+
+        let rows = fs::File::open(&out).expect("the build profile reopens");
+        let report =
+            curios_profile::fold(std::io::BufReader::new(rows)).expect("the build profile folds");
         println!(
             "cargo:warning=prelude build profile written to {} (peak {:.1} MiB)",
             out.display(),

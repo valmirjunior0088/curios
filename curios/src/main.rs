@@ -41,7 +41,7 @@ use {
 };
 
 #[cfg(feature = "profile")]
-use curios_profile::capture;
+use curios_profile::{Destination, ProfileReport, fold, trace};
 
 // Only the `profile` build installs it, so the ordinary CLI keeps the system allocator untouched and pays nothing for counters no mode would read.
 #[cfg(feature = "profile")]
@@ -261,47 +261,30 @@ fn dispatch() -> Result<(), Failure> {
             Query::Server => serve(budget, &units, manifest.as_deref())?,
         },
         #[cfg(feature = "profile")]
-        Mode::Profile { input_path } => {
+        Mode::Profile {
+            input_path,
+            out,
+            cap,
+        } => {
             let scope = load_units(&units)?;
             let subject = Subject::File(input_path.clone());
-            let (compilation, report) =
-                capture(|| compile_file(budget, scope, &input_path, &subject));
+            // Standard output is the default because the compile itself reports on standard error, so a stream can be piped or redirected without separating the two by hand.
+            let destination = match &out {
+                None => Destination::Stream(Box::new(std::io::stdout())),
+                Some(path) => Destination::Rotating {
+                    path: path.clone(),
+                    cap,
+                },
+            };
 
-            println!(
-                "total_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tallocs\ttarget\tname\t(peak {:.1} MiB)",
-                report.peak as f64 / (1024.0 * 1024.0),
-            );
-            for summary in &report.summaries {
-                println!(
-                    "{:.3}\t{}\t{:.3}\t{:.3}\t{:.1}\t{:.1}\t{}\t{}\t{}\t{}",
-                    summary.total.as_secs_f64() * 1_000.0,
-                    summary.calls,
-                    summary.min.as_secs_f64() * 1_000.0,
-                    summary.max.as_secs_f64() * 1_000.0,
-                    summary.retained as f64 / (1024.0 * 1024.0),
-                    summary.allocated as f64 / (1024.0 * 1024.0),
-                    summary.allocations,
-                    summary.target,
-                    summary.name,
-                    summary.group.as_deref().unwrap_or(""),
-                );
-            }
+            let compilation = trace(destination, || {
+                compile_file(budget, scope, &input_path, &subject)
+            })
+            .map_err(|error| Failure::Error(format!("profile: {error}")))?;
 
-            if !report.samples.is_empty() {
-                println!();
-                println!("count\ttotal\tmin\tmean\tmax\ttarget\tname");
-                for sample in &report.samples {
-                    println!(
-                        "{}\t{}\t{}\t{:.1}\t{}\t{}\t{}",
-                        sample.count,
-                        sample.total,
-                        sample.min,
-                        sample.mean(),
-                        sample.max,
-                        sample.target,
-                        sample.name,
-                    );
-                }
+            // A run that returned can be summarized; one that did not never reaches here, which is why the rows were written as they happened.
+            if let Some(path) = &out {
+                print!("{}", summarize(path)?.render());
             }
 
             compilation.map(|_| ())?;
@@ -309,6 +292,26 @@ fn dispatch() -> Result<(), Failure> {
     }
 
     Ok(())
+}
+
+/// Fold a rotated stream back into its summaries: the discarded file's rows first, then the current file's.
+///
+/// Both are handed to one fold because each restates the callsite table at its head, so their concatenation is well defined. They are chained rather than concatenated in memory: the fold reads rows, and at the default cap the pair is a gigabyte. A missing `.prev` is the ordinary case of a run that never grew past one file.
+#[cfg(feature = "profile")]
+fn summarize(path: &std::path::Path) -> Result<ProfileReport, Failure> {
+    use std::io::Read;
+
+    let named = |error| Failure::Error(format!("{}: {error}", path.display()));
+    let mut previous = path.to_path_buf().into_os_string();
+    previous.push(".prev");
+
+    let discarded: Box<dyn Read> = match fs::File::open(&previous) {
+        Ok(file) => Box::new(file),
+        Err(_) => Box::new(std::io::empty()),
+    };
+    let current = fs::File::open(path).map_err(named)?;
+
+    fold(std::io::BufReader::new(discarded.chain(current))).map_err(named)
 }
 
 fn main() -> ExitCode {

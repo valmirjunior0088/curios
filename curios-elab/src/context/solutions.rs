@@ -225,8 +225,7 @@ impl Solutions {
             .split_off(solved_len.min(self.solved_log.len()));
 
         for id in &unwound {
-            #[cfg(feature = "profile")]
-            curios_profile::tracing::debug!(target: "curios_elab::solve", meta = id.0, "solution unwound");
+            curios_profile::note!(target: "curios_elab::solve", meta = id.0, "solution unwound");
             if let Some(Some(entry)) = self.entries.get_mut(id.0) {
                 entry.solution = None;
             }

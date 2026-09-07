@@ -173,7 +173,6 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
 
     /// De Bruijn weakening: add `amount` to every loose bound index (`>= depth`), making room for that many new enclosing binders when a term is moved under them. Index-monotonic, so the traversal prunes by `reach`.
     fn shift(&self, amount: usize) -> Self {
-        curios_profile::sample!("walk::shift", 1);
         self.traverse(&mut Visit::pruning(|depth, var| {
             var.as_bound()
                 .filter(|&index| index >= depth)
@@ -185,7 +184,6 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     ///
     /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size: the kernel's conversion history captures every goal it enters, and captured that web's tree at every one.
     fn capture(&self, binders: &[&Free]) -> Self {
-        curios_profile::sample!("walk::capture", 1);
         self.traverse(&mut Visit::shared_at_depth(|depth, var| {
             var.as_free()
                 .and_then(|name| {
@@ -204,7 +202,6 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
 
     /// The opening half of the locally-nameless discipline: substitute the outermost `terms.len()` loose bound indices with `terms` (each shifted by the depth it lands under) and re-tighten the loose indices beyond them. `Scope::open` is this plus the arity check; effects depend only on indices `>= depth`, so the traversal prunes by `reach`.
     fn release(&self, terms: &[&Term]) -> Self {
-        curios_profile::sample!("walk::release", 1);
         self.traverse(&mut Visit::pruning(|depth, var| {
             var.as_bound().and_then(|index| {
                 index
@@ -282,7 +279,6 @@ pub(crate) fn rewrite_universe_levels<B: Bound, E: 'static>(
 
 /// Structural implementation of universe erasure: nominal vectors, instances, and contexts are removed by their owning nodes. `Type` must still carry a `Level` in Core, so its now-irrelevant payload is rebuilt with Core's private canonical ground representative. It is read two ways. As a projection into a world where levels are irrelevant — the Core-to-Ersd lowering, and goal-report display, since the surface language has no spelling for an instance — it is exact. As an equality key it is a quotient coarser than definitional equality, identifying `Type 0` with `Type 1`; that reading is sound only over `Nat` summands, where no level can reach a number, and `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` records the route it admits anywhere else.
 pub fn project_erased_universes<B: Bound>(value: &B) -> B {
-    curios_profile::sample!("walk::project_erased_universes", 1);
     value.traverse(&mut Visit::erasing_universes(|_, _| None))
 }
 

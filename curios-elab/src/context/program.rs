@@ -79,14 +79,6 @@ impl Program {
             self.struct_decls.contains_key(name),
             "update_struct: '{name}' is not already registered"
         );
-        #[cfg(feature = "profile")]
-        curios_profile::tracing::debug!(
-            target: "curios_elab::universe",
-            %name,
-            params = struct_decl.universe_context.parameter_count,
-            was = self.struct_decls[name].universe_context.parameter_count,
-            "struct scheme rewritten",
-        );
         self.struct_decls.insert(name.clone(), struct_decl);
     }
 

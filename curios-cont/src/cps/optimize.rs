@@ -54,7 +54,7 @@ pub fn optimize(module: &mut CpsModule) {
     // Name and time one pass, and record whether it fired. The two together are what separate the fixpoint's hypotheses: a pass that admits one candidate per call fires on as many rounds as it has candidates, while a pair undoing each other's work fires in lockstep for rounds neither needed.
     macro_rules! pass {
         ($name:literal, $pass:expr) => {{
-            let changed = curios_profile::profile_span!($name, $pass);
+            let changed = curios_profile::profile!($name => $pass);
             curios_profile::sample!($name, changed as u64);
             // The growth ledger beside the fired ledger: what each pass left standing, so a size regression names its pass the way a time regression names its span.
             curios_profile::sample!(
@@ -74,8 +74,7 @@ pub fn optimize(module: &mut CpsModule) {
     // The round on which the sequence settled, or `None` if it never did.
     let mut converged = None;
     for round in 1..=ROUND_LIMIT {
-        let substitutions =
-            curios_profile::profile_span!("cont::known_values", known_values(module));
+        let substitutions = curios_profile::profile!("cont::known_values" => known_values(module));
         let changed = pass!("cont::rewrite_atoms", rewrite_atoms(module, &substitutions))
             | pass!("cont::forward_continuations", forward_continuations(module))
             | pass!(

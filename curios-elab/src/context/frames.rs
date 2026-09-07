@@ -221,32 +221,7 @@ impl Frames {
             .rev()
             .find(|contexts| contexts.contains_key(name))
             .unwrap_or_else(|| panic!("'{name}' has no assumption universe context to replace"));
-        #[cfg(feature = "profile")]
-        curios_profile::tracing::debug!(
-            target: "curios_elab::universe",
-            %name,
-            params = universe_context.parameter_count,
-            was = contexts[name].parameter_count,
-            "assumption scheme written",
-        );
         contexts.insert(name.clone(), universe_context);
-        #[cfg(feature = "profile")]
-        {
-            let holders = self
-                .assumption_universes
-                .iter()
-                .enumerate()
-                .filter(|(_, contexts)| contexts.contains_key(name))
-                .map(|(index, contexts)| (index, contexts[name].parameter_count))
-                .collect::<Vec<_>>();
-            curios_profile::tracing::debug!(
-                target: "curios_elab::universe",
-                %name,
-                frames = self.assumption_universes.len(),
-                ?holders,
-                "assumption scheme frames",
-            );
-        }
     }
 
     /// Per-frame `(index, parameter_count)` holders of `name`'s universe context — diagnostics for the instantiation mismatch traces.

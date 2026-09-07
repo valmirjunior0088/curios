@@ -384,7 +384,7 @@ fn checked_proof_positions(
             Some(prop) => *prop,
             None => {
                 let prop =
-                    curios_profile::profile_span!("totality::is_prop", is_prop(context, &type_))?;
+                    curios_profile::profile!("totality::is_prop" => is_prop(context, &type_))?;
                 memo.insert(type_, prop);
                 prop
             }

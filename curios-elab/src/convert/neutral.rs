@@ -235,7 +235,7 @@ pub(super) fn apply_param_types(
 /// Report a site that could not determine a universe level and fell back to `Type 0`. Diagnostic only: it changes nothing, and exists to answer whether the concept-wrapper universe failures originate in these fallbacks rather than in how a wrapper is generalized.
 #[cfg(feature = "profile")]
 pub(super) fn probe_level_fallback(site: &'static str, type_: &Term) {
-    curios_profile::tracing::debug!(
+    curios_profile::note!(
         target: "curios_elab::sort",
         site,
         type_ = %type_,

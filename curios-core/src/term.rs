@@ -1312,7 +1312,6 @@ impl Hash for Term {
 /// **A pair of shared nodes is compared once.** A reduct is a graph whose tree can be exponential in its depth — a web of definitions each naming the one before it twice reduces to one — and two such graphs that are equal but distinct reach the walk with every pair of shared nodes on as many paths as the tree has, each pair masked and compared again. The walk keeps the pairs it has already entered, exactly as `any_metavar` keeps its visited nodes, and for the same reason: a pair's answer is the pair's, whichever path reached it, and a `false` ends the walk outright, so a recorded pair is always one that is equal so far. Recorded only where both nodes are shared, so the set stays empty and unallocated over two trees.
 impl PartialEq for Term {
     fn eq(&self, other: &Self) -> bool {
-        curios_profile::sample!("walk::term_eq", 1);
         // **Both verdicts the loop can reach in O(1), reached before it allocates anything.** They were inside the loop, which is correct and was quadratically wasteful: the setup below allocates a placeholder `Term`, a work vector and a pointer-pair set, and a comparison of a shared node against *itself* — the common case on a reduct, where one node stands in many positions — paid all three to then answer on the loop's first line. On a nine-definition web of definitions each naming the one before it twice, that was 592 million comparisons and the bulk of a 168 GB allocation churn.
         //
         // Neither is a new trust. One allocation is one value, so `ptr_eq` implies equality outright; and the hash is a function of the value, so a difference implies inequality. Both are the checks the loop already made, hoisted to where the answer is free.
@@ -1325,14 +1324,11 @@ impl PartialEq for Term {
         // Past both O(1) verdicts, one more before anything is allocated: two nodes whose children are pairwise one allocation differ, if at all, in their own payload — variant, names, plicities, levels, scope labels, arities — which the derived comparison settles at once, every child's comparison being the pointer verdict above. This is the memo probe's common case, a key rebuilt one step later over the same operands, and the loop below answered it by allocating a placeholder, a work vector and a visited set to compare one node: a 20 KB literal folded at the type level made three and a half million such comparisons and eleven thousand allocations a byte.
         match children_pairwise_shared(&self.inner.subterm, &other.inner.subterm) {
             Some(true) => {
-                curios_profile::sample!("term_eq::shallow", 1);
                 return self.inner.subterm == other.inner.subterm;
             }
             Some(false) => return false,
             None => {}
         }
-        // Past the shallow verdict: this comparison does structural work.
-        curios_profile::sample!("term_eq::structural", 1);
         // One visit for the whole comparison: the placeholder is allocated once, and each node's children are taken off it in turn.
         let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
         // Entering as a `Subterm` is what keeps the node itself unmasked — the hook fires per `Term`, and the node being compared is not one.
@@ -1374,7 +1370,6 @@ impl PartialEq for Term {
         }
 
         // The structural walk concluded equal — as opposed to the three `return false` exits above.
-        curios_profile::sample!("term_eq::structural_true", 1);
         true
     }
 }

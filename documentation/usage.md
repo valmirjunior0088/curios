@@ -301,7 +301,15 @@ Payloads are native code for the machine that built them, so an entry is found o
 cargo x profile programs/hello_world.crs
 ```
 
-It takes one path to a `.crs` entrypoint — not the four forms, since there is no project question to answer — compiles it once, and prints per-span aggregate timings sorted by total time. The instrumentation mechanics belong to `curios-profile`'s rustdoc.
+It takes one path to a `.crs` entrypoint — not the four forms, since there is no project question to answer — compiles it once, and writes one tab-separated row per span and event to standard output as each happens. The first column is the kind, so an analysis is a one-liner:
+
+```sh
+cargo x profile programs/hello_world.crs | awk -F'\t' '$1 == "V"'
+```
+
+**Nothing waits for the end.** That is the point: a compilation that hangs is exactly the one worth profiling, and its rows are on disk a second after it made them. `--out <PATH>` writes the stream to a file instead, rotating to `<PATH>.prev` at `--cap` bytes so an endless run cannot fill a disk, and prints the summaries afterwards — for a run that finished. For one that did not, fold the file yourself; the summary names the spans that were still open, which is the stack the compiler was inside when it was killed.
+
+The prelude's own elaboration is a separate compilation, in `curios-prelude-archive`'s build script, and a profiling build files its stream at `curios-prelude-archive/.artifacts/profile.tsv`. The instrumentation mechanics and the row shapes belong to `curios-profile`'s rustdoc.
 
 ## Global flags
 
