@@ -29,23 +29,6 @@ jobs:
       - name: Run rustfmt
         run: cargo fmt --all -- --check
 
-  compile:
-    name: Compilation
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-directories: |
-            curios/.artifacts
-            curios-binaryen/.artifacts
-      - name: Build runtime launcher
-        run: cargo x runtime
-      - name: Run cargo check
-        run: cargo check --workspace --all-targets --all-features
-
   lints:
     name: Lints
     runs-on: ubuntu-24.04
