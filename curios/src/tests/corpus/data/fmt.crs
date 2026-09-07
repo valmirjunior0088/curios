@@ -11,10 +11,9 @@ test percent_slot_shows_a_string_verbatim() =
 
 -- `\%` escapes a literal percent, and — because the escape lead character differs from the placeholder — composes unambiguously next to a slot in either order.
 test escaped_percent_renders_literally() =
-    Test/all(
-        [
-            Test/equal(Fmt/render("%\\% off")(50), "50% off"),
-            Test/equal(Fmt/render("\\%%")(50), "%50")]);
+    Test/all([
+        Test/equal(Fmt/render("%\\% off")(50), "50% off"),
+        Test/equal(Fmt/render("\\%%")(50), "%50")]);
 
 -- The scalar `Show` witnesses — `Byte` as decimal, `Bytes` as lowercase hex, `Ordering` by constructor — render through the same slot.
 test percent_slot_shows_scalar_witnesses() =
@@ -28,15 +27,13 @@ test percent_slot_shows_containers() =
 
 -- A bare `#` is the generic spell-slot: each argument renders through its own `Spell` witness, as the text that re-parses to it, and the two slots mix in either order.
 test hash_slot_spells_each_argument_through_its_witness() =
-    Test/all(
-        [
-            Test/equal(Fmt/render("# and #")(Option/some(3))("x"), "Option/some(3) and \"x\""),
-            Test/equal(Fmt/render("#%")([1, 2])(true), "[1, 2]true"),
-            Test/equal(Fmt/render("%#")(true)([1, 2]), "true[1, 2]")]);
+    Test/all([
+        Test/equal(Fmt/render("# and #")(Option/some(3))("x"), "Option/some(3) and \"x\""),
+        Test/equal(Fmt/render("#%")([1, 2])(true), "[1, 2]true"),
+        Test/equal(Fmt/render("%#")(true)([1, 2]), "true[1, 2]")]);
 
 -- `\#` escapes a literal hash, exactly as `\%` escapes a percent.
 test escaped_hash_renders_literally() =
-    Test/all(
-        [
-            Test/equal(Fmt/render("\\# #")(Option/none(@Nat)), "# Option/none()"),
-            Test/equal(Fmt/render("#\\#")(1), "1#")]);
+    Test/all([
+        Test/equal(Fmt/render("\\# #")(Option/none(@Nat)), "# Option/none()"),
+        Test/equal(Fmt/render("#\\#")(1), "1#")]);

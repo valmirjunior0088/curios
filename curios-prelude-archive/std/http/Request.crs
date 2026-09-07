@@ -54,19 +54,18 @@ pub let target(u: Url) -> Str =
 pub let render(r: Request) -> Bytes =
     x[
         ..Str/to_bytes(
-            Str/flatten(
-                [
-                    Method/to_str(r.method),
-                    " ",
-                    target(r.url),
-                    " HTTP/1.1\r\n",
-                    "Host: ",
-                    host_header(r.url),
-                    "\r\n",
-                    "Connection: close\r\n",
-                    content_length(r.body),
-                    Str/flatten(List/map(r.headers, render_header)),
-                    "\r\n"])),
+            Str/flatten([
+                Method/to_str(r.method),
+                " ",
+                target(r.url),
+                " HTTP/1.1\r\n",
+                "Host: ",
+                host_header(r.url),
+                "\r\n",
+                "Connection: close\r\n",
+                content_length(r.body),
+                Str/flatten(List/map(r.headers, render_header)),
+                "\r\n"])),
         ..r.body];
 
 let until(target: Byte) -> (Byte) -> Bool =

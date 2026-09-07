@@ -248,27 +248,23 @@ satisfy (@V: Type, use Equal(V)) => Equal(Map(V)) {
 
 satisfy (@V: Type, use Show(V)) => Show(Map(V)) {
     show(m) =
-        Str/flatten(
-            [
-                "{",
-                Str/join(
-                    ", ",
-                    List/map(
-                        entries(m),
-                        ((k, v)) => Str/flatten([Show/show(k), ": ", Show/show(v)]))),
-                "}"]),
+        Str/flatten([
+            "{",
+            Str/join(
+                ", ",
+                List/map(entries(m), ((k, v)) => Str/flatten([Show/show(k), ": ", Show/show(v)]))),
+            "}"]),
 }
 
 -- | As `Map/of` over the encoded keys.
 satisfy (@V: Type, use Spell(V)) => Spell(Map(V)) {
     spell(m) =
-        Str/flatten(
-            [
-                "Map/of([",
-                Str/join(
-                    ", ",
-                    List/map(
-                        entries(m),
-                        ((k, v)) => Str/flatten(["(", Spell/spell(k), ", ", Spell/spell(v), ")"]))),
-                "])"]),
+        Str/flatten([
+            "Map/of([",
+            Str/join(
+                ", ",
+                List/map(
+                    entries(m),
+                    ((k, v)) => Str/flatten(["(", Spell/spell(k), ", ", Spell/spell(v), ")"]))),
+            "])"]),
 }

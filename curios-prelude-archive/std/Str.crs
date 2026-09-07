@@ -312,20 +312,17 @@ satisfy Show(Str) {
 satisfy Spell(Str) {
     spell(s) =
         let body =
-            fold(
-                s,
-                "",
-                (c, acc) =>
-                    concat(
-                        acc,
-                        match Char/to_nat(c)
-                        | '\n' => "\\n"
-                        | '\t' => "\\t"
-                        | '\r' => "\\r"
-                        | '\\' => "\\\\"
-                        | '"' => "\\\""
-                        | _ => of_char(c)
-                        end));
+            fold(s, "", (c, acc) =>
+                concat(
+                    acc,
+                    match Char/to_nat(c)
+                    | '\n' => "\\n"
+                    | '\t' => "\\t"
+                    | '\r' => "\\r"
+                    | '\\' => "\\\\"
+                    | '"' => "\\\""
+                    | _ => of_char(c)
+                    end));
         concat("\"", concat(body, "\"")),
 }
 

@@ -82,15 +82,14 @@ pub let sgr(s: Style) -> Bytes =
         Str/concat(
             Str/join(
                 ";",
-                List/flatten(
-                    [
-                        ["0"],
-                        color_params(s.fg, 30),
-                        color_params(s.bg, 40),
-                        flag(s.bold, "1"),
-                        flag(s.dim, "2"),
-                        flag(s.italic, "3"),
-                        flag(s.underline, "4"),
-                        flag(s.reverse, "7"),
-                        flag(s.strike, "9")])),
+                List/flatten([
+                    ["0"],
+                    color_params(s.fg, 30),
+                    color_params(s.bg, 40),
+                    flag(s.bold, "1"),
+                    flag(s.dim, "2"),
+                    flag(s.italic, "3"),
+                    flag(s.underline, "4"),
+                    flag(s.reverse, "7"),
+                    flag(s.strike, "9")])),
             "m"));

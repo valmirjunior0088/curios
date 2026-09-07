@@ -101,11 +101,9 @@ let date_time_tail(date: Date) -> Parse(Toml) =
     let _ = Parse/take_if((b) => b == 0x54 || b == 0x74 || b == 0x20)!;
     let time = time_parse!;
     Parse/or(
-        Parse/map(
-            offset_parse,
-            (off) =>
-                Toml/offset_date_time(
-                    OffsetDateTime { date = date, time = time, offset_minutes = off })),
+        Parse/map(offset_parse, (off) =>
+            Toml/offset_date_time(
+                OffsetDateTime { date = date, time = time, offset_minutes = off })),
         Parse/pure(Toml/local_date_time(LocalDateTime { date = date, time = time })));
 
 let date_led: Parse(Toml) =

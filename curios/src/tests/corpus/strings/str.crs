@@ -10,13 +10,11 @@ test get_indexes_codepoints_of_every_width() =
 -- A braced escape names a scalar no keyboard types: `"e\u{301}"` is two scalars, the `e` and the combining acute accent, and reads back as the accented letter it composes. `\u` without a brace is the two characters it always was.
 test a_braced_escape_names_a_scalar() =
     Test/equal(
-        Str/join(
-            ",",
-            [
-                Nat/to_str(Str/len("é")),
-                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/try_get("é", 1), '?'))),
-                "e\\u",
-                Str/of_char('😀')]),
+        Str/join(",", [
+            Nat/to_str(Str/len("é")),
+            Nat/to_str(Char/to_nat(Option/unwrap_or(Str/try_get("é", 1), '?'))),
+            "e\\u",
+            Str/of_char('😀')]),
         "2,769,e\\u,😀");
 
 -- `Str/get` is the proof-carrying indexer: `ok: Lt(i, len s)` flows erased into the `Bytes/get` bound, so it reads each codepoint with no fallback — the same widths `try_get` reads above, but total.
@@ -33,12 +31,10 @@ test get_reads_codepoints_with_the_proof() =
                 | none() => Option/none()
                 | some(p2) =>
                     Option/some(
-                        Str/join(
-                            ",",
-                            [
-                                Nat/to_str(Char/to_nat(Str/get(s, 0, p0))),
-                                Nat/to_str(Char/to_nat(Str/get(s, 1, p1))),
-                                Nat/to_str(Char/to_nat(Str/get(s, 2, p2)))]))
+                        Str/join(",", [
+                            Nat/to_str(Char/to_nat(Str/get(s, 0, p0))),
+                            Nat/to_str(Char/to_nat(Str/get(s, 1, p1))),
+                            Nat/to_str(Char/to_nat(Str/get(s, 2, p2)))]))
                 end
             end
         end;
@@ -64,16 +60,14 @@ test trim_all_whitespace_is_empty() =
 test logical_operations_use_certified_chars() =
     let s = "a€😀";
     Test/equal(
-        Str/join(
-            "|",
-            [
-                Str/fold(s, "", (c, acc) => Str/concat(acc, Show/show(c))),
-                Show/show(Option/unwrap_or(Str/try_get(s, 1), '?')),
-                Nat/to_str(Option/unwrap_or(Str/find(s, '€'), 99)),
-                Nat/to_str(Option/unwrap_or(Str/find_index(s, (c) => Char/to_nat(c) > 0xFFFF), 99)),
-                Show/show('😀'),
-                Bool/to_str(Str/eql_ascii_ci("AbÉ", "aBÉ")),
-                Bool/to_str(Str/eql_ascii_ci("É", "é")),
-                Nat/to_str(Str/len(s)),
-                Str/slice(s, 1, 1)]),
+        Str/join("|", [
+            Str/fold(s, "", (c, acc) => Str/concat(acc, Show/show(c))),
+            Show/show(Option/unwrap_or(Str/try_get(s, 1), '?')),
+            Nat/to_str(Option/unwrap_or(Str/find(s, '€'), 99)),
+            Nat/to_str(Option/unwrap_or(Str/find_index(s, (c) => Char/to_nat(c) > 0xFFFF), 99)),
+            Show/show('😀'),
+            Bool/to_str(Str/eql_ascii_ci("AbÉ", "aBÉ")),
+            Bool/to_str(Str/eql_ascii_ci("É", "é")),
+            Nat/to_str(Str/len(s)),
+            Str/slice(s, 1, 1)]),
         "a€😀|€|1|2|😀|true|false|3|€");

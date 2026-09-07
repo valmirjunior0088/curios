@@ -99,9 +99,8 @@ pub let any_byte: Parse(Byte) =
 
 -- | The next byte when `pred` accepts it; declines otherwise, consuming nothing.
 pub let take_if(pred: (Byte) -> Bool) -> Parse(Byte) =
-    bind(
-        any_byte,
-        (byte) => match pred(byte) | true => pure(byte) | false => fail("unexpected byte") end);
+    bind(any_byte, (byte) =>
+        match pred(byte) | true => pure(byte) | false => fail("unexpected byte") end);
 
 -- | The next byte without consuming it; declines at the end of the input.
 pub let peek_byte: Parse(Byte) =
@@ -254,7 +253,11 @@ pub let many0(@A: Type, p: Parse(A)) -> Parse(List(A)) =
         run(input, pos) =
             let go(acc: List(A), cur: Nat) -> Result(Error, {Nat, List(A)}) =
                 match p.run(input, cur)
-                | failure(e) => match e.committed | false => Result/success((cur, acc)) | true => Result/failure(e) end
+                | failure(e) =>
+                    match e.committed
+                    | false => Result/success((cur, acc))
+                    | true => Result/failure(e)
+                    end
                 | success((next, a)) =>
                     match next == cur
                     | true => Result/success((cur, acc))
@@ -269,14 +272,26 @@ pub let sep_by0(@A: Type, @S: Type, elem: Parse(A), sep: Parse(S)) -> Parse(List
     Parse {
         run(input, pos) =
             match elem.run(input, pos)
-            | failure(e) => match e.committed | false => Result/success((pos, [])) | true => Result/failure(e) end
+            | failure(e) =>
+                match e.committed
+                | false => Result/success((pos, []))
+                | true => Result/failure(e)
+                end
             | success((first_end, first)) =>
                 let go(acc: List(A), cur: Nat) -> Result(Error, {Nat, List(A)}) =
                     match sep.run(input, cur)
-                    | failure(e) => match e.committed | false => Result/success((cur, acc)) | true => Result/failure(e) end
+                    | failure(e) =>
+                        match e.committed
+                        | false => Result/success((cur, acc))
+                        | true => Result/failure(e)
+                        end
                     | success((sep_end, _)) =>
                         match elem.run(input, sep_end)
-                        | failure(e) => match e.committed | false => Result/success((cur, acc)) | true => Result/failure(e) end
+                        | failure(e) =>
+                            match e.committed
+                            | false => Result/success((cur, acc))
+                            | true => Result/failure(e)
+                            end
                         | success((next, x)) =>
                             match next == cur
                             | true => Result/success((cur, acc))

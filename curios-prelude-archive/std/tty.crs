@@ -32,11 +32,9 @@ let restore: Io({}) =
 pub let with_raw(@A: Type, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
     let _ = raw(true)!;
     let a =
-        Try/rescue(
-            body,
-            (e) =>
-                let _ = restore!;
-                Try/raise(e))!;
+        Try/rescue(body, (e) =>
+            let _ = restore!;
+            Try/raise(e))!;
     let _ = restore!;
     Try/pure(a);
 

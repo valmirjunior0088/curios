@@ -21,9 +21,8 @@ test zip_pairs_two_vectors_of_one_length_and_fold_walks_left_to_right() =
 test a_vector_compares_as_its_list() =
     let v: Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
     let w: Vec(Nat, 2) = Vec/cons(1, Vec/cons(3, Vec/nil()));
-    Test/all(
-        [
-            Test/equal(Vec/to_list(v), [1, 2]),
-            Test/check(v == v),
-            Test/check(Bool/not(v == w)),
-            Test/check(v != w)]);
+    Test/all([
+        Test/equal(Vec/to_list(v), [1, 2]),
+        Test/check(v == v),
+        Test/check(Bool/not(v == w)),
+        Test/check(v != w)]);

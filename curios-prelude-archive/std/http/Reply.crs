@@ -92,12 +92,10 @@ pub let chunk(r: Reply(Stage/chunked()), b: Bytes) -> Try(Async, Io/Error, Reply
         match Bytes/len(b)
         | 0 => Try/pure(())
         | _ =>
-            put(
-                c,
-                x[
-                    ..Str/to_bytes(Str/concat(hex(Bytes/len(b)), "\r\n")),
-                    ..b,
-                    ..Str/to_bytes("\r\n")])
+            put(c, x[
+                ..Str/to_bytes(Str/concat(hex(Bytes/len(b)), "\r\n")),
+                ..b,
+                ..Str/to_bytes("\r\n")])
         end;
     let _ = write!;
     Try/pure(Reply/at(@Stage/chunked(), c));

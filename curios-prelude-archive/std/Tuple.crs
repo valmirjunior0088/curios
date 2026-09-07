@@ -66,14 +66,13 @@ satisfy (
     use Show(F),
 ) => Show({A, B, C, D, E, F}) {
     show(t) =
-        parens(
-            [
-                Show/show(t.0),
-                Show/show(t.1),
-                Show/show(t.2),
-                Show/show(t.3),
-                Show/show(t.4),
-                Show/show(t.5)]),
+        parens([
+            Show/show(t.0),
+            Show/show(t.1),
+            Show/show(t.2),
+            Show/show(t.3),
+            Show/show(t.4),
+            Show/show(t.5)]),
 }
 
 satisfy (
@@ -93,15 +92,14 @@ satisfy (
     use Show(G),
 ) => Show({A, B, C, D, E, F, G}) {
     show(t) =
-        parens(
-            [
-                Show/show(t.0),
-                Show/show(t.1),
-                Show/show(t.2),
-                Show/show(t.3),
-                Show/show(t.4),
-                Show/show(t.5),
-                Show/show(t.6)]),
+        parens([
+            Show/show(t.0),
+            Show/show(t.1),
+            Show/show(t.2),
+            Show/show(t.3),
+            Show/show(t.4),
+            Show/show(t.5),
+            Show/show(t.6)]),
 }
 
 satisfy (
@@ -123,16 +121,15 @@ satisfy (
     use Show(H),
 ) => Show({A, B, C, D, E, F, G, H}) {
     show(t) =
-        parens(
-            [
-                Show/show(t.0),
-                Show/show(t.1),
-                Show/show(t.2),
-                Show/show(t.3),
-                Show/show(t.4),
-                Show/show(t.5),
-                Show/show(t.6),
-                Show/show(t.7)]),
+        parens([
+            Show/show(t.0),
+            Show/show(t.1),
+            Show/show(t.2),
+            Show/show(t.3),
+            Show/show(t.4),
+            Show/show(t.5),
+            Show/show(t.6),
+            Show/show(t.7)]),
 }
 
 satisfy Spell({}) {
@@ -178,13 +175,12 @@ satisfy (
     use Spell(E),
 ) => Spell({A, B, C, D, E}) {
     spell(t) =
-        parens(
-            [
-                Spell/spell(t.0),
-                Spell/spell(t.1),
-                Spell/spell(t.2),
-                Spell/spell(t.3),
-                Spell/spell(t.4)]),
+        parens([
+            Spell/spell(t.0),
+            Spell/spell(t.1),
+            Spell/spell(t.2),
+            Spell/spell(t.3),
+            Spell/spell(t.4)]),
 }
 
 satisfy (
@@ -202,14 +198,13 @@ satisfy (
     use Spell(F),
 ) => Spell({A, B, C, D, E, F}) {
     spell(t) =
-        parens(
-            [
-                Spell/spell(t.0),
-                Spell/spell(t.1),
-                Spell/spell(t.2),
-                Spell/spell(t.3),
-                Spell/spell(t.4),
-                Spell/spell(t.5)]),
+        parens([
+            Spell/spell(t.0),
+            Spell/spell(t.1),
+            Spell/spell(t.2),
+            Spell/spell(t.3),
+            Spell/spell(t.4),
+            Spell/spell(t.5)]),
 }
 
 satisfy (
@@ -229,15 +224,14 @@ satisfy (
     use Spell(G),
 ) => Spell({A, B, C, D, E, F, G}) {
     spell(t) =
-        parens(
-            [
-                Spell/spell(t.0),
-                Spell/spell(t.1),
-                Spell/spell(t.2),
-                Spell/spell(t.3),
-                Spell/spell(t.4),
-                Spell/spell(t.5),
-                Spell/spell(t.6)]),
+        parens([
+            Spell/spell(t.0),
+            Spell/spell(t.1),
+            Spell/spell(t.2),
+            Spell/spell(t.3),
+            Spell/spell(t.4),
+            Spell/spell(t.5),
+            Spell/spell(t.6)]),
 }
 
 satisfy (
@@ -259,16 +253,15 @@ satisfy (
     use Spell(H),
 ) => Spell({A, B, C, D, E, F, G, H}) {
     spell(t) =
-        parens(
-            [
-                Spell/spell(t.0),
-                Spell/spell(t.1),
-                Spell/spell(t.2),
-                Spell/spell(t.3),
-                Spell/spell(t.4),
-                Spell/spell(t.5),
-                Spell/spell(t.6),
-                Spell/spell(t.7)]),
+        parens([
+            Spell/spell(t.0),
+            Spell/spell(t.1),
+            Spell/spell(t.2),
+            Spell/spell(t.3),
+            Spell/spell(t.4),
+            Spell/spell(t.5),
+            Spell/spell(t.6),
+            Spell/spell(t.7)]),
 }
 
 satisfy Equal({}) {
@@ -605,12 +598,8 @@ satisfy (
                         Option/map(
                             Test/Draw/all(@C)(),
                             (zs) =>
-                                List/concat_map(
-                                    xs,
-                                    (a) =>
-                                        List/concat_map(
-                                            ys,
-                                            (b) => List/map(zs, (c) => (a, b, c))))))),
+                                List/concat_map(xs, (a) =>
+                                    List/concat_map(ys, (b) => List/map(zs, (c) => (a, b, c))))))),
     draw(seed, size) =
         let (a, first) = Test/Draw/draw(@A, seed, size);
         let (b, second) = Test/Draw/draw(@B, first, size);

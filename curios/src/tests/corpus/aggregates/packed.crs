@@ -22,5 +22,5 @@ test list_fold_sums_elements() =
 
 test bytes_fold_sums_bytes() =
     Test/equal(
-        Bytes/fold(x[0x0a, 0x14, 0x1e], 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))),
+        Bytes/fold(x[0x0A, 0x14, 0x1E], 0, (byte, acc) => Nat/add(acc, Byte/to_nat(byte))),
         60);

@@ -77,11 +77,10 @@ let walk_final(
     | act_table() =>
         match Map/get(m, name)
         | none() =>
-            Result/success(
-                (
-                    Map/insert(m, name, Toml/table(Map/empty())),
-                    Map/insert(side, kf, Origin/header()),
-                    [Seg/plain(name)]))
+            Result/success((
+                Map/insert(m, name, Toml/table(Map/empty())),
+                Map/insert(side, kf, Origin/header()),
+                [Seg/plain(name)]))
         | some(existing) =>
             match existing
             | table(_) =>
@@ -89,8 +88,10 @@ let walk_final(
                 | some(st) =>
                     match st
                     | implicit() =>
-                        Result/success(
-                            (m, Map/insert(side, kf, Origin/header()), [Seg/plain(name)]))
+                        Result/success((
+                            m,
+                            Map/insert(side, kf, Origin/header()),
+                            [Seg/plain(name)]))
                     | header() => Result/failure(Rule/table_defined_twice())
                     | dotted() => Result/failure(Rule/redefines_dotted_table())
                     | _ => Result/failure(Rule/extends_inline_table())
@@ -104,11 +105,10 @@ let walk_final(
     | act_many() =>
         match Map/get(m, name)
         | none() =>
-            Result/success(
-                (
-                    Map/insert(m, name, Toml/arr([Toml/table(Map/empty())])),
-                    Map/insert(side, kf, Origin/many()),
-                    [Seg/at(name, 0)]))
+            Result/success((
+                Map/insert(m, name, Toml/arr([Toml/table(Map/empty())])),
+                Map/insert(side, kf, Origin/many()),
+                [Seg/at(name, 0)]))
         | some(existing) =>
             match existing
             | arr(items) =>
@@ -116,11 +116,10 @@ let walk_final(
                 | some(st) =>
                     match st
                     | many() =>
-                        Result/success(
-                            (
-                                Map/insert(m, name, Toml/arr([..items, Toml/table(Map/empty())])),
-                                side,
-                                [Seg/at(name, List/len(items))]))
+                        Result/success((
+                            Map/insert(m, name, Toml/arr([..items, Toml/table(Map/empty())])),
+                            side,
+                            [Seg/at(name, List/len(items))]))
                     | _ => Result/failure(Rule/appends_to_static_array())
                     end
                 | none() => Result/failure(Rule/appends_to_static_array())
@@ -163,8 +162,10 @@ let walk(
                         | table(inner) =>
                             match walk(inner, side, seg_key(pre, seg), rest, unchecked - 1, act)
                             | success((inner2, side2, res)) =>
-                                Result/success(
-                                    (Map/insert(m, name, Toml/table(inner2)), side2, [seg, ..res]))
+                                Result/success((
+                                    Map/insert(m, name, Toml/table(inner2)),
+                                    side2,
+                                    [seg, ..res]))
                             | failure(msg) => Result/failure(msg)
                             end
                         | _ => Result/failure(Rule/invariant("scope is not a table"))
@@ -190,11 +191,10 @@ let walk(
                                     | success((inner2, side2, res)) =>
                                         let items2 =
                                             replace_at(items, index, in_range, Toml/table(inner2));
-                                        Result/success(
-                                            (
-                                                Map/insert(m, name, Toml/arr(items2)),
-                                                side2,
-                                                [seg, ..res]))
+                                        Result/success((
+                                            Map/insert(m, name, Toml/arr(items2)),
+                                            side2,
+                                            [seg, ..res]))
                                     | failure(msg) => Result/failure(msg)
                                     end
                                 | _ =>
@@ -216,11 +216,10 @@ let walk(
                         match act | act_value(_) => Origin/dotted() | _ => Origin/implicit() end;
                     match walk(Map/empty(), Map/insert(side, kp, created), kp, rest, 0, act)
                     | success((inner2, side2, res)) =>
-                        Result/success(
-                            (
-                                Map/insert(m, name, Toml/table(inner2)),
-                                side2,
-                                [Seg/plain(name), ..res]))
+                        Result/success((
+                            Map/insert(m, name, Toml/table(inner2)),
+                            side2,
+                            [Seg/plain(name), ..res]))
                     | failure(msg) => Result/failure(msg)
                     end
                 | some(existing) =>
@@ -231,11 +230,10 @@ let walk(
                         | success(_) =>
                             match walk(inner, side, kp, rest, 0, act)
                             | success((inner2, side2, res)) =>
-                                Result/success(
-                                    (
-                                        Map/insert(m, name, Toml/table(inner2)),
-                                        side2,
-                                        [Seg/plain(name), ..res]))
+                                Result/success((
+                                    Map/insert(m, name, Toml/table(inner2)),
+                                    side2,
+                                    [Seg/plain(name), ..res]))
                             | failure(msg) => Result/failure(msg)
                             end
                         end
@@ -264,11 +262,10 @@ let walk(
                                                     index,
                                                     in_range,
                                                     Toml/table(inner2));
-                                            Result/success(
-                                                (
-                                                    Map/insert(m, name, Toml/arr(items2)),
-                                                    side2,
-                                                    [seg2, ..res]))
+                                            Result/success((
+                                                Map/insert(m, name, Toml/arr(items2)),
+                                                side2,
+                                                [seg2, ..res]))
                                         | failure(msg) => Result/failure(msg)
                                         end
                                     | _ =>
@@ -320,10 +317,8 @@ pub let apply_aot(b: Build, path: List(Str)) -> Result(Error, Build) =
 
 pub let inline_fold(pairs: List({List(Str), Toml})) -> Result(Error, Map(Toml)) =
     let start: Result(Error, Build) = Result/success(build_empty);
-    match List/fold(
-        pairs,
-        start,
-        (pair, acc) => Result/bind(acc, (b) => apply_assign(b, pair.0, pair.1)))
+    match List/fold(pairs, start, (pair, acc) =>
+        Result/bind(acc, (b) => apply_assign(b, pair.0, pair.1)))
     | success(b) => Result/success(b.root)
     | failure(msg) => Result/failure(msg)
     end;

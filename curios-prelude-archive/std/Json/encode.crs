@@ -50,9 +50,7 @@ pub let encode(v: Json) -> Str =
                 "{",
                 Str/join(
                     ",",
-                    List/map(
-                        ps,
-                        (pair: {Str, Json}) =>
-                            Str/concat(Str/concat(encode_str(pair.0), ":"), encode(pair.1))))),
+                    List/map(ps, (pair: {Str, Json}) =>
+                        Str/concat(Str/concat(encode_str(pair.0), ":"), encode(pair.1))))),
             "}")
     end;

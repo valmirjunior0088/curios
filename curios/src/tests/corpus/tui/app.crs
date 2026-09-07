@@ -33,11 +33,10 @@ let press(c: Char) -> Event(Nat) =
 
 test the_fold_runs_every_event_through_update() =
     let d = Tui/drive(counter, 3, 1, [press('+'), press('+'), press('-')]);
-    Test/all(
-        [
-            Test/equal(d.model, 1),
-            Test/equal(d.quit, false),
-            Test/equal(Frame/to_lines(d.frame), ["1  "])]);
+    Test/all([
+        Test/equal(d.model, 1),
+        Test/equal(d.quit, false),
+        Test/equal(Frame/to_lines(d.frame), ["1  "])]);
 
 -- `quit` stops the fold where it is issued; the events after it are not seen.
 test quit_stops_the_fold_early() =

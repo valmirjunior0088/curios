@@ -18,59 +18,51 @@ let decoded_str(input: Str) -> Str =
 -- Each rejection is pinned to its reason. The backslash commits the escape parser, so a malformed escape reports itself rather than ending the string segment and failing on a closing quote that is not there — `many0(or(escape, segment))` once reported every one of these as `unexpected byte`.
 test unicode_escapes_require_well_formed_surrogate_pairs() =
     Test/equal(
-        Str/join(
-            "|",
-            [
-                decoded_str("\"\\uD83D\\uDE00\""),
-                decoded_str("\"\\uD83D\""),
-                decoded_str("\"\\uD83D\\u0041\""),
-                decoded_str("\"\\uDE00\""),
-                decoded_str("\"a\\qb\"")]),
+        Str/join("|", [
+            decoded_str("\"\\uD83D\\uDE00\""),
+            decoded_str("\"\\uD83D\""),
+            decoded_str("\"\\uD83D\\u0041\""),
+            decoded_str("\"\\uDE00\""),
+            decoded_str("\"a\\qb\"")]),
         "😀|expected low surrogate|invalid low surrogate|invalid Unicode scalar|unknown escape");
 
 -- Each refusal is the reason at the point the input stopped being JSON, not the bracket an outer parser failed on afterwards. A comma commits to the element after it and a key to its colon, the byte after an opening bracket decides between the close and the elements, and the primitives name what they expected — `sep_by0`'s backtracking once reported every malformed input as `unexpected byte`, and a bad literal as `unexpected literal`.
 test structural_refusals_name_what_was_expected() =
     Test/equal(
-        Str/join(
-            "|",
-            [
-                decoded("[]"),
-                decoded("{}"),
-                decoded("[true, [null], {\"a\": []}]"),
-                decoded("[1,]"),
-                decoded("[x]"),
-                decoded("[1 2]"),
-                decoded("{\"a\" 1}"),
-                decoded("{\"a\": 1,}"),
-                decoded("{,}"),
-                decoded("tru"),
-                decoded("["),
-                decoded("")]),
-        Str/flatten(
-            [
-                "[]|{}|[true,[null],{\"a\":[]}]|expected value|expected value|",
-                "expected ',' or ']'|expected ':'|expected '\"'|expected '\"'|",
-                "expected \"true\"|unexpected end of input|unexpected end of input"]));
+        Str/join("|", [
+            decoded("[]"),
+            decoded("{}"),
+            decoded("[true, [null], {\"a\": []}]"),
+            decoded("[1,]"),
+            decoded("[x]"),
+            decoded("[1 2]"),
+            decoded("{\"a\" 1}"),
+            decoded("{\"a\": 1,}"),
+            decoded("{,}"),
+            decoded("tru"),
+            decoded("["),
+            decoded("")]),
+        Str/flatten([
+            "[]|{}|[true,[null],{\"a\":[]}]|expected value|expected value|",
+            "expected ',' or ']'|expected ':'|expected '\"'|expected '\"'|",
+            "expected \"true\"|unexpected end of input|unexpected end of input"]));
 
 -- A document is the whole input: a value followed by anything is refused, not read as its prefix. The last two rows are the control — trivia on either side of a document is still trivia, since the value parsers consume only what precedes them.
 test a_document_is_refused_when_anything_follows_the_value() =
     Test/equal(
-        Str/join(
-            "|",
-            [
-                decoded("nulll"),
-                decoded("truex"),
-                decoded("1 garbage"),
-                decoded("[1,2] junk"),
-                decoded("{} }}}"),
-                decoded("\"a\"\"b\""),
-                decoded("  { \"a\" : 1 }  \n"),
-                decoded("[]")]),
-        Str/flatten(
-            [
-                "expected end of input|expected end of input|expected end of input|",
-                "expected end of input|expected end of input|expected end of input|",
-                "{\"a\":1}|[]"]));
+        Str/join("|", [
+            decoded("nulll"),
+            decoded("truex"),
+            decoded("1 garbage"),
+            decoded("[1,2] junk"),
+            decoded("{} }}}"),
+            decoded("\"a\"\"b\""),
+            decoded("  { \"a\" : 1 }  \n"),
+            decoded("[]")]),
+        Str/flatten([
+            "expected end of input|expected end of input|expected end of input|",
+            "expected end of input|expected end of input|expected end of input|",
+            "{\"a\":1}|[]"]));
 
 -- Every number the encoder writes is a JSON number, so a non-finite one becomes `null` rather than a literal the grammar has no room for. Each row is written *and* read back, so a rendering the grammar does not admit shows up as its refusal rather than as text; the finite tail is the control.
 test a_non_finite_number_encodes_as_null() =
@@ -81,19 +73,17 @@ test a_non_finite_number_encodes_as_null() =
         | failure(e) => Str/concat("NOT JSON: ", e.message)
         end;
     Test/equal(
-        Str/join(
-            "|",
-            [
-                written(Json/num(Flt/pos_inf)),
-                written(Json/num(Flt/neg_inf)),
-                written(Json/num(Flt/nan)),
-                written(
-                    Json/num(
-                        Flt/mul(
-                            +1000000000000000000000000000000.0,
-                            +1000000000000000000000000000000.0))),
-                written(Json/arr([Json/num(+1.0), Json/num(Flt/pos_inf)])),
-                written(Json/num(+1.5)),
-                written(Json/num(-1.5)),
-                written(Json/num(-0.0))]),
+        Str/join("|", [
+            written(Json/num(Flt/pos_inf)),
+            written(Json/num(Flt/neg_inf)),
+            written(Json/num(Flt/nan)),
+            written(
+                Json/num(
+                    Flt/mul(
+                        +1000000000000000000000000000000.0,
+                        +1000000000000000000000000000000.0))),
+            written(Json/arr([Json/num(+1.0), Json/num(Flt/pos_inf)])),
+            written(Json/num(+1.5)),
+            written(Json/num(-1.5)),
+            written(Json/num(-0.0))]),
         "null|null|null|null|[1,null]|1.5|-1.5|-0");

@@ -19,27 +19,25 @@ let serve: Cli =
 test help_renders_the_layout_the_specification_fixes() =
     Test/equal(
         Cli/help(serve),
-        Str/flatten(
-            [
-                "Serve a directory over HTTP\n\n",
-                "Usage: serve [OPTIONS] <ROOT>\n\n",
-                "Arguments:\n",
-                "  <ROOT>  Directory to serve\n\n",
-                "Options:\n",
-                "  -v, --verbose   Log every request\n",
-                "      --port <N>  Port to listen on\n",
-                "  -h, --help      Print help\n",
-                "      --version   Print version\n\n"]));
+        Str/flatten([
+            "Serve a directory over HTTP\n\n",
+            "Usage: serve [OPTIONS] <ROOT>\n\n",
+            "Arguments:\n",
+            "  <ROOT>  Directory to serve\n\n",
+            "Options:\n",
+            "  -v, --verbose   Log every request\n",
+            "      --port <N>  Port to listen on\n",
+            "  -h, --help      Print help\n",
+            "      --version   Print version\n\n"]));
 
 -- A refusal names what went wrong, repeats the usage line, and points at `--help`; it never prints the whole help, which is what separates a mistake from a request.
 test a_refusal_names_the_offender_and_points_at_help() =
     Test/equal(
         Cli/report(serve, Cli/Failure/unknown_option("--prot")),
-        Str/flatten(
-            [
-                "error: unexpected argument '--prot'\n\n",
-                "Usage: serve [OPTIONS] <ROOT>\n\n",
-                "For more information, try '--help'.\n"]));
+        Str/flatten([
+            "error: unexpected argument '--prot'\n\n",
+            "Usage: serve [OPTIONS] <ROOT>\n\n",
+            "For more information, try '--help'.\n"]));
 
 -- A command declaring no options gets no `[OPTIONS]`, and a `rest` entry is bracketed to say it collects rather than requires.
 test the_usage_line_says_only_what_the_specification_declares() =

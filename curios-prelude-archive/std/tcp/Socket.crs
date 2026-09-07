@@ -98,8 +98,6 @@ pub let with(
 
 -- | `request` written whole and the reply read to its end, over the socket `open` connects, closed after. One exchange with a peer that closes when it has answered.
 pub let call(open: Try(Async, Io/Error, Socket), request: Bytes) -> Try(Async, Io/Error, Bytes) =
-    with(
-        open,
-        (c) =>
-            let _ = Try/attempt(write(c, request))!;
-            Try/attempt(stream/read_all(c)));
+    with(open, (c) =>
+        let _ = Try/attempt(write(c, request))!;
+        Try/attempt(stream/read_all(c)));

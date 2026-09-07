@@ -22,11 +22,10 @@ test insert_replaces_without_growing() =
 test remove_collapses_and_is_the_identity_on_an_absent_key() =
     let m: Map(Nat) = Map/of([("a", 1), ("b", 2), ("c", 3)]);
     let d: Map(Nat) = Map/remove(m, "b");
-    Test/all(
-        [
-            Test/equal(d, Map/of([("a", 1), ("c", 3)])),
-            Test/equal(Map/remove(d, "b"), d),
-            Test/equal(Map/remove(Map/remove(d, "a"), "c"), Map/empty())]);
+    Test/all([
+        Test/equal(d, Map/of([("a", 1), ("c", 3)])),
+        Test/equal(Map/remove(d, "b"), d),
+        Test/equal(Map/remove(Map/remove(d, "a"), "c"), Map/empty())]);
 
 -- Iteration order is a property of the canonical shape, not of insertion order: the zero side of a fork holds the smaller keys, and the marker bits sort a prefix before its extensions.
 test iterates_in_lexicographic_key_order() =
@@ -58,53 +57,49 @@ test holds_many_keys_with_shared_prefixes() =
     let d: Map(Str) = drop_even(300, m);
     let at(n: Nat) -> Str = Option/unwrap_or(Map/get(d, Nat/to_str(n)), "?");
     Test/equal(
-        Str/join(
-            ",",
-            [
-                Nat/to_str(Map/len(m)),
-                Nat/to_str(Map/len(d)),
-                at(2),
-                at(3),
-                at(255),
-                at(256),
-                at(257)]),
+        Str/join(",", [
+            Nat/to_str(Map/len(m)),
+            Nat/to_str(Map/len(d)),
+            at(2),
+            at(3),
+            at(255),
+            at(256),
+            at(257)]),
         "300,150,?,3,255,?,257");
 
 -- `update` is the one rewriting entry point: the function sees the current value or `none`, and answers the value to keep or `none` to remove. `map` and `filter` walk the entries, `union` is right-biased, and `get_or` reads with a default.
 test update_map_filter_union_and_get_or_rewrite_entries() =
     let m: Map(Nat) = Map/of([("a", 1), ("b", 2), ("c", 3)]);
-    Test/all(
-        [
-            Test/equal(
-                Map/update(m, "a", (o: Option(Nat)) => Option/map(o, (n: Nat) => n + 10)),
-                Map/of([("a", 11), ("b", 2), ("c", 3)])),
-            Test/equal(
-                Map/update(m, "b", (_o: Option(Nat)) => Option/none()),
-                Map/of([("a", 1), ("c", 3)])),
-            Test/equal(
-                Map/update(m, "d", (_o: Option(Nat)) => Option/some(4)),
-                Map/of([("a", 1), ("b", 2), ("c", 3), ("d", 4)])),
-            Test/equal(Map/map(m, (n: Nat) => n * 2), Map/of([("a", 2), ("b", 4), ("c", 6)])),
-            Test/equal(
-                Map/filter(m, (_k: Bytes, n: Nat) => Bool/not(Nat/is_even(n))),
-                Map/of([("a", 1), ("c", 3)])),
-            Test/equal(
-                Map/union(Map/of([("a", 1), ("x", 9)]), Map/of([("a", 100), ("y", 8)])),
-                Map/of([("a", 100), ("x", 9), ("y", 8)])),
-            Test/equal(Map/get_or(m, "z", 0), 0),
-            Test/equal(Map/get_or(m, "c", 0), 3)]);
+    Test/all([
+        Test/equal(
+            Map/update(m, "a", (o: Option(Nat)) => Option/map(o, (n: Nat) => n + 10)),
+            Map/of([("a", 11), ("b", 2), ("c", 3)])),
+        Test/equal(
+            Map/update(m, "b", (_o: Option(Nat)) => Option/none()),
+            Map/of([("a", 1), ("c", 3)])),
+        Test/equal(
+            Map/update(m, "d", (_o: Option(Nat)) => Option/some(4)),
+            Map/of([("a", 1), ("b", 2), ("c", 3), ("d", 4)])),
+        Test/equal(Map/map(m, (n: Nat) => n * 2), Map/of([("a", 2), ("b", 4), ("c", 6)])),
+        Test/equal(
+            Map/filter(m, (_k: Bytes, n: Nat) => Bool/not(Nat/is_even(n))),
+            Map/of([("a", 1), ("c", 3)])),
+        Test/equal(
+            Map/union(Map/of([("a", 1), ("x", 9)]), Map/of([("a", 100), ("y", 8)])),
+            Map/of([("a", 100), ("x", 9), ("y", 8)])),
+        Test/equal(Map/get_or(m, "z", 0), 0),
+        Test/equal(Map/get_or(m, "c", 0), 3)]);
 
 -- A `Set(K)` is a `Map(K)` storing each key as its own value, so `to_list` hands the elements back typed — `List(Str)` here, joined without a decoder — where a set over `Map({})` would hand back the trie's `Bytes`.
 test a_set_stores_its_keys_typed_and_unions() =
     let s = Set/of(["b", "a", "c", "a"]);
     let u = Set/union(s, Set/insert(Set/of(["d"]), "a"));
-    Test/all(
-        [
-            Test/equal(Set/len(s), 3),
-            Test/check(Set/has(s, "a")),
-            Test/check(Bool/not(Set/has(s, "z"))),
-            Test/equal(Set/to_list(Set/remove(s, "b")), ["a", "c"]),
-            Test/equal(u, Set/of(["a", "b", "c", "d"])),
-            Test/equal(
-                Set/fold(Set/of(["x", "yy", "zzz"]), 0, (x: Str, acc: Nat) => Str/len(x) + acc),
-                6)]);
+    Test/all([
+        Test/equal(Set/len(s), 3),
+        Test/check(Set/has(s, "a")),
+        Test/check(Bool/not(Set/has(s, "z"))),
+        Test/equal(Set/to_list(Set/remove(s, "b")), ["a", "c"]),
+        Test/equal(u, Set/of(["a", "b", "c", "d"])),
+        Test/equal(
+            Set/fold(Set/of(["x", "yy", "zzz"]), 0, (x: Str, acc: Nat) => Str/len(x) + acc),
+            6)]);

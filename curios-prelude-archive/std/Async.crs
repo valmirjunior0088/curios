@@ -526,11 +526,10 @@ pub let run(main: Async({})) -> Io({}) =
     | failure(d) =>
         let _ =
             /std/print_err(
-                Str/flatten(
-                    [
-                        "async: deadlocked, no runnable work remains and ",
-                        Nat/to_str(d.parked),
-                        " fiber(s) wait on a waker nothing will fire\n"]))!;
+                Str/flatten([
+                    "async: deadlocked, no runnable work remains and ",
+                    Nat/to_str(d.parked),
+                    " fiber(s) wait on a waker nothing will fire\n"]))!;
         /sys/proc/exit(1)
     end;
 
@@ -656,10 +655,9 @@ pub let timeout(@A: Type, d: Duration, body: Async(A)) -> Async(Option(A)) =
     let running = spawn(body)!;
     let timer = lift(after(d))!;
     let w =
-        select(
-            [
-                Offer/map(joined(running), (a) => Option/some(a)),
-                Offer/map(timer, (_) => Option/none())])!;
+        select([
+            Offer/map(joined(running), (a) => Option/some(a)),
+            Offer/map(timer, (_) => Option/none())])!;
     let _ = lift(cancel(running))!;
     pure(w.1);
 

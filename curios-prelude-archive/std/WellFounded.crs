@@ -26,12 +26,11 @@ pub let recurse(
 let lt_below(k: Nat, n: Nat, le: Le(n, k)) -> Accessible((a: Nat, b: Nat) => Nat/Lt(a, b), n) =
     match k
     | 0 =>
-        Accessible/intro(
-            (_m, lt) =>
-                match n
-                | 0 => match lt end
-                | _np + 1 => match le end
-                end)
+        Accessible/intro((_m, lt) =>
+            match n
+            | 0 => match lt end
+            | _np + 1 => match le end
+            end)
     | kp + 1 =>
         Accessible/intro((m, lt) => lt_below(kp, m, Le/trans(Nat/Lt/le_succ_of_lt(m, n, lt), le)))
     end;

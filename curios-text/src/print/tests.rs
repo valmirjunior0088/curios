@@ -30,6 +30,31 @@ fn an_overflowing_application_breaks_one_argument_per_line_with_a_riding_closer(
 }
 
 #[test]
+fn a_trailing_literal_or_lambda_after_atoms_hugs_the_call() {
+    // The literal's opener stays on the head's line and its elements sit one level in, for a list, a packed literal and a tuple alike.
+    assert_eq!(
+        render("f(alpha, [bravo, charlie])", 12),
+        "f(alpha, [\n    bravo,\n    charlie])"
+    );
+    // A packed run of atoms wraps as it does anywhere, its first element riding the opener.
+    assert_eq!(render("f(x[1, 2, 3])", 8), "f(x[1,\n    2,\n    3])");
+    assert_eq!(
+        render("f((alpha, bravo))", 10),
+        "f((\n    alpha,\n    bravo))"
+    );
+    // A lambda hugs the same way: its binders on the head's line, its body one level in below the arrow.
+    assert_eq!(
+        render("List/map(names, (name) => Str/concat(name, suffix))", 30),
+        "List/map(names, (name) =>\n    Str/concat(name, suffix))"
+    );
+    // A leading argument that could break of its own keeps the one shape, so the literal never strands after it.
+    assert_eq!(
+        render("f(g(alpha), [bravo])", 14),
+        "f(\n    g(alpha),\n    [bravo])"
+    );
+}
+
+#[test]
 fn a_lambda_body_rides_the_arrow_and_breaks_when_it_overflows() {
     assert_eq!(render("(x) => x", 80), "(x) => x");
     assert_eq!(

@@ -63,13 +63,11 @@ pub let strong(
     let go(k: Nat, n: Nat, le: Nat/Le(n, k)) -> P(n) =
         match k
         | 0 =>
-            step(
-                n,
-                (_m, lt) =>
-                    match n
-                    | 0 => match lt end
-                    | _np + 1 => match le end
-                    end)
+            step(n, (_m, lt) =>
+                match n
+                | 0 => match lt end
+                | _np + 1 => match le end
+                end)
         | kp + 1 => step(n, (m, lt) => go(kp, m, Le/trans(le_succ_of_lt(m, n, lt), le)))
         end;
     go(n, n, Le/refl(n));

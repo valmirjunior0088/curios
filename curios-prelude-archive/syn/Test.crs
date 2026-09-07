@@ -69,10 +69,9 @@ let case(index: Nat, t: Test) -> Test =
                     Str/concat("case ", Str/concat(Nat/to_str(index), Str/concat(": ", message)))))
         end
     | action(io) =>
-        perform(
-            () =>
-                let inner = io!;
-                Io/pure(case(index, inner)))
+        perform(() =>
+            let inner = io!;
+            Io/pure(case(index, inner)))
     end;
 
 let conjoin(left: Test, right: Test) -> Test =
@@ -84,10 +83,9 @@ let conjoin(left: Test, right: Test) -> Test =
         | failed(_) => left
         end
     | action(io) =>
-        perform(
-            () =>
-                let inner = io!;
-                Io/pure(conjoin(inner, right)))
+        perform(() =>
+            let inner = io!;
+            Io/pure(conjoin(inner, right)))
     end;
 
 let outcome(@E: Type, use Show(E), io: Io(Result(E, Test))) -> Io(Test) =

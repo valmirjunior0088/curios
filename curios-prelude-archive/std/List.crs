@@ -123,10 +123,8 @@ pub let filter_map(@T: Type, @B: Type, l: List(T), f: (T) -> Option(B)) -> List(
 -- | The elements `pred` accepts, and the rest.
 pub let partition(@T: Type, l: List(T), pred: (T) -> Bool) -> {List(T), List(T)} =
     let empty: {List(T), List(T)} = ([], []);
-    fold(
-        l,
-        empty,
-        (x, (yes, no)) => match pred(x) | true => ([..yes, x], no) | false => (yes, [..no, x]) end);
+    fold(l, empty, (x, (yes, no)) =>
+        match pred(x) | true => ([..yes, x], no) | false => (yes, [..no, x]) end);
 
 -- | The firsts and the seconds.
 pub let unzip(@A: Type, @B: Type, l: List({A, B})) -> {List(A), List(B)} =

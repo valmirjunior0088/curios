@@ -17,11 +17,10 @@ let page: Html =
 test a_page_renders_escaped() =
     Test/equal(
         Html/render(page),
-        Str/flatten(
-            [
-                "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/><title>A &amp; B</title>",
-                "<link rel=\"stylesheet\" href=\"a.css\"/></head><body>",
-                "<p class=\"x\" hidden>1 &lt; 2 &amp; &quot;q&quot;<br/><!--note--></p></body></html>"]));
+        Str/flatten([
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/><title>A &amp; B</title>",
+            "<link rel=\"stylesheet\" href=\"a.css\"/></head><body>",
+            "<p class=\"x\" hidden>1 &lt; 2 &amp; &quot;q&quot;<br/><!--note--></p></body></html>"]));
 
 -- What `render` writes, `of_str` reads back as the same tree.
 test a_rendered_page_reads_back() =
@@ -31,8 +30,9 @@ test a_rendered_page_reads_back() =
 test a_fragment_renders_bare() =
     Test/equal(
         Html/render(
-            Html/fragment(
-                [Html/element("script", [], [Html/text("if (a < b) {}")]), Html/text("x")])),
+            Html/fragment([
+                Html/element("script", [], [Html/text("if (a < b) {}")]),
+                Html/text("x")])),
         "<script>if (a < b) {}</script>x");
 
 -- With no element name known, `<li>` written without its closing tag nests inside the one before it, and each closing tag closes the nearest open element; attributes read quoted or bare, and references decode.
@@ -68,21 +68,18 @@ test queries_walk_the_tree() =
         Result/unwrap_or(
             Html/of_str("<div><a href=\"/x\">first</a><p><a href=\"/y\">second</a></p></div>"),
             Html/fragment([]));
-    Test/all(
-        [
-            Test/equal(
-                Option/map(Html/find(tree, (t) => Html/is_named(t, "a")), Html/text_of),
-                Option/some("first")),
-            Test/equal(
-                Option/bind(
-                    Html/find(tree, (t) => Html/is_named(t, "p")),
-                    (p) => Html/attribute(p, "href")),
-                Option/none()),
-            Test/equal(
-                List/map(
-                    Html/named(tree, "a"),
-                    (a) => Option/unwrap_or(Html/attribute(a, "href"), "")),
-                ["/x", "/y"]),
-            Test/equal(Html/text_of(tree), "firstsecond"),
-            Test/equal(Html/title_of(page), Option/some("A & B")),
-            Test/equal(Html/title_of(tree), Option/none())]);
+    Test/all([
+        Test/equal(
+            Option/map(Html/find(tree, (t) => Html/is_named(t, "a")), Html/text_of),
+            Option/some("first")),
+        Test/equal(
+            Option/bind(
+                Html/find(tree, (t) => Html/is_named(t, "p")),
+                (p) => Html/attribute(p, "href")),
+            Option/none()),
+        Test/equal(
+            List/map(Html/named(tree, "a"), (a) => Option/unwrap_or(Html/attribute(a, "href"), "")),
+            ["/x", "/y"]),
+        Test/equal(Html/text_of(tree), "firstsecond"),
+        Test/equal(Html/title_of(page), Option/some("A & B")),
+        Test/equal(Html/title_of(tree), Option/none())]);

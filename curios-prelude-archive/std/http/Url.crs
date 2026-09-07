@@ -224,8 +224,7 @@ pub let with_query(u: Url, pairs: List({Str, Str})) -> Url =
                 Option/some(
                     Str/join(
                         "&",
-                        List/map(
-                            pairs,
-                            ((name, value)) => Str/flatten([encode(name), "=", encode(value)])))),
+                        List/map(pairs, ((name, value)) =>
+                            Str/flatten([encode(name), "=", encode(value)])))),
         }
     end;

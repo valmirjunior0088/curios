@@ -56,12 +56,9 @@ let roster(@A: Type, use Draw(A)) -> Option(Nat) =
     Option/bind(Draw/all(@A)(), (xs) => bounded(List/len(xs)));
 
 let product(a: Option(Nat), b: Option(Nat)) -> Option(Nat) =
-    Option/bind(
-        a,
-        (x) =>
-            Option/bind(
-                b,
-                (y) => match y <= ceiling | true => bounded(x * y) | false => Option/none() end));
+    Option/bind(a, (x) =>
+        Option/bind(b, (y) =>
+            match y <= ceiling | true => bounded(x * y) | false => Option/none() end));
 
 let values(@A: Type, use Draw(A)) -> List(A) =
     Option/unwrap_or(Draw/all(@A)(), []);

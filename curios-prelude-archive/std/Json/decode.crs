@@ -128,9 +128,8 @@ let after_comma(@A: Type, elem: Parse(A)) -> Parse(A) =
     Parse/commit(elem);
 
 let elements(@A: Type, elem: Parse(A)) -> Parse(List(A)) =
-    Parse/bind(
-        elem,
-        (first) => Parse/map(Parse/many0(after_comma(elem)), (rest) => [first, ..rest]));
+    Parse/bind(elem, (first) =>
+        Parse/map(Parse/many0(after_comma(elem)), (rest) => [first, ..rest]));
 
 let bracketed(@A: Type, open: Byte, elem: Parse(A), close: Byte, after: Str) -> Parse(List(A)) =
     let _ = symbol(open)!;

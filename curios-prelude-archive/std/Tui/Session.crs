@@ -16,14 +16,18 @@ pub struct Session: Type {
 }
 
 let enter: Io({}) =
-    Io/write(
-        Io/stdout,
-        x[..ansi/alternate_on, ..ansi/cursor_hide, ..ansi/paste_on, ..ansi/kitty_push]);
+    Io/write(Io/stdout, x[
+        ..ansi/alternate_on,
+        ..ansi/cursor_hide,
+        ..ansi/paste_on,
+        ..ansi/kitty_push]);
 
 let leave: Io({}) =
-    Io/write(
-        Io/stdout,
-        x[..ansi/kitty_pop, ..ansi/paste_off, ..ansi/cursor_show, ..ansi/alternate_off]);
+    Io/write(Io/stdout, x[
+        ..ansi/kitty_pop,
+        ..ansi/paste_off,
+        ..ansi/cursor_show,
+        ..ansi/alternate_off]);
 
 -- | The bracket: raw mode, the alternate screen, the hidden cursor, bracketed paste and the kitty keyboard flag, each undone in reverse whichever way `body` ends.
 pub let with(@A: Type, body: (Session) -> Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =

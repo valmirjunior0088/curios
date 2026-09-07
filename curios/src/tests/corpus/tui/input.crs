@@ -24,26 +24,25 @@ test the_control_bytes_are_the_named_keys_and_ctrl_letters() =
 
 test the_legacy_sequences_name_their_keys() =
     Test/equal(
-        keys(
-            x[
-                0x1B,
-                '[',
-                'A',
-                0x1B,
-                '[',
-                'H',
-                0x1B,
-                '[',
-                '3',
-                '~',
-                0x1B,
-                '[',
-                '1',
-                '5',
-                '~',
-                0x1B,
-                'O',
-                'P']),
+        keys(x[
+            0x1B,
+            '[',
+            'A',
+            0x1B,
+            '[',
+            'H',
+            0x1B,
+            '[',
+            '3',
+            '~',
+            0x1B,
+            '[',
+            '1',
+            '5',
+            '~',
+            0x1B,
+            'O',
+            'P']),
         [k(Code/up()), k(Code/home()), k(Code/delete()), k(Code/f(5)), k(Code/f(1))]);
 
 test a_modifier_parameter_sets_the_modifiers() =
@@ -75,27 +74,24 @@ test a_multi_byte_scalar_is_one_character() =
 test a_lone_escape_at_the_end_waits_for_the_next_chunk() =
     let first = input/decode(@Nat, x['a', 0x1B]);
     let second = input/decode(@Nat, x[..first.rest, '[', 'B']);
-    Test/all(
-        [
-            Test/equal(first.events, [k(Code/char('a'))]),
-            Test/equal(first.rest, x[0x1B]),
-            Test/equal(second.events, [k(Code/down())])]);
+    Test/all([
+        Test/equal(first.events, [k(Code/char('a'))]),
+        Test/equal(first.rest, x[0x1B]),
+        Test/equal(second.events, [k(Code/down())])]);
 
 test an_unfinished_paste_is_cut_at_its_opener() =
     let first = input/decode(@Nat, x[0x1B, '[', '2', '0', '0', '~', 'a', 'b']);
     let second = input/decode(@Nat, x[..first.rest, 'c', 0x1B, '[', '2', '0', '1', '~']);
-    Test/all(
-        [
-            Test/equal(List/len(first.events), 0),
-            Test/equal(Bytes/len(first.rest), 8),
-            Test/equal(second.events, [Event/paste("abc")])]);
+    Test/all([
+        Test/equal(List/len(first.events), 0),
+        Test/equal(Bytes/len(first.rest), 8),
+        Test/equal(second.events, [Event/paste("abc")])]);
 
 -- Once the clock says nothing more is coming, a lone Escape is the Escape key and what followed it is read as itself.
 test flush_reads_a_lone_escape_as_the_key() =
-    Test/all(
-        [
-            Test/equal(input/flush(@Nat, x[0x1B]), [k(Code/escape())]),
-            Test/equal(input/flush(@Nat, x[0x1B, '[']), [k(Code/escape()), k(Code/char('['))])]);
+    Test/all([
+        Test/equal(input/flush(@Nat, x[0x1B]), [k(Code/escape())]),
+        Test/equal(input/flush(@Nat, x[0x1B, '[']), [k(Code/escape()), k(Code/char('['))])]);
 
 -- Whatever the bytes, `rest` is a suffix of the input: nothing is invented and nothing before the cut is kept.
 test the_rest_is_a_suffix_of_any_input(b: Bytes) =

@@ -34,10 +34,9 @@ let target_of(from: Url, location: Str) -> Option(Url) =
     match Str/starts_with(location, "/")
     | true =>
         match Url/of_str(
-            Str/flatten(
-                [
-                    Url/to_str(Url { ..from, path = "/", query = Option/none() }),
-                    Str/slice(location, 1, Str/len(location) - 1)]))
+            Str/flatten([
+                Url/to_str(Url { ..from, path = "/", query = Option/none() }),
+                Str/slice(location, 1, Str/len(location) - 1)]))
         | success(u) => Option/some(u)
         | failure(_) => Option/none()
         end

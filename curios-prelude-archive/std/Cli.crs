@@ -212,19 +212,16 @@ let no_repeat_short(spec: List(Arg)) -> Bool =
         | none() => no_repeat_short(more)
         | some(c) =>
             Bool/not(
-                List/any(
-                    more,
-                    (b) => match b.short | some(d) => Char/eql(c, d) | none() => false end))
+                List/any(more, (b) =>
+                    match b.short | some(d) => Char/eql(c, d) | none() => false end))
                 && no_repeat_short(more)
         end
     end;
 
 let no_reserved(spec: List(Arg)) -> Bool =
-    List/all(
-        spec,
-        (a) =>
-            Bool/not(Str/eql(a.long, "help")) && Bool/not(Str/eql(a.long, "version"))
-                && (match a.short | some(c) => Bool/not(Char/eql(c, 'h')) | none() => true end));
+    List/all(spec, (a) =>
+        Bool/not(Str/eql(a.long, "help")) && Bool/not(Str/eql(a.long, "version"))
+            && (match a.short | some(c) => Bool/not(Char/eql(c, 'h')) | none() => true end));
 
 let rest_comes_last(spec: List(Arg), seen: Bool) -> Bool =
     match spec
@@ -253,12 +250,10 @@ let sound(cli: Cli) -> Bool =
         | [] => true
         | [_, .._] =>
             empty(cli.args) && no_repeat_name(cli.commands)
-                && List/all(
-                    cli.commands,
-                    (c) =>
-                        empty(c.commands) && no_repeat_long(c.args) && no_repeat_short(c.args)
-                            && no_reserved(c.args)
-                            && rest_comes_last(c.args, false))
+                && List/all(cli.commands, (c) =>
+                    empty(c.commands) && no_repeat_long(c.args) && no_repeat_short(c.args)
+                        && no_reserved(c.args)
+                        && rest_comes_last(c.args, false))
         end);
 
 -- | That the declaration parses unambiguously: no reserved names, one `rest` after every positional, and subcommands one level deep. Decided by reduction and demanded by `main`.
@@ -334,12 +329,10 @@ let rest_index(spec: List(Arg)) -> Option(Nat) =
     List/find_index(spec, (a) => is_rest(a.kind));
 
 let wants_help(argv: List(Str)) -> Bool =
-    List/any(
-        argv,
-        (t) =>
-            Str/eql(t, "--help")
-                || Str/starts_with(t, "-") && Bool/not(Str/starts_with(t, "--"))
-                    && Str/contains(t, "h"));
+    List/any(argv, (t) =>
+        Str/eql(t, "--help")
+            || Str/starts_with(t, "-") && Bool/not(Str/starts_with(t, "--"))
+                && Str/contains(t, "h"));
 
 let wants_version(argv: List(Str)) -> Bool =
     List/any(argv, (t) => Str/eql(t, "--version"));
@@ -542,13 +535,11 @@ let positional_rows(spec: List(Arg)) -> List({Str, Str}) =
     List/filter_map(spec, (a) => Option/map(placeholder(a), (p) => (p, a.help)));
 
 let option_rows(spec: List(Arg)) -> List({Str, Str}) =
-    List/filter_map(
-        spec,
-        (a) =>
-            match is_positional(a.kind) || is_rest(a.kind)
-            | true => Option/none()
-            | false => Option/some((option_head(a), a.help))
-            end);
+    List/filter_map(spec, (a) =>
+        match is_positional(a.kind) || is_rest(a.kind)
+        | true => Option/none()
+        | false => Option/some((option_head(a), a.help))
+        end);
 
 let command_rows(subs: List(Cli)) -> List({Str, Str}) =
     List/map(subs, (c) => (c.name, c.about));
@@ -597,12 +588,11 @@ pub let help(cli: Cli) -> Str =
     let options = List/flatten([option_rows(cli.args), builtin_rows(cli)]);
     let commands = command_rows(cli.commands);
     Str/flatten(
-        List/flatten(
-            [
-                [cli.about, "\n\n", usage(cli), "\n\n"],
-                section("Arguments:", arguments),
-                section("Options:", options),
-                section("Commands:", commands)]));
+        List/flatten([
+            [cli.about, "\n\n", usage(cli), "\n\n"],
+            section("Arguments:", arguments),
+            section("Options:", options),
+            section("Commands:", commands)]));
 
 let complaint(f: Failure) -> Str =
     match f
@@ -619,8 +609,12 @@ let complaint(f: Failure) -> Str =
 
 -- | A refusal rendered for standard error, with the usage.
 pub let report(cli: Cli, f: Failure) -> Str =
-    Str/flatten(
-        ["error: ", complaint(f), "\n\n", usage(cli), "\n\nFor more information, try '--help'.\n"]);
+    Str/flatten([
+        "error: ",
+        complaint(f),
+        "\n\n",
+        usage(cli),
+        "\n\nFor more information, try '--help'.\n"]);
 
 -- | What choosing a subcommand came to: the subcommand and its line, a request for help or the version, or a refusal.
 pub induct Chosen: pub Type
@@ -683,13 +677,12 @@ pub let main(cli: Cli, @_ok: WellFormed(cli)) -> Io({}) =
     match decode(dropped)
     | failure(at) =>
         fail_with(
-            Str/flatten(
-                [
-                    "error: argument ",
-                    Nat/to_str(at + 1),
-                    " is not valid UTF-8\n\n",
-                    usage(cli),
-                    "\n\nFor more information, try '--help'.\n"]))
+            Str/flatten([
+                "error: argument ",
+                Nat/to_str(at + 1),
+                " is not valid UTF-8\n\n",
+                usage(cli),
+                "\n\nFor more information, try '--help'.\n"]))
     | success(argv) =>
         match parse(cli.args, argv, Option/is_some(cli.version))
         | help() => print(help(cli))

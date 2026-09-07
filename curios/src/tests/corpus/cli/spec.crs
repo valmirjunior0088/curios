@@ -26,13 +26,12 @@ let sample: Cli/Values(spec) =
 
 -- Five kinds, five carriers: a flag answers `Bool`, a defaulted option and a positional the reader's own type, an optional one `Option`, and `many` a list. `get` needs no annotation at any of them -- the specification is the index of `sample`'s type.
 test get_reads_each_carrier_at_the_type_its_entry_decides() =
-    Test/all(
-        [
-            Test/equal(Cli/get(sample, "verbose"), true),
-            Test/equal(Cli/get(sample, "port"), 9090),
-            Test/equal(Cli/get(sample, "tag"), Option/some("x")),
-            Test/equal(Cli/get(sample, "header"), ["one", "two"]),
-            Test/equal(Cli/get(sample, "root"), "/srv")]);
+    Test/all([
+        Test/equal(Cli/get(sample, "verbose"), true),
+        Test/equal(Cli/get(sample, "port"), 9090),
+        Test/equal(Cli/get(sample, "tag"), Option/some("x")),
+        Test/equal(Cli/get(sample, "header"), ["one", "two"]),
+        Test/equal(Cli/get(sample, "root"), "/srv")]);
 
 let serve: Cli =
     Cli {

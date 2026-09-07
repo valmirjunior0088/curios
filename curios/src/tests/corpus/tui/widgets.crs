@@ -20,13 +20,12 @@ test a_paragraph_wraps_and_fits() =
 test a_listing_moves_within_its_bounds_and_scrolls_to_its_selection() =
     let l = Listing/new(["one", "two", "three"]);
     let moved = Listing/move(Listing/move(Listing/move(l, Code/down()), Code/down()), Code/down());
-    Test/all(
-        [
-            Test/equal(Listing/index(moved), Option/some(2)),
-            Test/equal(Listing/selected(moved), Option/some("three")),
-            Test/equal(render(Listing/draw(moved, Style/plain, Style/plain, 5, 2)), "two  /three"),
-            Test/equal(Listing/index(Listing/move(l, Code/up())), Option/some(0)),
-            Test/equal(Listing/index(Listing/new([])), Option/none())]);
+    Test/all([
+        Test/equal(Listing/index(moved), Option/some(2)),
+        Test/equal(Listing/selected(moved), Option/some("three")),
+        Test/equal(render(Listing/draw(moved, Style/plain, Style/plain, 5, 2)), "two  /three"),
+        Test/equal(Listing/index(Listing/move(l, Code/up())), Option/some(0)),
+        Test/equal(Listing/index(Listing/new([])), Option/none())]);
 
 -- An input edits at its cursor, which never passes its text.
 test an_input_edits_at_its_cursor() =
@@ -36,19 +35,16 @@ test an_input_edits_at_its_cursor() =
             Key/plain(Code/char('X')));
     let drawn = Field/draw(i, Style/plain, 5);
     let past = Field/handle(Field/handle(i, Key/plain(Code/right())), Key/plain(Code/right()));
-    Test/all(
-        [
-            Test/equal(
-                Str/flatten([render(drawn.frame), ":", Nat/to_str(drawn.cursor_x)]),
-                "aXb  :2"),
-            Test/equal(past.cursor, 3),
-            Test/equal(Field/handle(past, Key/plain(Code/backspace())).text, "aX")]);
+    Test/all([
+        Test/equal(Str/flatten([render(drawn.frame), ":", Nat/to_str(drawn.cursor_x)]), "aXb  :2"),
+        Test/equal(past.cursor, 3),
+        Test/equal(Field/handle(past, Key/plain(Code/backspace())).text, "aX")]);
 
 -- A viewport is a window onto a larger frame, blank past its edge.
 test a_viewport_windows_a_larger_frame() =
     let big = Frame/of_lines(Style/plain, ["abcd", "efgh", "ijkl"], 4, 3);
     Test/equal(
-        Str/join(
-            " ",
-            [render(Viewport/draw(big, 1, 1, 2, 2)), render(Viewport/draw(big, 3, 2, 2, 2))]),
+        Str/join(" ", [
+            render(Viewport/draw(big, 1, 1, 2, 2)),
+            render(Viewport/draw(big, 3, 2, 2, 2))]),
         "fg/jk l /  ");

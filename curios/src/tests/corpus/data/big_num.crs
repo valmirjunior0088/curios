@@ -31,11 +31,10 @@ test big_nat_mul_pow2_builds_large_powers() =
 -- `div2` drops the low bit in O(1) and `is_even` reads it: 101 is odd and floor-halves to 50, which is even.
 test big_nat_div2_and_parity() =
     let n = BigNat/of_nat(101);
-    Test/all(
-        [
-            Test/equal(BigNat/div2(n), BigNat/of_nat(50)),
-            Test/check(Bool/not(BigNat/is_even(n))),
-            Test/check(BigNat/is_even(BigNat/div2(n)))]);
+    Test/all([
+        Test/equal(BigNat/div2(n), BigNat/of_nat(50)),
+        Test/check(Bool/not(BigNat/is_even(n))),
+        Test/check(BigNat/is_even(BigNat/div2(n)))]);
 
 -- `bit_len` is the numeral's length: zero has no bits, 1 is a single bit, and the 255 → 256 step is where the count grows from 8 to 9.
 test big_nat_bit_len_counts_binary_digits() =
@@ -64,12 +63,11 @@ test big_nat_zero_renders_and_roundtrips() =
 -- The decimal parser is the inverse of the renderer on everything the renderer writes, well past any native width.
 test big_nat_of_str_inverts_to_str() =
     let big = BigNat/mul(BigNat/of_decimal("123456789"), BigNat/of_decimal("987654321"));
-    Test/all(
-        [
-            Test/equal(BigNat/of_str(BigNat/to_str(big)), Option/some(big)),
-            Test/equal(BigNat/of_str(BigNat/to_str(BigNat/zero)), Option/some(BigNat/zero)),
-            Test/equal(BigNat/of_str(""), Option/none()),
-            Test/equal(BigNat/of_str("12x"), Option/none())]);
+    Test/all([
+        Test/equal(BigNat/of_str(BigNat/to_str(big)), Option/some(big)),
+        Test/equal(BigNat/of_str(BigNat/to_str(BigNat/zero)), Option/some(BigNat/zero)),
+        Test/equal(BigNat/of_str(""), Option/none()),
+        Test/equal(BigNat/of_str("12x"), Option/none())]);
 
 -- === `BigInt`, signed. ===========================================================
 -- Mixed-sign `add` routes through `pos_sub`, which reads the sign straight off `cmp`: the same magnitudes flipped land exactly on the other side of zero, and equal magnitudes land on zero itself — which has its own constructor, so "-0" cannot even be produced.
@@ -114,22 +112,20 @@ test bigint_of_int_crosses_the_i31_boundary() =
 -- `neg` is an involution that `abs` collapses, and `is_even`/`div2` read the magnitude: -101 is odd and halves toward zero to -50.
 test bigint_neg_abs_and_parity() =
     let n = BigInt/of_int(-101);
-    Test/all(
-        [
-            Test/equal(BigInt/neg(n), BigInt/of_decimal("+101")),
-            Test/equal(BigInt/abs(n), BigInt/of_decimal("+101")),
-            Test/equal(BigInt/div2(n), BigInt/of_decimal("-50")),
-            Test/check(Bool/not(BigInt/is_even(n))),
-            Test/check(BigInt/is_even(BigInt/div2(n)))]);
+    Test/all([
+        Test/equal(BigInt/neg(n), BigInt/of_decimal("+101")),
+        Test/equal(BigInt/abs(n), BigInt/of_decimal("+101")),
+        Test/equal(BigInt/div2(n), BigInt/of_decimal("-50")),
+        Test/check(Bool/not(BigInt/is_even(n))),
+        Test/check(BigInt/is_even(BigInt/div2(n)))]);
 
 -- The `/std` facades carry `Add`, `Subtract`, `Multiply`, `Equal` and `Compare` witnesses for `BigInt`, so the operator syntax resolves on it like on any native numeric type.
 test bigint_operators_dispatch_through_concepts() =
     let a = BigInt/of_int(-6);
     let b = BigInt/of_int(+2);
-    Test/all(
-        [
-            Test/equal(a + b, BigInt/of_decimal("-4")),
-            Test/equal(a - b, BigInt/of_decimal("-8")),
-            Test/equal(a * b, BigInt/of_decimal("-12")),
-            Test/check(Bool/not(a == b)),
-            Test/check(a < b)]);
+    Test/all([
+        Test/equal(a + b, BigInt/of_decimal("-4")),
+        Test/equal(a - b, BigInt/of_decimal("-8")),
+        Test/equal(a * b, BigInt/of_decimal("-12")),
+        Test/check(Bool/not(a == b)),
+        Test/check(a < b)]);

@@ -26,29 +26,25 @@ let read(argv: List(Str)) -> Str =
     | version() => "version"
     | failure(f) => why(f)
     | parsed(v) =>
-        Str/join(
-            " ",
-            [
-                Bool/to_str(Cli/get(v, "verbose")),
-                Nat/to_str(Cli/get(v, "port")),
-                Str/join(",", Cli/get(v, "header")),
-                Cli/get(v, "root")])
+        Str/join(" ", [
+            Bool/to_str(Cli/get(v, "verbose")),
+            Nat/to_str(Cli/get(v, "port")),
+            Str/join(",", Cli/get(v, "header")),
+            Cli/get(v, "root")])
     end;
 
 test an_option_takes_the_next_token_or_the_one_glued_to_it() =
-    Test/all(
-        [
-            Test/equal(read(["--port", "9090", "/srv"]), "false 9090  /srv"),
-            Test/equal(read(["--port=9090", "/srv"]), "false 9090  /srv")]);
+    Test/all([
+        Test/equal(read(["--port", "9090", "/srv"]), "false 9090  /srv"),
+        Test/equal(read(["--port=9090", "/srv"]), "false 9090  /srv")]);
 
 -- A short cluster sets its flags; a repeated option keeps its last value while `many` keeps every one; an absent defaulted option stands in for itself.
 test a_cluster_sets_flags_and_repetition_reads_by_kind() =
-    Test/all(
-        [
-            Test/equal(read(["-v", "/srv"]), "true 8080  /srv"),
-            Test/equal(read(["--port", "1", "--port", "2", "/srv"]), "false 2  /srv"),
-            Test/equal(read(["--header", "a", "--header", "b", "/srv"]), "false 8080 a,b /srv"),
-            Test/equal(read(["/srv"]), "false 8080  /srv")]);
+    Test/all([
+        Test/equal(read(["-v", "/srv"]), "true 8080  /srv"),
+        Test/equal(read(["--port", "1", "--port", "2", "/srv"]), "false 2  /srv"),
+        Test/equal(read(["--header", "a", "--header", "b", "/srv"]), "false 8080 a,b /srv"),
+        Test/equal(read(["/srv"]), "false 8080  /srv")]);
 
 -- `--` ends the options, so a token that looks like one fills the positional instead.
 test a_double_dash_makes_every_later_token_a_positional() =
@@ -56,19 +52,17 @@ test a_double_dash_makes_every_later_token_a_positional() =
 
 -- Help is decided before the line is understood, so it answers over a line that would otherwise parse and over one that would otherwise fail.
 test help_and_version_answer_before_any_other_reading() =
-    Test/all(
-        [
-            Test/equal(read(["--port", "1", "--help"]), "help"),
-            Test/equal(read(["--prot", "--help"]), "help"),
-            Test/equal(read(["--version"]), "version")]);
+    Test/all([
+        Test/equal(read(["--port", "1", "--help"]), "help"),
+        Test/equal(read(["--prot", "--help"]), "help"),
+        Test/equal(read(["--version"]), "version")]);
 
 test each_failure_names_what_the_line_got_wrong() =
-    Test/all(
-        [
-            Test/equal(read(["--prot", "/srv"]), "unknown --prot"),
-            Test/equal(read(["/srv", "--port"]), "missing value for port"),
-            Test/equal(read([]), "missing root"),
-            Test/equal(read(["a", "b"]), "unexpected b")]);
+    Test/all([
+        Test/equal(read(["--prot", "/srv"]), "unknown --prot"),
+        Test/equal(read(["/srv", "--port"]), "missing value for port"),
+        Test/equal(read([]), "missing root"),
+        Test/equal(read(["a", "b"]), "unexpected b")]);
 
 -- A reader refusing a value reports the reader's own reason, named against the entry that asked for it rather than against the token.
 test a_reader_that_refuses_a_value_reports_its_own_reason() =

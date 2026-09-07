@@ -23,11 +23,9 @@ test a_percentage_is_of_the_whole_axis() =
 -- Fills share the spare by weight, and the rounding shortfall goes to the last of them.
 test fills_share_by_weight_and_the_last_absorbs_the_rounding() =
     Test/equal(
-        Str/join(
-            " ",
-            [
-                shares([Layout/fill(1), Layout/fill(3)], 8),
-                shares([Layout/fill(1), Layout/fill(1), Layout/fill(1)], 10)]),
+        Str/join(" ", [
+            shares([Layout/fill(1), Layout/fill(3)], 8),
+            shares([Layout/fill(1), Layout/fill(1), Layout/fill(1)], 10)]),
         "2,6 3,3,4");
 
 -- An over-committed axis answers the claims as written; `fitted` is what crops the result to the axis.
@@ -37,11 +35,10 @@ test an_over_committed_axis_keeps_its_claims() =
 -- A `rows` layout stacks its panes at the heights the shares gave them, and the whole is the frame the caller asked for.
 test rows_stack_panes_at_their_shares() =
     let l =
-        Layout/rows(
-            [
-                (Layout/length(1), Layout/pane("head")),
-                (Layout/fill(1), Layout/pane("body")),
-                (Layout/length(1), Layout/pane("foot"))]);
+        Layout/rows([
+            (Layout/length(1), Layout/pane("head")),
+            (Layout/fill(1), Layout/pane("body")),
+            (Layout/length(1), Layout/pane("foot"))]);
     Test/equal(render(Layout/draw(l, 6, 4, by_name)), "head  /body  /      /foot  ");
 
 -- A `cols` layout sets its panes side by side at the widths the shares gave them.
@@ -52,20 +49,19 @@ test cols_set_panes_side_by_side() =
 -- One axis nested in the other: the inner split is at the size the outer gave it, and both joins are checked at the type.
 test one_axis_nests_in_the_other() =
     let l =
-        Layout/rows(
-            [
-                (Layout/length(1), Layout/pane("top")),
-                (
-                    Layout/fill(1),
-                    Layout/cols(
-                        [
-                            (Layout/fill(1), Layout/pane("a")),
-                            (Layout/fill(1), Layout/pane("b"))]))]);
+        Layout/rows([
+            (Layout/length(1), Layout/pane("top")),
+            (
+                Layout/fill(1),
+                Layout/cols([
+                    (Layout/fill(1), Layout/pane("a")),
+                    (Layout/fill(1), Layout/pane("b"))]))]);
     Test/equal(render(Layout/draw(l, 4, 3, by_name)), "top /a b /    ");
 
 -- A pane the constraints leave at zero takes no room and the rest is drawn as if it were not there.
 test a_pane_left_at_zero_takes_no_room() =
     let l =
-        Layout/rows(
-            [(Layout/length(0), Layout/pane("gone")), (Layout/fill(1), Layout/pane("all"))]);
+        Layout/rows([
+            (Layout/length(0), Layout/pane("gone")),
+            (Layout/fill(1), Layout/pane("all"))]);
     Test/equal(render(Layout/draw(l, 3, 2, by_name)), "all/   ");

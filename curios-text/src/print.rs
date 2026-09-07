@@ -145,16 +145,51 @@ fn filled(open: &'static str, items: Vec<String>, close: &'static str) -> Printe
     flat([pure(open), indent(fill(entries)), pure(close)])
 }
 
-/// The one shape every call takes: flat when it fits, otherwise the head on its own line and each argument on its own, with the closing bracket *riding* the last one.
+/// Whether a term prints as one indivisible piece — a name, a numeral, a character, a one-line string, or a projection off one — so that a run of them has no break of its own.
+fn is_atom(term: &Term) -> bool {
+    match term.as_subterm() {
+        Subterm::Name(_)
+        | Subterm::NumLit(_)
+        | Subterm::Syn(Syn::Char(_))
+        | Subterm::Intrinsic(Intrinsic::Flt(_)) => true,
+        Subterm::Syn(Syn::Str(literal)) => !literal.block,
+        Subterm::Proj(Proj { head, .. }) => is_atom(head),
+        _ => false,
+    }
+}
+
+/// Whether a term carries a break of its own that a call can hand its layout to — a list, a packed literal or a tuple of two or more fields, whose group breaks inside the brackets, or a lambda, whose body rides its arrow and breaks below it: see [`riding_call`].
+fn carries_its_own_break(term: &Term) -> bool {
+    match term.as_subterm() {
+        Subterm::Intrinsic(Intrinsic::List(entries)) => !entries.is_empty(),
+        Subterm::Intrinsic(Intrinsic::Bin(_, segments)) => !segments.is_empty(),
+        Subterm::Tuple(Tuple { fields }) => fields.len() >= 2,
+        Subterm::Func(_) => true,
+        _ => false,
+    }
+}
+
+/// The one shape every call takes: flat when it fits, otherwise the head on its own line and each argument on its own, with the closing bracket *riding* the last one — except that a call whose last argument carries a break of its own, with nothing but atoms before it, hands its break to that argument: `Str/flatten([` on the head's line, the elements one level in, and `])` riding the last; `List/map(names, (name) =>` on the head's line and the body one level in below it.
 ///
-/// One shape regardless of what the last argument is. A call whose trailing lambda hung on the head line read well in isolation, but it made the layout depend on the *kind* of the final argument, and a leading argument that then broke — a lambda too wide for the line, a `let` in a nested call — stranded the block after its own closing bracket. Reading a call should not require knowing which of two layouts it got.
+/// The hug is bounded by what the leading arguments can do. An unbounded trailing-lambda hug was tried and removed: it made the layout depend on the *kind* of the final argument while a leading argument that then broke — a lambda too wide for the line, a `let` in a nested call — stranded the block after its own closing bracket. Atoms cannot break, so a hugged argument's opener is always on the head's line, and that argument's own group is the only decision the call makes; a call led by anything else keeps the one shape.
 ///
 /// It is `listed` minus two things: no trailing comma, and no break before the closer. The last argument already ends the call, and saying so with `,` and a lone `)` spends two lines on punctuation.
 fn riding_call(head: Term, arguments: Vec<Argument>) -> Printer {
+    let hugs = arguments.split_last().is_some_and(|(last, leading)| {
+        carries_its_own_break(&last.term) && leading.iter().all(|argument| is_atom(&argument.term))
+    });
     let items = arguments
         .into_iter()
         .map(|argument| flat([print_plicity(argument.plicity), print_term(argument.term)]))
         .collect::<Vec<_>>();
+    if hugs {
+        return flat([
+            print_suffix_head(head),
+            pure("("),
+            sep_flat(items, || pure(", ")),
+            pure(")"),
+        ]);
+    }
     flat([
         print_suffix_head(head),
         group(flat([

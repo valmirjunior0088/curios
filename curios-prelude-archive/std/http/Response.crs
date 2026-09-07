@@ -146,19 +146,18 @@ let render_header((name, value): {Str, Str}) -> Str =
 pub let render(r: Response) -> Bytes =
     x[
         ..Str/to_bytes(
-            Str/flatten(
-                [
-                    r.status.version,
-                    " ",
-                    Nat/to_str(r.status.code),
-                    " ",
-                    r.status.reason,
-                    "\r\n",
-                    "Content-Length: ",
-                    Nat/to_str(Bytes/len(r.body)),
-                    "\r\n",
-                    Str/flatten(List/map(r.headers, render_header)),
-                    "\r\n"])),
+            Str/flatten([
+                r.status.version,
+                " ",
+                Nat/to_str(r.status.code),
+                " ",
+                r.status.reason,
+                "\r\n",
+                "Content-Length: ",
+                Nat/to_str(Bytes/len(r.body)),
+                "\r\n",
+                Str/flatten(List/map(r.headers, render_header)),
+                "\r\n"])),
         ..r.body];
 
 -- | The value of the first header named `name`, compared without case, or `none`.

@@ -24,10 +24,8 @@ pub let bind(
     f: (A) -> Try(M, E, B),
 ) -> Try(M, E, B) =
     Try {
-        Monad/bind(
-            m.0,
-            (r: Result(E, A)) =>
-                match r | success(a) => f(a).0 | failure(e) => Monad/pure(Result/failure(e)) end),
+        Monad/bind(m.0, (r: Result(E, A)) =>
+            match r | success(a) => f(a).0 | failure(e) => Monad/pure(Result/failure(e)) end),
     };
 
 -- | An `M(Result(E, A))` as a `Try`.
@@ -48,10 +46,8 @@ pub let rescue(
     handler: (E) -> Try(M, E, A),
 ) -> Try(M, E, A) =
     Try {
-        Monad/bind(
-            m.0,
-            (r: Result(E, A)) =>
-                match r | success(_) => Monad/pure(r) | failure(e) => handler(e).0 end),
+        Monad/bind(m.0, (r: Result(E, A)) =>
+            match r | success(_) => Monad/pure(r) | failure(e) => handler(e).0 end),
     };
 
 -- | `f` on the error of a failure.

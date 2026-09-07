@@ -24,12 +24,11 @@ test nat_powers_divisors_logarithms_and_roots_compute() =
         [1024, 1, 0, 6, 5, 5, 0, 12, 0, 0, 10, 9, 0, 0, 3, 4, 1000]);
 
 test parity_and_the_int_extrema_and_sign() =
-    Test/all(
-        [
-            Test/check(Nat/is_even(0)),
-            Test/check(Bool/not(Nat/is_even(7))),
-            Test/equal([Int/min(-3, +2), Int/max(-3, +2)], [-3, +2]),
-            Test/equal([Int/sign(-9), Int/sign(+0), Int/sign(+4)], [-1, +0, +1])]);
+    Test/all([
+        Test/check(Nat/is_even(0)),
+        Test/check(Bool/not(Nat/is_even(7))),
+        Test/equal([Int/min(-3, +2), Int/max(-3, +2)], [-3, +2]),
+        Test/equal([Int/sign(-9), Int/sign(+0), Int/sign(+4)], [-1, +0, +1])]);
 
 -- `Flt/to_nat` and `Flt/to_int` are the one bounded-looking pair in the prelude that states no precondition, because `curios-core` folds no `Flt` operation and a decided bound over one could never reduce — so the partiality is answered by a `try_` form, and the raw operations keep trapping.
 --
@@ -37,13 +36,12 @@ test parity_and_the_int_extrema_and_sign() =
 --
 -- `-0.0` is the case that pins which equality this follows. IEEE says `-0.0 >= +0.0`, so it converts to `0` rather than being rejected as negative — correct, since `i32.trunc_f32_u` does not trap on it — even though `Flt`'s own identity is bitwise and holds the two zeros apart.
 test narrowings_answer_their_partiality_with_an_option() =
-    Test/all(
-        [
-            Test/equal(Flt/try_to_nat(+1.5), Option/some(1)),
-            Test/equal(Flt/try_to_nat(-1.5), Option/none()),
-            Test/equal(Flt/try_to_nat(-0.0), Option/some(0)),
-            Test/equal(Flt/try_to_nat(Flt/pos_inf), Option/none()),
-            Test/equal(Flt/try_to_nat(Flt/nan), Option/none()),
-            Test/equal(Flt/try_to_int(-1.5), Option/some(-1)),
-            Test/equal(Flt/try_to_int(Flt/neg_inf), Option/none()),
-            Test/equal(Flt/try_to_int(Flt/nan), Option/none())]);
+    Test/all([
+        Test/equal(Flt/try_to_nat(+1.5), Option/some(1)),
+        Test/equal(Flt/try_to_nat(-1.5), Option/none()),
+        Test/equal(Flt/try_to_nat(-0.0), Option/some(0)),
+        Test/equal(Flt/try_to_nat(Flt/pos_inf), Option/none()),
+        Test/equal(Flt/try_to_nat(Flt/nan), Option/none()),
+        Test/equal(Flt/try_to_int(-1.5), Option/some(-1)),
+        Test/equal(Flt/try_to_int(Flt/neg_inf), Option/none()),
+        Test/equal(Flt/try_to_int(Flt/nan), Option/none())]);

@@ -72,18 +72,13 @@ pub let decode(source: Str) -> Result(Error, Map(Toml)) =
     | failure(e) => Result/failure(Error/syntax(e))
     | success(parsed) =>
         let start: Result(Error, Build) = Result/success(build_empty);
-        match List/fold(
-            parsed,
-            start,
-            (s, acc) =>
-                Result/bind(
-                    acc,
-                    (b) =>
-                        match s
-                        | assign(path, v) => apply_assign(b, path, v)
-                        | table_header(path) => apply_header(b, path)
-                        | array_header(path) => apply_aot(b, path)
-                        end))
+        match List/fold(parsed, start, (s, acc) =>
+            Result/bind(acc, (b) =>
+                match s
+                | assign(path, v) => apply_assign(b, path, v)
+                | table_header(path) => apply_header(b, path)
+                | array_header(path) => apply_aot(b, path)
+                end))
         | success(b) => Result/success(b.root)
         | failure(msg) => Result/failure(msg)
         end

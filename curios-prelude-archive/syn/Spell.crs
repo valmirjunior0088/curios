@@ -11,13 +11,11 @@ pub let call(head: Str, args: List(Str)) -> Str =
 
 pub let record(head: Str, fields: List({Str, Str})) -> Str =
     let entries =
-        List/map(
-            fields,
-            ((label, value)) =>
-                match Str/len(label)
-                | 0 => value
-                | _ => Str/concat(label, Str/concat(" = ", value))
-                end);
+        List/map(fields, ((label, value)) =>
+            match Str/len(label)
+            | 0 => value
+            | _ => Str/concat(label, Str/concat(" = ", value))
+            end);
     match entries
     | [] => Str/concat(head, " {}")
     | _ => Str/concat(head, Str/concat(" { ", Str/concat(Str/join(", ", entries), " }")))

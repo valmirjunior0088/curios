@@ -4,71 +4,65 @@ use /std/{Nat, Str, Bool, List, Option, Eq, Test};
 test predicates_and_searches_answer_over_the_elements() =
     let l = [3, 1, 4, 1, 5];
     let empty: List(Nat) = [];
-    Test/all(
-        [
-            Test/check(List/any(l, (x: Nat) => x > 4)),
-            Test/check(List/all(l, (x: Nat) => x > 0)),
-            Test/check(Bool/not(List/all(l, (x: Nat) => x > 1))),
-            Test/check(List/contains(l, 4)),
-            Test/check(Bool/not(List/contains(l, 2))),
-            Test/equal(List/index_of(l, 1), Option/some(1)),
-            Test/equal(List/index_of(l, 9), Option/none()),
-            Test/equal(List/find_index(l, (x: Nat) => x > 3), Option/some(2)),
-            Test/equal(List/find(l, (x: Nat) => x > 3), Option/some(4)),
-            Test/equal(List/last(l), Option/some(5)),
-            Test/equal(List/last(empty), Option/none())]);
+    Test/all([
+        Test/check(List/any(l, (x: Nat) => x > 4)),
+        Test/check(List/all(l, (x: Nat) => x > 0)),
+        Test/check(Bool/not(List/all(l, (x: Nat) => x > 1))),
+        Test/check(List/contains(l, 4)),
+        Test/check(Bool/not(List/contains(l, 2))),
+        Test/equal(List/index_of(l, 1), Option/some(1)),
+        Test/equal(List/index_of(l, 9), Option/none()),
+        Test/equal(List/find_index(l, (x: Nat) => x > 3), Option/some(2)),
+        Test/equal(List/find(l, (x: Nat) => x > 3), Option/some(4)),
+        Test/equal(List/last(l), Option/some(5)),
+        Test/equal(List/last(empty), Option/none())]);
 
 test builders_reshape_a_list() =
     let l = [3, 1, 4, 1, 5];
     let (evens, odds) = List/partition(l, (x: Nat) => Nat/is_even(x));
     let (xs, ys) = List/unzip([(1, "a"), (2, "b")]);
-    Test/all(
-        [
-            Test/equal(List/reverse(l), [5, 1, 4, 1, 3]),
-            Test/equal(List/filter(l, (x: Nat) => x > 2), [3, 4, 5]),
-            Test/equal(
-                List/filter_map(
-                    l,
-                    (x: Nat) =>
-                        match x > 2 | true => Option/some(x * 10) | false => Option/none() end),
-                [30, 40, 50]),
-            Test/equal(List/take(l, 2), [3, 1]),
-            Test/equal(List/take(l, 9), [3, 1, 4, 1, 5]),
-            Test/equal(List/take_while(l, (x: Nat) => x < 4), [3, 1]),
-            Test/equal(List/drop_while(l, (x: Nat) => x < 4), [4, 1, 5]),
-            Test/equal(evens, [4]),
-            Test/equal(odds, [3, 1, 1, 5]),
-            Test/equal(List/zip(l, ["a", "b"]), [(3, "a"), (1, "b")]),
-            Test/equal(xs, [1, 2]),
-            Test/equal(ys, ["a", "b"]),
-            Test/equal(List/range(2, 5), [2, 3, 4]),
-            Test/equal(List/range(5, 2), []),
-            Test/equal(List/replicate(3, 7), [7, 7, 7]),
-            Test/equal(List/concat_map([1, 2], (x: Nat) => [x, x]), [1, 1, 2, 2]),
-            Test/equal(List/intersperse([1, 2, 3], 0), [1, 0, 2, 0, 3])]);
+    Test/all([
+        Test/equal(List/reverse(l), [5, 1, 4, 1, 3]),
+        Test/equal(List/filter(l, (x: Nat) => x > 2), [3, 4, 5]),
+        Test/equal(
+            List/filter_map(l, (x: Nat) =>
+                match x > 2 | true => Option/some(x * 10) | false => Option/none() end),
+            [30, 40, 50]),
+        Test/equal(List/take(l, 2), [3, 1]),
+        Test/equal(List/take(l, 9), [3, 1, 4, 1, 5]),
+        Test/equal(List/take_while(l, (x: Nat) => x < 4), [3, 1]),
+        Test/equal(List/drop_while(l, (x: Nat) => x < 4), [4, 1, 5]),
+        Test/equal(evens, [4]),
+        Test/equal(odds, [3, 1, 1, 5]),
+        Test/equal(List/zip(l, ["a", "b"]), [(3, "a"), (1, "b")]),
+        Test/equal(xs, [1, 2]),
+        Test/equal(ys, ["a", "b"]),
+        Test/equal(List/range(2, 5), [2, 3, 4]),
+        Test/equal(List/range(5, 2), []),
+        Test/equal(List/replicate(3, 7), [7, 7, 7]),
+        Test/equal(List/concat_map([1, 2], (x: Nat) => [x, x]), [1, 1, 2, 2]),
+        Test/equal(List/intersperse([1, 2, 3], 0), [1, 0, 2, 0, 3])]);
 
 -- `traverse` collects under any `Monad`: over `Option` a single `none` sinks the whole list.
 test traverse_collects_under_a_monad() =
     let halve(x: Nat) -> Option(Nat) =
         match Nat/is_even(x) | true => Option/some(x / 2) | false => Option/none() end;
-    Test/all(
-        [
-            Test/equal(List/traverse([2, 4, 6], halve), Option/some([1, 2, 3])),
-            Test/equal(List/traverse([2, 3, 6], halve), Option/none())]);
+    Test/all([
+        Test/equal(List/traverse([2, 4, 6], halve), Option/some([1, 2, 3])),
+        Test/equal(List/traverse([2, 3, 6], halve), Option/none())]);
 
 -- The sort is the `; ih` right fold inserting before equals, which is what makes it stable: the two `1`s keep their order, and `sort_by` under a reversed comparator reverses the distinct keys while equal keys still keep theirs.
 test sort_is_stable_and_sort_by_takes_a_comparator() =
     let pairs = [(2, "b"), (1, "x"), (2, "a"), (1, "y")];
-    Test/all(
-        [
-            Test/equal(List/sort([3, 1, 2]), [1, 2, 3]),
-            Test/equal(List/sort(["b", "a", "c"]), ["a", "b", "c"]),
-            Test/equal(
-                List/sort_by(pairs, (p: {Nat, Str}, q: {Nat, Str}) => Nat/cmp(p.0, q.0)),
-                [(1, "x"), (1, "y"), (2, "b"), (2, "a")]),
-            Test/equal(
-                List/sort_by(pairs, (p: {Nat, Str}, q: {Nat, Str}) => Nat/cmp(q.0, p.0)),
-                [(2, "b"), (2, "a"), (1, "x"), (1, "y")])]);
+    Test/all([
+        Test/equal(List/sort([3, 1, 2]), [1, 2, 3]),
+        Test/equal(List/sort(["b", "a", "c"]), ["a", "b", "c"]),
+        Test/equal(
+            List/sort_by(pairs, (p: {Nat, Str}, q: {Nat, Str}) => Nat/cmp(p.0, q.0)),
+            [(1, "x"), (1, "y"), (2, "b"), (2, "a")]),
+        Test/equal(
+            List/sort_by(pairs, (p: {Nat, Str}, q: {Nat, Str}) => Nat/cmp(q.0, p.0)),
+            [(2, "b"), (2, "a"), (1, "x"), (1, "y")])]);
 
 -- Every predicate and search is a case split on `[head, ..tail]` with a call on the tail, which the totality analysis grades as a decrease — so `find` and `any` compute in a type, and the kernel settles both claims.
 test a_structural_find_computes_in_a_type() =

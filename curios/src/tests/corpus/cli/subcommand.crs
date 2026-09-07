@@ -41,32 +41,28 @@ let chose(argv: List(Str)) -> Str =
 
 -- Either child, chosen by the first token, with everything after it left for that child to parse.
 test the_first_token_chooses_the_subcommand_and_the_rest_is_its_line() =
-    Test/all(
-        [
-            Test/equal(chose(["add", "curios"]), "add(curios)"),
-            Test/equal(chose(["remove", "curios", "--force"]), "remove(curios,--force)")]);
+    Test/all([
+        Test/equal(chose(["add", "curios"]), "add(curios)"),
+        Test/equal(chose(["remove", "curios", "--force"]), "remove(curios,--force)")]);
 
 -- A parent answers help and its own version before the first token is read as a name, so `--help` is not an unrecognized subcommand.
 test a_parent_answers_help_before_reading_a_name() =
-    Test/all(
-        [
-            Test/equal(chose(["--help"]), "help"),
-            Test/equal(chose(["--version"]), "version"),
-            Test/equal(chose(["add", "--help"]), "help")]);
+    Test/all([
+        Test/equal(chose(["--help"]), "help"),
+        Test/equal(chose(["--version"]), "version"),
+        Test/equal(chose(["add", "--help"]), "help")]);
 
 -- Neither a name that is not there nor no name at all: both refuse, and both list what there is.
 test an_unknown_or_absent_subcommand_lists_the_ones_there_are() =
-    Test/all(
-        [
-            Test/check(Str/contains(chose(["push"]), "unrecognized subcommand 'push'")),
-            Test/check(Str/contains(chose(["push"]), "available: add, remove")),
-            Test/check(Str/contains(chose([]), "a subcommand is required")),
-            Test/check(Str/contains(chose([]), "available: add, remove"))]);
+    Test/all([
+        Test/check(Str/contains(chose(["push"]), "unrecognized subcommand 'push'")),
+        Test/check(Str/contains(chose(["push"]), "available: add, remove")),
+        Test/check(Str/contains(chose([]), "a subcommand is required")),
+        Test/check(Str/contains(chose([]), "available: add, remove"))]);
 
 -- A parent's usage names `<COMMAND>` rather than options it does not have, and its help grows the section its children fill.
 test a_parents_help_lists_its_children() =
-    Test/all(
-        [
-            Test/equal(Cli/usage(app), "Usage: deps <COMMAND>"),
-            Test/check(Str/contains(Cli/help(app), "Commands:\n  add     Add a dependency\n")),
-            Test/check(Str/contains(Cli/help(app), "  remove  Remove a dependency\n"))]);
+    Test/all([
+        Test/equal(Cli/usage(app), "Usage: deps <COMMAND>"),
+        Test/check(Str/contains(Cli/help(app), "Commands:\n  add     Add a dependency\n")),
+        Test/check(Str/contains(Cli/help(app), "  remove  Remove a dependency\n"))]);

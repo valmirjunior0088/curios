@@ -8,11 +8,9 @@ let render(@w: Nat, @h: Nat, f: Frame(w, h)) -> Str =
 -- `beside` joins at `w1 + w2` and `above` at `h1 + h2`, and both sizes are the type's rather than a runtime count, so nothing here measures the result to check it.
 test beside_and_above_join_at_the_sum_of_their_sizes() =
     Test/equal(
-        Str/join(
-            " ",
-            [
-                render(Frame/beside(Frame/blank(2, 2), Frame/blank(1, 2))),
-                render(Frame/above(Frame/blank(2, 1), Frame/blank(2, 2)))]),
+        Str/join(" ", [
+            render(Frame/beside(Frame/blank(2, 2), Frame/blank(1, 2))),
+            render(Frame/above(Frame/blank(2, 1), Frame/blank(2, 2)))]),
         "   /      /  /  ");
 
 -- The one coercion, in both directions at once: a frame wider and shorter than the target is cropped on the right and padded below.
@@ -32,12 +30,10 @@ test overlay_clips_a_patch_at_the_edge() =
     let base = Frame/of_lines(Style/plain, ["....", "....", "...."], 4, 3);
     let patch = Frame/of_lines(Style/plain, ["XX", "XX"], 2, 2);
     Test/equal(
-        Str/join(
-            " ",
-            [
-                render(Frame/overlay(base, patch, 1, 1)),
-                render(Frame/overlay(base, patch, 3, 2)),
-                render(Frame/overlay(base, patch, 9, 9))]),
+        Str/join(" ", [
+            render(Frame/overlay(base, patch, 1, 1)),
+            render(Frame/overlay(base, patch, 3, 2)),
+            render(Frame/overlay(base, patch, 9, 9))]),
         "..../.XX./.XX. ..../..../...X ..../..../....");
 
 -- Reading one tile back, under the bounds the frame's own type decides.
