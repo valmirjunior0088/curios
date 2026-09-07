@@ -1,10 +1,12 @@
 use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io};
 use /std/time/{Duration};
 
-mod Waker;
+-- | The handle a parked fiber is resumed through: a primitive registers one while it parks and wakes it when its own event arrives.
+pub mod Waker;
 pub use Waker/{let Waker};
 
-mod Future;
+-- | A value fulfilled once, which a fiber parks on until it is. What `await` waits on, and what a primitive of its own hands out.
+pub mod Future;
 pub use Future/{let Future};
 
 -- | A flag one fiber raises and another parks on: the one park a program takes that waits on no handle and no timer.
@@ -86,17 +88,18 @@ pub let lift(@A: Type, action: Io(A)) -> Async(A) =
 let suspend(p: Pause) -> Async({}) =
     Async { Io/pure(Step/step(p, Io/pure(Step/done(())))) };
 
-let park(waits: List(Wait)) -> Async({}) =
+-- | Park until one of `waits` fires, whichever is first.
+-- |
+-- | Readiness is advisory: an operation retried after a park may still answer `would_block`, so a caller parks in a loop rather than assuming the wait was truthful.
+pub let park(waits: List(Wait)) -> Async({}) =
     suspend(Pause/park(waits));
-
-let wait(h: /sys/Handle, ev: Nat) -> Async({}) =
-    park([Wait/readable(h, ev)]);
 
 -- | Park for `d`.
 pub let sleep(d: Duration) -> Async({}) =
     park([Wait/elapsed(d)]);
 
-let on_waker(register: (Waker) -> Io({})) -> Async({}) =
+-- | Park until the `Waker` handed to `register` is woken: how a primitive that waits on neither a handle nor a timer joins the scheduler.
+pub let on_waker(register: (Waker) -> Io({})) -> Async({}) =
     park([Wait/woken(register)]);
 
 -- | Park once, letting every other runnable fiber take a turn.

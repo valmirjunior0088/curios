@@ -56,7 +56,7 @@ let settle(h: /sys/Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
     match pending
     | false => Try/pure(())
     | true =>
-        let _ = Async/raw/wait(h, /sys/event/write)!;
+        let _ = Async/park([Async/Wait/readable(h, /sys/event/write)])!;
         let status = /sys/socket/finish_connect(h)!;
         choose | status == /sys/status/would_block => settle(h, true) | _ => ok(status) end
     end;

@@ -1,11 +1,14 @@
 use /std/{Io};
 
+-- | What resuming one parked fiber takes.
 pub struct Waker: Type {
     Io({}),
 }
 
+-- | The waker that performs `resume`.
 pub let new(resume: Io({})) -> Waker =
     Waker { resume };
 
+-- | Resume the fiber `w` was minted for.
 pub let wake(w: Waker) -> Io({}) =
     w.0;
