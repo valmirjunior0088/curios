@@ -12,7 +12,7 @@
 //!
 //! # How the machine differs from the strategy it replaces, and why each difference is safe
 //!
-//! **Substituted terms are evaluated first.** Arguments, `let` values, and `Induct` payload binds are taken to weak-head values before substitution, where the hosts substitute them unreduced. On a closed term the result is the same by confluence; what changes is cost, which is the point. Two consequences are handled rather than hoped away: a substituend whose evaluation *errors* falls back to its unreduced spelling — the hosts defer such an error until the position is demanded, and the fallback preserves exactly that — and a substituend whose evaluation exhausts the budget propagates, because spend is never refunded. An induction hypothesis is the deliberate exception: it is bound unreduced exactly as the hosts bind it, because evaluating one eagerly would run the whole tail fold whether or not the arm uses it.
+//! **Substituted terms are evaluated first.** Arguments, `let` values, and `Induct` payload binds are taken to weak-head values before substitution, where the hosts substitute them unreduced. On a closed term the result is the same by confluence; what changes is cost, which is the point. Two consequences are handled rather than hoped away: a substituend whose evaluation *errors* falls back to its unreduced spelling — the hosts defer such an error until the position is demanded, and the fallback preserves exactly that — and a substituend whose evaluation exhausts the budget propagates, because spend is never refunded. An induction hypothesis is the deliberate exception: it is bound unreduced exactly as the hosts bind it, because evaluating one eagerly would run the whole tail fold whether or not the arm uses it. Once an arm does demand it, its value is recorded in the run-scoped memo under the hypothesis term, so an arm projecting a tuple-valued hypothesis several times runs the tail fold once rather than once per projection.
 //!
 //! **Eta is contracted, with the hosts' own probe.** `(x) => f(x)` steps to `f` exactly as under the strategies, through the fresh binder identities [`ClosedHost::fresh_binder`] mints. This was learned rather than assumed: a first version skipped the probe on the theory that conversion decides eta anyway, and the elaborator's witness keying — which reads rigid heads off weak-head forms — stopped finding `Async` under `(A) => Async(A)` and failed the prelude at `/std/File`.
 //!
@@ -145,7 +145,7 @@ enum Frame {
         index: usize,
         demand: Demand,
     },
-    /// Record the value about to be produced under `key` in the run-scoped memo — pushed under a forced application or member selection, so the second occurrence of the same closed call is one probe. This is the machine's spelling of the amortization the hosts get from their own memos, which the machine's internal steps bypass.
+    /// Record the value about to be produced under `key` in the run-scoped memo — pushed under a forced application, a member selection or a match, so the second occurrence of the same closed call — or the second projection of the same induction hypothesis — is one probe. This is the machine's spelling of the amortization the hosts get from their own memos, which the machine's internal steps bypass.
     Memo {
         key: Term,
     },
@@ -329,11 +329,18 @@ impl Machine {
                 Ok(Step::Eval(head, Demand::Whnf))
             }
 
-            Subterm::Match(Match {
-                head,
-                motive,
-                cases,
-            }) => {
+            mtc @ Subterm::Match(_) => {
+                // The match is remembered whole, for the induction hypothesis above all: `dispatch` binds it unreduced, as this very term, and an arm that projects a tuple-valued hypothesis three times demands the same term three times. Recorded under the key on the way out, the first demand runs the tail fold and the rest are probes; without the record each projection ran the fold again, and a fold whose arm projected its hypothesis `k` times cost `k` to the power of its length.
+                let key = Term::from(mtc);
+                let Subterm::Match(Match {
+                    head,
+                    motive,
+                    cases,
+                }) = Term::unwrap_or_clone(key.clone())
+                else {
+                    unreachable!("rebuilt from the same value")
+                };
+                self.push(host, Frame::Memo { key })?;
                 self.push(
                     host,
                     Frame::MatchK {
