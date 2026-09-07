@@ -1,17 +1,17 @@
 use /std/{List, Option, Cell, Io};
 use /std/Async/{Waker};
 
-induct State(A: Type): Type
+induct Phase(A: Type): Type
 | pending(List(Waker))
 | ready(A)
 end
 
 pub struct Future(A: Type): Type {
-    Cell(State(A)),
+    Cell(Phase(A)),
 }
 
 pub let new(@A: Type) -> Io(Future(A)) =
-    let cell = Cell/new(State/pending([]))!;
+    let cell = Cell/new(Phase/pending([]))!;
     Io/pure(Future { cell });
 
 pub let poll(@A: Type, f: Future(A)) -> Io(Option(A)) =
@@ -30,7 +30,7 @@ pub let register(@A: Type, f: Future(A), w: Waker) -> Io({}) =
     let state = Cell/get(f.0)!;
     match state
     | ready(_) => Waker/wake(w)
-    | pending(ws) => Cell/set(f.0, State/pending([w, ..ws]))
+    | pending(ws) => Cell/set(f.0, Phase/pending([w, ..ws]))
     end;
 
 pub let fulfill(@A: Type, f: Future(A), a: A) -> Io({}) =
@@ -38,6 +38,6 @@ pub let fulfill(@A: Type, f: Future(A), a: A) -> Io({}) =
     match state
     | ready(_) => Io/pure(())
     | pending(ws) =>
-        let _ = Cell/set(f.0, State/ready(a))!;
+        let _ = Cell/set(f.0, Phase/ready(a))!;
         wake_all(ws)
     end;

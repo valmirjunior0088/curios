@@ -49,7 +49,7 @@ induct Seg: Type
 | at(name: Str, index: Nat)
 end
 
-induct State: Type
+induct Origin: Type
 | header()
 | implicit()
 | dotted()
@@ -59,7 +59,7 @@ end
 
 struct Build: Type {
     root: Map(Toml),
-    side: Map(State),
+    side: Map(Origin),
     scope: List(Seg),
 }
 

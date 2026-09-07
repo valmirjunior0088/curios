@@ -1,19 +1,19 @@
 use /std/{List, Option, Cell, Io, Async};
 use /std/Async/{Waker};
 
-induct State: Type
+induct Phase: Type
 | idle(List(Waker))
 | raised()
 end
 
 -- | A flag one fiber raises and another parks on.
 pub struct Signal: Type {
-    Cell(State),
+    Cell(Phase),
 }
 
 -- | A lowered flag.
 pub let new() -> Io(Signal) =
-    let cell = Cell/new(State/idle([]))!;
+    let cell = Cell/new(Phase/idle([]))!;
     Io/pure(Signal { cell });
 
 let wake_all(ws: List(Waker)) -> Io({}) =
@@ -30,19 +30,19 @@ pub let notify(s: Signal) -> Io({}) =
     match state
     | raised() => Io/pure(())
     | idle(ws) =>
-        let _ = Cell/set(s.0, State/raised())!;
+        let _ = Cell/set(s.0, Phase/raised())!;
         wake_all(ws)
     end;
 
 let listen(s: Signal, w: Waker) -> Io({}) =
     let now = Cell/get(s.0)!;
-    match now | raised() => Waker/wake(w) | idle(ws) => Cell/set(s.0, State/idle([w, ..ws])) end;
+    match now | raised() => Waker/wake(w) | idle(ws) => Cell/set(s.0, Phase/idle([w, ..ws])) end;
 
 let lower(s: Signal) -> Io(Option({})) =
     let state = Cell/get(s.0)!;
     match state
     | raised() =>
-        let _ = Cell/set(s.0, State/idle([]))!;
+        let _ = Cell/set(s.0, Phase/idle([]))!;
         Io/pure(Option/some(()))
     | idle(_) => Io/pure(Option/none())
     end;
