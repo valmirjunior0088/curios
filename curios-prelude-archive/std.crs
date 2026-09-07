@@ -58,7 +58,7 @@ pub use State/{let State};
 
 -- | A description of a computation that touches the host, never its result.
 -- |
--- | Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. `Error` is the failure every host operation reports and `Chunk` what one read answers with. Beside them are this process's own standard streams, read and written without a scheduler, and the terminal behind standard input: raw mode, its size, and the bracket a terminal session runs inside.
+-- | Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. `Error` is the failure every host operation reports and `Chunk` what one read answers with. Beside them are this process's own standard streams, read and written without a scheduler.
 pub mod Io;
 pub use Io/{let Io};
 
@@ -265,6 +265,10 @@ pub mod rand;
 
 -- | This process: its arguments, its environment, and its exit.
 pub mod proc;
+
+-- | The terminal a handle is attached to: raw mode, its size, and the bracket a terminal session runs inside.
+pub mod Tty;
+pub use Tty/{let Tty};
 
 -- | The filesystem beyond a file's contents: what is at a path, a directory's entries, and making, moving and removing things. Every operation is `Io`, and `Try` over it where it can fail.
 pub mod fs;

@@ -1,0 +1,55 @@
+use /std/{Nat, Bool, Str, Try, Async, Io, Equal, Show};
+
+-- | A terminal this process holds a handle on.
+pub struct Tty: Type {
+    /sys/Handle,
+}
+
+-- | The terminal behind standard input.
+pub let stdin: Tty =
+    Tty { /sys/Handle/stdin };
+
+-- | The terminal's size in cells.
+pub struct Size: pub Type {
+    cols: Nat,
+    rows: Nat,
+}
+
+satisfy Equal(Size);
+
+satisfy Show(Size) {
+    show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),
+}
+
+-- | Raw mode on `t`, or off.
+pub let raw(t: Tty, on: Bool) -> Try(Io, Io/Error, {}) =
+    let status = /sys/tty/raw(t.0, on)!;
+    match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+
+-- | The terminal's size now.
+pub let size(t: Tty) -> Try(Io, Io/Error, Size) =
+    let r = /sys/tty/size(t.0)!;
+    match Io/Error/of(r.status)
+    | some(e) => Try/raise(e)
+    | none() => Try/pure(Size { cols = r.cols, rows = r.rows })
+    end;
+
+let restore(t: Tty) -> Io({}) =
+    Io/bind(/sys/tty/raw(t.0, false), (_) => Io/pure(()));
+
+-- | Raw mode on `t` around `body`, restored whichever way the body ends.
+pub let with_raw(@A: Type, t: Tty, body: Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
+    let _ = raw(t, true)!;
+    let a =
+        Try/rescue(body, (e) =>
+            let _ = restore(t)!;
+            Try/raise(e))!;
+    let _ = restore(t)!;
+    Try/pure(a);
+
+-- | The same bracket inside a fiber, registered with the scheduler, so a cancelled task restores the mode.
+pub let with_raw_async(@A: Type, t: Tty, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
+    let _ = raw(t, true)!;
+    let outcome = Async/using(restore(t), Try/run(body))!;
+    let a = outcome!;
+    Try/pure(a);

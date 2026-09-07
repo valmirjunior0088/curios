@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Lift, Bytes, Byte, Nat, Bool, Str, Option, Try, Async, True, Equal, Show};
+use /std/{Monad, Lift, Bytes, Byte, Nat, Option, Async, True};
 
 -- | The failure every host operation reports.
 pub mod Error;
@@ -94,48 +94,3 @@ satisfy Async/Read(Input) {
 satisfy Async/Write(Output) {
     write(o, b) = Async/raw/write(o.0, b),
 }
-
--- | The terminal's size in cells.
-pub struct TtySize: pub Type {
-    cols: Nat,
-    rows: Nat,
-}
-
-satisfy Equal(TtySize);
-
-satisfy Show(TtySize) {
-    show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),
-}
-
--- | Raw mode on or off, on the terminal behind standard input.
-pub let tty_raw(on: Bool) -> Try(Io, Error, {}) =
-    let status = /sys/tty/raw(/sys/Handle/stdin, on)!;
-    match Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
-
--- | The terminal's size now.
-pub let tty_size: Try(Io, Error, TtySize) =
-    let r = /sys/tty/size(/sys/Handle/stdin)!;
-    match Error/of(r.status)
-    | some(e) => Try/raise(e)
-    | none() => Try/pure(TtySize { cols = r.cols, rows = r.rows })
-    end;
-
-let tty_restore: Io({}) =
-    Io/bind(/sys/tty/raw(/sys/Handle/stdin, false), (_) => Io/pure(()));
-
--- | Raw mode around `body`, restored whichever way the body ends.
-pub let with_raw_tty(@A: Type, body: Try(Io, Error, A)) -> Try(Io, Error, A) =
-    let _ = tty_raw(true)!;
-    let a =
-        Try/rescue(body, (e) =>
-            let _ = tty_restore!;
-            Try/raise(e))!;
-    let _ = tty_restore!;
-    Try/pure(a);
-
--- | The same bracket inside a fiber, registered with the scheduler, so a cancelled task restores the mode.
-pub let with_raw_tty_async(@A: Type, body: Try(Async, Error, A)) -> Try(Async, Error, A) =
-    let _ = tty_raw(true)!;
-    let outcome = Async/using(tty_restore, Try/run(body))!;
-    let a = outcome!;
-    Try/pure(a);

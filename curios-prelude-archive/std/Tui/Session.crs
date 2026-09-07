@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, List, Option, Cell, Io, Try, Async};
+use /std/{Nat, Bytes, List, Option, Cell, Io, Try, Async, Tty};
 use /std/time/{Duration};
 use /std/Tui/{Frame, Event, input, render, ansi};
 
@@ -10,9 +10,10 @@ struct Held: Type {
 
 -- | A terminal taken: what it remembers between draws and reads.
 pub struct Session: Type {
+    tty: Tty,
     rest: Cell(Bytes),
     previous: Cell(Option(Held)),
-    size: Cell(Io/TtySize),
+    size: Cell(Tty/Size),
 }
 
 let enter: Io({}) =
@@ -31,25 +32,27 @@ let leave: Io({}) =
 
 -- | The bracket: raw mode, the alternate screen, the hidden cursor, bracketed paste and the kitty keyboard flag, each undone in reverse whichever way `body` ends.
 pub let with(@A: Type, body: (Session) -> Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
-    Io/with_raw_tty_async(
-        let first = Io/tty_size!;
+    let t = Tty/stdin;
+    Tty/with_raw_async(
+        t,
+        let first = Tty/size(t)!;
         let rest: Cell(Bytes) = Cell/new(x[])!;
         let previous: Cell(Option(Held)) = Cell/new(Option/none())!;
-        let size: Cell(Io/TtySize) = Cell/new(first)!;
-        let s = Session { rest = rest, previous = previous, size = size };
+        let size: Cell(Tty/Size) = Cell/new(first)!;
+        let s = Session { tty = t, rest = rest, previous = previous, size = size };
         let _ = enter!;
         let outcome = Async/using(leave, Try/run(body(s)))!;
         let a = outcome!;
         Try/pure(a));
 
 -- | The terminal's size now.
-pub let size(s: Session) -> Try(Async, Io/Error, Io/TtySize) =
-    let now = Io/tty_size!;
+pub let size(s: Session) -> Try(Async, Io/Error, Tty/Size) =
+    let now = Tty/size(s.tty)!;
     let _ = Cell/set(s.size, now)!;
     Try/pure(now);
 
 -- | The size last read.
-pub let last_size(s: Session) -> Io(Io/TtySize) =
+pub let last_size(s: Session) -> Io(Tty/Size) =
     Cell/get(s.size);
 
 -- | `frame` written as the difference from the previous one where the size is unchanged, and whole where it is not.
