@@ -29,14 +29,20 @@ let of_mask(mask: Nat) -> Readiness =
         hung_up = flagged(mask, /sys/event/hup),
     };
 
+let to_masks(interests: List(Interest)) -> List(Nat) =
+    match interests | [] => [] | [i, ..rest] => [to_mask(i), ..to_masks(rest)] end;
+
+let of_masks(masks: List(Nat)) -> List(Readiness) =
+    match masks | [] => [] | [m, ..rest] => [of_mask(m), ..of_masks(rest)] end;
+
 -- | Wait until a handle is ready for the interest beside it, or until `timeout` milliseconds pass; a negative timeout waits forever and zero answers at once.
 pub let poll(
     handles: List(Handle),
     interests: List(Interest),
     timeout: Int,
 ) -> Io(List(Readiness)) =
-    let masks = /sys/Handle/poll(handles, List/map(interests, to_mask), timeout)!;
-    Io/pure(List/map(masks, of_mask));
+    let masks = /sys/Handle/poll(handles, to_masks(interests), timeout)!;
+    Io/pure(of_masks(masks));
 
 -- | Up to `n` bytes, waited for on this program's own behalf: a host that would block is polled until it would not.
 let read_waiting(h: Handle, n: Nat) -> Io(Io/Chunk) =
