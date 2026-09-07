@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Parse, Json, Equal, Spell};
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Parse, Json, Html, Equal, Spell};
 use /std/http/{Url};
 
 -- | The reply's status line.
@@ -208,6 +208,10 @@ pub let of_text(code: Nat, s: Str) -> Response =
 -- | JSON.
 pub let of_json(code: Nat, j: Json) -> Response =
     of(code, "application/json", Str/to_bytes(Json/encode(j)));
+
+-- | HTML, rendered as `Html/render` writes it.
+pub let of_html(code: Nat, h: Html) -> Response =
+    of(code, "text/html; charset=utf-8", Str/to_bytes(Html/render(h)));
 
 -- | A `303 See Other` to `url`.
 pub let redirect(url: Url) -> Response =

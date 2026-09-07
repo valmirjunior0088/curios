@@ -246,7 +246,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Purity through an opaque `Io` monad (three intrinsics: `Io(T)`, `pure`, `bind`)
   - [x] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness)
   - [x] Stage 2: the flip — `/std` retyped and the certifier's purity analysis deleted
-- [x] HTTP client (`std/http`, built on `tcp` + `Async`)
+- [x] HTTP client and server (`std/http`, built on `tcp` + `Async` — a literal URL refused where it does not read, a reply written in the order the protocol states with each step typed by its stage, a server accepting requests one by one or answering every connection through a handler)
+- [x] HTML as a tree (`/std/Html` — one type for an element, text, a comment or a run of trees, rendered escaped and read back as a browser reads it)
 - [x] Host-service modules (`std/time`, `std/proc`, `std/rand`, `std/fs`, `std/tty`)
 - [x] Command-line interfaces (`/std/Cli`) — a specification is a list of `Arg` values, the record a line parses into is `Values(spec)` computed from it, `get(v, name)` is typed by a type-level lookup and refuses a name the specification does not contain, `WellFormed` is decided by reduction, and `main` reads the process arguments against all of it: `parse` and `select` for the line, `help` and `usage` for the screens, `report` and exit 2 for a refusal
 - [x] A terminal program draws a screen and reads keys (`/std/Tui`) — a screen is a `Frame(w, h)` whose joins the type checks, a layout is a tree of named panes whose sizes mirror it, keys and pastes are decoded from bytes and frames are diffed into bytes by pure functions, `Session` brackets the terminal, and a program is a `Tui` record `run` drives against one queue and one `Async/Signal` or `drive` folds with no terminal; five widgets — a border, a paragraph, a listing, an input and a viewport — and the `\u{…}` escape that spelling a combining mark asked for

@@ -1,0 +1,160 @@
+use /std/{Str, Char, Bool, Nat, List, Option, Equal, Spell, Show};
+
+-- | An HTML tree: an element with its attributes and children, written `<name></name>`; one written `<name/>`, as the void elements are; text; a comment; or a run of trees standing where one does. Text is written escaped, so no value that lands in it can be read as markup. The shape of the tree is the author's, as it is in the browser: no element name is consulted, so whether `void` suits the element is theirs to know.
+pub induct Html: pub Type
+| element(Str, List(Attr), List(Html))
+| void(Str, List(Attr))
+| text(Str)
+| comment(Str)
+| fragment(List(Html))
+end
+
+pub use Html/*;
+
+-- | An attribute: a name with a value, or a name alone.
+pub induct Attr: pub Type
+| attr(Str, Str)
+| flag(Str)
+end
+
+pub use Attr/*;
+
+satisfy Equal(Attr);
+
+satisfy Spell(Attr);
+
+satisfy Equal(Html);
+
+satisfy Spell(Html);
+
+-- | A page: `html` in `lang`, a head stating the charset and `title` before `head`'s own trees, and `body`.
+pub let document(lang: Str, title: Str, head: List(Html), body: List(Html)) -> Html =
+    element(
+        "html",
+        [Attr/attr("lang", lang)],
+        [
+            element(
+                "head",
+                [],
+                [
+                    void("meta", [Attr/attr("charset", "utf-8")]),
+                    element("title", [], [text(title)]),
+                    ..head]),
+            element("body", [], body)]);
+
+let escape_char(c: Char) -> Str =
+    let n = Char/to_nat(c);
+    choose
+    | n == '&' => "&amp;"
+    | n == '<' => "&lt;"
+    | n == '>' => "&gt;"
+    | n == '"' => "&quot;"
+    | n == '\'' => "&#39;"
+    | _ => Str/of_char(c)
+    end;
+
+-- | `s` with the five characters markup reads — `&`, `<`, `>`, `"` and `'` — written as references.
+pub let escape(s: Str) -> Str =
+    Str/flatten(List/map(Str/to_list(s), escape_char));
+
+-- | Whether `name` is an element whose content the browser reads as text, references undecoded: `script` and `style`.
+pub let is_raw_text(name: Str) -> Bool =
+    Str/eql_ascii_ci(name, "script") || Str/eql_ascii_ci(name, "style");
+
+let attr_name(a: Attr) -> Str =
+    match a | attr(name, _) => name | flag(name) => name end;
+
+let attr_value(a: Attr) -> Str =
+    match a | attr(_, value) => value | flag(_) => "" end;
+
+let render_attr(a: Attr) -> Str =
+    match a
+    | attr(name, value) => Str/flatten([" ", name, "=\"", escape(value), "\""])
+    | flag(name) => Str/concat(" ", name)
+    end;
+
+-- | The text a tree holds: its own, or its descendants' in order; a comment holds none.
+pub let text_of(h: Html) -> Str =
+    match h
+    | text(s) => s
+    | void(_, _) => ""
+    | comment(_) => ""
+    | fragment(children) => Str/flatten(List/map(children, text_of))
+    | element(_, _, children) => Str/flatten(List/map(children, text_of))
+    end;
+
+-- | Whether `h` is an element called `name`, compared without case.
+pub let is_named(h: Html, name: Str) -> Bool =
+    match h
+    | element(tag, _, _) => Str/eql_ascii_ci(tag, name)
+    | void(tag, _) => Str/eql_ascii_ci(tag, name)
+    | _ => false
+    end;
+
+-- | The tree as markup, the doctype written first when the root is `html`. Text and attribute values are escaped, and the content of `script` and `style` is written as it is, since the browser decodes nothing there, so nothing untrusted belongs in them.
+pub let render(h: Html) -> Str =
+    match is_named(h, "html")
+    | true => Str/concat("<!doctype html>", render_tree(h))
+    | false => render_tree(h)
+    end
+and render_tree(h: Html) -> Str =
+    match h
+    | text(s) => escape(s)
+    | comment(s) => Str/flatten(["<!--", Str/replace(s, "--", "- -"), "-->"])
+    | fragment(children) => render_all(children)
+    | void(name, attrs) => Str/flatten(["<", name, render_attrs(attrs), "/>"])
+    | element(name, attrs, children) =>
+        let inner =
+            match is_raw_text(name)
+            | true => Str/flatten(List/map(children, text_of))
+            | false => render_all(children)
+            end;
+        Str/flatten(["<", name, render_attrs(attrs), ">", inner, "</", name, ">"])
+    end
+and render_all(trees: List(Html)) -> Str =
+    Str/flatten(List/map(trees, render_tree));
+
+let render_attrs(attrs: List(Attr)) -> Str =
+    Str/flatten(List/map(attrs, render_attr));
+
+-- | Shown as the markup it renders to.
+satisfy Show(Html) {
+    show = render,
+}
+
+let attribute_in(attrs: List(Attr), name: Str) -> Option(Str) =
+    Option/map(List/find(attrs, (a) => Str/eql_ascii_ci(attr_name(a), name)), attr_value);
+
+-- | The value of the attribute `name` on an element, `""` for a flag, compared without case; `none` on any other tree or when the element lacks it.
+pub let attribute(h: Html, name: Str) -> Option(Str) =
+    match h
+    | element(_, attrs, _) => attribute_in(attrs, name)
+    | void(_, attrs) => attribute_in(attrs, name)
+    | _ => Option/none()
+    end;
+
+-- | The children of an element or a fragment; nothing for any other tree.
+pub let children(h: Html) -> List(Html) =
+    match h | element(_, _, cs) => cs | fragment(cs) => cs | _ => [] end;
+
+-- | `h` and every tree beneath it, in document order, that `pred` accepts.
+pub let all(h: Html, pred: (Html) -> Bool) -> List(Html) =
+    let below = all_in(children(h), pred);
+    match pred(h) | true => [h, ..below] | false => below end
+and all_in(trees: List(Html), pred: (Html) -> Bool) -> List(Html) =
+    match trees | [] => [] | [t, ..rest] => List/flatten([all(t, pred), all_in(rest, pred)]) end;
+
+-- | The first of `h` and the trees beneath it that `pred` accepts.
+pub let find(h: Html, pred: (Html) -> Bool) -> Option(Html) =
+    List/try_get(all(h, pred), 0);
+
+-- | The elements called `name` in `h` and beneath it, in document order.
+pub let named(h: Html, name: Str) -> List(Html) =
+    all(h, (t) => is_named(t, name));
+
+-- | The text of the first `title` element in `h`, trimmed, or `none`.
+pub let title_of(h: Html) -> Option(Str) =
+    Option/map(List/try_get(named(h, "title"), 0), (t) => Str/trim(text_of(t)));
+
+mod parse;
+pub use parse/{of_str, decode};

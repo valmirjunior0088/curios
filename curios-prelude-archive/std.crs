@@ -231,6 +231,10 @@ pub use Json/{let Json};
 pub mod Toml;
 pub use Toml/{let Toml};
 
+-- | An HTML tree, rendered escaped and read as a browser reads it.
+pub mod Html;
+pub use Html/{let Html};
+
 -- | A command-line interface as a value: the arguments a program declares, and the record a line parses into, whose type the declaration decides.
 -- |
 -- | A field is read by name, and a name the declaration lacks is refused where it is written. The token grammar is GNU's.

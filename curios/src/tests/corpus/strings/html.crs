@@ -1,0 +1,88 @@
+-- The HTML tree: what renders, what escapes, and what a browser-shaped read gives back.
+use /std/{Str, List, Option, Result, Test, Html};
+use /std/Html/{Attr};
+
+let page: Html =
+    Html/document(
+        "en",
+        "A & B",
+        [Html/void("link", [Attr/attr("rel", "stylesheet"), Attr/attr("href", "a.css")])],
+        [
+            Html/element(
+                "p",
+                [Attr/attr("class", "x"), Attr/flag("hidden")],
+                [Html/text("1 < 2 & \"q\""), Html/void("br", []), Html/comment("note")])]);
+
+-- Text and attribute values are escaped, a flag stands alone, a void tree closes itself, and a page starts with the doctype, the charset and the title.
+test a_page_renders_escaped() =
+    Test/equal(
+        Html/render(page),
+        Str/flatten(
+            [
+                "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/><title>A &amp; B</title>",
+                "<link rel=\"stylesheet\" href=\"a.css\"/></head><body>",
+                "<p class=\"x\" hidden>1 &lt; 2 &amp; &quot;q&quot;<br/><!--note--></p></body></html>"]));
+
+-- What `render` writes, `of_str` reads back as the same tree.
+test a_rendered_page_reads_back() =
+    Test/equal(Html/of_str(Html/render(page)), Result/success(page));
+
+-- A fragment renders without a doctype, and script content is written as it is, since the browser decodes nothing there.
+test a_fragment_renders_bare() =
+    Test/equal(
+        Html/render(
+            Html/fragment(
+                [Html/element("script", [], [Html/text("if (a < b) {}")]), Html/text("x")])),
+        "<script>if (a < b) {}</script>x");
+
+-- With no element name known, `<li>` written without its closing tag nests inside the one before it, and each closing tag closes the nearest open element; attributes read quoted or bare, and references decode.
+test a_tolerant_read_shapes_the_tree() =
+    Test/equal(
+        Html/of_str("<ul><li class=a>one &amp; two<li>three &#x41;<br>x</ul></p>"),
+        Result/success(
+            Html/element(
+                "ul",
+                [],
+                [
+                    Html/element(
+                        "li",
+                        [Attr/attr("class", "a")],
+                        [
+                            Html/text("one & two"),
+                            Html/element(
+                                "li",
+                                [],
+                                [
+                                    Html/text("three A"),
+                                    Html/element("br", [], [Html/text("x")])])])])));
+
+-- Several trees read as a fragment; a reference that names nothing known is kept as written.
+test several_trees_read_as_a_fragment() =
+    Test/equal(
+        Html/of_str("a &zzz; b &#; c<hr/>"),
+        Result/success(Html/fragment([Html/text("a &zzz; b &#; c"), Html/void("hr", [])])));
+
+-- Queries walk the tree in document order.
+test queries_walk_the_tree() =
+    let tree =
+        Result/unwrap_or(
+            Html/of_str("<div><a href=\"/x\">first</a><p><a href=\"/y\">second</a></p></div>"),
+            Html/fragment([]));
+    Test/all(
+        [
+            Test/equal(
+                Option/map(Html/find(tree, (t) => Html/is_named(t, "a")), Html/text_of),
+                Option/some("first")),
+            Test/equal(
+                Option/bind(
+                    Html/find(tree, (t) => Html/is_named(t, "p")),
+                    (p) => Html/attribute(p, "href")),
+                Option/none()),
+            Test/equal(
+                List/map(
+                    Html/named(tree, "a"),
+                    (a) => Option/unwrap_or(Html/attribute(a, "href"), "")),
+                ["/x", "/y"]),
+            Test/equal(Html/text_of(tree), "firstsecond"),
+            Test/equal(Html/title_of(page), Option/some("A & B")),
+            Test/equal(Html/title_of(tree), Option/none())]);

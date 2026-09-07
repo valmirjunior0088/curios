@@ -3,3 +3,4 @@ mod utf8;
 mod str;
 mod decomposition;
 mod json;
+mod html;

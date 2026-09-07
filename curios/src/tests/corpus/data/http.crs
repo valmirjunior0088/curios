@@ -1,5 +1,5 @@
 -- `/std/http`'s vocabulary as data: a URL read and written, the request a client sends, the reply a client reads — by length, by chunks, or to the close — and the methods.
-use /std/{Str, Option, Result, Parse, Show, Test};
+use /std/{Str, Option, Result, Parse, Show, Test, Html};
 use /std/http/{Method, Url, Request, Response};
 
 -- A URL reads into its parts; the fragment is dropped, the port is the scheme's when unwritten, and the path is `/` when empty.
@@ -134,6 +134,9 @@ test a_made_reply_renders_and_decodes() =
                         (200, Str/to_bytes("hello")),
                         (Option/some("5"), Option/some("text/plain; charset=utf-8"))))),
             Test/equal(Response/not_found.status.code, 404),
+            Test/equal(
+                Response/header(Response/of_html(200, Html/text("x")), "Content-Type"),
+                Option/some("text/html; charset=utf-8")),
             Test/equal(
                 Response/header(Response/redirect(Url/lit("http://h/next")), "Location"),
                 Option/some("http://h/next"))]);
