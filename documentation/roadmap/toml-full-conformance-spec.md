@@ -55,4 +55,4 @@ The first two are not exclusive. Parsing exactly and rounding once is what the c
 
 The bounds, the ladders and the refusal messages the landed codec uses — they are the module's, documented there, and would go stale here. The order of the two halves. Any timing tied to the `BigFlt` sequence beyond the dependency itself. And TOML 1.1, which is unreleased: the target is 1.0.0, and it is frozen.
 
-Calendar types are outside this campaign. They are owned by `/std/Toml` because `/std/time` is monotonic-only, which is a reason that can stop being true — but that would be a question about where calendar types live, not about conformance, and it should not be folded in here.
+Calendar types are outside this campaign. They are owned by `/std/Toml` because `/std/time` has a wall clock but no civil calendar: `Timestamp` is a moment as seconds since the epoch, and nothing converts one into a year, a month and a day. That is still a reason that can stop being true — but it would be a question about where calendar types live, not about conformance, and it should not be folded in here.
