@@ -1,6 +1,5 @@
 use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result};
 use /std/Toml/{Toml, Date, Time, Error};
-use /std/Toml/calendar/{date_ok, offset_ok, time_ok};
 use /std/Toml/scan/{is_bare_byte};
 
 let bare_ok(s: Str) -> Bool =
@@ -113,31 +112,16 @@ let value_str(v: Toml) -> Result(Error, Str) =
     | flt(f) => Result/success(flt_str(f))
     | bool(x) => Result/success(Bool/to_str(x))
     | offset_date_time(odt) =>
-        match date_ok(odt.date) && time_ok(odt.time) && offset_ok(odt.offset_minutes)
-        | true =>
-            Result/success(
-                Str/flatten([
-                    date_str(odt.date),
-                    "T",
-                    time_str(odt.time),
-                    offset_str(odt.offset_minutes)]))
-        | false => Result/failure(Error/invalid_value(v))
-        end
+        Result/success(
+            Str/flatten([
+                date_str(odt.date),
+                "T",
+                time_str(odt.time),
+                offset_str(odt.offset_minutes)]))
     | local_date_time(ldt) =>
-        match date_ok(ldt.date) && time_ok(ldt.time)
-        | true => Result/success(Str/flatten([date_str(ldt.date), "T", time_str(ldt.time)]))
-        | false => Result/failure(Error/invalid_value(v))
-        end
-    | local_date(d) =>
-        match date_ok(d)
-        | true => Result/success(date_str(d))
-        | false => Result/failure(Error/invalid_value(v))
-        end
-    | local_time(t) =>
-        match time_ok(t)
-        | true => Result/success(time_str(t))
-        | false => Result/failure(Error/invalid_value(v))
-        end
+        Result/success(Str/flatten([date_str(ldt.date), "T", time_str(ldt.time)]))
+    | local_date(d) => Result/success(date_str(d))
+    | local_time(t) => Result/success(time_str(t))
     | arr(items) =>
         let start: Result(Error, List(Str)) = Result/success([]);
         match List/fold(items, start, (item, acc) =>

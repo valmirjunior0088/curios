@@ -1,26 +1,16 @@
 use /std/{Nat, Int, Flt, Bool, Str, List, Map};
 
--- | A calendar date.
-pub struct Date: pub Type {
-    year: Nat,
-    month: Nat,
-    day: Nat,
-}
+-- | A calendar date, and the bound its fields carry.
+pub mod Date;
+pub use Date/{let Date};
 
--- | A time of day, to the nanosecond.
-pub struct Time: pub Type {
-    hour: Nat,
-    minute: Nat,
-    second: Nat,
-    nanosecond: Nat,
-}
+-- | A time of day, and the bound its fields carry.
+pub mod Time;
+pub use Time/{let Time};
 
--- | A date and time at an offset from UTC, in minutes.
-pub struct OffsetDateTime: pub Type {
-    date: Date,
-    time: Time,
-    offset_minutes: Int,
-}
+-- | A moment at an offset from UTC, and the bound that offset carries.
+pub mod OffsetDateTime;
+pub use OffsetDateTime/{let OffsetDateTime};
 
 -- | A date and time with no offset.
 pub struct LocalDateTime: pub Type {
@@ -66,8 +56,6 @@ struct Build: Type {
 -- | Why a document did not decode or a table did not encode.
 pub mod Error;
 pub use Error/{let Error};
-
-mod calendar;
 
 mod build;
 

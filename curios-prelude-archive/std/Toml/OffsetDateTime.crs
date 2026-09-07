@@ -1,0 +1,41 @@
+use /std/{Int, Bool, Option, True, False};
+use /std/Toml/Date/{let Date};
+use /std/Toml/Time/{let Time};
+
+let sound(offset_minutes: Int) -> Bool =
+    Int/abs(offset_minutes) <= 1439;
+
+-- | That the offset is one UTC has: at most 23 hours and 59 minutes, ahead or behind.
+pub let Valid(offset_minutes: Int) -> Prop =
+    match sound(offset_minutes) | true => True | false => False end;
+
+-- | A date and time at an offset from UTC, in minutes.
+pub struct OffsetDateTime: pub Type {
+    date: Date,
+    time: Time,
+    offset_minutes: Int,
+    ok: Valid(offset_minutes),
+}
+
+-- | The moment, under the evidence that the offset is one.
+pub let of(
+    date: Date,
+    time: Time,
+    offset_minutes: Int,
+    @ok: Valid(offset_minutes),
+) -> OffsetDateTime =
+    OffsetDateTime { date = date, time = time, offset_minutes = offset_minutes, ok = ok };
+
+let try_valid(offset_minutes: Int) -> Option(Valid(offset_minutes)) =
+    match sound(offset_minutes): (r) =>
+        Option(match r: (_) => Prop | true => True | false => False end)
+    | true => Option/some(True/qed())
+    | false => Option/none()
+    end;
+
+-- | The moment, decided: `none` where the offset is not one.
+pub let try_of(date: Date, time: Time, offset_minutes: Int) -> Option(OffsetDateTime) =
+    match try_valid(offset_minutes)
+    | some(ok) => Option/some(of(date, time, offset_minutes, @ok))
+    | none() => Option/none()
+    end;

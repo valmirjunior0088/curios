@@ -1,0 +1,52 @@
+use /std/{Nat, Bool, Option, True, False};
+
+let leap(year: Nat) -> Bool =
+    choose
+    | year % 400 == 0 => true
+    | year % 100 == 0 => false
+    | year % 4 == 0 => true
+    | _ => false
+    end;
+
+let days_in(year: Nat, month: Nat) -> Nat =
+    match month
+    | 2 => match leap(year) | true => 29 | false => 28 end
+    | 4 => 30
+    | 6 => 30
+    | 9 => 30
+    | 11 => 30
+    | _ => 31
+    end;
+
+let sound(year: Nat, month: Nat, day: Nat) -> Bool =
+    year <= 9999 && Nat/in_range(month, 1, 12) && Nat/in_range(day, 1, days_in(year, month));
+
+-- | That the three spell a day: a year of at most four digits, a month of the year, and a day the month has.
+pub let Valid(year: Nat, month: Nat, day: Nat) -> Prop =
+    match sound(year, month, day) | true => True | false => False end;
+
+-- | A calendar date.
+pub struct Date: pub Type {
+    year: Nat,
+    month: Nat,
+    day: Nat,
+    ok: Valid(year, month, day),
+}
+
+-- | The date, under the evidence that the three spell one.
+pub let of(year: Nat, month: Nat, day: Nat, @ok: Valid(year, month, day)) -> Date =
+    Date { year = year, month = month, day = day, ok = ok };
+
+let try_valid(year: Nat, month: Nat, day: Nat) -> Option(Valid(year, month, day)) =
+    match sound(year, month, day): (r) =>
+        Option(match r: (_) => Prop | true => True | false => False end)
+    | true => Option/some(True/qed())
+    | false => Option/none()
+    end;
+
+-- | The date, decided: `none` where the three spell no day.
+pub let try_of(year: Nat, month: Nat, day: Nat) -> Option(Date) =
+    match try_valid(year, month, day)
+    | some(ok) => Option/some(of(year, month, day, @ok))
+    | none() => Option/none()
+    end;

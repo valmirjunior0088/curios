@@ -1,6 +1,5 @@
 use /std/{Nat, Int, Bool, Byte, Parse};
 use /std/Toml/{Toml, Date, Time, OffsetDateTime, LocalDateTime};
-use /std/Toml/calendar/{date_ok, time_ok};
 
 let digit: Parse(Nat) =
     Parse/label(
@@ -53,8 +52,10 @@ let date_fields(y: Nat) -> Parse(Date) =
     let mo = fixed(2, 0)!;
     let _ = expect(0x2D)!;
     let d = fixed(2, 0)!;
-    let date = Date { year = y, month = mo, day = d };
-    match date_ok(date) | true => Parse/pure(date) | false => Parse/fail("invalid date") end;
+    match Date/try_of(y, mo, d)
+    | some(date) => Parse/pure(date)
+    | none() => Parse/fail("invalid date")
+    end;
 
 let date_parse: Parse(Date) =
     let y = fixed(4, 0)!;
@@ -66,8 +67,10 @@ let time_fields(h: Nat) -> Parse(Time) =
     let _ = expect(0x3A)!;
     let s = fixed(2, 0)!;
     let ns = frac_part!;
-    let time = Time { hour = h, minute = mi, second = s, nanosecond = ns };
-    match time_ok(time) | true => Parse/pure(time) | false => Parse/fail("invalid time") end;
+    match Time/try_of(h, mi, s, ns)
+    | some(time) => Parse/pure(time)
+    | none() => Parse/fail("invalid time")
+    end;
 
 let time_parse: Parse(Time) =
     let h = fixed(2, 0)!;
@@ -97,13 +100,18 @@ let offset_parse: Parse(Int) =
         Parse/commit(offset_fields(sign))
     end;
 
+let offset_tail(date: Date, time: Time) -> Parse(Toml) =
+    let off = offset_parse!;
+    match OffsetDateTime/try_of(date, time, off)
+    | some(odt) => Parse/pure(Toml/offset_date_time(odt))
+    | none() => Parse/fail("invalid offset")
+    end;
+
 let date_time_tail(date: Date) -> Parse(Toml) =
     let _ = Parse/take_if((b) => b == 0x54 || b == 0x74 || b == 0x20)!;
     let time = time_parse!;
     Parse/or(
-        Parse/map(offset_parse, (off) =>
-            Toml/offset_date_time(
-                OffsetDateTime { date = date, time = time, offset_minutes = off })),
+        offset_tail(date, time),
         Parse/pure(Toml/local_date_time(LocalDateTime { date = date, time = time })));
 
 let date_led: Parse(Toml) =
