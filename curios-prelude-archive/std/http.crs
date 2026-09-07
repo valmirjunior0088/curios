@@ -1,188 +1,33 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, List, Parse, Option, Try, Async, Io};
-use /std/tcp/{Socket};
+use /std/{Str, Nat, Try, Async, Io};
 
 -- | The request's method.
-pub induct Method: pub Type
-| get()
-| post()
-end
+pub mod Method;
+pub use Method/{let Method};
 
-let method_str(m: Method) -> Str =
-    match m | get() => "GET" | post() => "POST" end;
+-- | Where a request goes, read from text and refused at a literal that does not read.
+pub mod Url;
+pub use Url/{let Url};
 
--- | A failure on the wire, or a reply the decoder refuses.
+-- | What is sent, as data, and the bytes it goes out as.
+pub mod Request;
+pub use Request/{let Request, get, post};
+
+-- | What comes back, as data, with the readers and makers an exchange ends in.
+pub mod Response;
+pub use Response/{let Response};
+
+-- | How an exchange is performed: the deadline and the redirect limit.
+pub mod Client;
+pub use Client/{let Client};
+
+-- | Why an exchange failed: the wire, a reply the decoder refuses, the deadline, or a redirect chain past the client's limit.
 pub induct Error: pub Type
 | net(Io/Error)
 | malformed(Str)
+| timeout()
+| redirected(Nat)
 end
 
--- | What is sent: the method, where to, the path, the headers and the body, and whether under TLS.
-pub struct Request: pub Type {
-    method: Method,
-    host: Str,
-    port: Nat,
-    path: Str,
-    headers: List({Str, Str}),
-    body: Bytes,
-    tls: Bool,
-}
-
--- | A `GET` of `path` at `host` and `port`, in the clear.
-pub let get(host: Str, port: Nat, path: Str) -> Request =
-    Request {
-        method = Method/get(),
-        host = host,
-        port = port,
-        path = path,
-        headers = [],
-        body = x[],
-        tls = false,
-    };
-
--- | A `POST` of `body` to `path` at `host` and `port`, in the clear.
-pub let post(host: Str, port: Nat, path: Str, body: Bytes) -> Request =
-    Request {
-        method = Method/post(),
-        host = host,
-        port = port,
-        path = path,
-        headers = [],
-        body = body,
-        tls = false,
-    };
-
--- | `request` under TLS.
-pub let secure(request: Request) -> Request =
-    Request { ..request, tls = true };
-
--- | A `GET` under TLS.
-pub let get_tls(host: Str, port: Nat, path: Str) -> Request =
-    secure(get(host, port, path));
-
--- | A `POST` under TLS.
-pub let post_tls(host: Str, port: Nat, path: Str, body: Bytes) -> Request =
-    secure(post(host, port, path, body));
-
-let until(target: Byte) -> (Byte) -> Bool =
-    (byte) => Bool/not(byte == target);
-
-let header_lookup(headers: List({Str, Str}), name: Str) -> Option(Str) =
-    Option/map(
-        List/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)),
-        ((_, value)) => value);
-
-let is_ascii_digit(byte: Byte) -> Bool =
-    Nat/in_range(Byte/to_nat(byte), 0x30, 0x39);
-
-let render_header((name, value): {Str, Str}) -> Str =
-    Str/flatten([name, ": ", value, "\r\n"]);
-
-let content_length(body: Bytes) -> Str =
-    match Bytes/len(body) == 0
-    | true => ""
-    | false => Str/flatten(["Content-Length: ", Nat/to_str(Bytes/len(body)), "\r\n"])
-    end;
-
--- | The request as the bytes sent on the wire.
-pub let render(request: Request) -> Bytes =
-    x[
-        ..Str/to_bytes(
-            Str/flatten(
-                [
-                    method_str(request.method),
-                    " ",
-                    request.path,
-                    " HTTP/1.1\r\n",
-                    "Host: ",
-                    request.host,
-                    "\r\n",
-                    "Connection: close\r\n",
-                    content_length(request.body),
-                    Str/flatten(List/map(request.headers, render_header)),
-                    "\r\n"])),
-        ..request.body];
-
--- | The reply's status line.
-pub struct Status: pub Type {
-    version: Str,
-    code: Nat,
-    reason: Str,
-}
-
--- | A status line: the version, the code and the reason.
-pub let status_line: Parse(Status) =
-    let version = Parse/take_while(until(0x20))!;
-    let _ = Parse/take_byte(0x20)!;
-    let digits = Parse/take_while(is_ascii_digit)!;
-    let _ = Parse/take_byte(0x20)!;
-    let reason = Parse/take_while(until(0xD))!;
-    let _ = Parse/take_byte(0xD)!;
-    let _ = Parse/take_byte(0xA)!;
-    Parse/pure(
-        Status {
-            version = Option/unwrap_or(Str/of_bytes(version), ""),
-            code = Option/unwrap_or(Nat/of_str(Option/unwrap_or(Str/of_bytes(digits), "")), 0),
-            reason = Option/unwrap_or(Str/of_bytes(reason), ""),
-        });
-
--- | What came back: the status, the headers and the body.
-pub struct Response: pub Type {
-    status: Status,
-    headers: List({Str, Str}),
-    body: Bytes,
-}
-
-let guard_header: Parse({}) =
-    let next = Parse/peek!;
-    match next
-    | none() => Parse/fail("unexpected end of headers")
-    | some(byte) =>
-        match byte == 0xD | true => Parse/fail("end of header block") | false => Parse/pure(()) end
-    end;
-
-let header_line: Parse({Str, Str}) =
-    let _ = guard_header!;
-    let name = Parse/take_while(until(0x3A))!;
-    let _ = Parse/take_byte(0x3A)!;
-    let value = Parse/take_while(until(0xD))!;
-    let _ = Parse/take_byte(0xD)!;
-    let _ = Parse/take_byte(0xA)!;
-    Parse/pure(
-        (
-            Option/unwrap_or(Str/of_bytes(name), ""),
-            Str/trim(Option/unwrap_or(Str/of_bytes(value), ""))));
-
-let content_length_of(headers: List({Str, Str})) -> Option(Nat) =
-    match header_lookup(headers, "Content-Length")
-    | some(value) => Nat/of_str(value)
-    | none() => Option/none()
-    end;
-
-let body_parser(headers: List({Str, Str})) -> Parse(Bytes) =
-    match content_length_of(headers) | some(n) => Parse/take(n) | none() => Parse/rest end;
-
--- | A whole reply. The body is `Content-Length` bytes when the header is there, clamped to what arrived, and everything the peer sent otherwise.
-pub let decode: Parse(Response) =
-    let status = status_line!;
-    let headers = Parse/many0(header_line)!;
-    let _ = Parse/take_byte(0xD)!;
-    let _ = Parse/take_byte(0xA)!;
-    let body = body_parser(headers)!;
-    Parse/pure(Response { status = status, headers = headers, body = body });
-
--- | The value of the first header named `name`, or `none`.
-pub let header(resp: Response, name: Str) -> Option(Str) =
-    header_lookup(resp.headers, name);
-
--- | One exchange: connect as the request says, send it whole, read the reply to the close, decode.
+-- | One exchange under the default client.
 pub let perform(request: Request) -> Try(Async, Error, Response) =
-    let open =
-        match request.tls
-        | true => Socket/connect_tls(request.host, request.port)
-        | false => Socket/connect(request.host, request.port)
-        end;
-    let bytes = Try/map_error(Socket/call(open, render(request)), (e) => Error/net(e))!;
-    match Parse/run(decode, bytes)
-    | success(response) => Try/pure(response)
-    | failure(message) => Try/raise(Error/malformed(message))
-    end;
+    Client/perform(Client/default, request);

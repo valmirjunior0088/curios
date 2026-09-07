@@ -60,7 +60,7 @@ fn https_perform_reaches_a_public_host_over_the_real_host() {
         r#"
         use /std/{{Str, Nat, Result, Try, Async, Io, Path, File, http}};
         let program: Async({{}}) =
-            let r = Try/run(http/perform(http/get_tls("example.com", 443, "/")))!;
+            let r = Try/run(http/perform(http/get(http/Url/lit("https://example.com/"))))!;
             let line = match r | success(resp) => Nat/to_str(resp.status.code) | failure(_) => "failed" end;
             let _ = Try/run(File/write_all(Path/of_str("{path}"), Str/to_bytes(line)))!;
             Async/pure(());
@@ -202,13 +202,19 @@ fn listen_and_accept_serve_one_connection_by_hand() {
 const HTTP_GET: &str = r#"
     use /std/{Str, Nat, Option, Try, Async, http, Io};
     let fiber: Async({}) =
-        let r = Try/run(http/perform(http/get("example.com", 80, "/")))!;
+        let r = Try/run(http/perform(http/get(http/Url/lit("http://example.com/"))))!;
         match r
         | success(response) =>
-            let ct = Option/unwrap_or(http/header(response, "Content-Type"), "none");
+            let ct = Option/unwrap_or(http/Response/header(response, "Content-Type"), "none");
             let body = Option/unwrap_or(Str/of_bytes(response.body), "bad body");
             /std/print(Str/flatten([Nat/to_str(response.status.code), " ", ct, " ", body]))
-        | failure(e) => match e | net(_) => /std/print("net") | malformed(_) => /std/print("malformed") end
+        | failure(e) =>
+            match e
+            | net(_) => /std/print("net")
+            | malformed(_) => /std/print("malformed")
+            | timeout() => /std/print("timeout")
+            | redirected(_) => /std/print("redirected")
+            end
         end;
     Async/run(fiber)
     "#;

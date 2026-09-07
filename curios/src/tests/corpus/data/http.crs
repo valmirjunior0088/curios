@@ -1,0 +1,139 @@
+-- `/std/http`'s vocabulary as data: a URL read and written, the request a client sends, the reply a client reads — by length, by chunks, or to the close — and the methods.
+use /std/{Str, Option, Result, Parse, Show, Test};
+use /std/http/{Method, Url, Request, Response};
+
+-- A URL reads into its parts; the fragment is dropped, the port is the scheme's when unwritten, and the path is `/` when empty.
+test a_url_reads_into_its_parts() =
+    match Url/of_str("https://example.com:8443/a/b?x=1&y=two+words#frag")
+    | failure(why) => Test/check(Str/is_empty(why))
+    | success(u) =>
+        Test/all(
+            [
+                Test/equal(u.scheme, Url/Scheme/https()),
+                Test/equal(u.host, "example.com"),
+                Test/equal(u.port, 8443),
+                Test/equal(u.path, "/a/b"),
+                Test/equal(u.query, Option/some("x=1&y=two+words")),
+                Test/equal(Url/segments(u), ["a", "b"]),
+                Test/equal(Url/query_pairs(u), [("x", "1"), ("y", "two words")])])
+    end;
+
+-- The default port is the scheme's, and is not written back.
+test a_url_takes_and_omits_its_default_port() =
+    Test/all(
+        [
+            Test/equal(Url/to_str(Url/lit("http://example.com/")), "http://example.com/"),
+            Test/equal(Url/lit("http://example.com").port, 80),
+            Test/equal(Url/lit("https://example.com").port, 443),
+            Test/equal(Url/lit("https://example.com").path, "/"),
+            Test/equal(Url/to_str(Url/lit("http://h:8080/p?q=1")), "http://h:8080/p?q=1")]);
+
+-- A literal that does not read is refused where it is written; a string that does not read says why.
+test a_url_that_does_not_read_says_why() =
+    Test/all(
+        [
+            Test/check(Result/is_failure(Url/of_str("ftp://example.com/"))),
+            Test/check(Result/is_failure(Url/of_str("http:///nohost"))),
+            Test/check(Result/is_failure(Url/of_str("http://h:port/")))]);
+
+-- Percent-encoding leaves the unreserved characters and spells every other byte; decoding reads `+` as a space and refuses a broken escape.
+test components_encode_and_decode() =
+    Test/all(
+        [
+            Test/equal(Url/encode("a b/c~d"), "a%20b%2Fc~d"),
+            Test/equal(Url/decode("a%20b+c"), Option/some("a b c")),
+            Test/equal(Url/decode("%zz"), Option/none()),
+            Test/equal(
+                Url/query_pairs(Url/with_query(Url/lit("http://h/"), [("q", "a b"), ("n", "1")])),
+                [("q", "a b"), ("n", "1")])]);
+
+-- A method spells as the wire does and reads back.
+test a_method_spells_and_reads() =
+    Test/all(
+        [
+            Test/equal(Show/show(Method/post()), "POST"),
+            Test/equal(Method/of_str("DELETE"), Option/some(Method/delete())),
+            Test/equal(Method/of_str("BREW"), Option/none())]);
+
+-- A request renders with its target, `Host`, `Connection: close`, and a length only when there is a body; the rendering decodes back to the same request under `http`.
+test a_request_renders_and_decodes() =
+    let r =
+        Request/with_header(
+            Request/get(Url/lit("http://example.com/x?y=1")),
+            "Accept",
+            "text/plain");
+    Test/all(
+        [
+            Test/equal(
+                Str/of_bytes(Request/render(r)),
+                Option/some(
+                    "GET /x?y=1 HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\nAccept: text/plain\r\n\r\n")),
+            Test/equal(
+                Result/map_success(
+                    Parse/run(Request/decode, Request/render(r)),
+                    (d) =>
+                        (
+                            (d.method, Url/to_str(d.url)),
+                            (Request/header(d, "Host"), Request/header(d, "Accept")))),
+                Result/success(
+                    (
+                        (Method/get(), "http://example.com/x?y=1"),
+                        (Option/some("example.com"), Option/some("text/plain"))))),
+            Test/equal(
+                Str/of_bytes(
+                    Request/render(Request/post(Url/lit("http://h:81/"), Str/to_bytes("hi")))),
+                Option/some(
+                    "POST / HTTP/1.1\r\nHost: h:81\r\nConnection: close\r\nContent-Length: 2\r\n\r\nhi"))]);
+
+let reply(s: Str) -> Result(Str, Response) =
+    Parse/run(Response/decode, Str/to_bytes(s));
+
+-- A reply's body is `Content-Length` bytes when the header is there, and a header is found without regard to case.
+test a_reply_decodes_by_length() =
+    match reply(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello AND MORE")
+    | failure(why) => Test/check(Str/is_empty(why))
+    | success(r) =>
+        Test/all(
+            [
+                Test/equal(r.status.code, 200),
+                Test/equal(r.status.reason, "OK"),
+                Test/equal(Response/header(r, "content-type"), Option/some("text/plain")),
+                Test/equal(Response/text(r), Option/some("hello")),
+                Test/check(Response/ok(r))])
+    end;
+
+-- A chunked body is its chunks joined, the sizes in hexadecimal, the trailers skipped.
+test a_reply_decodes_by_chunks() =
+    match reply(
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\nE\r\n in\r\n\r\nchunks.\r\n0\r\nExpires: never\r\n\r\n")
+    | failure(why) => Test/check(Str/is_empty(why))
+    | success(r) => Test/equal(Response/text(r), Option/some("Wikipedia in\r\n\r\nchunks."))
+    end;
+
+-- A status whose code is not a number is a refusal, not code zero.
+test a_reply_with_no_code_is_refused() =
+    Test/check(Result/is_failure(reply("HTTP/1.1 OK\r\n\r\n")));
+
+-- A made reply renders with its length and decodes back to itself.
+test a_made_reply_renders_and_decodes() =
+    let r = Response/of_text(200, "hello");
+    Test/all(
+        [
+            Test/equal(
+                Result/map_success(
+                    Parse/run(Response/decode, Response/render(r)),
+                    (d) =>
+                        (
+                            (d.status.code, d.body),
+                            (
+                                Response/header(d, "Content-Length"),
+                                Response/header(d, "Content-Type")))),
+                Result/success(
+                    (
+                        (200, Str/to_bytes("hello")),
+                        (Option/some("5"), Option/some("text/plain; charset=utf-8"))))),
+            Test/equal(Response/not_found.status.code, 404),
+            Test/equal(
+                Response/header(Response/redirect(Url/lit("http://h/next")), "Location"),
+                Option/some("http://h/next"))]);

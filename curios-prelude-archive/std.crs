@@ -250,7 +250,7 @@ pub use Test/{let Test};
 -- | TCP over the host's sockets: connections and listeners as streams, parking the fiber wherever a peer decides.
 pub mod tcp;
 
--- | HTTP/1.1, one connection per request.
+-- | HTTP/1.1 over `tcp`: the vocabulary of an exchange as data, and a client that performs one — one connection per request, whole bodies, a deadline and a redirect limit.
 pub mod http;
 
 -- | Clocks: `Instant` is an opaque reading of the monotonic clock, good for measuring alone; `Timestamp` is a moment that means something; `Duration` is the distance between two of either, with no sign. The two moments do not convert.

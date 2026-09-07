@@ -1,0 +1,139 @@
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Parse, Equal, Spell};
+use /std/http/{Method, Url};
+
+-- | What is sent: the method, where to, the headers and the body. Where to is the URL, whose scheme decides the connection and whose host and port the `Host` header.
+pub struct Request: pub Type {
+    method: Method,
+    url: Url,
+    headers: List({Str, Str}),
+    body: Bytes,
+}
+
+satisfy Equal(Request);
+
+satisfy Spell(Request);
+
+-- | A `GET` of `url`.
+pub let get(url: Url) -> Request =
+    Request { method = Method/get(), url = url, headers = [], body = x[] };
+
+-- | A `POST` of `body` to `url`.
+pub let post(url: Url, body: Bytes) -> Request =
+    Request { method = Method/post(), url = url, headers = [], body = body };
+
+-- | `r` with `name: value` appended to its headers.
+pub let with_header(r: Request, name: Str, value: Str) -> Request =
+    Request { ..r, headers = [..r.headers, (name, value)] };
+
+-- | The value of the first header named `name`, compared without case, or `none`.
+pub let header(r: Request, name: Str) -> Option(Str) =
+    Option/map(
+        List/find(r.headers, ((key, _)) => Str/eql_ascii_ci(key, name)),
+        ((_, value)) => value);
+
+let render_header((name, value): {Str, Str}) -> Str =
+    Str/flatten([name, ": ", value, "\r\n"]);
+
+let content_length(body: Bytes) -> Str =
+    match Bytes/len(body) == 0
+    | true => ""
+    | false => Str/flatten(["Content-Length: ", Nat/to_str(Bytes/len(body)), "\r\n"])
+    end;
+
+let host_header(u: Url) -> Str =
+    match u.port == Url/default_port(u.scheme)
+    | true => u.host
+    | false => Str/flatten([u.host, ":", Nat/to_str(u.port)])
+    end;
+
+-- | The request target: the path, and the query after it when there is one.
+pub let target(u: Url) -> Str =
+    match u.query | some(q) => Str/flatten([u.path, "?", q]) | none() => u.path end;
+
+-- | The request as the bytes sent on the wire: the request line, `Host`, `Connection: close`, the length when there is a body, the headers, then the body.
+pub let render(r: Request) -> Bytes =
+    x[
+        ..Str/to_bytes(
+            Str/flatten(
+                [
+                    Method/to_str(r.method),
+                    " ",
+                    target(r.url),
+                    " HTTP/1.1\r\n",
+                    "Host: ",
+                    host_header(r.url),
+                    "\r\n",
+                    "Connection: close\r\n",
+                    content_length(r.body),
+                    Str/flatten(List/map(r.headers, render_header)),
+                    "\r\n"])),
+        ..r.body];
+
+let until(target: Byte) -> (Byte) -> Bool =
+    (byte) => Bool/not(byte == target);
+
+let text(b: Bytes) -> Parse(Str) =
+    match Str/of_bytes(b)
+    | some(s) => Parse/pure(s)
+    | none() => Parse/fail("a request is text before its body")
+    end;
+
+let request_line: Parse({Method, Str}) =
+    let m = Parse/take_while(until(' '))!;
+    let _ = Parse/take_byte(' ')!;
+    let t = Parse/take_while(until(' '))!;
+    let _ = Parse/take_byte(' ')!;
+    let _ = Parse/take_while(until('\r'))!;
+    let _ = Parse/take_literal("\r\n")!;
+    let spelled = text(m)!;
+    let target = text(t)!;
+    match Method/of_str(spelled)
+    | some(method) => Parse/pure((method, target))
+    | none() => Parse/fail(Str/flatten(["unknown method '", spelled, "'"]))
+    end;
+
+let guard_header: Parse({}) =
+    let next = Parse/peek!;
+    match next
+    | none() => Parse/fail("unexpected end of headers")
+    | some(byte) =>
+        match byte == '\r' | true => Parse/fail("end of header block") | false => Parse/pure(()) end
+    end;
+
+-- | One `name: value` line; the value is trimmed.
+pub let header_line: Parse({Str, Str}) =
+    let _ = guard_header!;
+    let name = Parse/take_while(until(':'))!;
+    let _ = Parse/take_byte(':')!;
+    let value = Parse/take_while(until('\r'))!;
+    let _ = Parse/take_literal("\r\n")!;
+    let n = text(name)!;
+    let v = text(value)!;
+    Parse/pure((n, Str/trim(v)));
+
+let lookup(headers: List({Str, Str}), name: Str) -> Option(Str) =
+    Option/map(
+        List/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)),
+        ((_, value)) => value);
+
+let body_of(headers: List({Str, Str})) -> Parse(Bytes) =
+    match Option/bind(lookup(headers, "Content-Length"), Nat/of_str)
+    | some(n) => Parse/take(n)
+    | none() => Parse/pure(x[])
+    end;
+
+let url_of(headers: List({Str, Str}), target: Str) -> Parse(Url) =
+    let authority = Option/unwrap_or(lookup(headers, "Host"), "localhost");
+    match Url/of_str(Str/flatten(["http://", authority, target]))
+    | success(u) => Parse/pure(u)
+    | failure(why) => Parse/fail(why)
+    end;
+
+-- | A whole request as a server reads it: the request line, the headers, then `Content-Length` bytes of body or none. The URL is rebuilt from `Host` and the target, under `http`, since the wire does not say.
+pub let decode: Parse(Request) =
+    let (method, target) = request_line!;
+    let headers = Parse/many0(header_line)!;
+    let _ = Parse/take_literal("\r\n")!;
+    let body = body_of(headers)!;
+    let url = url_of(headers, target)!;
+    Parse/pure(Request { method = method, url = url, headers = headers, body = body });

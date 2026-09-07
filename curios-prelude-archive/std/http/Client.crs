@@ -1,0 +1,74 @@
+use /std/{Str, Nat, Bool, Option, Try, Async, Parse};
+use /std/time/{Duration};
+use /std/tcp/{Socket};
+use /std/http/{Error, Url, Request, Response};
+
+-- | How a client performs an exchange: how long the whole of one may take, and how many redirects it follows before refusing.
+pub struct Client: pub Type {
+    timeout: Duration,
+    redirects: Nat,
+}
+
+-- | Thirty seconds, three redirects.
+pub let default: Client =
+    Client { timeout = Duration/of_secs(30), redirects = 3 };
+
+let exchange(request: Request) -> Try(Async, Error, Response) =
+    let u = request.url;
+    let open =
+        match u.scheme
+        | http() => Socket/connect(u.host, u.port)
+        | https() => Socket/connect_tls(u.host, u.port)
+        end;
+    let bytes = Try/map_error(Socket/call(open, Request/render(request)), (e) => Error/net(e))!;
+    match Parse/run(Response/decode, bytes)
+    | success(response) => Try/pure(response)
+    | failure(message) => Try/raise(Error/malformed(message))
+    end;
+
+let is_redirect(code: Nat) -> Bool =
+    code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
+
+-- | Where a redirect points: an absolute `Location`, or a path on the same origin.
+let target_of(from: Url, location: Str) -> Option(Url) =
+    match Str/starts_with(location, "/")
+    | true =>
+        match Url/of_str(
+            Str/flatten(
+                [
+                    Url/to_str(Url { ..from, path = "/", query = Option/none() }),
+                    Str/slice(location, 1, Str/len(location) - 1)]))
+        | success(u) => Option/some(u)
+        | failure(_) => Option/none()
+        end
+    | false =>
+        match Url/of_str(location) | success(u) => Option/some(u) | failure(_) => Option/none() end
+    end;
+
+let redirect_of(request: Request, response: Response) -> Option(Url) =
+    match is_redirect(response.status.code)
+    | false => Option/none()
+    | true =>
+        Option/bind(
+            Response/header(response, "Location"),
+            (location) => target_of(request.url, location))
+    end;
+
+let follow(c: Client, request: Request, left: Nat) -> Try(Async, Error, Response) =
+    let response = exchange(request)!;
+    match redirect_of(request, response)
+    | none() => Try/pure(response)
+    | some(target) =>
+        match left
+        | 0 => Try/raise(Error/redirected(c.redirects))
+        | rest + 1 => follow(c, Request { ..request, url = target }, rest)
+        end
+    end;
+
+-- | One exchange: connect by the scheme, send the request whole, read the reply to the close, decode it, and follow a redirect while the limit allows — all under the deadline, which is reported as `timeout`.
+pub let perform(c: Client, request: Request) -> Try(Async, Error, Response) =
+    let outcome = Async/timeout(c.timeout, Try/run(follow(c, request, c.redirects)))!;
+    match outcome
+    | none() => Try/raise(Error/timeout())
+    | some(r) => Try/attempt(Async/pure(r))
+    end;

@@ -1,0 +1,45 @@
+use /std/{Str, Option, Equal, Spell, Show};
+
+-- | The request's method.
+pub induct Method: pub Type
+| get()
+| head()
+| post()
+| put()
+| delete()
+| patch()
+end
+
+pub use Method/*;
+
+satisfy Equal(Method);
+
+satisfy Spell(Method);
+
+-- | The method as the wire spells it.
+pub let to_str(m: Method) -> Str =
+    match m
+    | get() => "GET"
+    | head() => "HEAD"
+    | post() => "POST"
+    | put() => "PUT"
+    | delete() => "DELETE"
+    | patch() => "PATCH"
+    end;
+
+-- | Shown as the wire spells it.
+satisfy Show(Method) {
+    show = to_str,
+}
+
+-- | The method `s` spells, or `none`.
+pub let of_str(s: Str) -> Option(Method) =
+    choose
+    | Str/eql(s, "GET") => Option/some(Method/get())
+    | Str/eql(s, "HEAD") => Option/some(Method/head())
+    | Str/eql(s, "POST") => Option/some(Method/post())
+    | Str/eql(s, "PUT") => Option/some(Method/put())
+    | Str/eql(s, "DELETE") => Option/some(Method/delete())
+    | Str/eql(s, "PATCH") => Option/some(Method/patch())
+    | _ => Option/none()
+    end;

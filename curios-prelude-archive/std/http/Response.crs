@@ -1,0 +1,226 @@
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Parse, Json, Equal, Spell};
+use /std/http/{Url};
+
+-- | The reply's status line.
+pub struct Status: pub Type {
+    version: Str,
+    code: Nat,
+    reason: Str,
+}
+
+satisfy Equal(Status);
+
+satisfy Spell(Status);
+
+-- | What came back: the status, the headers and the body.
+pub struct Response: pub Type {
+    status: Status,
+    headers: List({Str, Str}),
+    body: Bytes,
+}
+
+satisfy Equal(Response);
+
+satisfy Spell(Response);
+
+let until(target: Byte) -> (Byte) -> Bool =
+    (byte) => Bool/not(byte == target);
+
+let is_digit(byte: Byte) -> Bool =
+    Nat/in_range(Byte/to_nat(byte), '0', '9');
+
+let as_text(b: Bytes) -> Parse(Str) =
+    match Str/of_bytes(b)
+    | some(s) => Parse/pure(s)
+    | none() => Parse/fail("a reply is text before its body")
+    end;
+
+-- | The status line: the version, the code and the reason. A code that is not a number is a refusal.
+pub let status_line: Parse(Status) =
+    let version = Parse/take_while(until(' '))!;
+    let _ = Parse/take_byte(' ')!;
+    let digits = Parse/take_while(is_digit)!;
+    let _ = Parse/take_byte(' ')!;
+    let reason = Parse/take_while(until('\r'))!;
+    let _ = Parse/take_literal("\r\n")!;
+    let v = as_text(version)!;
+    let spelled = as_text(digits)!;
+    let r = as_text(reason)!;
+    match Nat/of_str(spelled)
+    | some(code) => Parse/pure(Status { version = v, code = code, reason = r })
+    | none() => Parse/fail("a status code is a number")
+    end;
+
+let guard_header: Parse({}) =
+    let next = Parse/peek!;
+    match next
+    | none() => Parse/fail("unexpected end of headers")
+    | some(byte) =>
+        match byte == '\r' | true => Parse/fail("end of header block") | false => Parse/pure(()) end
+    end;
+
+let header_line: Parse({Str, Str}) =
+    let _ = guard_header!;
+    let name = Parse/take_while(until(':'))!;
+    let _ = Parse/take_byte(':')!;
+    let value = Parse/take_while(until('\r'))!;
+    let _ = Parse/take_literal("\r\n")!;
+    let n = as_text(name)!;
+    let v = as_text(value)!;
+    Parse/pure((n, Str/trim(v)));
+
+let lookup(headers: List({Str, Str}), name: Str) -> Option(Str) =
+    Option/map(
+        List/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)),
+        ((_, value)) => value);
+
+let hex_value(byte: Byte) -> Option(Nat) =
+    let n = Byte/to_nat(byte);
+    choose
+    | Nat/in_range(n, '0', '9') => Option/some(n - '0')
+    | Nat/in_range(n, 'a', 'f') => Option/some(n - 'a' + 10)
+    | Nat/in_range(n, 'A', 'F') => Option/some(n - 'A' + 10)
+    | _ => Option/none()
+    end;
+
+let is_hex(byte: Byte) -> Bool =
+    Option/is_some(hex_value(byte));
+
+let hex_number(b: Bytes) -> Nat =
+    Bytes/fold(b, 0, (byte, acc) => acc * 16 + Option/unwrap_or(hex_value(byte), 0));
+
+-- | One chunk's size line: the hexadecimal size, any extension after `;` ignored, then the line's end.
+let chunk_size: Parse(Nat) =
+    let digits = Parse/take_while(is_hex)!;
+    let _ = Parse/take_while(until('\r'))!;
+    let _ = Parse/take_literal("\r\n")!;
+    match Bytes/len(digits) == 0
+    | true => Parse/fail("a chunk states its size")
+    | false => Parse/pure(hex_number(digits))
+    end;
+
+-- | The chunks until the empty one, then any trailers, then the block's end; `acc` is what has arrived.
+let chunks(acc: Bytes) -> Parse(Bytes) =
+    let n = chunk_size!;
+    match n
+    | 0 =>
+        let _ = Parse/many0(header_line)!;
+        let _ = Parse/take_literal("\r\n")!;
+        Parse/pure(acc)
+    | _ =>
+        let chunk = Parse/take(n)!;
+        let _ = Parse/take_literal("\r\n")!;
+        chunks(x[..acc, ..chunk])
+    end;
+
+-- | Whether the transfer encoding lists `chunked`, compared without case, wherever it stands in the list.
+let chunked(headers: List({Str, Str})) -> Bool =
+    match lookup(headers, "Transfer-Encoding")
+    | some(value) =>
+        List/any(Str/split(value, ","), (coding) => Str/eql_ascii_ci(Str/trim(coding), "chunked"))
+    | none() => false
+    end;
+
+let body_of(headers: List({Str, Str})) -> Parse(Bytes) =
+    match chunked(headers)
+    | true => chunks(x[])
+    | false =>
+        match Option/bind(lookup(headers, "Content-Length"), Nat/of_str)
+        | some(n) => Parse/take(n)
+        | none() => Parse/rest
+        end
+    end;
+
+-- | A whole reply: the status line, the headers, then the body — the chunks when the transfer encoding is chunked, `Content-Length` bytes when the header is there, clamped to what arrived, and everything the peer sent otherwise.
+pub let decode: Parse(Response) =
+    let status = status_line!;
+    let headers = Parse/many0(header_line)!;
+    let _ = Parse/take_literal("\r\n")!;
+    let body = body_of(headers)!;
+    Parse/pure(Response { status = status, headers = headers, body = body });
+
+let render_header((name, value): {Str, Str}) -> Str =
+    Str/flatten([name, ": ", value, "\r\n"]);
+
+-- | The reply as the bytes sent on the wire, its length stated.
+pub let render(r: Response) -> Bytes =
+    x[
+        ..Str/to_bytes(
+            Str/flatten(
+                [
+                    r.status.version,
+                    " ",
+                    Nat/to_str(r.status.code),
+                    " ",
+                    r.status.reason,
+                    "\r\n",
+                    "Content-Length: ",
+                    Nat/to_str(Bytes/len(r.body)),
+                    "\r\n",
+                    Str/flatten(List/map(r.headers, render_header)),
+                    "\r\n"])),
+        ..r.body];
+
+-- | The value of the first header named `name`, compared without case, or `none`.
+pub let header(r: Response, name: Str) -> Option(Str) =
+    lookup(r.headers, name);
+
+-- | Whether the status is a success, 200 through 299.
+pub let ok(r: Response) -> Bool =
+    Nat/in_range(r.status.code, 200, 299);
+
+-- | The body as text, or `none` unless it is UTF-8.
+pub let text(r: Response) -> Option(Str) =
+    Str/of_bytes(r.body);
+
+-- | The body decoded as JSON, or the decoder's refusal.
+pub let json(r: Response) -> Result(Str, Json) =
+    Parse/run(Json/decode, r.body);
+
+let reason_of(code: Nat) -> Str =
+    match code
+    | 200 => "OK"
+    | 201 => "Created"
+    | 204 => "No Content"
+    | 301 => "Moved Permanently"
+    | 302 => "Found"
+    | 303 => "See Other"
+    | 307 => "Temporary Redirect"
+    | 308 => "Permanent Redirect"
+    | 400 => "Bad Request"
+    | 404 => "Not Found"
+    | 500 => "Internal Server Error"
+    | _ => ""
+    end;
+
+-- | A reply with `code`, its usual reason, `Content-Type` set to `kind`, and `body`.
+pub let of(code: Nat, kind: Str, body: Bytes) -> Response =
+    Response {
+        status = Status { version = "HTTP/1.1", code = code, reason = reason_of(code) },
+        headers = [("Content-Type", kind)],
+        body = body,
+    };
+
+-- | Plain text.
+pub let of_text(code: Nat, s: Str) -> Response =
+    of(code, "text/plain; charset=utf-8", Str/to_bytes(s));
+
+-- | JSON.
+pub let of_json(code: Nat, j: Json) -> Response =
+    of(code, "application/json", Str/to_bytes(Json/encode(j)));
+
+-- | A `303 See Other` to `url`.
+pub let redirect(url: Url) -> Response =
+    Response {
+        status = Status { version = "HTTP/1.1", code = 303, reason = reason_of(303) },
+        headers = [("Location", Url/to_str(url))],
+        body = x[],
+    };
+
+-- | A `404 Not Found` with an empty body.
+pub let not_found: Response =
+    Response {
+        status = Status { version = "HTTP/1.1", code = 404, reason = reason_of(404) },
+        headers = [],
+        body = x[],
+    };

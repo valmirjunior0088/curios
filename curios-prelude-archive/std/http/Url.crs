@@ -1,0 +1,231 @@
+use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Equal, Spell, True,
+    False};
+
+-- | The scheme, which decides the port when none is written and whether the connection is under TLS.
+pub induct Scheme: pub Type
+| http()
+| https()
+end
+
+pub use Scheme/*;
+
+satisfy Equal(Scheme);
+
+satisfy Spell(Scheme);
+
+-- | Where a request goes: the scheme, the host, the port, the path, and the query as written after `?`, if any. A fragment is the client's and is dropped.
+pub struct Url: pub Type {
+    scheme: Scheme,
+    host: Str,
+    port: Nat,
+    path: Str,
+    query: Option(Str),
+}
+
+satisfy Equal(Url);
+
+satisfy Spell(Url);
+
+-- | The port a scheme implies.
+pub let default_port(s: Scheme) -> Nat =
+    match s | http() => 80 | https() => 443 end;
+
+let until(stops: List(Byte)) -> (Byte) -> Bool =
+    (byte) => Bool/not(List/any(stops, (stop) => byte == stop));
+
+let text(b: Bytes) -> Parse(Str) =
+    match Str/of_bytes(b) | some(s) => Parse/pure(s) | none() => Parse/fail("a URL is text") end;
+
+let scheme: Parse(Scheme) =
+    let name = Parse/take_while(until([':']))!;
+    let _ = Parse/take_literal("://")!;
+    let s = text(name)!;
+    choose
+    | Str/eql_ascii_ci(s, "http") => Parse/pure(Scheme/http())
+    | Str/eql_ascii_ci(s, "https") => Parse/pure(Scheme/https())
+    | _ => Parse/fail(Str/flatten(["unknown scheme '", s, "'"]))
+    end;
+
+let is_digit(byte: Byte) -> Bool =
+    Nat/in_range(Byte/to_nat(byte), '0', '9');
+
+let port_number: Parse(Nat) =
+    let _ = Parse/take_byte(':')!;
+    let digits = Parse/take_while(is_digit)!;
+    let spelled = text(digits)!;
+    match Nat/of_str(spelled)
+    | some(n) => Parse/pure(n)
+    | none() => Parse/fail("a port is a number")
+    end;
+
+let port_of(s: Scheme) -> Parse(Nat) =
+    let next = Parse/peek!;
+    match next
+    | some(b) => match Byte/to_nat(b) | ':' => port_number | _ => Parse/pure(default_port(s)) end
+    | none() => Parse/pure(default_port(s))
+    end;
+
+let path: Parse(Str) =
+    let b = Parse/take_while(until(['?', '#']))!;
+    let s = text(b)!;
+    match Str/is_empty(s) | true => Parse/pure("/") | false => Parse/pure(s) end;
+
+let query_text: Parse(Option(Str)) =
+    let _ = Parse/take_byte('?')!;
+    let b = Parse/take_while(until(['#']))!;
+    let s = text(b)!;
+    Parse/pure(Option/some(s));
+
+let query: Parse(Option(Str)) =
+    let next = Parse/peek!;
+    match next
+    | some(b) => match Byte/to_nat(b) | '?' => query_text | _ => Parse/pure(Option/none()) end
+    | none() => Parse/pure(Option/none())
+    end;
+
+let url: Parse(Url) =
+    let s = scheme!;
+    let h = Parse/take_while(until([':', '/', '?', '#']))!;
+    let host = text(h)!;
+    let p = port_of(s)!;
+    let pa = path!;
+    let q = query!;
+    let _ = Parse/rest!;
+    match Str/is_empty(host)
+    | true => Parse/fail("a URL names a host")
+    | false => Parse/pure(Url { scheme = s, host = host, port = p, path = pa, query = q })
+    end;
+
+-- | `s` read as a URL, or why it is not: a scheme other than `http` and `https`, a missing host, or a port that is not a number.
+pub let of_str(s: Str) -> Result(Str, Url) =
+    Parse/run(url, Str/to_bytes(s));
+
+-- | That `r` is a URL that read.
+pub let Read(r: Result(Str, Url)) -> Prop =
+    match r | success(_) => True | failure(_) => False end;
+
+-- | That `s` reads as a URL, decided by reduction: a literal that does not is refused where it is written.
+pub let Valid(s: Str) -> Prop =
+    Read(of_str(s));
+
+-- | The URL the literal `s` spells, at no cost at run time beyond the read.
+pub let lit(s: Str, @ok: Valid(s)) -> Url =
+    (match of_str(s): (r) => (Read(r)) -> Url
+    | success(u) => (_) => u
+    | failure(_) => (absent) => match absent end
+    end)(ok);
+
+let scheme_str(s: Scheme) -> Str =
+    match s | http() => "http" | https() => "https" end;
+
+let port_str(u: Url) -> Str =
+    match u.port == default_port(u.scheme)
+    | true => ""
+    | false => Str/concat(":", Nat/to_str(u.port))
+    end;
+
+let query_str(q: Option(Str)) -> Str =
+    match q | some(s) => Str/concat("?", s) | none() => "" end;
+
+-- | The URL as text.
+pub let to_str(u: Url) -> Str =
+    Str/flatten([scheme_str(u.scheme), "://", u.host, port_str(u), u.path, query_str(u.query)]);
+
+-- | The path's segments, for a server to match on: `/a/b/` is `["a", "b"]`.
+pub let segments(u: Url) -> List(Str) =
+    List/filter(Str/split(u.path, "/"), (s) => Bool/not(Str/is_empty(s)));
+
+let hex_digit(n: Nat) -> Str =
+    let code = match n < 10 | true => '0' + n | false => 'A' + (n - 10) end;
+    Str/of_char(Option/unwrap_or(Char/of_nat(code), '0'));
+
+let unreserved(n: Nat) -> Bool =
+    Nat/in_range(n, 'a', 'z') || Nat/in_range(n, 'A', 'Z') || Nat/in_range(n, '0', '9') || n == '-'
+        || n == '_'
+        || n == '.'
+        || n == '~';
+
+-- | `component` percent-encoded: every byte but the unreserved ones as `%XX`.
+pub let encode(component: Str) -> Str =
+    let empty: List(Str) = [];
+    Str/flatten(
+        List/reverse(
+            Bytes/fold(
+                Str/to_bytes(component),
+                empty,
+                (byte, acc) =>
+                    let n = Byte/to_nat(byte);
+                    match unreserved(n)
+                    | true => [Option/unwrap_or(Str/of_bytes(x[byte]), ""), ..acc]
+                    | false => [Str/flatten(["%", hex_digit(n / 16), hex_digit(n % 16)]), ..acc]
+                    end)));
+
+let hex_value(byte: Byte) -> Option(Nat) =
+    let n = Byte/to_nat(byte);
+    choose
+    | Nat/in_range(n, '0', '9') => Option/some(n - '0')
+    | Nat/in_range(n, 'a', 'f') => Option/some(n - 'a' + 10)
+    | Nat/in_range(n, 'A', 'F') => Option/some(n - 'A' + 10)
+    | _ => Option/none()
+    end;
+
+let decode_at(b: Bytes, i: Nat, acc: Bytes, fuel: Nat) -> Option(Bytes) =
+    match fuel
+    | 0 => Option/some(acc)
+    | rest + 1 =>
+        match Bytes/try_get(b, i)
+        | none() => Option/some(acc)
+        | some(byte) =>
+            match Byte/to_nat(byte)
+            | '+' => decode_at(b, i + 1, x[..acc, ' '], rest)
+            | '%' =>
+                match (
+                    Option/bind(Bytes/try_get(b, i + 1), hex_value),
+                    Option/bind(Bytes/try_get(b, i + 2), hex_value))
+                | (some(hi), some(lo)) =>
+                    decode_at(b, i + 3, x[..acc, Nat/to_byte(hi * 16 + lo)], rest)
+                | (some(_), none()) => Option/none()
+                | (none(), _) => Option/none()
+                end
+            | _ => decode_at(b, i + 1, x[..acc, byte], rest)
+            end
+        end
+    end;
+
+-- | `component` percent-decoded, `+` read as a space, or `none` when an escape is malformed or the result is not text.
+pub let decode(component: Str) -> Option(Str) =
+    let b = Str/to_bytes(component);
+    Option/bind(decode_at(b, 0, x[], Bytes/len(b) + 1), Str/of_bytes);
+
+-- | The query as decoded pairs: `a=1&b=x+y` is `[("a", "1"), ("b", "x y")]`. A pair that does not decode is dropped.
+pub let query_pairs(u: Url) -> List({Str, Str}) =
+    match u.query
+    | none() => []
+    | some(q) =>
+        List/filter_map(
+            Str/split(q, "&"),
+            (pair) =>
+                let (name, value) = Option/unwrap_or(Str/split_once(pair, "="), (pair, ""));
+                match (decode(name), decode(value))
+                | (some(n), some(v)) => Option/some((n, v))
+                | (some(_), none()) => Option/none()
+                | (none(), _) => Option/none()
+                end)
+    end;
+
+-- | `u` with `pairs` as its query, each name and value encoded.
+pub let with_query(u: Url, pairs: List({Str, Str})) -> Url =
+    match pairs
+    | [] => Url { ..u, query = Option/none() }
+    | _ =>
+        Url {
+            ..u,
+            query =
+                Option/some(
+                    Str/join(
+                        "&",
+                        List/map(
+                            pairs,
+                            ((name, value)) => Str/flatten([encode(name), "=", encode(value)])))),
+        }
+    end;
