@@ -152,6 +152,125 @@ satisfy (@A: Type, @B: Type, @C: Type, use Spell(A), use Spell(B), use Spell(C))
     spell(t) = parens([Spell/spell(t.0), Spell/spell(t.1), Spell/spell(t.2)]),
 }
 
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    use Spell(A),
+    use Spell(B),
+    use Spell(C),
+    use Spell(D),
+) => Spell({A, B, C, D}) {
+    spell(t) = parens([Spell/spell(t.0), Spell/spell(t.1), Spell/spell(t.2), Spell/spell(t.3)]),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    use Spell(A),
+    use Spell(B),
+    use Spell(C),
+    use Spell(D),
+    use Spell(E),
+) => Spell({A, B, C, D, E}) {
+    spell(t) =
+        parens(
+            [
+                Spell/spell(t.0),
+                Spell/spell(t.1),
+                Spell/spell(t.2),
+                Spell/spell(t.3),
+                Spell/spell(t.4)]),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    use Spell(A),
+    use Spell(B),
+    use Spell(C),
+    use Spell(D),
+    use Spell(E),
+    use Spell(F),
+) => Spell({A, B, C, D, E, F}) {
+    spell(t) =
+        parens(
+            [
+                Spell/spell(t.0),
+                Spell/spell(t.1),
+                Spell/spell(t.2),
+                Spell/spell(t.3),
+                Spell/spell(t.4),
+                Spell/spell(t.5)]),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    @G: Type,
+    use Spell(A),
+    use Spell(B),
+    use Spell(C),
+    use Spell(D),
+    use Spell(E),
+    use Spell(F),
+    use Spell(G),
+) => Spell({A, B, C, D, E, F, G}) {
+    spell(t) =
+        parens(
+            [
+                Spell/spell(t.0),
+                Spell/spell(t.1),
+                Spell/spell(t.2),
+                Spell/spell(t.3),
+                Spell/spell(t.4),
+                Spell/spell(t.5),
+                Spell/spell(t.6)]),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    @G: Type,
+    @H: Type,
+    use Spell(A),
+    use Spell(B),
+    use Spell(C),
+    use Spell(D),
+    use Spell(E),
+    use Spell(F),
+    use Spell(G),
+    use Spell(H),
+) => Spell({A, B, C, D, E, F, G, H}) {
+    spell(t) =
+        parens(
+            [
+                Spell/spell(t.0),
+                Spell/spell(t.1),
+                Spell/spell(t.2),
+                Spell/spell(t.3),
+                Spell/spell(t.4),
+                Spell/spell(t.5),
+                Spell/spell(t.6),
+                Spell/spell(t.7)]),
+}
+
 satisfy Equal({}) {
     eql(_a, _b) = true,
     neq(_a, _b) = false,
