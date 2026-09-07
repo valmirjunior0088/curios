@@ -24,17 +24,25 @@ fn a_standard_stream_takes_set_reuseaddr_like_a_file() {
     }
 }
 
-/// A descriptor that is not a terminal refuses both tty rows with `ENOTTY` through the errno lane, which is how a program learns it has none. `/dev/null` rather than a standard stream, because under an interactive `cargo test` stdin *is* a terminal and a passing `raw` would leave it in raw mode.
+/// A descriptor that is not a terminal refuses both tty rows through the errno lane, which is how a program learns it has none. Which errno is the platform's own — Linux answers `ENOTTY`, macOS `ENODEV` for both rows — so what is under test is the lane rather than the code. `/dev/null` rather than a standard stream, because under an interactive `cargo test` stdin *is* a terminal and a passing `raw` would leave it in raw mode.
 #[test]
-fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_report_enotty() {
+fn the_tty_rows_on_a_descriptor_that_is_not_a_terminal_refuse_through_the_errno_lane() {
+    #[cfg(target_os = "linux")]
+    const NOT_A_TERMINAL: u32 = 25;
+    #[cfg(not(target_os = "linux"))]
+    const NOT_A_TERMINAL: u32 = 19;
+
     let host = OsHost::with_args(vec![]);
     let (status, handle) = host.open(b"/dev/null", Mode::Read);
 
     assert!(matches!(status, Status::Ok));
-    assert!(matches!(host.raw(handle.clone(), 1), Status::Other(25)));
+    assert!(matches!(
+        host.raw(handle.clone(), 1),
+        Status::Other(NOT_A_TERMINAL)
+    ));
     assert!(matches!(
         host.size(handle.clone()),
-        (Status::Other(25), 0, 0)
+        (Status::Other(NOT_A_TERMINAL), 0, 0)
     ));
     assert!(matches!(host.raw(handle.clone(), 0), Status::Ok));
 
@@ -285,7 +293,7 @@ fn a_tls_upgrade_is_driven_by_the_reads_and_writes_that_follow() {
 fn a_refused_connect_reports_and_drops_the_socket() {
     let host = OsHost::with_args(vec![]);
 
-    // A socket bound to a loopback port but never listening refuses every connect, and holding it for the test's duration keeps a parallel test from listening on that port in between.
+    // A port the kernel just handed out and nothing holds: the connect meets an RST wherever the platform sends one. A bound socket that never listens is not the same staging — Linux refuses a connect to one, macOS leaves the SYN unanswered — so the port is taken to learn its number and released before the connect.
     let holder = Socket::new(Domain::IPV4, Type::STREAM, None).expect("a socket");
     holder
         .bind(&SockAddr::from(
@@ -298,6 +306,7 @@ fn a_refused_connect_reports_and_drops_the_socket() {
         .as_socket()
         .expect("an IP address")
         .port();
+    drop(holder);
     let blob = format!("127.0.0.1:{port}").into_bytes();
 
     let (status, client) = host.socket(&blob);
@@ -309,7 +318,15 @@ fn a_refused_connect_reports_and_drops_the_socket() {
                 &[Poll::from_bits(curios_abi::event::WRITE)],
                 5_000,
             );
-            assert_ne!(ready[0].bits() & curios_abi::event::WRITE, 0);
+            // A settled connect is reported as the platform reports it: Linux answers a refused one `WRITE`, macOS `HUP`, and `ERR` rides either. `/std`'s scheduler resumes a park on any of the three for the same reason — a handle in one of those states will never become ready.
+            let settled =
+                curios_abi::event::WRITE | curios_abi::event::ERR | curios_abi::event::HUP;
+            assert_ne!(
+                ready[0].bits() & settled,
+                0,
+                "the poll reported {:#06b}",
+                ready[0].bits()
+            );
             host.finish_connect(client.clone())
         }
         other => other,
@@ -353,13 +370,18 @@ fn a_child_is_reaped_through_its_handle_and_its_piped_output_read() {
     host.close(stdout);
 }
 
-/// A path is the bytes the host holds, never decoded on the way: a name `list` hands back that is not UTF-8 opens as the file it names, exactly as `stat` finds it. The file is made with the standard library on the raw bytes, so the row under test is the only one asked to read them back.
+/// A path is the bytes the host holds, never decoded on the way: the name `list` hands back opens as the file it names, exactly as `stat` finds it. The file is made with the standard library on the raw bytes, so the row under test is the only one asked to read them back. The name is the hardest one the filesystem takes — bytes that are not UTF-8 at all where they are allowed, and a non-ASCII name where they are not, since APFS refuses an undecodable one with `EILSEQ`.
 #[test]
-fn open_takes_a_listed_name_that_is_not_utf8() {
+fn open_takes_a_listed_name_back_as_the_bytes_it_was_given() {
+    #[cfg(target_os = "linux")]
+    const NAME: &[u8] = b"\xffname.txt";
+    #[cfg(not(target_os = "linux"))]
+    const NAME: &[u8] = "café.txt".as_bytes();
+
     let host = OsHost::with_args(vec![]);
     let dir = std::env::temp_dir().join(format!("curios-open-{}", std::process::id()));
     fs::create_dir(&dir).expect("a fresh temporary directory");
-    let name = b"\xffname.txt";
+    let name = NAME;
     fs::write(dir.join(OsStr::from_bytes(name)), b"x").expect("a file under the raw name");
 
     let (status, names) = host.list(dir.as_os_str().as_bytes());
