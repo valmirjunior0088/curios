@@ -73,7 +73,9 @@ code {
     color: var(--ink-85);
 }
 
-/* The frame: a rail and a main column side by side, stacked when the width runs out. The footer closes the main column rather than the body, so the frame reaches the page's end and the sticky rail is never pushed up by anything below it. */
+/* The frame: a rail and a main column side by side, stacked when the width runs out. The footer closes the main column rather than the body, so the frame reaches the page's end and the sticky rail is never pushed up by anything below it.
+
+   The main column's cap is the page's one measure: nothing inside it sets a width of its own, so every paragraph, signature and note shares one right edge and each type size gets the character count that edge gives it. The cap is on the content box, so the number is the card's own width: a card must clear the widest line the record can print — a signature pre-broken at a hundred columns, plus the `| ` a constructor adds — in the mono face and inside the card's padding. A narrower column would not break a signature, since the breaks are the record's; it would put the longest of them behind the horizontal scroll `.signature` carries. */
 .frame {
     display: flex;
     align-items: flex-start;
@@ -95,7 +97,7 @@ code {
 main {
     flex: 1 1 480px;
     min-width: 0;
-    max-width: 1040px;
+    max-width: 930px;
     padding: 22px clamp(20px, 4vw, 40px) 40px;
 }
 
@@ -256,7 +258,6 @@ h2 {
 }
 .lead {
     margin: -12px 0 32px;
-    max-width: 62ch;
     font-size: clamp(16px, 2.1vw, 17.5px);
     font-weight: 300;
     line-height: 1.6;
@@ -380,7 +381,6 @@ h2 {
 .card .prose {
     margin: 0;
     padding: 0 22px 20px;
-    max-width: 68ch;
     font-size: 15px;
     line-height: 1.65;
     color: var(--ink-70);
