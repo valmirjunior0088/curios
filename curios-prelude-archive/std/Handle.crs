@@ -48,10 +48,13 @@ let read_waiting(h: Handle, n: Nat) -> Io(Io/Chunk) =
     | _ => Io/pure(Io/Chunk/of(r.status, r.bytes))
     end;
 
--- | The whole of `b`, waited for on this program's own behalf, a short write resent; the first failure is the answer.
+-- | The whole of `b`, waited for on this program's own behalf: a host that would block is polled until it would not, and a short write is resent; the first failure is the answer.
 let write_waiting(h: Handle, b: Bytes) -> Io(Result(Io/Error, {})) =
     let r = /sys/Handle/write(h, b)!;
     choose
+    | r.status == /sys/status/would_block =>
+        let _ = poll([h], [Interest/writable], -1)!;
+        write_waiting(h, b)
     | r.status != /sys/status/ok =>
         Io/pure(
             match Io/Error/of(r.status)
