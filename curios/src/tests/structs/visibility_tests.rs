@@ -262,12 +262,12 @@ fn opaque_inductive_is_eliminable_in_a_descendant() {
     assert_eq!(run(source), b"42");
 }
 
-// `/std/Async` keeps `Future` and `Waker` as private child modules and re-exports only the two type names, so a program can name a `Future` but cannot reach the scheduler plumbing that drives one.
+// `/std/Async/Future` publishes the type and the operations a parking primitive needs, and keeps the phase machinery behind them private, so a program can hold a `Future` without reaching the states that drive one.
 #[test]
 fn async_future_plumbing_is_not_reachable_from_user_code() {
     let source = r#"
         use /std/{Nat, Async};
-        let f = /std/Async/Future/new();
+        let f = /std/Async/Future/Phase/ready(1);
         /std/print("no")
         "#;
 
