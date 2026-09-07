@@ -348,6 +348,30 @@ const REASONS: &[Row] = &[
 ];
 
 /// Table construction: a key or table defined twice, a table opened over a dotted key or an inline table, and arrays of tables against tables, against the three that are allowed.
+/// Each refusal rendered whole by `Toml/Error/to_str`: a syntax refusal names the byte offset the parser stopped at, and a broken construction rule names the key path being applied. `message` is the reason alone, which the reasons table pins.
+const LOCATIONS: &[Row] = &[
+    Row {
+        expr: r##"located("i = 1__2")"##,
+        expected: "malformed underscore at byte 6",
+    },
+    Row {
+        expr: r##"located("x = \"unterminated")"##,
+        expected: "unterminated string at byte 17",
+    },
+    Row {
+        expr: r##"located("a = 1\na = 2")"##,
+        expected: "duplicate key at key a",
+    },
+    Row {
+        expr: r##"located("[t]\nx = 1\n[t]\n")"##,
+        expected: "table defined more than once at key t",
+    },
+    Row {
+        expr: r##"located("[a.b]\nc = 1\n[a]\nb.c = 2\n")"##,
+        expected: "cannot extend a table defined elsewhere with dotted keys at key b.c",
+    },
+];
+
 const TABLE_CONFLICTS: &[Row] = &[
     Row {
         expr: r##"verdict("dup = 1\ndup = 2")"##,
@@ -486,6 +510,7 @@ const TABLES: &[&[Row]] = &[
     INTEGERS,
     FLOAT_BITS,
     REASONS,
+    LOCATIONS,
     TABLE_CONFLICTS,
     COMMENTS,
     NESTING,
@@ -559,6 +584,11 @@ fn program() -> String {
         let reason(input : Str) -> Str =
             match Toml/decode(input)
             | failure(e) => Toml/Error/message(e)
+            | success(_) => "accept"
+            end;
+        let located(input : Str) -> Str =
+            match Toml/decode(input)
+            | failure(e) => Toml/Error/to_str(e)
             | success(_) => "accept"
             end;
         let verdict(input : Str) -> Str =
