@@ -58,7 +58,7 @@ pub use State/{let State};
 
 -- | A description of a computation that touches the host, never its result.
 -- |
--- | Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. `Error` is the failure every host operation reports.
+-- | Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. `Error` is the failure every host operation reports and `Chunk` what one read answers with. Beside them are this process's own standard streams, read and written without a scheduler, and the terminal behind standard input: raw mode, its size, and the bracket a terminal session runs inside.
 pub mod Io;
 pub use Io/{let Io};
 
@@ -128,7 +128,7 @@ pub use Command/{let Command};
 
 -- | Cooperative tasks over the host's scheduler: a fiber that parks on a handle, a timer or a signal and resumes when it is ready.
 -- |
--- | `run` drives a root fiber to its answer or reports a deadlock, and `using` brackets a resource so that a cancelled task releases it. An `Io` action sequences inside an `Async` region as it is.
+-- | `run` drives a root fiber to its answer or reports a deadlock, and `using` brackets a resource so that a cancelled task releases it. An `Io` action sequences inside an `Async` region as it is. `Read` and `Write` are what a stream is read and written through — the concepts a file, a socket, a child's pipe and the standard streams satisfy, parking the fiber wherever the host would block — with `read_all`, `read_until` and `copy` written once over them.
 pub mod Async;
 pub use Async/{let Async};
 
@@ -266,14 +266,8 @@ pub mod rand;
 -- | This process: its arguments, its environment, and its exit.
 pub mod proc;
 
--- | The terminal this process's standard input is attached to: raw mode, its size, and the bracket a terminal session runs inside.
-pub mod tty;
-
 -- | The filesystem beyond a file's contents: what is at a path, a directory's entries, and making, moving and removing things. Every operation is `Io`, and `Try` over it where it can fail.
 pub mod fs;
-
--- | What a stream is to a program: the concepts a file, a socket, a child's pipe and the standard streams satisfy, and the operations written once over them.
-pub mod stream;
 
 -- | A terminal interface: a screen is a frame whose size is in its type, and a program is a model, an `update` and a `view` that the loop drives.
 -- |

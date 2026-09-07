@@ -1,4 +1,4 @@
-//! Raw mode and the window size through `/std/tty`, against a scripted terminal and against none.
+//! Raw mode and the window size through `/std/Io`, against a scripted terminal and against none.
 
 use {crate::tests::run_text, curios_runtime::MockHost};
 
@@ -6,8 +6,8 @@ use {crate::tests::run_text, curios_runtime::MockHost};
 #[test]
 fn size_reads_the_scripted_dimensions_and_reports_no_terminal_otherwise() {
     let source = r#"
-        use /std/{Str, Nat, Show, Try, Io, tty};
-        match Try/run(tty/size)!
+        use /std/{Str, Nat, Show, Try, Io};
+        match Try/run(Io/tty_size)!
         | success(s) => /std/print(Show/show(s))
         | failure(e) => match e | other(n) => /std/print(Str/concat("other ", Nat/to_str(n))) | _ => /std/print("error") end
         end
@@ -26,8 +26,8 @@ fn size_reads_the_scripted_dimensions_and_reports_no_terminal_otherwise() {
 #[test]
 fn with_raw_brackets_the_body_and_restores_the_mode() {
     let source = r#"
-        use /std/{Nat, Show, Try, Io, tty};
-        match Try/run(tty/with_raw(Try/pure(7)))!
+        use /std/{Nat, Show, Try, Io};
+        match Try/run(Io/with_raw_tty(Try/pure(7)))!
         | success(n) => /std/print(Nat/to_str(n))
         | failure(e) => /std/print(Show/show(e))
         end
@@ -43,10 +43,10 @@ fn with_raw_brackets_the_body_and_restores_the_mode() {
 #[test]
 fn with_raw_restores_after_a_failing_body_and_refuses_without_a_terminal() {
     let source = r#"
-        use /std/{Nat, Show, Try, Io, tty};
+        use /std/{Nat, Show, Try, Io};
         let body: Try(Io, Io/Error, Nat) =
             Try/raise(Io/Error/refused());
-        match Try/run(tty/with_raw(body))!
+        match Try/run(Io/with_raw_tty(body))!
         | success(n) => /std/print(Nat/to_str(n))
         | failure(e) => /std/print(Show/show(e))
         end
@@ -67,12 +67,12 @@ fn with_raw_restores_after_a_failing_body_and_refuses_without_a_terminal() {
 #[test]
 fn with_raw_async_brackets_a_parking_body_inside_a_fiber() {
     let source = r#"
-        use /std/{Nat, Show, Try, Async, Io, tty};
+        use /std/{Nat, Show, Try, Async, Io};
         let body: Try(Async, Io/Error, Nat) =
             let _ = Async/yield_now!;
             Try/pure(7);
         let fiber: Async({}) =
-            let r = Try/run(tty/with_raw_async(body))!;
+            let r = Try/run(Io/with_raw_tty_async(body))!;
             match r
             | success(n) => /std/print(Nat/to_str(n))
             | failure(e) => /std/print(Show/show(e))

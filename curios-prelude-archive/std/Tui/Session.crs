@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, List, Option, Cell, Io, Try, Async, tty, stream};
+use /std/{Nat, Bytes, List, Option, Cell, Io, Try, Async};
 use /std/time/{Duration};
 use /std/Tui/{Frame, Event, input, render, ansi};
 
@@ -12,7 +12,7 @@ struct Held: Type {
 pub struct Session: Type {
     rest: Cell(Bytes),
     previous: Cell(Option(Held)),
-    size: Cell(tty/Size),
+    size: Cell(Io/TtySize),
 }
 
 let enter: Io({}) =
@@ -31,11 +31,11 @@ let leave: Io({}) =
 
 -- | The bracket: raw mode, the alternate screen, the hidden cursor, bracketed paste and the kitty keyboard flag, each undone in reverse whichever way `body` ends.
 pub let with(@A: Type, body: (Session) -> Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
-    tty/with_raw_async(
-        let first = tty/size!;
+    Io/with_raw_tty_async(
+        let first = Io/tty_size!;
         let rest: Cell(Bytes) = Cell/new(x[])!;
         let previous: Cell(Option(Held)) = Cell/new(Option/none())!;
-        let size: Cell(tty/Size) = Cell/new(first)!;
+        let size: Cell(Io/TtySize) = Cell/new(first)!;
         let s = Session { rest = rest, previous = previous, size = size };
         let _ = enter!;
         let outcome = Async/using(leave, Try/run(body(s)))!;
@@ -43,13 +43,13 @@ pub let with(@A: Type, body: (Session) -> Try(Async, Io/Error, A)) -> Try(Async,
         Try/pure(a));
 
 -- | The terminal's size now.
-pub let size(s: Session) -> Try(Async, Io/Error, tty/Size) =
-    let now = tty/size!;
+pub let size(s: Session) -> Try(Async, Io/Error, Io/TtySize) =
+    let now = Io/tty_size!;
     let _ = Cell/set(s.size, now)!;
     Try/pure(now);
 
 -- | The size last read.
-pub let last_size(s: Session) -> Io(tty/Size) =
+pub let last_size(s: Session) -> Io(Io/TtySize) =
     Cell/get(s.size);
 
 -- | `frame` written as the difference from the previous one where the size is unchanged, and whole where it is not.
@@ -76,7 +76,7 @@ pub let draw(
 -- | The next burst of input as events, parking until one arrives; `none` once standard input has ended.
 pub let read(@E: Type, s: Session) -> Async(Option(List(Event(E)))) =
     let carried = Cell/get(s.rest)!;
-    let got = stream/Read/read(Io/stdin, 1024)!;
+    let got = Async/Read/read(Io/stdin, 1024)!;
     match got
     | eof() => Async/pure(Option/none())
     | error(_) => Async/pure(Option/none())
@@ -90,7 +90,7 @@ pub let read(@E: Type, s: Session) -> Async(Option(List(Event(E)))) =
             let settle() -> Async(Option(List(Event(E)))) =
                 let _ = Cell/set(s.rest, x[])!;
                 Async/pure(Option/some([..d.events, ..input/flush(d.rest)]));
-            let more = Async/timeout(Duration/of_millis(30), stream/Read/read(Io/stdin, 1024))!;
+            let more = Async/timeout(Duration/of_millis(30), Async/Read/read(Io/stdin, 1024))!;
             match more: (_) => Async(Option(List(Event(E))))
             | none() => settle()
             | some(c) =>

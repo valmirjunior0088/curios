@@ -254,7 +254,7 @@ fn a_cancelled_task_kills_the_child_it_spawned() {
     assert_eq!(io.kills(), vec![b"sleepy".to_vec()]);
 }
 
-// A child's pipes are streams: `spawn` with piped output hands back a `Child/Pipe` that `stream/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
+// A child's pipes are streams: `spawn` with piped output hands back a `Child/Pipe` that `Async/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
 #[test]
 fn a_piped_output_is_read_through_the_stream_witness() {
     let source = child_program(
@@ -262,7 +262,7 @@ fn a_piped_output_is_read_through_the_stream_witness() {
             let child = Command/spawn(Command { ..Command/new("greet", []), stdout = Command/Stdio/piped() })!;
             let read =
                 match Child/stdout(child)
-                | some(p) => /std/stream/read_all(p)
+                | some(p) => /std/Async/read_all(p)
                 | none() => Async/pure(Result/success(x[]))
                 end;
             let out = read!;

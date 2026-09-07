@@ -1,4 +1,4 @@
-use /std/{Option, Try, Async, Io, stream};
+use /std/{Option, Try, Async, Io};
 
 -- | How a child ended: with an exit code, or by a signal.
 pub mod Exit
@@ -30,11 +30,11 @@ pub struct Pipe: Type {
     /sys/Handle,
 }
 
-satisfy stream/Read(Pipe) {
+satisfy Async/Read(Pipe) {
     read(p, n) = Async/raw/read(p.0, n),
 }
 
-satisfy stream/Write(Pipe) {
+satisfy Async/Write(Pipe) {
     write(p, b) = Async/raw/write(p.0, b),
 }
 

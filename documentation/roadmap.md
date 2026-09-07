@@ -178,7 +178,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 ## IO
 
-- [x] Streams: `stream/Read` and `stream/Write` over `File`, `tcp/Socket`, a child's `Pipe` and the standard streams under `Io`; a program never holds a raw handle
+- [x] Streams: `Async/Read` and `Async/Write` over `File`, `tcp/Socket`, a child's `Pipe` and the standard streams under `Io`; a program never holds a raw handle
 - [x] Terminal
 - [x] File
 - [x] Client network (TCP)
@@ -188,7 +188,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Never-reused fd handle tokens (monotonic mint counter, use-after-close hardening)
 - [x] Clock & randomness
 - [x] Process IO
-- [x] Terminal raw mode and window size (`/sys/tty`, wrapped by `std/tty` on the terminal behind standard input with a restoring bracket in `Io` and one registered with the scheduler; the native host restores the terminal when it is dropped)
+- [x] Terminal raw mode and window size (`/sys/tty`, wrapped by `std/Io` on the terminal behind standard input with a restoring bracket in `Io` and one registered with the scheduler; the native host restores the terminal when it is dropped)
 - [x] Filesystem (`stat`, listing, making, moving and removing over `Path`, wrapped by `std/fs` in `Try` over `Io`; the browser denies every row)
 - [x] Subprocesses (`spawn`, `wait` and `kill`, a child reaped on a thread that signals a polled pipe, wrapped by `std/Command`'s synchronous `spawn` and its `run` and `status` brackets, and `std/Command/Child` with its pipes as streams and `with` as the bracket that kills what a task started)
 
@@ -248,7 +248,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Stage 2: the flip — `/std` retyped and the certifier's purity analysis deleted
 - [x] HTTP client and server (`std/http`, built on `tcp` + `Async` — a literal URL refused where it does not read, a reply written in the order the protocol states with each step typed by its stage, a server accepting requests one by one or answering every connection through a handler)
 - [x] HTML as a tree (`/std/Html` — one type for an element, text, a comment or a run of trees, rendered escaped and read back as a browser reads it)
-- [x] Host-service modules (`std/time`, `std/proc`, `std/rand`, `std/fs`, `std/tty`)
+- [x] Host-service modules (`std/time`, `std/proc`, `std/rand`, `std/fs`, and the terminal rows in `std/Io`)
 - [x] Command-line interfaces (`/std/Cli`) — a specification is a list of `Arg` values, the record a line parses into is `Values(spec)` computed from it, `get(v, name)` is typed by a type-level lookup and refuses a name the specification does not contain, `WellFormed` is decided by reduction, and `main` reads the process arguments against all of it: `parse` and `select` for the line, `help` and `usage` for the screens, `report` and exit 2 for a refusal
 - [x] A terminal program draws a screen and reads keys (`/std/Tui`) — a screen is a `Frame(w, h)` whose joins the type checks, a layout is a tree of named panes whose sizes mirror it, keys and pastes are decoded from bytes and frames are diffed into bytes by pure functions, `Session` brackets the terminal, and a program is a `Tui` record `run` drives against one queue and one `Async/Signal` or `drive` folds with no terminal; five widgets — a border, a paragraph, a listing, an input and a viewport — and the `\u{…}` escape that spelling a combining mark asked for
 - [ ] [Text templates with named holes, sections and an output kind, checked at the fill](roadmap/templates-spec.md) (nothing holds a page of text with named places in it, repeats a part of it over a list, or escapes a value for where it lands; researched and prototyped, not designed)

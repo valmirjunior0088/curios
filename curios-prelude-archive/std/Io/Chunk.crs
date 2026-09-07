@@ -1,0 +1,18 @@
+use /std/{Bytes, Nat, Io};
+
+-- | One read's answer: bytes, the end of the stream, or a failure.
+pub induct Chunk: pub Type
+| chunk(Bytes)
+| eof()
+| error(Io/Error)
+end
+
+pub use Chunk/*;
+
+-- | The chunk a read row's status and bytes stand for; a `would_block` status is a failure here.
+pub let of(status: Nat, bytes: Bytes) -> Chunk =
+    match Io/Error/of(status)
+    | some(e) => Chunk/error(e)
+    | none() =>
+        match status == /sys/status/eof | true => Chunk/eof() | false => Chunk/chunk(bytes) end
+    end;

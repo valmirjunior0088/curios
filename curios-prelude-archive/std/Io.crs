@@ -1,6 +1,6 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Lift, Bytes, Byte, Nat, Option, Async, True, stream};
+use /std/{Monad, Lift, Bytes, Byte, Nat, Bool, Str, Option, Try, Async, True, Equal, Show};
 
 -- | The failure every host operation reports.
 pub mod Error;
@@ -16,30 +16,34 @@ satisfy Lift(Io, Io) {
     lift(@_A, m) = m,
 }
 
+-- | What one read answers with.
+pub mod Chunk;
+pub use Chunk/{let Chunk};
+
 -- | An input stream of this process.
-pub struct In: Type {
+pub struct Input: Type {
     /sys/Handle,
 }
 
 -- | An output stream of this process.
-pub struct Out: Type {
+pub struct Output: Type {
     /sys/Handle,
 }
 
 -- | Standard input.
-pub let stdin: In =
-    In { /sys/Handle/stdin };
+pub let stdin: Input =
+    Input { /sys/Handle/stdin };
 
 -- | Standard output.
-pub let stdout: Out =
-    Out { /sys/Handle/stdout };
+pub let stdout: Output =
+    Output { /sys/Handle/stdout };
 
 -- | Standard error.
-pub let stderr: Out =
-    Out { /sys/Handle/stderr };
+pub let stderr: Output =
+    Output { /sys/Handle/stderr };
 
--- | Up to `n` bytes, waited for on this program's own behalf. Inside a fiber, the stream concept's `read` parks instead.
-pub let read(i: In, n: Nat) -> Io(stream/Chunk) =
+-- | Up to `n` bytes, waited for on this program's own behalf. Inside a fiber, `Async/Read`'s `read` parks instead.
+pub let read(i: Input, n: Nat) -> Io(Chunk) =
     let r = /sys/Handle/read(i.0, n)!;
     choose
     | r.status == /sys/status/would_block =>
@@ -48,17 +52,17 @@ pub let read(i: In, n: Nat) -> Io(stream/Chunk) =
     | _ =>
         Io/pure(
             match Error/of(r.status)
-            | some(e) => stream/Chunk/error(e)
+            | some(e) => Chunk/error(e)
             | none() =>
                 match r.status == /sys/status/eof
-                | true => stream/Chunk/eof()
-                | false => stream/Chunk/chunk(r.bytes)
+                | true => Chunk/eof()
+                | false => Chunk/chunk(r.bytes)
                 end
             end)
     end;
 
 -- | One line without its newline, `none` at the end of the input. An error ends the input as the end does, and what was read before it is still the line.
-pub let read_line(i: In) -> Io(Option(Bytes)) =
+pub let read_line(i: Input) -> Io(Option(Bytes)) =
     let go(acc: Bytes) -> Io(Option(Bytes)) =
         let c = read(i, 1)!;
         match c
@@ -74,7 +78,7 @@ pub let read_line(i: In) -> Io(Option(Bytes)) =
     go(x[]);
 
 -- | The whole of `b`, a short write resent and a failure dropped.
-pub let write(o: Out, b: Bytes) -> Io({}) =
+pub let write(o: Output, b: Bytes) -> Io({}) =
     let r = /sys/Handle/write(o.0, b)!;
     choose
     | r.status != /sys/status/ok => Io/pure(())
@@ -83,10 +87,55 @@ pub let write(o: Out, b: Bytes) -> Io({}) =
     | _ => Io/pure(())
     end;
 
-satisfy stream/Read(In) {
+satisfy Async/Read(Input) {
     read(i, n) = Async/raw/read(i.0, n),
 }
 
-satisfy stream/Write(Out) {
+satisfy Async/Write(Output) {
     write(o, b) = Async/raw/write(o.0, b),
 }
+
+-- | The terminal's size in cells.
+pub struct TtySize: pub Type {
+    cols: Nat,
+    rows: Nat,
+}
+
+satisfy Equal(TtySize);
+
+satisfy Show(TtySize) {
+    show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),
+}
+
+-- | Raw mode on or off, on the terminal behind standard input.
+pub let tty_raw(on: Bool) -> Try(Io, Error, {}) =
+    let status = /sys/tty/raw(/sys/Handle/stdin, on)!;
+    match Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+
+-- | The terminal's size now.
+pub let tty_size: Try(Io, Error, TtySize) =
+    let r = /sys/tty/size(/sys/Handle/stdin)!;
+    match Error/of(r.status)
+    | some(e) => Try/raise(e)
+    | none() => Try/pure(TtySize { cols = r.cols, rows = r.rows })
+    end;
+
+let tty_restore: Io({}) =
+    Io/bind(/sys/tty/raw(/sys/Handle/stdin, false), (_) => Io/pure(()));
+
+-- | Raw mode around `body`, restored whichever way the body ends.
+pub let with_raw_tty(@A: Type, body: Try(Io, Error, A)) -> Try(Io, Error, A) =
+    let _ = tty_raw(true)!;
+    let a =
+        Try/rescue(body, (e) =>
+            let _ = tty_restore!;
+            Try/raise(e))!;
+    let _ = tty_restore!;
+    Try/pure(a);
+
+-- | The same bracket inside a fiber, registered with the scheduler, so a cancelled task restores the mode.
+pub let with_raw_tty_async(@A: Type, body: Try(Async, Error, A)) -> Try(Async, Error, A) =
+    let _ = tty_raw(true)!;
+    let outcome = Async/using(tty_restore, Try/run(body))!;
+    let a = outcome!;
+    Try/pure(a);

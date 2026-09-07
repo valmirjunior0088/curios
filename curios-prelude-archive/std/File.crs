@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Path, Try, Async, Io, True, stream};
+use /std/{Bytes, Nat, Path, Try, Async, Io, True};
 
 -- | An open file.
 pub struct File: Type {
@@ -33,9 +33,9 @@ pub let close(f: File) -> Io({}) =
     /sys/Handle/close(f.0);
 
 -- | Up to `n` bytes.
-pub let read(f: File, n: Nat) -> Io(stream/Chunk) =
+pub let read(f: File, n: Nat) -> Io(Io/Chunk) =
     let r = /sys/Handle/read(f.0, n)!;
-    Io/pure(stream/of_status(r.status, r.bytes));
+    Io/pure(Io/Chunk/of(r.status, r.bytes));
 
 -- | The whole of `b`, a short write resent.
 pub let write(f: File, b: Bytes) -> Try(Io, Io/Error, {}) =
@@ -52,11 +52,11 @@ pub let write(f: File, b: Bytes) -> Try(Io, Io/Error, {}) =
         end
     end;
 
-satisfy stream/Read(File) {
+satisfy Async/Read(File) {
     read(f, n) = Async/lift(read(f, n)),
 }
 
-satisfy stream/Write(File) {
+satisfy Async/Write(File) {
     write(f, b) = Async/lift(Try/run(write(f, b))),
 }
 

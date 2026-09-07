@@ -48,8 +48,8 @@ fn io_read() {
 #[test]
 fn io_read_short_reads_and_eof() {
     let source = r#"
-        use /std/{Io, stream};
-        let show(r : stream/Chunk) -> Io({}) =
+        use /std/{Io};
+        let show(r : Io/Chunk) -> Io({}) =
             match r : (_) => Io({})
             | chunk(b) => let _ = Io/write(Io/stdout, b)!; /std/Io/pure(())
             | eof() => /std/print("1")
@@ -69,7 +69,7 @@ fn io_read_short_reads_and_eof() {
 #[test]
 fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
     let source = r#"
-        use /std/{Nat, Bytes, Result, Async, Cell, Str, Io, print, stream};
+        use /std/{Nat, Bytes, Result, Async, Cell, Str, Io, print};
         let show(r : Result(Async/Deadlock, Result(Io/Error, Bytes))) -> Str =
             match r
             | failure(_) => "deadlock"
@@ -79,25 +79,25 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 | failure(_) => "error"
                 end
             end;
-        let error_first(n : Nat) -> Async(stream/Chunk) =
-            Async/pure(stream/Chunk/error(Io/Error/other(247)));
-        let chunk_then_error : Io((Nat) -> Async(stream/Chunk)) =
+        let error_first(n : Nat) -> Async(Io/Chunk) =
+            Async/pure(Io/Chunk/error(Io/Error/other(247)));
+        let chunk_then_error : Io((Nat) -> Async(Io/Chunk)) =
             let calls = Cell/new(0)!;
             Io/pure((n) =>
                 let k = Async/lift(Cell/get(calls))!;
                 let _ = Async/lift(Cell/set(calls, k + 1))!;
                 match k
-                | 0 => Async/pure(stream/Chunk/chunk(x[0x41, 0x42]))
-                | _ => Async/pure(stream/Chunk/error(Io/Error/other(247)))
+                | 0 => Async/pure(Io/Chunk/chunk(x[0x41, 0x42]))
+                | _ => Async/pure(Io/Chunk/error(Io/Error/other(247)))
                 end);
-        let chunk_then_eof : Io((Nat) -> Async(stream/Chunk)) =
+        let chunk_then_eof : Io((Nat) -> Async(Io/Chunk)) =
             let calls = Cell/new(0)!;
             Io/pure((n) =>
                 let k = Async/lift(Cell/get(calls))!;
                 let _ = Async/lift(Cell/set(calls, k + 1))!;
                 match k
-                | 0 => Async/pure(stream/Chunk/chunk(x[0x41, 0x42, 0x43]))
-                | _ => Async/pure(stream/Chunk/eof())
+                | 0 => Async/pure(Io/Chunk/chunk(x[0x41, 0x42, 0x43]))
+                | _ => Async/pure(Io/Chunk/eof())
                 end);
         let _ = print(show(Async/block_on(Async/drain(error_first))!))!;
         let _ = print(" / ")!;

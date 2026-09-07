@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io, stream};
+use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io};
 use /std/time/{Duration};
 
 mod Waker;
@@ -124,7 +124,7 @@ pub let go(body: Fiber) -> Async({}) =
     fork_with(body, Token { c });
 
 -- | Everything `read` yields up to the end of the stream; a failure before the end drops what was read.
-pub let drain(read: (Nat) -> Async(stream/Chunk)) -> Async(Result(Io/Error, Bytes)) =
+pub let drain(read: (Nat) -> Async(Io/Chunk)) -> Async(Result(Io/Error, Bytes)) =
     let go(acc: Bytes) -> Async(Result(Io/Error, Bytes)) =
         let r = read(4096)!;
         match r
@@ -133,6 +133,55 @@ pub let drain(read: (Nat) -> Async(stream/Chunk)) -> Async(Result(Io/Error, Byte
         | error(e) => pure(Result/failure(e))
         end;
     go(x[]);
+
+-- | What a stream is read through: up to `n` bytes, parking the fiber until some arrive.
+pub concept Read(S: Type): pub Type {
+    read(S, Nat) -> Async(Io/Chunk),
+}
+
+-- | What a stream is written through: the whole of the bytes, a short write resent.
+pub concept Write(S: Type): pub Type {
+    write(S, Bytes) -> Async(Result(Io/Error, {})),
+}
+
+-- | Everything up to the end of the stream; a failure before the end drops what was read.
+pub let read_all(@S: Type, use Read(S), s: S) -> Async(Result(Io/Error, Bytes)) =
+    drain((n) => Read/read(s, n));
+
+-- | The bytes before the first `delimiter`, which is consumed and dropped, or everything read when the stream ends first.
+pub let read_until(@S: Type, use Read(S), s: S, delimiter: Byte) -> Async(Result(Io/Error, Bytes)) =
+    let go(acc: Bytes) -> Async(Result(Io/Error, Bytes)) =
+        let c = Read/read(s, 1)!;
+        match c
+        | chunk(b) =>
+            match Option/unwrap_or(Bytes/try_get(b, 0), delimiter) == delimiter
+            | true => pure(Result/success(acc))
+            | false => go(x[..acc, ..b])
+            end
+        | eof() => pure(Result/success(acc))
+        | error(e) => pure(Result/failure(e))
+        end;
+    go(x[]);
+
+-- | Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer.
+pub let copy(
+    @S: Type,
+    @T: Type,
+    use Read(S),
+    use Write(T),
+    from: S,
+    to: T,
+) -> Async(Result(Io/Error, {})) =
+    let go() -> Async(Result(Io/Error, {})) =
+        let c = Read/read(from, 4096)!;
+        match c
+        | chunk(b) =>
+            let w = Write/write(to, b)!;
+            match w | success(_) => go() | failure(e) => pure(Result/failure(e)) end
+        | eof() => pure(Result/success(()))
+        | error(e) => pure(Result/failure(e))
+        end;
+    go();
 
 -- | The value `f` is fulfilled with, parking until it is.
 pub let await(@A: Type, f: Future(A)) -> Async(A) =

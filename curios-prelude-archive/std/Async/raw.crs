@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Bool, List, Option, Result, Io, Async, True, stream};
+use /std/{Bytes, Nat, Bool, List, Option, Result, Io, Async, True};
 
 let ready_now(results: Nat, interest: Nat) -> Bool =
     Nat/and(results, Nat/or(Nat/or(interest, /sys/event/err), /sys/event/hup)) > 0;
@@ -21,8 +21,8 @@ pub let wait(h: /sys/Handle, ev: Nat) -> Async({}) =
     Async/wait(h, ev);
 
 -- | Up to `n` bytes from `h`, parking while the host would block.
-pub let read(h: /sys/Handle, n: Nat) -> Async(stream/Chunk) =
-    let go() -> Async(stream/Chunk) =
+pub let read(h: /sys/Handle, n: Nat) -> Async(Io/Chunk) =
+    let go() -> Async(Io/Chunk) =
         let r = /sys/Handle/read(h, n)!;
         match r.status == /sys/status/would_block
         | true =>
@@ -30,11 +30,11 @@ pub let read(h: /sys/Handle, n: Nat) -> Async(stream/Chunk) =
             go()
         | false =>
             match Io/Error/of(r.status)
-            | some(e) => Async/pure(stream/Chunk/error(e))
+            | some(e) => Async/pure(Io/Chunk/error(e))
             | none() =>
                 match r.status == /sys/status/eof
-                | true => Async/pure(stream/Chunk/eof())
-                | false => Async/pure(stream/Chunk/chunk(r.bytes))
+                | true => Async/pure(Io/Chunk/eof())
+                | false => Async/pure(Io/Chunk/chunk(r.bytes))
                 end
             end
         end;

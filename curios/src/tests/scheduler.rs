@@ -40,9 +40,9 @@ fn task_bind_reads_and_echoes() {
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     run_text(
         r#"
-        use /std/{Async, Io, stream};
+        use /std/{Async, Io};
         let prog : Async({}) =
-            let r = stream/Read/read(Io/stdin, 1024)!;
+            let r = Async/Read/read(Io/stdin, 1024)!;
             match r : (_) => Async({})
             | chunk(bytes) => Io/write(Io/stdout, bytes)
             | eof() => Async/pure(())
@@ -143,8 +143,8 @@ fn constructing_a_leaf_task_performs_no_effect() {
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     run_text(
         r#"
-        use /std/{Async, Str, Io, stream};
-        let discarded : Async(stream/Chunk) = stream/Read/read(Io/stdin, 100);
+        use /std/{Async, Str, Io};
+        let discarded : Async(Io/Chunk) = Async/Read/read(Io/stdin, 100);
         let r = Io/read(Io/stdin, 100)!;
         match r : (_) => /std/Io({})
         | chunk(bytes) => Io/write(Io/stdout, bytes)

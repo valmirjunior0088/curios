@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async, stream};
+use /std/{Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async};
 
 -- | How a child's standard stream is wired.
 pub mod Stdio;
@@ -74,7 +74,7 @@ pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
     end;
 
 let drain(p: Option(Child/Pipe)) -> Async(Result(Io/Error, Bytes)) =
-    match p | some(p) => stream/read_all(p) | none() => Async/pure(Result/success(x[])) end;
+    match p | some(p) => Async/read_all(p) | none() => Async/pure(Result/success(x[])) end;
 
 let capture(
     child: Child,

@@ -17,7 +17,7 @@ Two Curios processes have no way to talk that is not bytes on a handle. `/std/tc
 
 ## What the tree already decides
 
-- **There is no new transport to build, and none to add.** `curios-abi`'s row list has no `pipe`, no `socketpair`, no unix-domain socket and no shared memory. What exists is a child's standard streams (`proc/spawn`, `proc/stream`) and TCP with TLS above it, multiplexed by `Handle/poll`. Both already satisfy `/std/stream`'s `Read` and `Write` — over `File`, `tcp/Socket` and `Child/Pipe` — so a channel written against those two concepts reaches every transport this system has without an ABI change.
+- **There is no new transport to build, and none to add.** `curios-abi`'s row list has no `pipe`, no `socketpair`, no unix-domain socket and no shared memory. What exists is a child's standard streams (`proc/spawn`, `proc/stream`) and TCP with TLS above it, multiplexed by `Handle/poll`. Both already satisfy `/std/Async`'s `Read` and `Write` — over `File`, `tcp/Socket` and `Child/Pipe` — so a channel written against those two concepts reaches every transport this system has without an ABI change.
 - **A fallible operation is `Try`.** By [a fallible operation returns `Try`](../../design/language/a-fallible-operation-returns-try.md), a remote receive is `Try(Async, Io/Error, …)` and a local one is not. The two are therefore different types, and unifying them would either infect every in-process program with an impossible error case or hide a peer's death.
 - **A concept resolves with global coherence**, which is exactly the property a wire format wants: one encoding per type, decided once for the whole program, not per call site.
 - **Only `Spell` and `Equal` are derivable** (`curios-elab/src/derive.rs`), so a codec is hand-written witnesses until and unless a third derivation is added.
@@ -27,7 +27,7 @@ Two Curios processes have no way to talk that is not bytes on a handle. `/std/tc
 
 One sentence: **a remote channel is a local channel with a bridge, and the bridge is a codec, a framing and a fiber at each end.**
 
-**The transport is a premise, not a type.** `Remote(A)` is built over any `S` satisfying `stream/Read(S)` and `stream/Write(S)`, so a child's pipe and a TLS socket are one implementation.
+**The transport is a premise, not a type.** `Remote(A)` is built over any `S` satisfying `Async/Read(S)` and `Async/Write(S)`, so a child's pipe and a TLS socket are one implementation.
 
 **The codec is a concept.** `Codec(A)` encodes an `A` to `Bytes` and decodes a prefix of `Bytes` back to an `A` and the remainder. A witness exists only for data that is first-order and closed: no functions, no proofs, no `Io`, nothing whose type mentions a value the peer cannot reconstruct.
 
