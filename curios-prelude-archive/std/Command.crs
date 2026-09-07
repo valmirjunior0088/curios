@@ -4,9 +4,21 @@ use /std/{Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async, Handle};
 pub mod Stdio;
 pub use Stdio/{let Stdio};
 
--- | A running child process.
+-- | One end of a pipe to the child, read and written as a stream.
+pub struct Pipe: Type {
+    Handle,
+}
+
+-- | A running child, and whichever of its streams were piped.
+pub struct Child: Type {
+    handle: Handle,
+    stdin: Option(Pipe),
+    stdout: Option(Pipe),
+    stderr: Option(Pipe),
+}
+
+-- | Waiting for a child, ending it, and how it ended.
 pub mod Child;
-pub use Child/{let Child};
 
 -- | A program to run, and how to run it.
 pub struct Command: pub Type {
@@ -70,10 +82,16 @@ pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
         let stdin = pipe(r.child, 0, cmd.stdin)!;
         let stdout = pipe(r.child, 1, cmd.stdout)!;
         let stderr = pipe(r.child, 2, cmd.stderr)!;
-        Try/pure(Child/new(r.child, stdin, stdout, stderr))
+        Try/pure(
+            Child {
+                handle = r.child,
+                stdin = Option/map(stdin, (h) => Pipe { h }),
+                stdout = Option/map(stdout, (h) => Pipe { h }),
+                stderr = Option/map(stderr, (h) => Pipe { h }),
+            })
     end;
 
-let drain(p: Option(Child/Pipe)) -> Async(Result(Io/Error, Bytes)) =
+let drain(p: Option(Pipe)) -> Async(Result(Io/Error, Bytes)) =
     match p | some(p) => Async/read_all(p) | none() => Async/pure(Result/success(x[])) end;
 
 let capture(

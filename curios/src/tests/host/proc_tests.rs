@@ -254,7 +254,7 @@ fn a_cancelled_task_kills_the_child_it_spawned() {
     assert_eq!(io.kills(), vec![b"sleepy".to_vec()]);
 }
 
-// A child's pipes are streams: `spawn` with piped output hands back a `Child/Pipe` that `Async/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
+// A child's pipes are streams: `spawn` with piped output hands back a `Command/Pipe` that `Async/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
 #[test]
 fn a_piped_output_is_read_through_the_stream_witness() {
     let source = child_program(

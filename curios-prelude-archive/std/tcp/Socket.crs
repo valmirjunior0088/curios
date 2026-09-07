@@ -1,14 +1,5 @@
 use /std/{Bytes, Str, Nat, Bool, Result, Try, Async, Io, Handle};
-use /std/tcp/{resolve};
-
--- | A connected socket.
-pub struct Socket: Type {
-    Handle,
-}
-
--- | A socket over an accepted handle. The seam `Listener/accept` builds one through.
-pub let new(h: Handle) -> Socket =
-    Socket { h };
+use /std/tcp/{resolve, let Socket};
 
 -- | Up to `n` bytes, parking until some arrive.
 pub let read(c: Socket, n: Nat) -> Async(Io/Chunk) =

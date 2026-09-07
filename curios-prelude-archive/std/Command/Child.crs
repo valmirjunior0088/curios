@@ -1,4 +1,5 @@
 use /std/{Option, Try, Async, Io, Handle};
+use /std/Command/{let Child, let Pipe};
 
 -- | How a child ended: with an exit code, or by a signal.
 pub mod Exit
@@ -25,11 +26,6 @@ end
 
 pub use Exit/{let Exit};
 
--- | One end of a pipe to the child, read and written as a stream.
-pub struct Pipe: Type {
-    Handle,
-}
-
 satisfy Async/Read(Async, Pipe) {
     read(p, n) = Async/Read/read(p.0, n),
 }
@@ -37,28 +33,6 @@ satisfy Async/Read(Async, Pipe) {
 satisfy Async/Write(Async, Pipe) {
     write(p, b) = Async/Write/write(p.0, b),
 }
-
--- | A running child, and whichever of its streams were piped.
-pub struct Child: Type {
-    handle: Handle,
-    stdin: Option(Pipe),
-    stdout: Option(Pipe),
-    stderr: Option(Pipe),
-}
-
--- | A child over the handles the host handed back. The seam `Command/spawn` builds one through.
-pub let new(
-    handle: Handle,
-    stdin: Option(Handle),
-    stdout: Option(Handle),
-    stderr: Option(Handle),
-) -> Child =
-    Child {
-        handle = handle,
-        stdin = Option/map(stdin, (h) => Pipe { h }),
-        stdout = Option/map(stdout, (h) => Pipe { h }),
-        stderr = Option/map(stderr, (h) => Pipe { h }),
-    };
 
 -- | The pipe to the child's standard input, when it was piped.
 pub let stdin(c: Child) -> Option(Pipe) =

@@ -1,5 +1,5 @@
 use /std/{Bytes, Str, Nat, Result, Try, Async, Io, Handle};
-use /std/tcp/{resolve, Socket};
+use /std/tcp/{resolve, let Socket};
 
 -- | A bound, listening socket.
 pub struct Listener: Type {
@@ -47,7 +47,7 @@ let accepted(l: Listener) -> Async(Result(Io/Error, Handle)) =
 -- | The next connection, parking until a peer arrives.
 pub let accept(l: Listener) -> Try(Async, Io/Error, Socket) =
     let h = Try/attempt(accepted(l))!;
-    Try/pure(Socket/new(h));
+    Try/pure(Socket { h });
 
 -- | Close `l`.
 pub let close(l: Listener) -> Io({}) =
@@ -65,7 +65,7 @@ let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
     go();
 
 let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
-    Async/go(Async/using(Handle/close(h), handler(Socket/new(h))));
+    Async/go(Async/using(Handle/close(h), handler(Socket { h })));
 
 -- | Every connection to `host` at `port` handed to `handler` in a fiber of its own, until an accept fails; the listener is closed whichever way the task ends.
 pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Try(Async, Io/Error, {}) =
