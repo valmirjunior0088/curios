@@ -1,5 +1,6 @@
 use /std/{Bytes, Str, Nat, Result, Try, Async, Io, Handle};
 use /std/tcp/{resolve, let Socket};
+use /std/Handle/{Interest};
 
 -- | A bound, listening socket.
 pub struct Listener: Type {
@@ -34,7 +35,7 @@ let accepted(l: Listener) -> Async(Result(Io/Error, Handle)) =
         let r = /sys/socket/accept(l.0)!;
         match r.status == /sys/status/would_block
         | true =>
-            let _ = Async/park([Async/Wait/readable(l.0, /sys/event/read)])!;
+            let _ = Async/park([Async/Wait/ready(l.0, Interest/readable)])!;
             go()
         | false =>
             match Io/Error/of(r.status)

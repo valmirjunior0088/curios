@@ -1,13 +1,49 @@
-use /std/{Bytes, Nat, Result, Io, Async, True};
+use /std/{Bool, Bytes, Nat, Int, List, Result, Io, Async, True};
 pub use /sys/{Handle};
-pub use /sys/Handle/{poll, close, stdin, stdout, stderr};
+pub use /sys/Handle/{close, stdin, stdout, stderr};
+
+-- | What a park asks to be woken for.
+pub mod Interest;
+pub use Interest/{let Interest};
+
+-- | What a poll reports for one handle.
+pub mod Readiness;
+pub use Readiness/{let Readiness};
+
+let to_mask(i: Interest) -> Nat =
+    Nat/or(
+        match i.readable | true => /sys/event/read | false => 0 end,
+        match i.writable | true => /sys/event/write | false => 0 end);
+
+let flagged(mask: Nat, flag: Nat) -> Bool =
+    Nat/and(mask, flag) > 0;
+
+let of_mask(mask: Nat) -> Readiness =
+    Readiness {
+        fired =
+            Interest {
+                readable = flagged(mask, /sys/event/read),
+                writable = flagged(mask, /sys/event/write),
+            },
+        failed = flagged(mask, /sys/event/err),
+        hung_up = flagged(mask, /sys/event/hup),
+    };
+
+-- | Wait until a handle is ready for the interest beside it, or until `timeout` milliseconds pass; a negative timeout waits forever and zero answers at once.
+pub let poll(
+    handles: List(Handle),
+    interests: List(Interest),
+    timeout: Int,
+) -> Io(List(Readiness)) =
+    let masks = /sys/Handle/poll(handles, List/map(interests, to_mask), timeout)!;
+    Io/pure(List/map(masks, of_mask));
 
 -- | Up to `n` bytes, waited for on this program's own behalf: a host that would block is polled until it would not.
 let read_waiting(h: Handle, n: Nat) -> Io(Io/Chunk) =
     let r = /sys/Handle/read(h, n)!;
     choose
     | r.status == /sys/status/would_block =>
-        let _ = poll([h], [/sys/event/read], -1)!;
+        let _ = poll([h], [Interest/readable], -1)!;
         read_waiting(h, n)
     | _ => Io/pure(Io/Chunk/of(r.status, r.bytes))
     end;
@@ -29,15 +65,15 @@ let write_waiting(h: Handle, b: Bytes) -> Io(Result(Io/Error, {})) =
     | _ => Io/pure(Result/success(()))
     end;
 
-let park_on(h: Handle, interest: Nat) -> Async({}) =
-    Async/park([Async/Wait/readable(h, interest)]);
+let park_on(h: Handle, interest: Interest) -> Async({}) =
+    Async/park([Async/Wait/ready(h, interest)]);
 
 -- | Up to `n` bytes, parking the fiber while the host would block.
 let read_parking(h: Handle, n: Nat) -> Async(Io/Chunk) =
     let r = /sys/Handle/read(h, n)!;
     choose
     | r.status == /sys/status/would_block =>
-        let _ = park_on(h, /sys/event/read)!;
+        let _ = park_on(h, Interest/readable)!;
         read_parking(h, n)
     | _ => Async/pure(Io/Chunk/of(r.status, r.bytes))
     end;
@@ -47,7 +83,7 @@ let write_parking(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
     let r = /sys/Handle/write(h, b)!;
     choose
     | r.status == /sys/status/would_block =>
-        let _ = park_on(h, /sys/event/write)!;
+        let _ = park_on(h, Interest/writable)!;
         write_parking(h, b)
     | _ =>
         match Io/Error/of(r.status)
@@ -55,7 +91,7 @@ let write_parking(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
         | none() =>
             match r.written < Bytes/len(b)
             | true =>
-                let _ = park_on(h, /sys/event/write)!;
+                let _ = park_on(h, Interest/writable)!;
                 write_parking(
                     h,
                     Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))

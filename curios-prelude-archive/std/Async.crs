@@ -1,5 +1,6 @@
 use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, Lift, Io, Handle};
 use /std/time/{Duration};
+use /std/Handle/{Interest, Readiness};
 
 -- | The handle a parked fiber is resumed through: a primitive registers one while it parks and wakes it when its own event arrives.
 pub mod Waker;
@@ -38,7 +39,7 @@ struct Guard: Type {
 
 -- | One thing a parked fiber waits for. A park names a list of them and resumes on whichever fires first.
 pub induct Wait: pub Type
-| readable(handle: Handle, interest: Nat)
+| ready(handle: Handle, interest: Interest)
 | elapsed(Duration)
 | woken(register: (Waker) -> Io({}))
 end
@@ -235,7 +236,7 @@ let claim(s: Slot) -> Io(Option(Job)) =
 
 struct Parked: Type {
     handle: Handle,
-    interest: Nat,
+    interest: Interest,
     slot: Slot,
 }
 
@@ -312,9 +313,6 @@ let sweep_parked(ss: List(Slot)) -> Io(List(Slot)) =
         end
     end;
 
-let is_ready(results: Nat, interest: Nat) -> Bool =
-    Nat/and(results, Nat/or(Nat/or(interest, /sys/event/err), /sys/event/hup)) > 0;
-
 let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parked)}) =
     let handles = List/map(blocked, (p: Parked) => p.handle);
     let events = List/map(blocked, (p: Parked) => p.interest);
@@ -339,7 +337,9 @@ let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parke
                     let _ = run_guards(j.guards)!;
                     walk(tail, i + 1, woken, still)
                 | false =>
-                    match is_ready(Option/unwrap_or(List/try_get(results, i), 0), p.interest)
+                    match Readiness/answers(
+                        Option/unwrap_or(List/try_get(results, i), Readiness/nothing),
+                        p.interest)
                     | true =>
                         let taken = claim(p.slot)!;
                         match taken
@@ -439,7 +439,7 @@ let waker_for(q: Queues, slot: Slot) -> Waker =
 
 let register_wait(q: Queues, slot: Slot, w: Wait) -> Io({}) =
     match w
-    | readable(h, interest) =>
+    | ready(h, interest) =>
         let current = Cell/get(q.blocked)!;
         Cell/set(q.blocked, [Parked { handle = h, interest = interest, slot = slot }, ..current])
     | elapsed(d) =>

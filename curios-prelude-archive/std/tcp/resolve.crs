@@ -1,7 +1,8 @@
 use /std/{Str, Nat, Bytes, Result, Option, List, Try, Async, Io, Handle};
+use /std/Handle/{Interest};
 
 let resolved_address(h: Handle) -> Async(Result(Io/Error, Bytes)) =
-    let _ = Async/park([Async/Wait/readable(h, /sys/event/read)])!;
+    let _ = Async/park([Async/Wait/ready(h, Interest/readable)])!;
     let a = /sys/dns/resolve(h)!;
     match Io/Error/of(a.status)
     | some(e) => Async/pure(Result/failure(e))

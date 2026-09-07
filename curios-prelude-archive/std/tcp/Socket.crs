@@ -1,5 +1,6 @@
 use /std/{Bytes, Str, Nat, Bool, Result, Try, Async, Io, Handle};
 use /std/tcp/{resolve, let Socket};
+use /std/Handle/{Interest};
 
 -- | Up to `n` bytes, parking until some arrive.
 pub let read(c: Socket, n: Nat) -> Async(Io/Chunk) =
@@ -47,7 +48,7 @@ let settle(h: Handle, pending: Bool) -> Try(Async, Io/Error, {}) =
     match pending
     | false => Try/pure(())
     | true =>
-        let _ = Async/park([Async/Wait/readable(h, /sys/event/write)])!;
+        let _ = Async/park([Async/Wait/ready(h, Interest/writable)])!;
         let status = /sys/socket/finish_connect(h)!;
         choose | status == /sys/status/would_block => settle(h, true) | _ => ok(status) end
     end;

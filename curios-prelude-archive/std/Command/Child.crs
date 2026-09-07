@@ -1,5 +1,6 @@
 use /std/{Option, Try, Async, Io, Handle};
 use /std/Command/{let Child, let Pipe};
+use /std/Handle/{Interest};
 
 -- | How a child ended: with an exit code, or by a signal.
 pub mod Exit
@@ -61,7 +62,7 @@ pub let kill(c: Child) -> Io({}) =
 
 -- | How the child ended, parking until it does. The pipes are closed with it, so read what it wrote before waiting for it.
 pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
-    let _ = Async/park([Async/Wait/readable(c.handle, /sys/event/read)])!;
+    let _ = Async/park([Async/Wait/ready(c.handle, Interest/readable)])!;
     let r = /sys/proc/wait(c.handle)!;
     let _ = close_pipes(c)!;
     match Io/Error/of(r.status)

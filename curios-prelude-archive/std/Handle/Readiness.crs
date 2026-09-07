@@ -1,0 +1,17 @@
+use /std/{Bool};
+use /std/Handle/{Interest};
+
+-- | What one poll reports for one handle: which settable flags fired, and the two the host reports whether or not they were asked for.
+pub struct Readiness: pub Type {
+    fired: Interest,
+    failed: Bool,
+    hung_up: Bool,
+}
+
+-- | Nothing reported.
+pub let nothing: Readiness =
+    Readiness { fired = Interest/none, failed = false, hung_up = false };
+
+-- | Whether `r` answers a park registered for `i`: its interest fired, or the handle failed, or the peer hung up — either of which means the handle will never become ready.
+pub let answers(r: Readiness, i: Interest) -> Bool =
+    Interest/overlaps(r.fired, i) || r.failed || r.hung_up;

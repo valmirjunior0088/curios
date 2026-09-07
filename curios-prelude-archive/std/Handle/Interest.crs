@@ -1,0 +1,25 @@
+use /std/{Bool};
+
+-- | The host's settable poll flags: what a park asks to be woken for, and, coming back, which of those fired.
+-- |
+-- | Both flags are askable, together or apart. The two a host reports unasked are `Readiness`'s own.
+pub struct Interest: pub Type {
+    readable: Bool,
+    writable: Bool,
+}
+
+-- | Neither flag.
+pub let none: Interest =
+    Interest { readable = false, writable = false };
+
+-- | Readability alone.
+pub let readable: Interest =
+    Interest { readable = true, writable = false };
+
+-- | Writability alone.
+pub let writable: Interest =
+    Interest { readable = false, writable = true };
+
+-- | Whether `a` and `b` share a flag.
+pub let overlaps(a: Interest, b: Interest) -> Bool =
+    a.readable && b.readable || a.writable && b.writable;
