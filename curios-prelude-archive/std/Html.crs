@@ -1,4 +1,4 @@
-use /std/{Str, Char, Bool, Nat, List, Option, Equal, Spell, Show};
+use /std/{Str, Char, Bool, List, Option, Equal, Spell, Show};
 
 -- | An HTML tree: an element with its attributes and children, written `<name></name>`; one written `<name/>`, as the void elements are; text; a comment; or a run of trees standing where one does. Text is written escaped, so no value that lands in it can be read as markup. The shape of the tree is the author's, as it is in the browser: no element name is consulted, so whether `void` suits the element is theirs to know.
 pub induct Html: pub Type

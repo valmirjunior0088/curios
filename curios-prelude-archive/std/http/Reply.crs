@@ -57,7 +57,7 @@ pub let write(
     @n: Nat,
     r: Reply(Stage/fixed(n)),
     b: Bytes,
-    @fits: Nat/Le(Bytes/len(b), n),
+    @_fits: Nat/Le(Bytes/len(b), n),
 ) -> Try(Async, Io/Error, Reply(Stage/fixed(n - Bytes/len(b)))) =
     let c = socket_of(r);
     let _ = put(c, b)!;
