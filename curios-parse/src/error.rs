@@ -4,7 +4,7 @@ use {
     std::rc::Rc,
 };
 
-/// A parse failure: a message at a byte offset into its source. It also carries the commitment flag behind progress-based backtracking — an error that is still fatal and sits past the choice point aborts [`Parser::or`](crate::Parser::or) and the repetition combinators instead of being backtracked, unless [`catch`](crate::catch) downgraded it. Outside this crate the error is opaque except for [`ParserError::format`].
+/// A parse failure: a message at a byte offset into its source. It also carries the commitment flag: an error [`commit`](crate::commit) marked aborts [`Parser::or`](crate::Parser::or) and the repetition combinators instead of being backtracked, and every other error backtracks. Outside this crate the error is opaque except for [`ParserError::format`].
 #[derive(Debug, Clone)]
 pub struct ParserError {
     fatal: bool,
@@ -21,7 +21,7 @@ impl ParserError {
         M: Into<String>,
     {
         Self {
-            fatal: true,
+            fatal: false,
             offset: state.offset,
             from: None,
             message: message.into(),
@@ -36,7 +36,7 @@ impl ParserError {
         }
     }
 
-    pub(crate) fn catch(self) -> Self {
+    pub(crate) fn uncommit(self) -> Self {
         Self {
             fatal: false,
             ..self
@@ -57,8 +57,8 @@ impl ParserError {
         }
     }
 
-    pub(crate) fn is_uncaught(&self, state: ParserState) -> bool {
-        self.fatal && self.offset != state.offset
+    pub(crate) fn is_uncaught(&self) -> bool {
+        self.fatal
     }
 
     /// The error as data: its message at a span ending at the failure offset — empty, at the point the parser stopped, unless the failure named the run of text it is about — which is what the caret of [`format`](Self::format) points at, so a consumer reading the span sees exactly where the rendering does.

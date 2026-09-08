@@ -20,17 +20,20 @@ where
         (self.0)(state)
     }
 
-    /// Ordered choice with progress-based commitment: the second alternative is tried only if the first failed *without consuming input* (or its error was downgraded by [`catch`]) — a failure past the choice point means the first alternative was the right branch and its error is the real diagnosis. When both fail recoverably, the error that got further into the input is reported, since it is almost always the more informative one.
+    /// Ordered choice: the second alternative is tried whenever the first failed, however much input it read, unless that failure was [`commit`]ted — a commitment says that alternative was the right branch and its error is the real diagnosis.
+    ///
+    /// Commitment is read on *both* sides, and it outranks the offset. When neither alternative committed, the error that got further into the input is reported, since it is almost always the more informative one — but that is a heuristic over two guesses, and a committed error is not a guess. Weighing a commitment by offset would discard the diagnosis an alternative asked for whenever a sibling happened to read further before giving up.
     pub fn or(self, parser: Parser<'a, A>) -> Self {
         Parser::new(move |state| {
             let first = match self.parse(state) {
                 Ok((item, state)) => return Ok((item, state)),
-                Err(error) if error.is_uncaught(state) => return Err(error),
+                Err(error) if error.is_uncaught() => return Err(error),
                 Err(error) => error,
             };
 
             let second = match parser.parse(state) {
                 Ok((item, state)) => return Ok((item, state)),
+                Err(error) if error.is_uncaught() => return Err(error),
                 Err(error) => error,
             };
 
@@ -42,7 +45,7 @@ where
         })
     }
 
-    /// Sequences two parsers and pairs their outputs. A failure in the second half typically *has* consumed input by then, so under [`Parser::or`]'s progress rule it commits — wrap the whole sequence in [`catch`] when the alternatives share a prefix.
+    /// Sequences two parsers and pairs their outputs. A failure in either half backtracks like any other, so an alternative that must own its tail says so with [`commit`] once its discriminating prefix is read.
     pub fn and<B>(self, parser: Parser<'a, B>) -> Parser<'a, (A, B)>
     where
         B: 'a,
@@ -119,9 +122,9 @@ where
     }
 }
 
-/// Upgrades the parser's failure to fatal, so an enclosing [`Parser::or`] or repetition stops at it instead of trying the next alternative. The dual of [`catch`]: `catch` says a failure must not kill its siblings, this says that past this point the failure *is* the diagnosis.
+/// Marks the parser's failure as the diagnosis, so an enclosing [`Parser::or`] or repetition stops at it instead of trying the next alternative.
 ///
-/// Only meaningful once input has been consumed, because commitment is progress-based — `ParserError::is_uncaught` asks for a fatal error whose offset has moved past the choice point, so committing a parser that fails without consuming anything still backtracks. The use it exists for is a keyword-dispatched alternative: the head is already eaten when the body runs, so the body's failure is always past the choice point.
+/// The one source of commitment: a failure backtracks until something says otherwise. Written once an alternative has read the prefix that discriminates it — `parse_struct_pattern` reads `Name {` and commits, so a missing `}` is reported against the pattern rather than sending the whole term grammar looking for another reading. [`uncommit`] is how a caller that may legitimately re-read the same text takes it back.
 pub fn commit<'a, T>(parser: Parser<'a, T>) -> Parser<'a, T>
 where
     T: 'a,
@@ -129,12 +132,14 @@ where
     Parser::new(move |state| parser.parse(state).map_err(ParserError::commit))
 }
 
-/// Downgrades the parser's failure to recoverable even when it consumed input, so an enclosing [`Parser::or`] or repetition backtracks instead of aborting. The escape hatch from progress-based commitment, for alternatives that share a prefix — e.g. the WAT parser wraps each `(keyword` head in `catch` so consuming the `(` while probing one form doesn't kill the others.
-pub fn catch<'a, T>(parser: Parser<'a, T>) -> Parser<'a, T>
+/// Takes back a [`commit`] made inside `parser`, so an enclosing [`Parser::or`] or repetition may still try its next alternative. The dual of `commit`, and the only way past one: commitment does not decay with distance, so a refusal a nested grammar commits to travels out of every caller that does not stop it here.
+///
+/// Written where one grammar deliberately refuses what another may legitimately re-read — `parse_bind_arm` over `parse_qualified_match_pattern`, whose refusal of `Option/some(n)` as a constructor pattern must not prevent a `choose` condition arm from reading the same text as an ordinary call.
+pub fn uncommit<'a, T>(parser: Parser<'a, T>) -> Parser<'a, T>
 where
     T: 'a,
 {
-    Parser::new(move |state| parser.parse(state).map_err(|error| error.catch()))
+    Parser::new(move |state| parser.parse(state).map_err(|error| error.uncommit()))
 }
 
 /// Runs the parser and hands its output back at the position it started from, consuming nothing. A positive look-ahead — the dual of [`not_ahead`](crate::not_ahead) — for a grammar that must inspect the next word before choosing among alternatives none of which may be denied their turn at it.

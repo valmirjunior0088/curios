@@ -236,6 +236,16 @@ fn parse_choose() {
     );
 }
 
+/// A condition arm may begin with a qualified name, which the bind arm first reads as a constructor pattern and refuses. The refusal is the pattern grammar's, not this arm's, so it must not escape the arm: the condition arm re-parses the same text as an ordinary term.
+#[test]
+fn a_choose_condition_arm_may_begin_with_a_qualified_name() {
+    assert!(
+        "choose\n| /std/Nat/lt(a, b) => 1\n| _ => 0\nend"
+            .parse::<Term>()
+            .is_ok()
+    );
+}
+
 // An arm-free choose is legal: `choose | _ => d end` is just its default.
 #[test]
 fn a_choose_of_only_a_default_parses() {

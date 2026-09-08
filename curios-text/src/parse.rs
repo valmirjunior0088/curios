@@ -50,9 +50,9 @@ use {
     curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
     curios_num::{Floating, Natural},
     curios_parse::{
-        Mark, Parser, catch, commit, fail, fail_from, lazy, look_ahead, many0, many1, mark,
-        memoize, not_ahead, preceded_by_space, pure, sep_by0_trailing, sep_by1_trailing, spanned,
-        take_eof, take_exact, take_n, take_while,
+        Mark, Parser, commit, fail, fail_from, lazy, look_ahead, many0, many1, mark, memoize,
+        not_ahead, preceded_by_space, pure, sep_by0_trailing, sep_by1_trailing, spanned, take_eof,
+        take_exact, take_n, take_while, uncommit,
     },
     curios_utilities::{
         Grain, InfixOp, Plicity, Qualifier, Sign, Span, is_identifier_char, is_keyword,
@@ -131,11 +131,9 @@ pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
             // The head is recoverable, because the absence of a comment is how the loop ends and a `-- |` is not a comment but the documentation syntax the caller reads next. Everything after the head is not: a `--` glued to a word is a mistake nothing else can diagnose.
             //
             // The span covers `--` through the end of the line, newline excluded. Recording is sound here because this parser never runs inside a string or character literal — literal interiors are consumed atomically by their own parsers — so every recorded span is a genuine comment of the winning parse.
-            spanned(
-                catch(take_exact("--").and_drop(not_ahead(" |")))
-                    .and_drop(comment_spacing(COMMENT_SPACING))
-                    .and_drop(take_while(|char| char != '\n')),
-            )
+            spanned(take_exact("--").and_drop(not_ahead(" |")).and_drop(commit(
+                comment_spacing(COMMENT_SPACING).and_drop(take_while(|char| char != '\n')),
+            )))
             .map(|(span, _)| record_comment(span))
             .and_drop(take_while(|char| char.is_whitespace()))
         }))
@@ -165,14 +163,14 @@ fn parse_doc_line<'a>() -> Parser<'a, String> {
                 .all(char::is_whitespace)
             {
                 true => pure(()),
-                false => fail(DOC_TRAILING),
+                false => commit(fail(DOC_TRAILING)),
             }
         })
-        .and_drop(comment_spacing(DOC_SPACING))
+        .and_drop(commit(comment_spacing(DOC_SPACING)))
         .and_keep(
             take_while(|char| char != '\n').map(|line| line.trim_end_matches('\r').to_string()),
         )
-        .and_drop(catch(take_exact("\n")).or(take_eof()))
+        .and_drop(take_exact("\n").or(take_eof()))
         .and_drop(take_while(|char| char == ' ' || char == '\t'))
 }
 
@@ -261,12 +259,13 @@ fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> Parser<'a, Nam
 fn parse_name<'a>() -> Parser<'a, Name> {
     // A path is whitespace-free: every separator touches both of its neighbors. That tightness is the whole disambiguation against division — the operator grammar requires whitespace on both sides of `/` (`parse_infix_op`), so `a/b` is only ever a path and `a / b` only ever a division, and the asymmetric spellings satisfy neither grammar. Trailing whitespace is consumed once, after the whole name, keeping the span tight.
     spanned(
-        catch(take_exact("/"))
+        take_exact("/")
             .map(|()| true)
             .or(pure(false))
-            .and(parse_identifier_raw().and(many0(|| {
-                catch(take_exact("/").and_keep(parse_identifier_raw()))
-            })))
+            .and(
+                parse_identifier_raw()
+                    .and(many0(|| take_exact("/").and_keep(parse_identifier_raw()))),
+            )
             .flat_map(|(is_abs, (first, rest))| {
                 let segments = iter::once(first)
                     .chain(rest)
@@ -281,10 +280,10 @@ fn parse_name<'a>() -> Parser<'a, Name> {
 }
 
 fn parse_qualified_name<'a>() -> Parser<'a, Name> {
-    catch(parse_name().flat_map(|name| match name.is_single() {
+    parse_name().flat_map(|name| match name.is_single() {
         true => fail("expected a qualified path"),
         false => pure(name),
-    }))
+    })
 }
 
 // The word is read *raw* and the whitespace after it consumed only once it matched, so a mismatch is reported against the word rather than wherever that whitespace ended — which for a line-final keyword is the next line, or past the end of the file. `end` and `and` are habitually written line-final, so a misspelled one used to put its caret on the innocent declaration below it. `parse_top_item` reads its head raw for the same reason.

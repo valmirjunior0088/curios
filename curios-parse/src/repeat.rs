@@ -23,7 +23,7 @@ where
             }
         };
 
-        if (require_first && items.is_empty()) || error.is_uncaught(state) {
+        if (require_first && items.is_empty()) || error.is_uncaught() {
             return Err(error);
         }
 
@@ -63,7 +63,7 @@ where
             panic!("Infinite repetition")
         }
         Ok((_, next_state)) => Ok(Some(next_state)),
-        Err(error) if error.is_uncaught(state) => Err(error),
+        Err(error) if error.is_uncaught() => Err(error),
         Err(_) => Ok(None),
     }
 }
@@ -86,7 +86,7 @@ where
 
         let (item, mut state) = match f().parse(state) {
             Ok(output) => output,
-            Err(error) if require_first || error.is_uncaught(state) => return Err(error),
+            Err(error) if require_first || error.is_uncaught() => return Err(error),
             Err(_) => return Ok((Vec::new(), state)),
         };
 
@@ -107,7 +107,7 @@ where
                     items.push(item);
                     state = next_state;
                 }
-                Err(error) if !trailing || error.is_uncaught(next_state) => return Err(error),
+                Err(error) if !trailing || error.is_uncaught() => return Err(error),
                 // The separator was trailing: keep it consumed, end the list.
                 Err(_) => {
                     state = next_state;

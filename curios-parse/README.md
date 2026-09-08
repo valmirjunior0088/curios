@@ -1,6 +1,6 @@
 # curios-parse
 
-The parser combinator DSL behind both the `.crs` surface grammar (`curios-text`) and the WAT parser (`curios-wasm`): single-use `Parser` actions, ordered choice under progress-based commitment, packrat memoization, and byte-offset errors rendered as caret snippets. Each combinator's contract belongs to the crate rustdoc. Why this and `curios-print` are two crates rather than two modules of one is `curios-print/README.md`'s decision.
+The parser combinator DSL behind both the `.crs` surface grammar (`curios-text`) and the WAT parser (`curios-wasm`): single-use `Parser` actions, freely backtracking ordered choice that an alternative stops with `commit`, packrat memoization, and byte-offset errors rendered as caret snippets. Each combinator's contract belongs to the crate rustdoc. Why this and `curios-print` are two crates rather than two modules of one is `curios-print/README.md`'s decision.
 
 ## Design
 
@@ -10,11 +10,13 @@ The parser combinator DSL behind both the `.crs` surface grammar (`curios-text`)
 
 **Rationale.** Being `FnOnce` lets combinators move captured values into results without cloning. The cost is that a parser cannot be run twice, which is why every iteration builds a fresh instance.
 
-### Choice commits on progress
+### Choice backtracks until an alternative commits
 
-**Decision.** `or` tries its second alternative only when the first failed *without consuming input*; a failure past the choice point is fatal and owns the diagnosis. `catch` downgrades a failure to recoverable, for alternatives that share a prefix; `commit` upgrades one, for a keyword-dispatched body whose head has already been eaten. When both alternatives fail recoverably, the error that got further into the input is reported.
+**Decision.** `or` tries its second alternative whenever the first failed, however much input it read. `commit` marks a failure as the diagnosis, and an alternative that commits stops the choice on either side; `uncommit` takes a commitment back, for a caller that may legitimately re-read the same text. When neither alternative committed, the error that got further into the input is reported.
 
-**Rationale.** A failure after progress means that alternative was the right branch, so its error — not a generic complaint at the choice point — is what the reader needs, and the error that got further is almost always the more informative one. The escape hatches exist because a grammar with shared prefixes, such as WAT's `(keyword …` forms, would otherwise die on the first probe that consumed the `(`.
+**Rationale.** An alternative knows when it has read the prefix that discriminates it, and nothing else does: `parse_struct_pattern` reads `Name {` and owes a missing `}`, while a grammar with shared prefixes — WAT's `(keyword …` forms, or a Curios tuple against a parenthesized term — must probe past the `(` and still yield. Commitment is asked for rather than inferred from consumption, so the two cannot disagree, and the offset heuristic decides only between two failures that are both guesses.
+
+`uncommit` is the rarer half and each use marks a real boundary: a speculative alternative that invokes the term grammar contains what that grammar commits to, since the same text is about to be read another way. Three sites carry it, and a fourth would be a reason to ask whether the grammar is sharing too much rather than to write it.
 
 ### Memoization is packrat, keyed by nonterminal and offset
 

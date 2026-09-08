@@ -7,13 +7,13 @@ pub(super) fn parse_binding<'a>() -> Parser<'a, (Label, LetSignature)> {
 
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
 fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
-    catch(parse_keyword("let"))
+    parse_keyword("let")
         .and_keep(parse_pattern())
         .and(parse_local_let_signature())
         .map(|(binder, signature)| LetBinding { binder, signature })
         .and(many0(|| {
-            catch(parse_keyword("and"))
-                .and_keep(parse_binding())
+            parse_keyword("and")
+                .and_keep(commit(parse_binding()))
                 .map(|(label, signature)| LetBinding {
                     binder: Pattern::Binder(Some(label)),
                     signature,
@@ -27,7 +27,7 @@ fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
 
 // A `use` binder in function-definition sugar (`let`/`satisfy` telescopes): `use term`. Always anonymous — there is no source binder position at all (lowering mints a fresh name directly) and joins the instance scope; an instance is reached by resolution, never by name.
 pub(super) fn parse_use_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
-    catch(parse_keyword("use"))
+    parse_keyword("use")
         .and_keep(lazy(parse_term))
         .map(|type_| FuncSugarParam {
             plicity: Plicity::Witness,
@@ -52,27 +52,25 @@ pub(super) fn parse_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
 
 // The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the type-required and the local (type-optional) signature parsers.
 pub(super) fn parse_func_let_signature<'a>() -> Parser<'a, LetSignature> {
-    catch(
-        parse_literal("(")
-            .and_keep(sep_by0_trailing(parse_func_sugar_param, || {
-                parse_literal(",")
-            }))
-            .and_drop(parse_literal(")"))
-            .and_drop(parse_literal("->")),
-    )
-    .and(lazy(parse_term))
-    .and_drop(parse_literal("="))
-    .and(lazy(parse_term))
-    .map(|((params, output), body)| LetSignature::Func {
-        params,
-        output,
-        body,
-    })
+    parse_literal("(")
+        .and_keep(sep_by0_trailing(parse_func_sugar_param, || {
+            parse_literal(",")
+        }))
+        .and_drop(parse_literal(")"))
+        .and_drop(parse_literal("->"))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal("="))
+        .and(lazy(parse_term))
+        .map(|((params, output), body)| LetSignature::Func {
+            params,
+            output,
+            body,
+        })
 }
 
 // The plain `: T = body` form with a mandatory type.
 pub(super) fn parse_required_name_signature<'a>() -> Parser<'a, LetSignature> {
-    catch(parse_literal(":"))
+    parse_literal(":")
         .and_keep(lazy(parse_term))
         .and_drop(parse_literal("="))
         .and(lazy(parse_term))
@@ -84,7 +82,8 @@ pub(super) fn parse_required_name_signature<'a>() -> Parser<'a, LetSignature> {
 
 // The plain `(: T)? = body` form: the type may be omitted (inferred from `body`).
 pub(super) fn parse_optional_name_signature<'a>() -> Parser<'a, LetSignature> {
-    catch(parse_literal(":").and_keep(lazy(parse_term)))
+    parse_literal(":")
+        .and_keep(lazy(parse_term))
         .map(Some)
         .or(pure(None))
         .and_drop(parse_literal("="))
@@ -129,13 +128,11 @@ pub(super) fn parse_let<'a>() -> Parser<'a, Term> {
 
 // A glued `.index`/`.label` projection, consuming no whitespace — usable both as an ordinary term suffix (via the whitespace-eating [`parse_proj_suffix`]) and inside the tight `Bin`-literal spread operand.
 pub(super) fn parse_proj_suffix_raw<'a>() -> Parser<'a, Field> {
-    catch(
-        take_exact(".").and_keep(
-            parse_usize_raw()
-                .map(Field::Index)
-                .or(parse_identifier_raw().map(|label| Field::Label(label.to_string())))
-                .map_err("Expected field index or label after '.'"),
-        ),
+    take_exact(".").and_keep(
+        parse_usize_raw()
+            .map(Field::Index)
+            .or(parse_identifier_raw().map(|label| Field::Label(label.to_string())))
+            .map_err("Expected field index or label after '.'"),
     )
 }
 
@@ -151,7 +148,7 @@ pub(super) enum Suffix {
 
 // A call-site argument's plicity: `use <term>` fills a witness slot, `@<term>` an implicit slot, a plain term an explicit slot. `use` is reserved, so it can never begin a plain-argument term.
 pub(super) fn parse_apply_argument<'a>() -> Parser<'a, Argument> {
-    catch(parse_keyword("use"))
+    parse_keyword("use")
         .map(|()| Plicity::Witness)
         .or(parse_plicity())
         .and(lazy(parse_term))
@@ -161,19 +158,17 @@ pub(super) fn parse_apply_argument<'a>() -> Parser<'a, Argument> {
 pub(super) fn parse_suffix<'a>() -> Parser<'a, Suffix> {
     parse_proj_suffix()
         .map(Suffix::Proj)
-        .or(catch(parse_literal("("))
+        .or(parse_literal("(")
             .and_keep(sep_by0_trailing(parse_apply_argument, || {
                 parse_literal(",")
             }))
-            .and_drop(parse_literal(")"))
+            .and_drop(commit(parse_literal(")")))
             .map(Suffix::Apply))
         // A postfix `!` — but not the `!=` operator, whose `!` would otherwise be eaten here as a bang, stranding the `=`.
-        .or(catch(
-            take_exact("!")
-                .and_drop(not_ahead("="))
-                .and_drop(parse_whitespace()),
-        )
-        .map(|()| Suffix::Bang))
+        .or(take_exact("!")
+            .and_drop(not_ahead("="))
+            .and_drop(parse_whitespace())
+            .map(|()| Suffix::Bang))
 }
 
 /// Folds a postfix chain onto its head, one node per suffix. Every intermediate node takes the span from the head's start to its own suffix's end — `acts.0` inside `acts.0!`, `f(x)` inside `f(x).1` — so an error at a node in the middle of a chain reports there rather than at the nearest spanned ancestor, which for a hoisted action is the outermost `!` of its region. A head without a span (a bare name) leaves the chain's own nodes unspanned, and the caller's `with_span` over the whole chain covers those as before.
@@ -197,7 +192,8 @@ pub(super) fn apply_suffixes(head: Term, suffixes: Vec<(Span, Suffix)>) -> Term 
 }
 
 pub(super) fn parse_empty_tuple<'a>() -> Parser<'a, Term> {
-    catch(parse_literal("(").and_keep(parse_literal(")")))
+    parse_literal("(")
+        .and_keep(parse_literal(")"))
         .map(|_| Subterm::Tuple(Tuple { fields: vec![] }))
         .map(Into::into)
 }
@@ -223,7 +219,7 @@ fn trimmed(mut span: Span) -> Span {
 
 pub(super) fn parse_goal<'a>() -> Parser<'a, Term> {
     // `?` is not an identifier character, so a plain literal suffices — no token-aware matching needed. (`_` remains the match wildcard binder.) A written `?` is a *goal* — reported at zonk — never a silent `Subterm::Hole`, which only desugars mint.
-    catch(parse_literal("?")).map(|()| Subterm::Goal.into())
+    parse_literal("?").map(|()| Subterm::Goal.into())
 }
 
 pub(super) fn parse_atomic_term<'a>() -> Parser<'a, Term> {
@@ -254,7 +250,7 @@ pub(super) fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
 // The fixed set of overloaded infix operators, recognised by maximal munch (two-character symbols before their one-character prefixes).
 pub(super) fn parse_infix_symbol<'a>() -> Parser<'a, InfixOp> {
     fn symbol<'a>(text: &'static str, op: InfixOp) -> Parser<'a, InfixOp> {
-        catch(take_exact(text)).map(move |()| op)
+        take_exact(text).map(move |()| op)
     }
 
     symbol("==", InfixOp::Eql)
@@ -295,11 +291,9 @@ pub(super) fn require_space<'a>() -> Parser<'a, ()> {
 
 // An infix operator with a space on each side, consumed without its operands.
 pub(super) fn parse_infix_op<'a>() -> Parser<'a, InfixOp> {
-    catch(
-        preceded_by_space()
-            .and_keep(parse_infix_symbol())
-            .and_drop(require_space()),
-    )
+    preceded_by_space()
+        .and_keep(parse_infix_symbol())
+        .and_drop(require_space())
 }
 
 // Precedence-climbing over applied atoms: parse a left operand, then fold in every following operator whose precedence is at least `min_prec`. The right operand of an operator at precedence `p` is parsed at `p + 1` (left-associativity).
@@ -310,7 +304,7 @@ pub(super) fn parse_infix_expr<'a>(min_prec: u8) -> Parser<'a, Term> {
 pub(super) fn parse_infix_rest<'a>(left: Term, min_prec: u8) -> Parser<'a, Term> {
     // One `many0` loop per precedence level, folded by move. The previous spelling recursed once per operator *and* deep-cloned the accumulated left spine at every link (`let here = left.clone()` before the catch), so an N-operator chain cost N native frame nests and O(N²) cloned nodes — the same per-element-recursion class the flat `let` block in `parse_let` was rebuilt to avoid. Native depth is now bounded by the precedence table's height (each `parse_infix_expr(precedence + 1)` descends one level), never by chain length, and the left operand is cloned zero times.
     many0(move || {
-        catch(parse_infix_op().flat_map(move |op| {
+        parse_infix_op().flat_map(move |op| {
             let precedence = op_precedence(op);
 
             if precedence < min_prec {
@@ -319,7 +313,7 @@ pub(super) fn parse_infix_rest<'a>(left: Term, min_prec: u8) -> Parser<'a, Term>
             }
 
             parse_infix_expr(precedence + 1).map(move |right| (op, right))
-        }))
+        })
     })
     .and_drop(refuse_asymmetric_operator())
     .map(move |pairs| {
@@ -342,7 +336,7 @@ fn refuse_asymmetric_operator<'a>() -> Parser<'a, ()> {
             .map(|()| true)
             .or(pure(false))
             .and(mark())
-            .and(catch(parse_infix_symbol()))
+            .and(parse_infix_symbol())
             .and(look_ahead(take_while(|char: char| !char.is_whitespace()))),
     )
     .map(Some)
