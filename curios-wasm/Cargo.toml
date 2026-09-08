@@ -8,6 +8,9 @@ description = "The Curios WebAssembly-GC target: symbolic module model, parser, 
 [lints]
 workspace = true
 
+[features]
+profile = ["curios-parse/profile"]
+
 [dependencies]
 curios-utilities = { workspace = true }
 curios-parse = { workspace = true }

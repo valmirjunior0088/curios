@@ -8,5 +8,9 @@ description = "The Curios parser combinator DSL: ordered choice with progress-ba
 [lints]
 workspace = true
 
+[features]
+profile = ["curios-profile/enabled"]
+
 [dependencies]
+curios-profile = { workspace = true }
 curios-utilities = { workspace = true }

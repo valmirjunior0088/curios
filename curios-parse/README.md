@@ -10,6 +10,12 @@ The parser combinator DSL behind both the `.crs` surface grammar (`curios-text`)
 
 **Rationale.** Being `FnOnce` lets combinators move captured values into results without cloning. The cost is that a parser cannot be run twice, which is why every iteration builds a fresh instance.
 
+### Reading control flow is temporary instrumentation
+
+**Decision.** What this crate carries permanently is one span per parse. A question about *which* alternative ran, or where a commitment went, is answered by adding `curios_profile::note!` to `or`, `commit` and `uncommit` — the site from `Location::caller()` under `#[cfg_attr(feature = "profile", track_caller)]`, and the error's offset and message — capturing with `curios_profile::trace`, and taking the notes out again.
+
+**Rationale.** Those notes answer the question completely: a commitment that escapes reads as a `commit` row with no `uncommit` after it, and an alternative that never ran reads as the short-circuit that skipped it. They also cost roughly five rows per byte of input, against the eleven rows a whole 52 KB module emits through the permanent spans, so leaving them in would mean every profile is mostly parser chatter. The span stays because it is bounded by parses rather than by nodes; the notes go because they are bounded by neither.
+
 ### Choice backtracks until an alternative commits
 
 **Decision.** `or` tries its second alternative whenever the first failed, however much input it read. `commit` marks a failure as the diagnosis, and an alternative that commits stops the choice on either side; `uncommit` takes a commitment back, for a caller that may legitimately re-read the same text. When neither alternative committed, the error that got further into the input is reported.

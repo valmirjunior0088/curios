@@ -269,6 +269,7 @@ impl Module {
         source: &Rc<Source>,
     ) -> Result<(Self, Vec<Span>), ParserError> {
         clear_comments();
+        curios_profile::profile!("parse", group = "module");
         let module = run_parser(
             parse_whitespace()
                 .and_keep(many0(parse_top_item))
@@ -349,6 +350,7 @@ impl Entrypoint {
         source: &Rc<Source>,
     ) -> Result<(Self, Vec<Span>), ParserError> {
         clear_comments();
+        curios_profile::profile!("parse", group = "entrypoint");
         let entrypoint = run_parser(
             parse_whitespace()
                 .and_keep(many0(parse_top_item))
@@ -374,6 +376,7 @@ pub(crate) struct FormatInput {
 
 pub(crate) fn parse_for_format(source: &Rc<Source>) -> Result<FormatInput, ParserError> {
     clear_comments();
+    curios_profile::profile!("parse", group = "format");
     let (module, item_spans, tail) = run_parser(
         parse_whitespace()
             .and_keep(many0(|| spanned(parse_top_item())))

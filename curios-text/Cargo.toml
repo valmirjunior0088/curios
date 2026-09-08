@@ -10,7 +10,7 @@ workspace = true
 
 [features]
 archive = ["curios-archive/enabled", "curios-abi/archive", "curios-utilities/archive", "curios-elab/archive", "curios-num/archive", "curios-document/archive"]
-profile = ["curios-profile/enabled"]
+profile = ["curios-profile/enabled", "curios-parse/profile"]
 
 [dependencies]
 curios-archive = { workspace = true }

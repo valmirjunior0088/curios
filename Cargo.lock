@@ -730,6 +730,7 @@ dependencies = [
 name = "curios-parse"
 version = "0.13.5"
 dependencies = [
+ "curios-profile",
  "curios-utilities",
 ]
 
