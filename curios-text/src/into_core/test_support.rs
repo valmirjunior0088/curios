@@ -244,15 +244,16 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
             pub mod Nat
                 pub let Nat : Type = Type;
                 pub let add : Type = Type;
+                pub use /syn/Nat/{Lt};
             end
         "#
         .parse()
         .unwrap(),
     );
-    // `/sys` states its preconditions in `/syn`'s propositions, so the roster this fixture builds now carries references out of its own root and the scope has to hold their targets. Stubs, not definitions: these tests lower and never elaborate, so a name that resolves is the whole requirement — the same reason `/std` above is two modules of `Type`.
+    // `/sys` states its preconditions in `/syn`'s propositions, so the roster this fixture builds now carries references out of its own root and the scope has to hold their targets. Stubs, not definitions: these tests lower and never elaborate, so a name that resolves is the whole requirement — the same reason `/std` above is two modules of `Type`. Internal like `/sys` and for the same reason, which is what makes the fixture model the tier the real prelude mounts it at; `/std/Nat` re-exports one of its names so the facade a consumer actually goes through is exercised too.
     modules.insert_root(
         "syn",
-        RootKind::Privileged,
+        RootKind::Internal,
         r#"
             pub mod Nat
                 pub let Lt : Type = Type;

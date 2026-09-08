@@ -45,13 +45,13 @@ impl Mount {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum RootKind {
-    /// Reachable only from a privileged root — `sys` today. Discoverable (so the standard library can resolve it by absolute path) but rejected when referenced from an ordinary consumer.
+    /// Reachable only from a privileged root — `sys` and `syn` today. Discoverable (so the standard library can resolve it by absolute path) but rejected when referenced from an ordinary consumer.
     ///
-    /// **The reason is interface stability, not safety.** `/sys` is generated from `curios-abi`'s foreign store: its roster, its argument order, and the shape of every host row move when the ABI moves, and a consumer that reached past the `/std` facade would be pinned to a surface with no compatibility promise. That is the whole of what this tier buys, and it is worth buying.
+    /// **The reason is interface stability, not safety.** Both roots are the compiler's own vocabulary rather than anybody's interface. `/sys` is generated from `curios-abi`'s foreign store: its roster, its argument order, and the shape of every host row move when the ABI moves. `/syn` is what the surface forms desugar into — the concept `+` dispatches through, the `Monad` a `!` sequences in, the proposition `/` demands — and it is reached without being named: every `/syn` reference a program contains is one the compiler wrote as an already-resolved identity, which never passes this gate, so closing the root to authors costs the desugaring nothing. A consumer that reached past the `/std` facade to either would be pinned to a surface with no compatibility promise. That is the whole of what this tier buys, and it is worth buying.
     ///
     /// It is worth stating because the tier was long assumed to be a soundness mechanism, and it never was one. It grants trust to whole *roots*, so `/std/Map` and `/std/Bytes` are indistinguishable to it — which is why the bypasses that motivated giving `/sys`'s operations their preconditions were all *inside* the roots this tier authorizes, one of them inside the very module any conceivable reach rule would have allowed. Nothing behind the gate is a hazard now that those operations carry their domains in their types, and nothing behind it was a hazard the gate itself was catching. It does not constrain what `/sys` *exports* either, so the one premise that does depend on `/sys`'s surface — that `/sys/Io` offers no eliminator — is asserted where that roster is built and not here.
     Internal,
-    /// May reference an internal root — `sys`, `syn`, `std` today.
+    /// May reference an internal root — `std` today. An internal root is privileged over another by [`RootKind::is_privileged`], so `sys` and `syn` need no entry here to reach one another.
     Privileged,
     /// No special reach — the entry program, and every package.
     Ordinary,

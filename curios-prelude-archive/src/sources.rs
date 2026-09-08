@@ -68,7 +68,7 @@ pub(crate) fn authored_prelude(manifest: &Path) -> RootSource {
     modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops(), &SYNTAX));
     modules.insert_root(
         "syn",
-        RootKind::Privileged,
+        RootKind::Internal,
         parse_module(manifest.join("syn.crs")),
     );
     modules.insert_root(

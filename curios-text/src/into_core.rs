@@ -64,7 +64,7 @@ use {
     },
 };
 
-// Reject a reference that *resolves into* an internal root (`sys`) when the consuming module lies outside the privileged roots. `resolved` is the segments of the qualifier the reference resolved to — not the raw spelled path — so absolute and relative spellings are guarded identically. A non-internal target or a privileged consumer passes through.
+// Reject a reference that *resolves into* an internal root (`sys` or `syn`) when the consuming module lies outside the privileged roots. `resolved` is the segments of the qualifier the reference resolved to — not the raw spelled path — so absolute and relative spellings are guarded identically. A non-internal target or a privileged consumer passes through.
 fn guard_internal_root(
     mounts: &[Mount],
     consumer: &Qualifier,

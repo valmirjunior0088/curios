@@ -1,4 +1,4 @@
-//! `/sys` is reachable only through the standard library, and a user module may not collide with the prelude's.
+//! The internal roots — `/sys` and `/syn` — are reachable only through the standard library, and a user module may not collide with the prelude's.
 
 use crate::{Intrinsic, LetSignature, Subterm, Term, TopItem, sys_module};
 use curios_abi::host_ops;
@@ -60,6 +60,57 @@ fn rejects_sys_pub_use_reexport_from_user_code() {
         error.contains("internal to the standard library"),
         "unexpected error: {error}"
     );
+}
+
+// `syn` is closed for the same reason `sys` is: it is the vocabulary the surface forms desugar into rather than anybody's interface, and `/std` re-exports every name of it a program may write.
+#[test]
+fn rejects_syn_use_from_user_code() {
+    let error = lower_with_prelude("use /syn/Nat/{Lt}; Type").unwrap_err();
+    assert!(
+        error.contains("internal to the standard library"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn rejects_syn_reference_in_term_from_user_code() {
+    let error = lower_with_prelude("/syn/Nat/Lt").unwrap_err();
+    assert!(
+        error.contains("internal to the standard library"),
+        "unexpected error: {error}"
+    );
+}
+
+// The guard rides the resolved qualifier here too, so the relative spelling is refused with the absolute one.
+#[test]
+fn rejects_relative_syn_reference_in_term() {
+    let error = lower_with_prelude("syn/Nat/Lt").unwrap_err();
+    assert!(
+        error.contains("internal to the standard library"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn rejects_syn_pub_use_reexport_from_user_code() {
+    let error =
+        lower_with_prelude("pub mod Foo\n    pub use /syn/Nat/{Lt};\nend\nType").unwrap_err();
+    assert!(
+        error.contains("internal to the standard library"),
+        "unexpected error: {error}"
+    );
+}
+
+// The same declaration reached through its `/std` facade resolves, which is the door every consumer goes through.
+#[test]
+fn allows_a_syn_declaration_through_its_std_facade() {
+    assert!(lower_with_prelude("use /std/Nat/{Lt}; Type").is_ok());
+}
+
+// **The desugaring never spells the root it reaches.** An operator lowers to a witness projection built from an already-resolved identity, so closing `/syn` to authors costs it nothing — the property that makes this tier affordable, checked here rather than argued.
+#[test]
+fn allows_an_operator_whose_concept_lives_in_the_closed_root() {
+    assert!(lower_with_prelude("use /std/{Nat}; let n: Nat = 1 + 1; Type").is_ok());
 }
 
 // The same intrinsic reached through its `/std` wrapper resolves: `std` is privileged to reference `sys`, and re-exports it.
