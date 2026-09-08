@@ -3,7 +3,7 @@ name = "curios-parse"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios parser combinator DSL: ordered choice with progress-based commitment, packrat memoization, and caret-snippet errors"
+description = "The Curios parser combinator DSL: freely backtracking ordered choice that an alternative stops with a commitment, packrat memoization, and caret-snippet errors"
 
 [lints]
 workspace = true

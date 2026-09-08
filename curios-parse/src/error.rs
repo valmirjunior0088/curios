@@ -9,7 +9,7 @@ use {
 pub struct ParserError {
     fatal: bool,
     pub(crate) offset: usize,
-    /// Where the report's span begins when the failure is about a run of text rather than a point — a keyword read and refused, whose caret then underlines the word instead of standing after it. Commitment reads `offset` alone, so the span's start changes nothing about backtracking.
+    /// Where the report's span begins when the failure is about a run of text rather than a point — a keyword read and refused, whose caret then underlines the word instead of standing after it. Backtracking reads `fatal` alone; `offset` only ranks two uncommitted failures against each other. The span's start feeds neither.
     from: Option<usize>,
     message: String,
     source: Rc<Source>,

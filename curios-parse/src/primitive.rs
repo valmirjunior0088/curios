@@ -17,7 +17,7 @@ where
     Parser::new(move |state| Err(ParserError::new(state, message)))
 }
 
-/// [`fail`] about the text from `start` to the current offset: the failure still sits at the current offset, so it commits or backtracks exactly as `fail` would, and only the reported span reaches back — for a word read and refused, so the caret underlines the word rather than standing after it.
+/// [`fail`] about the text from `start` to the current offset: only the reported span reaches back, and the failure still sits at the current offset, so it commits and ranks in [`Parser::or`]'s tie-break exactly as `fail` would — for a word read and refused, so the caret underlines the word rather than standing after it.
 pub fn fail_from<'a, A, S>(start: &Mark, message: S) -> Parser<'a, A>
 where
     A: 'a,
@@ -27,7 +27,7 @@ where
     Parser::new(move |state| Err(ParserError::new(state, message).from(start)))
 }
 
-/// Consumes exactly the literal `expected`, yielding nothing. On mismatch the error sits at the *pre-consumption* offset, so failing here never commits — a keyword or punctuation probe is always safe as the first token of an [`Parser::or`] alternative. The mismatch message shows what actually follows, counted in characters rather than the literal's bytes, so non-ASCII input never truncates mid-character or misreports as end-of-file — and cut at the first whitespace, so a token shorter than the literal is quoted alone rather than with its neighbour: `=` where `=>` was expected read as `'= '`.
+/// Consumes exactly the literal `expected`, yielding nothing. On mismatch the error sits at the *pre-consumption* offset, so it loses [`Parser::or`]'s tie-break to any alternative that read further — which, the failure being uncommitted, is what makes a keyword or punctuation probe safe as the first token of an alternative. The mismatch message shows what actually follows, counted in characters rather than the literal's bytes, so non-ASCII input never truncates mid-character or misreports as end-of-file — and cut at the first whitespace, so a token shorter than the literal is quoted alone rather than with its neighbour: `=` where `=>` was expected read as `'= '`.
 pub fn take_exact<'a>(expected: &'static str) -> Parser<'a, ()> {
     Parser::new(move |state| match state.string.starts_with(expected) {
         true => Ok(((), state.jump_to(state.offset + expected.len()))),
