@@ -11,10 +11,9 @@ use {
     curios_analysis::group_totality,
     curios_core::{
         Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType, Global,
-        InductDecl, InductParam, Intrinsic, Item, Level, Module, RecItem, SelfReference,
-        StructDecl, Subterm, Telescope, Term, Totality, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, Visit,
-        stamp_declaration_instance, universe_metas,
+        InductDecl, InductParam, Item, Level, Module, RecItem, SelfReference, StructDecl, Subterm,
+        Telescope, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
     },
     curios_utilities::{Qualifier, grown},
     std::{
@@ -1184,13 +1183,11 @@ fn check_witness_cycles(context: &mut Context, items: &[Item]) -> Result<(), Err
     Ok(())
 }
 
-/// What one unit's elaboration produced, before anything is finalized: the module itself, the type its entry inferred, and the second program [`Tail::Both`] checks beside it. The last two are both `Option<Term>` and mean different things, which is why they are named here rather than left as positions in a tuple.
+/// What one unit's elaboration produced, before anything is finalized: the module itself and the type its entry inferred.
 struct ElaboratedSuffix {
     module: Module,
     /// The entry's inferred type — `None` for a library, which has no entry to infer one from.
     body_type: Option<Term>,
-    /// [`Tail::Both`]'s test program, elaborated and not yet finalized. `None` under every other policy. [`finalize_and_check`] finalizes it beside the entry and discards it there.
-    beside: Option<Term>,
 }
 
 /// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint `body`, and (through `mode`) its type annotation. Returns the rebuilt suffix alongside the body's type, reduced through the accumulated definitions.
@@ -1256,7 +1253,7 @@ fn elaborate_module_suffix(
     // A test program's tail is synthesized here rather than handed in: it is built over the elaborated definitions the items just produced, in the scope they were defined into, so the discharge it chooses for each test can consult them. The unit's own written entry — the ordinary program — is not part of a test program and is neither checked nor kept.
     let synthesized;
     let entry = match tail {
-        Tail::Written | Tail::Both(_) => module.entry.as_ref(),
+        Tail::Written => module.entry.as_ref(),
         Tail::Tests(scheduled) => {
             synthesized = Entrypoint {
                 body: test_program_tail(context, scheduled),
@@ -1293,18 +1290,6 @@ fn elaborate_module_suffix(
             )
         }
         None => (None, None),
-    };
-    // The test program beside the written one: its tail is built over the same defined items and checked against the contract every entry meets, `Io({})`, on a budget of its own. What it elaborated to is handed back rather than dropped here, because elaborating it is not what reports its faults: a witness goal the tail raises is only decided when the term is finalized, so a tail dropped at this point takes its unresolved goals with it. [`finalize_and_check`] finalizes it beside the entry and discards it there, which is what puts the two tails on one path — the errors and goals it raises are the point, and a parameterized test's `Property` goal is raised nowhere else.
-    let beside = match tail {
-        Tail::Both(scheduled) => {
-            context.restore_budget();
-            let synthesized = test_program_tail(context, scheduled);
-            context.restore_budget();
-            let contract = Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()));
-            let contract = check_is_sort(context, &contract)?.0;
-            Some(elaborate(context, &synthesized, Mode::Check(contract))?.0)
-        }
-        Tail::Written | Tail::Tests(_) => None,
     };
     // The whole program has elaborated: a witness goal still deferred will never find a table entry — report it now.
     finish_deferred_witnesses(context)?;
@@ -1362,11 +1347,7 @@ fn elaborate_module_suffix(
         entry,
     };
 
-    Ok(ElaboratedSuffix {
-        module,
-        body_type,
-        beside,
-    })
+    Ok(ElaboratedSuffix { module, body_type })
 }
 
 /// A finalized module and what finalizing it decided: the module, the type its entry inferred, and the erasure obligations this checker decides but does not always raise — see [`elaborate_and_zonk_unit_reporting`] for why they are reported rather than thrown.
@@ -1393,7 +1374,6 @@ fn finalize_and_check(
     context: &mut Context,
     mut module: Module,
     body_type: Option<Term>,
-    beside: Option<Term>,
     inherited: &BTreeMap<Global, Totality>,
 ) -> Result<FinalizedModule, Error> {
     curios_profile::profile!("finalize_and_check");
@@ -1411,15 +1391,9 @@ fn finalize_and_check(
     if let Some(body_type) = body_type {
         entry_terms.push(body_type);
     }
-    // `beside` is [`Tail::Both`]'s test program, finalized on the entry's own terms and kept only until it has been. Universe defaulting reads the whole batch at once, so it joins the batch rather than being defaulted alone.
-    let has_beside = beside.is_some();
-    if let Some(beside) = beside {
-        entry_terms.push(beside);
-    }
-    let mut finalized = context.default_universes(&entry_terms.iter().collect::<Vec<_>>())?;
-    // Taken off the end, where it was pushed: the entry's own terms are positional and optional, so counting forward to it would depend on which of them are present.
-    let beside = has_beside.then(|| finalized.pop().expect("the test tail was finalized"));
-    let mut entry_terms = finalized.into_iter();
+    let mut entry_terms = context
+        .default_universes(&entry_terms.iter().collect::<Vec<_>>())?
+        .into_iter();
     if let Some(entry) = &mut module.entry {
         entry.body = entry_terms.next().expect("entry body was finalized");
         if has_annotation {
@@ -1438,10 +1412,6 @@ fn finalize_and_check(
     let body_type = body_type
         .map(|body_type| zonk(context, &body_type))
         .transpose()?;
-    // The test program's own zonk, and the whole reason [`Tail::Both`] carries it this far: a witness goal is decided here, not where the term was elaborated, so the tail has to reach this line to report one. The zonked term is discarded — only the verdict was wanted.
-    if let Some(beside) = beside {
-        zonk(context, &beside)?;
-    }
     context.restore_budget();
 
     // Positivity gates the zonked registries rather than running inside elaboration: the telescopes it reads are final here, and meta-free, so an unsolved hole reports as an unsolved hole instead of as an unseeable occurrence. At a replay the module in hand is the suffix alone, which is what this must see — the replayed prefix carries the vectors its archive was built with, and since prefix items cannot mention the suffix they are sinks of the occurrence relation, so no cycle crosses the boundary.
@@ -1514,7 +1484,6 @@ fn elaborate_and_zonk_module_within(
         context,
         suffix.module,
         suffix.body_type,
-        suffix.beside,
         &BTreeMap::new(),
     )?)
 }
@@ -1533,8 +1502,6 @@ pub enum Tail<'a> {
     Written,
     /// `Test/main([...])` over these tests, replacing whatever entry the module carries; a unit with no tests gets `Test/main([])`.
     Tests(&'a [ScheduledTest]),
-    /// The written entry, kept as the module's, and the test tail checked beside it against `Io({})` and then dropped: what a question about a unit that declares tests is answered by, since the two programs share every item and differ only in their tails. The dropped tail reaches neither the kernel nor erasure — a diagnosis, not a build — which is why nothing that compiles takes this policy.
-    Both(&'a [ScheduledTest]),
 }
 
 pub fn elaborate_and_zonk_unit(
@@ -1585,13 +1552,7 @@ pub fn elaborate_and_zonk_unit_reporting(
         module: suffix,
         body_type,
         obligations,
-    } = finalize_and_check(
-        context,
-        elaborated.module,
-        elaborated.body_type,
-        elaborated.beside,
-        &inherited,
-    )?;
+    } = finalize_and_check(context, elaborated.module, elaborated.body_type, &inherited)?;
 
     // Nothing is merged back in. The entry's items, the entry's declarations: what the prelude contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure. A whole-module pass that needs the complete declaration set gets it by being handed both halves (`curios_analysis::Declarations`), not by being handed one map somebody concatenated.
     //

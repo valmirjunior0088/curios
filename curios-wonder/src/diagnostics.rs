@@ -40,7 +40,9 @@ pub enum Origin {
 
 /// Every diagnostic and goal `subject` reports when lowered, elaborated and judged against the prelude — empty when it compiles. `overlay` is consulted before the disk for every file read, the entry included.
 ///
-/// **A unit that declares tests compiles to two programs, and both are asked.** The test program is the unit's items under the synthesized `Test/main` tail, and that tail is where a parameterized test's `Property` goal is raised — a parameter nothing draws is a fault `curios test` reports and `curios run` never meets, so a question about the unit that checked only the written program would be silent about it. A program is elaborated once under both tails ([`EntryTail::Both`]): the written entry as the module's, the test tail checked beside it and dropped. A library has no written program, so it is checked through the same `()` entry `curios test` uses, scheduling the last unit's tests — the fold that compiles the units is one and the same, and a unit with no tests gets `Test/main([])`, which costs nothing.
+/// **A library is asked through the tail `curios test` compiles it with.** It has no written program of its own, so the question is put to the same `()` entry under [`EntryTail::LastUnitTests`], scheduling the last unit's tests; the fold that compiles the units is one and the same, and a unit with no tests gets `Test/main([])`, which costs nothing.
+///
+/// An entry is asked under its written tail alone. A unit's tests are ordinary items and are elaborated whatever the policy, so a fault in one is reported either way; the synthesized tail over them pairs each declaration with its path and raises nothing of its own, which is what a test taking no parameters leaves it with. A policy that checked both tails existed while that was untrue and was removed with the parameters.
 ///
 /// **One failure stops the compilation, as it does on the compile path.** A parse failure yields one diagnostic and nothing after it; a refused declaration yields its own and nothing after it; only a goal batch yields several, one per `?`. Per-item recovery would be a change to three loops on the shared compile path, and until it lands this is the answer on a broken file: what stopped the compiler, and where.
 ///
@@ -105,7 +107,7 @@ pub fn diagnosed(
                 &entrypoint,
                 &loader,
                 cache,
-                EntryTail::Both,
+                EntryTail::Authored,
                 |_| {},
             );
             (checked, false)
