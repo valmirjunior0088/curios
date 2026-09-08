@@ -123,8 +123,6 @@ impl HeadKey {
         )
     }
 
-    /// The key of a function type, shared by the first-order and higher-kinded (`Func`-body) positions of [`of_whnf`](Self::of_whnf). The marks sit on the node, so the read opens no binder and evaluates nothing.
-
     /// The key of an intrinsic type former, shared by the first-order and higher-kinded (`Func`-body) positions of [`of_whnf`](Self::of_whnf).
     fn of_intrinsic(intrinsic: &Intrinsic) -> Option<HeadKey> {
         match intrinsic {
