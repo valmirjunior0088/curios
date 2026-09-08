@@ -574,6 +574,20 @@ fn a_test_takes_no_parameters() {
     );
 }
 
+/// A program's `test` item reports its own fault rather than becoming the program's tail.
+#[test]
+fn a_malformed_test_in_a_program_reports_its_own_fault() {
+    // The fall-through a contextual word needs ends at the label, so each of these commits and names what it wanted. Falling through instead, the report would land on `ok`, where the tail the item became ran out.
+    for (source, expected) in [
+        ("test ok(n: Nat) = Test/assert(true);", "Expected '='"),
+        ("test ok Test/assert(true);", "Expected '='"),
+        ("test ok = Test/assert(true)", "Expected ';'"),
+    ] {
+        let error = source.parse::<Entrypoint>().unwrap_err().format();
+        assert!(error.contains(expected), "{source}\n{error}");
+    }
+}
+
 #[test]
 fn a_test_takes_no_pub_and_stays_a_contextual_word() {
     // The name is a report line, not an export.

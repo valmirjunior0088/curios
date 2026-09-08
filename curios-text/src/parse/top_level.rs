@@ -41,16 +41,20 @@ fn documented<'a, T: 'a>(doc: &Option<Doc>, parser: Parser<'a, T>) -> Parser<'a,
 
 // A top-level `let` item: one definition, or the group `let f … and g …;`. Each member takes its own `pub` — before `let` for the first, before `and` for each later one — and one `;` terminates the whole item.
 
-// A `test` declaration: `test name(params) = body;`. The parentheses are the function sugar written out — required, holding the telescope a `let`'s signature holds: empty for the harness's nullary test, a parameter list for a property. `pub` is refused by name: a test's identifier is its report line, not an export. Like `satisfy`, `test` stays a contextual word everywhere else.
+// A `test` declaration: `test name = body;`. `pub` is refused by name: a test's identifier is its report line, not an export.
+//
+// Like `satisfy`, `test` stays a contextual word everywhere else, and the label is exactly how far that reaches. The label carries its own [`catch`] because the head is already eaten when this runs: its failure sits past the item loop's choice point, so uncaught it would abort the loop rather than end it, and `test(1)` could not be a program's tail. Past the label there is nothing to fall through to — `test name` is two names in a row and so no term at all — so the rest commits and reports its own fault.
 pub(super) fn parse_top_test<'a>(vis_pub: bool) -> Parser<'a, TopItem> {
     match vis_pub {
         true => fail("a test is never `pub`: its name is its report line, not an export"),
         false => pure(()),
     }
-    .and_keep(parse_label())
-    .and_drop(parse_literal("="))
-    .and(lazy(parse_term))
-    .and_drop(parse_literal(";"))
+    .and_keep(catch(parse_label()))
+    .and(commit(
+        parse_literal("=")
+            .and_keep(lazy(parse_term))
+            .and_drop(parse_literal(";")),
+    ))
     .map(|(label, body)| TopItem::Test(TopTest { label, body }))
 }
 
@@ -645,7 +649,9 @@ const NOT_A_TOP_LEVEL_ITEM: &str = "Expected a top-level item: one of 'mod', 'us
 ///
 /// **A head commits when it is reserved and cannot begin a term**, which is exactly `mod`, `use`, `induct`, `struct` and `foreign`. Nothing else may be written in their place, so once one is read its arm owns the error and [`commit`] stops an enclosing choice from backtracking into a vaguer one.
 ///
-/// **The other four are [`catch`]ed back to recoverable, and the language decides which.** The head is already consumed when the arm runs, so without it a failure inside one of them is fatal by progress alone and would abort the item loop instead of falling through. `concept`, `satisfy` and `test` are contextual words — `documentation/syntax.md` keeps them ordinary identifiers outside a declaration position, so one of them here may really be a program's tail calling a function of that name. `let` is reserved but shared with the term grammar: a top-level `let` requires an annotation, and `let x = 1; tail` has to fall through to a local `let`. An unrecognized head is recoverable for the same reason — it is how the item loop terminates before a program's tail begins.
+/// **The other four fall through, and the language decides which.** The head is already consumed when the arm runs, so without a [`catch`] a failure inside one of them is fatal by progress alone and would abort the item loop instead of falling through. `concept`, `satisfy` and `test` are contextual words — `documentation/syntax.md` keeps them ordinary identifiers outside a declaration position, so one of them here may really be a program's tail calling a function of that name. `let` is reserved but shared with the term grammar: a top-level `let` requires an annotation, and `let x = 1; tail` has to fall through to a local `let`. An unrecognized head is recoverable for the same reason — it is how the item loop terminates before a program's tail begins.
+///
+/// **How far the fall-through reaches is the arm's to say, and `test` says: as far as the label.** The rest of the grammar catches the prefix that discriminates an alternative and lets the tail commit — `parse_struct_pattern` catches `Name {` and reports a missing `}` itself. `test` may be a program's tail, but `test name` is two names in a row and so no term at all, so [`parse_top_test`] takes its own `catch` no further than the label and this arm hands it the item uncaught: past the label, a mistake inside a test is the diagnosis. `concept` and `satisfy` are caught whole, so a mistake inside one of those in a program is reported against the tail it falls through to; `satisfy` cannot take `test`'s rule, since `satisfy (…) => …` and a call `satisfy(…)` share their next token.
 ///
 /// **A `pub` in front makes every arm commit, because it removes the fall-through the `catch` exists for.** `pub` is a keyword, so no term begins with one: after reading it there is no tail for a failed item to become, and an unrecognized head after it names no item rather than ending the item loop. Leaving those arms recoverable threw the diagnosis away wherever it mattered most. A module recovers it — `Module::parse_items_end` re-runs the item parser once input remains — but an entrypoint's grammar runs `parse_term` instead, which tries a local `let` at the `pub`, fails one token in, and wins [`Parser::or`]'s furthest-failure tie-break over the real error the `catch` had just made backtrackable. Every mistake inside a `pub let` in a program therefore reported `Expected keyword 'let', obtained 'pub'` against the `let`, and the refusals `parse_top_witness` and `parse_top_test` write by hand for a `pub` they cannot accept never reached a reader at all.
 ///
@@ -678,9 +684,11 @@ pub(crate) fn parse_top_item<'a>() -> Parser<'a, TopItem> {
                 "foreign" => commit(parse_top_foreign(doc, vis_pub)),
                 "concept" => fallible(parse_top_concept(doc, vis_pub)),
                 "satisfy" => fallible(parse_top_witness(doc, vis_pub)),
-                "test" => match documented {
-                    true => commit(fail(DOC_BEFORE_TEST)),
-                    false => fallible(parse_top_test(vis_pub)),
+                // The fall-through ends at the label, so this arm hands the item over uncaught rather than through `fallible`, whose `catch` reaches past it. A `pub` commits the whole arm, which `parse_top_test` refuses by name.
+                "test" => match (documented, vis_pub) {
+                    (true, _) => commit(fail(DOC_BEFORE_TEST)),
+                    (false, true) => commit(parse_top_test(vis_pub)),
+                    (false, false) => parse_top_test(vis_pub),
                 },
                 "let" => fallible(parse_top_let(doc, vis_pub)),
                 _ => {
