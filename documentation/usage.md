@@ -303,6 +303,7 @@ Payloads are native code for the machine that built them, so an entry is found o
 | `--unit <DIR>` | mount the package in `DIR` ahead of the entry program, with no manifest edge; repeat for more, in dependency order |
 | `--budget <UNITS>` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
 | `--version` | the build's version, so a bug report can say which compiler produced the output |
+| `--profile <PATH>` | write one record per span and event to `PATH`, rotating at 512 MiB — present only in a compiler built with the `profile` feature, and inert without it |
 
 The budget is restored at every declaration boundary, so it bounds the heaviest declaration rather than the compilation; `curios --help` prints the default it was built with.
 

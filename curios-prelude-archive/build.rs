@@ -31,8 +31,10 @@ fn main() {
     // Under the `profile` feature the whole build runs under a record stream, filed beside the archive it builds. There is deliberately no environment switch: the feature is the switch, and it is specified where every other build input is.
     #[cfg(feature = "profile")]
     {
-        // Filed rather than streamed because it is read after the build that wrote it, which is `.artifacts`'s rule; a hung prelude build is the case it exists for, and that build never reaches the summary below. The path is `stream_path!`'s, so this build script and the CLI spell the convention once between them, and the directory is the destination's to make.
-        let out = PathBuf::from(curios_profile::stream_path!());
+        // Filed here rather than under `OUT_DIR` because it is read after the build that wrote it, which is `.artifacts`'s rule; a hung prelude build is the case it exists for, and that build never reaches the summary below. A build script has no caller to take a destination from — unlike the CLI, whose `--profile` names one — so this is the one place that chooses its own, and the directory is the destination's to make.
+        let out = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap())
+            .join(".artifacts")
+            .join("profile.tsv");
 
         curios_profile::trace(
             curios_profile::Destination::Rotating {

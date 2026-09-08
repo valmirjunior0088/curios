@@ -41,27 +41,34 @@ use {
 };
 
 #[cfg(feature = "profile")]
-use curios_profile::{Destination, install, stream_path};
+use {
+    curios_profile::{Destination, install},
+    std::path::PathBuf,
+};
 
 // Only the `profile` build installs it, so the ordinary CLI keeps the system allocator untouched and pays nothing for counters no mode would read.
 #[cfg(feature = "profile")]
 #[global_allocator]
 static ALLOCATOR: curios_profile::CountingAllocator = curios_profile::CountingAllocator;
 
-/// File every span and event this invocation makes, for a `profile` build only.
+/// The size at which the record stream rotates, keeping the current file and its predecessor. A constant rather than a second flag: it bounds what an endless run may write, which is not a thing a caller has a reason to choose, and the destination is the only part of a measurement that is the caller's.
+#[cfg(feature = "profile")]
+const PROFILE_CAP: u64 = 512 * 1024 * 1024;
+
+/// File every span and event this invocation makes at `path`.
 ///
-/// **Profiling is a property of the build, not a subcommand.** There is nothing to select: whatever the arguments asked for is what gets measured, so `run`, `test`, `document` and a package build are all profileable where a dedicated mode could only ever profile the one compilation it performed itself.
+/// **Whatever the arguments asked for is what gets measured**, so `run`, `test`, `document` and a package build are all profileable — where a dedicated mode could only ever profile the one compilation it performed itself.
+///
+/// **The path is the caller's, and there is no default.** A compiler that chose one would spell a location the reader then has to spell again to read it back, and two derivations of one path are two things that can disagree. This way the reader chooses and the compiler obeys.
 ///
 /// The stream is filed rather than piped because a hung run is the case profiling exists for, and a pipe dies with the interrupt that ends one. Standard output is also the *product* of most subcommands — a program's own output under `run`, an answer under `wonder` — so rows on it would corrupt the thing being profiled.
 ///
-/// A failure to open is reported and the invocation proceeds. The alternative is refusing to compile because a measurement could not be filed, which inverts which of the two the caller asked for.
-///
-/// **Success says nothing.** Where the stream went is the reader's to state — `cargo x profile` derives the same path and prints it beside the summary — and a line per invocation would be narration on every `run` a profiling build performs, which `curios/tests/lint.rs` is right to refuse.
+/// A failure to open is reported and the invocation proceeds. The alternative is refusing to compile because a measurement could not be filed, which inverts which of the two the caller asked for. Success says nothing: the caller named the path, so it has nothing to be told.
 #[cfg(feature = "profile")]
-fn install_profiling() {
+fn install_profiling(path: PathBuf) {
     let destination = Destination::Rotating {
-        path: stream_path!().into(),
-        cap: 512 * 1024 * 1024,
+        path,
+        cap: PROFILE_CAP,
     };
 
     if let Err(error) = install(destination) {
@@ -91,12 +98,21 @@ impl From<CompileError> for Failure {
 }
 
 fn dispatch() -> Result<(), Failure> {
+    let cli = Cli::parse();
+
+    // After parsing, because the destination is one of the arguments; before dispatch, because everything worth measuring is downstream of it.
+    #[cfg(feature = "profile")]
+    if let Some(path) = cli.profile.clone() {
+        install_profiling(path);
+    }
+
     let Cli {
         budget,
         units,
         manifest,
         mode,
-    } = Cli::parse();
+        ..
+    } = cli;
 
     match mode {
         Mode::Run { target, args } => {
@@ -290,9 +306,6 @@ fn dispatch() -> Result<(), Failure> {
 }
 
 fn main() -> ExitCode {
-    #[cfg(feature = "profile")]
-    install_profiling();
-
     match dispatch() {
         Ok(()) => ExitCode::SUCCESS,
         Err(Failure::Incomplete(report)) => {

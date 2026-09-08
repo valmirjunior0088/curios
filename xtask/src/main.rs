@@ -293,6 +293,9 @@ fn std_docs() -> Result<(), String> {
 fn profile(source: &Path) -> Result<(), String> {
     runtime()?;
 
+    // The one place the stream's location is spelled. The compiler takes it as an argument and keeps no default, so what is written and what is read back cannot drift — and it is derived here the way every other path in this crate is.
+    let stream = root().join("curios/.artifacts/profile.tsv");
+
     run(
         cargo(),
         &[
@@ -303,13 +306,13 @@ fn profile(source: &Path) -> Result<(), String> {
             "--features",
             "profile",
             "--",
+            "--profile",
+            &stream.to_string_lossy(),
             "run",
             &source.to_string_lossy(),
         ],
     )?;
 
-    // The reader states where it read from: the compiler files the stream and says nothing, so this is the one place the path is announced, and it is derived here the way every other path in this crate is.
-    let stream = root().join("curios/.artifacts/profile.tsv");
     print!("{}", summarize(&stream)?.render());
     println!("\nstream: {}", stream.display());
 

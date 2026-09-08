@@ -224,6 +224,17 @@ pub(crate) struct Cli {
     )]
     pub(crate) manifest: Option<PathBuf>,
 
+    /// Present only in profiling builds, and inert until asked for: the feature compiles the instrumentation in, and this decides whether anything listens to it. Without that, a build with the feature on would record on *every* invocation — including the eight the integration suite spawns under `--all-features`, all of them onto one path.
+    ///
+    /// It takes the destination rather than defaulting to one, so no path is spelled in the compiler at all. The reader chooses where the stream goes and reads it back from there, which is one spelling instead of two that have to agree.
+    #[cfg(feature = "profile")]
+    #[arg(
+        long = "profile",
+        value_name = "PATH",
+        help = "Write one record per span and event to PATH, rotating at 512 MiB"
+    )]
+    pub(crate) profile: Option<PathBuf>,
+
     #[command(subcommand)]
     pub(crate) mode: Mode,
 }

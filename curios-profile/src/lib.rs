@@ -5,8 +5,7 @@
 //! - [`profile!`] as the first statement of a function times the whole function, the successor of the retired `#[cfg_attr(feature = "profile", tracing::instrument(…))]` attribute — which could not survive re-export, because its expansion requires a crate literally named `tracing` in the invoking crate's extern prelude. It takes fields after the name — a `group` field is what makes a per-item span report *which item* rather than an average over all of them — and an `=>` form times one expression rather than the enclosing function.
 //! - [`note!`] states *why* a decision went the way it did, for a refusal that has neither a duration nor a size. It carries the `profile` gate itself, and it is what keeps `tracing` named in this crate alone.
 //! - [`sample!`] records a *magnitude* — how many, how wide, how deep. It is for a number that varies; a site that would always record the same number is a call counter, and a span already counts its calls.
-//! - [`stream_path!`] names where the invoking crate files what it records — `.artifacts/profile.tsv` beside its own manifest, derived rather than written, so the convention is spelled once for every caller.
-//! - `trace` and `install` — present under `enabled`, so they carry no link here — are the two scopings of the subscriber that writes one row per span and event as it happens. `trace` runs one closure under it and leaves the process-global default alone; `install` *is* that default, for a binary whose scope is the whole invocation because it has no closure to wrap. They are the only producers: profiling is configured where it is used, in code.
+//! - `trace` and `install` — present under `enabled`, so they carry no link here — are the two scopings of the subscriber that writes one row per span and event as it happens. `trace` runs one closure under it and leaves the process-global default alone; `install` *is* that default, for a binary whose scope is the whole invocation because it has no closure to wrap. Both take the destination from their caller: this crate names no path, so nothing here decides where a stream lands. They are the only producers, and profiling is configured where it is used, in code.
 //! - `fold` — beside it — recomputes timings, allocation figures and distributions from those rows. Aggregation is a consumer of the stream rather than what a capture returns, so a run that never terminates still leaves everything it did on disk, and a question the summaries do not answer is asked of the file.
 //! - `capture_host_records` — also under `enabled` — is the same scoping for what a *host library* says through the `log` facade rather than through spans: the engine announces each collection at trace level, and the bridge raises `log` only for the duration of one closure, so everything outside a capture pays one relaxed atomic load per suppressed record at most.
 //! - `CountingAllocator`, under `enabled` beside it and unlinked for the same reason, adds the memory half of a report. A binary installs it as its `#[global_allocator]` under its own `profile` feature and every boundary row carries what the process held and had taken; a binary that installs nothing still gets its timings, with the memory columns reading zero.
@@ -98,25 +97,6 @@ macro_rules! note {
     ($($arguments:tt)*) => {
         #[cfg(feature = "profile")]
         $crate::tracing::debug!($($arguments)*);
-    };
-}
-
-/// Where the invoking crate files its record stream: `.artifacts/profile.tsv` beside its own manifest.
-///
-/// ```text
-/// curios_profile::install(curios_profile::Destination::Rotating {
-///     path: curios_profile::stream_path!().into(),
-///     cap: 512 * 1024 * 1024,
-/// })
-/// ```
-///
-/// **The path is derived, never written.** `env!` expands where this macro is *invoked*, so each caller lands beside its own manifest rather than beside this crate — a build script under `curios-prelude-archive/.artifacts/`, the CLI under `curios/.artifacts/` — and the `.artifacts` convention is spelled once, here, rather than once per caller. It is a compile-time constant, so the destination does not depend on the working directory the process was started from, which is what a relative path would have made it.
-///
-/// **It bakes in the tree that built the binary**, so a profiling build is meaningful only in the checkout that produced it. That is the intended scope — profiling is run with this repository in hand — and the `profile` feature is what keeps the path out of a shipped binary, where it would be a filesystem detail with no reader.
-#[macro_export]
-macro_rules! stream_path {
-    () => {
-        concat!(env!("CARGO_MANIFEST_DIR"), "/.artifacts/profile.tsv")
     };
 }
 
