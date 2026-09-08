@@ -18,6 +18,8 @@ curios-document = { workspace = true }
 curios-text = { workspace = true }
 curios-unit = { workspace = true }
 curios-wasm = { workspace = true }
+# For the fate survey `cost` reads: the Cont graph is `curios-cont`'s to walk, so the walk lives there and this crate is one of its consumers. It carries no back end — `curios-pipeline` already depends on it to name `CpsModule` in `Stage`.
+curios-cont = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-package = { workspace = true }
 curios-verdicts = { workspace = true }

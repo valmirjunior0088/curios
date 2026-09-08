@@ -29,8 +29,8 @@ use {
     curios_text::{Formatted, Overlay},
     curios_verdicts::Verdicts,
     curios_wonder::{
-        Linted, archived_documentation, documentation, lint, serve, wonder_diagnostics,
-        wonder_stage, wonder_tests,
+        Linted, archived_documentation, documentation, lint, serve, wonder_cost,
+        wonder_diagnostics, wonder_stage, wonder_tests,
     },
     std::{
         ffi::OsString,
@@ -269,6 +269,9 @@ fn dispatch() -> Result<(), Failure> {
             }
             Query::Tests { target } => {
                 wonder_tests(budget, &units, manifest.as_deref(), target.as_deref())?
+            }
+            Query::Cost { target } => {
+                wonder_cost(budget, &units, manifest.as_deref(), target.as_deref())?
             }
             // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
             Query::Stage { name, target } => wonder_stage(

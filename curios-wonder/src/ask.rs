@@ -6,9 +6,10 @@
 
 use {
     crate::{
-        Diagnosed, Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, declared_tests,
-        diagnosed, diagnostics, stage,
+        Diagnosed, Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, cost,
+        declared_tests, diagnosed, diagnostics, stage,
     },
+    curios_cont::Outcome,
     curios_package::{Form, Governing, LIBRARY, Membership, Target, mounted, order},
     curios_text::{LoadError, Overlay, RootSource},
     curios_verdicts::Verdicts,
@@ -251,6 +252,56 @@ pub fn wonder_stage(
             ));
         }
         Err(Refusal::Diagnostics(diagnostics)) => {
+            let rendered = diagnostics
+                .iter()
+                .map(Diagnostic::render)
+                .collect::<Vec<_>>();
+            return Err(rendered.join("\n\n"));
+        }
+    }
+
+    Ok(())
+}
+
+/// What the optimizer did to each declaration, one tab-separated row per line.
+///
+/// Two columns, because the analysis should not need this crate: `awk -F'\t' '$2 == "absorbed"'` is a whole question, and a diff of two runs is a diff of two files. The rows are ordered by name for the same reason — a report that reproduces is what makes a regression something to read rather than something to judge.
+pub fn wonder_cost(
+    budget: u64,
+    mounted: &[PathBuf],
+    manifest: Option<&Path>,
+    target: Option<&str>,
+) -> Result<(), String> {
+    let overlay = Overlay::default();
+
+    let asked = match Form::of(target) {
+        Form::Stdin => Asked::about_stdin(mounted, read_stdin()?)?,
+        Form::File(path) => Asked::about_file(&file_target(path)?, mounted, manifest)?,
+        Form::Named(name) => Asked::about_executable(name.as_deref(), mounted, manifest)?,
+    };
+
+    let Subject::Entry { units, origin } = asked.subject else {
+        return Err(
+            "a library is not compiled to a program — name an executable or a program file"
+                .to_string(),
+        );
+    };
+    let cache = asked.store.as_ref();
+
+    match cost(budget, units, origin, &overlay, cache) {
+        Ok(fates) => {
+            for fate in fates {
+                // The outcome is one token and its count, so a column stays a column: `specialized 3` reads as one answer and splits as one field.
+                let outcome = match fate.outcome {
+                    Outcome::Survived => "survived".to_string(),
+                    Outcome::Specialized { copies } => format!("specialized {copies}"),
+                    Outcome::Absorbed => "absorbed".to_string(),
+                };
+
+                println!("{}\t{outcome}", fate.name);
+            }
+        }
+        Err(diagnostics) => {
             let rendered = diagnostics
                 .iter()
                 .map(Diagnostic::render)

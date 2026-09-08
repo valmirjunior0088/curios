@@ -13,3 +13,6 @@ mod machine;
 
 mod into_wasm;
 pub use into_wasm::*;
+
+mod survey;
+pub use survey::*;

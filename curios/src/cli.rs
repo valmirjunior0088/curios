@@ -132,7 +132,6 @@ pub(crate) enum Mode {
         #[command(subcommand)]
         query: Query,
     },
-
 }
 
 /// One question each, of fixed arity. A target takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Membership`.
@@ -154,6 +153,18 @@ pub(crate) enum Query {
         #[arg(
             value_name = "TARGET",
             help = TARGET_HELP_PACKAGE
+        )]
+        target: Option<String>,
+    },
+
+    /// What the optimizer did to each declaration, which is a question about the compilation and never about a run — so it sits here beside the other things the compiler already decided, rather than behind a flag on `run`.
+    #[command(
+        about = "What became of each declaration by the time the optimizer settled, one row per line"
+    )]
+    Cost {
+        #[arg(
+            value_name = "TARGET",
+            help = TARGET_HELP_EXECUTABLE
         )]
         target: Option<String>,
     },
