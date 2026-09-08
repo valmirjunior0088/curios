@@ -1,4 +1,4 @@
-//! Keying a witness on an anonymous type — a tuple's shape or a function type's plicity vector: what registers, what resolves, and the surprise each key's identity holds.
+//! Keying a witness on an anonymous type — a tuple's shape: what registers, what resolves, and the surprise the key's identity holds. A function type is not keyable, and the refusal that says so closes the file.
 
 use crate::tests::{error, run};
 
@@ -96,120 +96,11 @@ fn a_constructor_whose_body_is_a_tuple_type_is_keyed() {
 }
 
 // The base case, function side: a function type has no name to be headed by either, so its plicity vector is the head. `Tag/tag` reduces the parameter to `(Nat) -> Nat`, keys it as `(_) -> _`, and finds the entry; the domains and result were never in the key and are checked by unification after the lookup.
-#[test]
-fn a_concept_resolves_on_a_function_value() {
-    let source = r#"
-        use /std/{Nat, Str};
-        pub concept Tag(A: Type): pub Type {
-            tag(A) -> Str,
-        }
-        satisfy Tag((Nat) -> Nat) {
-            tag(f) = "func",
-        }
-        /std/print(Tag/tag((n) => n + 1))
-        "#;
-
-    assert_eq!(run(source), b"func");
-}
-
 // A keyed function goal has the standing a nominal goal has: no entry defers to the end-of-module sweep instead of failing at the call.
-#[test]
-fn a_later_declared_function_witness_serves_an_earlier_use() {
-    let source = r#"
-        use /std/{Nat, Str};
-        pub concept Tag(A: Type): pub Type {
-            tag(A) -> Str,
-        }
-        let f: (Nat) -> Nat = (n) => n + 1;
-        let named: Str = Tag/tag(f);
-        satisfy Tag((Nat) -> Nat) {
-            tag(f) = "func",
-        }
-        /std/print(named)
-        "#;
-
-    assert_eq!(run(source), b"func");
-}
-
 // Curios does not curry at the type level, so `() -> A` is a distinct type from `A` and the empty vector is its own table entry.
-#[test]
-fn a_nullary_function_type_is_its_own_key() {
-    let source = r#"
-        use /std/{Nat, Str};
-        pub concept Tag(A: Type): pub Type {
-            tag(A) -> Str,
-        }
-        satisfy Tag(() -> Nat) {
-            tag(f) = "thunk",
-        }
-        let f() -> Nat = 1;
-        /std/print(Tag/tag(f))
-        "#;
-
-    assert_eq!(run(source), b"thunk");
-}
-
 // Plicity is part of a function type's identity — `(Nat) -> Nat` and `(@n: Nat) -> Nat` do not convert — so two vectors of one arity are two table entries, each reached by the goals of its own type.
-#[test]
-fn plicity_distinct_shapes_are_distinct_entries() {
-    let source = r#"
-        use /std/{Nat, Str};
-        pub concept Tag(A: Type): pub Type {
-            tag(A) -> Str,
-        }
-        satisfy Tag((Nat) -> Nat) {
-            tag(f) = "explicit",
-        }
-        satisfy Tag((@n: Nat) -> Nat) {
-            tag(f) = "implicit",
-        }
-        let g: (@n: Nat) -> Nat = (@n) => n;
-        /std/print(Str/concat(Tag/tag((n) => n), Tag/tag(g)))
-        "#;
-
-    assert_eq!(run(source), b"explicitimplicit");
-}
-
 // Plicity is part of a function type's identity, so an all-explicit witness does not cover a goal with hidden slots. That is the surprise this key has, so the miss carries the rule — the plicity twin of the labeled-tuple hint above.
-#[test]
-fn a_marked_goal_does_not_reach_the_explicit_witness() {
-    let source = r#"
-        use /std/{Nat, Str};
-        pub concept Tag(A: Type): pub Type {
-            tag(A) -> Str,
-        }
-        satisfy Tag((Nat) -> Nat) {
-            tag(f) = "func",
-        }
-        let g: (@n: Nat) -> Nat = (@n) => n;
-        /std/print(Tag/tag(g))
-        "#;
-
-    assert!(error(source).contains(
-        "no witness of Tag((@n: Nat) -> Nat) found\n  \
-         plicity marks are part of the type: the witness for (_) -> _ does not cover (@_) -> _\n  \
-         declare the witness for this shape"
-    ));
-}
-
 // The higher-kinded position keys on the constructor's body, so a constructor whose body is a function type keys on that body's plicity vector — beside the tuple-bodied constructor above and `Monad(Option)`.
-#[test]
-fn a_constructor_whose_body_is_a_function_type_is_keyed() {
-    let source = r#"
-        use /std/{Nat, Str};
-        let Reader(A: Type) -> Type = (Nat) -> A;
-        pub concept Fun(M: (Type) -> Type): pub Type {
-            name() -> Str,
-        }
-        satisfy Fun(Reader) {
-            name() = "Reader",
-        }
-        /std/print(Fun/name(@Reader)())
-        "#;
-
-    assert_eq!(run(source), b"Reader");
-}
-
 // Every other rigid head still keys as it did, and a head that is none of them is still refused — with the roster the refusal names now listing function types. A witness over a bare variable is the shape that stays out: nothing rigid remains to key on.
 #[test]
 fn a_variable_head_is_still_not_a_key() {
@@ -225,6 +116,27 @@ fn a_variable_head_is_still_not_a_key() {
         "#;
 
     assert!(error(source).contains(
-        "every parameter's head must be an inductive, a struct, an intrinsic type, a tuple type, or a function type"
+        "every parameter's head must be an inductive, a struct, an intrinsic type, or a tuple type"
     ));
+}
+
+/// A function type is not a key. Its useful key space is nearly one point — `(_) -> _` above all — so a concept's owner claiming a shape would claim it program-wide and forever, and the one consumer the standard library ever had for it is gone. Tuple shapes are unaffected: their space is large and ownership partitions naturally.
+#[test]
+fn a_witness_keyed_on_a_function_type_cannot_be_keyed() {
+    let error = error(
+        r#"
+        use /std/{Nat, Str};
+        concept Tag(A: Type): Type {
+            name() -> Str,
+        }
+        satisfy Tag((Nat) -> Nat) {
+            name() = "a function",
+        }
+        /std/print("hi\n")
+        "#,
+    );
+    assert!(
+        error.contains("this witness cannot be keyed") && !error.contains("or a function type"),
+        "unexpected error: {error}"
+    );
 }

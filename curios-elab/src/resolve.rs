@@ -64,9 +64,6 @@ pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<S
         .iter()
         .map(|head| match head {
             HeadKey::TupleType(labels) => HeadKey::TupleType(vec![String::new(); labels.len()]),
-            HeadKey::FuncType(plicities) => {
-                HeadKey::FuncType(vec![Plicity::Explicit; plicities.len()])
-            }
             head => head.clone(),
         })
         .collect();

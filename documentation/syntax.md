@@ -736,19 +736,19 @@ A top-level definition is in scope of its own body, so it may recurse with nothi
 
 ### Test declarations
 
-A `test` declaration declares a named test: a description of type `/syn/Test`, built with the combinators `/std/Test` exports. The parentheses are required and hold the telescope a `let` signature holds: the declaration is the function-definition sugar it lowers to — a definition of declared type `(params) -> /syn/Test`, its body checked under the lambda binding every parameter.
+A `test` declaration declares a named test: a description of type `/syn/Test`, built with the combinators `/std/Test` exports. It takes no parameters — a claim about every instantiation is a proposition, so it is a `let` whose type states it, which the kernel checks on every build.
 
 ```crs
-use /std/{Nat, Test};
+use /std/{Nat, Eq, Test};
 
-test the_answer_holds() =
-    Test/check(21 * 2 == 42);
+test the_answer_holds =
+    Test/assert(21 * 2 == 42);
 
-test add_commutes(n: Nat, m: Nat) =
-    Test/check(n + m == m + n);
+let _right_identity(n: Nat) -> Eq(n + 0, n) =
+    Eq/refl();
 ```
 
-A test's parentheses carry its quantifier. Empty, the body is a closed description and its verdict is computed when the test runs: `passed`, `failed`, or `proved` when the description is a theorem — `Test/refl(2 + 2, 4, Eq/refl())` reports `proved` at arity zero. Holding a telescope, the claim is about *every* instantiation, and only a proof decides it: the body must be a theorem the kernel settles under the whole telescope — `Test/refl(n + 0, n, Eq/refl())` — which is closed through `Test/settled`, rechecked by the kernel, and reported `proved`. A body the kernel does not settle is refused at the declaration, because a `verdict` is a fact about one instance and has nothing to say about all of them. The closing is over the test's *explicit* parameters: a `use` premise in the telescope is resolved as any call's would be, so `test reflexive(use Equal(Nat), n: Nat)` closes over `n` alone, and an implicit is solved from the explicit parameters that mention it. To check a claim at chosen instances instead, make it an ordinary definition and schedule a table: a `let` returning `Test` is not a test and owes no proof, and `Test/all(List/map(cases, ((a, b)) => claim(a, b)))` is one test over the author's own cases whose failure names the case's position. What `curios test` reports is [Testing](usage.md#testing).
+A test takes no parameters. Its body is a closed description and its verdict is computed when the test runs — `passed`, `failed`, `trapped`, or `exited N`. A claim about *every* instantiation is not a description and nothing runs decides it: it is a proposition, so it is a `let` whose type states the claim and whose body proves it, checked by the kernel on every build — `let _right_identity(n: Nat) -> Eq(n + 0, n) = Eq/refl();`, the leading `_` marking a declaration that exists for its type rather than its callers. To check a claim that is true but not a theorem at instances you choose, make it an ordinary definition returning `Test` and schedule a table: a `let` is not a test and owes no proof, and `Test/all(List/map(cases, ((a, b)) => claim(a, b)))` is one test over the author's own cases whose failure names the case's position. What `curios test` reports is [Testing](usage.md#testing).
 
 `test` is contextual: it is a keyword only where an item may start, and `test` stays an ordinary name everywhere else. A test is never `pub` — its name is its report line, not an export — but it is otherwise registered like a private definition: referable within its subtree, and colliding with a sibling declaration of the same name. Being referable is what makes a parameterized test a family: `Test/all(List/map(cases, ((a, b)) => add_commutes(a, b)))` is the same claim over a table the author wrote, one test whose failure names the case's position. The body is its own sequencing region typed at `Test`, which is no monad, so a bare `!` is refused where it is written; an effectful test enters `Io` through `Test/perform`'s thunk. Each unit's tests are collected in declaration order.
 
@@ -981,7 +981,7 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
 }
 ```
 
-Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, tuple type, function type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A: Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
+Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, tuple type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A: Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
 
 A tuple type is keyed by its *shape*: the label at each field position, arity implied, field types excluded. Labels are part of a tuple type's identity, so `Show({Nat, Bool})`, `Show({a: Nat, b: Bool})` and `Show({x: Nat, y: Bool})` are three keys for three types, and a witness for one does not serve another. `{}` keys as the empty shape, and a constructor whose body is a tuple type — `let Pair(A: Type) -> Type = {Nat, A};` — keys on that body's shape in the higher-kinded position. The standard library writes tuple-keyed witnesses for the positional shapes in `/std/Tuple`, whose header states which concept reaches which arity and why the ceiling sits where it does; a labeled product wanting the same is written as a `struct`.
 
@@ -991,7 +991,7 @@ satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
 }
 ```
 
-A function type is keyed by its *plicity vector*: the mark at each parameter position, arity implied, domains and result excluded. Plicity and arity are part of a function type's identity, so `Tag((Nat) -> Nat)`, `Tag((@n: Nat) -> Nat)` and `Tag((Nat) -> (Nat) -> Nat)` are three keys for three types, and a witness for one does not serve another — while binder names are not part of it: `(a: Nat) -> Nat` and `(b: Nat) -> Nat` are one key. `() -> A` keys as the empty vector, a distinct type from `A`, and a constructor whose body is a function type — `let Reader(A: Type) -> Type = (Nat) -> A;` — keys on that body's vector in the higher-kinded position. The result type is not in the key, so a concept commits, per shape, to one result discipline. The standard library writes function-keyed witnesses for one concept alone, `/std/Test/Property`, whose function instance has one canonical meaning — a property probed at its arity, `-> Test` the discipline at every shape. No meaningful `Show` exists at a function type, `Equal` at one is undecidable, and `Monad` at one is declined deliberately — the nominal wrapper, `/std/State`'s idiom, is how a function becomes a monad.
+A function type is **not** keyed. Its useful key space is nearly one point — `(_) -> _` above all — so a concept's owner claiming a shape would claim it program-wide and forever, and no meaningful witness wanted one: `Show` at a function type is meaningless, `Equal` at one undecidable, and `Monad` at one declined deliberately, since the nominal wrapper — `/std/State`'s idiom — is how a function becomes a monad. A `satisfy` whose concept parameter reduces to a function type is refused as unkeyable, with the same report a variable head gets.
 
 Two witnesses that resolve through each other are declared as one group with `and`; each member is a whole witness, with its own telescope where it has one, and the group's members register before any body elaborates. A lone witness may resolve through its own entry with nothing said; two that resolve through each other without being declared as a group are refused, naming both.
 
@@ -1043,8 +1043,6 @@ A witness premise must be a concept application strictly smaller than the witnes
 A witness may be declared only by the compilation root that owns its concept or at least one rigid type head in its key. This prevents independent third parties from defining the same globally coherent instance.
 
 A tuple shape is owned by no root, as an intrinsic type former is. A tuple-keyed witness is therefore declared where its concept is declared, or by a privileged root: a program writes tuple witnesses for its own concepts, and cannot add one for a `/std` concept at a shape `/std` did not write.
-
-A function type's plicity vector is owned by no root either, and there the consequence bites harder: the useful key space is nearly one point — `(_) -> _` above all — so a concept's owner claiming a shape claims it program-wide. A program writes function witnesses for its own concepts, and cannot add one for a `/std` concept at any shape.
 
 The coordinated `/sys`, `/syn`, and `/std` roots are exempt from the restriction against one another.
 
@@ -1134,7 +1132,7 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `Name { ..base, ... }` | Structure update |
 | `match term ... end` | Typed elimination or dispatch |
 | `choose ... end` | Ordered guarded ladder |
-| `test name(params) = body;` | Declared test — a `/syn/Test` description, collected per unit; with empty parentheses its verdict is computed when it runs, and with parameters it is a claim over every instantiation, proved when the kernel settles the body under the telescope and refused when it does not |
+| `test name = body;` | Declared test — a `/syn/Test` description, collected per unit and run by `curios test`; it takes no parameters, since a claim over every instantiation is a `let` whose type states it |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
 | `satisfy C(args);` | Derived witness — the compiler writes the body |
 | `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |

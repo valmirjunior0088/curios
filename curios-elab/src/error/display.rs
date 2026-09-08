@@ -806,7 +806,7 @@ impl fmt::Display for Displayed<'_> {
                 let head = head.spelled(spelling);
                 write!(
                     f,
-                    "this witness cannot be keyed: its concept's parameter {n} reduces to {head}\n  every parameter's head must be an inductive, a struct, an intrinsic type, a tuple type, or a function type",
+                    "this witness cannot be keyed: its concept's parameter {n} reduces to {head}\n  every parameter's head must be an inductive, a struct, an intrinsic type, or a tuple type",
                     n = position + 1
                 )
             }
