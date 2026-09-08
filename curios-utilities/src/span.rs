@@ -104,11 +104,17 @@ impl Span {
         let (number, column) = self.line_column();
 
         let width = source[start..end.min(line_end)].chars().count();
-        let caret = format!(
-            "{}{}",
-            " ".repeat(source[line_start..start].chars().count()),
-            "^".repeat(width.max(1))
-        );
+
+        // One padding character per scalar, and a tab pads as a tab: the line above is printed verbatim, so padding a tab with a space put the caret one column along where the text moved eight, and every tab-indented line reported a caret short of its span by the width of its indentation. A tab *inside* the span still takes one `^`, which is the same trade the scalar count already makes for a wide character.
+        let indent: String = source[line_start..start]
+            .chars()
+            .map(|char| match char {
+                '\t' => '\t',
+                _ => ' ',
+            })
+            .collect();
+
+        let caret = format!("{}{}", indent, "^".repeat(width.max(1)));
 
         let snippet = format!(
             "{number:>5} | {line}\n{padding:>5} | {caret}",
