@@ -84,12 +84,15 @@ pub(super) fn parse_choose_arm<'a>() -> Parser<'a, ChooseArm> {
     parse_bind_arm().or(parse_cond_arm())
 }
 
-// The mandatory `| _ =>` default arm closing a `choose`. A `Bool` ladder is a dispatch form (it enumerates no shapes), so `_` is required, not optional.
+// The mandatory `| _ =>` default arm closing a `choose` — a `Bool` ladder is a dispatch form (it enumerates no shapes), so `_` is required, not optional — or the arm parser explaining why what stands here is no arm.
+//
+// **A bare default here reported the wrong thing.** `many0` drops a recoverable arm failure (`curios_parse`'s repetition keeps only uncaught ones), leaving the default to invent `Expected '_'` at the arm's first token: a missing `=>`, or a pattern the arm grammar refuses, reported as a default the reader never meant to write. Re-running the arm parser recovers the diagnosis it already had, and [`Parser::or`] then keeps whichever error reached further, so a genuinely absent default still reports as one — both alternatives fail at the same `|` and the first takes the tie. The alternative never succeeds, since the loop stopped here precisely because the arm parser failed, so no arm is parsed twice. This is `Module::parse_items_end`'s recovery, for the same reason.
 pub(super) fn parse_choose_default<'a>() -> Parser<'a, Term> {
     parse_literal("|")
         .and_keep(parse_literal("_"))
         .and_drop(parse_literal("=>"))
         .and_keep(lazy(parse_term))
+        .or(lazy(parse_choose_arm).map(|arm| arm.body))
 }
 
 // `choose | test => body | … | _ => default end`. No head term — the arms are `Bool` conditions or refutable binds, tried top-to-bottom, first to fire wins. Distinguished from `match` by keyword alone, so there is no disambiguation to speak of here.

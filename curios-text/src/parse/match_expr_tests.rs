@@ -301,6 +301,30 @@ fn choose_bind_arm() {
     );
 }
 
+#[test]
+fn a_malformed_choose_arm_reports_the_arm_rather_than_the_missing_default() {
+    // `many0` drops the failed arm's error, and the default arm stood in its place: each of these reported `Expected '_'` at the arm's first token, a default the reader never meant to write.
+    for (source, expected) in [
+        (
+            "choose\n| some(v) = key v\n| _ => 0\nend",
+            "Expected '=>', obtained 'v'",
+        ),
+        (
+            "choose\n| true 1\n| _ => 0\nend",
+            "Expected '=', obtained '1'",
+        ),
+    ] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(report.contains(expected), "{source:?} reported {report}");
+    }
+    // A genuinely absent default still reports as one: both alternatives fail at the same `|`, and the first takes the tie.
+    let report = "choose\n| f => 1\nend"
+        .parse::<Term>()
+        .unwrap_err()
+        .format();
+    assert!(report.contains("Expected '|'"), "reported {report}");
+}
+
 // `choose` survives print → re-parse, including the arm-free form.
 #[test]
 fn choose_round_trips() {
