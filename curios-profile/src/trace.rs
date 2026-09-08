@@ -1,6 +1,6 @@
 //! The record stream: [`trace`] runs a closure under a subscriber that writes one tab-separated row per span and event as it happens, so a run that never returns still leaves everything it did on disk.
 //!
-//! Nothing is aggregated here. A row is what the callback had in hand — an identity, a timestamp, and the allocator's readings — and every statistic the old collector computed is [`fold`](crate::fold)'s to recompute from the file. `README.md` states why the library emits records and leaves aggregation to a consumer; what follows is what a reader of the file needs to know.
+//! Nothing is aggregated here. A row is what the callback had in hand — an identity, a timestamp, and the allocator's readings — and every statistic the old collector computed is [`fold`](crate::fold())'s to recompute from the file. `README.md` states why the library emits records and leaves aggregation to a consumer; what follows is what a reader of the file needs to know.
 //!
 //! **The row shapes.** The first column is the kind, so `awk '$1 == "V"'` is a whole analysis:
 //!
@@ -87,7 +87,7 @@ pub fn trace<T>(destination: Destination, operation: impl FnOnce() -> T) -> io::
 ///
 /// The two compose rather than compete. `set_global_default` is consulted only where no thread-local subscriber is set, so a [`trace`] on any thread still overrides this for the duration of its closure, and the callers that need a scoped capture keep it.
 ///
-/// Configuration is still in code: the `profile` feature decides that this is called at all, and [`stream_path!`](crate::stream_path) decides where it writes. Neither is readable from the environment, so there is no second specification to disagree with the first.
+/// Configuration is still in code: the `profile` feature decides that this is called at all, and the [`Destination`] its caller names decides where it writes. Neither is readable from the environment, so there is no second specification to disagree with the first.
 pub fn install(destination: Destination) -> io::Result<()> {
     let recorder = Recorder::new(destination)?;
 

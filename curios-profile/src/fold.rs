@@ -1,4 +1,4 @@
-//! Aggregation, as one consumer of the record stream rather than as what the library produces: [`fold`] reads the rows [`trace`](crate::trace) wrote and recomputes the timings, allocation figures and magnitude distributions the old collector used to keep in memory.
+//! Aggregation, as one consumer of the record stream rather than as what the library produces: [`fold`] reads the rows [`trace`](crate::trace()) wrote and recomputes the timings, allocation figures and magnitude distributions the old collector used to keep in memory.
 //!
 //! Every statistic here is derived, which is the point. A duration is an exit differenced against its entry, a retained byte count the same subtraction over the allocator's readings, and a sample distribution a pass over the `V` rows — so a question the columns below do not answer is asked of the file directly rather than by changing what a capture keeps.
 //!

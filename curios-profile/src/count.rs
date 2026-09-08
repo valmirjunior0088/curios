@@ -1,4 +1,4 @@
-//! Allocation accounting for [`capture`](crate::capture): a `GlobalAlloc` wrapper maintaining process-wide live, cumulative, and high-water byte counters that span timing samples at each boundary.
+//! Allocation accounting for [`trace`](crate::trace()): a `GlobalAlloc` wrapper maintaining process-wide live, cumulative, and high-water byte counters that span timing samples at each boundary.
 //!
 //! A binary opts in by installing [`CountingAllocator`] as its `#[global_allocator]` under its own `profile` feature. Nothing else observes the counters, so a build that installs no allocator reports every memory column as zero while its timings stay exactly as they were — the columns are absent evidence, never a claim that nothing allocated.
 //!
