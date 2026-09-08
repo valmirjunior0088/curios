@@ -265,6 +265,16 @@ fn a_malformed_braced_escape_is_refused() {
 }
 
 #[test]
+fn an_unrecognized_character_escape_is_refused_by_name() {
+    // The backslash discriminates the escape, so what follows it is the diagnosis. Uncommitted, the alternative below it reads the backslash as an ordinary character and the closing quote takes the blame for the reader's mistyped escape. A string literal is the opposite case, above: there an unrecognized escape stands for itself.
+    let report = "'\\q'".parse::<Term>().unwrap_err().format();
+    assert!(
+        report.contains("a character escape is one of"),
+        "reported {report}"
+    );
+}
+
+#[test]
 fn char_literal_multi_char_is_error() {
     assert!("'ab'".parse::<Term>().is_err());
 }

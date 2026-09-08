@@ -234,7 +234,10 @@ pub(super) fn parse_char_value<'a>() -> Parser<'a, char> {
                 .or(take_exact("\\").map(|_| '\\'))
                 .or(take_exact("'").map(|_| '\''))
                 .or(parse_unicode_escape())
-                .or(fail("Unknown char escape sequence")),
+                // The backslash discriminates the escape, so the fault is this one rather than the first alternative's tie at the same offset, and rather than the fallback below reading the backslash as an ordinary character.
+                .or(commit(fail(
+                    "a character escape is one of `\\n`, `\\t`, `\\r`, `\\\\`, `\\'` or `\\u{...}`; a lone backslash is written `'\\\\'`",
+                ))),
         )
         .or(
             take_n(1).flat_map(|string| match string.chars().next().unwrap() {
