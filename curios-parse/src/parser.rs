@@ -134,7 +134,7 @@ where
 
 /// Takes back a [`commit`] made inside `parser`, so an enclosing [`Parser::or`] or repetition may still try its next alternative. The dual of `commit`, and the only way past one: commitment does not decay with distance, so a refusal a nested grammar commits to travels out of every caller that does not stop it here.
 ///
-/// Written where one grammar deliberately refuses what another may legitimately re-read — `parse_bind_arm` over `parse_qualified_match_pattern`, whose refusal of `Option/some(n)` as a constructor pattern must not prevent a `choose` condition arm from reading the same text as an ordinary call.
+/// Written where one grammar deliberately refuses what another may legitimately re-read — `parse_func_type` over its parameter telescope, whose refusal of `(a, b)` as a list of annotated binders must not prevent the same text being read as a tuple or a parenthesized term.
 pub fn uncommit<'a, T>(parser: Parser<'a, T>) -> Parser<'a, T>
 where
     T: 'a,

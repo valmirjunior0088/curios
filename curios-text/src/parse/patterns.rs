@@ -185,7 +185,7 @@ pub(super) fn parse_ctor_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 //
 // **Tried first, and guarded by the one form that may carry a path.** A struct head *is* a path (`parse_struct_match_pattern`, documentary and unresolved), so `not_ahead` hands `Name/Sub { … }` back; nothing else in this grammar begins with one, since `parse_qualified_name` rejects a single segment and so never reaches the `Binder` case. First is what makes the refusal stick: [`Parser::or`] consults the *first* alternative's fatality but picks between two failures on offset alone, and the struct alternative fails at exactly this one's offset — both stop at the delimiter that is not a `{` — so from any later position the tie would keep the vaguer error.
 //
-// The failure is past the choice point and so fatal, which is what carries it out of the arm. `parse_bind_arm` catches it back, so a `choose` condition arm beginning the same way still re-parses as a term.
+// The refusal commits, which is what carries it out of the arm instead of leaving the vaguer complaint of whatever the text falls through to. A `choose` bind arm is read after the condition arm so that it can: the condition arm has already had its turn at text beginning this way, so there is nothing left to re-read and nothing to take the commitment back for.
 pub(super) fn parse_qualified_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     parse_qualified_name().and_drop(not_ahead("{")).flat_map(|name| {
         commit(fail(format!(

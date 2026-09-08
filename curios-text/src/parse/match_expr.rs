@@ -40,25 +40,23 @@ pub(super) fn parse_cons_ih<'a>() -> Parser<'a, Option<Pattern>> {
         .or(pure(None))
 }
 
-// A bind arm `| pattern = value => body` (Rust `if let`): the arm fires when `value` matches the refutable `pattern`. The `=` separator is guarded against `==` (equality) and `=>` (an empty value) via `not_ahead`, mirroring the `!` vs `!=` idiom. Tried *before* the condition arm — a bind pattern like `some(x)` also parses as a condition term — so the `catch` backtracks to the `|` when no `=` separator follows the pattern, and the condition arm re-parses the same text as a `Bool` term.
+// A bind arm `| pattern = value => body` (Rust `if let`): the arm fires when `value` matches the refutable `pattern`. The `=` separator is guarded against `==` (equality) and `=>` (an empty value) via `not_ahead`, mirroring the `!` vs `!=` idiom. Tried *after* the condition arm, since a bind pattern like `some(x)` also parses as a condition term and the condition arm cannot take a bind arm from it: `=` is no infix operator, so a condition term stops there and the arm fails wanting its `=>`. Reading it second is what lets it keep its commitments — a pattern the grammar refuses by name, a qualified constructor above all, is then the diagnosis instead of being re-read as an ordinary call and reported at the `=` that follows it.
 pub(super) fn parse_bind_arm<'a>() -> Parser<'a, ChooseArm> {
-    uncommit(
-        parse_literal("|")
-            .and_keep(parse_match_pattern())
-            .and_drop(
-                take_exact("=")
-                    .and_drop(not_ahead("="))
-                    .and_drop(not_ahead(">")),
-            )
-            .and_drop(parse_whitespace())
-            .and(lazy(parse_term))
-            .and_drop(parse_literal("=>")),
-    )
-    .and(lazy(parse_term))
-    .map(|((pattern, value), body)| ChooseArm {
-        test: ChooseTest::Bind { pattern, value },
-        body,
-    })
+    parse_literal("|")
+        .and_keep(parse_match_pattern())
+        .and_drop(
+            take_exact("=")
+                .and_drop(not_ahead("="))
+                .and_drop(not_ahead(">")),
+        )
+        .and_drop(parse_whitespace())
+        .and(lazy(parse_term))
+        .and_drop(parse_literal("=>"))
+        .and(lazy(parse_term))
+        .map(|((pattern, value), body)| ChooseArm {
+            test: ChooseTest::Bind { pattern, value },
+            body,
+        })
 }
 
 // A choose condition arm `| cond => body`. The catch spans through `=>` so a condition term that merely *starts* like the default backtracks cleanly. A bare `_` parses as an ordinary `Name` term, so the choose's `| _ =>` default would otherwise be swallowed here; the `flat_map` guard rejects a lone `_` condition, letting `many0` stop and hand the default to `parse_choose_default`. A condition that merely *begins* with `_` (e.g. `_ready`) has a longer head and passes the guard, parsing as an ordinary condition.
@@ -79,9 +77,9 @@ pub(super) fn parse_cond_arm<'a>() -> Parser<'a, ChooseArm> {
         })
 }
 
-// One choose arm: a bind arm first (its `catch` backtracks when the pattern is not followed by `=`), else a condition arm.
+// One choose arm: a condition arm first, else a bind arm. The condition arm is the reading that cannot be mistaken — its term stops at a `=`, which is no infix operator — so trying it first costs the bind arm nothing and leaves the bind arm free to commit.
 pub(super) fn parse_choose_arm<'a>() -> Parser<'a, ChooseArm> {
-    parse_bind_arm().or(parse_cond_arm())
+    parse_cond_arm().or(parse_bind_arm())
 }
 
 // The mandatory `| _ =>` default arm closing a `choose` — a `Bool` ladder is a dispatch form (it enumerates no shapes), so `_` is required, not optional — or the arm parser explaining why what stands here is no arm.

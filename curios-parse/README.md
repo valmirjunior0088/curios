@@ -22,7 +22,7 @@ The parser combinator DSL behind both the `.crs` surface grammar (`curios-text`)
 
 **Rationale.** An alternative knows when it has read the prefix that discriminates it, and nothing else does: `parse_struct_pattern` reads `Name {` and owes a missing `}`, while a grammar with shared prefixes — WAT's `(keyword …` forms, or a Curios tuple against a parenthesized term — must probe past the `(` and still yield. Commitment is asked for rather than inferred from consumption, so the two cannot disagree, and the offset heuristic decides only between two failures that are both guesses.
 
-`uncommit` is the rarer half and each use marks a real boundary: a speculative alternative that invokes the term grammar contains what that grammar commits to, since the same text is about to be read another way. Three sites carry it, and a fourth would be a reason to ask whether the grammar is sharing too much rather than to write it.
+`uncommit` is the rarer half and each use marks a real boundary: a speculative alternative that invokes the term grammar contains what that grammar commits to, since the same text is about to be read another way. One site carries it, and a second would be a reason to ask whether the grammar is sharing too much rather than to write it.
 
 ### Memoization is packrat, keyed by nonterminal and offset
 

@@ -303,7 +303,7 @@ fn choose_bind_arm() {
 
 #[test]
 fn a_malformed_choose_arm_reports_the_arm_rather_than_the_missing_default() {
-    // `many0` drops the failed arm's error, and the default arm stood in its place: each of these reported `Expected '_'` at the arm's first token, a default the reader never meant to write.
+    // `many0` drops the failed arm's error, and the default arm stood in its place: every one of these reported `Expected '_'` at the arm's first token, a default the reader never meant to write.
     for (source, expected) in [
         (
             "choose\n| some(v) = key v\n| _ => 0\nend",
@@ -311,7 +311,12 @@ fn a_malformed_choose_arm_reports_the_arm_rather_than_the_missing_default() {
         ),
         (
             "choose\n| true 1\n| _ => 0\nend",
-            "Expected '=', obtained '1'",
+            "Expected '=>', obtained '1'",
+        ),
+        // The bind arm is read after the condition arm and so keeps its commitments: the pattern grammar's own refusal is the diagnosis, the same one a `match` arm gives for the same mistake.
+        (
+            "choose\n| Option/some(v) = key => v\n| _ => 0\nend",
+            "a constructor pattern names its constructor bare",
         ),
     ] {
         let report = source.parse::<Term>().unwrap_err().format();
