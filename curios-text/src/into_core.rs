@@ -560,7 +560,7 @@ fn process_items(
                     false => FlatItem::Let(items.pop().expect("a `let` item has a member")),
                 });
             }
-            // A test is the function sugar its parentheses spell — a `let`'s `LetSignature::Func` shape with the output fixed. Its declared type is `(params) -> /syn/Test`: the output emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on `/syn` being importable, closed under the written telescope. Its body is the authored body under the lambda binding every parameter. Empty parentheses give the harness's nullary test; a telescope gives a property the synthesized tail closes through `Test/property`.
+            // A test takes no parameters, so it is not function sugar — but it lowers to the same `() -> Test` a nullary one used to, because `Test/main` holds the whole schedule and must force only the one it selected. The output is emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on `/syn` being importable.
             TopItem::Test(test) => {
                 context.record_import_scope(Some(&context.prefixed(&test.label)));
                 let lower = Lowerer::new(context);

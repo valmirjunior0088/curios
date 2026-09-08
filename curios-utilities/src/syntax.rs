@@ -298,7 +298,7 @@ impl ProofSyntax {
     }
 }
 
-/// The names the `test` declaration form emits: `/syn/Test`, the declared output type of every lowered test; `/syn/Test/main`, the scheduler the synthesized tail applies to the collected tests; `/syn/Test/property`, what that tail closes a parameterized test through when it is probed; `/syn/Test/settled`, what it closes one through when the kernel settled it, and `/syn/Test/Test/theorem`, the description the elaborator compares the body against to tell the two apart.
+/// The names the `test` declaration form emits: `/syn/Test`, the declared output type of every lowered test, and `/syn/Test/main`, the scheduler the synthesized tail applies to the collected tests. Two slots, because the tail decides nothing — a test takes no parameters, so there is no discharge to choose and no description to compare a body against.
 #[derive(Debug, Clone, Copy)]
 pub struct TestSyntax {
     pub test_type: SyntaxName,

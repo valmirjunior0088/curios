@@ -86,47 +86,17 @@ fn the_unit_type_keys_on_the_empty_shape() {
     );
 }
 
-// The vector is the mark at each parameter position, so the key carries every mark in order and nothing about the domains or result.
+// A function type is not keyable at all, whatever its marks: its key space was nearly one point, so a concept's owner claiming a shape claimed it program-wide, and the one consumer that wanted it is gone.
 #[test]
-fn a_function_type_keys_on_its_plicity_vector() {
-    assert_eq!(
-        HeadKey::of_whnf(&func_type(
-            &[Plicity::Explicit, Plicity::Implicit, Plicity::Witness],
-            "p"
-        )),
-        Some(HeadKey::FuncType(vec![
-            Plicity::Explicit,
-            Plicity::Implicit,
-            Plicity::Witness
-        ]))
-    );
-}
-
-// Binder names are alpha-convertible in a function type — the exact opposite of tuple labels — so two spellings of one type are one key.
-#[test]
-fn binder_names_are_not_part_of_a_function_key() {
-    assert_eq!(
-        HeadKey::of_whnf(&func_type(&[Plicity::Explicit], "a")),
-        HeadKey::of_whnf(&func_type(&[Plicity::Explicit], "b"))
-    );
-}
-
-// `() -> A` is a distinct type from `A`, and its key is the empty vector rather than `A`'s head.
-#[test]
-fn a_nullary_function_type_keys_on_the_empty_vector() {
-    assert_eq!(
-        HeadKey::of_whnf(&func_type(&[], "p")),
-        Some(HeadKey::FuncType(Vec::new()))
-    );
-}
-
-// Plicity is part of a function type's identity, so two vectors of one arity are two table entries rather than a duplicate.
-#[test]
-fn marks_separate_two_vectors_of_one_arity() {
-    assert_ne!(
-        HeadKey::of_whnf(&func_type(&[Plicity::Explicit], "p")),
-        HeadKey::of_whnf(&func_type(&[Plicity::Implicit], "p"))
-    );
+fn a_function_type_is_not_a_key() {
+    for marks in [
+        [].as_slice(),
+        &[Plicity::Explicit],
+        &[Plicity::Implicit],
+        &[Plicity::Explicit, Plicity::Witness],
+    ] {
+        assert_eq!(HeadKey::of_whnf(&func_type(marks, "p")), None);
+    }
 }
 
 // A shape stands for a type whose field types it does not carry, so it displays them elided rather than inventing a spelling for them.
@@ -144,26 +114,5 @@ fn a_shape_displays_its_field_types_elided() {
             .unwrap()
             .to_string(),
         "{x: _, y: _}"
-    );
-}
-
-// A function key stands for a type whose domains and result it does not carry, so it displays them elided too — the marks alone are truthful to print.
-#[test]
-fn a_function_key_displays_its_domains_and_result_elided() {
-    assert_eq!(HeadKey::FuncType(Vec::new()).to_string(), "() -> _");
-    assert_eq!(
-        HeadKey::of_whnf(&func_type(&[Plicity::Explicit], "p"))
-            .unwrap()
-            .to_string(),
-        "(_) -> _"
-    );
-    assert_eq!(
-        HeadKey::of_whnf(&func_type(
-            &[Plicity::Implicit, Plicity::Witness, Plicity::Explicit],
-            "p"
-        ))
-        .unwrap()
-        .to_string(),
-        "(@_, use _, _) -> _"
     );
 }
