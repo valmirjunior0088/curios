@@ -2,7 +2,6 @@
 
 use {
     crate::{Diagnostic, Severity},
-    curios_package::LIBRARY,
     curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, check_with_units},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
@@ -71,13 +70,9 @@ pub fn diagnosed(
     let (checked, is_unit) = match subject {
         Subject::Unit { units } => {
             let units = overlaid(units, overlay);
-            // `()` is the smallest text an entrypoint parses, and the tests tail replaces it before anything checks it — the subject is the scope's final unit, exactly as `curios test` compiles a library.
-            let (entrypoint, loader, _source) = match Entrypoint::supplied(LIBRARY, "()") {
-                Ok(opened) => opened,
-                Err(error) => {
-                    return Diagnosed::refused(CompileError::Failure(vec![error.report()]));
-                }
-            };
+            // A library has no written entry, so it is asked through the trivial one, which the tests tail then replaces — the subject is the scope's final unit, exactly as `curios test` compiles a library.
+            let entrypoint = Entrypoint::trivial();
+            let loader = RootSource::none();
             let checked = check_with_units(
                 budget,
                 &units,

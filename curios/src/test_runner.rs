@@ -13,6 +13,9 @@ use {
     std::path::{Path, PathBuf},
 };
 
+/// What stands in for a library's entry text when the payload is keyed. A library is compiled through [`Entrypoint::trivial`], which is built rather than parsed and so has no text of its own; the key has to be *something* constant, and naming it here says which constant and why. The library's own content reaches the address through the unit chain, so nothing depends on this being the program.
+const LIBRARY_KEY: &str = "<library>";
+
 /// The tally a `↳ Tested` step and the count line report, in the order they spell it.
 #[derive(Default)]
 struct Totals {
@@ -73,15 +76,15 @@ pub(crate) fn run_tests(
     if library.is_file() {
         let store = Verdicts::at(governing.root.clone());
         let subject = Subject::package(&governing.package.name);
-        // The entry is a dummy program — `()` is the smallest text an entrypoint parses, and the tests tail replaces it before anything checks it: the subject is the scope's final unit, and `EntryTail::LastUnitTests` schedules that unit's tests. The constant text is also what keys the payload — the library's own content rides in through the unit chain.
-        let (entrypoint, loader, source) = Entrypoint::supplied(LIBRARY, "()")
-            .map_err(|error| CompileError::Failure(vec![error.report()]))?;
+        // A library has no written entry, so it is compiled through the trivial one: the subject is the scope's final unit, and `EntryTail::LastUnitTests` replaces that entry with the tail scheduling the unit's tests. `LIBRARY_KEY` stands in for the entry text the payload is keyed on — a built entry has none, and the library's own content rides in through the unit chain regardless.
+        let entrypoint = Entrypoint::trivial();
+        let loader = RootSource::none();
         let (records, cwasm) = tests_payload(
             budget,
             &units,
             &entrypoint,
             &loader,
-            &source.text,
+            LIBRARY_KEY,
             &library,
             &store,
             &governing.package.name,

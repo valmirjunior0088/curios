@@ -35,8 +35,8 @@ fn run_unit(unit: &str) {
         root.join(format!("{unit}.crs")),
         root.join(unit),
     );
-    let (entrypoint, loader, _source) =
-        Entrypoint::supplied("corpus", "()").expect("the empty entry parses");
+    let entrypoint = Entrypoint::trivial();
+    let loader = RootSource::none();
 
     // No cache: a test must not file payloads into a project store.
     let (module, _foreigns, records) = compile_tests_with_units(

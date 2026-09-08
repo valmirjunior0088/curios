@@ -1,7 +1,8 @@
 use {
     super::{
-        FuncSugarParam, FuncType, FuncTypeParam, Label, LetSignature, LoadError, Name, RootSource,
-        Subterm, Term, TupleTypeParam, print_module_items, print_term,
+        FuncSugarParam, FuncType, FuncTypeParam, Intrinsic, Label, LetSignature, LoadError, Name,
+        RootSource, Subterm, Term, Tuple, TupleType, TupleTypeParam, print_module_items,
+        print_term,
     },
     crate::parse::{
         clear_comments, parse_optional_term, parse_term, parse_top_item, parse_whitespace,
@@ -420,6 +421,22 @@ impl Entrypoint {
         let (entrypoint, source) = Self::sourced(path)?;
 
         Ok((entrypoint, RootSource::entry(path), source))
+    }
+
+    /// The trivial program `Io/pure(())`, built rather than parsed.
+    ///
+    /// What a unit with no written entry is compiled through. A library has none, so one is supplied for it, and every policy that does so replaces it with a synthesized tail before anything checks it — which is why the placeholder used to be the text `"()"`, chosen for being the shortest thing an entrypoint parses. That text is not a program: `()` has type `{}` and nothing lifts a pure value into `Io`, so it would be refused the moment a policy stopped replacing it, and the invariant holding it up lived in a comment.
+    ///
+    /// This is a program. It needs no text, so there is nothing to parse and nothing to fail; and it is the `IoPure` intrinsic rather than a path, so there is no name to resolve and no dependence on `/std` being reachable from a placeholder.
+    pub fn trivial() -> Self {
+        Self {
+            module: Module { items: Vec::new() },
+            type_: None,
+            tail: Term::from(Subterm::Intrinsic(Intrinsic::IoPure {
+                result: Term::from(Subterm::TupleType(TupleType { fields: Vec::new() })),
+                value: Term::from(Subterm::Tuple(Tuple { fields: Vec::new() })),
+            })),
+        }
     }
 
     /// Parses `text` as an entrypoint, paired with the [`RootSource`] that resolves nothing — the counterpart of [`opened`](Self::opened) for a program that arrived as text rather than as a file. `label` names it in diagnostics, where a file's path would go.
