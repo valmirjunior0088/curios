@@ -237,3 +237,58 @@ fn a_comment_opens_with_a_space_or_ends_its_line() {
         .format();
     assert!(error.contains("with the space"), "{error}");
 }
+
+/// A malformed construct reports inside itself, not at the delimiter that opens it.
+///
+/// Each of these has a prefix that nothing else in the grammar may follow — `Name {`, a lambda's `=>`, a motive's `:`, a field's `:`/`->`/`=`, a constructor target's `:`, a block string's opener, a witness's concept name. Every one of them used to backtrack instead: the construct was re-read as something shorter (a bare name, a parenthesized term, no motive, a positional field) and the enclosing form complained about a token the reader had written correctly.
+#[test]
+fn a_construct_with_a_discriminating_prefix_reports_inside_itself() {
+    for (source, expected) in [
+        // A struct literal, past its `Name {`.
+        ("P { x = 1 ", "Expected '}'"),
+        ("P { x = @ }", "expected a term, obtained '@'"),
+        // A lambda, past its `=>`.
+        ("(x) => @", "expected a term, obtained '@'"),
+        // A motive, past its `:`.
+        (
+            "match b: @ | true => 1 end",
+            "expected a term, obtained '@'",
+        ),
+        // A tuple-type field, past its `:`.
+        ("{ x: @ }", "expected a term, obtained '@'"),
+        // A labeled tuple field, past its guarded `=`.
+        ("(x = @)", "expected a term, obtained '@'"),
+        // A block string, past its opener and newline.
+        (
+            "\"\"\"\n text\n",
+            "closes with `\"\"\"` on a line of its own",
+        ),
+    ] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(report.contains(expected), "{source:?} reported {report}");
+    }
+}
+
+/// The readings those commitments must not take away.
+#[test]
+fn a_shorter_reading_still_wins_where_the_prefix_is_absent() {
+    for source in [
+        // `==` is not a field's `=`, so this stays a positional field.
+        "(a == b, 2)",
+        // A bare `{` is a tuple type, not a struct literal; a bare `(` a tuple, not a lambda.
+        "{ x: A, y: B }",
+        "(1, true)",
+        "(1,)",
+        "()",
+        "(1)",
+        // A motive is optional.
+        "match b | true => 1 | false => 0 end",
+        // Definition sugar and spreads in a literal.
+        "(bump(x) = x, base = 3)",
+        "P { ..p, y = false }",
+        // A lambda whose body is a whole term.
+        "(x) => let y = 1; y",
+    ] {
+        assert!(source.parse::<Term>().is_ok(), "{source} should parse");
+    }
+}

@@ -31,7 +31,8 @@ pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
                 .and_drop(parse_literal(")")),
         )
         .and_drop(parse_literal("->"))
-        .and(lazy(parse_term))
+        // A field's type position commits once its introducer is read: past a `->` or a `:` nothing else may stand here, and the unlabeled alternative below would otherwise read the label alone as the whole type and leave the enclosing `}` to complain at the introducer.
+        .and(commit(lazy(parse_term)))
         .map(
             |((label, params), output): ((&str, Vec<FuncTypeParam>), Term)| TupleTypeParam {
                 label: Some(label.to_string()),
@@ -41,7 +42,7 @@ pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
         )
         .or(parse_identifier()
             .and_drop(parse_literal(":"))
-            .and(lazy(parse_term))
+            .and(commit(lazy(parse_term)))
             .map(|(label, type_): (&str, Term)| TupleTypeParam {
                 label: Some(label.to_string()),
                 func_params: None,
@@ -71,7 +72,7 @@ pub(super) fn parse_tuple_type<'a>() -> Parser<'a, Term> {
 // A parsed labeled-field prefix: the label and, for the definition sugar, the written lambda-parameter list.
 type TupleFieldPrefix = (String, Option<Vec<(Plicity, Label, Option<Term>)>>);
 
-// The committing prefix of a labeled tuple/struct-literal field: `label =` or the definition sugar `label(params) =`. The caller wraps it in `catch`, so a positional field that merely starts with an identifier or an application backtracks cleanly.
+// The committing prefix of a labeled tuple/struct-literal field: `label =` or the definition sugar `label(params) =`. It fails recoverably, so a positional field that merely starts with an identifier or an application backtracks cleanly; the `=` is guarded against `==` and `=>` via `not_ahead`, mirroring the bind arm's idiom, since `(a == b, 2)` is a positional field whose value begins with a name and must not be read as the label `a`.
 pub(super) fn parse_tuple_field_prefix<'a>() -> Parser<'a, TupleFieldPrefix> {
     parse_identifier()
         .and(
@@ -81,14 +82,20 @@ pub(super) fn parse_tuple_field_prefix<'a>() -> Parser<'a, TupleFieldPrefix> {
                 .map(Some)
                 .or(pure(None)),
         )
-        .and_drop(parse_literal("="))
+        .and_drop(
+            take_exact("=")
+                .and_drop(not_ahead("="))
+                .and_drop(not_ahead(">")),
+        )
+        .and_drop(parse_whitespace())
         .map(|(label, func_params): (&str, _)| (label.to_string(), func_params))
 }
 
 // A tuple-literal / struct-literal field: `label = value`, the definition sugar `label(params) = value` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar — or a positional value.
 pub(super) fn parse_tuple_field<'a>() -> Parser<'a, TupleField> {
     parse_tuple_field_prefix()
-        .and(lazy(parse_term))
+        // Past a guarded `=` the value must follow: no positional field can hold one at its top level, so the field owns the diagnosis rather than falling back to the positional reading and leaving the enclosing `}` or `)` to complain at the label.
+        .and(commit(lazy(parse_term)))
         .map(|((label, func_params), value)| TupleField {
             label: Some(label),
             func_params,
@@ -135,7 +142,7 @@ pub(super) fn parse_struct_entry<'a>() -> Parser<'a, StructLitEntry> {
         .or(parse_tuple_field().map(StructLitEntry::Field))
 }
 
-// A struct literal: `Name { … }` or `Name(args) { … }`. The trailing `{` inside the `catch` is the commit point — it distinguishes the literal from a bare name / name-application (no brace) and from a Σ-type `{ x : A }` (no head name), so there is no grammar conflict. Plain entries reuse the tuple-value grammar (`= value` or positional) and `use <term>` fills a concept's `use`-marked field; the head's arguments are plain terms (`@`-pinning is not the struct idiom — the head type pins instead).
+// A struct literal: `Name { … }` or `Name(args) { … }`. The trailing `{` is the commit point — it distinguishes the literal from a bare name / name-application (no brace) and from a Σ-type `{ x : A }` (no head name), so there is no grammar conflict. Plain entries reuse the tuple-value grammar (`= value` or positional) and `use <term>` fills a concept's `use`-marked field; the head's arguments are plain terms (`@`-pinning is not the struct idiom — the head type pins instead).
 pub(super) fn parse_struct_lit<'a>() -> Parser<'a, Term> {
     parse_name()
         .and(
@@ -145,8 +152,10 @@ pub(super) fn parse_struct_lit<'a>() -> Parser<'a, Term> {
                 .or(pure(vec![])),
         )
         .and_drop(parse_literal("{"))
-        .and(sep_by0_trailing(parse_struct_entry, || parse_literal(",")))
-        .and_drop(parse_literal("}"))
+        .and(commit(
+            sep_by0_trailing(parse_struct_entry, || parse_literal(","))
+                .and_drop(parse_literal("}")),
+        ))
         .map(|((head, params), entries)| {
             Subterm::StructLit(StructLit {
                 head,

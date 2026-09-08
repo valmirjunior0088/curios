@@ -223,7 +223,11 @@ fn a_malformed_item_is_reported_by_the_head_it_names() {
     for (source, expected) in [
         ("pub let a : /std/Nat -> 1;", "Expected '='"),
         ("satisfy => /std/Equal { }", "Expected identifier"),
-        ("use /std/Nat, /std/Bool;", "Expected '/'"),
+        // The `use` arm now names the rule rather than the token that introduces a group.
+        (
+            "use /std/Nat, /std/Bool;",
+            "a `use` imports through a group",
+        ),
     ] {
         let report = source.parse::<Module>().unwrap_err().format();
         assert!(

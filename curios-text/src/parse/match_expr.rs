@@ -7,7 +7,8 @@ pub(super) fn parse_func<'a>() -> Parser<'a, Term> {
         }))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("=>"))
-        .and(lazy(parse_term))
+        // Past the arrow this is a lambda and nothing else, so its body owns the diagnosis. Left to backtrack, the parameter list was re-read as a tuple or a parenthesized term and the arrow itself became the complaint.
+        .and(commit(lazy(parse_term)))
         .map(|(params, body)| Subterm::Func(Func { params, body }).into())
 }
 
@@ -15,7 +16,8 @@ pub(super) fn parse_func<'a>() -> Parser<'a, Term> {
 pub(super) fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Term>)> {
     parse_keyword("match").and_keep(lazy(parse_term)).and(
         parse_literal(":")
-            .and_keep(lazy(parse_term))
+            // The `:` is what introduces a motive, so past it a term must follow. Recoverable, a malformed motive was read as no motive at all and the arms' `end` complained at the colon.
+            .and_keep(commit(lazy(parse_term)))
             .map(Some)
             .or(pure(None)),
     )

@@ -301,9 +301,14 @@ pub(super) fn parse_block_string_literal<'a>() -> Parser<'a, Term> {
                         "a block string literal opens with `\"\"\"` and a newline; its text begins on the next line",
                     ))
                 })))
-                .and_keep(many0(parse_block_piece))
-                .and(mark())
-                .and_drop(take_exact("\"\"\""))
+                // Past the opener and its newline this is a block literal and nothing else, so an unterminated one says so. Recoverable, it backtracked to the one-line form, failed there too, and left the enclosing term to complain at the opening quotes.
+                .and_keep(commit(
+                    many0(parse_block_piece)
+                        .and(mark())
+                        .and_drop(take_exact("\"\"\"").map_err(
+                            "a block string literal closes with `\"\"\"` on a line of its own",
+                        )),
+                ))
                 .flat_map(|(pieces, close)| match assemble_block(pieces) {
                     Ok(value) => pure(Subterm::Syn(Syn::Str(StrLit::block(value)))),
                     Err(message) => commit(fail_from(&close, message)),
