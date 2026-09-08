@@ -59,6 +59,7 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
         name: "poll".into(),
         subject: Some("Handle".into()),
         label: "poll".into(),
+        description: String::new(),
         signature: WireSignature {
             params: vec![],
             results: WireResults::single("r".into(), WireType::Nat),

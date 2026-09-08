@@ -907,6 +907,7 @@ pub(super) fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
         name: "/forged".to_string(),
         subject: None,
         label: "forged".to_string(),
+        description: String::new(),
         signature: WireSignature {
             params: Vec::new(),
             results: WireResults::single("value".to_string(), WireType::Nat),

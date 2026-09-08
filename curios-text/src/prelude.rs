@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Argument, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Intrinsic,
+        Apply, Argument, Doc, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Intrinsic,
         LetSignature, Module, Name, Nat, NatLiteral, Pattern, Subterm, Term, TopForeign, TopItem,
         TopLet, TopMod, TopUse, TupleType, TupleTypeParam, UseGroup,
     },
@@ -144,6 +144,35 @@ fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
     }])
 }
 
+/// `item` under `lines`, the block a `-- |` would have put above it — written first here for the same reason it is written first there. An empty line is a paragraph break, exactly as it is in the surface syntax.
+///
+/// **A gloss says what the operation is, not what its carrier will not hold.** Where a value leaves the carrier is one rule stated once — `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`, and `curios-num`'s `scalar` per operation — and repeating it on every row would be sixty copies to keep in step. What a gloss must say is where an operation departs from the obvious reading of its name: that `sub` is monus, that `shr` divides.
+///
+/// **Only a lone declaration takes one.** Every builder here makes one declaration per item, so the group form would leave all but the first silently undocumented; asserted rather than assumed, since nothing else would notice.
+fn documented(lines: &[&str], item: TopItem) -> TopItem {
+    let doc = Some(Doc {
+        lines: lines.iter().map(|line| (*line).to_string()).collect(),
+        span: None,
+    });
+
+    match item {
+        TopItem::Let(mut members) => {
+            assert_eq!(
+                members.len(),
+                1,
+                "a documented `/sys` item declares one name"
+            );
+            members[0].doc = doc;
+            TopItem::Let(members)
+        }
+        TopItem::Mod(mut module) => {
+            module.doc = doc;
+            TopItem::Mod(module)
+        }
+        _ => panic!("only a definition or a module carries a `/sys` gloss"),
+    }
+}
+
 fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
     TopItem::Mod(TopMod {
         doc: None,
@@ -236,6 +265,14 @@ fn wire_type(type_: &WireType) -> Term {
 ///
 /// A row with no parameters becomes a *constant* rather than a nullary function. The nullary function was the previous discipline's workaround — a top-level value binding would force-reduce its effectful body where a type-level effect was refused — and a description needs no thunk, being one already.
 fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
+    // What the row says of itself, which for a builtin is the roster's own `///` and for a user's `foreign` is nothing — their prose sits on the declaration they wrote.
+    let doc = match function.description.is_empty() {
+        true => None,
+        false => Some(Doc {
+            lines: vec![function.description.clone()],
+            span: None,
+        }),
+    };
     let signature = &function.signature;
 
     let result = match signature.results.shape() {
@@ -261,7 +298,7 @@ fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
 
     if signature.params.is_empty() {
         return TopLet {
-            doc: None,
+            doc,
             vis_pub,
             label: function.label.clone().into(),
             signature: LetSignature::Name {
@@ -271,7 +308,7 @@ fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
         };
     }
 
-    fn_marked(
+    let mut declaration = fn_marked(
         vis_pub,
         &function.label,
         signature
@@ -281,7 +318,9 @@ fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
             .collect(),
         output,
         body,
-    )
+    );
+    declaration.doc = doc;
+    declaration
 }
 
 /// Handle one user-written `foreign` declaration: register its [`ForeignFunction`] into the compilation's (non-`host_ops`) foreign store, and return the ordinary [`LetSignature`] `into_core` lowers it as — wire-type bookkeeping and `host_fn`'s shape stay internal to this module, so `into_core` only ever deals with the same `LetSignature` it already knows how to lower for a plain `TopItem::Let`. `name` is the declaration's fully qualified name (leading `/`, the caller's current position while walking the module tree), which becomes the wasm import string under the `ffi` namespace. Qualified names are unique per compilation (a same-scope duplicate is a binding conflict long before lowering reaches this point), so `register`'s duplicate panic stays what it is everywhere else: a construction bug.
@@ -296,6 +335,8 @@ pub(crate) fn foreign_signature(
         subject: None,
         label: declaration.label.to_string(),
         signature: declaration.signature.clone(),
+        // A user's `foreign` carries its own `-- |` on the declaration they wrote, which is what a page reads; the row has nothing to add.
+        description: String::new(),
     };
 
     foreigns.register(function.clone());
@@ -386,175 +427,393 @@ fn int_nonzero(syntax: &SyntaxRegistry) -> Term {
 
 fn nat_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     vec![
-        nat_succ(),
-        binary("eql", nat(), bool_(), Intrinsic::NatEql),
-        binary("neq", nat(), bool_(), Intrinsic::NatNeq),
-        binary("add", nat(), nat(), Intrinsic::NatAdd),
-        binary("sub", nat(), nat(), Intrinsic::NatSub),
-        binary("mul", nat(), nat(), Intrinsic::NatMul),
-        guarded_binary(
-            "div",
-            nat(),
-            nat(),
-            nat_nonzero(syntax),
-            |dividend, divisor, non_zero| Intrinsic::NatDiv {
-                dividend,
-                divisor,
-                non_zero,
-            },
+        documented(&["One more than `a`."], nat_succ()),
+        documented(
+            &["Whether the two are equal."],
+            binary("eql", nat(), bool_(), Intrinsic::NatEql),
         ),
-        guarded_binary(
-            "rem",
-            nat(),
-            nat(),
-            nat_nonzero(syntax),
-            |dividend, divisor, non_zero| Intrinsic::NatRem {
-                dividend,
-                divisor,
-                non_zero,
-            },
+        documented(
+            &["Whether the two differ."],
+            binary("neq", nat(), bool_(), Intrinsic::NatNeq),
         ),
-        binary("lt", nat(), bool_(), Intrinsic::NatLt),
+        documented(
+            &["Their sum."],
+            binary("add", nat(), nat(), Intrinsic::NatAdd),
+        ),
+        documented(
+            &[
+                "`b` taken from `a`, and zero where `b` is the larger — a natural is never negative.",
+            ],
+            binary("sub", nat(), nat(), Intrinsic::NatSub),
+        ),
+        documented(
+            &["Their product."],
+            binary("mul", nat(), nat(), Intrinsic::NatMul),
+        ),
+        documented(
+            &["`a` divided by `b`, rounded down, under the evidence that `b` is not zero."],
+            guarded_binary(
+                "div",
+                nat(),
+                nat(),
+                nat_nonzero(syntax),
+                |dividend, divisor, non_zero| Intrinsic::NatDiv {
+                    dividend,
+                    divisor,
+                    non_zero,
+                },
+            ),
+        ),
+        documented(
+            &["What `a` leaves after dividing by `b`, under the evidence that `b` is not zero."],
+            guarded_binary(
+                "rem",
+                nat(),
+                nat(),
+                nat_nonzero(syntax),
+                |dividend, divisor, non_zero| Intrinsic::NatRem {
+                    dividend,
+                    divisor,
+                    non_zero,
+                },
+            ),
+        ),
+        documented(
+            &["Whether `a` is below `b`."],
+            binary("lt", nat(), bool_(), Intrinsic::NatLt),
+        ),
         // **`gt` and `ge` are built as their `lt`/`le` mirrors, on every carrier.** A comparison is spelled one way from the moment it enters Core, so a case equation recorded on a guard as written and the same guard met reduced inside a proposition are one term — the reducer's own mirror covers an intrinsic built by hand, but a spelling that never exists cannot be keyed on. See `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md`.
-        binary("gt", nat(), bool_(), |a, b| Intrinsic::NatLt(b, a)),
-        binary("le", nat(), bool_(), Intrinsic::NatLe),
-        binary("ge", nat(), bool_(), |a, b| Intrinsic::NatLe(b, a)),
-        binary("and", nat(), nat(), Intrinsic::NatAnd),
-        binary("or", nat(), nat(), Intrinsic::NatOr),
-        binary("xor", nat(), nat(), Intrinsic::NatXor),
-        binary("shl", nat(), nat(), Intrinsic::NatShl),
-        binary("shr", nat(), nat(), Intrinsic::NatShr),
-        unary("to_int", nat(), int(), Intrinsic::NatToInt),
-        unary("to_flt", nat(), flt(), Intrinsic::NatToFlt),
-        unary("to_byte", nat(), byte(), Intrinsic::NatToByte),
+        documented(
+            &["Whether `a` is above `b`."],
+            binary("gt", nat(), bool_(), |a, b| Intrinsic::NatLt(b, a)),
+        ),
+        documented(
+            &["Whether `a` is below `b` or equal to it."],
+            binary("le", nat(), bool_(), Intrinsic::NatLe),
+        ),
+        documented(
+            &["Whether `a` is above `b` or equal to it."],
+            binary("ge", nat(), bool_(), |a, b| Intrinsic::NatLe(b, a)),
+        ),
+        documented(
+            &["Their bits, kept where both have one."],
+            binary("and", nat(), nat(), Intrinsic::NatAnd),
+        ),
+        documented(
+            &["Their bits, kept where either has one."],
+            binary("or", nat(), nat(), Intrinsic::NatOr),
+        ),
+        documented(
+            &["Their bits, kept where exactly one has one."],
+            binary("xor", nat(), nat(), Intrinsic::NatXor),
+        ),
+        documented(
+            &["`a` doubled `b` times."],
+            binary("shl", nat(), nat(), Intrinsic::NatShl),
+        ),
+        documented(
+            &["`a` halved `b` times, rounded down each time."],
+            binary("shr", nat(), nat(), Intrinsic::NatShr),
+        ),
+        documented(
+            &["The same number as an `Int`."],
+            unary("to_int", nat(), int(), Intrinsic::NatToInt),
+        ),
+        documented(
+            &["The nearest `Flt` to it."],
+            unary("to_flt", nat(), flt(), Intrinsic::NatToFlt),
+        ),
+        documented(
+            &["The same number as a `Byte`."],
+            unary("to_byte", nat(), byte(), Intrinsic::NatToByte),
+        ),
     ]
 }
 
 fn byte_ops() -> Vec<TopItem> {
     vec![
-        unary("to_nat", byte(), nat(), Intrinsic::ByteToNat),
-        binary("eql", byte(), bool_(), Intrinsic::ByteEql),
-        binary("lt", byte(), bool_(), Intrinsic::ByteLt),
-        binary("le", byte(), bool_(), Intrinsic::ByteLe),
-        binary("gt", byte(), bool_(), |a, b| Intrinsic::ByteLt(b, a)),
-        binary("ge", byte(), bool_(), |a, b| Intrinsic::ByteLe(b, a)),
+        documented(
+            &["The same number as a `Nat`."],
+            unary("to_nat", byte(), nat(), Intrinsic::ByteToNat),
+        ),
+        documented(
+            &["Whether the two are equal."],
+            binary("eql", byte(), bool_(), Intrinsic::ByteEql),
+        ),
+        documented(
+            &["Whether `a` is below `b`."],
+            binary("lt", byte(), bool_(), Intrinsic::ByteLt),
+        ),
+        documented(
+            &["Whether `a` is below `b` or equal to it."],
+            binary("le", byte(), bool_(), Intrinsic::ByteLe),
+        ),
+        documented(
+            &["Whether `a` is above `b`."],
+            binary("gt", byte(), bool_(), |a, b| Intrinsic::ByteLt(b, a)),
+        ),
+        documented(
+            &["Whether `a` is above `b` or equal to it."],
+            binary("ge", byte(), bool_(), |a, b| Intrinsic::ByteLe(b, a)),
+        ),
     ]
 }
 
 // `Bool` rides the same i31ref/u32 carrier as `Nat`, with `false`/`true` as `0`/`1`. `and`/`or`/`xor` are bitwise machine ops on those bits — exact boolean logic — and `eql` is the `Nat` equality op (`i32.eq`) on that single bit, so all four are intrinsics rather than `match` definitions. `not` has no machine instruction; `/std/Bool` defines it as `xor(b, true)`.
 fn bool_ops() -> Vec<TopItem> {
     vec![
-        binary("and", bool_(), bool_(), Intrinsic::BoolAnd),
-        binary("or", bool_(), bool_(), Intrinsic::BoolOr),
-        binary("xor", bool_(), bool_(), Intrinsic::BoolXor),
-        binary("eql", bool_(), bool_(), Intrinsic::BoolEql),
+        documented(
+            &["True when both are."],
+            binary("and", bool_(), bool_(), Intrinsic::BoolAnd),
+        ),
+        documented(
+            &["True when either is."],
+            binary("or", bool_(), bool_(), Intrinsic::BoolOr),
+        ),
+        documented(
+            &["True when exactly one is."],
+            binary("xor", bool_(), bool_(), Intrinsic::BoolXor),
+        ),
+        documented(
+            &["Whether the two are equal."],
+            binary("eql", bool_(), bool_(), Intrinsic::BoolEql),
+        ),
     ]
 }
 
 fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     vec![
-        binary("eql", int(), bool_(), Intrinsic::IntEql),
-        binary("neq", int(), bool_(), Intrinsic::IntNeq),
-        binary("add", int(), int(), Intrinsic::IntAdd),
-        binary("sub", int(), int(), Intrinsic::IntSub),
-        binary("mul", int(), int(), Intrinsic::IntMul),
-        guarded_binary(
-            "div",
-            int(),
-            int(),
-            int_nonzero(syntax),
-            |dividend, divisor, non_zero| Intrinsic::IntDiv {
-                dividend,
-                divisor,
-                non_zero,
-            },
+        documented(
+            &["Whether the two are equal."],
+            binary("eql", int(), bool_(), Intrinsic::IntEql),
         ),
-        guarded_binary(
-            "rem",
-            int(),
-            int(),
-            int_nonzero(syntax),
-            |dividend, divisor, non_zero| Intrinsic::IntRem {
-                dividend,
-                divisor,
-                non_zero,
-            },
+        documented(
+            &["Whether the two differ."],
+            binary("neq", int(), bool_(), Intrinsic::IntNeq),
         ),
-        binary("lt", int(), bool_(), Intrinsic::IntLt),
-        binary("gt", int(), bool_(), |a, b| Intrinsic::IntLt(b, a)),
-        binary("le", int(), bool_(), Intrinsic::IntLe),
-        binary("ge", int(), bool_(), |a, b| Intrinsic::IntLe(b, a)),
+        documented(
+            &["Their sum."],
+            binary("add", int(), int(), Intrinsic::IntAdd),
+        ),
+        documented(
+            &["`b` taken from `a`."],
+            binary("sub", int(), int(), Intrinsic::IntSub),
+        ),
+        documented(
+            &["Their product."],
+            binary("mul", int(), int(), Intrinsic::IntMul),
+        ),
+        documented(
+            &["`a` divided by `b`, rounded toward zero."],
+            guarded_binary(
+                "div",
+                int(),
+                int(),
+                int_nonzero(syntax),
+                |dividend, divisor, non_zero| Intrinsic::IntDiv {
+                    dividend,
+                    divisor,
+                    non_zero,
+                },
+            ),
+        ),
+        documented(
+            &["What `a` leaves after dividing by `b`, taking its sign from `a`."],
+            guarded_binary(
+                "rem",
+                int(),
+                int(),
+                int_nonzero(syntax),
+                |dividend, divisor, non_zero| Intrinsic::IntRem {
+                    dividend,
+                    divisor,
+                    non_zero,
+                },
+            ),
+        ),
+        documented(
+            &["Whether `a` is below `b`."],
+            binary("lt", int(), bool_(), Intrinsic::IntLt),
+        ),
+        documented(
+            &["Whether `a` is above `b`."],
+            binary("gt", int(), bool_(), |a, b| Intrinsic::IntLt(b, a)),
+        ),
+        documented(
+            &["Whether `a` is below `b` or equal to it."],
+            binary("le", int(), bool_(), Intrinsic::IntLe),
+        ),
+        documented(
+            &["Whether `a` is above `b` or equal to it."],
+            binary("ge", int(), bool_(), |a, b| Intrinsic::IntLe(b, a)),
+        ),
         // Bitwise ops on the signed i31 carrier. `and`/`or`/`xor` are exact bit ops; `shl` refuses a result past the carrier like `Nat/shl`; `shr` is arithmetic (sign-preserving). Both shifts count in `Nat`, as `Nat/shl` does, so a negative count — which the theory never defined — cannot be written. `not` is `/std/Int`'s `xor(x, -1)`.
-        binary("and", int(), int(), Intrinsic::IntAnd),
-        binary("or", int(), int(), Intrinsic::IntOr),
-        binary("xor", int(), int(), Intrinsic::IntXor),
-        pub_fn(
-            "shl",
-            vec![("a", int()), ("b", nat())],
-            int(),
-            intrinsic(Intrinsic::IntShl(name("a"), name("b"))),
+        documented(
+            &["Their bits, kept where both have one."],
+            binary("and", int(), int(), Intrinsic::IntAnd),
         ),
-        pub_fn(
-            "shr",
-            vec![("a", int()), ("b", nat())],
-            int(),
-            intrinsic(Intrinsic::IntShr(name("a"), name("b"))),
+        documented(
+            &["Their bits, kept where either has one."],
+            binary("or", int(), int(), Intrinsic::IntOr),
         ),
-        guarded_unary(
-            "to_nat",
-            int(),
-            nat(),
-            applied(registered(syntax.proof.int_non_neg), vec![name("a")]),
-            |int, non_neg| Intrinsic::IntToNat { int, non_neg },
+        documented(
+            &["Their bits, kept where exactly one has one."],
+            binary("xor", int(), int(), Intrinsic::IntXor),
         ),
-        unary("to_flt", int(), flt(), Intrinsic::IntToFlt),
+        documented(
+            &["`a` doubled `b` times."],
+            pub_fn(
+                "shl",
+                vec![("a", int()), ("b", nat())],
+                int(),
+                intrinsic(Intrinsic::IntShl(name("a"), name("b"))),
+            ),
+        ),
+        documented(
+            &["`a` halved `b` times, rounded toward negative — the sign is kept."],
+            pub_fn(
+                "shr",
+                vec![("a", int()), ("b", nat())],
+                int(),
+                intrinsic(Intrinsic::IntShr(name("a"), name("b"))),
+            ),
+        ),
+        documented(
+            &["The same number as a `Nat`, under the evidence that it is not negative."],
+            guarded_unary(
+                "to_nat",
+                int(),
+                nat(),
+                applied(registered(syntax.proof.int_non_neg), vec![name("a")]),
+                |int, non_neg| Intrinsic::IntToNat { int, non_neg },
+            ),
+        ),
+        documented(
+            &["The nearest `Flt` to it."],
+            unary("to_flt", int(), flt(), Intrinsic::IntToFlt),
+        ),
     ]
 }
 
 fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     vec![
-        binary("add", flt(), flt(), Intrinsic::FltAdd),
-        binary("sub", flt(), flt(), Intrinsic::FltSub),
-        binary("mul", flt(), flt(), Intrinsic::FltMul),
-        binary("div", flt(), flt(), Intrinsic::FltDiv),
-        binary("rem", flt(), flt(), Intrinsic::FltRem),
-        binary("min", flt(), flt(), Intrinsic::FltMin),
-        binary("max", flt(), flt(), Intrinsic::FltMax),
-        binary("eql", flt(), bool_(), Intrinsic::FltEql),
-        binary("neq", flt(), bool_(), Intrinsic::FltNeq),
-        binary("lt", flt(), bool_(), Intrinsic::FltLt),
-        binary("gt", flt(), bool_(), |a, b| Intrinsic::FltLt(b, a)),
-        binary("le", flt(), bool_(), Intrinsic::FltLe),
-        binary("ge", flt(), bool_(), |a, b| Intrinsic::FltLe(b, a)),
-        unary("neg", flt(), flt(), Intrinsic::FltNeg),
-        unary("abs", flt(), flt(), Intrinsic::FltAbs),
-        unary("sqrt", flt(), flt(), Intrinsic::FltSqrt),
-        unary("floor", flt(), flt(), Intrinsic::FltFloor),
-        unary("ceil", flt(), flt(), Intrinsic::FltCeil),
-        unary("trunc", flt(), flt(), Intrinsic::FltTrunc),
-        unary("nearest", flt(), flt(), Intrinsic::FltNearest),
-        binary("copysign", flt(), flt(), Intrinsic::FltCopysign),
-        guarded_unary(
-            "to_nat",
-            flt(),
-            nat(),
-            applied(registered(syntax.proof.flt_non_neg), vec![name("a")]),
-            |flt, non_neg| Intrinsic::FltToNat { flt, non_neg },
+        documented(
+            &["Their sum."],
+            binary("add", flt(), flt(), Intrinsic::FltAdd),
         ),
-        guarded_unary(
-            "to_int",
-            flt(),
-            int(),
-            applied(registered(syntax.proof.flt_finite), vec![name("a")]),
-            |flt, finite| Intrinsic::FltToInt { flt, finite },
+        documented(
+            &["`b` taken from `a`."],
+            binary("sub", flt(), flt(), Intrinsic::FltSub),
         ),
-        unary("to_le_bytes", flt(), bin(Grain::X), Intrinsic::FltToLeBytes),
-        guarded_unary(
-            "of_le_bytes",
-            bin(Grain::X),
-            flt(),
-            applied(registered(syntax.proof.bytes_four), vec![name("a")]),
-            |bin, four_bytes| Intrinsic::FltOfLeBytes { bin, four_bytes },
+        documented(
+            &["Their product."],
+            binary("mul", flt(), flt(), Intrinsic::FltMul),
+        ),
+        documented(
+            &["`a` divided by `b`."],
+            binary("div", flt(), flt(), Intrinsic::FltDiv),
+        ),
+        documented(
+            &["What `a` leaves after dividing by `b`."],
+            binary("rem", flt(), flt(), Intrinsic::FltRem),
+        ),
+        documented(
+            &["The smaller of the two."],
+            binary("min", flt(), flt(), Intrinsic::FltMin),
+        ),
+        documented(
+            &["The larger of the two."],
+            binary("max", flt(), flt(), Intrinsic::FltMax),
+        ),
+        documented(
+            &["Whether the two are equal."],
+            binary("eql", flt(), bool_(), Intrinsic::FltEql),
+        ),
+        documented(
+            &["Whether the two differ."],
+            binary("neq", flt(), bool_(), Intrinsic::FltNeq),
+        ),
+        documented(
+            &["Whether `a` is below `b`."],
+            binary("lt", flt(), bool_(), Intrinsic::FltLt),
+        ),
+        documented(
+            &["Whether `a` is above `b`."],
+            binary("gt", flt(), bool_(), |a, b| Intrinsic::FltLt(b, a)),
+        ),
+        documented(
+            &["Whether `a` is below `b` or equal to it."],
+            binary("le", flt(), bool_(), Intrinsic::FltLe),
+        ),
+        documented(
+            &["Whether `a` is above `b` or equal to it."],
+            binary("ge", flt(), bool_(), |a, b| Intrinsic::FltLe(b, a)),
+        ),
+        documented(
+            &["`a` with its sign flipped."],
+            unary("neg", flt(), flt(), Intrinsic::FltNeg),
+        ),
+        documented(
+            &["`a` without its sign."],
+            unary("abs", flt(), flt(), Intrinsic::FltAbs),
+        ),
+        documented(
+            &["The square root of `a`."],
+            unary("sqrt", flt(), flt(), Intrinsic::FltSqrt),
+        ),
+        documented(
+            &["The greatest whole number at or below `a`."],
+            unary("floor", flt(), flt(), Intrinsic::FltFloor),
+        ),
+        documented(
+            &["The least whole number at or above `a`."],
+            unary("ceil", flt(), flt(), Intrinsic::FltCeil),
+        ),
+        documented(
+            &["`a` with its fraction dropped, toward zero."],
+            unary("trunc", flt(), flt(), Intrinsic::FltTrunc),
+        ),
+        documented(
+            &["The whole number nearest `a`, and the even one where it falls halfway."],
+            unary("nearest", flt(), flt(), Intrinsic::FltNearest),
+        ),
+        documented(
+            &["`a` carrying `b`'s sign."],
+            binary("copysign", flt(), flt(), Intrinsic::FltCopysign),
+        ),
+        documented(
+            &["The whole part of `a` as a `Nat`, under the evidence that it is not negative."],
+            guarded_unary(
+                "to_nat",
+                flt(),
+                nat(),
+                applied(registered(syntax.proof.flt_non_neg), vec![name("a")]),
+                |flt, non_neg| Intrinsic::FltToNat { flt, non_neg },
+            ),
+        ),
+        documented(
+            &["The whole part of `a` as an `Int`, under the evidence that it is finite."],
+            guarded_unary(
+                "to_int",
+                flt(),
+                int(),
+                applied(registered(syntax.proof.flt_finite), vec![name("a")]),
+                |flt, finite| Intrinsic::FltToInt { flt, finite },
+            ),
+        ),
+        documented(
+            &["Its four bytes, least significant first."],
+            unary("to_le_bytes", flt(), bin(Grain::X), Intrinsic::FltToLeBytes),
+        ),
+        documented(
+            &["The number those four bytes spell, least significant first."],
+            guarded_unary(
+                "of_le_bytes",
+                bin(Grain::X),
+                flt(),
+                applied(registered(syntax.proof.bytes_four), vec![name("a")]),
+                |bin, four_bytes| Intrinsic::FltOfLeBytes { bin, four_bytes },
+            ),
         ),
     ]
 }
@@ -573,193 +832,233 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
         vec![name("i"), applied(name("len"), vec![name("b")])],
     );
     vec![
-        pub_fn(
-            "len",
-            vec![("b", type_.clone())],
-            nat(),
-            intrinsic(Intrinsic::BinLen(grain, name("b"))),
+        documented(
+            &["How many it holds."],
+            pub_fn(
+                "len",
+                vec![("b", type_.clone())],
+                nat(),
+                intrinsic(Intrinsic::BinLen(grain, name("b"))),
+            ),
         ),
-        pub_fn(
-            "eql",
-            vec![("a", type_.clone()), ("b", type_.clone())],
-            bool_(),
-            intrinsic(Intrinsic::BinEql(grain, name("a"), name("b"))),
+        documented(
+            &["Whether the two hold the same, in the same order."],
+            pub_fn(
+                "eql",
+                vec![("a", type_.clone()), ("b", type_.clone())],
+                bool_(),
+                intrinsic(Intrinsic::BinEql(grain, name("a"), name("b"))),
+            ),
         ),
-        pub_fn_marked(
-            "get",
-            vec![
-                (Plicity::Explicit, "b", type_.clone()),
-                (Plicity::Explicit, "i", nat()),
-                (Plicity::Implicit, "ok", in_range),
-            ],
-            atom.clone(),
-            intrinsic(Intrinsic::BinGet {
-                grain,
-                bin: name("b"),
-                index: name("i"),
-                in_range: name("ok"),
-            }),
+        documented(
+            &["The element at `i`, under the evidence that `i` is within the length."],
+            pub_fn_marked(
+                "get",
+                vec![
+                    (Plicity::Explicit, "b", type_.clone()),
+                    (Plicity::Explicit, "i", nat()),
+                    (Plicity::Implicit, "ok", in_range),
+                ],
+                atom.clone(),
+                intrinsic(Intrinsic::BinGet {
+                    grain,
+                    bin: name("b"),
+                    index: name("i"),
+                    in_range: name("ok"),
+                }),
+            ),
         ),
         // A window is a start and a *count*, so a reversed one cannot be spelled and the ordering half of the old bound has no proposition left to state. What survives is that the window ends inside the value.
-        pub_fn_marked(
-            "slice",
-            vec![
-                (Plicity::Explicit, "b", type_.clone()),
-                (Plicity::Explicit, "s", nat()),
-                (Plicity::Explicit, "l", nat()),
-                (
-                    Plicity::Implicit,
-                    "within",
-                    applied(
-                        registered(syntax.proof.le),
-                        vec![
-                            nat_plus(name("s"), name("l")),
-                            applied(name("len"), vec![name("b")]),
-                        ],
-                    ),
-                ),
+        documented(
+            &[
+                "The run from `from` up to but not including `to`, under the evidence that both are within the length and in order.",
             ],
-            type_.clone(),
-            intrinsic(Intrinsic::BinSlice {
-                grain,
-                bin: name("b"),
-                start: name("s"),
-                length: name("l"),
-                within: name("within"),
-            }),
+            pub_fn_marked(
+                "slice",
+                vec![
+                    (Plicity::Explicit, "b", type_.clone()),
+                    (Plicity::Explicit, "s", nat()),
+                    (Plicity::Explicit, "l", nat()),
+                    (
+                        Plicity::Implicit,
+                        "within",
+                        applied(
+                            registered(syntax.proof.le),
+                            vec![
+                                nat_plus(name("s"), name("l")),
+                                applied(name("len"), vec![name("b")]),
+                            ],
+                        ),
+                    ),
+                ],
+                type_.clone(),
+                intrinsic(Intrinsic::BinSlice {
+                    grain,
+                    bin: name("b"),
+                    start: name("s"),
+                    length: name("l"),
+                    within: name("within"),
+                }),
+            ),
         ),
-        pub_fn(
-            "append",
-            vec![("b", type_.clone()), ("x", atom)],
-            type_.clone(),
-            intrinsic(Intrinsic::BinAppend {
-                grain,
-                bin: name("b"),
-                element: name("x"),
-            }),
+        documented(
+            &["`b` with `x` added after its last element."],
+            pub_fn(
+                "append",
+                vec![("b", type_.clone()), ("x", atom)],
+                type_.clone(),
+                intrinsic(Intrinsic::BinAppend {
+                    grain,
+                    bin: name("b"),
+                    element: name("x"),
+                }),
+            ),
         ),
-        pub_fn(
-            "concat",
-            vec![("a", type_.clone()), ("b", type_.clone())],
-            type_,
-            intrinsic(Intrinsic::BinConcat {
-                grain,
-                left: name("a"),
-                right: name("b"),
-            }),
+        documented(
+            &["The elements of `a`, then those of `b`."],
+            pub_fn(
+                "concat",
+                vec![("a", type_.clone()), ("b", type_.clone())],
+                type_,
+                intrinsic(Intrinsic::BinConcat {
+                    grain,
+                    left: name("a"),
+                    right: name("b"),
+                }),
+            ),
         ),
     ]
 }
 
 fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     vec![
-        pub_fn_marked(
-            "len",
-            vec![
-                (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", list_of(name("T"))),
-            ],
-            nat(),
-            intrinsic(Intrinsic::ListLen {
-                element: name("T"),
-                list: name("a"),
-            }),
+        documented(
+            &["How many it holds."],
+            pub_fn_marked(
+                "len",
+                vec![
+                    (Plicity::Implicit, "T", type_()),
+                    (Plicity::Explicit, "a", list_of(name("T"))),
+                ],
+                nat(),
+                intrinsic(Intrinsic::ListLen {
+                    element: name("T"),
+                    list: name("a"),
+                }),
+            ),
         ),
-        pub_fn_marked(
-            "get",
-            vec![
-                (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", list_of(name("T"))),
-                (Plicity::Explicit, "i", nat()),
-                (
-                    Plicity::Implicit,
-                    "ok",
-                    applied(
-                        registered(syntax.proof.lt),
-                        vec![name("i"), applied(name("len"), vec![name("a")])],
+        documented(
+            &["The element at `i`, under the evidence that `i` is within the length."],
+            pub_fn_marked(
+                "get",
+                vec![
+                    (Plicity::Implicit, "T", type_()),
+                    (Plicity::Explicit, "a", list_of(name("T"))),
+                    (Plicity::Explicit, "i", nat()),
+                    (
+                        Plicity::Implicit,
+                        "ok",
+                        applied(
+                            registered(syntax.proof.lt),
+                            vec![name("i"), applied(name("len"), vec![name("a")])],
+                        ),
                     ),
-                ),
-            ],
-            name("T"),
-            intrinsic(Intrinsic::ListGet {
-                element: name("T"),
-                list: name("a"),
-                index: name("i"),
-                in_range: name("ok"),
-            }),
+                ],
+                name("T"),
+                intrinsic(Intrinsic::ListGet {
+                    element: name("T"),
+                    list: name("a"),
+                    index: name("i"),
+                    in_range: name("ok"),
+                }),
+            ),
         ),
         // The `List` twin of `Bin/slice`'s window bound; see the comment there for why only one half survives the count.
-        pub_fn_marked(
-            "slice",
-            vec![
-                (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", list_of(name("T"))),
-                (Plicity::Explicit, "s", nat()),
-                (Plicity::Explicit, "l", nat()),
-                (
-                    Plicity::Implicit,
-                    "within",
-                    applied(
-                        registered(syntax.proof.le),
-                        vec![
-                            nat_plus(name("s"), name("l")),
-                            applied(name("len"), vec![name("a")]),
-                        ],
+        documented(
+            &[
+                "The run from `from` up to but not including `to`, under the evidence that both are within the length and in order.",
+            ],
+            pub_fn_marked(
+                "slice",
+                vec![
+                    (Plicity::Implicit, "T", type_()),
+                    (Plicity::Explicit, "a", list_of(name("T"))),
+                    (Plicity::Explicit, "s", nat()),
+                    (Plicity::Explicit, "l", nat()),
+                    (
+                        Plicity::Implicit,
+                        "within",
+                        applied(
+                            registered(syntax.proof.le),
+                            vec![
+                                nat_plus(name("s"), name("l")),
+                                applied(name("len"), vec![name("a")]),
+                            ],
+                        ),
                     ),
-                ),
-            ],
-            list_of(name("T")),
-            intrinsic(Intrinsic::ListSlice {
-                element: name("T"),
-                list: name("a"),
-                start: name("s"),
-                length: name("l"),
-                within: name("within"),
-            }),
+                ],
+                list_of(name("T")),
+                intrinsic(Intrinsic::ListSlice {
+                    element: name("T"),
+                    list: name("a"),
+                    start: name("s"),
+                    length: name("l"),
+                    within: name("within"),
+                }),
+            ),
         ),
-        pub_fn_marked(
-            "append",
-            vec![
-                (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", list_of(name("T"))),
-                (Plicity::Explicit, "x", name("T")),
-            ],
-            list_of(name("T")),
-            intrinsic(Intrinsic::ListAppend {
-                element: name("T"),
-                list: name("a"),
-                item: name("x"),
-            }),
+        documented(
+            &["`a` with `x` added after its last element."],
+            pub_fn_marked(
+                "append",
+                vec![
+                    (Plicity::Implicit, "T", type_()),
+                    (Plicity::Explicit, "a", list_of(name("T"))),
+                    (Plicity::Explicit, "x", name("T")),
+                ],
+                list_of(name("T")),
+                intrinsic(Intrinsic::ListAppend {
+                    element: name("T"),
+                    list: name("a"),
+                    item: name("x"),
+                }),
+            ),
         ),
-        pub_fn_marked(
-            "concat",
-            vec![
-                (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", list_of(name("T"))),
-                (Plicity::Explicit, "b", list_of(name("T"))),
-            ],
-            list_of(name("T")),
-            intrinsic(Intrinsic::ListConcat {
-                element: name("T"),
-                left: name("a"),
-                right: name("b"),
-            }),
+        documented(
+            &["The elements of `a`, then those of `b`."],
+            pub_fn_marked(
+                "concat",
+                vec![
+                    (Plicity::Implicit, "T", type_()),
+                    (Plicity::Explicit, "a", list_of(name("T"))),
+                    (Plicity::Explicit, "b", list_of(name("T"))),
+                ],
+                list_of(name("T")),
+                intrinsic(Intrinsic::ListConcat {
+                    element: name("T"),
+                    left: name("a"),
+                    right: name("b"),
+                }),
+            ),
         ),
-        pub_fn_marked(
-            "map",
-            vec![
-                (Plicity::Implicit, "A", type_()),
-                (Plicity::Implicit, "B", type_()),
-                (Plicity::Explicit, "a", list_of(name("A"))),
-                (Plicity::Explicit, "f", fn_of(name("A"), name("B"))),
-            ],
-            list_of(name("B")),
-            intrinsic(Intrinsic::ListMap {
-                from: name("A"),
-                to: name("B"),
-                list: name("a"),
-                function: name("f"),
-            }),
+        documented(
+            &["Each element with `f` applied to it, in order."],
+            pub_fn_marked(
+                "map",
+                vec![
+                    (Plicity::Implicit, "A", type_()),
+                    (Plicity::Implicit, "B", type_()),
+                    (Plicity::Explicit, "a", list_of(name("A"))),
+                    (Plicity::Explicit, "f", fn_of(name("A"), name("B"))),
+                ],
+                list_of(name("B")),
+                intrinsic(Intrinsic::ListMap {
+                    from: name("A"),
+                    to: name("B"),
+                    list: name("a"),
+                    function: name("f"),
+                }),
+            ),
         ),
     ]
 }
@@ -767,43 +1066,52 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
 // Allocating a cell, reading one, and writing one are all host effects, so all three return descriptions. `Cell/get` is the operation the whole discipline was named for: a scrutinee spelled `Cell/get(c)` denotes a different value before and after a `Cell/set`, and giving it an `Io` result is what makes that spelling ill-typed in scrutinee position rather than something an analysis has to notice.
 fn cell_ops() -> Vec<TopItem> {
     vec![
-        pub_fn_marked(
-            "new",
-            vec![
-                (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "x", name("T")),
-            ],
-            io_of(cell_of(name("T"))),
-            intrinsic(Intrinsic::Cell {
-                element: name("T"),
-                initial: name("x"),
-            }),
+        documented(
+            &["A new cell holding `x`."],
+            pub_fn_marked(
+                "new",
+                vec![
+                    (Plicity::Implicit, "T", type_()),
+                    (Plicity::Explicit, "x", name("T")),
+                ],
+                io_of(cell_of(name("T"))),
+                intrinsic(Intrinsic::Cell {
+                    element: name("T"),
+                    initial: name("x"),
+                }),
+            ),
         ),
-        pub_fn_marked(
-            "set",
-            vec![
-                (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "c", cell_of(name("T"))),
-                (Plicity::Explicit, "v", name("T")),
-            ],
-            io_of(unit()),
-            intrinsic(Intrinsic::CellSet {
-                element: name("T"),
-                cell: name("c"),
-                value: name("v"),
-            }),
+        documented(
+            &["Put `v` in the cell."],
+            pub_fn_marked(
+                "set",
+                vec![
+                    (Plicity::Implicit, "T", type_()),
+                    (Plicity::Explicit, "c", cell_of(name("T"))),
+                    (Plicity::Explicit, "v", name("T")),
+                ],
+                io_of(unit()),
+                intrinsic(Intrinsic::CellSet {
+                    element: name("T"),
+                    cell: name("c"),
+                    value: name("v"),
+                }),
+            ),
         ),
-        pub_fn_marked(
-            "get",
-            vec![
-                (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "c", cell_of(name("T"))),
-            ],
-            io_of(name("T")),
-            intrinsic(Intrinsic::CellGet {
-                element: name("T"),
-                cell: name("c"),
-            }),
+        documented(
+            &["What the cell holds."],
+            pub_fn_marked(
+                "get",
+                vec![
+                    (Plicity::Implicit, "T", type_()),
+                    (Plicity::Explicit, "c", cell_of(name("T"))),
+                ],
+                io_of(name("T")),
+                intrinsic(Intrinsic::CellGet {
+                    element: name("T"),
+                    cell: name("c"),
+                }),
+            ),
         ),
     ]
 }
@@ -811,33 +1119,39 @@ fn cell_ops() -> Vec<TopItem> {
 // The monad of the `/sys/Io` type, and nothing else: `Io` owns the sequencing, never the operations. An operation belongs with its subject — the one its own store row names, not the type its result wears.
 fn io_ops() -> Vec<TopItem> {
     vec![
-        pub_fn_marked(
-            "pure",
-            vec![
-                (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "x", name("T")),
-            ],
-            io_of(name("T")),
-            intrinsic(Intrinsic::IoPure {
-                result: name("T"),
-                value: name("x"),
-            }),
+        documented(
+            &["The description that performs nothing and yields `x`."],
+            pub_fn_marked(
+                "pure",
+                vec![
+                    (Plicity::Implicit, "T", type_()),
+                    (Plicity::Explicit, "x", name("T")),
+                ],
+                io_of(name("T")),
+                intrinsic(Intrinsic::IoPure {
+                    result: name("T"),
+                    value: name("x"),
+                }),
+            ),
         ),
-        pub_fn_marked(
-            "bind",
-            vec![
-                (Plicity::Implicit, "A", type_()),
-                (Plicity::Implicit, "B", type_()),
-                (Plicity::Explicit, "m", io_of(name("A"))),
-                (Plicity::Explicit, "f", fn_of(name("A"), io_of(name("B")))),
-            ],
-            io_of(name("B")),
-            intrinsic(Intrinsic::IoBind {
-                from: name("A"),
-                to: name("B"),
-                action: name("m"),
-                continuation: name("f"),
-            }),
+        documented(
+            &["The description that performs `m`, then whatever `f` makes of its result."],
+            pub_fn_marked(
+                "bind",
+                vec![
+                    (Plicity::Implicit, "A", type_()),
+                    (Plicity::Implicit, "B", type_()),
+                    (Plicity::Explicit, "m", io_of(name("A"))),
+                    (Plicity::Explicit, "f", fn_of(name("A"), io_of(name("B")))),
+                ],
+                io_of(name("B")),
+                intrinsic(Intrinsic::IoBind {
+                    from: name("A"),
+                    to: name("B"),
+                    action: name("m"),
+                    continuation: name("f"),
+                }),
+            ),
         ),
     ]
 }
@@ -845,20 +1159,29 @@ fn io_ops() -> Vec<TopItem> {
 // The values and operations of the `/sys/Handle` type: the three standard streams, handle identity, and `host` — the store rows whose subject is the handle itself (`read`, `write`, `poll`, `close`), which join their type module rather than open one of their own.
 fn handle_ops(mut host: Vec<TopItem>) -> Vec<TopItem> {
     let mut items = vec![
-        pub_let(
-            "stdin",
-            handle(),
-            intrinsic(Intrinsic::Handle(stdio::STDIN)),
+        documented(
+            &["The stream the host feeds the program."],
+            pub_let(
+                "stdin",
+                handle(),
+                intrinsic(Intrinsic::Handle(stdio::STDIN)),
+            ),
         ),
-        pub_let(
-            "stdout",
-            handle(),
-            intrinsic(Intrinsic::Handle(stdio::STDOUT)),
+        documented(
+            &["The stream the program writes its output to."],
+            pub_let(
+                "stdout",
+                handle(),
+                intrinsic(Intrinsic::Handle(stdio::STDOUT)),
+            ),
         ),
-        pub_let(
-            "stderr",
-            handle(),
-            intrinsic(Intrinsic::Handle(stdio::STDERR)),
+        documented(
+            &["The stream the program writes its diagnostics to."],
+            pub_let(
+                "stderr",
+                handle(),
+                intrinsic(Intrinsic::Handle(stdio::STDERR)),
+            ),
         ),
     ];
 
@@ -991,47 +1314,88 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
     let mut items = vec![
         pub_mod(
             "Nat",
-            with_type(pub_let("Nat", type_(), nat()), nat_ops(syntax)),
+            with_type(
+                documented(
+                    &["The whole numbers from zero up, with no highest."],
+                    pub_let("Nat", type_(), nat()),
+                ),
+                nat_ops(syntax),
+            ),
         ),
         pub_use("Nat"),
         pub_mod(
             "Byte",
-            with_type(pub_let("Byte", type_(), byte()), byte_ops()),
+            with_type(
+                documented(
+                    &["A single byte, from zero through 255."],
+                    pub_let("Byte", type_(), byte()),
+                ),
+                byte_ops(),
+            ),
         ),
         pub_use("Byte"),
         pub_mod(
             "Int",
-            with_type(pub_let("Int", type_(), int()), int_ops(syntax)),
+            with_type(
+                documented(
+                    &["The whole numbers, negative and not, with no least and no greatest."],
+                    pub_let("Int", type_(), int()),
+                ),
+                int_ops(syntax),
+            ),
         ),
         pub_use("Int"),
         pub_mod(
             "Flt",
-            with_type(pub_let("Flt", type_(), flt()), flt_ops(syntax)),
+            with_type(
+                documented(
+                    &["A binary32 floating-point number."],
+                    pub_let("Flt", type_(), flt()),
+                ),
+                flt_ops(syntax),
+            ),
         ),
         pub_use("Flt"),
         pub_mod(
             "Bits",
             with_type(
-                pub_let("Bits", type_(), bin(Grain::B)),
+                documented(
+                    &["A packed run of bits, written `b[…]`."],
+                    pub_let("Bits", type_(), bin(Grain::B)),
+                ),
                 bin_ops(Grain::B, syntax),
             ),
         ),
         pub_mod(
             "Bytes",
             with_type(
-                pub_let("Bytes", type_(), bin(Grain::X)),
+                documented(
+                    &["A packed run of bytes, written `x[…]`."],
+                    pub_let("Bytes", type_(), bin(Grain::X)),
+                ),
                 bin_ops(Grain::X, syntax),
             ),
         ),
         pub_mod(
             "Bool",
-            with_type(pub_let("Bool", type_(), bool_()), bool_ops()),
+            with_type(
+                documented(
+                    &["The two truth values, `true` and `false`."],
+                    pub_let("Bool", type_(), bool_()),
+                ),
+                bool_ops(),
+            ),
         ),
         pub_use("Bool"),
         pub_mod(
             "Handle",
             with_type(
-                pub_let("Handle", type_(), handle()),
+                documented(
+                    &[
+                        "An open stream the host holds — a file, a socket, or one of the three standard streams.",
+                    ],
+                    pub_let("Handle", type_(), handle()),
+                ),
                 handle_ops(handle_host),
             ),
         ),
@@ -1039,7 +1403,10 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
         pub_mod(
             "List",
             with_type(
-                pub_fn("List", vec![("T", type_())], type_(), list_of(name("T"))),
+                documented(
+                    &["A run of values of one type, written `[…]`."],
+                    pub_fn("List", vec![("T", type_())], type_(), list_of(name("T"))),
+                ),
                 list_ops(syntax),
             ),
         ),
@@ -1047,7 +1414,14 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
         pub_mod(
             "Cell",
             with_type(
-                pub_fn("Cell", vec![("T", type_())], type_(), cell_of(name("T"))),
+                documented(
+                    &[
+                        "A mutable holder of one value.",
+                        "",
+                        "Reading answers the last value written through any name for the same cell, so two names for one cell are not two cells.",
+                    ],
+                    pub_fn("Cell", vec![("T", type_())], type_(), cell_of(name("T"))),
+                ),
                 cell_ops(),
             ),
         ),
@@ -1055,7 +1429,14 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
         pub_mod(
             "Io",
             with_type(
-                pub_fn("Io", vec![("T", type_())], type_(), io_of(name("T"))),
+                documented(
+                    &[
+                        "A description of something the host does, yielding a `T`.",
+                        "",
+                        "Holding one performs nothing: a description runs by being the program's tail, so forcing the same one twice does the work twice, and there is no operation taking an `Io(T)` back to a `T`.",
+                    ],
+                    pub_fn("Io", vec![("T", type_())], type_(), io_of(name("T"))),
+                ),
                 io_ops(),
             ),
         ),

@@ -250,6 +250,8 @@ pub struct ForeignFunction {
     pub subject: Option<String>,
     pub label: String,
     pub signature: WireSignature,
+    /// What the operation does, in the words the roster states it in — the guest's own documentation of the row, so a page showing a builtin says the same thing the table says. Empty for a user's `foreign` declaration, whose prose sits on the declaration the author wrote.
+    pub description: String,
 }
 
 // Identity is the wasm import pair: a [`ForeignStore`] never holds two functions with one name (`register` enforces it), so `(namespace, name)` determines the whole row. This keeps term-level equality and hashing O(1) instead of walking the signature — and makes rows from *different* stores with the same content compare equal, so a cached prelude term matches a freshly minted one.

@@ -263,11 +263,11 @@ macro_rules! result_ty {
 
 /// Project the op list to the typed host interface.
 macro_rules! declare_host_trait {
-    ($($(#[$attr:meta])* $method:ident as $subject:ident / $label:ident [$($p:ident : $ps:ident),* $(,)?] [$($r:ident : $rs:ident),* $(,)?];)*) => {
+    ($($(#[doc = $doc:literal])* $method:ident as $subject:ident / $label:ident [$($p:ident : $ps:ident),* $(,)?] [$($r:ident : $rs:ident),* $(,)?];)*) => {
         /// The host side of the builtin import surface: one method per `host_ops` store row, generated from the `host_ops!` list so the store and this trait cannot drift. Handles cross as [`Handle`], failures as [`Status`]; one shared `Arc<H>` backs every import closure, so methods take `&self` and implementations synchronize internally. Implemented by `OsHost` over real OS resources and by `MockHost` over scripted in-memory ones.
         pub trait HostOps {
             $(
-                $(#[$attr])*
+                $(#[doc = $doc])*
                 fn $method(&self $(, $p: trait_param_of!($ps))*) -> result_ty!($($rs),*);
             )*
         }
@@ -276,7 +276,7 @@ macro_rules! declare_host_trait {
 
 /// Project the op list to the wire store the compiler and runtime derive from.
 macro_rules! declare_host_store {
-    ($($(#[$attr:meta])* $method:ident as $subject:ident / $label:ident [$($p:ident : $ps:ident),* $(,)?] [$($r:ident : $rs:ident),* $(,)?];)*) => {
+    ($($(#[doc = $doc:literal])* $method:ident as $subject:ident / $label:ident [$($p:ident : $ps:ident),* $(,)?] [$($r:ident : $rs:ident),* $(,)?];)*) => {
         /// The builtin store: every host operation the standard library consumes, in prelude (= declaration) order. The method name is the wasm import name; the subject and label are the `/sys` module and binding the guest surfaces it as; parameter names match those declarations; result labels are the record fields the guest projects. The runtime seeds its implementations from the same rows, so the two ends cannot drift.
         pub fn host_ops() -> ForeignStore {
             let mut store = ForeignStore::new();
@@ -291,6 +291,8 @@ macro_rules! declare_host_store {
                         params: vec![$((stringify!($p).to_string(), wire_of!($ps))),*],
                         results: results_of!($($r : $rs),*),
                     },
+                    // The row's own `///`, which is where a builtin's meaning is already written down.
+                    description: concat!($($doc),*).trim().to_string(),
                 });
             )*
 

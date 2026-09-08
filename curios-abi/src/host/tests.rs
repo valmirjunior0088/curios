@@ -219,6 +219,7 @@ fn register_rejects_a_duplicate_name() {
         name: "read".to_string(),
         subject: Some("Handle".to_string()),
         label: "read_again".to_string(),
+        description: String::new(),
         signature: WireSignature {
             params: vec![],
             results: WireResults::none(),
@@ -244,6 +245,7 @@ fn equality_is_the_import_pair() {
         name: "frobnicate".to_string(),
         subject: None,
         label: label.to_string(),
+        description: String::new(),
         signature: WireSignature {
             params: vec![],
             results: WireResults::none(),
