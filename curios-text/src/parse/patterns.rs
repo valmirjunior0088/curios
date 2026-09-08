@@ -50,7 +50,7 @@ pub(super) fn parse_binder<'a>() -> Parser<'a, Label> {
     parse_label()
 }
 
-// The committing prefix of a labeled pattern field: `label =`. The caller wraps it in `catch`, so a positional field that merely starts with an identifier backtracks cleanly — mirrors `parse_tuple_field_prefix`, with no definition-sugar form (a pattern field is never itself a function).
+// The committing prefix of a labeled pattern field: `label =`. It fails recoverably, so a positional field that merely starts with an identifier backtracks cleanly — mirrors `parse_tuple_field_prefix`, with no definition-sugar form (a pattern field is never itself a function).
 pub(super) fn parse_pattern_field_prefix<'a>() -> Parser<'a, String> {
     parse_identifier()
         .and_drop(parse_literal("="))
