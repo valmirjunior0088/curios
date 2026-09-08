@@ -153,6 +153,37 @@ fn infix_requires_spaces_and_disambiguates_signs() {
 }
 
 #[test]
+fn a_position_that_begins_no_term_names_the_input_rather_than_an_alternative() {
+    // Every alternative of the term grammar declines at the choice point here, and `or`'s tie-break reports the first of them. Left to it the reader was told `Expected keyword 'let'` for each of these, naming the chain's order rather than their mistake.
+    for (source, obtained) in [
+        (")", ")"),
+        (",", ","),
+        ("@", "@"),
+        ("=> 1", "="),
+        ("}", "}"),
+    ] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(
+            report.contains(&format!("expected a term, obtained '{obtained}'")),
+            "{source:?} reported {report}"
+        );
+    }
+    // Nothing is left to consume at the end of input, so that case is named ahead of the alternatives instead of after them.
+    let report = "".parse::<Term>().unwrap_err().format();
+    assert!(
+        report.contains("expected a term, obtained 'end-of-file'"),
+        "reported {report}"
+    );
+    // The caret underlines the offending character rather than standing after it.
+    let report = ")".parse::<Term>().unwrap_err().format();
+    assert!(report.ends_with("1 | )\n      | ^"), "reported {report}");
+    // The refusal stays recoverable, so a speculative caller still backtracks past it: a trailing separator is read as trailing only because `parse_term` fails softly at the closing delimiter.
+    for source in ["(1, true,)", "[1, 2,]", "(1,)", "()"] {
+        assert!(source.parse::<Term>().is_ok(), "{source} should parse");
+    }
+}
+
+#[test]
 fn a_long_operator_chain_parses_without_native_recursion() {
     // Chain length was a stack bound twice over: the recursive infix spelling nested one native frame per operator (aborting at 1k on the default test-thread stack), and after that went iterative, the packrat cache's per-success deep clone of the Box-backed tree still recursed per level (aborting near 3k). The infix loop folds by move and `Term` is Rc-backed now, so this depth exercises both cures.
     let depth = 10_000;

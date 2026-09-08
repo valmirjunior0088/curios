@@ -373,14 +373,26 @@ pub(crate) fn parse_term<'a>() -> Parser<'a, Term> {
 pub(super) fn parse_term_inner<'a>() -> Parser<'a, Term> {
     with_span(
         refuse_declaration_head().and_keep(
-            parse_let()
+            // At end of input there is no character for [`refuse_non_term`] to consume, so every alternative below declines at the same offset and the tie-break reports the first of them. This stands ahead of them so that tie names the input instead.
+            look_ahead(take_eof())
+                .and_keep(fail("expected a term, obtained 'end-of-file'"))
+                .or(parse_let())
                 .or(parse_match())
                 .or(parse_choose())
                 .or(parse_func_type())
                 .or(parse_func())
-                .or(parse_infix_expr(0)),
+                .or(parse_infix_expr(0))
+                .or(refuse_non_term()),
         ),
     )
+}
+
+// The last resort, for a position that begins no term at all. Every alternative above declines at the choice point, and [`Parser::or`]'s tie-break then reports the first of them — `Expected keyword 'let'`, which names the chain's order rather than the reader's mistake. Consuming the offending character puts this failure one past that point, where it outranks them. It stays uncommitted, so a speculative caller still backtracks past it: the trailing comma of `(a, b,)`, whose `parse_term` at the `)` must fail recoverably for the separator to be read as trailing, above all. A word needs none of this — `parse_keyword` consumes the identifier run before refusing it, so a word already fails past the choice point, and the only words that begin no term are the six [`refuse_declaration_head`] names.
+fn refuse_non_term<'a>() -> Parser<'a, Term> {
+    mark().and(take_n(1)).flat_map(|(start, text)| {
+        // The span reaches back over the consumed character so the caret underlines it; the failure itself stays past it, which is what outranks the alternatives.
+        fail_from(&start, format!("expected a term, obtained '{text}'"))
+    })
 }
 
 // The reserved words that begin a declaration and can never begin a term, refused ahead of the alternatives above. Left to them, the local `let` read the word as its keyword and failed one token in, which won [`Parser::or`]'s furthest-failure tie-break: a declaration written after the program's tail — after the unannotated top-level `let` that opened it, above all — reported `Expected keyword 'let'`, naming neither the word read nor why an item is refused there. The word is consumed before the failure so it is past the choice point and stays the diagnosis, with the caret after the word as `parse_keyword` places it. `end`, `concept`, `satisfy` and `test` stay out: the first may follow a term and the other three may begin one.
