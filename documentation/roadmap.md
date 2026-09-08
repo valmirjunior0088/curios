@@ -36,7 +36,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Concept laws (a field whose type is a proposition about earlier fields, discharged by `satisfy` at the implementations it supplies)
   - [x] Associated types (a field whose result is a sort — what lets `Divide` state each carrier's own division precondition)
   - [x] Superclass edges (a `use`-prefixed field; `use value` fills a slot in a literal, and an `Ordered(A)` witness answers an `Equal(A)` goal by projection)
-- [x] [Derived witnesses](design/language/a-witness-body-may-be-written-by-the-compiler.md) (`satisfy C(T);` — the compiler writes `Spell` and `Equal` bodies from the declaration of the type in the key; `/std`'s structural types derive theirs)
+- [x] [Derived witnesses](design/language/a-witness-body-may-be-written-by-the-compiler.md) (`satisfy C(T);` writes the body from the key's declaration)
 - [x] Unified `struct` declarations (independent nominal and representation visibility)
 - [x] Inductive types (`induct` declarations)
   - [x] Independent nominal/representation visibility, with opaque construction
@@ -126,7 +126,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Full memory and data section support in `curios-wasm` (plural memories, 32- and 64-bit)
 - [x] Full table and element section support in `curios-wasm` (plural tables, every segment mode)
 - [x] `Stage::WasmOptm`: the Binaryen-optimized module observable through `wonder stage`
-- [x] Crate-boundary split isolating the store-backed cache (`curios-verdicts`) and the `wonder` engine with its transports (`curios-wonder`) from the native back end
+- [x] Crate split keeping `curios-verdicts` and `curios-wonder` off the native back end
 
 ## Optimizations
 
@@ -178,19 +178,19 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 ## IO
 
-- [x] Streams: `Async/Read` and `Async/Write` over `File`, `tcp/Socket`, a child's `Pipe` and the standard streams under `Io`; a program never holds a raw handle
+- [x] Streams: `Async/Read` and `Async/Write` over every host handle, never a raw one
 - [x] Terminal
 - [x] File
 - [x] Client network (TCP)
 - [x] Server network (TCP)
 - [x] TLS (https) for client and server sockets
-- [x] Non-blocking IO & concurrent connection handling: the host never waits on a peer — every peer-facing handle is non-blocking at creation, a pending connect settles through `finish_connect`, a TLS session is driven by the reads and writes that follow, and standard input is gated by a zero-timeout poll
+- [x] Non-blocking IO: every peer-facing handle is non-blocking and never waits on a peer
 - [x] Never-reused fd handle tokens (monotonic mint counter, use-after-close hardening)
 - [x] Clock & randomness
 - [x] Process IO
-- [x] Terminal raw mode and window size (`/sys/tty`, wrapped by `std/Tty` on the terminal behind standard input with a restoring bracket in `Io` and one registered with the scheduler; the native host restores the terminal when it is dropped)
-- [x] Filesystem (`stat`, listing, making, moving and removing over `Path`, wrapped by `std/fs` in `Try` over `Io`; the browser denies every row)
-- [x] Subprocesses (`spawn`, `wait` and `kill`, a child reaped on a thread that signals a polled pipe, wrapped by `std/Command`'s synchronous `spawn` and its `run` and `status` brackets, and `std/Command/Child` with its pipes as streams and `with` as the bracket that kills what a task started)
+- [x] Terminal raw mode and window size (`/sys/tty`, wrapped by `std/Tty` with a restoring bracket)
+- [x] Filesystem over `Path` (`std/fs` in `Try` over `Io`; the browser denies every row)
+- [x] Subprocesses (`std/Command`: `spawn`, `run` and `status`, a child's pipes as streams)
 
 ## Host Interface (FFI)
 
@@ -208,7 +208,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Complete written-goal batches: one elaboration reports every reached goal, located
 - [x] [Goal suggestions (`? ≈`)](design/toolchain/goal-suggestions-are-depth-one-fits-not-proof-search.md): sandboxed candidate fits, verified to compile
 - [x] Goal suggestions reach what a program has not already mentioned
-- [x] A failing program names what failed — the emitter calls a `sys.panic` import with one sentence per class (a `Nat` or `Int` past its carrier, a read past the end, a `Flt` decode, a recursive value read during its own initialization, a compiler invariant), both runtimes render `panicked: …`, the CPS IR carries the class as `CpsNode::Panic` where a lowering seats one, and no program can spell it
+- [x] [A failing program names what failed](design/language/a-refusal-is-a-panic-the-emitter-renders.md) (one sentence per class; no program can spell it)
 
 ## Standard Library
 
@@ -218,18 +218,18 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Foundational sum types (`std/Option`, `std/Result`)
 - [x] Pure state threading (`std/State`; no `Lift(Io, State(S))` edge, so a region performs nothing)
 - [x] Short-circuiting failure (`std/Result` is its own monad, error first; `!` as checked early return)
-- [x] The error channel over any monad (`std/Try`: `Try(M, E, A)` over `M(Result(E, A))`, with `raise`, `rescue`, `attempt` and `run`, and one `Lift` edge per kind of action written once with a premise on the base)
-- [x] The host's failure vocabulary under `Io` (`std/Io/Error`) and paths as the bytes the host holds (`std/Path`)
-- [x] The effect tier retyped: every host module `Io` unless it suspends and `Try` where it can fail, brackets in both tiers, and `Test/try` for a fallible test
+- [x] The error channel over any monad (`std/Try`: `raise`, `rescue`, `attempt` and `run`)
+- [x] The host's failure vocabulary (`std/Io/Error`) and paths as host bytes (`std/Path`)
+- [x] The effect tier retyped: `Io` where a module suspends, `Try` where it can fail
 - [x] Core collections (`std/List` and its helpers, length-indexed `std/Vec`)
 - [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys)
 - [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`, over packed `Bytes`)
 - [x] Certified Unicode-scalar `Char` type and `Str` migration (`'…' : Char`, typed APIs)
-- [x] Character literals realize as numerals (`Char` by default; `Nat`/`Byte`/`Int` from context; `Nat` dispatch patterns and `Bytes` atoms)
+- [x] Character literals realize as numerals (`Char` by default, `Nat`/`Byte`/`Int` from context)
 - [x] Parser-combinator library (`std/Parse`)
 - [x] Typed format strings (`std/Fmt`)
 - [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int` and `Flt`; they round-trip)
-- [x] JSON codec (`std/Json`; numbers are binary32 `Flt`, so an integer above 2²⁴ or a decimal outside binary32 does not round-trip)
+- [x] JSON codec (`std/Json`; numbers are binary32 `Flt`, so large integers do not round-trip)
 - [x] TOML 1.0.0 codec over native `Int` and binary32 `Flt` (`std/Toml`; not fully conforming)
   - [ ] [TOML's numbers are wider than the carriers under them](roadmap/toml-full-conformance-spec.md) (the gap is named; the float carrier is not chosen)
 - [x] Structured concurrency in `/std/Async`
@@ -246,13 +246,13 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Purity through an opaque `Io` monad (three intrinsics: `Io(T)`, `pure`, `bind`)
   - [x] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness)
   - [x] Stage 2: the flip — `/std` retyped and the certifier's purity analysis deleted
-- [x] HTTP client and server (`std/http`, built on `tcp` + `Async` — a literal URL refused where it does not read, and every connection answered by a handler that takes the request and returns the response, which the server writes and closes behind)
-- [ ] [What a value may do next is part of its type](roadmap/typestate-spec.md) (`http`'s reply staging carried it and was removed, taking chunked responses with it; the routes are surveyed and region parameters are probed, nothing is designed)
-- [x] HTML as a tree (`/std/Html` — one type for an element, text, a comment or a run of trees, rendered escaped and read back as a browser reads it)
+- [x] HTTP client and server (`std/http` over `tcp` + `Async`; a handler answers each connection)
+- [ ] [What a value may do next is part of its type](roadmap/typestate-spec.md) (surveyed and probed, not designed)
+- [x] HTML as a tree (`/std/Html`, rendered escaped and read back as a browser reads it)
 - [x] Host-service modules (`std/time`, `std/proc`, `std/rand`, `std/fs`, and the terminal rows in `std/Io`)
-- [x] Command-line interfaces (`/std/Cli`) — a specification is a list of `Arg` values, the record a line parses into is `Values(spec)` computed from it, `get(v, name)` is typed by a type-level lookup and refuses a name the specification does not contain, `WellFormed` is decided by reduction, and `main` reads the process arguments against all of it: `parse` and `select` for the line, `help` and `usage` for the screens, `report` and exit 2 for a refusal
-- [x] A terminal program draws a screen and reads keys (`/std/Tui`) — a screen is a `Frame(w, h)` whose joins the type checks, a layout is a tree of named panes whose sizes mirror it, keys and pastes are decoded from bytes and frames are diffed into bytes by pure functions, `Session` brackets the terminal, and a program is a `Tui` record `run` drives against one queue and one `Async/Signal` or `drive` folds with no terminal; five widgets — a border, a paragraph, a listing, an input and a viewport — and the `\u{…}` escape that spelling a combining mark asked for
-- [ ] [Text templates with named holes, sections and an output kind, checked at the fill](roadmap/templates-spec.md) (nothing holds a page of text with named places in it, repeats a part of it over a list, or escapes a value for where it lands; researched and prototyped, not designed)
+- [x] Command-line interfaces (`/std/Cli`: a specification computes the record a line parses into)
+- [x] A terminal program draws a screen and reads keys (`/std/Tui`, with five widgets)
+- [ ] [Text templates with named holes, sections and an output kind](roadmap/templates-spec.md) (prototyped, not designed)
 - [x] Arbitrary-precision naturals (`std/BigNat`, canonical and packed over `Bits`)
   - [x] Machine-checked additive, multiplicative, cancellation and order laws
 - [x] Certified strictly-positive arbitrary-precision naturals (`std/BigPos`)
@@ -271,15 +271,15 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [General division and field laws](roadmap/big-flt-general/04-field-laws-spec.md)
   - [ ] [General rational binary32 boundaries](roadmap/big-flt-general/05-binary32-spec.md)
   - [ ] [Exact decimal parsing and presentation](roadmap/big-flt-general/06-decimal-spec.md)
-- [x] The standard library's indispensable tier — what every one of nine surveyed peers ships: `Str` decomposition; `Option`, `Result` and `Vec` accessors under decided bounds; `Compare` and `Ordered` on strings, bytes, booleans and the containers; `List`'s structural predicates and searches, builders, `traverse` and a stable sort; `Nat`'s `pow`, `gcd`, `lcm`, `log2` and `sqrt` with course-of-values induction as `Nat/Lt/strong`; `std/Set` over `Map` with `Map`'s rewriting functions; `std/WellFounded` for proofs; and the host half under IO
+- [x] The standard library's indispensable tier — what every one of nine surveyed peers ships
   - [ ] The certified sort, `Key(Nat)` and the reducer law it waits on, and the `Ordered`-keyed tree, each deferred to a consumer
 
 ## Tooling & Ecosystem
 
-- [x] CLI (`run`, `compile`, `test`, `curate`, `new`, `format`, `lint` and `wonder`; `compile` bundles a native executable, and a profiling build adds `profile`)
+- [x] CLI (`run`, `compile`, `test`, `curate`, `new`, `format`, `lint` and `wonder`)
 - [x] Staged IR debugging (`wonder stage <name>`, one pipeline rung reprinted to stdout)
 - [x] Built-in tracing-based profiling harness (`cargo x profile`, per-span aggregation)
-- [x] CI pipeline (formatting, compilation, lints, tests and doctests, documentation under `-Dwarnings`, the browser bundle, and the grammar parser)
+- [x] CI pipeline (formatting, lints, tests, documentation, the browser bundle and the grammar)
 - [x] Multi-platform release automation (Linux and macOS binaries, via tag-triggered releases)
 - [x] Browser playground
   - [x] Run harness owned by `curios-js` (`compile`/`run`, with wire codes from `curios-abi`)
