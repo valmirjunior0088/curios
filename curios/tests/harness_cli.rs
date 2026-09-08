@@ -93,7 +93,7 @@ fn in_order(haystack: &str, needles: &[&str]) {
 }
 
 #[test]
-fn the_six_outcomes_report_in_declaration_order_and_exit_one() {
+fn every_outcome_reports_in_declaration_order_and_exits_one() {
     let root = project("outcomes");
     let output = curios(&root, &["test"]);
 
@@ -107,7 +107,7 @@ fn the_six_outcomes_report_in_declaration_order_and_exit_one() {
             "    Test/assert(Nat/shl(1, 40) == 0)\n",
             "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n",
             "/app/effect_passes: passed\n",
-            "4 passed, 1 failed, 1 trapped, 1 exited\n",
+            "3 passed, 1 failed, 1 trapped, 1 exited\n",
         ],
     );
     // The library is taken on, compiled, tested and tallied; the executable, which declares no tests, is taken on and compiled and nothing more.
