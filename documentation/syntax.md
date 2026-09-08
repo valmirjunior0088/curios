@@ -2,7 +2,7 @@
 
 This document defines the surface language accepted in `.crs` files. It is a reference for writing and reading Curios programs, not a description of compiler internals. An implementation disagreement is a language conformance bug: either the implementation or this document must be corrected.
 
-Examples use declarations from `/std` and `/syn`. The authored libraries under `curios-prelude-archive/std/` and `curios-prelude-archive/syn/` are the main corpus of complete programs.
+Examples use declarations from `/std`, the standard library every program may name. The authored libraries under `curios-prelude-archive/std/` and `curios-prelude-archive/syn/` are the main corpus of complete programs.
 
 - [Lexical structure](#lexical-structure)
 - [Literals](#literals)
@@ -67,8 +67,10 @@ A path is one or more identifier segments separated by `/`. A leading `/` makes 
 Nat                 -- relative name
 Option/some         -- member of Option
 /std/List           -- absolute name
-/sys/Handle         -- absolute intrinsic declaration
+/std/Nat/Lt         -- absolute name through a nested module
 ```
+
+The roots `/sys` and `/syn` are the compiler's own and a program may name neither: `/sys` holds the intrinsic types and the host's operations, `/syn` the concepts the surface forms desugar into. Naming either is refused, pointing at the `/std` module that stands in front of it — `Nat`, `Add` and `Test` are reached as `/std/Nat`, `/std/Add` and `/std/Test`. Both are named in this document only where the mechanism behind a form is the point.
 
 A path is whitespace-free: every separator touches both of its neighbors. Infix operators are the opposite — they require whitespace on both sides (see [Operators](#operators)) — so `a/b` is only ever the path and `a / b` only ever the division, and the asymmetric spellings `a/ b` and `a /b` satisfy neither grammar. A packed `Bits` or `Bytes` literal glues its grain letter to the opening bracket and admits whitespace freely thereafter; see [Packed literals](#packed-literals).
 
@@ -400,7 +402,7 @@ A goal is never accepted in a successfully compiled program.
 
 ### Postfix `!`
 
-`action!` is monadic sequencing. Each occurrence is equivalent to a call to `/syn/Monad/bind(action, continuation)` in the monad of its region.
+`action!` is monadic sequencing. Each occurrence is equivalent to a call to `/std/Monad/bind(action, continuation)` in the monad of its region.
 
 ```crs
 let parser: Parse(Nat) =
@@ -413,7 +415,7 @@ Every value body is a sequencing region. Lambda bodies, match arms, and recursiv
 
 A region's monad is read from the region's type and never inferred from a sequenced action. A region whose type is not yet known waits for it, and one whose type can never name a monad — the body of a lambda in inference position, say — is rejected with a request to annotate the enclosing result type.
 
-An action whose own monad differs from the region's is lifted: the `!` wraps the action in `/syn/Lift`'s `lift`, and the declared `Lift` witness for that ordered pair of monads carries it into the region. A pair with no declared witness is rejected. A region's tail is lifted the same way when its head is declared in another monad, so an `Io` action may end an `Async` region bare. See [Lifting between monads](#lifting-between-monads).
+An action whose own monad differs from the region's is lifted: the `!` wraps the action in `/std/Lift`'s `lift`, and the declared `Lift` witness for that ordered pair of monads carries it into the region. A pair with no declared witness is rejected. A region's tail is lifted the same way when its head is declared in another monad, so an `Io` action may end an `Async` region bare. See [Lifting between monads](#lifting-between-monads).
 
 Postfix `!` is not allowed in types. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
 
@@ -468,7 +470,7 @@ let contents: Try(Io, Io/Error, Bytes) =
 
 ### Lifting between monads
 
-`/syn/Lift(M, N)` declares the canonical embedding of monad `M` into monad `N`: one method, `lift`, taking an `M(A)` to an `N(A)`, with `Monad` witnesses for both sides as superclasses — so an embedding between non-monads cannot be declared. Like every witness, one `Lift` witness may occupy each ordered pair of monads program-wide, so which embedding runs is a fact about the program, never about a call site.
+`/std/Lift(M, N)` declares the canonical embedding of monad `M` into monad `N`: one method, `lift`, taking an `M(A)` to an `N(A)`, with `Monad` witnesses for both sides as superclasses — so an embedding between non-monads cannot be declared. Like every witness, one `Lift` witness may occupy each ordered pair of monads program-wide, so which embedding runs is a fact about the program, never about a call site.
 
 ```crs
 satisfy Lift(Io, Async) {
@@ -515,7 +517,7 @@ All infix operators require whitespace on both sides and associate to the left.
 
 Both operands of an operator have the same type. `==` and `!=` are two separate methods of `Equal`, `eql` and `neq`, so a witness supplies both; `!=` is not a negation applied to `eql`.
 
-An operator's result type is whatever its `/syn` method declares: `+`, `-`, `*`, `/`, `%`, `&&` and `||` return the operand type, while `==`, `!=`, `<`, `>`, `<=` and `>=` return `Bool`.
+An operator's result type is whatever its concept's method declares: `+`, `-`, `*`, `/`, `%`, `&&` and `||` return the operand type, while `==`, `!=`, `<`, `>`, `<=` and `>=` return `Bool`.
 
 `/` and `%` additionally carry the precondition their concept declares. `Divide` and `Remainder` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/Lt(0, b)`. A carrier whose division is total states `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail.
 
@@ -736,7 +738,7 @@ A top-level definition is in scope of its own body, so it may recurse with nothi
 
 ### Test declarations
 
-A `test` declaration declares a named test: a description of type `/syn/Test`, built with the combinators `/std/Test` exports. It takes no parameters — a claim about every instantiation is a proposition, so it is a `let` whose type states it, which the kernel checks on every build.
+A `test` declaration declares a named test: a description of type `/std/Test`, built with the combinators that module exports. It takes no parameters — a claim about every instantiation is a proposition, so it is a `let` whose type states it, which the kernel checks on every build.
 
 ```crs
 use /std/{Nat, Eq, Test};
@@ -1132,7 +1134,7 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `Name { ..base, ... }` | Structure update |
 | `match term ... end` | Typed elimination or dispatch |
 | `choose ... end` | Ordered guarded ladder |
-| `test name = body;` | Declared test — a `/syn/Test` description, collected per unit and run by `curios test`; it takes no parameters, since a claim over every instantiation is a `let` whose type states it |
+| `test name = body;` | Declared test — a `/std/Test` description, collected per unit and run by `curios test`; it takes no parameters, since a claim over every instantiation is a `let` whose type states it |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
 | `satisfy C(args);` | Derived witness — the compiler writes the body |
 | `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |
