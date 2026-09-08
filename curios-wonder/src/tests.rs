@@ -107,6 +107,24 @@ test small(n: Nat) =
 }
 
 #[test]
+fn a_parameterized_test_whose_draw_premise_fails_is_reported_through_the_test_program() {
+    // The sibling above fails the `Property` goal *outright* — a dependent telescope matches no witness shape — and that is decided while the tail elaborates. Here the telescope is not dependent, so the arity-one witness resolves and its own `Draw` premise is what fails, which is decided when the term is finalized instead. A test program elaborated and then dropped before finalization therefore answered this case with silence, while `curios test` reported it: the two spellings of one fault have to reach the same answer, which is why the tail is carried as far as the entry is.
+    let diagnostics = of(r#"
+use /std/{Nat, Test};
+test undrawable(f: (Nat) -> Nat) =
+    Test/check(f(0) == f(0));
+/std/print("ran\n")
+"#);
+    assert_eq!(diagnostics.len(), 1);
+    assert!(matches!(diagnostics[0].severity, Severity::Error));
+    let rendered = diagnostics[0].render();
+    assert!(
+        rendered.contains("Draw") && rendered.contains("Test/check(f(0) == f(0))"),
+        "{rendered}"
+    );
+}
+
+#[test]
 fn a_library_test_the_roster_cannot_draw_is_reported_through_its_test_program() {
     // A library has no written program: it is checked through the `()` entry under the last unit's tests tail, the way `curios test` compiles it, so the goal lands on the declaration in `lib.crs`.
     let root = mounted_project("library-test-program");

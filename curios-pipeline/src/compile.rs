@@ -5,10 +5,9 @@ use {
     curios_abi::ForeignStore,
     curios_cert::{Globals, Kernel, Verdict, recheck_module_measured, recheck_module_verdicts},
     curios_cont::into_wasm,
-    curios_core::derived_binder_floor,
-    curios_core::{Consumption, Intrinsic, Term},
+    curios_core::{Consumption, Intrinsic, Term, derived_binder_floor},
     curios_elab::{
-        Context, Established, Mode, Resumed, Tail, elaborate_and_zonk_unit,
+        Context, Established, FinalizedModule, Mode, Resumed, Tail, elaborate_and_zonk_unit,
         elaborate_and_zonk_unit_reporting, erase_unit,
     },
     curios_ersd::lower_to_cont,
@@ -180,7 +179,11 @@ pub fn typecheck_measured(
 
     let mut context = Context::new(budget, *syntax);
     context.set_imports(imports.clone());
-    let (module, _core_type, obligations) = elaborate_and_zonk_unit_reporting(
+    let FinalizedModule {
+        module,
+        obligations,
+        ..
+    } = elaborate_and_zonk_unit_reporting(
         &mut context,
         Established::over(&cores),
         &lowered,
