@@ -424,8 +424,10 @@ pub(super) fn parse_bin_literal<'a>() -> Parser<'a, Term> {
 
 fn parse_bin_literal_grain<'a>(grain: Grain, prefix: &'static str) -> Parser<'a, Term> {
     parse_literal(prefix)
-        .and_keep(sep_by0_trailing(parse_bin_entry, || parse_literal(",")))
-        .and_drop(parse_literal("]"))
+        // The glued grain letter and bracket are the discriminating prefix — `b [1]` is a binder and a list, `b[1]` can be nothing but this — so what follows is the diagnosis. Left to backtrack, a bad entry sent the grammar back to reading the letter as a bare name, which succeeds and throws the entry's report away: the enclosing form's own complaint then stood at the bracket, asking for the `;` or `)` that follows the literal rather than naming the entry or the missing `]`. The `List` sibling below needs none of this only because nothing else consumes a bare `[`.
+        .and_keep(commit(
+            sep_by0_trailing(parse_bin_entry, || parse_literal(",")).and_drop(parse_literal("]")),
+        ))
         .map(move |segments| Subterm::Intrinsic(Intrinsic::Bin(grain, segments)))
         .map(Into::into)
 }

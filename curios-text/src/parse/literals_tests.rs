@@ -469,6 +469,18 @@ fn bin_literal_spread_segments() {
 }
 
 #[test]
+fn a_packed_literal_reports_its_own_entry_rather_than_the_form_around_it() {
+    // The glued grain letter and bracket commit, so a bad entry or a missing `]` is the diagnosis. Left to backtrack, the letter read as a bare name and the enclosing form complained at the bracket about the `;` that follows the literal.
+    for source in ["x[0x48, )]", "b[0, ,]", "x[0x48, 0x69"] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(
+            !report.contains("Expected ';'"),
+            "{source:?} reported {report}"
+        );
+    }
+}
+
+#[test]
 fn bin_literal_atom_segments() {
     let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
 
