@@ -80,34 +80,45 @@ pub(super) fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, T
 
 // An `List` element type — the wire grammar minus `List` itself. Splitting it out of `parse_wire_type` is what makes `List(List(T))` unwritable: codegen forces and embeds exactly one level at the host boundary, so a second one would silently hand the host rope structs instead of flat arrays.
 fn parse_wire_leaf<'a>() -> Parser<'a, WireLeaf> {
-    parse_identifier().flat_map(|name| match name {
-        "Nat" => pure(WireLeaf::Nat),
-        "Int" => pure(WireLeaf::Int),
-        "Bool" => pure(WireLeaf::Bool),
-        "Bytes" => pure(WireLeaf::Bytes),
-        "Handle" => pure(WireLeaf::Handle),
-        other => fail(format!(
-            "expected a List element type (Nat, Int, Bool, Bytes, or Handle — List does not nest), found '{other}'"
-        )),
-    })
+    refuse_qualified_wire_name()
+        .and_keep(mark().and(parse_identifier()))
+        .flat_map(|(start, name)| match name {
+            "Nat" => pure(WireLeaf::Nat),
+            "Int" => pure(WireLeaf::Int),
+            "Bool" => pure(WireLeaf::Bool),
+            "Bytes" => pure(WireLeaf::Bytes),
+            "Handle" => pure(WireLeaf::Handle),
+            // A word read here is an element type or nothing, so the refusal commits and is the diagnosis. Left to backtrack it reached no reader at all: the enclosing list took the failure for an empty one and the `)` after it complained instead, naming a paren for a mistake about a type.
+            other => commit(fail_from(&start, format!(
+                "expected a List element type (Nat, Int, Bool, Bytes, or Handle — List does not nest), found '{other}'"
+            ))),
+        })
+}
+
+// A wire type is one of six bare words, so a path spelled with `/` is refused by name rather than left to `parse_identifier`, which stops at the slash and lets the enclosing paren take the blame.
+fn refuse_qualified_wire_name<'a>() -> Parser<'a, ()> {
+    commit(not_ahead("/").map_err("a wire type is written bare: `Nat` rather than `/std/Nat`, since the wire grammar is its own closed vocabulary and resolves no names"))
 }
 
 // One of the six wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Bytes`/`Handle` are literal keywords here, and `List(T)` takes a leaf.
 pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
-    parse_identifier().flat_map(|name| match name {
-        "Nat" => pure(WireType::Nat),
-        "Int" => pure(WireType::Int),
-        "Bool" => pure(WireType::Bool),
-        "Bytes" => pure(WireType::Bytes),
-        "Handle" => pure(WireType::Handle),
-        "List" => parse_literal("(")
-            .and_keep(parse_wire_leaf())
-            .and_drop(parse_literal(")"))
-            .map(WireType::List),
-        other => fail(format!(
-            "expected a wire type (Nat, Int, Bool, Bytes, Handle, or List(...)), found '{other}'"
-        )),
-    })
+    refuse_qualified_wire_name()
+        .and_keep(mark().and(parse_identifier()))
+        .flat_map(|(start, name)| match name {
+            "Nat" => pure(WireType::Nat),
+            "Int" => pure(WireType::Int),
+            "Bool" => pure(WireType::Bool),
+            "Bytes" => pure(WireType::Bytes),
+            "Handle" => pure(WireType::Handle),
+            "List" => parse_literal("(")
+                .and_keep(parse_wire_leaf())
+                .and_drop(parse_literal(")"))
+                .map(WireType::List),
+            // As in [`parse_wire_leaf`]: a word here is a wire type or nothing. `parse_identifier` failing on a non-identifier is what keeps the empty parameter list `() -> T` working — the arm is never reached at the `)`.
+            other => commit(fail_from(&start, format!(
+                "expected a wire type (Nat, Int, Bool, Bytes, Handle, or List(...)), found '{other}'"
+            ))),
+        })
 }
 
 // `(T, T, ...) -> T` (a foreign function) or a bare `T` (a zero-argument foreign, like `host_ops`'s `clock_wall`). Params carry no surface label — `a0`, `a1`, … name them positionally; the single result is unnamed (`_`), since a `foreign` declaration has no surface syntax for a named record result the way `/sys/Handle`'s Rust-side rows do.

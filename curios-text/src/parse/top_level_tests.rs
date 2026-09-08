@@ -93,6 +93,36 @@ fn top_foreign_rejects_nested_list() {
     );
 }
 
+/// The wire grammar's own refusals, which used to reach no reader: uncommitted, each left the parameter list to come back empty and the `)` after it to complain about a paren for a mistake about a type.
+#[test]
+fn top_foreign_names_the_wire_vocabulary_it_refused() {
+    for (source, expected) in [
+        (
+            "foreign f : (Str) -> Nat;",
+            "expected a wire type (Nat, Int, Bool, Bytes, Handle, or List(...)), found 'Str'",
+        ),
+        // A bare result goes through the same parser, so it names the same vocabulary.
+        (
+            "foreign f : Str;",
+            "expected a wire type (Nat, Int, Bool, Bytes, Handle, or List(...)), found 'Str'",
+        ),
+        (
+            "foreign f : (List(List(Nat))) -> Bool;",
+            "expected a List element type (Nat, Int, Bool, Bytes, or Handle — List does not nest), found 'List'",
+        ),
+        // A `/` stops `parse_identifier` before either arm is reached, so the qualified spelling is refused by name of its own.
+        (
+            "foreign f : (/std/Nat) -> Nat;",
+            "a wire type is written bare: `Nat` rather than `/std/Nat`",
+        ),
+    ] {
+        let report = source.parse::<Module>().unwrap_err().format();
+        assert!(report.contains(expected), "{source:?} reported {report}");
+    }
+    // `parse_identifier` fails on a non-identifier, so no refusal fires at the `)` and the empty parameter list still parses.
+    assert!("foreign f : () -> Nat;".parse::<Module>().is_ok());
+}
+
 /// One level of `List` still parses, over each leaf the wire admits.
 #[test]
 fn top_foreign_list_of_leaf() {
