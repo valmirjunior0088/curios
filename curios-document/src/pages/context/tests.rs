@@ -54,6 +54,8 @@ fn a_module_card_tallies_kinds_in_keyword_order() {
         members: Vec::new(),
         opaque: false,
         derived: false,
+        source: None,
+        chip: None,
     };
     let declarations = [
         declaration(Kind::Witness),

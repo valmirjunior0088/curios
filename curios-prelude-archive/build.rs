@@ -72,7 +72,10 @@ fn build() {
         );
     }
     // The standard library is the one prelude mount a program reaches for by name, so it is the one the image documents; `/syn` is the syntax forms' concepts and `/sys` the host's rows, neither an interface anybody reads for.
-    let modules = authored_prelude(&manifest).documented("std", Some(STD_DESCRIPTION));
+    let modules = authored_prelude(&manifest)
+        .documented("std", Some(STD_DESCRIPTION))
+        .adopting("sys", "intrinsic")
+        .adopting("syn", "syntax form");
 
     let prepared = prepare_prelude(&modules, &SYNTAX)
         .unwrap_or_else(|error| panic!("fixed prelude failed to lower: {}", error.format()));

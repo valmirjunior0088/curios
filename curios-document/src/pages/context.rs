@@ -36,7 +36,6 @@ pub(super) struct Page {
     cards: Vec<Card>,
     /// The module's witnesses, in source order.
     witnesses: Vec<WitnessRow>,
-    reexports: Vec<ReexportRow>,
     version: &'static str,
 }
 
@@ -93,6 +92,16 @@ struct Card {
     /// What closes the block, as the segments it is spelled by: the keyword `end` after constructors, the plain `}` after fields or methods — punctuation, like the opener, and set apart no more than it is. Empty when nothing closes it.
     closer: Vec<Segment>,
     prose: Vec<Paragraph>,
+    /// The page this declaration is written on, when that is another page of this bundle — what the header says it was re-exported from.
+    origin: Option<Origin>,
+    /// What kind of thing a declaration adopted out of a root a consumer cannot name is. Never a path: the root has no name a reader may write, and the word is all a card can honestly say.
+    chip: Option<String>,
+}
+
+/// Where a re-exported declaration is written: the path a consumer writes for it, and the link that reaches it.
+struct Origin {
+    text: String,
+    href: Option<String>,
 }
 
 /// A fact about a declaration the signature does not spell: whether a representation is public, and whether the compiler wrote a body.
@@ -124,13 +133,6 @@ struct WitnessRow {
     signature: Vec<Segment>,
     derived: bool,
     prose: Vec<Paragraph>,
-}
-
-/// A `pub use`: the name and where it leads, a link when the declaration has a page in this bundle.
-struct ReexportRow {
-    name: String,
-    target: String,
-    href: Option<String>,
 }
 
 /// The page of `module` in `bundle`, with every link resolved from where the page sits.
@@ -225,19 +227,6 @@ pub(super) fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
         })
         .collect();
 
-    let reexports = module
-        .reexports
-        .iter()
-        .map(|reexport| ReexportRow {
-            name: reexport.name.clone(),
-            target: reexport.referent.join(),
-            href: reexport
-                .within
-                .then(|| bundle.href(depth, &reexport.referent))
-                .flatten(),
-        })
-        .collect();
-
     Page {
         root,
         path: module.path.join(),
@@ -248,7 +237,6 @@ pub(super) fn page(bundle: &Bundle<'_>, module: &ModuleDocumentation) -> Page {
         modules,
         cards,
         witnesses,
-        reexports,
         version: VERSION,
     }
 }
@@ -285,6 +273,11 @@ fn card(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration) -> Card {
         _ => ("", "", "", "", Vec::new()),
     };
 
+    let origin = declaration.source.as_ref().map(|source| Origin {
+        text: source.join(),
+        href: bundle.href(depth, source),
+    });
+
     Card {
         anchor: declaration.name.clone(),
         keyword: keyword(declaration.kind),
@@ -298,6 +291,8 @@ fn card(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration) -> Card {
         trail,
         closer,
         prose: paragraphs(declaration.prose.as_deref()),
+        origin,
+        chip: declaration.chip.clone(),
     }
 }
 

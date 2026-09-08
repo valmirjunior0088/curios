@@ -1,4 +1,4 @@
-//! The bundle's addressing and what it writes: a mark's referent is found where the record shows the declaration, which for a facade is the re-exporting module's page; the index lists every module, named declaration and member at that address; and a page carries the field the script shows.
+//! The bundle's addressing and what it writes: a mark's referent is found where the record shows the declaration, which for a facade is the re-exporting module's page under that module's own name; the index lists every module, named declaration and member at that address; and a page carries the field the script shows.
 
 use {
     super::*,
@@ -30,6 +30,8 @@ fn declaration(kind: Kind, name: &str, home: &[&str], members: &[&str]) -> Decla
             .collect(),
         opaque: false,
         derived: false,
+        source: None,
+        chip: None,
     }
 }
 
@@ -43,6 +45,8 @@ fn witness(text: &str) -> Declaration {
         members: Vec::new(),
         opaque: false,
         derived: false,
+        source: None,
+        chip: None,
     }
 }
 
@@ -60,10 +64,9 @@ fn record() -> Documentation {
                     declaration(Kind::Inductive, "Shape", &["shapes"], &["circle"]),
                     declaration(Kind::Concept, "Area", &["shapes"], &["", "area"]),
                     witness("satisfy Show(Shape)"),
-                    // Declared in the private `hidden`, shown here through `pub use hidden/{Token}`.
-                    declaration(Kind::Inductive, "Token", &["shapes", "hidden"], &["token"]),
+                    // Declared in the private `hidden` and shown here through `pub use hidden/{Token}`, so this page is the name it carries.
+                    declaration(Kind::Inductive, "Token", &["shapes"], &["token"]),
                 ],
-                reexports: Vec::new(),
             },
             ModuleDocumentation {
                 path: Qualifier::from(["shapes", "geometry"]),
@@ -75,7 +78,6 @@ fn record() -> Documentation {
                     &["shapes", "geometry"],
                     &[],
                 )],
-                reexports: Vec::new(),
             },
         ],
     }
@@ -103,15 +105,17 @@ fn a_referent_is_found_where_the_record_shows_it() {
         href(1, &["shapes", "geometry", "origin"]).as_deref(),
         Some("../geometry.crs.html#origin")
     );
-    // The facade: the mark names the declaration's home, and the link lands on the page that shows it.
+    // The facade: the record names the declaration for the page that shows it, and the mark the builder writes carries that same name.
     assert_eq!(
-        href(0, &["shapes", "hidden", "Token"]).as_deref(),
+        href(0, &["shapes", "Token"]).as_deref(),
         Some("index.html#Token")
     );
     assert_eq!(
-        href(1, &["shapes", "hidden", "Token", "token"]).as_deref(),
+        href(1, &["shapes", "Token", "token"]).as_deref(),
         Some("../index.html#Token/token")
     );
+    // The path it was written at is not an address: nothing renders it, so nothing may resolve it either.
+    assert_eq!(href(0, &["shapes", "hidden", "Token"]), None);
     // A declaration nothing shows has no address, rather than an anchor no page defines.
     assert_eq!(href(0, &["shapes", "hidden", "unseen"]), None);
 }

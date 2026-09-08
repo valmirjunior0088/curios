@@ -7,13 +7,13 @@
 use {
     super::*,
     crate::{
-        print_case_head, print_concept_field_head, print_concept_head, print_foreign_head,
-        print_induct_head, print_let_head, print_struct_field_head, print_struct_head,
-        print_witness_head,
+        print_case_head, print_case_result_head, print_concept_field_head, print_concept_head,
+        print_foreign_head, print_induct_head, print_let_head, print_struct_field_head,
+        print_struct_head, print_witness_head,
     },
     curios_core::{Global, Imports},
     curios_document::{
-        Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Reexport, Signature,
+        Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Signature,
     },
     curios_print::{Printer, render_annotated},
     std::collections::{HashMap, HashSet},
@@ -34,15 +34,20 @@ pub(super) fn document(
     public: &Scoped<'_, PublicInterface>,
     imports: &Imports,
     prefix: &Qualifier,
+    adopted: &[(Qualifier, Option<String>)],
     description: Option<String>,
 ) -> Documentation {
-    let reader = Reader {
+    let mut reader = Reader {
         modules,
         table,
         public,
         imports,
         prefix,
+        adopted,
+        public_names: HashMap::new(),
     };
+    // Read before the walk, because a signature anywhere in the unit may name an adopted declaration, and taken through the reader because knowing which modules have pages is its own rule.
+    reader.public_names = reader.exposed_names();
 
     let mut pages = Vec::new();
     reader.visit(prefix.clone(), None, &mut pages);
@@ -61,9 +66,79 @@ struct Reader<'a> {
     public: &'a Scoped<'a, PublicInterface>,
     imports: &'a Imports,
     prefix: &'a Qualifier,
+    /// The unit's own roots that no consumer may name — its internal mounts. Their declarations reach a consumer only through a `pub use` in the documented mount, so a page shows them and no page names where they were written.
+    adopted: &'a [(Qualifier, Option<String>)],
+    /// What a consumer calls each declaration that no page of its own shows: its declaration site, to the path of the page that exposes it. One entry per declaration a private child or an adopted root holds and a page re-exports.
+    public_names: HashMap<Qualifier, Qualifier>,
 }
 
 impl Reader<'_> {
+    /// What a consumer calls every declaration a page exposes out of a module with no page of its own — a private child, or a root this unit keeps to itself. Both are the same situation and take the same answer: the declaration is named for the page that shows it.
+    ///
+    /// **A second name is a tie this breaks and does not report.** One declaration exposed under two paths is legal, and both pages document it; what needs a single answer is which page a *mark* naming it links to. The first in sorted order wins — sorted because the maps underneath are `HashMap`s, and a tie broken by their iteration order would move between compilations of the same source.
+    fn exposed_names(&self) -> HashMap<Qualifier, Qualifier> {
+        let mut pages = self
+            .public
+            .iter()
+            .filter(|(module, _)| self.has_page(module))
+            .collect::<Vec<_>>();
+        pages.sort_by_key(|(left, _)| *left);
+
+        let mut names = HashMap::new();
+        for (module, interface) in pages {
+            let mut bindings = interface.bindings.iter().collect::<Vec<_>>();
+            bindings.sort_by_key(|(left, _)| *left);
+
+            for (label, entry) in bindings {
+                let declaring = entry.target.without_last();
+                if !self.has_page(&declaring) && self.items_of(&declaring).is_some() {
+                    names
+                        .entry(entry.target.clone())
+                        .or_insert_with(|| module.with(label));
+                }
+            }
+        }
+        names
+    }
+
+    /// The path a consumer writes for the declaration at `referent`.
+    ///
+    /// **A member is addressed under the declaration that holds it, never under a name a glob gave it.** A constructor and a concept method live in their owner's block on their owner's page, so `/std/Result/Result/success` is where a mark finds `success` even where `pub use Result/*` also spells it `/std/Result/success` — the shorter spelling is a way to write the name, not a second place it lives.
+    ///
+    /// **A declaration whose own module has a page is already named the way a consumer writes it.** One whose module has none — a private child, or a root this unit keeps to itself — is the consumer's only through the re-export that shows it, so it takes that page's name. And one this bundle exposes nowhere has no consumer-facing name at all, which is a hole in the documented interface rather than a fact to render: it is refused here, naming both ends, rather than quietly rendered as a path the reader is not allowed to write. A name belonging to neither this unit's documented mount nor a root it adopts is nobody here's to rename, and renders as written.
+    fn public_name(&self, referent: &Qualifier) -> Qualifier {
+        let declaring = referent.without_last();
+        let ours = referent.is_within(self.prefix) || self.adopted_root(referent).is_some();
+        if !ours || self.has_page(&declaring) {
+            return referent.clone();
+        }
+
+        if let Some(public) = self.public_names.get(referent) {
+            return public.clone();
+        }
+
+        // **A member follows the declaration that holds it.** `Scan` moves to the page that exposes it, so `Scan/lead` is written under that page too — the constructor namespace is the declaration's, not a module anyone re-exports on its own.
+        if let Some(owner) = self.public_names.get(&declaring) {
+            return owner.with(referent.last());
+        }
+
+        // A member of a declaration that never moved is already addressed under it, and a name outside every module this unit holds is nobody here's to rename.
+        if self.items_of(&declaring).is_none() {
+            return referent.clone();
+        }
+
+        panic!(
+            "{} is named by the interface of {} but exposed by no page of it, so a consumer has no way to write it",
+            referent.join(),
+            self.prefix.join()
+        )
+    }
+
+    /// The adopted root `name` lies within, when it lies within one.
+    fn adopted_root(&self, name: &Qualifier) -> Option<&(Qualifier, Option<String>)> {
+        self.adopted.iter().find(|(root, _)| name.is_within(root))
+    }
+
     /// The file-backed module `qualifier` names, then its public children after it.
     fn visit(
         &self,
@@ -90,9 +165,10 @@ impl Reader<'_> {
             prose,
             children: Vec::new(),
             declarations: Vec::new(),
-            reexports: self.reexports(&qualifier),
         };
         let mut children = Vec::new();
+        // Every name this page has already placed, so the sweep below adds each exposed name once.
+        let mut placed = HashSet::new();
 
         for item in items {
             match item {
@@ -103,33 +179,39 @@ impl Reader<'_> {
                         children.push((child, lines(&declaration.doc), &declaration.module));
                     }
                 }
+                // A `pub use` puts what it exposes on this page, where it is written: a name a consumer reaches through this module is documented where the module offers it, whatever module declared it.
+                TopItem::Use(use_) if use_.vis_pub => {
+                    if let UseGroup::Named(group) = &use_.group {
+                        for entry in group {
+                            let label = entry.label().to_string();
+                            self.expose(&qualifier, &label, &mut placed, &mut page.declarations);
+                        }
+                    }
+                }
                 // Every other item is a declaration of this module, or nothing.
-                item => self.declare(&qualifier, &imports, item, &mut page.declarations),
+                item => {
+                    let before = page.declarations.len();
+                    self.declare(&qualifier, &imports, item, &mut page.declarations);
+                    for declaration in &page.declarations[before..] {
+                        placed.insert(declaration.name.clone());
+                    }
+                }
             }
         }
 
-        // The facade: a `pub use` out of a module with no page of its own is the one way that declaration reaches a consumer, so it is documented here, after the module's own declarations and sorted by name, at the home a mark names it under.
-        let mut facades = Vec::new();
+        // What a glob exposed, and anything else resolution reached that no item above placed. A glob writes no order, so these take the one a reader can predict.
         if let Some(interface) = self.public.get(&qualifier) {
-            for (label, entry) in &interface.bindings {
-                let Some(home) = self.facade_home(&qualifier, label, &entry.target) else {
-                    continue;
-                };
-                let items = self.items_of(&home).expect("a facade home is a module");
-                let imports = self.imports_of(&home);
-                let mut found = Vec::new();
-                for item in items {
-                    self.declare(&home, &imports, item, &mut found);
-                }
-                facades.extend(
-                    found
-                        .into_iter()
-                        .filter(|declaration| declaration.name == entry.target.last()),
-                );
+            let mut rest = interface
+                .bindings
+                .keys()
+                .filter(|label| !placed.contains(*label))
+                .cloned()
+                .collect::<Vec<_>>();
+            rest.sort();
+            for label in rest {
+                self.expose(&qualifier, &label, &mut placed, &mut page.declarations);
             }
         }
-        facades.sort_by(|left, right| left.name.cmp(&right.name));
-        page.declarations.extend(facades);
 
         out.push(page);
 
@@ -140,6 +222,138 @@ impl Reader<'_> {
                 None => self.visit(child, prose, out),
             }
         }
+    }
+
+    /// The name `module` exposes as `label`, appended to `out` as a declaration of this page.
+    ///
+    /// **A page shows what it offers, not what it wrote.** Where the declaration lives decides only what the card says about it: another page of this bundle is named as its source, and a module with no page — a private child, or a root a consumer cannot name — is not named at all, because for a consumer this page is where the declaration lives. A name declared on this page is skipped, since its own item already placed it, and one declared outside this unit is skipped because nothing here can read it.
+    fn expose(
+        &self,
+        module: &Qualifier,
+        label: &str,
+        placed: &mut HashSet<String>,
+        out: &mut Vec<Declaration>,
+    ) {
+        if placed.contains(label) {
+            return;
+        }
+        let Some(entry) = self
+            .public
+            .get(module)
+            .and_then(|interface| interface.bindings.get(label))
+        else {
+            return;
+        };
+
+        let declaring = entry.target.without_last();
+        if declaring == *module {
+            return;
+        }
+        let (mut declaration, source, chip) = match self.declaration_at(&entry.target) {
+            // A declaration of another module: named for the page that holds it, or, where it has none, adopted and chipped with what its root holds.
+            Some(found) => {
+                let source = self
+                    .has_page(&declaring)
+                    .then(|| self.public_name(&entry.target));
+                let chip = match source {
+                    Some(_) => None,
+                    None => self
+                        .adopted_root(&entry.target)
+                        .and_then(|(_, chip)| chip.clone()),
+                };
+                (found, source, chip)
+            }
+            // A member of a declaration: its owner's namespace is a path a consumer writes, and the row inside that owner's block is where the member is shown, so the card names it and links there.
+            None => match self.member_at(&entry.target) {
+                // The owner under the name a consumer writes, which is what the card points at: a member is shown in its owner's block, and its own path is this very card.
+                Some(found) => (found, Some(self.public_name(&declaring)), None),
+                None => return,
+            },
+        };
+
+        declaration.name = label.to_string();
+        declaration.home = module.clone();
+        declaration.source = source;
+        declaration.chip = chip;
+
+        placed.insert(label.to_string());
+        out.push(declaration);
+    }
+
+    /// The member a module exposes beside its owner: a constructor of an inductive, a method of a concept.
+    ///
+    /// **The head states what the member takes and what it produces, and the card links to the owner for the rest.** What a consumer reaches through `pub use Option/*` is the value constructor, whose full type also carries the family's parameters implicitly in front of the payload — but *that* is the lowering's rule, and restating it here would put a second statement of it on a page the compiler never checks. The payload and the result are written in the declaration itself, so they are read rather than derived; the parameters are left to the owner's own card, which the source names.
+    fn member_at(&self, target: &Qualifier) -> Option<Declaration> {
+        let owner = target.without_last();
+        let declaring = owner.without_last();
+        let items = self.items_of(&declaring)?;
+        let imports = self.imports_of(&declaring);
+        let label = target.last();
+        let item = items.iter().find(|item| declares(item, owner.last()))?;
+
+        let (signature, prose) = match item {
+            TopItem::Induct(members) => {
+                let holder = members
+                    .iter()
+                    .find(|member| member.label.as_str() == owner.last())?;
+                let case = holder.cases.iter().find(|case| case.label == label)?;
+                // A payload's label binds for the payloads and the target after it, exactly as it does inside the block.
+                let mut binders = param_binders(&holder.params);
+                binders.extend(case.payload.iter().filter_map(|param| param.label.clone()));
+                (
+                    self.signature(
+                        &declaring,
+                        &imports,
+                        &binders,
+                        print_case_result_head(holder, case),
+                    ),
+                    lines(&case.doc),
+                )
+            }
+            TopItem::Concept(members) => {
+                let holder = members
+                    .iter()
+                    .find(|member| member.label.as_str() == owner.last())?;
+                let field = holder.fields.iter().find(|field| field.label == label)?;
+                (
+                    self.method(&declaring, &imports, &param_binders(&holder.params), field)
+                        .signature,
+                    lines(&field.doc),
+                )
+            }
+            // A struct's fields are projections rather than a namespace a `use` selects from, and nothing else holds members at all.
+            _ => return None,
+        };
+
+        Some(Declaration {
+            name: label.to_string(),
+            home: declaring,
+            kind: Kind::Definition,
+            signature,
+            prose,
+            members: Vec::new(),
+            opaque: false,
+            derived: false,
+            source: None,
+            chip: None,
+        })
+    }
+
+    /// The declaration written at `target`, read from the module that declares it — `None` when that module is not one this unit holds.
+    ///
+    /// **Only the item that declares it is read.** Reading the whole module and picking afterwards would print, resolve and check a signature for every other declaration the module makes, including ones this bundle exposes nowhere — so a name only those may write would be judged against an interface that does not contain them, and the work to reach one declaration would scale with the module holding it.
+    fn declaration_at(&self, target: &Qualifier) -> Option<Declaration> {
+        let declaring = target.without_last();
+        let items = self.items_of(&declaring)?;
+        let imports = self.imports_of(&declaring);
+        let label = target.last();
+
+        let item = items.iter().find(|item| declares(item, label))?;
+        let mut found = Vec::new();
+        self.declare(&declaring, &imports, item, &mut found);
+        found
+            .into_iter()
+            .find(|declaration| declaration.name == label)
     }
 
     /// The declarations `item` makes in `home` that a consumer can see, appended to `out`: a `let` group's `pub` members, a `pub` inductive, structure or concept with the members its representation exposes, every witness, a `pub` foreign. A module, an import and a test declare nothing here.
@@ -169,6 +383,8 @@ impl Reader<'_> {
                         members: Vec::new(),
                         opaque: false,
                         derived: false,
+                        source: None,
+                        chip: None,
                     });
                 }
             }
@@ -198,6 +414,8 @@ impl Reader<'_> {
                         members: cases,
                         opaque: !member.rep_pub,
                         derived: false,
+                        source: None,
+                        chip: None,
                     });
                 }
             }
@@ -233,6 +451,8 @@ impl Reader<'_> {
                         members: fields,
                         opaque: !member.rep_pub,
                         derived: false,
+                        source: None,
+                        chip: None,
                     });
                 }
             }
@@ -259,6 +479,8 @@ impl Reader<'_> {
                         members: fields,
                         opaque: !member.rep_pub,
                         derived: false,
+                        source: None,
+                        chip: None,
                     });
                 }
             }
@@ -279,6 +501,8 @@ impl Reader<'_> {
                         members: Vec::new(),
                         opaque: false,
                         derived: member.body.is_none(),
+                        source: None,
+                        chip: None,
                     });
                 }
             }
@@ -298,6 +522,8 @@ impl Reader<'_> {
                         members: Vec::new(),
                         opaque: false,
                         derived: false,
+                        source: None,
+                        chip: None,
                     });
                 }
             }
@@ -344,23 +570,6 @@ impl Reader<'_> {
                 }
                 _ => None,
             })
-    }
-
-    /// The module a binding `module` exposes as `label` was declared in, when that module has no page of its own and the binding is therefore documented on `module`'s page: a `pub use` out of a private child, or out of a module below one. `None` for a declaration of `module` itself, one outside the unit, or one whose home has a page and so is listed as a link.
-    fn facade_home(
-        &self,
-        module: &Qualifier,
-        label: &str,
-        target: &Qualifier,
-    ) -> Option<Qualifier> {
-        if *target == module.with(label) || !target.is_within(self.prefix) {
-            return None;
-        }
-        let home = target.without_last();
-        match !self.has_page(&home) && self.items_of(&home).is_some() {
-            true => Some(home),
-            false => None,
-        }
     }
 
     fn case(
@@ -416,19 +625,41 @@ impl Reader<'_> {
         binders: &HashSet<String>,
         head: Printer,
     ) -> Signature {
-        let (text, annotations) = render_annotated(head, INDENT, WIDTH);
-        let marks = annotations
-            .into_iter()
-            .filter_map(|annotation| {
-                self.resolve(&annotation.name, module, imports, binders)
-                    .map(|referent| Mark {
-                        start: annotation.start,
-                        end: annotation.end,
-                        within: referent.is_within(self.prefix),
-                        referent,
-                    })
-            })
-            .collect();
+        let (rendered, annotations) = render_annotated(head, INDENT, WIDTH);
+
+        let mut text = String::new();
+        let mut marks = Vec::new();
+        let mut at = 0;
+        for annotation in annotations {
+            text.push_str(&rendered[at..annotation.start]);
+            at = annotation.end;
+
+            let Some(referent) = self.resolve(&annotation.name, module, imports, binders) else {
+                text.push_str(&rendered[annotation.start..annotation.end]);
+                continue;
+            };
+            let referent = self.public_name(&referent);
+
+            // **A declaration may spell a name no consumer may write.** `/sys`'s rows state their preconditions as absolute `/syn` paths, because the module is generated and resolves against the compilation root — so the page shows the name that reaches the same declaration through the standard library instead of the one the compiler emitted. Only an absolute spelling into a root this unit keeps to itself is rewritten; everything an author wrote is shown as written.
+            let start = text.len();
+            match annotation.name.starts_with('/')
+                && self.adopted.iter().any(|(root, _)| {
+                    Qualifier::from(annotation.name.trim_start_matches('/').split('/'))
+                        .is_within(root)
+                }) {
+                true => text.push_str(&referent.join()),
+                false => text.push_str(&rendered[annotation.start..annotation.end]),
+            }
+
+            marks.push(Mark {
+                start,
+                end: text.len(),
+                within: referent.is_within(self.prefix),
+                referent,
+            });
+        }
+        text.push_str(&rendered[at..]);
+
         Signature { text, marks }
     }
 
@@ -491,25 +722,27 @@ impl Reader<'_> {
         }
         spellings
     }
+}
 
-    /// The names `module`'s export view exposes for declarations made on other pages. One made in a module with no page is not a link but a declaration of this page, and is left to `facade_home`.
-    fn reexports(&self, module: &Qualifier) -> Vec<Reexport> {
-        let Some(interface) = self.public.get(module) else {
-            return Vec::new();
-        };
-        let mut reexports = interface
-            .bindings
+/// Whether `item` declares `label` as something a consumer can see — asked of the tree alone, so finding one declaration never costs the printing and resolving of its neighbours.
+fn declares(item: &TopItem, label: &str) -> bool {
+    let named = |vis_pub: bool, declared: &str| vis_pub && declared == label;
+    match item {
+        TopItem::Let(members) => members
             .iter()
-            .filter(|(label, entry)| entry.target != module.with(label))
-            .filter(|(label, entry)| self.facade_home(module, label, &entry.target).is_none())
-            .map(|(label, entry)| Reexport {
-                name: label.clone(),
-                referent: entry.target.clone(),
-                within: entry.target.is_within(self.prefix),
-            })
-            .collect::<Vec<_>>();
-        reexports.sort_by(|left, right| left.name.cmp(&right.name));
-        reexports
+            .any(|member| named(member.vis_pub, member.label.as_str())),
+        TopItem::Induct(members) => members
+            .iter()
+            .any(|member| named(member.vis_pub, member.label.as_str())),
+        TopItem::Struct(members) => members
+            .iter()
+            .any(|member| named(member.vis_pub, member.label.as_str())),
+        TopItem::Concept(members) => members
+            .iter()
+            .any(|member| named(member.vis_pub, member.label.as_str())),
+        TopItem::Foreign(declaration) => named(declaration.vis_pub, declaration.label.as_str()),
+        // A witness is anonymous, and neither a module, an import nor a test declares a name a `use` can select.
+        TopItem::Witness(_) | TopItem::Mod(_) | TopItem::Use(_) | TopItem::Test(_) => false,
     }
 }
 

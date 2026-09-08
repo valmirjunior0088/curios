@@ -9,6 +9,17 @@
         {%- for badge in card.badges -%}
             <span class="badge {{ badge.tone }}">{{ badge.label }}</span>
         {%- endfor -%}
+        {%- if let Some(chip) = card.chip -%}
+            <span class="chip">{{ chip }}</span>
+        {%- endif -%}
+        {%- if let Some(origin) = card.origin -%}
+            <span class="origin">re-exported from {% if let Some(href) = origin.href -%}
+                    <a href="{{ href }}">{{ origin.text }}</a>
+                {%- else -%}
+                    <span class="target">{{ origin.text }}</span>
+                {%- endif -%}
+            </span>
+        {%- endif -%}
     </header>
     <div class="signature {{ card.layout }}">
         <div class="line">{% call sig::segments(card.signature) %}{% endcall %}{{ card.opener }}</div>

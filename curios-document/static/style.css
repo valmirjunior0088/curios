@@ -543,3 +543,17 @@ footer img {
 .tree.live nav {
     display: none;
 }
+
+/* What a card says about where it came from, pushed to the far end of its header. Both are asides — they say where a declaration comes from, never what it does — so the chip borrows the badge's shape and the origin reads quieter still, and neither competes with the name. A card carries at most one of them: a declaration is either written on a page this bundle holds or adopted out of a root it does not name. */
+.card header .chip,
+.card header .origin {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-57);
+}
+.card header .origin a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}

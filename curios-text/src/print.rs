@@ -2103,6 +2103,48 @@ pub(crate) fn print_case_head(case: &TopCase) -> Printer {
 }
 
 /// The head of a `struct` member: its visibility, name, parameters and sort, without the fields.
+/// The head of a constructor where a module exposes it beside its type: the payload as the block writes it, then the family it produces — `success(A) -> Result(E, A)`, or `cons(@n: Nat, head: T, tail: Vec(T, n)) -> Vec(T, n + 1)` for an indexed family.
+///
+/// **The result replaces the block's index suffix rather than joining it.** Inside the block a case states only the indices it targets, because the family is the declaration it sits in; standing alone it has to say what it produces, and writing both would spell those indices twice. What it deliberately does not state is the family's parameters, which are implicit at every value constructor: that is the lowering's rule to apply, and the card names its owner so the one card that does state them is a click away.
+pub(crate) fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printer {
+    let payload = case
+        .payload
+        .iter()
+        .cloned()
+        .map(|param| {
+            flat([
+                print_plicity(param.plicity),
+                print_field(TupleTypeParam {
+                    label: param.label,
+                    func_params: None,
+                    type_: param.type_,
+                }),
+            ])
+        })
+        .collect();
+
+    let mut args = item
+        .params
+        .iter()
+        .map(|(_, label, _)| pure(label.clone()))
+        .collect::<Vec<_>>();
+    if let Some(target) = &case.target {
+        args.extend(target.iter().cloned().map(print_term));
+    }
+
+    let family = match args.is_empty() {
+        true => named(item.label.to_string()),
+        false => flat([named(item.label.to_string()), listed("(", args, ")")]),
+    };
+
+    flat([
+        pure(case.label.clone()),
+        listed("(", payload, ")"),
+        pure(" -> "),
+        family,
+    ])
+}
+
 pub(crate) fn print_struct_head(item: &TopStruct) -> Printer {
     flat([
         print_pub(item.vis_pub),

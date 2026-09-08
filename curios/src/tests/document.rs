@@ -153,16 +153,101 @@ fn the_standard_library_documents_from_the_archive() {
         pure.signature
     );
 
-    // `pub use Result/*` exposes the constructors at the module, each a link to the type that declares them.
+    // `pub use Result/*` puts the constructors in the module beside the type, which is where a consumer reaches them: `Result/success` and `Result` are siblings, so the page lists both. The constructor stays a member of its type as well, since that is where its shape belongs.
+    let declared = result
+        .declarations
+        .iter()
+        .find(|declaration| declaration.name == "Result")
+        .expect("Result");
     assert!(
-        result
-            .reexports
+        declared
+            .members
             .iter()
-            .any(|reexport| reexport.name == "success"
-                && reexport.referent.join() == "/std/Result/Result/success"),
+            .any(|member| member.name == "success"),
         "{:?}",
-        result.reexports
+        declared.members
     );
+
+    let constructor = result
+        .declarations
+        .iter()
+        .find(|declaration| declaration.name == "success")
+        .expect("the constructor beside its type");
+    assert_eq!(constructor.home.join(), "/std/Result");
+    assert_eq!(
+        constructor.source.as_ref().map(Qualifier::join).as_deref(),
+        Some("/std/Result/Result"),
+        "a member's card names the declaration that holds it, and links to the row inside it"
+    );
+    assert!(
+        constructor.signature.text.starts_with("success("),
+        "{:?}",
+        constructor.signature
+    );
+}
+
+/// **No page names a root a consumer may not write.** `/sys` and `/syn` are adopted rather than linked: their declarations appear under the `/std` module that exposes them, and their own paths appear nowhere a reader can see — not in a signature, a card header, a search row or a crumb.
+///
+/// Rendered and read back rather than checked against the record, because the record is only half the claim. A path can reach a reader through a template as easily as through a field, and the file is the thing a reader opens.
+#[test]
+fn no_internal_root_reaches_a_rendered_page() {
+    let documentation = with_units(
+        DEFAULT_STEP_BUDGET,
+        &[],
+        None,
+        |_| {},
+        |prelude, _| {
+            prelude
+                .text()
+                .documentation()
+                .cloned()
+                .ok_or_else(|| CompileError::failure("the image carries no record".to_string()))
+        },
+    )
+    .expect("the standard library documents");
+
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    let directory = std::env::temp_dir().join(format!(
+        "curios-document-internal-{}-{millis}",
+        std::process::id()
+    ));
+    curios_document::write_documentation(&documentation, &directory).expect("the pages render");
+
+    let mut offenders = Vec::new();
+    let mut pending = vec![directory.clone()];
+    while let Some(path) = pending.pop() {
+        for entry in fs::read_dir(&path).expect("a written directory") {
+            let entry = entry.expect("a written entry").path();
+            if entry.is_dir() {
+                pending.push(entry);
+                continue;
+            }
+            // The fonts and the mark are bytes, and their licenses name no module: what this claim is about is everything a page is rendered from.
+            let text = match entry.extension().and_then(|extension| extension.to_str()) {
+                Some("html" | "js" | "css") => fs::read_to_string(&entry).expect("written text"),
+                _ => continue,
+            };
+
+            for (line, text) in text.lines().enumerate() {
+                if text.contains("/sys/") || text.contains("/syn/") {
+                    let name = entry.strip_prefix(&directory).unwrap_or(&entry);
+                    offenders.push(format!("{}:{}: {}", name.display(), line + 1, text.trim()));
+                }
+            }
+        }
+    }
+
+    assert!(
+        offenders.is_empty(),
+        "an internal root reached {} rendered line(s):\n{}",
+        offenders.len(),
+        offenders.join("\n")
+    );
+
+    fs::remove_dir_all(&directory).ok();
 }
 
 /// Every rule of the record on one package: a private module and a private definition are absent, an opaque representation shows no constructors, prose attaches where it was written, a module's prose is the `mod` declaration's, a re-export is a link — or, out of a private module, the declaration itself on the facade's page — and a signature's names resolve to where they were declared — within the unit or in the standard library.
@@ -241,17 +326,28 @@ fn a_package_documents_its_interface_for_its_consumers() {
             .iter()
             .map(|declaration| declaration.name.as_str())
             .collect::<Vec<_>>(),
-        ["Shape", "Secret", "area", "mint", "Token", "unseen"],
-        "a private definition is absent; a declaration re-exported out of the private module is shown here, after the module's own and sorted by name"
+        [
+            "unseen", "Token", "Shape", "Secret", "area", "mint", "origin"
+        ],
+        "the order the module writes them: the `pub use` out of the private module stands where it is written, above the declarations below it, and the one out of `geometry` last"
     );
-    for declaration in &library.declarations[..4] {
+    let named = |name: &str| {
+        library
+            .declarations
+            .iter()
+            .find(|declaration| declaration.name == name)
+            .unwrap_or_else(|| panic!("{name} on the library's page"))
+    };
+
+    // Every name this page offers is named for this page, whether it was written here or exposed out of a module with none.
+    for declaration in &library.declarations {
         assert_eq!(declaration.home, Qualifier::from(["shapes"]));
     }
 
-    // The facade: `Token` and `unseen` are declared in `hidden`, which has no page, so their cards are the root's, at the home a mark names them under, with the prose and members written there.
-    let token = &library.declarations[4];
-    assert_eq!(token.home, Qualifier::from(["shapes", "hidden"]));
+    // The facade: `Token` and `unseen` are declared in `hidden`, which has no page — so their cards are this page's, under this page's name, with the prose and members written where they were declared. Nothing names `hidden`, since a consumer cannot write it.
+    let token = named("Token");
     assert_eq!(token.kind, Kind::Inductive);
+    assert_eq!(token.source, None, "a private module is not a page to name");
     assert_eq!(token.prose, Some(vec!["A token.".to_string()]));
     assert_eq!(
         token
@@ -261,22 +357,22 @@ fn a_package_documents_its_interface_for_its_consumers() {
             .collect::<Vec<_>>(),
         ["token"]
     );
-    assert_eq!(library.declarations[5].name, "unseen");
-    let mint = &library.declarations[3];
+
     assert_eq!(
-        mint.signature
+        named("mint")
+            .signature
             .marks
             .iter()
             .map(|mark| (mark.referent.join(), mark.within))
             .collect::<Vec<_>>(),
         [
-            ("/shapes/hidden/Token".to_string(), true),
+            ("/shapes/Token".to_string(), true),
             ("/sys/Nat/Nat".to_string(), false)
         ],
-        "a mark names the declaration's home, and the renderer finds it where the record shows it"
+        "a mark names the declaration the way this bundle shows it, and leaves a name from another unit as it stands"
     );
 
-    let shape = &library.declarations[0];
+    let shape = named("Shape");
     assert_eq!(
         shape.prose,
         Some(vec![
@@ -297,11 +393,11 @@ fn a_package_documents_its_interface_for_its_consumers() {
     assert_eq!(shape.members[0].prose, Some(vec!["Round.".to_string()]));
     assert!(!shape.opaque);
     assert!(
-        library.declarations[1].opaque && library.declarations[1].members.is_empty(),
+        named("Secret").opaque && named("Secret").members.is_empty(),
         "an opaque representation is marked and shows no constructors"
     );
 
-    let area = &library.declarations[2];
+    let area = named("area");
     assert_eq!(
         area.signature.text,
         "pub let area(@A: Type, s: Shape, fallback: Option(A)) -> Nat"
@@ -329,18 +425,27 @@ fn a_package_documents_its_interface_for_its_consumers() {
         "a binder is plain text, an own declaration links within, an import links outside"
     );
 
+    // A re-export is a card of the page that offers it, naming the page it is written on; one out of a private module is a card too, and names nothing, since a consumer has no path to that module.
+    let exposed = library
+        .declarations
+        .iter()
+        .find(|declaration| declaration.name == "origin")
+        .expect("origin");
+    assert_eq!(exposed.home.join(), "/shapes");
     assert_eq!(
-        library
-            .reexports
-            .iter()
-            .map(|reexport| (
-                reexport.name.as_str(),
-                reexport.referent.join(),
-                reexport.within
-            ))
-            .collect::<Vec<_>>(),
-        [("origin", "/shapes/geometry/origin".to_string(), true)],
-        "a re-export out of a module with a page is a link; one out of a private module is a declaration of this page instead"
+        exposed.source.as_ref().map(Qualifier::join).as_deref(),
+        Some("/shapes/geometry/origin")
+    );
+
+    let facade = library
+        .declarations
+        .iter()
+        .find(|declaration| declaration.name == "Token")
+        .expect("Token");
+    assert_eq!(facade.home.join(), "/shapes");
+    assert_eq!(
+        facade.source, None,
+        "a private module is not a page to name"
     );
 
     let geometry = &documentation.modules[1];

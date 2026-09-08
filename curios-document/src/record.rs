@@ -25,10 +25,8 @@ pub struct ModuleDocumentation {
     pub prose: Option<Vec<String>>,
     /// The public child modules, in declaration order.
     pub children: Vec<Qualifier>,
-    /// The declarations written here that a consumer can see, in source order, then — sorted by name — the ones this module exposes out of a module with no page of its own, each at its [`Declaration::home`].
+    /// Everything a consumer reaches through this module, in the order the module writes it: its own declarations where they are declared, and each name a `pub use` exposes where that `pub use` stands. A name declared elsewhere carries a [`Declaration::source`] saying so, and one declared in a module with no page carries none — for a consumer, this page is where it lives.
     pub declarations: Vec<Declaration>,
-    /// The names this module exposes that are declared on another page — a `pub use` — each a link to where the declaration lives, sorted by name. A `pub use` out of a module with no page is not listed here: its declaration is among `declarations` instead.
-    pub reexports: Vec<Reexport>,
 }
 
 /// What kind of declaration a page entry is.
@@ -49,7 +47,7 @@ pub enum Kind {
 pub struct Declaration {
     /// The declared label — and the anchor a link to it names. Empty for a witness, which is anonymous by design.
     pub name: String,
-    /// The module that declares it, which a mark's referent names it under: the page's own module, or, for a declaration the page exposes out of a module with no page of its own, that module. This is what lets a link find the declaration where it is shown rather than where it was written.
+    /// The module a consumer names it under, which is this page's own module — for a declaration written here, one exposed out of a module with no page, and one re-exported from another page alike. Every [`Mark`] naming this declaration carries the same path, so a link finds it where it is shown and no reader is ever handed the path it was written at.
     pub home: Qualifier,
     pub kind: Kind,
     pub signature: Signature,
@@ -60,6 +58,10 @@ pub struct Declaration {
     pub opaque: bool,
     /// A `satisfy` whose body the compiler writes.
     pub derived: bool,
+    /// What this card came from, under the name a consumer writes it by, when that is something else this bundle shows: the declaration itself for a name re-exported off another page, and the owning declaration for a constructor or a method a module exposes beside it. `None` both for a declaration written here and for one adopted out of a module with no page — the second has no path a consumer may write, and naming the root it came from is exactly what a consumer must not be taught.
+    pub source: Option<Qualifier>,
+    /// What kind of thing a declaration adopted out of a root a consumer cannot name is — the word that root's owner chose, never its path. It is the only thing a card can say about a declaration whose signature says little: `let Nat: Type` lists no constructors because there are none to list, and this is what says so.
+    pub chip: Option<String>,
 }
 
 /// One constructor, field or concept method — or a concept's superclass edge, `use Equal(A),`, which the language declares as an anonymous field and which stays a member so the block prints it where it was written.
@@ -81,23 +83,14 @@ pub struct Signature {
     pub marks: Vec<Mark>,
 }
 
-/// One name in a signature, resolved: the byte range of `text` it occupies and the declaration it names.
+/// One name in a signature, resolved: the byte range of `text` it occupies and the declaration it names, under the name a consumer writes rather than the path it was declared at. A name whose declaration a consumer cannot write carries no mark at all and stays plain text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Mark {
     pub start: usize,
     pub end: usize,
-    /// The canonical path of the declaration named.
+    /// The path a consumer names the declaration by — a [`Declaration::home`] with its name, never a declaration site inside a root this unit keeps to itself.
     pub referent: Qualifier,
     /// Whether the referent lies within the documented unit, and so has a page in the same bundle.
-    pub within: bool,
-}
-
-/// A name this module exposes for a declaration made elsewhere.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[curios_archive::archived]
-pub struct Reexport {
-    pub name: String,
-    pub referent: Qualifier,
     pub within: bool,
 }
