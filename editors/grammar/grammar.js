@@ -270,16 +270,9 @@ module.exports = grammar({
         ";",
       ),
 
-    // A test declaration: `test name(params) = body;`. Never `pub`; the parentheses hold a `let` telescope — empty for the harness's nullary test, a parameter list for a property.
+    // A test declaration: `test name = body;`. Never `pub`, and never parameterized — a claim about every instantiation is a `let` whose type states it, so there is no telescope here to hold.
     test_item: ($) =>
-      seq(
-        "test",
-        field("name", $.identifier),
-        field("parameters", $.parameters),
-        "=",
-        field("body", $._term),
-        ";",
-      ),
+      seq("test", field("name", $.identifier), "=", field("body", $._term), ";"),
 
     // ---- Telescopes ----
 

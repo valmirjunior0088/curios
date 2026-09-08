@@ -3,14 +3,14 @@ use /std/{Test};
 use /std/Tui/{Color, Style, Tile};
 
 -- `ansi` carries an irrelevant proof beside its index, so the derived comparison is the index comparison and the named value agrees with the numbered spelling. A literal past the sixteen is refused where it is written, which no test here can state because a corpus unit that does not compile has no tests to run.
-test a_named_colour_is_its_palette_index() =
-    Test/check(Color/bright_white == Color/ansi(15) && Color/red != Color/blue);
+test a_named_colour_is_its_palette_index =
+    Test/assert(Color/bright_white == Color/ansi(15) && Color/red != Color/blue);
 
-test a_style_compares_field_by_field() =
+test a_style_compares_field_by_field =
     let bold = Style { ..Style/plain, bold = true };
-    Test/check(Style/plain == Style { ..Style/plain } && Style/plain != bold);
+    Test/assert(Style/plain == Style { ..Style/plain } && Style/plain != bold);
 
-test a_cell_compares_by_symbol_and_style() =
-    Test/check(
+test a_cell_compares_by_symbol_and_style =
+    Test/assert(
         Tile/blank == Tile { symbol = " ", style = Style/plain }
             && Tile/blank != Tile/continuation);

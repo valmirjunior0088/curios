@@ -174,7 +174,7 @@
           }
         },
         {
-          "match": "\\b(test)\\s+([\\p{L}\\p{N}_]+)(?=\\s*\\()",
+          "match": "\\b(test)\\s+([\\p{L}\\p{N}_]+)(?=\\s*=)",
           "captures": {
             "1": {
               "name": "keyword.other.curios"

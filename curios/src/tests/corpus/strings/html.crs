@@ -14,7 +14,7 @@ let page: Html =
                 [Html/text("1 < 2 & \"q\""), Html/void("br", []), Html/comment("note")])]);
 
 -- Text and attribute values are escaped, a flag stands alone, a void tree closes itself, and a page starts with the doctype, the charset and the title.
-test a_page_renders_escaped() =
+test a_page_renders_escaped =
     Test/equal(
         Html/render(page),
         Str/flatten([
@@ -23,11 +23,11 @@ test a_page_renders_escaped() =
             "<p class=\"x\" hidden>1 &lt; 2 &amp; &quot;q&quot;<br/><!--note--></p></body></html>"]));
 
 -- What `render` writes, `of_str` reads back as the same tree.
-test a_rendered_page_reads_back() =
+test a_rendered_page_reads_back =
     Test/equal(Html/of_str(Html/render(page)), Result/success(page));
 
 -- A fragment renders without a doctype, and script content is written as it is, since the browser decodes nothing there.
-test a_fragment_renders_bare() =
+test a_fragment_renders_bare =
     Test/equal(
         Html/render(
             Html/fragment([
@@ -36,7 +36,7 @@ test a_fragment_renders_bare() =
         "<script>if (a < b) {}</script>x");
 
 -- With no element name known, `<li>` written without its closing tag nests inside the one before it, and each closing tag closes the nearest open element; attributes read quoted or bare, and references decode.
-test a_tolerant_read_shapes_the_tree() =
+test a_tolerant_read_shapes_the_tree =
     Test/equal(
         Html/of_str("<ul><li class=a>one &amp; two<li>three &#x41;<br>x</ul></p>"),
         Result/success(
@@ -57,13 +57,13 @@ test a_tolerant_read_shapes_the_tree() =
                                     Html/element("br", [], [Html/text("x")])])])])));
 
 -- Several trees read as a fragment; a reference that names nothing known is kept as written.
-test several_trees_read_as_a_fragment() =
+test several_trees_read_as_a_fragment =
     Test/equal(
         Html/of_str("a &zzz; b &#; c<hr/>"),
         Result/success(Html/fragment([Html/text("a &zzz; b &#; c"), Html/void("hr", [])])));
 
 -- Queries walk the tree in document order.
-test queries_walk_the_tree() =
+test queries_walk_the_tree =
     let tree =
         Result/unwrap_or(
             Html/of_str("<div><a href=\"/x\">first</a><p><a href=\"/y\">second</a></p></div>"),

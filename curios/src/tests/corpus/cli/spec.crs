@@ -25,7 +25,7 @@ let sample: Cli/Values(spec) =
                 Cli/Values/cons(headers, Cli/Values/cons(root, Cli/Values/nil())))));
 
 -- Five kinds, five carriers: a flag answers `Bool`, a defaulted option and a positional the reader's own type, an optional one `Option`, and `many` a list. `get` needs no annotation at any of them -- the specification is the index of `sample`'s type.
-test get_reads_each_carrier_at_the_type_its_entry_decides() =
+test get_reads_each_carrier_at_the_type_its_entry_decides =
     Test/all([
         Test/equal(Cli/get(sample, "verbose"), true),
         Test/equal(Cli/get(sample, "port"), 9090),
@@ -53,5 +53,5 @@ let well_formed(c: Cli, @_ok: Cli/WellFormed(c)) -> Bool =
     true;
 
 -- Two claims in one: the handler's parameter carries the `args` written two fields above it, so the `get` calls inside `serve` type with nothing annotated; and `WellFormed` is decided by reduction, so the entry's bound discharges here with nothing written.
-test a_handler_is_typed_by_the_specification_beside_it() =
-    Test/check(well_formed(serve));
+test a_handler_is_typed_by_the_specification_beside_it =
+    Test/assert(well_formed(serve));

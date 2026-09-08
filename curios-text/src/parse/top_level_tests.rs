@@ -545,7 +545,7 @@ fn rec_is_an_ordinary_identifier() {
 
 #[test]
 fn a_test_declaration_parses_and_round_trips() {
-    let source = "test the_answer_holds() = Test/check(42 == 42);";
+    let source = "test the_answer_holds = Test/assert(42 == 42);";
     let module = source.parse::<Module>().unwrap();
     let [TopItem::Test(test)] = module.items.as_slice() else {
         panic!("expected one test item, got {:?}", module.items);
@@ -554,36 +554,30 @@ fn a_test_declaration_parses_and_round_trips() {
     let printed = module.to_string();
     assert_eq!(
         printed.trim(),
-        "test the_answer_holds() =\n    Test/check(42 == 42);"
+        "test the_answer_holds =\n    Test/assert(42 == 42);"
     );
     assert_eq!(printed.parse::<Module>().unwrap().items, module.items);
 }
 
 #[test]
-fn a_parameterized_test_declaration_parses_and_round_trips() {
-    // The parentheses hold the telescope a `let`'s signature holds — a property's parameters — kept verbatim and printed as a signature's are.
-    let source = "test add_commutes(n: Nat, m: Nat) = Test/check(n + m == m + n);";
-    let module = source.parse::<Module>().unwrap();
-    let [TopItem::Test(test)] = module.items.as_slice() else {
-        panic!("expected one test item, got {:?}", module.items);
-    };
-    assert_eq!(test.params.len(), 2);
-    let printed = module.to_string();
-    assert_eq!(
-        printed.trim(),
-        "test add_commutes(n: Nat, m: Nat) =\n    Test/check(n + m == m + n);"
+fn a_test_takes_no_parameters() {
+    // A name and a description, with nothing between them. A telescope would say the claim holds of every instantiation, which nothing but a proof decides — that is a `let` whose type states the claim — so the parentheses that used to hold one are not part of this form, empty ones included.
+    assert!(
+        "test add_commutes(n: Nat, m: Nat) = Test/assert(true);"
+            .parse::<Module>()
+            .is_err()
     );
-    assert_eq!(printed.parse::<Module>().unwrap().items, module.items);
+    assert!(
+        "test empty() = Test/assert(true);"
+            .parse::<Module>()
+            .is_err()
+    );
 }
 
 #[test]
 fn a_test_takes_no_pub_and_stays_a_contextual_word() {
     // The name is a report line, not an export.
-    assert!(
-        "pub test t() = Test/check(true);"
-            .parse::<Module>()
-            .is_err()
-    );
+    assert!("pub test t = Test/assert(true);".parse::<Module>().is_err());
     // `test` stays a contextual word everywhere else.
     assert!("let test : Type = Type;".parse::<Module>().is_ok());
     assert!("test(1)".parse::<Entrypoint>().is_ok());
@@ -597,7 +591,7 @@ fn a_test_takes_no_pub_and_stays_a_contextual_word() {
 /// A declaration's label is spanned over the word alone, whatever whitespace follows it: the span is what a report about the declaration underlines.
 #[test]
 fn every_declaration_label_spans_its_word_alone() {
-    let module = "pub let  x  : Type = Type;\nmod  Inner ;\ninduct  Foo  : Type | bar() end\nstruct  Pt  : Type { }\nconcept  Sh (A : Type) : Type { }\ntest  it () = Type;\nforeign  clock  : Nat;"
+    let module = "pub let  x  : Type = Type;\nmod  Inner ;\ninduct  Foo  : Type | bar() end\nstruct  Pt  : Type { }\nconcept  Sh (A : Type) : Type { }\ntest  it  = Type;\nforeign  clock  : Nat;"
         .parse::<Module>()
         .unwrap();
     let spelled = module
@@ -727,7 +721,7 @@ fn a_documentation_comment_before_use_or_test_is_refused() {
         .format();
     assert!(error.contains("cannot precede `use`"), "{error}");
 
-    let error = "-- | lost\ntest t() = Test/check(true);"
+    let error = "-- | lost\ntest t = Test/assert(true);"
         .parse::<Module>()
         .unwrap_err()
         .format();

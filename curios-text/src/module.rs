@@ -224,12 +224,10 @@ pub struct TopWitness {
     pub body: Option<Vec<WitnessEntry>>,
 }
 
-/// A `test` declaration: `test name(params) = body;` — the function-definition sugar with its output fixed at `/syn/Test`. Empty parentheses declare the harness's nullary test; a telescope declares a property, probed over drawn arguments. No `pub`: a test's name is its report line, not an export.
+/// A `test` declaration: `test name = body;` — a named description of type `/syn/Test`, taking no parameters. It is not function sugar, though it lowers to the same `() -> Test` thunk a nullary one used to: only the selected test's body is forced, and the parentheses that used to spell that are gone from the surface because they held a telescope that no longer has a meaning.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopTest {
     pub label: Label,
-    /// The written telescope, kept verbatim as a `let`'s is so the printer round-trips it; lowering builds the Π-type and the lambda from it exactly as it does for a `let`.
-    pub params: Vec<FuncSugarParam>,
     pub body: Term,
 }
 

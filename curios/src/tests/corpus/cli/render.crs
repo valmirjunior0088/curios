@@ -16,7 +16,7 @@ let serve: Cli =
     };
 
 -- The layout the specification fixes, to the space: one description, a usage line naming the options bundle and every positional, then the sections, each padded to its own widest left column. `-h` and `--version` are rows because the entry answers them, not because the program declared them.
-test help_renders_the_layout_the_specification_fixes() =
+test help_renders_the_layout_the_specification_fixes =
     Test/equal(
         Cli/help(serve),
         Str/flatten([
@@ -31,7 +31,7 @@ test help_renders_the_layout_the_specification_fixes() =
             "      --version   Print version\n\n"]));
 
 -- A refusal names what went wrong, repeats the usage line, and points at `--help`; it never prints the whole help, which is what separates a mistake from a request.
-test a_refusal_names_the_offender_and_points_at_help() =
+test a_refusal_names_the_offender_and_points_at_help =
     Test/equal(
         Cli/report(serve, Cli/Failure/unknown_option("--prot")),
         Str/flatten([
@@ -40,7 +40,7 @@ test a_refusal_names_the_offender_and_points_at_help() =
             "For more information, try '--help'.\n"]));
 
 -- A command declaring no options gets no `[OPTIONS]`, and a `rest` entry is bracketed to say it collects rather than requires.
-test the_usage_line_says_only_what_the_specification_declares() =
+test the_usage_line_says_only_what_the_specification_declares =
     let bare: Cli =
         Cli {
             name = "cat",

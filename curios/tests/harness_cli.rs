@@ -41,22 +41,22 @@ fn project(name: &str) -> PathBuf {
 
 pub let double(n: Nat) -> Nat = n * 2;
 
-test doubling_proves() =
-    Test/refl(double(21), 42, Eq/refl());
+test doubling_passes =
+    Test/equal(double(21), 42);
 
-test addition_passes() =
-    Test/check(1 + 1 == 2);
+test addition_passes =
+    Test/assert(1 + 1 == 2);
 
-test equality_fails() =
+test equality_fails =
     Test/equal(double(2), 5);
 
-test overflow_traps() =
-    Test/check(Nat/shl(1, 40) == 0);
+test overflow_traps =
+    Test/assert(Nat/shl(1, 40) == 0);
 
-test exits_seven() =
-    Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/check(true)));
+test exits_seven =
+    Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/assert(true)));
 
-test effect_passes() =
+test effect_passes =
     Test/perform(() => let s = Io/pure("x")!; Io/pure(Test/equal(s, "x")));
 "#,
     );
@@ -100,14 +100,14 @@ fn the_six_outcomes_report_in_declaration_order_and_exit_one() {
     in_order(
         &stdout(&output),
         &[
-            "/app/doubling_proves: proved\n",
+            "/app/doubling_passes: passed\n",
             "/app/addition_passes: passed\n",
             "/app/equality_fails: failed\n  expected 5 but got 4\n    Test/equal(double(2), 5)\n",
             "/app/overflow_traps: trapped\n",
-            "    Test/check(Nat/shl(1, 40) == 0)\n",
-            "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/check(true)))\n",
+            "    Test/assert(Nat/shl(1, 40) == 0)\n",
+            "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n",
             "/app/effect_passes: passed\n",
-            "3 passed, 1 failed, 1 trapped, 1 exited\n",
+            "4 passed, 1 failed, 1 trapped, 1 exited\n",
         ],
     );
     // The library is taken on, compiled, tested and tallied; the executable, which declares no tests, is taken on and compiled and nothing more.
@@ -236,12 +236,12 @@ fn wonder_tests_lists_declared_paths_per_target_form() {
     write(
         &root,
         "lib.crs",
-        "use /std/{Nat, Test};\n\ntest lib_first() =\n    Test/check(1 == 1);\n\ntest lib_second() =\n    Test/check(2 == 2);\n",
+        "use /std/{Nat, Test};\n\ntest lib_first =\n    Test/assert(1 == 1);\n\ntest lib_second =\n    Test/assert(2 == 2);\n",
     );
     write(
         &root,
         "app.crs",
-        "use /std/{Nat, Str, Io, Test};\n\ntest app_holds() =\n    Test/check(3 == 3);\n\n/std/print(\"ran\\n\")\n",
+        "use /std/{Nat, Str, Io, Test};\n\ntest app_holds =\n    Test/assert(3 == 3);\n\n/std/print(\"ran\\n\")\n",
     );
 
     // The package entire: the library's tests, then each executable's, in declaration order — and nothing executes, so the authored entry never prints.
@@ -296,13 +296,13 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
     write(
         &root,
         "lib.crs",
-        "use /std/{Nat, Test};\n\ntest lib_holds() =\n    Test/check(1 == 1);\n",
+        "use /std/{Nat, Test};\n\ntest lib_holds =\n    Test/assert(1 == 1);\n",
     );
     write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
     write(
         &root,
         "other.crs",
-        "use /std/{Nat, Test};\n\ntest other_holds() =\n    Test/check(2 == 2);\n\n/std/print(\"ran\\n\")\n",
+        "use /std/{Nat, Test};\n\ntest other_holds =\n    Test/assert(2 == 2);\n\n/std/print(\"ran\\n\")\n",
     );
 
     let cold = curios(&root, &["test"]);

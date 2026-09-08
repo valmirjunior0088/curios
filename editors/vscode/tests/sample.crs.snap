@@ -340,64 +340,70 @@
 #                 ^ source.curios punctuation.bracket.curios
 #                  ^ source.curios punctuation.separator.curios
 >
->test sample_map_holds() =
+>test sample_map_holds =
 #^^^^ source.curios keyword.other.curios
 #    ^ source.curios
 #     ^^^^^^^^^^^^^^^^ source.curios entity.name.function.curios
-#                     ^ source.curios punctuation.bracket.curios
-#                      ^ source.curios punctuation.bracket.curios
-#                       ^ source.curios
-#                        ^ source.curios keyword.operator.assignment.curios
->    Test/check(even(zero));
+#                     ^ source.curios
+#                      ^ source.curios keyword.operator.assignment.curios
+>    Test/assert(even(zero));
 #^^^^ source.curios
 #    ^^^^ source.curios support.module.curios
 #        ^ source.curios punctuation.separator.path.curios
-#         ^^^^^ source.curios entity.name.function.curios
-#              ^ source.curios punctuation.bracket.curios
-#               ^^^^ source.curios entity.name.function.curios
-#                   ^ source.curios punctuation.bracket.curios
-#                    ^^^^ source.curios variable.other.curios
-#                        ^ source.curios punctuation.bracket.curios
+#         ^^^^^^ source.curios entity.name.function.curios
+#               ^ source.curios punctuation.bracket.curios
+#                ^^^^ source.curios entity.name.function.curios
+#                    ^ source.curios punctuation.bracket.curios
+#                     ^^^^ source.curios variable.other.curios
 #                         ^ source.curios punctuation.bracket.curios
-#                          ^ source.curios punctuation.separator.curios
+#                          ^ source.curios punctuation.bracket.curios
+#                           ^ source.curios punctuation.separator.curios
 >
->test sample_add_commutes(n: Nat, m: Nat) =
+>test sample_equality_holds =
 #^^^^ source.curios keyword.other.curios
 #    ^ source.curios
-#     ^^^^^^^^^^^^^^^^^^^ source.curios entity.name.function.curios
-#                        ^ source.curios punctuation.bracket.curios
-#                         ^ source.curios variable.other.curios
-#                          ^ source.curios keyword.operator.assignment.curios
-#                           ^ source.curios
-#                            ^^^ source.curios entity.name.type.curios
-#                               ^ source.curios punctuation.separator.curios
-#                                ^ source.curios
-#                                 ^ source.curios variable.other.curios
-#                                  ^ source.curios keyword.operator.assignment.curios
-#                                   ^ source.curios
-#                                    ^^^ source.curios entity.name.type.curios
-#                                       ^ source.curios punctuation.bracket.curios
-#                                        ^ source.curios
-#                                         ^ source.curios keyword.operator.assignment.curios
->    Test/check(n + m == m + n);
+#     ^^^^^^^^^^^^^^^^^^^^^ source.curios entity.name.function.curios
+#                          ^ source.curios
+#                           ^ source.curios keyword.operator.assignment.curios
+>    Test/equal(map(Option/some(zero), (n: Nat) => n + 1), Option/some(1));
 #^^^^ source.curios
 #    ^^^^ source.curios support.module.curios
 #        ^ source.curios punctuation.separator.path.curios
 #         ^^^^^ source.curios entity.name.function.curios
 #              ^ source.curios punctuation.bracket.curios
-#               ^ source.curios variable.other.curios
-#                ^ source.curios
-#                 ^ source.curios keyword.operator.arithmetic.curios
-#                  ^ source.curios
-#                   ^ source.curios variable.other.curios
-#                    ^ source.curios
-#                     ^^ source.curios keyword.operator.comparison.curios
-#                       ^ source.curios
-#                        ^ source.curios variable.other.curios
-#                         ^ source.curios
-#                          ^ source.curios keyword.operator.arithmetic.curios
-#                           ^ source.curios
-#                            ^ source.curios variable.other.curios
-#                             ^ source.curios punctuation.bracket.curios
-#                              ^ source.curios punctuation.separator.curios
+#               ^^^ source.curios entity.name.function.curios
+#                  ^ source.curios punctuation.bracket.curios
+#                   ^^^^^^ source.curios support.module.curios
+#                         ^ source.curios punctuation.separator.path.curios
+#                          ^^^^ source.curios entity.name.function.curios
+#                              ^ source.curios punctuation.bracket.curios
+#                               ^^^^ source.curios variable.other.curios
+#                                   ^ source.curios punctuation.bracket.curios
+#                                    ^ source.curios punctuation.separator.curios
+#                                     ^ source.curios
+#                                      ^ source.curios punctuation.bracket.curios
+#                                       ^ source.curios variable.other.curios
+#                                        ^ source.curios keyword.operator.assignment.curios
+#                                         ^ source.curios
+#                                          ^^^ source.curios entity.name.type.curios
+#                                             ^ source.curios punctuation.bracket.curios
+#                                              ^ source.curios
+#                                               ^^ source.curios keyword.operator.arrow.curios
+#                                                 ^ source.curios
+#                                                  ^ source.curios variable.other.curios
+#                                                   ^ source.curios
+#                                                    ^ source.curios keyword.operator.arithmetic.curios
+#                                                     ^ source.curios
+#                                                      ^ source.curios constant.numeric.decimal.curios
+#                                                       ^ source.curios punctuation.bracket.curios
+#                                                        ^ source.curios punctuation.separator.curios
+#                                                         ^ source.curios
+#                                                          ^^^^^^ source.curios support.module.curios
+#                                                                ^ source.curios punctuation.separator.path.curios
+#                                                                 ^^^^ source.curios entity.name.function.curios
+#                                                                     ^ source.curios punctuation.bracket.curios
+#                                                                      ^ source.curios constant.numeric.decimal.curios
+#                                                                       ^ source.curios punctuation.bracket.curios
+#                                                                        ^ source.curios punctuation.bracket.curios
+#                                                                         ^ source.curios punctuation.separator.curios
 >

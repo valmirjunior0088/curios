@@ -48,21 +48,10 @@ pub(super) fn parse_top_test<'a>(vis_pub: bool) -> Parser<'a, TopItem> {
         false => pure(()),
     }
     .and_keep(parse_label())
-    .and_drop(parse_literal("("))
-    .and(sep_by0_trailing(parse_func_sugar_param, || {
-        parse_literal(",")
-    }))
-    .and_drop(parse_literal(")"))
     .and_drop(parse_literal("="))
     .and(lazy(parse_term))
     .and_drop(parse_literal(";"))
-    .map(|((label, params), body)| {
-        TopItem::Test(TopTest {
-            label,
-            params,
-            body,
-        })
-    })
+    .map(|(label, body)| TopItem::Test(TopTest { label, body }))
 }
 
 pub(super) fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopItem> {

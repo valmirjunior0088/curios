@@ -7,17 +7,17 @@ let render(@w: Nat, @h: Nat, f: Frame(w, h)) -> Str =
     Str/join("/", Frame/to_lines(f));
 
 -- A border is two wider and two taller than what it wraps, the title in its top edge.
-test a_border_wraps_at_two_more_each_way() =
+test a_border_wraps_at_two_more_each_way =
     Test/equal(
         render(Border/around(Style/plain, "t", Frame/of_lines(Style/plain, ["ab"], 2, 1))),
         "┌t─┐/│ab│/└──┘");
 
 -- A paragraph wraps at spaces and fits the pane.
-test a_paragraph_wraps_and_fits() =
+test a_paragraph_wraps_and_fits =
     Test/equal(render(Paragraph/draw(Style/plain, "aa bb cc", 5, 3)), "aa bb/cc   /     ");
 
 -- The selection moves down and stops at the end; the rows scroll so it stays in view.
-test a_listing_moves_within_its_bounds_and_scrolls_to_its_selection() =
+test a_listing_moves_within_its_bounds_and_scrolls_to_its_selection =
     let l = Listing/new(["one", "two", "three"]);
     let moved = Listing/move(Listing/move(Listing/move(l, Code/down()), Code/down()), Code/down());
     Test/all([
@@ -28,7 +28,7 @@ test a_listing_moves_within_its_bounds_and_scrolls_to_its_selection() =
         Test/equal(Listing/index(Listing/new([])), Option/none())]);
 
 -- An input edits at its cursor, which never passes its text.
-test an_input_edits_at_its_cursor() =
+test an_input_edits_at_its_cursor =
     let i =
         Field/handle(
             Field/handle(Field/of_str("ab"), Key/plain(Code/left())),
@@ -41,7 +41,7 @@ test an_input_edits_at_its_cursor() =
         Test/equal(Field/handle(past, Key/plain(Code/backspace())).text, "aX")]);
 
 -- A viewport is a window onto a larger frame, blank past its edge.
-test a_viewport_windows_a_larger_frame() =
+test a_viewport_windows_a_larger_frame =
     let big = Frame/of_lines(Style/plain, ["abcd", "efgh", "ijkl"], 4, 3);
     Test/equal(
         Str/join(" ", [

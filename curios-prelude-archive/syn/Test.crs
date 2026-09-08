@@ -7,24 +7,11 @@ pub induct Verdict: pub Type
 end
 
 pub induct Test: Type
-| theorem()
 | verdict(Verdict)
 | action(Io(Test))
 end
 
-pub let prove(P: Prop, _proof: P) -> Test =
-    Test/theorem();
-
-pub let refl(@A: Type, a: A, b: A, _proof: Eq(a, b)) -> Test =
-    Test/theorem();
-
-pub let Settled(t: Test) -> Prop =
-    match t | theorem() => True | verdict(_) => False | action(_) => False end;
-
-pub let settled(@A: Type, prop: (A) -> Test, _evidence: (a: A) -> Settled(prop(a))) -> Test =
-    Test/theorem();
-
-pub let check(condition: Bool) -> Test =
+pub let assert(condition: Bool) -> Test =
     Test/verdict(
         match condition
         | true => Verdict/passed()
@@ -51,7 +38,7 @@ pub let all(tests: List(Test)) -> Test =
     let (conjunction, _) =
         List/fold(
             tests,
-            (Test/theorem(), 0),
+            (Test/verdict(Verdict/passed()), 0),
             (t, state: {Test, Nat}) =>
                 let (acc, index) = state;
                 (conjoin(acc, case(index, t)), index + 1));
@@ -59,7 +46,6 @@ pub let all(tests: List(Test)) -> Test =
 
 let case(index: Nat, t: Test) -> Test =
     match t
-    | theorem() => t
     | verdict(v) =>
         match v
         | passed() => t
@@ -76,10 +62,9 @@ let case(index: Nat, t: Test) -> Test =
 
 let conjoin(left: Test, right: Test) -> Test =
     match left
-    | theorem() => right
     | verdict(v) =>
         match v
-        | passed() => match right | theorem() => left | verdict(_) => right | action(_) => right end
+        | passed() => right
         | failed(_) => left
         end
     | action(io) =>
@@ -98,9 +83,6 @@ pub let try(@E: Type, use Show(E), thunk: () -> Try(Io, E, Test)) -> Test =
 
 let report(name: Str, t: Test) -> Io(Bool) =
     match t
-    | theorem() =>
-        let _ = print(Str/concat(name, ": proved\n"))!;
-        Io/pure(true)
     | verdict(v) =>
         match v
         | passed() =>
@@ -146,24 +128,3 @@ pub let main(tests: List({Str, () -> Test})) -> Io({}) =
         match ok | true => Io/pure(()) | false => proc/exit(1) end
     end;
 
-let judge(t: Test) -> Verdict =
-    match t
-    | theorem() => Verdict/passed()
-    | verdict(v) => v
-    | action(_) => Verdict/failed("an action cannot be probed")
-    end;
-
-satisfy /std/Test/Property(Test) {
-    probe(t, _seed, _size) = judge(t),
-    extent() = Option/some(1),
-    exhaust(t) = [judge(t)],
-}
-
-let default_seed: /std/Test/Seed =
-    /std/Test/Seed/make(20260831);
-
-let default_cases: Nat =
-    100;
-
-pub let property(@A: Type, use /std/Test/Property(A), prop: A) -> Test =
-    Test/verdict(/std/Test/Property/run(prop, default_seed, default_cases));

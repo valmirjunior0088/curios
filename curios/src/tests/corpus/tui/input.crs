@@ -9,10 +9,10 @@ let keys(b: Bytes) -> List(Event(Nat)) =
 let k(code: Code) -> Event(Nat) =
     Event/key(Key/plain(code));
 
-test a_printable_byte_is_its_character() =
+test a_printable_byte_is_its_character =
     Test/equal(keys(x['a', 'Z']), [k(Code/char('a')), k(Code/char('Z'))]);
 
-test the_control_bytes_are_the_named_keys_and_ctrl_letters() =
+test the_control_bytes_are_the_named_keys_and_ctrl_letters =
     Test/equal(
         keys(x[0x0D, 0x09, 0x7F, 0x01, 0x1A]),
         [
@@ -22,7 +22,7 @@ test the_control_bytes_are_the_named_keys_and_ctrl_letters() =
             Event/key(Key/with_ctrl(Code/char('a'))),
             Event/key(Key/with_ctrl(Code/char('z')))]);
 
-test the_legacy_sequences_name_their_keys() =
+test the_legacy_sequences_name_their_keys =
     Test/equal(
         keys(x[
             0x1B,
@@ -45,33 +45,33 @@ test the_legacy_sequences_name_their_keys() =
             'P']),
         [k(Code/up()), k(Code/home()), k(Code/delete()), k(Code/f(5)), k(Code/f(1))]);
 
-test a_modifier_parameter_sets_the_modifiers() =
+test a_modifier_parameter_sets_the_modifiers =
     Test/equal(
         keys(x[0x1B, '[', '1', ';', '5', 'C', 0x1B, '[', '3', ';', '2', '~']),
         [
             Event/key(Key/with_ctrl(Code/right())),
             Event/key(Key { ..Key/plain(Code/delete()), shift = true })]);
 
-test the_kitty_form_reads_the_code_and_modifiers() =
+test the_kitty_form_reads_the_code_and_modifiers =
     Test/equal(
         keys(x[0x1B, '[', '9', '7', ';', '2', 'u', 0x1B, '[', '1', '3', ';', '5', 'u']),
         [
             Event/key(Key { ..Key/plain(Code/char('a')), shift = true }),
             Event/key(Key/with_ctrl(Code/enter()))]);
 
-test an_escape_before_a_printable_byte_is_alt() =
+test an_escape_before_a_printable_byte_is_alt =
     Test/equal(keys(x[0x1B, 'x']), [Event/key(Key/with_alt(Code/char('x')))]);
 
-test a_bracketed_paste_is_one_event() =
+test a_bracketed_paste_is_one_event =
     Test/equal(
         keys(x[0x1B, '[', '2', '0', '0', '~', 'h', 'i', 0x1B, '[', '2', '0', '1', '~', 'q']),
         [Event/paste("hi"), k(Code/char('q'))]);
 
-test a_multi_byte_scalar_is_one_character() =
+test a_multi_byte_scalar_is_one_character =
     Test/equal(keys(x[0xC3, 0xA9]), [k(Code/char('é'))]);
 
 -- A chunk ending in a lone Escape hands it back untouched, and the next chunk completes the sequence it began.
-test a_lone_escape_at_the_end_waits_for_the_next_chunk() =
+test a_lone_escape_at_the_end_waits_for_the_next_chunk =
     let first = input/decode(@Nat, x['a', 0x1B]);
     let second = input/decode(@Nat, x[..first.rest, '[', 'B']);
     Test/all([
@@ -79,7 +79,7 @@ test a_lone_escape_at_the_end_waits_for_the_next_chunk() =
         Test/equal(first.rest, x[0x1B]),
         Test/equal(second.events, [k(Code/down())])]);
 
-test an_unfinished_paste_is_cut_at_its_opener() =
+test an_unfinished_paste_is_cut_at_its_opener =
     let first = input/decode(@Nat, x[0x1B, '[', '2', '0', '0', '~', 'a', 'b']);
     let second = input/decode(@Nat, x[..first.rest, 'c', 0x1B, '[', '2', '0', '1', '~']);
     Test/all([
@@ -88,17 +88,31 @@ test an_unfinished_paste_is_cut_at_its_opener() =
         Test/equal(second.events, [Event/paste("abc")])]);
 
 -- Once the clock says nothing more is coming, a lone Escape is the Escape key and what followed it is read as itself.
-test flush_reads_a_lone_escape_as_the_key() =
+test flush_reads_a_lone_escape_as_the_key =
     Test/all([
         Test/equal(input/flush(@Nat, x[0x1B]), [k(Code/escape())]),
         Test/equal(input/flush(@Nat, x[0x1B, '[']), [k(Code/escape()), k(Code/char('['))])]);
 
--- Whatever the bytes, `rest` is a suffix of the input: nothing is invented and nothing before the cut is kept.
-test the_rest_is_a_suffix_of_any_input(b: Bytes) =
+-- `rest` is a suffix of the input: nothing is invented and nothing before the cut is kept. An open claim rather than a test, because the kernel does not settle it — the declaration below states it over the inputs whose branches it is worth stating over.
+let rest_is_a_suffix(b: Bytes) -> Test =
     let d = input/decode(@Nat, b);
     let cut = Bytes/len(b) - Bytes/len(d.rest);
     match Nat/Le/try(cut, Bytes/len(b))
-    | none() => Test/check(false)
+    | none() => Test/assert(false)
     | some(ok) =>
-        Test/check(Bytes/len(d.rest) <= Bytes/len(b) && Bytes/eql(Bytes/drop(b, cut, @ok), d.rest))
+        Test/assert(Bytes/len(d.rest) <= Bytes/len(b) && Bytes/eql(Bytes/drop(b, cut, @ok), d.rest))
     end;
+
+-- Every shape the decoder cuts differently: nothing to read, a complete key, a lone Escape and a truncated sequence it must hold back, a complete and an incomplete paste.
+test the_rest_is_a_suffix_of_every_shape_the_decoder_cuts =
+    Test/all(
+        List/map(
+            [
+                x[],
+                x['a'],
+                x[0x1B],
+                x[0x1B, '['],
+                x[0x1B, '[', 'A'],
+                x[0x1B, '[', '2', '0', '0', '~', 'a', 'b'],
+                x[0x1B, '[', '2', '0', '0', '~', 'a', 0x1B, '[', '2', '0', '1', '~']],
+            rest_is_a_suffix));

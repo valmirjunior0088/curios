@@ -5249,16 +5249,6 @@
             "named": true
           }
         ]
-      },
-      "parameters": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "parameters",
-            "named": true
-          }
-        ]
       }
     }
   },

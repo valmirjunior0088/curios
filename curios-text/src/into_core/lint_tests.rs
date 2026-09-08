@@ -417,7 +417,7 @@ fn a_definition_only_a_test_reaches_is_used() {
         lints(
             r#"
         let helper : Type = Type;
-        test it() = helper;
+        test it = helper;
         Type
     "#
         ),

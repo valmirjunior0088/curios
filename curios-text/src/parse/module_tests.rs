@@ -293,7 +293,7 @@ fn a_malformed_pub_item_is_reported_in_a_program_too() {
             "pub satisfy /std/Equal(/std/Nat) { }\n()",
             "a witness is never `pub`",
         ),
-        ("pub test t() = 1;\n()", "a test is never `pub`"),
+        ("pub test t = 1;\n()", "a test is never `pub`"),
         ("pub wibble x = 1;\n()", "Expected a top-level item"),
     ] {
         let report = source.parse::<Entrypoint>().unwrap_err().format();

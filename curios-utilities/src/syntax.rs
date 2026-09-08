@@ -303,22 +303,13 @@ impl ProofSyntax {
 pub struct TestSyntax {
     pub test_type: SyntaxName,
     pub main: SyntaxName,
-    pub property: SyntaxName,
-    pub settled: SyntaxName,
-    pub theorem: SyntaxName,
 }
 
 impl TestSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        let Self {
-            test_type,
-            main,
-            property,
-            settled,
-            theorem,
-        } = self;
+        let Self { test_type, main } = self;
 
-        [test_type, main, property, settled, theorem].into_iter()
+        [test_type, main].into_iter()
     }
 }
 

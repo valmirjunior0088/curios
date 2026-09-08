@@ -568,9 +568,9 @@ fn process_items(
                 let output = curios_core::Term::var(curios_core::Var::free(
                     curios_core::Free::global(context.syntax().test.test_type.qualifier()),
                 ));
-                let type_ =
-                    lower.func_type_under(&func_sugar_type_params(&test.params), || Ok(output))?;
-                let body = func_sugar_lambda(&test.params, &test.body);
+                // The empty telescope is not vestigial: it is the thunk. A test lowers to `() -> Test` so `Test/main` can hold it unforced and run only the one it selected, which is what the parentheses used to spell before they were dropped from the surface.
+                let type_ = lower.func_type_under(&func_sugar_type_params(&[]), || Ok(output))?;
+                let body = func_sugar_lambda(&[], &test.body);
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
                 tests.push(name.clone());
                 flat_items.push(FlatItem::Let(FlatLet {

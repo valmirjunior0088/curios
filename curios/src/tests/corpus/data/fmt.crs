@@ -2,38 +2,38 @@
 use /std/{Fmt, Nat, Str, Option, Ordered, Test};
 
 -- A bare `%` is the generic show-slot: each argument renders through its own `Show` witness, so one format string mixes types freely.
-test percent_slot_shows_each_argument_through_its_witness() =
+test percent_slot_shows_each_argument_through_its_witness =
     Test/equal(Fmt/render("% / % / %")(42)(true)(+3.5), "42 / true / +3.5");
 
 -- `Show(Str)` is the identity, so a `Str` argument renders verbatim.
-test percent_slot_shows_a_string_verbatim() =
+test percent_slot_shows_a_string_verbatim =
     Test/equal(Fmt/render("hello, %!")("world"), "hello, world!");
 
 -- `\%` escapes a literal percent, and — because the escape lead character differs from the placeholder — composes unambiguously next to a slot in either order.
-test escaped_percent_renders_literally() =
+test escaped_percent_renders_literally =
     Test/all([
         Test/equal(Fmt/render("%\\% off")(50), "50% off"),
         Test/equal(Fmt/render("\\%%")(50), "%50")]);
 
 -- The scalar `Show` witnesses — `Byte` as decimal, `Bytes` as lowercase hex, `Ordering` by constructor — render through the same slot.
-test percent_slot_shows_scalar_witnesses() =
+test percent_slot_shows_scalar_witnesses =
     Test/equal(
         Fmt/render("byte=% bytes=% ord=%")(Nat/to_byte(65))(Str/to_bytes("ABC"))(Ordered/cmp(9, 4)),
         "byte=65 bytes=414243 ord=gt");
 
 -- The container `Show` witnesses render structurally, recursing through the element witness resolved from their `use Show(A)` premise.
-test percent_slot_shows_containers() =
+test percent_slot_shows_containers =
     Test/equal(Fmt/render("list=% opt=%")([1, 2, 3])(Option/some(7)), "list=[1, 2, 3] opt=some(7)");
 
 -- A bare `#` is the generic spell-slot: each argument renders through its own `Spell` witness, as the text that re-parses to it, and the two slots mix in either order.
-test hash_slot_spells_each_argument_through_its_witness() =
+test hash_slot_spells_each_argument_through_its_witness =
     Test/all([
         Test/equal(Fmt/render("# and #")(Option/some(3))("x"), "Option/some(3) and \"x\""),
         Test/equal(Fmt/render("#%")([1, 2])(true), "[1, 2]true"),
         Test/equal(Fmt/render("%#")(true)([1, 2]), "true[1, 2]")]);
 
 -- `\#` escapes a literal hash, exactly as `\%` escapes a percent.
-test escaped_hash_renders_literally() =
+test escaped_hash_renders_literally =
     Test/all([
         Test/equal(Fmt/render("\\# #")(Option/none(@Nat)), "# Option/none()"),
         Test/equal(Fmt/render("#\\#")(1), "1#")]);

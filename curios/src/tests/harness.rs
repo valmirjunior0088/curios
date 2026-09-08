@@ -9,7 +9,7 @@ use {
 
 #[test]
 fn the_description_schedules_every_rung() {
-    // The end-to-end scheduler probed on 2026-08-31, now through the library: no index argument runs every test in declaration order.
+    // The end-to-end scheduler probed on 2026-08-31, now through the library: no index argument runs every test in declaration order. Two rungs, since a description is a verdict or an action — a proof is a `let` the kernel checks and never reaches a runner.
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, Eq, Test};
@@ -18,14 +18,14 @@ fn the_description_schedules_every_rung() {
             let s = Io/pure("x")!;
             Io/pure(Test/equal(s, "x"));
         Test/main([
-            ("/tests/doubling", () => Test/refl(double(21), 42, Eq/refl())),
-            ("/tests/a_bool", () => Test/check(1 + 1 == 2)),
+            ("/tests/a_bool", () => Test/assert(1 + 1 == 2)),
+            ("/tests/doubling", () => Test/equal(double(21), 42)),
             ("/tests/a_failing_equal", () => Test/equal(double(2), 5)),
             ("/tests/an_action", () => Test/perform(an_action)),
-            ("/tests/a_failing_action", () => Test/perform(() => Io/pure(Test/check(false)))),
+            ("/tests/a_failing_action", () => Test/perform(() => Io/pure(Test/assert(false)))),
         ])
         "#),
-        b"/tests/doubling: proved\n/tests/a_bool: passed\n/tests/a_failing_equal: failed\n  expected 5 but got 4\n/tests/an_action: passed\n/tests/a_failing_action: failed\n  the condition was false\n"
+        b"/tests/a_bool: passed\n/tests/doubling: passed\n/tests/a_failing_equal: failed\n  expected 5 but got 4\n/tests/an_action: passed\n/tests/a_failing_action: failed\n  the condition was false\n"
     );
 }
 
@@ -37,10 +37,10 @@ fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
         use /std/{Nat, Str, Io, Try, Path, fs, Test};
         let exists() -> Try(Io, Io/Error, Test) =
             let here = fs/exists(Path/of_str("data"))!;
-            Try/pure(Test/check(here == false));
+            Try/pure(Test/assert(here == false));
         let missing() -> Try(Io, Io/Error, Test) =
             let m = fs/stat(Path/of_str("nope"))!;
-            Try/pure(Test/check(true));
+            Try/pure(Test/assert(true));
         Test/main([
             ("/tests/exists", () => Test/try(exists)),
             ("/tests/missing", () => Test/try(missing)),
@@ -58,8 +58,8 @@ fn an_index_argument_selects_one_test() {
         r#"
         use /std/{Nat, Io, Test};
         Test/main([
-            ("/tests/first", () => Test/check(true)),
-            ("/tests/second", () => Test/check(2 == 2)),
+            ("/tests/first", () => Test/assert(true)),
+            ("/tests/second", () => Test/assert(2 == 2)),
         ])
         "#,
         system,
@@ -82,46 +82,45 @@ fn spelled_strings_are_quoted_and_escaped() {
 
 #[test]
 fn a_conjunction_takes_the_weakest_rung_and_names_the_first_failure() {
-    // `Test/all` at every rung: theorems alone stay a theorem, the empty conjunction included; a verdict among theorems is the verdict; the first failure is the report, positioned; an action performs before what follows it is consulted, and a failure before an action leaves the action unrun.
+    // `Test/all` at every rung: passing verdicts conjoin to a passing verdict, the empty conjunction included; the first failure is the report, positioned; an action performs before what follows it is consulted, and a failure before an action leaves the action unrun.
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, Eq, Test};
         let counter() -> Io(Test) =
             let _ = /std/print("performed\n")!;
-            Io/pure(Test/check(true));
+            Io/pure(Test/assert(true));
         Test/main([
-            ("/tests/theorems", () => Test/all([Test/refl(1, 1, Eq/refl()), Test/refl(2, 2, Eq/refl())])),
+            ("/tests/passing", () => Test/all([Test/equal(1, 1), Test/equal(2, 2)])),
             ("/tests/empty", () => Test/all([])),
-            ("/tests/mixed", () => Test/all([Test/refl(1, 1, Eq/refl()), Test/check(true)])),
-            ("/tests/first_failure", () => Test/all([Test/check(true), Test/equal(2, 3), Test/equal(4, 5)])),
-            ("/tests/action_then_verdict", () => Test/all([Test/perform(counter), Test/check(true)])),
-            ("/tests/failure_before_action", () => Test/all([Test/check(false), Test/perform(counter)])),
+            ("/tests/first_failure", () => Test/all([Test/assert(true), Test/equal(2, 3), Test/equal(4, 5)])),
+            ("/tests/action_then_verdict", () => Test/all([Test/perform(counter), Test/assert(true)])),
+            ("/tests/failure_before_action", () => Test/all([Test/assert(false), Test/perform(counter)])),
         ])
         "#),
-        b"/tests/theorems: proved\n/tests/empty: proved\n/tests/mixed: passed\n/tests/first_failure: failed\n  case 1: expected 3 but got 2\nperformed\n/tests/action_then_verdict: passed\n/tests/failure_before_action: failed\n  case 0: the condition was false\n"
+        b"/tests/passing: passed\n/tests/empty: passed\n/tests/first_failure: failed\n  case 1: expected 3 but got 2\nperformed\n/tests/action_then_verdict: passed\n/tests/failure_before_action: failed\n  case 0: the condition was false\n"
     );
 }
 
 #[test]
 fn a_declared_test_applied_to_a_table_is_one_test() {
-    // A test is callable by name, so a table of cases is `Test/all` over its applications — the author-supplied domain beside the drawn one — and a case's failure carries both its position and the inner report.
+    // An open claim is an ordinary definition: it takes its arguments, is not scheduled, and owes no proof, because it is not a claim about anything until it is instantiated. The test is the table that applies it to the author's own cases, and a case's failure carries both its position and the inner report.
     assert_eq!(
         run_tests_program(
             r#"
         use /std/{Nat, Str, List, Io, Test};
-        test add_commutes(n: Nat, m: Nat) =
-            Test/check(n + m == m + n);
+        let add_commutes(n: Nat, m: Nat) -> Test =
+            Test/assert(n + m == m + n);
         let small(n: Nat) -> Test =
-            Test/check(n < 3);
+            Test/assert(n < 3);
         let cases: List({Nat, Nat}) = [(1, 2), (3, 4)];
-        test table() =
+        test table =
             Test/all(List/map(cases, ((a, b)) => add_commutes(a, b)));
-        test failing_table() =
+        test failing_table =
             Test/all(List/map([0, 1, 5], small));
         /std/print("ran\n")
         "#
         ),
-        b"/add_commutes: passed\n/table: passed\n/failing_table: failed\n  case 2: the condition was false\n"
+        b"/table: passed\n/failing_table: failed\n  case 2: the condition was false\n"
     );
 }
 
@@ -131,7 +130,7 @@ fn a_description_is_matched_only_by_its_own_module() {
     let report = error(
         r#"
         use /std/{Io, Test};
-        let t: Test = Test/check(true);
+        let t: Test = Test/assert(true);
         match t | verdict(v) => /std/print("leaked\n") | _ => /std/print("hidden\n") end
         "#,
     );
@@ -247,8 +246,8 @@ fn a_test_declaration_compiles_beside_the_entry() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, Test};
-        test the_answer_holds() =
-            Test/check(42 == 42);
+        test the_answer_holds =
+            Test/assert(42 == 42);
         /std/print("ran\n")
         "#),
         b"ran\n"
@@ -261,7 +260,7 @@ fn a_test_body_is_checked_against_the_description_type() {
     let error = error(
         r#"
         use /std/{Nat, Str, Io, Test};
-        test nope() =
+        test nope =
             42;
         /std/print("ran\n")
         "#,
@@ -275,8 +274,8 @@ fn a_bare_bang_in_a_test_body_is_refused() {
     let error = error(
         r#"
         use /std/{Nat, Str, Io, Test};
-        test t() =
-            Test/check(Io/pure(true)!);
+        test t =
+            Test/assert(Io/pure(true)!);
         /std/print("ran\n")
         "#,
     );
@@ -306,13 +305,13 @@ fn declared_tests_schedule_through_the_synthesized_tail() {
         use /std/{Nat, Str, Io, Eq, Test};
         mod checks
             use /std/{Nat, Test};
-            test addition_holds() = Test/check(1 + 1 == 2);
+            test addition_holds = Test/assert(1 + 1 == 2);
         end
-        test the_answer_holds() = Test/refl(21 * 2, 42, Eq/refl());
+        test the_answer_holds = Test/assert(21 * 2 == 42);
         /std/print("ran\n")
         "#
         ),
-        b"/checks/addition_holds: passed\n/the_answer_holds: proved\n"
+        b"/checks/addition_holds: passed\n/the_answer_holds: passed\n"
     );
 }
 
@@ -327,7 +326,7 @@ fn the_ordinary_program_prunes_what_the_test_program_keeps() {
     // The same unit compiles to two programs: the ordinary one neither reaches nor runs its tests, so the prune drops them; the test program's tail references every one, which is what keeps them.
     let source = r#"
         use /std/{Nat, Str, Io, Test};
-        test the_answer_holds() = Test/check(42 == 42);
+        test the_answer_holds = Test/assert(42 == 42);
         /std/print("ran\n")
         "#;
     assert!(!survives(&ersd_optm(source), "/the_answer_holds"));
@@ -339,13 +338,13 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
     // The runner slices a test's body from the span its lowered lambda carries, and `Lowerer::region` used to stamp that span on its spine arm alone: a body rooted at `match`, `let`, `choose` or a lambda rebuilt its node and reached Core unspanned, so `curios test` reported those failures with no body under them — the three forms below all printed an empty line where the source belongs. The same gap left an elaboration error at such a root unlocated.
     let entrypoint = r#"
         use /std/{Nat, Str, Bool, Io, Test};
-        test application() =
-            Test/check(1 + 1 == 2);
-        test matching() =
-            match 1 + 1 == 2 : (_) => Test | true => Test/check(true) | false => Test/check(false) end;
-        test binding() =
+        test application =
+            Test/assert(1 + 1 == 2);
+        test matching =
+            match 1 + 1 == 2 : (_) => Test | true => Test/assert(true) | false => Test/assert(false) end;
+        test binding =
             let x = 1 + 1;
-            Test/check(x == 2);
+            Test/assert(x == 2);
         /std/print("ran\n")
         "#
     .parse::<Entrypoint>()
@@ -368,9 +367,9 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
             .map(|record| record.body.as_str())
             .collect::<Vec<_>>(),
         [
-            "Test/check(1 + 1 == 2)",
-            "match 1 + 1 == 2 : (_) => Test | true => Test/check(true) | false => Test/check(false) end",
-            "let x = 1 + 1;\n            Test/check(x == 2)",
+            "Test/assert(1 + 1 == 2)",
+            "match 1 + 1 == 2 : (_) => Test | true => Test/assert(true) | false => Test/assert(false) end",
+            "let x = 1 + 1;\n            Test/assert(x == 2)",
         ]
     );
 }

@@ -1,7 +1,7 @@
 -- The arithmetic every peer ships beyond the operators — powers, divisors, logarithms, roots, parity and the `Int` extrema — and the `Flt` narrowings that answer their partiality with an `Option`.
 use /std/{Nat, Int, Bool, Flt, Option, Test};
 
-test nat_powers_divisors_logarithms_and_roots_compute() =
+test nat_powers_divisors_logarithms_and_roots_compute =
     Test/equal(
         [
             Nat/pow(2, 10),
@@ -23,10 +23,10 @@ test nat_powers_divisors_logarithms_and_roots_compute() =
             Nat/sqrt(1000000)],
         [1024, 1, 0, 6, 5, 5, 0, 12, 0, 0, 10, 9, 0, 0, 3, 4, 1000]);
 
-test parity_and_the_int_extrema_and_sign() =
+test parity_and_the_int_extrema_and_sign =
     Test/all([
-        Test/check(Nat/is_even(0)),
-        Test/check(Bool/not(Nat/is_even(7))),
+        Test/assert(Nat/is_even(0)),
+        Test/assert(Bool/not(Nat/is_even(7))),
         Test/equal([Int/min(-3, +2), Int/max(-3, +2)], [-3, +2]),
         Test/equal([Int/sign(-9), Int/sign(+0), Int/sign(+4)], [-1, +0, +1])]);
 
@@ -35,7 +35,7 @@ test parity_and_the_int_extrema_and_sign() =
 -- The interval is open at both infinities rather than closed on the finite extremes, and every non-finite input is checked because each fails for a different reason: `+inf` by the upper bound, `-inf` by the lower, a NaN by both, since every IEEE comparison with one is false. `try_to_nat` needs no lower bound at all — `f >= +0.0` has already rejected the NaN and `-inf`.
 --
 -- `-0.0` is the case that pins which equality this follows. IEEE says `-0.0 >= +0.0`, so it converts to `0` rather than being rejected as negative — correct, since `i32.trunc_f32_u` does not trap on it — even though `Flt`'s own identity is bitwise and holds the two zeros apart.
-test narrowings_answer_their_partiality_with_an_option() =
+test narrowings_answer_their_partiality_with_an_option =
     Test/all([
         Test/equal(Flt/try_to_nat(+1.5), Option/some(1)),
         Test/equal(Flt/try_to_nat(-1.5), Option/none()),

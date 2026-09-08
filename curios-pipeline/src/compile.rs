@@ -256,6 +256,7 @@ fn scheduled_tests(
     tests
         .iter()
         .map(|test| {
+            // The declaration lowers to a `() -> Test` thunk, so the authored body is the lambda's terminal — the span a failing test's record is sliced from.
             let lambda = test_definition(items, test).and_then(|def| match &*def.body {
                 curios_core::Subterm::Func(func) => Some(func),
                 _ => None,
@@ -263,9 +264,6 @@ fn scheduled_tests(
 
             curios_elab::ScheduledTest {
                 name: test.clone(),
-                plicities: lambda
-                    .map(|func| func.plicities().to_vec())
-                    .unwrap_or_default(),
                 span: lambda.and_then(|func| func.telescope.terminal().span()),
             }
         })

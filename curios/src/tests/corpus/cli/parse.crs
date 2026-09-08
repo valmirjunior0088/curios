@@ -33,13 +33,13 @@ let read(argv: List(Str)) -> Str =
             Cli/get(v, "root")])
     end;
 
-test an_option_takes_the_next_token_or_the_one_glued_to_it() =
+test an_option_takes_the_next_token_or_the_one_glued_to_it =
     Test/all([
         Test/equal(read(["--port", "9090", "/srv"]), "false 9090  /srv"),
         Test/equal(read(["--port=9090", "/srv"]), "false 9090  /srv")]);
 
 -- A short cluster sets its flags; a repeated option keeps its last value while `many` keeps every one; an absent defaulted option stands in for itself.
-test a_cluster_sets_flags_and_repetition_reads_by_kind() =
+test a_cluster_sets_flags_and_repetition_reads_by_kind =
     Test/all([
         Test/equal(read(["-v", "/srv"]), "true 8080  /srv"),
         Test/equal(read(["--port", "1", "--port", "2", "/srv"]), "false 2  /srv"),
@@ -47,17 +47,17 @@ test a_cluster_sets_flags_and_repetition_reads_by_kind() =
         Test/equal(read(["/srv"]), "false 8080  /srv")]);
 
 -- `--` ends the options, so a token that looks like one fills the positional instead.
-test a_double_dash_makes_every_later_token_a_positional() =
+test a_double_dash_makes_every_later_token_a_positional =
     Test/equal(read(["--", "-weird"]), "false 8080  -weird");
 
 -- Help is decided before the line is understood, so it answers over a line that would otherwise parse and over one that would otherwise fail.
-test help_and_version_answer_before_any_other_reading() =
+test help_and_version_answer_before_any_other_reading =
     Test/all([
         Test/equal(read(["--port", "1", "--help"]), "help"),
         Test/equal(read(["--prot", "--help"]), "help"),
         Test/equal(read(["--version"]), "version")]);
 
-test each_failure_names_what_the_line_got_wrong() =
+test each_failure_names_what_the_line_got_wrong =
     Test/all([
         Test/equal(read(["--prot", "/srv"]), "unknown --prot"),
         Test/equal(read(["/srv", "--port"]), "missing value for port"),
@@ -65,7 +65,7 @@ test each_failure_names_what_the_line_got_wrong() =
         Test/equal(read(["a", "b"]), "unexpected b")]);
 
 -- A reader refusing a value reports the reader's own reason, named against the entry that asked for it rather than against the token.
-test a_reader_that_refuses_a_value_reports_its_own_reason() =
+test a_reader_that_refuses_a_value_reports_its_own_reason =
     let ported: List(Cli/Arg) = [Cli/option("port", Cli/nat, "Port to listen on")];
     Test/equal(
         match Cli/parse(ported, ["--port", "http"], false)
