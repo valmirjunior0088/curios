@@ -1,1 +1,1 @@
-pub use /syn/Spell/{Spell, spell};
+pub use /syn/Spell/{Spell, spell, call, record};

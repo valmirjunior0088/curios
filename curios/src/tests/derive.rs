@@ -398,7 +398,7 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
 fn the_renderers_spell_a_call_and_a_record() {
     let source = r#"
         use /std/{Str, print};
-        use /syn/Spell/{call, record};
+        use /std/Spell/{call, record};
         let _ = print(call("/Tree/leaf", []))!;
         let _ = print("\n")!;
         let _ = print(call("/Tree/node", ["1", "/Tree/leaf()"]))!;

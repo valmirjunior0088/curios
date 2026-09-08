@@ -6,9 +6,13 @@ pub concept Spell(A: Type): pub Type {
 
 pub use Spell/*;
 
+-- | How a constructor application spells: the head, then its arguments in parentheses.
 pub let call(head: Str, args: List(Str)) -> Str =
     Str/concat(head, Str/concat("(", Str/concat(Str/join(", ", args), ")")));
 
+-- | How a record spells: the head, then its fields in braces.
+-- |
+-- | A field whose label is empty spells as its value alone, which is the positional field of a newtype-like structure.
 pub let record(head: Str, fields: List({Str, Str})) -> Str =
     let entries =
         List/map(fields, ((label, value)) =>
