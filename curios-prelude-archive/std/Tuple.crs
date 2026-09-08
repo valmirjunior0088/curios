@@ -1,4 +1,4 @@
-use /std/{Show, Spell, Equal, Ordered, Ordering, Str, Bool, List, Option, Test};
+use /std/{Show, Spell, Equal, Ordered, Ordering, Str, Bool, List};
 
 let parens(parts: List(Str)) -> Str =
     Str/concat("(", Str/concat(Str/join(", ", parts), ")"));

@@ -2,7 +2,7 @@ pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /syn/{True};
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Equal, Show, Spell, Ordering, Compare,
-    Ordered, Test};
+    Ordered};
 
 -- | The scan witness a string carries, and the lemmas the operations rest on.
 pub mod utf8;

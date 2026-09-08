@@ -1,4 +1,4 @@
-use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered, List, Monad, Test};
+use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered, Monad};
 
 -- | Success or failure, the failure's type first.
 pub induct Result(E: Type, A: Type): pub Type

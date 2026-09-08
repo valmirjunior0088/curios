@@ -1,5 +1,5 @@
 pub use /sys/Bits/{let Bits, get, len, eql, slice};
-use /std/{List, Nat, Bool, Option, Eq, Str, Equal, Show, Spell, Test, True};
+use /std/{List, Nat, Bool, Option, Eq, Str, Equal, Show, Spell, True};
 
 -- | The bit at `i`, or `none` past the end.
 pub let try_get(b: Bits, i: Nat) -> Option(Bool) =

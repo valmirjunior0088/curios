@@ -1,5 +1,4 @@
-use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, Compare, Ordered,
-    List, Test};
+use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, Compare, Ordered};
 
 -- | A value that may be absent.
 pub induct Option(A: Type): pub Type

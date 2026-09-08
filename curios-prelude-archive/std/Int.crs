@@ -3,7 +3,7 @@ pub use /syn/Int/{NonZero, NonNeg};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
     to_flt};
 use /std/{Nat, Str, Option, Ordering, Equal, Compare, Add, Subtract, Multiply, Divide, Remainder,
-    Show, Spell, Ordered, True, False, Test};
+    Show, Spell, Ordered, True, False};
 
 -- | The value with its sign written, `+3` or `-3`, so the text re-parses as an `Int` without context.
 pub let to_str(n: Int) -> Str =

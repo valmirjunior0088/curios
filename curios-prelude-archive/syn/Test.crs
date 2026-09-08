@@ -1,5 +1,4 @@
-use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Eq, Equal, Spell, Show, True, False,
-    print, proc};
+use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Equal, Spell, Show, print, proc};
 
 pub induct Verdict: pub Type
 | passed()
@@ -62,11 +61,7 @@ let case(index: Nat, t: Test) -> Test =
 
 let conjoin(left: Test, right: Test) -> Test =
     match left
-    | verdict(v) =>
-        match v
-        | passed() => right
-        | failed(_) => left
-        end
+    | verdict(v) => match v | passed() => right | failed(_) => left end
     | action(io) =>
         perform(() =>
             let inner = io!;
@@ -127,4 +122,3 @@ pub let main(tests: List({Str, () -> Test})) -> Io({}) =
         let ok = run_all(tests)!;
         match ok | true => Io/pure(()) | false => proc/exit(1) end
     end;
-

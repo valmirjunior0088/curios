@@ -1,7 +1,6 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map};
-use /std/{Nat, Bool, Option, Eq, Equal, Str, Show, Spell, Monad, Ordering, Compare, Ordered, Test,
-    True};
+use /std/{Nat, Bool, Option, Eq, Equal, Str, Show, Spell, Monad, Ordering, Compare, Ordered, True};
 
 -- | The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =

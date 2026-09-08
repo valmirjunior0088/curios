@@ -1,7 +1,7 @@
 pub use /sys/{Byte};
 pub use /sys/Byte/{to_nat, eql, lt, le, gt, ge};
 use /sys/Bytes/{let Bytes, get};
-use /std/{Ordering, Equal, Compare, Nat, Bool, Show, Spell, Ordered, Option, List, Test};
+use /std/{Ordering, Equal, Compare, Nat, Bool, Show, Spell, Ordered};
 
 let atoms: Bytes =
     x[0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 0x10, 0x11,

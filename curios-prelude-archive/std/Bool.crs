@@ -1,7 +1,6 @@
 pub use /sys/{Bool};
 pub use /sys/Bool/{and, or, xor, eql};
-use /std/{Nat, Str, Option, Eq, False, True, Equal, Or, And, Show, Spell, Ordering, Compare,
-    Ordered, Test};
+use /std/{Str, Option, Eq, False, True, Equal, Or, And, Show, Spell, Ordering, Compare, Ordered};
 
 -- | The other value.
 pub let not(b: Bool) -> Bool =

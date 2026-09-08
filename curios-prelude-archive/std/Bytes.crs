@@ -1,6 +1,6 @@
 pub use /sys/Bytes/{let Bytes, get, len, eql, slice};
 use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Equal, Show, Spell, Ordering, Compare,
-    Ordered, Test, True};
+    Ordered, True};
 
 -- | The byte at `i`, or `none` past the end.
 pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =

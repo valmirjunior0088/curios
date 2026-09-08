@@ -1,4 +1,4 @@
-use /std/{Bool, Eq, Equal, False, Show, Spell, Option, Test};
+use /std/{Bool, Eq, Equal, False, Show, Spell};
 use /std/Bool/{false_neq_true};
 
 -- | The three-way answer a comparison gives.
