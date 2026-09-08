@@ -2,9 +2,13 @@ use /std/{Bytes, Byte, Str, Nat, Show, Spell, Io};
 
 -- | A parsed format string: literal pieces, and the places an argument goes — shown at a `%`, spelled at a `#`.
 pub induct Fmt: pub Type
+-- | Nothing left of the string.
 | nil()
+-- | A literal piece, then the rest.
 | lit(piece: Str, rest: Fmt)
+-- | A place a `Show`-able argument goes, written `%`.
 | show(Fmt)
+-- | A place a `Spell`-able argument goes, written `#`.
 | spell(Fmt)
 end
 

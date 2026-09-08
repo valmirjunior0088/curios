@@ -2,11 +2,17 @@ use /std/{Bool, Flt, Str, List};
 
 -- | A JSON value.
 pub induct Json: pub Type
+-- | `null`.
 | null()
+-- | `true` or `false`.
 | bool(Bool)
+-- | A number.
 | num(Flt)
+-- | A string.
 | str(Str)
+-- | An array, in order.
 | arr(List(Json))
+-- | An object: its members, in the order they were written.
 | obj(List({Str, Json}))
 end
 

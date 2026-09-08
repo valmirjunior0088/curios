@@ -74,7 +74,9 @@ pub let dbl_succ(t: BigPos) -> BigPos =
 
 -- | A natural as zero or a positive.
 pub induct Split: pub Type
+-- | Zero.
 | zero()
+-- | A positive, which is what `BigPos` holds.
 | pos(BigPos)
 end
 

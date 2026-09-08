@@ -3,9 +3,13 @@ use /std/Tui/{Frame};
 
 -- | How a child claims its share of an axis: an exact length, a floor a fill may grow past, a percentage of the whole, or a weighted share of what the others leave.
 pub induct Constraint: pub Type
+-- | Exactly this many cells.
 | length(Nat)
+-- | At least this many, which a fill may grow past.
 | min(Nat)
+-- | This percentage of the whole axis.
 | percent(Nat)
+-- | A weighted share of whatever the others leave.
 | fill(Nat)
 end
 
@@ -13,8 +17,11 @@ pub use Constraint/*;
 
 -- | A named pane, or children stacked as rows or as columns, each under a constraint.
 pub induct Layout: pub Type
+-- | A leaf, under the name the frame draws into.
 | pane(name: Str)
+-- | Children stacked down the axis, each under its constraint.
 | rows(List({Constraint, Layout}))
+-- | Children laid across the axis, each under its constraint.
 | cols(List({Constraint, Layout}))
 end
 
@@ -22,16 +29,22 @@ pub use Layout/*;
 
 -- | The sizes a layout was split into, indexed by the layout, the width and the height. `fitted` is the coercion: a subtree at one size shown at another.
 pub induct Sizes: (Layout, Nat, Nat) -> pub Type
+-- | A pane at the width and height it was given.
 | leaf(@name: Str, w: Nat, h: Nat): (pane(name), w, h)
+-- | A `rows` layout, split into its children's heights.
 | stacked(@ps: List({Constraint, Layout}), @w: Nat, @h: Nat, col: Column(ps, w, h)): (
     rows(ps),
     w,
     h)
+-- | A `cols` layout, split into its children's widths.
 | ranged(@ps: List({Constraint, Layout}), @w: Nat, @h: Nat, row: Row(ps, w, h)): (cols(ps), w, h)
+-- | A subtree sized for one box, shown in another.
 | fitted(@l: Layout, @w0: Nat, @h0: Nat, w: Nat, h: Nat, inner: Sizes(l, w0, h0)): (l, w, h)
 -- | The children of a `rows` layout at one width, their heights summing to the whole.
 pub and Column: (List({Constraint, Layout}), Nat, Nat) -> pub Type
+-- | No children left, so no height is claimed.
 | col_stop(@w: Nat): ([], w, 0)
+-- | One child at its height, then the rest below it.
 | col_part(
     @c: Constraint,
     @l: Layout,
@@ -43,7 +56,9 @@ pub and Column: (List({Constraint, Layout}), Nat, Nat) -> pub Type
     tail: Column(rest, w, h2)): ([(c, l), ..rest], w, h1 + h2)
 -- | The children of a `cols` layout at one height, their widths summing to the whole.
 pub and Row: (List({Constraint, Layout}), Nat, Nat) -> pub Type
+-- | No children left, so no width is claimed.
 | row_stop(@h: Nat): ([], 0, h)
+-- | One child at its width, then the rest beside it.
 | row_part(
     @c: Constraint,
     @l: Layout,

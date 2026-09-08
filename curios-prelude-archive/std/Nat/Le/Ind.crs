@@ -2,7 +2,9 @@ use /std/{Nat};
 
 -- | `a <= b`, built from `0 <= n` and `a <= b` gives `a + 1 <= b + 1`.
 pub induct Ind: (Nat, Nat) -> pub Prop
+-- | Zero is below or equal to anything.
 | z(@n: Nat): (0, n)
+-- | One more on each side keeps it.
 | s(@a: Nat, @b: Nat, prev: Ind(a, b)): (a + 1, b + 1)
 end
 

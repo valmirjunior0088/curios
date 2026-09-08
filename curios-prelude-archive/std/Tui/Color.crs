@@ -3,9 +3,13 @@ use /std/Nat/{Lt};
 
 -- | The terminal's default, one of the sixteen the palette names, one of the 256-colour cube, or a direct 24-bit triple.
 pub induct Color: pub Type
+-- | Whatever the terminal draws with when nothing sets a colour.
 | default()
+-- | One of the sixteen the terminal's own palette names.
 | ansi(n: Nat, @ok: Lt(n, 16))
+-- | One of the 256-colour cube, by its index.
 | indexed(Byte)
+-- | A direct 24-bit colour, red then green then blue.
 | rgb(Byte, Byte, Byte)
 end
 

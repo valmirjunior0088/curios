@@ -8,7 +8,9 @@ pub mod Exit
 
     -- | An exit code, or the signal that ended the child.
     pub induct Exit: pub Type
+-- | It returned, with this code.
     | exited(Nat)
+-- | A signal ended it, this one.
     | signaled(Nat)
     end
 

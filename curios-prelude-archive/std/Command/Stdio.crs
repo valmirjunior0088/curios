@@ -1,7 +1,10 @@
 -- | Shared with this process, piped to the parent, or attached to the null device.
 pub induct Stdio: pub Type
+-- | The child shares this process's own stream.
 | inherit()
+-- | The parent gets a pipe to it.
 | piped()
+-- | It goes to the null device.
 | null()
 end
 

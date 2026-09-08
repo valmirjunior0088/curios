@@ -2,15 +2,25 @@ use /std/{Nat, Str, List, Option, Show};
 
 -- | Why a host operation failed: a named status, or `other` with the errno it carries.
 pub induct Error: pub Type
+-- | Nothing is there.
 | not_found()
+-- | The host refused the access.
 | permission_denied()
+-- | Something is there already.
 | exists()
+-- | The peer refused the connection.
 | refused()
+-- | The secure channel failed.
 | tls()
+-- | Not ready yet — waiting for it is the caller's to do.
 | would_block()
+-- | The directory still holds entries.
 | not_empty()
+-- | A directory was given where a file was wanted.
 | is_directory()
+-- | A file was given where a directory was wanted.
 | not_directory()
+-- | Anything else, carrying the host's own code.
 | other(Nat)
 end
 

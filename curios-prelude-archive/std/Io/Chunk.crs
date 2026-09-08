@@ -2,8 +2,11 @@ use /std/{Bytes, Nat, Io};
 
 -- | One read's answer: bytes, the end of the stream, or a failure.
 pub induct Chunk: pub Type
+-- | Bytes were read.
 | chunk(Bytes)
+-- | The stream is finished.
 | eof()
+-- | The read failed.
 | error(Io/Error)
 end
 

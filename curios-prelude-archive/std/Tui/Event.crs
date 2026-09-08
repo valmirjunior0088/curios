@@ -3,9 +3,13 @@ use /std/Tui/{Key};
 
 -- | A key, the terminal's new size, a pasted text, or a value of the program's own `E`: the answer a `Cmd/perform` came back with.
 pub induct Event(E: Type): pub Type
+-- | A key was pressed.
 | key(Key)
+-- | The terminal is now this many columns by this many rows.
 | resize(cols: Nat, rows: Nat)
+-- | Text was pasted in one go.
 | paste(Str)
+-- | What a `Cmd/perform` came back with.
 | custom(E)
 end
 

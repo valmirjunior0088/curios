@@ -2,7 +2,9 @@ use /std/{Nat, List, Equal, Show, Spell};
 
 -- | A list of exactly `n` elements.
 pub induct Vec(T: Type): (Nat) -> pub Type
+-- | No elements.
 | nil(): (0)
+-- | One element in front of a vector one shorter.
 | cons(@m: Nat, x: T, xs: Vec(T, m)): (m + 1)
 end
 

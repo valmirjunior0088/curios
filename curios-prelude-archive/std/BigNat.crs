@@ -65,7 +65,9 @@ pub let of_bits(bits: Bits) -> BigNat =
 
 -- | A number as zero, or a low bit over the rest.
 pub induct View: pub Type
+-- | Nothing left.
 | zero()
+-- | A low bit, and the rest above it.
 | succ(low: Bool, tail: BigNat)
 end
 

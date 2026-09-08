@@ -2,21 +2,37 @@ use /std/{Nat, Bool, Char, Equal, Spell};
 
 -- | A character, or a named key. The End key is `end_key`, since `end` is a reserved word.
 pub induct Code: pub Type
+-- | A character key.
 | char(Char)
+-- | Enter.
 | enter()
+-- | Escape.
 | escape()
+-- | Backspace.
 | backspace()
+-- | Tab.
 | tab()
+-- | Delete.
 | delete()
+-- | Insert.
 | insert()
+-- | The up arrow.
 | up()
+-- | The down arrow.
 | down()
+-- | The left arrow.
 | left()
+-- | The right arrow.
 | right()
+-- | Home.
 | home()
+-- | End.
 | end_key()
+-- | Page Up.
 | page_up()
+-- | Page Down.
 | page_down()
+-- | A function key, by its number.
 | f(Nat)
 end
 

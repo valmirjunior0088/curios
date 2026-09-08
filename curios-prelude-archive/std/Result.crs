@@ -2,7 +2,9 @@ use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered, Mon
 
 -- | Success or failure, the failure's type first.
 pub induct Result(E: Type, A: Type): pub Type
+-- | It worked, carrying the value.
 | success(A)
+-- | It did not, carrying the error.
 | failure(E)
 end
 

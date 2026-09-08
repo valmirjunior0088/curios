@@ -26,9 +26,13 @@ pub use Server/{let Server};
 
 -- | Why an exchange failed: the wire, a reply the decoder refuses, the deadline, or a redirect chain past the client's limit.
 pub induct Error: pub Type
+-- | The wire failed.
 | net(Io/Error)
+-- | A reply the decoder refuses.
 | malformed(Parse/Error)
+-- | The deadline passed.
 | timeout()
+-- | The redirect chain ran past the client's limit, after this many.
 | redirected(Nat)
 end
 

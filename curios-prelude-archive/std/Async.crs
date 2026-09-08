@@ -39,8 +39,11 @@ struct Guard: Type {
 
 -- | One thing a parked fiber waits for. A park names a list of them and resumes on whichever fires first.
 pub induct Wait: pub Type
+-- | Until the handle is ready for what the interest names.
 | ready(handle: Handle, interest: Interest)
+-- | Until this much time has passed.
 | elapsed(Duration)
+-- | Until whoever holds the waker this hands out fires it.
 | woken(register: (Waker) -> Io({}))
 end
 

@@ -7,8 +7,11 @@ pub struct File: Type {
 
 -- | How a file is opened: to read, to write from the start, or to append.
 pub induct Mode: pub Type
+-- | Opened to read.
 | read()
+-- | Opened to write from the start.
 | write()
+-- | Opened to write after what is there.
 | append()
 end
 

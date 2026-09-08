@@ -2,7 +2,9 @@ use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, C
 
 -- | A value that may be absent.
 pub induct Option(A: Type): pub Type
+-- | The value is there.
 | some(A)
+-- | There is none.
 | none()
 end
 

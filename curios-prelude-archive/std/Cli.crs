@@ -56,17 +56,25 @@ pub let reader(@A: Type, metavar: Str, f: (Str) -> Result(Str, A)) -> Value =
 
 -- | Whether an option must appear, may be absent, or stands for `a` when absent.
 pub induct Presence(A: Type): pub Type
+-- | It must appear.
 | required()
+-- | It may be absent.
 | optional()
+-- | It stands for `a` when absent.
 | default(a: A)
 end
 
 -- | What an argument is: a flag, an option taking a value, an option taking every value it is given, a positional, or the collector of every remaining positional.
 pub induct Kind: pub Type
+-- | A name alone, present or not.
 | flag()
+-- | A name taking one value.
 | option(v: Value, presence: Presence(v.A))
+-- | A name taking every value it is given.
 | many(v: Value)
+-- | A value taken by its place rather than by name.
 | positional(v: Value)
+-- | The collector of every positional after the ones declared.
 | rest(v: Value)
 end
 
@@ -143,7 +151,9 @@ let is_rest(k: Kind) -> Bool =
 
 -- | The record a line parsed into, indexed by the arguments it was parsed against.
 pub induct Values: (List(Arg)) -> pub Type
+-- | No arguments were declared, so nothing was parsed.
 | nil(): ([])
+-- | One argument's value, then the rest.
 | cons(@a: Arg, @rest: List(Arg), head: Carrier(a), tail: Values(rest)): ([a, ..rest])
 end
 
@@ -262,20 +272,31 @@ pub let WellFormed(cli: Cli) -> Prop =
 
 -- | Why a line was refused.
 pub induct Failure: pub Type
+-- | A token no declared name matches.
 | unknown_option(token: Str)
+-- | An option was given without the value it takes.
 | missing_value(name: Str)
+-- | A required argument never appeared.
 | missing_required(name: Str)
+-- | A token nothing was left to take.
 | unexpected(token: Str)
+-- | The value was read and refused, for this reason.
 | bad_value(name: Str, reason: Str)
+-- | A subcommand no declaration names, beside those that do.
 | unknown_command(name: Str, known: List(Str))
+-- | A subcommand was owed and none was given, beside those that would do.
 | missing_command(known: List(Str))
 end
 
 -- | What a line came to: a parsed record, a request for help or the version, or a refusal.
 pub induct Outcome(spec: List(Arg)): pub Type
+-- | The line was read into the record.
 | parsed(Values(spec))
+-- | The line asked for the help text.
 | help()
+-- | The line asked for the version.
 | version()
+-- | The line was refused.
 | failure(Failure)
 end
 
@@ -618,9 +639,13 @@ pub let report(cli: Cli, f: Failure) -> Str =
 
 -- | What choosing a subcommand came to: the subcommand and its line, a request for help or the version, or a refusal.
 pub induct Chosen: pub Type
+-- | This subcommand, and the line left for it.
 | chose(sub: Cli, rest: List(Str))
+-- | The line asked for the help text.
 | wanted_help()
+-- | The line asked for the version.
 | wanted_version()
+-- | The choice was refused.
 | refused(f: Failure)
 end
 

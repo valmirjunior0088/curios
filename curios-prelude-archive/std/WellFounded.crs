@@ -3,6 +3,7 @@ use /std/Nat/{Le};
 
 -- | `x` is accessible under `R`: everything below it is.
 pub induct Accessible(@A: Type, R: (A, A) -> Prop): (A) -> pub Prop
+-- | Everything below `x` is accessible, so `x` is.
 | intro(@x: A, below: (y: A, r: R(y, x)) -> Accessible(R, y)): (x)
 end
 

@@ -3,9 +3,13 @@ use /std/time/{Timestamp};
 
 -- | What is at a path.
 pub induct Kind: pub Type
+-- | A regular file.
 | file()
+-- | A directory.
 | directory()
+-- | A symbolic link.
 | symlink()
+-- | Anything else the host holds at a path.
 | other()
 end
 

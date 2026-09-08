@@ -20,15 +20,25 @@ pub struct LocalDateTime: pub Type {
 
 -- | A TOML value.
 pub induct Toml: pub Type
+-- | A string.
 | str(Str)
+-- | An integer.
 | int(Int)
+-- | A float.
 | flt(Flt)
+-- | `true` or `false`.
 | bool(Bool)
+-- | A date and time with an offset from UTC.
 | offset_date_time(OffsetDateTime)
+-- | A date and time with no offset.
 | local_date_time(LocalDateTime)
+-- | A date alone.
 | local_date(Date)
+-- | A time of day alone.
 | local_time(Time)
+-- | An array, in order.
 | arr(List(Toml))
+-- | A table, by key.
 | table(Map(Toml))
 end
 

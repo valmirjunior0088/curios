@@ -3,8 +3,11 @@ use /std/Bool/{false_neq_true};
 
 -- | The three-way answer a comparison gives.
 pub induct Ordering: pub Type
+-- | Below.
 | lt()
+-- | The same.
 | eq()
+-- | Above.
 | gt()
 end
 

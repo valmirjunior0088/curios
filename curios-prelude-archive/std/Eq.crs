@@ -1,5 +1,6 @@
 -- | Propositional equality: `x` and `y` are one value.
 pub induct Eq(@A: Type): (A, A) -> pub Prop
+-- | A value equals itself, which is the only way an equality is made.
 | refl(@z: A): (z, z)
 end
 

@@ -2,19 +2,33 @@ use /std/{Str, Bytes, List, Parse, Show, Equal, Spell};
 
 -- | A table-construction rule a document breaks; `invariant` is a state the builder cannot reach, named so that it is reported rather than swallowed if it ever is.
 pub induct Rule: pub Type
+-- | The key was already given a value here.
 | duplicate_key()
+-- | A `[table]` header repeats one already written.
 | table_defined_twice()
+-- | A header reaches into a table written inline, which is closed once written.
 | extends_inline_table()
+-- | A header reaches into a table a dotted key made, which the header may not extend.
 | extends_dotted_table()
+-- | A dotted key reaches into a table another header defined.
 | extends_table_defined_elsewhere()
+-- | A header names a table a dotted key already made.
 | redefines_dotted_table()
+-- | A `[table]` header names what an array of tables holds.
 | redefines_array_as_table()
+-- | An `[[array]]` header names what is already a table.
 | redefines_table_as_array()
+-- | An `[[array]]` header names an array written as a value.
 | appends_to_static_array()
+-- | A key path reaches into an array written as a value.
 | extends_static_array()
+-- | A dotted key reaches into an array of tables.
 | extends_array_with_dotted_keys()
+-- | The key path runs through something that is not a table.
 | conflicts_with_value()
+-- | The key path names nothing.
 | empty_key_path()
+-- | A state the builder cannot reach, reported rather than swallowed if it ever is.
 | invariant(Str)
 end
 
@@ -26,8 +40,11 @@ satisfy Spell(Rule);
 
 -- | Why a document did not decode — its text is not TOML, or the key path broke a construction rule — or a table did not encode: a key that is not UTF-8.
 pub induct Error: pub Type
+-- | The text is not TOML.
 | syntax(Parse/Error)
+-- | The key path broke a construction rule, at this path.
 | rule(List(Str), Rule)
+-- | A key that is not UTF-8, which no document can spell.
 | invalid_key(Bytes)
 end
 

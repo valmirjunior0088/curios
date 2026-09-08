@@ -64,9 +64,13 @@ pub mod Viewport;
 
 -- | What an `update` asks the loop to do beside the new model: nothing, stop, run an `Async` and hand its answer back as `Event/custom`, or several of those.
 pub induct Cmd(E: Type): pub Type
+-- | Nothing beside the new model.
 | none()
+-- | Stop the loop.
 | quit()
+-- | Run this, and hand its answer back as `Event/custom`.
 | perform(Async(E))
+-- | Several of these, in order.
 | batch(List(Cmd(E)))
 end
 

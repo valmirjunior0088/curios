@@ -3,8 +3,11 @@ use /std/{Nat, Int, Bool, Str, Option, True, False, Ordering, BigNat, BigPos, Eq
 
 -- | A sign over a positive magnitude, or zero.
 pub induct BigInt: pub Type
+-- | Below zero, by this magnitude.
 | neg(BigPos)
+-- | Zero.
 | zero()
+-- | Above zero, by this magnitude.
 | pos(BigPos)
 end
 

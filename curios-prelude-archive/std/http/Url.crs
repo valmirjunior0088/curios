@@ -3,7 +3,9 @@ use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Equal,
 
 -- | The scheme, which decides the port when none is written and whether the connection is under TLS.
 pub induct Scheme: pub Type
+-- | `http`: port 80 where none is written, and in the clear.
 | http()
+-- | `https`: port 443 where none is written, and under TLS.
 | https()
 end
 
