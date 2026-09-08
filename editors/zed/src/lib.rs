@@ -4,6 +4,9 @@
 //!
 //! Finding one is not the same as reading `PATH`, though. Zed inherits the `PATH` the desktop session launched it with, not the one an interactive shell assembles, so `~/.local/bin` — where the installer puts the binary — is routinely invisible here while every terminal on the machine can see it. Resolution therefore has three steps: an explicit setting, then `PATH`, then the installer's own directory.
 
+#[cfg(test)]
+mod tests;
+
 use zed_extension_api::{self as zed, settings::LspSettings, LanguageServerId, Result};
 
 struct Curios;
