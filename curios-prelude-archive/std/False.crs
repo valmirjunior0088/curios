@@ -1,1 +1,7 @@
-pub use /syn/{False, Not};
+pub use /syn/{False};
+
+-- | The refutation of `P`.
+-- |
+-- | A value of it turns any `P` into a contradiction, so a type with one is uninhabited.
+pub let Not(P: Type) -> Type =
+    (P) -> False;

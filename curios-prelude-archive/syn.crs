@@ -60,9 +60,6 @@ end
 pub induct False: pub Prop
 end
 
-pub let Not(P: Type) -> Type =
-    (P) -> False;
-
 pub mod Char;
 pub use Char/{let Char};
 
