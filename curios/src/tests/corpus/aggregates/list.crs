@@ -65,8 +65,8 @@ test sort_is_stable_and_sort_by_takes_a_comparator =
             [(2, "b"), (2, "a"), (1, "x"), (1, "y")])]);
 
 -- Every predicate and search is a case split on `[head, ..tail]` with a call on the tail, which the totality analysis grades as a decrease — so `find` and `any` compute in a type. Stated as proofs: the claim is in the type and the kernel discharges it where the unit is checked, which is a stronger statement than a run of them would be.
-let _: Eq(List/find([1, 2, 3], (x: Nat) => x > 1), Option/some(2)) =
+let _find_computes_in_a_type: Eq(List/find([1, 2, 3], (x: Nat) => x > 1), Option/some(2)) =
     Eq/refl();
 
-let _: Eq(List/any([1, 2, 3], (x: Nat) => Nat/is_even(x)), true) =
+let _any_computes_in_a_type: Eq(List/any([1, 2, 3], (x: Nat) => Nat/is_even(x)), true) =
     Eq/refl();

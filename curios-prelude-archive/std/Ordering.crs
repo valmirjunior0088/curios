@@ -69,10 +69,3 @@ satisfy Show(Ordering) {
 }
 
 satisfy Spell(Ordering);
-
-satisfy Test/Draw(Ordering) {
-    all() = Option/some([Ordering/lt(), Ordering/eq(), Ordering/gt()]),
-    draw(seed, _size) =
-        let (n, rest) = Test/Seed/next(seed);
-        (match n % 3 | 0 => Ordering/lt() | 1 => Ordering/eq() | _ => Ordering/gt() end, rest),
-}

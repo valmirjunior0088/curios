@@ -103,17 +103,3 @@ satisfy (@A: Type, use Ordered(A)) => Compare(Option(A)) {
 satisfy (@A: Type, use Ordered(A)) => Ordered(Option(A)) {
     cmp = cmp,
 }
-
--- | `none` one draw in four.
-satisfy (@A: Type, use Test/Draw(A)) => Test/Draw(Option(A)) {
-    all() =
-        map(Test/Draw/all(@A)(), (xs) => [Option/none(), ..List/map(xs, (a) => Option/some(a))]),
-    draw(seed, size) =
-        let (n, after) = Test/Seed/next(seed);
-        match n % 4 == 0
-        | true => (Option/none(), after)
-        | false =>
-            let (value, rest) = Test/Draw/draw(@A, after, size);
-            (Option/some(value), rest)
-        end,
-}

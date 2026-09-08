@@ -36,19 +36,3 @@ satisfy Spell(Bits) {
         let parts = fold(b, [], (bit, acc) => [..acc, match bit | true => "1" | false => "0" end]);
         Str/concat("b[", Str/concat(Str/join(", ", parts), "]")),
 }
-
-let bits(seed: Test/Seed, count: Nat) -> {Bits, Test/Seed} =
-    match count
-    | 0 => (b[], seed)
-    | _more + 1; (acc, after) =>
-        let (bit, rest) = Test/Draw/draw(@Bool, after, 0);
-        (b[..acc, bit], rest)
-    end;
-
--- | Up to `size` bits.
-satisfy Test/Draw(Bits) {
-    all() = Option/none(),
-    draw(seed, size) =
-        let (count, after) = Test/Draw/draw(@Nat, seed, size);
-        bits(after, count),
-}

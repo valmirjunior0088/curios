@@ -53,13 +53,3 @@ satisfy Spell(Byte) {
 satisfy Ordered(Byte) {
     cmp = cmp,
 }
-
-let every_byte(count: Nat, next: Nat) -> List(Byte) =
-    match count | 0 => [] | more + 1 => [of_nat(next % 256), ..every_byte(more, next + 1)] end;
-
-satisfy Test/Draw(Byte) {
-    all() = Option/some(every_byte(256, 0)),
-    draw(seed, _size) =
-        let (n, rest) = Test/Seed/next(seed);
-        (of_nat(n % 256), rest),
-}

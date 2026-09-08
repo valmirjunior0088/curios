@@ -111,19 +111,3 @@ satisfy Spell(Bytes) {
         let parts = fold(b, [], (byte, acc) => [..acc, Nat/to_str(Byte/to_nat(byte))]);
         Str/concat("x[", Str/concat(Str/join(", ", parts), "]")),
 }
-
-let bytes(seed: Test/Seed, count: Nat) -> {Bytes, Test/Seed} =
-    match count
-    | 0 => (x[], seed)
-    | _more + 1; (acc, after) =>
-        let (byte, rest) = Test/Draw/draw(@Byte, after, 0);
-        (x[..acc, byte], rest)
-    end;
-
--- | Up to `size` bytes.
-satisfy Test/Draw(Bytes) {
-    all() = Option/none(),
-    draw(seed, size) =
-        let (count, after) = Test/Draw/draw(@Nat, seed, size);
-        bytes(after, count),
-}

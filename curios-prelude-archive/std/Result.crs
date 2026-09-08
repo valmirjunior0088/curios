@@ -103,27 +103,3 @@ satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Compare(Result(E
 satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Ordered(Result(E, A)) {
     cmp = cmp,
 }
-
--- | A failure one draw in four.
-satisfy (@A: Type, @E: Type, use Test/Draw(A), use Test/Draw(E)) => Test/Draw(Result(E, A)) {
-    all() =
-        Option/bind(
-            Test/Draw/all(@A)(),
-            (xs) =>
-                Option/map(
-                    Test/Draw/all(@E)(),
-                    (es) =>
-                        [
-                            ..List/map(es, (e) => Result/failure(e)),
-                            ..List/map(xs, (a) => Result/success(a))])),
-    draw(seed, size) =
-        let (n, after) = Test/Seed/next(seed);
-        match n % 4 == 0
-        | true =>
-            let (failure, rest) = Test/Draw/draw(@E, after, size);
-            (Result/failure(failure), rest)
-        | false =>
-            let (value, rest) = Test/Draw/draw(@A, after, size);
-            (Result/success(value), rest)
-        end,
-}

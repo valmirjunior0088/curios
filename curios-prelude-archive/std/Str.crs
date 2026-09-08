@@ -340,19 +340,3 @@ satisfy Compare(Str) {
 satisfy Ordered(Str) {
     cmp = cmp,
 }
-
-let chars(seed: Test/Seed, size: Nat, count: Nat) -> {Str, Test/Seed} =
-    match count
-    | 0 => ("", seed)
-    | _more + 1; (acc, after) =>
-        let (c, rest) = Test/Draw/draw(@Char, after, size);
-        (concat(acc, of_char(c)), rest)
-    end;
-
--- | Up to `size` printable ASCII characters.
-satisfy Test/Draw(Str) {
-    all() = Option/none(),
-    draw(seed, size) =
-        let (count, after) = Test/Draw/draw(@Nat, seed, size);
-        chars(after, size, count),
-}

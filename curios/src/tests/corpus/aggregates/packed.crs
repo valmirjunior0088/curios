@@ -8,15 +8,15 @@ test atom_splice_builds_the_written_sequence =
     Test/equal(x[0x48, i, bang], Str/to_bytes("Hi!"));
 
 -- An atom leading a spread lowers to the cons spelling the packed-match refinement builds — the singleton `append(x[], h)` concatenated with the tail — so a literal written that way *is* the cons spine rather than merely equal to one. Stated over symbolic operands through `len` and `try_get`, the two observations that reduce across that spine, so nothing here is reached by folding literals. These are proofs rather than tests: each is a claim about every `h` and `t`, so it is stated in a type and discharged by the kernel on every build, and there is nothing left for a run to decide.
-let bytes_cons_has_the_length_of_its_tail_plus_one(h: Byte, t: Bytes)
+let _bytes_cons_has_the_length_of_its_tail_plus_one(h: Byte, t: Bytes)
     -> Eq(Bytes/len(x[h, ..t]), Nat/add(1, Bytes/len(t))) =
     Eq/refl();
 
-let bytes_cons_decodes_its_head_first(h: Byte, t: Bytes)
+let _bytes_cons_decodes_its_head_first(h: Byte, t: Bytes)
     -> Eq(Bytes/try_get(x[h, ..t], 0), Option/some(h)) =
     Eq/refl();
 
-let bits_cons_has_the_length_of_its_tail_plus_one(h: Bool, t: Bits)
+let _bits_cons_has_the_length_of_its_tail_plus_one(h: Bool, t: Bits)
     -> Eq(Bits/len(b[h, ..t]), Nat/add(1, Bits/len(t))) =
     Eq/refl();
 

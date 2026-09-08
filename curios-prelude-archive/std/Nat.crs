@@ -135,14 +135,6 @@ satisfy Ordered(Nat) {
     cmp = cmp,
 }
 
--- | A number from `0` to `size`, so the smallest cases come first. No roster: the type has no end.
-satisfy Test/Draw(Nat) {
-    all() = Option/none(),
-    draw(seed, size) =
-        let (n, rest) = Test/Seed/next(seed);
-        (n % (size + 1), rest),
-}
-
 -- | `a < b` as a decided proposition, and its bridges to the inductive order.
 -- |
 -- | `True` when the comparison holds and `False` otherwise, so a literal pair discharges it by reduction and a comparison a guard has taken discharges it with nothing written. Where a proof has to recurse, `ind_of_lt` crosses into `Le/Ind`.

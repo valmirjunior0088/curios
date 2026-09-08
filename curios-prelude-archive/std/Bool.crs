@@ -61,10 +61,3 @@ satisfy Compare(Bool) {
 satisfy Ordered(Bool) {
     cmp = cmp,
 }
-
-satisfy Test/Draw(Bool) {
-    all() = Option/some([true, false]),
-    draw(seed, _size) =
-        let (n, rest) = Test/Seed/next(seed);
-        (Nat/and(n, 1) == 1, rest),
-}

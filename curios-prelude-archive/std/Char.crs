@@ -167,11 +167,3 @@ satisfy Spell(Char) {
 satisfy Ordered(Char) {
     cmp = cmp,
 }
-
--- | Printable ASCII.
-satisfy Test/Draw(Char) {
-    all() = Option/none(),
-    draw(seed, _size) =
-        let (n, rest) = Test/Seed/next(seed);
-        (Option/unwrap_or(of_nat(32 + n % 95), ' '), rest),
-}

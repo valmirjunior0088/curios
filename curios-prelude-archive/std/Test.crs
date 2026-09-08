@@ -1,9 +1,1 @@
 pub use /syn/Test/{let Test, Verdict, assert, equal, perform, try, all, main};
-
--- | The pure splittable generator a property test draws from.
-pub mod Seed;
-
--- | What an argument is drawn from.
-pub mod Draw;
-pub use Seed/{let Seed};
-pub use Draw/{let Draw};

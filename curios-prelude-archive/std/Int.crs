@@ -110,13 +110,3 @@ satisfy Spell(Int) {
 satisfy Ordered(Int) {
     cmp = cmp,
 }
-
--- | A magnitude drawn as a `Nat`, with either sign.
-satisfy Test/Draw(Int) {
-    all() = Option/none(),
-    draw(seed, size) =
-        let (magnitude, after) = Test/Draw/draw(@Nat, seed, size);
-        let (sign, rest) = Test/Seed/next(after);
-        let value = Nat/to_int(magnitude);
-        (match Nat/and(sign, 1) == 1 | true => 0 - value | false => value end, rest),
-}
