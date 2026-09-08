@@ -24,7 +24,7 @@ use {
     std::{
         collections::HashMap,
         fmt,
-        fs::File,
+        fs::{self, File},
         io::{self, BufWriter, Write},
         path::PathBuf,
         sync::{
@@ -79,6 +79,19 @@ pub fn trace<T>(destination: Destination, operation: impl FnOnce() -> T) -> io::
     let result = tracing::subscriber::with_default(recorder, operation);
 
     Ok(result)
+}
+
+/// Record every span and event of this process, for a binary with no closure to wrap.
+///
+/// [`trace`] scopes a capture to one operation, which is what a build script and a probe want: they measure a compilation they call themselves. A *binary* has no such closure — the work is whatever subcommand the arguments selected — so this installs the same recorder as the process-global default and lets the whole invocation be the scope.
+///
+/// The two compose rather than compete. `set_global_default` is consulted only where no thread-local subscriber is set, so a [`trace`] on any thread still overrides this for the duration of its closure, and the callers that need a scoped capture keep it.
+///
+/// Configuration is still in code: the `profile` feature decides that this is called at all, and [`stream_path!`](crate::stream_path) decides where it writes. Neither is readable from the environment, so there is no second specification to disagree with the first.
+pub fn install(destination: Destination) -> io::Result<()> {
+    let recorder = Recorder::new(destination)?;
+
+    tracing::subscriber::set_global_default(recorder).map_err(io::Error::other)
 }
 
 /// What a span's identity is, once the file has named it: an index into the callsite table.
@@ -249,6 +262,11 @@ impl Sink {
         let (writer, rotate): (Box<dyn Write + Send>, _) = match destination {
             Destination::Stream(writer) => (writer, None),
             Destination::Rotating { path, cap } => {
+                // The directory is made here rather than by each caller, because the path is derived by `stream_path!` rather than chosen: a caller that cannot spell the path should not have to know which of its components exist.
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+
                 let file = BufWriter::new(File::create(&path)?);
 
                 (Box::new(file), Some((path, cap)))
@@ -353,7 +371,7 @@ impl Sink {
         self.writer = Box::new(io::sink());
         let mut previous = path.clone().into_os_string();
         previous.push(".prev");
-        let _ = std::fs::rename(&path, PathBuf::from(previous));
+        let _ = fs::rename(&path, PathBuf::from(previous));
 
         let Ok(file) = File::create(&path) else {
             return;

@@ -133,7 +133,7 @@ Why the gate holds these steps and no others — what each is the sole check for
 - Changes to `curios-binaryen/build.rs` must verify an empty-cache build and a cache hit from a different Cargo mode or build-script fingerprint.
 - Changes to runtime dependencies must rebuild through `cargo x runtime` and confirm that neither `cranelift-codegen` nor `curios-binaryen` entered its graph — name those crates, since Wasmtime's runtime legitimately pulls the `cranelift-bitset`, `cranelift-bforest` and `cranelift-entity` utility crates.
 - Changes to the bundle format must run the ignored end-to-end test in `curios/tests/bundle.rs` explicitly.
-- Profile through the built-in `tracing` mechanism, not an external sampler: `cargo x profile programs/hello_world.crs` is the only build in which the `profile` subcommand exists.
+- Profile through the built-in `tracing` mechanism, not an external sampler: `cargo x profile programs/hello_world.crs` builds the compiler with its `profile` feature and folds what that build filed. Profiling is a property of the build and not a subcommand, so every subcommand a profiling build runs is measured, and the stream lands in `.artifacts/` beside the crate that wrote it.
 
 ## Repository conventions
 

@@ -41,12 +41,33 @@ use {
 };
 
 #[cfg(feature = "profile")]
-use curios_profile::{Destination, ProfileReport, fold, trace};
+use curios_profile::{Destination, install, stream_path};
 
 // Only the `profile` build installs it, so the ordinary CLI keeps the system allocator untouched and pays nothing for counters no mode would read.
 #[cfg(feature = "profile")]
 #[global_allocator]
 static ALLOCATOR: curios_profile::CountingAllocator = curios_profile::CountingAllocator;
+
+/// File every span and event this invocation makes, for a `profile` build only.
+///
+/// **Profiling is a property of the build, not a subcommand.** There is nothing to select: whatever the arguments asked for is what gets measured, so `run`, `test`, `document` and a package build are all profileable where a dedicated mode could only ever profile the one compilation it performed itself.
+///
+/// The stream is filed rather than piped because a hung run is the case profiling exists for, and a pipe dies with the interrupt that ends one. Standard output is also the *product* of most subcommands — a program's own output under `run`, an answer under `wonder` — so rows on it would corrupt the thing being profiled.
+///
+/// A failure to open is reported and the invocation proceeds. The alternative is refusing to compile because a measurement could not be filed, which inverts which of the two the caller asked for.
+///
+/// **Success says nothing.** Where the stream went is the reader's to state — `cargo x profile` derives the same path and prints it beside the summary — and a line per invocation would be narration on every `run` a profiling build performs, which `curios/tests/lint.rs` is right to refuse.
+#[cfg(feature = "profile")]
+fn install_profiling() {
+    let destination = Destination::Rotating {
+        path: stream_path!().into(),
+        cap: 512 * 1024 * 1024,
+    };
+
+    if let Err(error) = install(destination) {
+        eprintln!("profiling unavailable: {error}");
+    }
+}
 
 /// The process-level failure split: a written-goal batch is incomplete development state (exit 2), everything else a hard error (exit 1). A running program's own exit code passes through untouched, so 0 always means "compiled, ran, and exited 0".
 enum Failure {
@@ -260,61 +281,15 @@ fn dispatch() -> Result<(), Failure> {
             )?,
             Query::Server => serve(budget, &units, manifest.as_deref())?,
         },
-        #[cfg(feature = "profile")]
-        Mode::Profile {
-            input_path,
-            out,
-            cap,
-        } => {
-            let scope = load_units(&units)?;
-            let subject = Subject::File(input_path.clone());
-            // Standard output is the default because the compile itself reports on standard error, so a stream can be piped or redirected without separating the two by hand.
-            let destination = match &out {
-                None => Destination::Stream(Box::new(std::io::stdout())),
-                Some(path) => Destination::Rotating {
-                    path: path.clone(),
-                    cap,
-                },
-            };
-
-            let compilation = trace(destination, || {
-                compile_file(budget, scope, &input_path, &subject)
-            })
-            .map_err(|error| Failure::Error(format!("profile: {error}")))?;
-
-            // A run that returned can be summarized; one that did not never reaches here, which is why the rows were written as they happened.
-            if let Some(path) = &out {
-                print!("{}", summarize(path)?.render());
-            }
-
-            compilation.map(|_| ())?;
-        }
     }
 
     Ok(())
 }
 
-/// Fold a rotated stream back into its summaries: the discarded file's rows first, then the current file's.
-///
-/// Both are handed to one fold because each restates the callsite table at its head, so their concatenation is well defined. They are chained rather than concatenated in memory: the fold reads rows, and at the default cap the pair is a gigabyte. A missing `.prev` is the ordinary case of a run that never grew past one file.
-#[cfg(feature = "profile")]
-fn summarize(path: &std::path::Path) -> Result<ProfileReport, Failure> {
-    use std::io::Read;
-
-    let named = |error| Failure::Error(format!("{}: {error}", path.display()));
-    let mut previous = path.to_path_buf().into_os_string();
-    previous.push(".prev");
-
-    let discarded: Box<dyn Read> = match fs::File::open(&previous) {
-        Ok(file) => Box::new(file),
-        Err(_) => Box::new(std::io::empty()),
-    };
-    let current = fs::File::open(path).map_err(named)?;
-
-    fold(std::io::BufReader::new(discarded.chain(current))).map_err(named)
-}
-
 fn main() -> ExitCode {
+    #[cfg(feature = "profile")]
+    install_profiling();
+
     match dispatch() {
         Ok(()) => ExitCode::SUCCESS,
         Err(Failure::Incomplete(report)) => {

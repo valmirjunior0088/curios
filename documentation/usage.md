@@ -17,7 +17,6 @@ The complete command-line and package reference. The [README](../README.md) cove
 - [Which manifest governs](#which-manifest-governs)
 - [Where things go](#where-things-go)
 - [Reusing what was already built](#reusing-what-was-already-built)
-- [Profiling builds](#profiling-builds)
 - [Global flags](#global-flags)
 
 ## Running and compiling
@@ -292,24 +291,6 @@ Neither `run` nor `compile` recompiles a declared executable nothing has changed
 An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again. A question about a program (`wonder`) reads the store and never writes it. A bare `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-bare split as everywhere else.
 
 Payloads are native code for the machine that built them, so an entry is found only by an engine that can run it; two machines share one only when their engines agree. Nothing has to be cleaned up by hand as sources change: each executable occupies one slot per dependency chain, overwritten in place.
-
-## Profiling builds
-
-`profile` exists only in a compiler built with the `profile` feature: there is nothing to report without the instrumentation the feature compiles in, so the subcommand is absent rather than empty. `cargo x profile <PATH>` builds such a compiler and runs it:
-
-```sh
-cargo x profile programs/hello_world.crs
-```
-
-It takes one path to a `.crs` entrypoint — not the four forms, since there is no project question to answer — compiles it once, and writes one tab-separated row per span and event to standard output as each happens. The first column is the kind, so an analysis is a one-liner:
-
-```sh
-cargo x profile programs/hello_world.crs | awk -F'\t' '$1 == "V"'
-```
-
-**Nothing waits for the end.** That is the point: a compilation that hangs is exactly the one worth profiling, and its rows are on disk a second after it made them. `--out <PATH>` writes the stream to a file instead, rotating to `<PATH>.prev` at `--cap` bytes so an endless run cannot fill a disk, and prints the summaries afterwards — for a run that finished. For one that did not, fold the file yourself; the summary names the spans that were still open, which is the stack the compiler was inside when it was killed.
-
-The prelude's own elaboration is a separate compilation, in `curios-prelude-archive`'s build script, and a profiling build files its stream at `curios-prelude-archive/.artifacts/profile.tsv`. The instrumentation mechanics and the row shapes belong to `curios-profile`'s rustdoc.
 
 ## Global flags
 

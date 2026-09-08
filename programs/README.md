@@ -8,7 +8,7 @@ Nothing here is a test fixture. Fixtures are written inline in the probes that a
 
 - `curios/src/tests/codegen/` — `census.rs` surveys the fourteen Curios-only programs and three of the workloads, `ladder.rs` and `structural.rs` name individual programs, and `churn.rs` measures three under the collector. Figures live beside the probe that reproduces them, never here.
 - [`benchmarks/`](../benchmarks/README.md) — the Docker harness times the five workloads against seven other languages. That README owns the results, the toolchains, and the caveats that belong beside a number.
-- `cargo x profile programs/<file>.crs` — one compilation under the tracing profiler.
+- `cargo x profile programs/<file>.crs` — one run under a profiling build, folded into its summaries. What that build measures and where it files it is [`curios-profile`](../curios-profile/README.md)'s.
 
 Run one directly:
 

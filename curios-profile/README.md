@@ -1,6 +1,26 @@
 # curios-profile
 
-Programmatic profiling for the workspace: the `profile!`, `sample!` and `note!` macros every crate instruments with, and — under `enabled` — `trace`, the scoped subscriber that writes one tab-separated row per span and event as it happens; `fold`, which recomputes timings, allocation figures and magnitude distributions from those rows; `capture_host_records`, the same scoping for what the engine says through the `log` facade; and `CountingAllocator`, the memory half of a report. It is the workspace's only `tracing`, `tracing-subscriber` and `tracing-log` dependency, and through the last the only naming of `log`. What each macro expands to, what a row holds and what a fold returns belong to the crate rustdoc.
+Programmatic profiling for the workspace: the `profile!`, `sample!` and `note!` macros every crate instruments with, `stream_path!` for where a crate files what it records, and — under `enabled` — `trace` and `install`, the two scopings of the subscriber that writes one tab-separated row per span and event as it happens; `fold`, which recomputes timings, allocation figures and magnitude distributions from those rows; `capture_host_records`, the same scoping for what the engine says through the `log` facade; and `CountingAllocator`, the memory half of a report. It is the workspace's only `tracing`, `tracing-subscriber` and `tracing-log` dependency, and through the last the only naming of `log`. What each macro expands to, what a row holds and what a fold returns belong to the crate rustdoc.
+
+## Taking a profile
+
+Profiling is a property of the build. `cargo x profile <PATH>` builds the compiler with its `profile` feature, runs `<PATH>` under it, and folds what that run filed:
+
+```sh
+cargo x profile programs/hello_world.crs
+```
+
+Because nothing selects a mode, whatever a profiling build runs is what gets measured — `run`, `test`, `document`, a package build — and `cargo x profile` picks the subject rather than switching an instrument on.
+
+Each run files `.artifacts/profile.tsv` beside the crate that wrote it: `curios/` for the CLI, `curios-prelude-archive/` for the prelude's own elaboration, which is a separate compilation in a build script. The reader is what names the path — `cargo x profile` prints it beside the summary — because a compiler that narrated where it was writing would narrate it on every invocation. The stream rotates to `<PATH>.prev` at half a gibibyte, so an endless run keeps its tail and cannot fill a disk.
+
+**A test run shares one path.** Under `--all-features` every spawned `curios` in the integration suite installs the recorder and files the same stream, so what is left there after `cargo test` is many processes interleaved and means nothing. Nothing reads it, and a write that fails is dropped, so the suite is unaffected — but take a profile from a run of your own, never from a test run.
+
+**Nothing waits for the end.** That is the point: a compilation that hangs is exactly the one worth profiling, and its rows are on disk a second after it made them. A run that returned is summarized by the recipe; for one that had to be killed, fold the file — the summary names the spans that were still open, which is the stack the compiler was inside when it stopped. The first column is the kind, so a question the summaries do not answer is a one-liner:
+
+```sh
+awk -F'\t' '$1 == "V"' curios/.artifacts/profile.tsv
+```
 
 ## Design
 
@@ -12,9 +32,13 @@ Programmatic profiling for the workspace: the `profile!`, `sample!` and `note!` 
 
 ### Profiling is configured in code, never from the environment
 
-**Decision.** `capture` runs a closure under a thread-local subscriber and returns the report; there is no environment-variable switch, no process-global subscriber, and no metrics API. Stage entrypoints and optimizer passes carry permanent spans; a span added to isolate one investigation is removed once the question is answered.
+**Decision.** There is no environment-variable switch and no metrics API. What is measured is decided by the `profile` feature and by the call sites the feature compiles in; where the stream goes is decided by `stream_path!`. A capture is scoped two ways, and which one a caller wants follows from whether it has a closure to wrap: `trace` runs one operation under a thread-local subscriber, and `install` makes the recorder this process's global default. Stage entrypoints and optimizer passes carry permanent spans; a span added to isolate one investigation is removed once the question is answered.
 
-**Rationale.** A measurement is already specified at its call sites, and a second, out-of-band specification could only disagree with the first. `capture_host_records` keeps the rule within the one constraint the `log` facade imposes — one process-global logger — so its bridge is installed lazily and permanently, but `log`'s max level stays `Off` except inside a capture, and a build that never captures pays one relaxed atomic load per suppressed record.
+**Rationale.** A measurement is already specified at its call sites, and a second, out-of-band specification could only disagree with the first. A compile-time feature and a derived path are not a second specification — neither is readable from the environment, and neither can say anything the other contradicts.
+
+**Why a global default, given that.** A *binary* has no closure to wrap: the work is whatever subcommand the arguments selected, so a scoped capture could only ever cover a synthetic operation the binary performed on profiling's behalf — which is what `curios profile` was, and why it could profile one compilation and nothing else. Making the invocation the scope is what lets `run`, `test` and a package build be profiled at all. The two do not compete: `set_global_default` is consulted only where no thread-local subscriber is set, so `trace` still overrides it for the duration of its closure, and the build script and the probes that need a scoped capture keep one.
+
+`capture_host_records` keeps the rule within the one constraint the `log` facade imposes — one process-global logger — so its bridge is installed lazily and permanently, but `log`'s max level stays `Off` except inside a capture, and a build that never captures pays one relaxed atomic load per suppressed record.
 
 ### Three instruments, because time and bytes cannot tell waste from bad inputs
 

@@ -171,20 +171,6 @@ pub(crate) fn compile_entry(
     compiled.map(|(module, _foreigns)| module)
 }
 
-/// [`compile_entry`] over a target that has already been resolved to a path, for the profiling mode — which compiles one bare file and consults nothing.
-#[cfg(feature = "profile")]
-pub(crate) fn compile_file(
-    budget: u64,
-    units: Vec<RootSource>,
-    entry: &Path,
-    subject: &Subject,
-) -> Result<Module, CompileError> {
-    let (entrypoint, loader, _source) =
-        Entrypoint::opened(entry).map_err(|error| CompileError::Failure(vec![error.report()]))?;
-
-    compile_entry(budget, &units, &entrypoint, &loader, subject, None)
-}
-
 /// Fold one [`Progress`] event onto the open status line, opening and closing lines as subjects begin and end.
 ///
 /// The line outlives each event, which is why it is threaded rather than owned here: `↳ Compiling /hello` and the `; 1.4s` that completes it are two separate writes to one line.

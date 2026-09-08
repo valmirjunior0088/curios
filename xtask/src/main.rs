@@ -92,7 +92,7 @@ enum Recipe {
         version: String,
     },
 
-    #[command(about = "Run one compilation under the tracing profiler")]
+    #[command(about = "Run one program under a profiling build, and fold what it filed")]
     Profile {
         #[arg(
             value_name = "PATH",
@@ -287,6 +287,9 @@ fn std_docs() -> Result<(), String> {
     Ok(())
 }
 
+/// Run `source` under a profiling build, then fold the stream it filed.
+///
+/// **The compiler is not asked to profile anything.** A `profile` build files every span and event it makes, whatever subcommand ran, so this recipe selects a subject rather than a mode — and the summary is a recipe's job because a fold reads a file the compiler has already finished writing.
 fn profile(source: &Path) -> Result<(), String> {
     runtime()?;
 
@@ -300,12 +303,36 @@ fn profile(source: &Path) -> Result<(), String> {
             "--features",
             "profile",
             "--",
-            "profile",
+            "run",
             &source.to_string_lossy(),
         ],
     )?;
 
+    // The reader states where it read from: the compiler files the stream and says nothing, so this is the one place the path is announced, and it is derived here the way every other path in this crate is.
+    let stream = root().join("curios/.artifacts/profile.tsv");
+    print!("{}", summarize(&stream)?.render());
+    println!("\nstream: {}", stream.display());
+
     Ok(())
+}
+
+/// Fold a rotated stream back into its summaries: the discarded file's rows first, then the current file's.
+///
+/// Both are handed to one fold because each restates the callsite table at its head, so their concatenation is well defined. They are chained rather than concatenated in memory: the fold reads rows, and at the default cap the pair is a gigabyte. A missing `.prev` is the ordinary case of a run that never grew past one file.
+fn summarize(path: &Path) -> Result<curios_profile::ProfileReport, String> {
+    use std::io::Read;
+
+    let named = |error| format!("{}: {error}", path.display());
+    let mut previous = path.to_path_buf().into_os_string();
+    previous.push(".prev");
+
+    let discarded: Box<dyn Read> = match fs::File::open(PathBuf::from(previous)) {
+        Ok(file) => Box::new(file),
+        Err(_) => Box::new(std::io::empty()),
+    };
+    let current = fs::File::open(path).map_err(named)?;
+
+    curios_profile::fold(std::io::BufReader::new(discarded.chain(current))).map_err(named)
 }
 
 fn benchmarks(tag: &str) -> Result<(), String> {

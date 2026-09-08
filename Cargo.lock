@@ -2555,6 +2555,7 @@ version = "0.13.6"
 dependencies = [
  "askama",
  "clap",
+ "curios-profile",
  "wasm-bindgen-cli-support",
 ]
 

@@ -133,29 +133,6 @@ pub(crate) enum Mode {
         query: Query,
     },
 
-    /// Present only in profiling builds: the mode exists exactly when the spans it writes do.
-    #[cfg(feature = "profile")]
-    #[command(about = "Profile one compilation, writing one record per span and event")]
-    Profile {
-        #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
-        input_path: PathBuf,
-
-        /// Without it the stream is standard output, which is what makes `| awk` the analysis. With it the rows go to a rotating pair of files and the summaries are printed instead — but only if the compilation returned, which is the whole point of the file.
-        #[arg(
-            long,
-            value_name = "PATH",
-            help = "Write the record stream here, rotating at --cap, and print the summaries on completion"
-        )]
-        out: Option<PathBuf>,
-
-        #[arg(
-            long,
-            value_name = "BYTES",
-            default_value_t = 512 * 1024 * 1024,
-            help = "Size at which the stream rotates, keeping the current file and its predecessor"
-        )]
-        cap: u64,
-    },
 }
 
 /// One question each, of fixed arity. A target takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Membership`.

@@ -13,3 +13,5 @@ workspace = true
 wasm-bindgen-cli-support = { workspace = true }
 clap = { workspace = true }
 askama = { workspace = true }
+# For the fold alone: `profile` runs a profiling build and summarizes the stream it filed, which is the half a recipe can do and the compiler should not. `enabled` carries the reader, not the instrumentation — nothing here is measured.
+curios-profile = { workspace = true, features = ["enabled"] }
