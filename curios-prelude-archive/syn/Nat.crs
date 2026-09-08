@@ -1,8 +1,12 @@
 use /std/{Nat};
 use /syn/{True, False};
 
+-- | That `a` is below `b`.
+-- |
+-- | Decided rather than proved: over literals it reduces to the proposition that holds, which is how `/` and `%` on `Nat` discharge what they ask of a divisor.
 pub let Lt(a: Nat, b: Nat) -> Prop =
     match Nat/lt(a, b) | true => True | false => False end;
 
+-- | That `a` is below `b` or equal to it, decided as `Lt` is.
 pub let Le(a: Nat, b: Nat) -> Prop =
     match Nat/le(a, b) | true => True | false => False end;

@@ -1,6 +1,7 @@
 use /std/{Nat, Bytes, Flt};
 use /syn/{True, False};
 
+-- | That `b` is four bytes long, decided.
 pub let FourBytes(b: Bytes) -> Prop =
     match Nat/eql(Bytes/len(b), 4) | true => True | false => False end;
 
@@ -10,8 +11,10 @@ let max: Flt =
 let min: Flt =
     -340282350000000000000000000000000000000.0;
 
+-- | That `a` is neither infinite nor beyond what `Flt` represents, decided.
 pub let Finite(a: Flt) -> Prop =
     match Flt/le(min, a) && Flt/le(a, max) | true => True | false => False end;
 
+-- | That `a` is zero or above and within range, decided.
 pub let NonNeg(a: Flt) -> Prop =
     match Flt/ge(a, +0.0) && Flt/le(a, max) | true => True | false => False end;

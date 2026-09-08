@@ -1,6 +1,10 @@
 use /std/{Str, List};
 
+-- | How a value spells as text.
+-- |
+-- | A body-less `satisfy Spell(T);` asks the compiler to write the witness, spelling a value as its constructor applied to its payloads.
 pub concept Spell(A: Type): pub Type {
+    -- | The value, written the way a source would write it.
     spell(A) -> Str,
 }
 
