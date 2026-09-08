@@ -2,7 +2,9 @@
 
 ## Status
 
-Not refined. The three questions below are separated, the mechanism each needs is located in the tree, and the removal in [What is removed](#what-is-removed) is settled and can land first. Nothing is traced: every claim under [What is certain](#what-is-certain) was read off the sources at `1120ba2c`, and the trace that would discharge it is named beside it. Nine peer toolchains were surveyed for what they profile and in what units; where one is precedent it is cited where it applies.
+**Question 0 has landed, and so has the removal.** `wonder cost` reports what became of each declaration; `curios profile` is gone and profiling is a property of the build. What remains unrefined is questions 1 and 2, which is what keeps this specification open — when one of them refines, this file becomes `profiling/01`, `02` and `03`, and the thesis under [The hinge](#the-hinge) graduates to `documentation/design/toolchain/` where a landed item's cross-cutting rationale belongs.
+
+Nine peer toolchains were surveyed for what they profile and in what units; where one is precedent it is cited where it applies.
 
 ## Why it exists
 
@@ -72,7 +74,7 @@ It is replaced by nothing. Under `profile`, `curios`'s `main` installs a process
 
 **Condition.** `env!` bakes in the builder's tree, so a profile build is meaningful only in the checkout that produced it. That is acceptable because profiling is only ever run with this repository in hand, and the feature gate is what guarantees the path never reaches a shipped binary.
 
-This lands first, on its own commit, and waits on nothing.
+**Landed**, first and on its own commit, as it said it would. One thing it turned up that the plan did not have: `install` may not announce where it wrote. `curios/tests/lint.rs` asserts that a lint run narrates nothing on stderr, and under `--all-features` every spawned `curios` would have narrated. The announcement moved to `cargo x profile`, which derives the same path — a better place regardless, since the reader is what should name what it read.
 
 ## The routes for question 2
 
@@ -86,23 +88,26 @@ This lands first, on its own commit, and waits on nothing.
 
 ## What is certain
 
-Read off the sources at `1120ba2c`. Nothing here was traced; each entry names the trace it owes.
+- **A hint traces to exactly one source declaration, and it is the qualified one.** Erasure names every function it lifts after the declaration it descends from, and derives `owner/n` for an anonymous one — `curios-elab`'s `Lowering::derived_hint` states it and names a profile as the reader that pays for an absent hint. The name survives the optimizer: `curios-cont`'s clone and inline paths both copy `debug_name` onto the copy. Measured on `programs/parse_digits.crs`, the rows read `/std/Str/fold`, `/syn/Str/step`, `/std/Str/trim_bounds/1`.
+- **Fate needs no instrumentation, because the driver already observes both sides.** `curios-pipeline` emits `Stage::Cont` and `Stage::ContOptm` around one call to the optimizer, once per compilation, so a consumer that counts declarations on each side learns every fate from the difference. No pass records anything, and the program measured is the program that ships. This is what closed the question of which decisions are per-site and which per-pass: for a fate, neither.
+- **What a difference cannot separate is inlining from pruning.** Both remove a name, so both report as absorbed. Separating them needs the passes to say which, and nothing here is worth that.
+- **All three outcomes occur.** On `programs/hello_world.crs`, 36 of 43 rows are absorbed, 6 survived, and `io/pure` is specialized 7 ways; on `programs/parse_digits.crs` the same declaration is specialized 20 ways. A report is dominated by absorption, which is the finding: most of what a program names costs nothing of its own.
+- **No span survives below Core.** Neither `curios-ersd` nor `curios-cont` mentions one, which is why the unit of attribution is the declaration and not a position. Identity survives instead, as [one naming scheme for compiler identities](../design/toolchain/one-naming-scheme-for-compiler-identities.md) states.
+- **Curios has no loop syntax.** No `for`, `while` or `loop` in [syntax.md](../syntax.md), so every repetition is a recursive `let` and per-declaration attribution is per-loop attribution.
+- **A test run shares one stream.** Under `--all-features` every `curios` the integration suite spawns installs the recorder and files the same path, so what is left there is many processes interleaved. Nothing reads it and a failed write is dropped, so the suite is unaffected — recorded in `curios-profile`'s README rather than engineered around.
+
+Still owed, by question 1:
 
 - **The per-declaration ledger exists and is discarded.** `curios-elab`'s `Context::consumed` computes the units spent and the peak depth reached, and `curios-cert`'s `Spend::consumed` computes the kernel's. `heaviest_declaration` folds by `heavier_of` and keeps no name. *Owes: that the value is live at every budget-restoring boundary, not only at module end.*
 - **Cost has a taxonomy, already declined for this use.** `Cost`'s `Category` names eight rows with display strings, and the `Cost` handed to `spend` already carries one — it is what builds the refusal. `cost`'s module documentation states that dominance "is deliberately not promised" and would need "cumulative per-category accounting". The accumulator is one indexed add on a path that already branches, subtracts and stores. **It belongs in `curios-elab`'s `Context` alone**: a user's compile time is spent in the elaborator, and the kernel's copy is a separate question with a different justification — the cost-parity invariant has been violated three times, and was found by bisection each time. *Owes: the measured cost of the accumulator on the elaborator's hot path.*
-- **No span survives below Core.** Neither `curios-ersd` nor `curios-cont` mentions one. Identity does survive, as the hint convention [one naming scheme for compiler identities](../design/toolchain/one-naming-scheme-for-compiler-identities.md) states. *Owes: that a hint traces to exactly one source declaration.*
-- **No optimizer decision is recorded.** `note!` appears nowhere in `curios-cont` or `curios-ersd`, though the passes are already named at their call sites. *Owes: which decisions are per-site and which are per-pass.*
-- **The structural survey exists, in the test tree.** `curios`'s codegen census already classifies every construction in optimized CPS across the fourteen-program corpus. Question 0 is largely that machinery moved from a probe into the product. *Owes: what of it is corpus-specific.*
-- **Curios has no loop syntax.** No `for`, `while` or `loop` in [syntax.md](../syntax.md).
 - **Guest sampling works and is undocumented.** `curios-runtime`'s shared engine selects a perf map under `profile`, and `curios-wasm`'s writer emits the full name section. *Owes: one recipe.*
-- **The removal's blast radius is eleven references, seven of them unchanged.** `cargo x profile` keeps its verb, so this roadmap, `programs/README.md` and the recorded retake recipes in `curios`'s fixpoint and unfolding probes need no edit — those last are reproduction recipes for figures the design documents quote. CLAUDE.md's profiling line and `usage.md`'s Profiling builds section change; the latter arguably leaves `usage.md`, which owns every subcommand and this stops being one.
 
 ## What has to be decided
 
-- **Whether question 0 alone is the deliverable.** If an exact "which cliff am I on" answers most of it, 1 and 2 are refinements rather than the product.
+- **Whether question 0 alone is the deliverable.** It has landed; the question is now whether using it makes 1 and 2 wanted, which is answered by living with it rather than by arguing about it.
+- **Whether carried cost joins fate.** A row says what became of a declaration and not yet what the survivors carry — allocation sites, calls that stayed indirect, membership of a recursive component. `curios`'s codegen census already computes a version of this over a fixed corpus; what of it is corpus-specific is the open part.
 - **Whether the elaborator's per-category accumulator is affordable** at its measured cost, and whether the kernel's follows it.
-- **Whether a vanished declaration is a finding or a lint**, held to the exactness bar the lint decision sets.
-- **Where the removed `usage.md` section goes** — CLAUDE.md's contributor validation, or `curios-profile`'s README beside the mechanics it already owns.
+- **Whether an indirect call inside a recursive component is a lint**, held to the exactness bar the lint decision sets. It is the one shape that is a cliff with no counterexample, and the report deliberately does not say so.
 - **Whether counts ever arrive**, and by which of the four routes.
 
 ## Deliberately not specified
