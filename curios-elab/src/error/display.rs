@@ -482,6 +482,7 @@ impl fmt::Display for Displayed<'_> {
                 )
             }
             Error::NoDerivation { concept } => {
+                let concept = spelling.symbol(concept);
                 write!(
                     f,
                     "no derivation exists for '{concept}'; write the body\n  a body-less `satisfy` asks the compiler to write the witness, which it does only for a concept registered as derivable"
@@ -498,6 +499,7 @@ impl fmt::Display for Displayed<'_> {
                 key,
                 reason,
             } => {
+                let concept = spelling.symbol(concept);
                 let key = key.spelled(spelling);
                 write!(f, "cannot derive '{concept}' for {key}")?;
                 match reason {
@@ -743,6 +745,7 @@ impl fmt::Display for Displayed<'_> {
                 first,
                 second,
             } => {
+                let concept = spelling.symbol(concept);
                 let noun = match key.0.len() {
                     1 => "head",
                     _ => "key",
@@ -767,6 +770,7 @@ impl fmt::Display for Displayed<'_> {
                 key,
                 witness,
             } => {
+                let concept = spelling.symbol(concept);
                 let noun = match key.0.len() {
                     1 => "head",
                     _ => "key",

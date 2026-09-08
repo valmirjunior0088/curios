@@ -341,11 +341,11 @@ pub enum Error {
     },
     /// A body-less `satisfy` for a concept the compiler has no derivation for. Derivability is registered per concept, never inferred from its shape.
     NoDerivation {
-        concept: String,
+        concept: Global,
     },
     /// A body-less `satisfy` whose key the registered derivation cannot write a body for: the shape it excludes, named so the refusal says what to write instead.
     Underivable {
-        concept: String,
+        concept: Global,
         key: Box<Term>,
         reason: Underivable,
     },
@@ -433,7 +433,7 @@ pub enum Error {
     Goals(Vec<GoalReport>),
     /// Two witnesses registered under the same `(concept, key)` — global coherence admits exactly one witness per key, program-wide.
     DuplicateWitness {
-        concept: String,
+        concept: Global,
         key: super::WitnessKey,
         /// The two declaring modules. Witnesses are anonymous, so the module is the coordinate that locates them for a reader — carried from each declaration's `island` rather than recovered by splitting the compiler-minted name.
         first: Qualifier,
@@ -441,7 +441,7 @@ pub enum Error {
     },
     /// A witness registered by a root that owns neither the concept nor any key head's declaring root — the orphan rule: a coherence-relevant registration must happen where the concept or a type it mentions is already declared, so two unrelated roots cannot independently `satisfy` the same concept+type and collide unfixably downstream.
     OrphanWitness {
-        concept: String,
+        concept: Global,
         key: super::WitnessKey,
         /// The declaring module — see [`Error::DuplicateWitness`].
         witness: Qualifier,
@@ -864,19 +864,13 @@ impl Error {
         Self::PrivateRepresentation { name: name.into() }
     }
 
-    pub(crate) fn no_derivation<N: Into<String>>(concept: N) -> Self {
-        Self::NoDerivation {
-            concept: concept.into(),
-        }
+    pub(crate) fn no_derivation(concept: Global) -> Self {
+        Self::NoDerivation { concept }
     }
 
-    pub(crate) fn underivable<N: Into<String>, T: Into<Term>>(
-        concept: N,
-        key: T,
-        reason: Underivable,
-    ) -> Self {
+    pub(crate) fn underivable<T: Into<Term>>(concept: Global, key: T, reason: Underivable) -> Self {
         Self::Underivable {
-            concept: concept.into(),
+            concept,
             key: Box::new(key.into()),
             reason,
         }
@@ -982,7 +976,7 @@ impl Error {
     }
 
     pub(crate) fn duplicate_witness(
-        concept: String,
+        concept: Global,
         key: super::WitnessKey,
         first: Qualifier,
         second: Qualifier,
@@ -996,7 +990,7 @@ impl Error {
     }
 
     pub(crate) fn orphan_witness(
-        concept: String,
+        concept: Global,
         key: super::WitnessKey,
         witness: Qualifier,
     ) -> Self {

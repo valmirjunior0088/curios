@@ -861,7 +861,7 @@ pub(crate) fn register_witness(
         && !key.0.iter().any(|head| owns(context.mount_of_head(head)))
     {
         return Err(Error::orphan_witness(
-            concept_name.symbol(),
+            concept_name.clone(),
             key,
             module.clone(),
         ));
@@ -878,7 +878,7 @@ pub(crate) fn register_witness(
         },
     ) {
         return Err(Error::duplicate_witness(
-            concept_name.symbol(),
+            concept_name.clone(),
             key,
             first_module,
             module.clone(),

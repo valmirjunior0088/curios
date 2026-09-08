@@ -73,7 +73,7 @@ pub(crate) fn elaborate_derive(
     }
 
     let Some(derivation) = derivation_for(&context.syntax(), name) else {
-        return Err(Error::no_derivation(name.symbol()).at_opt(term.span()));
+        return Err(Error::no_derivation(name.clone()).at_opt(term.span()));
     };
     let key = params
         .first()
@@ -111,8 +111,7 @@ impl Site<'_> {
     }
 
     fn refuse(&self, reason: Underivable) -> Error {
-        Error::underivable(self.concept.symbol(), self.key.clone(), reason)
-            .at_opt(self.span.clone())
+        Error::underivable(self.concept.clone(), self.key.clone(), reason).at_opt(self.span.clone())
     }
 }
 

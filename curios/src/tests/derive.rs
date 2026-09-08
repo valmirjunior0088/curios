@@ -233,7 +233,7 @@ fn the_eql_derivation_shares_the_eligibility_and_the_provenance() {
         "#;
     let report = error(proposition);
     assert!(
-        report.contains("cannot derive '/syn/Equal' for Holds\n  Holds is a proposition, whose values erase; write the body"),
+        report.contains("cannot derive 'Equal' for Holds\n  Holds is a proposition, whose values erase; write the body"),
         "{report}"
     );
 
@@ -296,7 +296,7 @@ fn an_ineligible_key_is_refused_by_its_shape() {
         "#;
     let report = error(proposition);
     assert!(
-        report.contains("cannot derive '/syn/Spell/Spell' for Holds\n  Holds is a proposition, whose values erase; write the body"),
+        report.contains("cannot derive 'Spell' for Holds\n  Holds is a proposition, whose values erase; write the body"),
         "{report}"
     );
 
@@ -310,7 +310,9 @@ fn an_ineligible_key_is_refused_by_its_shape() {
         "#;
     let report = error(concept);
     assert!(
-        report.contains("cannot derive '/syn/Spell/Spell' for Tag(Nat)\n  Tag(Nat) is a concept's record; write the body"),
+        report.contains(
+            "cannot derive 'Spell' for Tag(Nat)\n  Tag(Nat) is a concept's record; write the body"
+        ),
         "{report}"
     );
 
@@ -322,7 +324,7 @@ fn an_ineligible_key_is_refused_by_its_shape() {
         "#;
     let report = error(type_valued);
     assert!(
-        report.contains("cannot derive '/syn/Spell/Spell' for Holder\n  payload #1 of 'Holder/holds' is a type, which no value spells; write the body"),
+        report.contains("cannot derive 'Spell' for Holder\n  payload #1 of 'Holder/holds' is a type, which no value spells; write the body"),
         "{report}"
     );
 
@@ -335,7 +337,7 @@ fn an_ineligible_key_is_refused_by_its_shape() {
         "#;
     let report = error(recursive);
     assert!(
-        report.contains("cannot derive '/syn/Spell/Spell' for R\n  payload #2 of 'R/node' is a type, which no value spells; write the body"),
+        report.contains("cannot derive 'Spell' for R\n  payload #2 of 'R/node' is a type, which no value spells; write the body"),
         "{report}"
     );
     assert!(!report.contains("rec #0"), "{report}");
@@ -459,7 +461,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
         /std/print("")
         "#;
     assert!(
-        error(standard).contains("no derivation exists for '/std/Show/Show'; write the body"),
+        error(standard).contains("no derivation exists for 'Show'; write the body"),
         "{}",
         error(standard)
     );
@@ -473,7 +475,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
         /std/print("")
         "#;
     assert!(
-        error(own).contains("no derivation exists for '/Tag'; write the body"),
+        error(own).contains("no derivation exists for 'Tag'; write the body"),
         "{}",
         error(own)
     );
@@ -485,7 +487,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
         /std/print("")
         "#;
     assert!(
-        error(premised).contains("no derivation exists for '/std/Show/Show'; write the body"),
+        error(premised).contains("no derivation exists for 'Show'; write the body"),
         "{}",
         error(premised)
     );
@@ -502,7 +504,7 @@ fn the_signature_refusals_fire_on_a_body_less_witness_as_on_a_written_one() {
     let rendered = error(orphan);
     assert!(
         rendered.contains(
-            "orphan witness of '/std/Ordered/Ordered' for head 'Bool', declared in the entry module\n  \
+            "orphan witness of 'Ordered' for head 'Bool', declared in the entry module\n  \
              a witness may only be declared where the concept or a type in its head is already declared"
         ),
         "{rendered}"

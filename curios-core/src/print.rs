@@ -118,7 +118,7 @@ impl Spelling {
     }
 
     /// The display spelling of a global — shortened against the module's other symbols (axis (b)) when that is unambiguous, and rendered in full otherwise. Globals never take axis (a)'s rename: their spelling is a path a programmer wrote, not a minted hint.
-    fn symbol(&self, name: &Global) -> String {
+    pub fn symbol(&self, name: &Global) -> String {
         self.shorten
             .as_ref()
             .and_then(|map| map.get(name).cloned())
