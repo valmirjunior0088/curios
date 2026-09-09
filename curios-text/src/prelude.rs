@@ -8,6 +8,7 @@ use {
         ForeignFunction, ForeignStore, Namespace, ResultShape, WireType, event, file_kind,
         open_mode, status, stdio, stdio_mode,
     },
+    curios_num::Integer,
     curios_utilities::{Grain, Plicity, SyntaxName, SyntaxRegistry},
     std::sync::Arc,
 };
@@ -23,9 +24,19 @@ fn name(label: &str) -> Term {
     Subterm::Name(Name::from([label.to_string()])).into()
 }
 
-// A registered `/syn` name, absolute so it resolves against the compilation root rather than whatever module the generated declaration lands in.
+// A registered name, absolute so it resolves against the compilation root rather than whatever module the generated declaration lands in.
 fn registered(target: SyntaxName) -> Term {
     Subterm::Name(Name::new(true, target.qualifier())).into()
+}
+
+// One of this roster's own operations, named absolutely for the reason `registered` is: a declaration lands in whatever module the roster puts it in, so a relative name would resolve differently per site. Not a registry entry — the registry holds what a crate *below* `/sys` must be able to name, and these are `/sys` naming itself.
+fn sys_op(segments: &'static [&'static str]) -> Term {
+    registered(SyntaxName::new(segments))
+}
+
+// The proposition a decided bound is stated as: `Holds` applied to the decision itself. `curios-core`'s signature table builds the same shape over the intrinsic nodes these wrappers unfold to, and elaborating a `/sys` body is what holds the two together.
+fn decided(syntax: &SyntaxRegistry, decision: Term) -> Term {
+    applied(registered(syntax.proof.holds), vec![decision])
 }
 
 fn applied(head: Term, args: Vec<Term>) -> Term {
@@ -433,14 +444,23 @@ fn nat_succ() -> TopItem {
 
 // `0 < b`: a natural is nonzero exactly when zero is below it, so the divisions reuse the bound the accessors already state rather than introducing a second proposition for the same fact.
 fn nat_nonzero(syntax: &SyntaxRegistry) -> Term {
-    applied(
-        registered(syntax.proof.lt),
-        vec![intrinsic(Intrinsic::Nat(Nat::Zero)), name("b")],
+    decided(
+        syntax,
+        applied(
+            sys_op(&["sys", "Nat", "lt"]),
+            vec![intrinsic(Intrinsic::Nat(Nat::Zero)), name("b")],
+        ),
     )
 }
 
 fn int_nonzero(syntax: &SyntaxRegistry) -> Term {
-    applied(registered(syntax.proof.int_non_zero), vec![name("b")])
+    decided(
+        syntax,
+        applied(
+            sys_op(&["sys", "Int", "neq"]),
+            vec![name("b"), intrinsic(Intrinsic::Int(Integer::from(0)))],
+        ),
+    )
 }
 
 fn nat_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
@@ -702,7 +722,13 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 "to_nat",
                 int(),
                 nat(),
-                applied(registered(syntax.proof.int_non_neg), vec![name("a")]),
+                decided(
+                    syntax,
+                    applied(
+                        sys_op(&["sys", "Int", "ge"]),
+                        vec![name("a"), intrinsic(Intrinsic::Int(Integer::from(0)))],
+                    ),
+                ),
                 |int, non_neg| Intrinsic::IntToNat { int, non_neg },
             ),
         ),
@@ -829,7 +855,16 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 "of_le_bytes",
                 bin(Grain::X),
                 flt(),
-                applied(registered(syntax.proof.bytes_four), vec![name("a")]),
+                decided(
+                    syntax,
+                    applied(
+                        sys_op(&["sys", "Nat", "eql"]),
+                        vec![
+                            applied(sys_op(&["sys", "Bytes", "len"]), vec![name("a")]),
+                            nat_lit(4),
+                        ],
+                    ),
+                ),
                 |bin, four_bytes| Intrinsic::FltOfLeBytes { bin, four_bytes },
             ),
         ),
@@ -845,9 +880,12 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
     // `i < len(b)`, the bound `at` will not index without. Stated here rather than only on `/std`'s wrapper because `/std` re-exports this module: a precondition the wrapper alone carried would be bypassed by naming the raw operation, which is the defect this obligation exists to close.
     //
     // The length is the sibling `len` rather than the `BinLen` intrinsic its body bakes in, which is the one place this module needs a name resolved rather than a node planted. The two are definitionally equal and that is not enough: a scrutinee refinement is keyed on the term written, so a caller who guards with `i < len(b)` — the only spelling available to them — discharges a goal spelled that way and not one spelled with an intrinsic they cannot write.
-    let in_range = applied(
-        registered(syntax.proof.lt),
-        vec![name("i"), applied(name("len"), vec![name("b")])],
+    let in_range = decided(
+        syntax,
+        applied(
+            sys_op(&["sys", "Nat", "lt"]),
+            vec![name("i"), applied(name("len"), vec![name("b")])],
+        ),
     );
     vec![
         documented(
@@ -900,12 +938,15 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
                     (
                         Plicity::Implicit,
                         "within",
-                        applied(
-                            registered(syntax.proof.le),
-                            vec![
-                                nat_plus(name("s"), name("l")),
-                                applied(name("len"), vec![name("b")]),
-                            ],
+                        decided(
+                            syntax,
+                            applied(
+                                sys_op(&["sys", "Nat", "le"]),
+                                vec![
+                                    nat_plus(name("s"), name("l")),
+                                    applied(name("len"), vec![name("b")]),
+                                ],
+                            ),
                         ),
                     ),
                 ],
@@ -976,9 +1017,12 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                     (
                         Plicity::Implicit,
                         "ok",
-                        applied(
-                            registered(syntax.proof.lt),
-                            vec![name("i"), applied(name("len"), vec![name("a")])],
+                        decided(
+                            syntax,
+                            applied(
+                                sys_op(&["sys", "Nat", "lt"]),
+                                vec![name("i"), applied(name("len"), vec![name("a")])],
+                            ),
                         ),
                     ),
                 ],
@@ -1006,12 +1050,15 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                     (
                         Plicity::Implicit,
                         "within",
-                        applied(
-                            registered(syntax.proof.le),
-                            vec![
-                                nat_plus(name("s"), name("l")),
-                                applied(name("len"), vec![name("a")]),
-                            ],
+                        decided(
+                            syntax,
+                            applied(
+                                sys_op(&["sys", "Nat", "le"]),
+                                vec![
+                                    nat_plus(name("s"), name("l")),
+                                    applied(name("len"), vec![name("a")]),
+                                ],
+                            ),
                         ),
                     ),
                 ],

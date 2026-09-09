@@ -3,6 +3,7 @@
 use {
     crate::{KernelError, infer},
     curios_core::{Free, Intrinsic, Term, UniverseContext},
+    curios_num::Integer,
 };
 
 use super::test_support::*;
@@ -25,16 +26,16 @@ fn an_intrinsic_operand_of_the_wrong_type_is_refused() {
 
 /// A bound stated only on `/sys`'s wrapper is re-checked wherever that application survives and nowhere else: one unfolding leaves the bare operation, which a signature reading its operand alone would admit. Carrying the proof as an operand is what makes the check a property of the node, so it is this crate — not the elaborator that built the node — that decides the narrowing was justified.
 ///
-/// `/syn/Int/NonNeg` is declared rather than defined, since the fixture registry only names it. Opaque is enough: what is under test is that the operand is checked against the proposition at all.
+/// `Holds` is declared rather than defined, since the fixture registry only names it. Opaque is enough: what is under test is that the operand is checked against the proposition at all — and the proposition is now the reflection of a comparison the signature builds, rather than a separately named `NonNeg`.
 #[test]
 fn a_narrowing_to_nat_is_refused_without_its_bound() {
     let mut kernel = kernel();
     let int_type = Term::intrinsic(Intrinsic::IntType);
 
-    let non_neg = Free::global(crate::SYNTAX.proof.int_non_neg.qualifier());
+    let holds = Free::global(crate::SYNTAX.proof.holds.qualifier());
     kernel.declare(
-        &non_neg,
-        &Term::func_type([(binder(0, "a"), int_type.clone())], Term::prop()),
+        &holds,
+        &Term::func_type([(binder(0, "b"), bool_type())], Term::prop()),
         &UniverseContext::default(),
     );
 
@@ -44,7 +45,13 @@ fn a_narrowing_to_nat_is_refused_without_its_bound() {
     let ok = binder(2, "ok");
     kernel.assume(
         &ok,
-        &Term::apply(Term::free_var(&non_neg), vec![Term::free_var(&x)]),
+        &Term::apply(
+            Term::free_var(&holds),
+            vec![Term::intrinsic(Intrinsic::IntLe(
+                Term::intrinsic(Intrinsic::Int(Integer::from(0))),
+                Term::free_var(&x),
+            ))],
+        ),
     );
 
     assert_eq!(

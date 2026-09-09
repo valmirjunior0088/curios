@@ -55,11 +55,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     proof: ProofSyntax {
         true_qed: name(&["syn", "True", "True", "qed"]),
         true_type: name(&["syn", "True", "True"]),
-        lt: name(&["syn", "Nat", "Lt"]),
-        le: name(&["syn", "Nat", "Le"]),
-        int_non_zero: name(&["syn", "Int", "NonZero"]),
-        int_non_neg: name(&["syn", "Int", "NonNeg"]),
-        bytes_four: name(&["syn", "Flt", "FourBytes"]),
+        holds: name(&["syn", "Bool", "Holds"]),
         flt_finite: name(&["syn", "Flt", "Finite"]),
         flt_non_neg: name(&["syn", "Flt", "NonNeg"]),
     },

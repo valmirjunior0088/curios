@@ -19,6 +19,7 @@
 use {
     super::Intrinsic,
     crate::{Nat, Term},
+    curios_num::Integer,
     curios_utilities::{Grain, SyntaxName, SyntaxRegistry},
 };
 
@@ -83,6 +84,10 @@ impl Intrinsic {
                 args,
             )
         };
+
+        // A bound stated over a comparison this table can build: `Holds` applied to the decision itself, rather than a proposition named per operand shape. The five that used to be named — `Lt`, `Le`, `NonZero`, `NonNeg`, `FourBytes` — were each one comparison under the same reflection, and naming them is what made the `/sys` roster reference a root above it.
+        let holds =
+            |decision: Intrinsic| decided(syntax.proof.holds, vec![Term::intrinsic(decision)]);
 
         let sig = |operands: Vec<Operand>, produced: Term| Signature {
             operands,
@@ -150,10 +155,10 @@ impl Intrinsic {
                 vec![
                     Operand::At(nat_type()),
                     Operand::At(nat_type()),
-                    Operand::At(decided(
-                        syntax.proof.lt,
-                        vec![Term::intrinsic(Nat(self::Nat::Zero)), divisor.clone()],
-                    )),
+                    Operand::At(holds(NatLt(
+                        Term::intrinsic(Nat(self::Nat::Zero)),
+                        divisor.clone(),
+                    ))),
                 ],
                 nat_type(),
             ),
@@ -161,7 +166,10 @@ impl Intrinsic {
                 vec![
                     Operand::At(int_type()),
                     Operand::At(int_type()),
-                    Operand::At(decided(syntax.proof.int_non_zero, vec![divisor.clone()])),
+                    Operand::At(holds(IntNeq(
+                        divisor.clone(),
+                        Term::intrinsic(Int(Integer::from(0))),
+                    ))),
                 ],
                 int_type(),
             ),
@@ -174,7 +182,10 @@ impl Intrinsic {
             IntToNat { int, .. } => sig(
                 vec![
                     Operand::At(int_type()),
-                    Operand::At(decided(syntax.proof.int_non_neg, vec![int.clone()])),
+                    Operand::At(holds(IntLe(
+                        Term::intrinsic(Int(Integer::from(0))),
+                        int.clone(),
+                    ))),
                 ],
                 nat_type(),
             ),
@@ -197,7 +208,10 @@ impl Intrinsic {
             FltOfLeBytes { bin, .. } => sig(
                 vec![
                     Operand::At(bin_type(Grain::X)),
-                    Operand::At(decided(syntax.proof.bytes_four, vec![bin.clone()])),
+                    Operand::At(holds(NatEql(
+                        bin_len(Grain::X, bin.clone()),
+                        Term::intrinsic(Nat(self::Nat::new(4u32))),
+                    ))),
                 ],
                 flt_type(),
             ),
@@ -212,10 +226,7 @@ impl Intrinsic {
                 vec![
                     Operand::At(bin_type(*grain)),
                     Operand::At(nat_type()),
-                    Operand::At(decided(
-                        syntax.proof.lt,
-                        vec![index.clone(), bin_len(*grain, bin.clone())],
-                    )),
+                    Operand::At(holds(NatLt(index.clone(), bin_len(*grain, bin.clone())))),
                 ],
                 grain_element(*grain),
             ),
@@ -230,13 +241,10 @@ impl Intrinsic {
                     Operand::At(bin_type(*grain)),
                     Operand::At(nat_type()),
                     Operand::At(nat_type()),
-                    Operand::At(decided(
-                        syntax.proof.le,
-                        vec![
-                            Term::intrinsic(NatAdd(start.clone(), length.clone())),
-                            bin_len(*grain, bin.clone()),
-                        ],
-                    )),
+                    Operand::At(holds(NatLe(
+                        Term::intrinsic(NatAdd(start.clone(), length.clone())),
+                        bin_len(*grain, bin.clone()),
+                    ))),
                 ],
                 bin_type(*grain),
             ),
@@ -276,10 +284,10 @@ impl Intrinsic {
                     Operand::IsType,
                     Operand::At(list_type(element.clone())),
                     Operand::At(nat_type()),
-                    Operand::At(decided(
-                        syntax.proof.lt,
-                        vec![index.clone(), list_len(element.clone(), list.clone())],
-                    )),
+                    Operand::At(holds(NatLt(
+                        index.clone(),
+                        list_len(element.clone(), list.clone()),
+                    ))),
                 ],
                 element.clone(),
             ),
@@ -295,13 +303,10 @@ impl Intrinsic {
                     Operand::At(list_type(element.clone())),
                     Operand::At(nat_type()),
                     Operand::At(nat_type()),
-                    Operand::At(decided(
-                        syntax.proof.le,
-                        vec![
-                            Term::intrinsic(NatAdd(start.clone(), length.clone())),
-                            list_len(element.clone(), list.clone()),
-                        ],
-                    )),
+                    Operand::At(holds(NatLe(
+                        Term::intrinsic(NatAdd(start.clone(), length.clone())),
+                        list_len(element.clone(), list.clone()),
+                    ))),
                 ],
                 list_type(element.clone()),
             ),

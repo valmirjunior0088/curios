@@ -253,19 +253,13 @@ pub struct ProofSyntax {
     pub true_qed: SyntaxName,
     /// The trivially true proposition itself. Named beside its constructor because discharging an obligation needs both halves: this one recognises a goal worth discharging, `true_qed` inhabits it.
     pub true_type: SyntaxName,
-    /// `a < b`, decided — the bound `/sys`'s checked accessors take as their index precondition. Decided rather than inductive is load-bearing: it reduces to `True` on a refined comparison, which is what lets the obligation be discharged without a written proof.
-    pub lt: SyntaxName,
-    /// `a <= b`, decided, by the same mechanism — the ordering half of a window bound. Distinct from `/std/Nat/Le/Ind`, which stays inductive so its laws can recurse over the relation's constructors.
-    pub le: SyntaxName,
-    /// `a != 0` over `Int`, the precondition a division states. `Nat` needs no counterpart: a natural is nonzero exactly when `0 < n`, which [`ProofSyntax::lt`] already states.
-    pub int_non_zero: SyntaxName,
-    /// `0 <= a` over `Int`, the precondition narrowing to `Nat` states.
-    pub int_non_neg: SyntaxName,
-    /// `len(b) = 4` over `Bytes`, the precondition reinterpreting one as a binary32 states. Decided on the length alone, which is the whole of what the reinterpretation needs.
-    pub bytes_four: SyntaxName,
+    /// The reflection of a decided comparison into a proposition — `Holds(b)`, which reduces to [`ProofSyntax::true_type`] on a refined scrutinee, and that is what lets an obligation be discharged without a written proof.
+    ///
+    /// **Every bound stated over an intrinsic comparison is built from this one rather than named.** A comparison is a term the table already holds the operands of, so naming five separate propositions — `Lt`, `Le`, `NonZero`, `NonNeg`, `FourBytes` — made the roster reach into a root above it for what it could spell itself. What survives beside this are the two `Flt` bounds, whose decision is a conjunction and so is authored rather than constructed.
+    pub holds: SyntaxName,
     /// `a` is a number over `Flt` — finite, so neither infinity nor the NaN — the precondition truncating one to an `Int` states.
     pub flt_finite: SyntaxName,
-    /// `0 <= a` and `a` is a number, the precondition truncating a `Flt` to a `Nat` states. Distinct from [`ProofSyntax::int_non_neg`]: an `Int` has no infinity to exclude, so its non-negativity needs no upper bound and this one does.
+    /// `0 <= a` and `a` is a number, the precondition truncating a `Flt` to a `Nat` states. An `Int`'s non-negativity needs no upper bound and so is built from [`ProofSyntax::holds`] over a single comparison; this one is not, which is why it is named.
     pub flt_non_neg: SyntaxName,
 }
 
@@ -274,27 +268,12 @@ impl ProofSyntax {
         let Self {
             true_qed,
             true_type,
-            lt,
-            le,
-            int_non_zero,
-            int_non_neg,
-            bytes_four,
+            holds,
             flt_finite,
             flt_non_neg,
         } = self;
 
-        [
-            true_qed,
-            true_type,
-            lt,
-            le,
-            int_non_zero,
-            int_non_neg,
-            bytes_four,
-            flt_finite,
-            flt_non_neg,
-        ]
-        .into_iter()
+        [true_qed, true_type, holds, flt_finite, flt_non_neg].into_iter()
     }
 }
 
