@@ -583,7 +583,7 @@ impl Reader<'_> {
         let mut binders = binders.clone();
         binders.extend(case.payload.iter().filter_map(|param| param.label.clone()));
         Member {
-            name: case.label.clone(),
+            name: case.label.to_string(),
             signature: self.signature(module, imports, &binders, print_case_head(case)),
             prose: lines(&case.doc),
         }
@@ -611,7 +611,7 @@ impl Reader<'_> {
         field: &ConceptField,
     ) -> Member {
         Member {
-            name: field.label.clone(),
+            name: field.label.to_string(),
             signature: self.signature(module, imports, binders, print_concept_field_head(field)),
             prose: lines(&field.doc),
         }

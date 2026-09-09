@@ -1022,7 +1022,7 @@ fn process_items(
                             if field.is_super {
                                 format!("_super{i}")
                             } else {
-                                field.label.clone()
+                                field.label.to_string()
                             }
                         })
                         .collect::<Vec<_>>();

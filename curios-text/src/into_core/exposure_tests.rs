@@ -313,6 +313,53 @@ fn rejects_a_duplicate_declaration() {
     );
 }
 
+// A constructor and a concept method are reached as path segments, so both are declaring positions: a repeat is refused at the one that arrived second, and the caret is on it. Located only once their labels carried a span — built from a bare `String`, every one of these refusals arrived with no line at all.
+#[test]
+fn locates_a_duplicate_constructor_and_a_duplicate_concept_method() {
+    let cases = run_err_report(
+        r#"
+        induct Color : Type
+        | red()
+        | green()
+        | red()
+        end
+        Type
+    "#,
+    );
+    assert!(
+        cases.contains("`red` is already declared in this module") && cases.contains("5 |"),
+        "reported {cases}"
+    );
+
+    let fields = run_err_report(
+        r#"
+        concept Tag(A : Type) : Type {
+            tag(x : A) -> Type,
+            name(x : A) -> Type,
+            tag(x : A) -> Type,
+        }
+        Type
+    "#,
+    );
+    assert!(
+        fields.contains("`tag` is already declared in this module") && fields.contains("5 |"),
+        "reported {fields}"
+    );
+}
+
+// A superclass field is an anonymous positional slot, so two of them share the empty label and must not collide as a duplicate.
+#[test]
+fn accepts_two_superclass_fields() {
+    lowered_module(
+        r#"
+        concept One(A : Type) : Type { one(x : A) -> Type }
+        concept Two(A : Type) : Type { two(x : A) -> Type }
+        concept Both(A : Type) : Type { use One(A), use Two(A), tag(x : A) -> Type }
+        Type
+    "#,
+    );
+}
+
 // A structure's fields are not module declarations, so nothing above catches a repeated one: the telescope kept both, a literal set both, and every `.n` read the first. Refused here at the label that arrived second, like every other duplicate in this stage — including through the signature sugar, which is the same field written another way.
 #[test]
 fn rejects_a_duplicate_struct_field() {

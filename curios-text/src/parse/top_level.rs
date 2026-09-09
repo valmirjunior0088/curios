@@ -308,7 +308,7 @@ pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
             Some(_) => commit(fail(DOC_BEFORE_NOTHING)),
         };
 
-        bar.and_keep(parse_identifier())
+        bar.and_keep(parse_declared_label())
             .and(
                 parse_literal("(")
                     .and_keep(sep_by0_trailing(parse_induct_payload_field, || {
@@ -329,9 +329,9 @@ pub(super) fn parse_top_induct_case<'a>() -> Parser<'a, TopCase> {
                     .or(pure(None)),
             )
             .map(
-                move |((label, payload), target): ((&str, Vec<_>), Option<Vec<Term>>)| TopCase {
+                move |((label, payload), target): ((Label, Vec<_>), Option<Vec<Term>>)| TopCase {
                     doc,
-                    label: label.to_string(),
+                    label,
                     payload,
                     target,
                 },
@@ -499,12 +499,12 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
         .map(|type_| ConceptField {
             doc: None,
             is_super: true,
-            label: String::new(),
+            label: Label::from(""),
             func_params: None,
             type_,
         });
 
-    let plain_or_sugar = parse_identifier()
+    let plain_or_sugar = parse_declared_label()
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_func_type_param, || {
@@ -519,10 +519,10 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
                     .and_keep(commit(lazy(parse_term)))
                     .map(|type_| (None, type_))),
         )
-        .map(|(label, (func_params, type_)): (&str, _)| ConceptField {
+        .map(|(label, (func_params, type_)): (Label, _)| ConceptField {
             doc: None,
             is_super: false,
-            label: label.to_string(),
+            label,
             func_params,
             type_,
         });

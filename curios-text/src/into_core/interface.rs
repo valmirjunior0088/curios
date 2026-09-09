@@ -1,6 +1,6 @@
 use {
     super::{ModuleInfo, Scoped},
-    crate::{Error, GroupItem, Label, Module, Name, TopItem, UseGroup},
+    crate::{Error, GroupItem, Module, Name, TopItem, UseGroup},
     curios_utilities::{Mount, Qualifier},
     std::{
         collections::{HashMap, HashSet},
@@ -339,7 +339,7 @@ fn seed(
                     // Constructor bindings are public within their synthetic namespace. The parent's child bit, seeded separately as `vis_pub && rep_pub`, gates all external walks while the declaring module retains direct access.
                     let mut direct = ModuleInfo::new();
                     for case in &induct_decl.cases {
-                        direct.insert_binding(&Label::from(case.label.clone()), true)?;
+                        direct.insert_binding(&case.label, true)?;
                     }
                     table.insert(ctor.clone(), direct);
 
@@ -347,7 +347,7 @@ fn seed(
                     for case in &induct_decl.cases {
                         let target = ctor.with(&case.label);
                         interface.bindings.insert(
-                            case.label.clone(),
+                            case.label.to_string(),
                             Entry {
                                 target,
                                 representation: None,
@@ -365,7 +365,7 @@ fn seed(
                     let mut direct = ModuleInfo::new();
                     // Superclass fields are anonymous — positional slots with no name to reach them by, and no wrapper (`into_core` filters them out of wrapper generation the same way). Registering their empty labels here is what made two superclasses collide as an empty-named duplicate declaration.
                     for field in concept.fields.iter().filter(|field| !field.is_super) {
-                        direct.insert_binding(&Label::from(field.label.clone()), true)?;
+                        direct.insert_binding(&field.label, true)?;
                     }
                     table.insert(namespace.clone(), direct);
 
@@ -373,7 +373,7 @@ fn seed(
                     for field in concept.fields.iter().filter(|field| !field.is_super) {
                         let target = namespace.with(&field.label);
                         interface.bindings.insert(
-                            field.label.clone(),
+                            field.label.to_string(),
                             Entry {
                                 target,
                                 representation: None,

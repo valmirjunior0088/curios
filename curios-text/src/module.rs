@@ -118,7 +118,8 @@ pub struct CasePayloadParam {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopCase {
     pub doc: Option<Doc>,
-    pub label: String,
+    /// The constructor's name, carrying the span of the word alone. A case is reached as a path segment (`Color/red`), so this is a declaring position: it refuses a keyword, and a refusal about it — a repeated case, above all — points at the word.
+    pub label: Label,
     pub payload: Vec<CasePayloadParam>,
     /// The parenthesized index expressions after the payload — the case's terminal `: Vec(T, Nat/succ(m))` with the mandatory part elided to `: (Nat/succ(m))`. Present iff the inductive head declares indices.
     pub target: Option<Vec<Term>>,
@@ -166,7 +167,8 @@ pub struct TopStruct {
 pub struct ConceptField {
     pub doc: Option<Doc>,
     pub is_super: bool,
-    pub label: String,
+    /// The method's name, carrying the span of the word alone, as [`TopCase::label`] does and for the same reasons — a field is reached as a path segment (`Show/show`) through the wrapper it generates. Empty and spanless on a superclass field, which is an anonymous positional slot with no name to reach it by.
+    pub label: Label,
     /// `Some` for the signature sugar `label(params) -> type_` — the written parameter list, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label : (params) -> type_` (see `ConceptField::desugared_type`). Never set on a super field.
     pub func_params: Option<Vec<FuncTypeParam>>,
     pub type_: Term,
