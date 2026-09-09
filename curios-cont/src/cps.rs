@@ -671,21 +671,32 @@ struct ScopeVerifier {
 impl ScopeVerifier {
     /// Record what `step` binds, rejecting a name bound twice, then queue the regions below it.
     fn admit(&mut self, step: ScopeStep) -> Result<(), CpsVerifyError> {
-        for function in step.functions {
+        let ScopeStep {
+            values,
+            functions,
+            tasks,
+        } = step;
+        for function in functions {
             if !self.bound_functions.insert(function) {
                 return Err(CpsVerifyError(format!(
                     "function {function} is bound more than once"
                 )));
             }
         }
-        for ScopeBinding { value, noun } in step.values {
+        for ScopeBinding { value, noun } in values {
             if !self.bound_values.insert(value) {
                 return Err(CpsVerifyError(format!(
                     "{noun} {value} is bound more than once"
                 )));
             }
         }
-        for task in step.tasks {
+        self.queue(tasks);
+        Ok(())
+    }
+
+    /// Queue the regions below a step without deciding anything about what it binds. The recording walk takes this route rather than [`Self::admit`]: it reports nothing, so a name bound twice is not its to refuse, and refusing one would drop the whole region beneath it from a set whose incompleteness costs optimizations.
+    fn queue(&mut self, tasks: Vec<ScopeTask>) {
+        for task in tasks {
             match task {
                 ScopeTask::Function {
                     function,
@@ -703,7 +714,6 @@ impl ScopeVerifier {
                     .push((owner, node, values, functions, continuations)),
             }
         }
-        Ok(())
     }
 }
 
@@ -1377,6 +1387,42 @@ impl CpsModule {
             ));
         }
         Ok(())
+    }
+
+    /// The functions each body may name, by the rule [`Self::scope_step`] states and [`Self::verify_lexical_scopes`] enforces: its own `LetFun` group, every group enclosing it, and every group bound *before* it along the chain from the entry. Recorded rather than checked, so a pass forwarding a function reference into a body can ask whether that body may legally name it.
+    ///
+    /// A function the walk does not reach is absent rather than empty, and the caller decides what to answer for it. This runs mid-round, where the module is transiently unscoped by design and only a round boundary promises a walk from the entry reaches every live function.
+    fn lexical_scopes(&self) -> BTreeMap<CpsFunId, BTreeSet<CpsFunId>> {
+        let Some(entry) = self.entry else {
+            return BTreeMap::new();
+        };
+        let mut scopes = BTreeMap::new();
+        let mut walk = ScopeVerifier {
+            function_work: vec![(entry, BTreeSet::new(), BTreeSet::from([entry]))],
+            ..ScopeVerifier::default()
+        };
+        let mut visited_nodes = BTreeSet::new();
+
+        while !walk.function_work.is_empty() || !walk.node_work.is_empty() {
+            while let Some((function, values, functions)) = walk.function_work.pop() {
+                scopes.insert(function, functions.clone());
+                let step = self.function_scope(function, values, functions);
+                walk.queue(step.tasks);
+            }
+
+            let Some((_, node_id, values, functions, continuations)) = walk.node_work.pop() else {
+                continue;
+            };
+            if !visited_nodes.insert(node_id) {
+                continue;
+            }
+            let Some(node) = self.node(node_id) else {
+                continue;
+            };
+            let step = self.scope_step(None, node, values, functions, continuations);
+            walk.queue(step.tasks);
+        }
+        scopes
     }
 
     /// The scope a function's own body sees: its parameters join the values it inherits, and no continuation crosses the boundary.

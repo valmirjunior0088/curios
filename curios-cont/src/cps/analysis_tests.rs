@@ -98,8 +98,18 @@ fn a_knot_of_function_references_is_recursive_though_neither_body_calls_the_othe
     assert!(!analysis.recursive.contains(&b), "`b` reaches nothing");
 }
 
-/// `g(p, n) = let _ = p() in g(p, n)`, a self-recursive member whose closure parameter every entry feeds the same function `f`, called once from `h() = g(f, 0)`. With `nested`, `f` is defined inside `h` — outside `g`'s lexical scope; otherwise it sits in the root group beside `g` and `h`.
-fn a_recursive_member_fed_one_function(nested: bool) -> (CpsModule, CpsValueId) {
+/// Where `f` is bound relative to the member fed with it. Every `LetFun` the lowering emits is a singleton, so these are chained groups rather than one group holding several members — which is what makes the ordering, and not merely the nesting, decide the answer.
+enum FeedShape {
+    /// `f` is bound before `g`, so `g`'s body may name it. The ordinary shape: one `/std` function reaching another.
+    SiblingBefore,
+    /// `f` is bound after `g` and before `h`. The call site may name `f` and `g` may not, so the site's scope and the callee's genuinely differ — the case that decides whether the recorded scope is a walk or a guess.
+    SiblingAfter,
+    /// `f` is defined inside `h`'s body, out of `g`'s scope by nesting rather than by order.
+    Nested,
+}
+
+/// `g(p, n) = let _ = p() in g(p, n)`, a self-recursive member whose closure parameter every entry feeds the same function `f`, called once from `h() = g(f, 0)`.
+fn a_recursive_member_fed_one_function(shape: FeedShape) -> (CpsModule, CpsValueId) {
     let mut module = CpsModule::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
@@ -165,12 +175,12 @@ fn a_recursive_member_fed_one_function(nested: bool) -> (CpsModule, CpsValueId) 
         args: vec![CpsAtom::Fun(f), CpsAtom::Literal(CpsLiteral::Nat(0))],
         return_to: h_return,
     });
-    let h_body = match nested {
-        true => module.add_node(CpsNode::LetFun {
+    let h_body = match shape {
+        FeedShape::Nested => module.add_node(CpsNode::LetFun {
             functions: vec![f],
             body: call_g,
         }),
-        false => call_g,
+        FeedShape::SiblingBefore | FeedShape::SiblingAfter => call_g,
     };
     module.define_function(
         h,
@@ -187,13 +197,17 @@ fn a_recursive_member_fed_one_function(nested: bool) -> (CpsModule, CpsValueId) 
         args: vec![],
         return_to: entry_return,
     });
-    let mut root = vec![g, h];
-    if !nested {
-        root.push(f);
-    }
-    let body = module.add_node(CpsNode::LetFun {
-        functions: root,
-        body: call_h,
+    // Singleton groups chained innermost-outward, so the order they are bound in is the order this list reverses.
+    let order: &[CpsFunId] = match shape {
+        FeedShape::SiblingBefore => &[f, g, h],
+        FeedShape::SiblingAfter => &[g, f, h],
+        FeedShape::Nested => &[g, h],
+    };
+    let body = order.iter().rev().fold(call_h, |inner, function| {
+        module.add_node(CpsNode::LetFun {
+            functions: vec![*function],
+            body: inner,
+        })
     });
     module.define_function(
         entry,
@@ -211,12 +225,28 @@ fn a_recursive_member_fed_one_function(nested: bool) -> (CpsModule, CpsValueId) 
 
 #[test]
 fn a_function_reference_reaches_a_recursive_member_only_within_its_scope() {
-    // The SCC fixpoint proves `p` is always `f`, and forwarding that lets `rewrite_atoms` devirtualize `p()` inside `g` — legal only where `g`'s body may name `f`. Nested inside `h`, `f` is out of `g`'s scope, and the devirtualized call would have stood as an out-of-scope call at the round's close, since the inliner declines a recursive callee; the parameter then stays unknown and the closure call stays a closure call. In the root group, the forwarding is admitted as before.
-    let (nested, p) = a_recursive_member_fed_one_function(true);
-    assert_eq!(known_values(&nested).get(&p), None);
+    // The SCC fixpoint proves `p` is always `f`, and forwarding that lets `rewrite_atoms` devirtualize `p()` inside `g` — legal only where `g`'s body may name `f`. Where it may not, the devirtualized call would stand as an out-of-scope call at the round's close, since the inliner declines a recursive callee; the parameter then stays unknown and the closure call stays a closure call.
+    //
+    // The three shapes are the whole rule. Order decides the two sibling cases, and it is the half an owner-chain reading of scope cannot see: `SiblingAfter` is admitted by every reading that asks only who *encloses* `g`, and refused by the one that asks what was bound before it.
+    let (before, p) = a_recursive_member_fed_one_function(FeedShape::SiblingBefore);
+    assert!(
+        matches!(known_values(&before).get(&p), Some(CpsAtom::Fun(_))),
+        "`f` is bound before `g`, so `g`'s body may name it",
+    );
 
-    let (flat, p) = a_recursive_member_fed_one_function(false);
-    assert!(matches!(known_values(&flat).get(&p), Some(CpsAtom::Fun(_))));
+    let (after, p) = a_recursive_member_fed_one_function(FeedShape::SiblingAfter);
+    assert_eq!(
+        known_values(&after).get(&p),
+        None,
+        "`f` is bound after `g`: the call site may name it and `g` may not",
+    );
+
+    let (nested, p) = a_recursive_member_fed_one_function(FeedShape::Nested);
+    assert_eq!(
+        known_values(&nested).get(&p),
+        None,
+        "`f` is nested inside `h`, out of `g`'s scope",
+    );
 }
 
 #[test]

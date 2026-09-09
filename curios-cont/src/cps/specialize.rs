@@ -54,7 +54,7 @@ impl Lattice for Knowledge {
 ///
 /// Only members of an eligible SCC participate: the SCC must be recursive and must contain no escaping member and not the program entry, because an escaping or host-called function receives arguments this analysis cannot observe. `known_literals` seeds resolution of caller values already known to be constant.
 ///
-/// A function reference counts only where the member's body may name it (`CallAnalysis::lexical_scope`); one from outside that scope leaves the parameter unknown rather than forwarding a call the body cannot legally make.
+/// A function reference counts only where the member's body may name it (`CallAnalysis::lexical_scope`); one from outside that scope leaves the parameter unknown rather than forwarding a call the body cannot legally make. That scope is the walk the verifier performs, so a reference bound earlier in an enclosing body chain counts as much as one in the member's own group — the site passing the reference and the body receiving it sit at different points of that chain, and only the receiving body's point decides.
 pub(super) fn scc_invariant_knowns(
     module: &CpsModule,
     analysis: &CallAnalysis,

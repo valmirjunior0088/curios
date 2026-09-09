@@ -13,7 +13,7 @@ pub(super) struct CallAnalysis {
     /// On a cycle of the call graph closed under definition — a callee inherits the calls of every function nested within it — which is the inliner's question: see `analyze_calls`.
     pub(super) recursive: BTreeSet<CpsFunId>,
     pub(super) sccs: SccAnalysis,
-    /// The functions each function's body may name: its own `LetFun` group and every group enclosing it, up to the entry — the scope `verify_lexical_scopes` walks, recorded per function so a pass that forwards a function reference into a body can ask whether that body may name it.
+    /// The functions each function's body may name: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry — the scope `verify_lexical_scopes` walks, recorded per function so a pass that forwards a function reference into a body can ask whether that body may name it. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.
     pub(super) lexical_scope: BTreeMap<CpsFunId, BTreeSet<CpsFunId>>,
 }
 /// Function strongly-connected components of the known-callee call graph, computed at an explicit phase boundary. `SccId` is a dense index into `members`; each component lists its functions in `CpsFunId` order.
@@ -198,7 +198,12 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
     }
     analysis.sccs = analyze_sccs(&analysis.call_graph);
 
-    // Each function's lexical scope, off the same `LetFun` nodes: a member may name its own group and everything its owner may name, and the entry names itself — the walk `verify_lexical_scopes` performs, recorded rather than repeated by the pass that needs it.
+    // Each function's lexical scope, taken from the walk `verify_lexical_scopes` performs rather than restated here.
+    //
+    // It used to be read off the `LetFun` nodes alone — a member's own group, then everything its owner's group holds, up to the entry — and that misses the third of the three things `scope_step` admits: a group bound *earlier along the same body chain*. Every group the lowering emits is a singleton, so what it missed was precisely a body's siblings, which is nearly every function reference a program makes; the filter reading this then refused to forward any of them.
+    analysis.lexical_scope = module.lexical_scopes();
+
+    // A function the walk did not reach keeps the owner-chain answer, which is a subset of what it may name. This runs mid-round, where the module is transiently unscoped by design, so a walk from the entry can miss a live function; and the set is read to *refuse* a forward, so answering with less than the truth costs an optimization where answering with more would forward a reference the body cannot legally name.
     let mut group_of: BTreeMap<CpsFunId, (CpsFunId, Vec<CpsFunId>)> = BTreeMap::new();
     for (&node_id, &owner) in &analysis.node_owners {
         if let Some(CpsNode::LetFun { functions, .. }) = module.node(node_id) {
@@ -208,6 +213,9 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
         }
     }
     for function in module.functions.live_ids() {
+        if analysis.lexical_scope.contains_key(&function) {
+            continue;
+        }
         let mut scope = BTreeSet::new();
         let mut visited = BTreeSet::new();
         let mut current = function;
