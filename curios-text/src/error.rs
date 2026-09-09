@@ -68,6 +68,10 @@ pub enum Error {
     DuplicateDeclaration {
         label: String,
     },
+    /// A structure declares one field label twice. Distinct from [`Error::DuplicateDeclaration`] because a field is not a module declaration: it occupies a slot in the structure's telescope, which is what the message says and what a reader has to look at.
+    DuplicateField {
+        label: String,
+    },
     ExportConflict {
         label: String,
     },
@@ -253,6 +257,9 @@ impl fmt::Display for Error {
             }
             Error::DuplicateDeclaration { label } => {
                 write!(f, "`{label}` is already declared in this module")
+            }
+            Error::DuplicateField { label } => {
+                write!(f, "`{label}` is already a field of this structure")
             }
             Error::ExportConflict { label } => {
                 write!(f, "export conflict for label: {label}")

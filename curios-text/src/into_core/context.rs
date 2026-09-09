@@ -929,12 +929,28 @@ fn attach(error: Error, name: &Name) -> Error {
     }
 }
 
-// The refusal of a name a module already declares, located at the declaration that arrived second — which is why the inserters take the written [`Label`] rather than a copy of its text. A label the compiler spelled rather than parsed carries no span and reports unlocated, which is right for the one caller that has none: a mount claims a prefix on no source line.
+// The refusal of a name a module already declares, located at the declaration that arrived second — which is why the inserters take the written [`Label`] rather than a copy of its text.
 fn duplicate(label: &Label) -> Error {
-    let error = Error::DuplicateDeclaration {
-        label: label.to_string(),
-    };
+    located(
+        Error::DuplicateDeclaration {
+            label: label.to_string(),
+        },
+        label,
+    )
+}
 
+// [`duplicate`] for a label a structure already declares as a *field*. A field is not a module declaration — it occupies a slot in the structure's telescope and never reaches an inserter — so it needs its own refusal, and the message says so.
+pub(super) fn duplicate_field(label: &Label) -> Error {
+    located(
+        Error::DuplicateField {
+            label: label.to_string(),
+        },
+        label,
+    )
+}
+
+// A refusal placed at the word it is about. A label the compiler spelled rather than parsed carries no span and reports unlocated, which is right for the one caller that has none: a mount claims a prefix on no source line.
+fn located(error: Error, label: &Label) -> Error {
     match label.span() {
         Some(span) => error.at(span.clone()),
         None => error,

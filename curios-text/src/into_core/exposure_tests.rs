@@ -313,6 +313,38 @@ fn rejects_a_duplicate_declaration() {
     );
 }
 
+// A structure's fields are not module declarations, so nothing above catches a repeated one: the telescope kept both, a literal set both, and every `.n` read the first. Refused here at the label that arrived second, like every other duplicate in this stage — including through the signature sugar, which is the same field written another way.
+#[test]
+fn rejects_a_duplicate_struct_field() {
+    for source in [
+        r#"
+        struct S : Type { n : Type, m : Type, n : Type }
+        Type
+    "#,
+        r#"
+        struct S : Type { tag(x : Type) -> Type, tag(x : Type) -> Type }
+        Type
+    "#,
+    ] {
+        let report = run_err_report(source);
+        assert!(
+            report.contains("is already a field of this structure") && report.contains("2 |"),
+            "reported {report}"
+        );
+    }
+}
+
+// Positional fields have no label to collide, so a structure of like-typed slots stays legal.
+#[test]
+fn accepts_a_struct_of_positional_fields() {
+    lowered_module(
+        r#"
+        struct P : Type { Type, Type }
+        Type
+    "#,
+    );
+}
+
 #[test]
 fn rejects_a_duplicate_private_declaration_without_calling_it_public() {
     let report = run_err_report(

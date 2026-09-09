@@ -355,7 +355,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let binders = self.mint(
                     tt.fields
                         .iter()
-                        .map(|f| f.label.clone().unwrap_or_default()),
+                        .map(|f| f.label.as_deref().unwrap_or_default().to_string()),
                 );
                 let mut fields = Vec::with_capacity(tt.fields.len());
                 for (index, param) in tt.fields.iter().enumerate() {

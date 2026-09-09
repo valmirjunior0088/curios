@@ -906,10 +906,25 @@ fn process_items(
                         .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
                         .collect::<Vec<_>>();
 
+                    // A repeated label is refused at the one that arrived second, as a repeated declaration is. Nothing else catches it: a structure's fields are not module declarations, so they never reach `insert_binding`'s check, and the telescope below keeps both — a literal set them both and every `.label` read the first, silently. The tuple-type twin of this is `curios_elab`'s `DuplicateTupleLabel`, which a `struct` never reaches because its fields never elaborate as one.
+                    let mut declared = BTreeSet::new();
+                    for field in &s.fields {
+                        if let Some(label) = &field.param.label
+                            && !declared.insert(label.as_str())
+                        {
+                            return Err(duplicate_field(label));
+                        }
+                    }
+
                     // Field types, with declared or positional (`_i`) names so a later field type can depend on an earlier field. The signature sugar `f(params) -> T` is undone here.
                     let field_binders =
                         lower.mint(s.fields.iter().enumerate().map(|(i, field)| {
-                            field.param.label.clone().unwrap_or_else(|| format!("_{i}"))
+                            field
+                                .param
+                                .label
+                                .as_deref()
+                                .map(str::to_string)
+                                .unwrap_or_else(|| format!("_{i}"))
                         }));
                     let mut field_scope = param_binders.clone();
                     let field_tys = s

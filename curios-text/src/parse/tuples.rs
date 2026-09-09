@@ -22,7 +22,7 @@ pub(super) fn parse_parens<'a>() -> Parser<'a, Term> {
 
 // A Σ-type / struct-declaration field: an optional label and the field type, or the signature sugar `label(params) -> type` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and `struct` decls. The sugared catch spans through `->`, so a positional field that merely starts with an application (`f(x)`) backtracks cleanly.
 pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
-    parse_identifier()
+    parse_field_label()
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_func_type_param, || {
@@ -34,17 +34,17 @@ pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
         // A field's type position commits once its introducer is read: past a `->` or a `:` nothing else may stand here, and the unlabeled alternative below would otherwise read the label alone as the whole type and leave the enclosing `}` to complain at the introducer.
         .and(commit(lazy(parse_term)))
         .map(
-            |((label, params), output): ((&str, Vec<FuncTypeParam>), Term)| TupleTypeParam {
-                label: Some(label.to_string()),
+            |((label, params), output): ((Label, Vec<FuncTypeParam>), Term)| TupleTypeParam {
+                label: Some(label),
                 func_params: Some(params),
                 type_: output,
             },
         )
-        .or(parse_identifier()
+        .or(parse_field_label()
             .and_drop(parse_literal(":"))
             .and(commit(lazy(parse_term)))
-            .map(|(label, type_): (&str, Term)| TupleTypeParam {
-                label: Some(label.to_string()),
+            .map(|(label, type_): (Label, Term)| TupleTypeParam {
+                label: Some(label),
                 func_params: None,
                 type_,
             }))

@@ -1,6 +1,6 @@
 use {
     super::{
-        Apply, Argument, Doc, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Intrinsic,
+        Apply, Argument, Doc, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Intrinsic, Label,
         LetSignature, Module, Name, Nat, NatLiteral, Pattern, Subterm, Term, TopForeign, TopItem,
         TopLet, TopMod, TopUse, TupleType, TupleTypeParam, UseGroup,
     },
@@ -94,7 +94,7 @@ fn record(fields: Vec<(&str, Term)>) -> Term {
         fields: fields
             .into_iter()
             .map(|(label, type_)| TupleTypeParam {
-                label: Some(label.to_string()),
+                label: Some(Label::from(label)),
                 func_params: None,
                 type_,
             })

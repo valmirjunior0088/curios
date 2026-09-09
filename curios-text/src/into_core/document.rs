@@ -430,7 +430,7 @@ impl Reader<'_> {
                                 let shown = self.field(home, imports, &binders, field);
                                 // A field's label binds for the fields after it.
                                 if let Some(label) = &field.param.label {
-                                    binders.insert(label.clone());
+                                    binders.insert(label.to_string());
                                 }
                                 shown
                             })
@@ -597,7 +597,7 @@ impl Reader<'_> {
         field: &StructField,
     ) -> Member {
         Member {
-            name: field.param.label.clone().unwrap_or_default(),
+            name: field.param.label.as_deref().unwrap_or_default().to_string(),
             signature: self.signature(module, imports, binders, print_struct_field_head(field)),
             prose: lines(&field.doc),
         }

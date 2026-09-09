@@ -548,7 +548,7 @@ fn print_labeled((label, ty): (Option<String>, Term)) -> Printer {
 fn print_field(param: TupleTypeParam) -> Printer {
     match (param.label, param.func_params) {
         (Some(label), Some(params)) => flat([
-            pure(label),
+            pure(label.to_string()),
             listed(
                 "(",
                 params.into_iter().map(print_func_type_param).collect(),
@@ -557,7 +557,7 @@ fn print_field(param: TupleTypeParam) -> Printer {
             pure(" -> "),
             print_term(param.type_),
         ]),
-        (Some(label), None) => flat([pure(label), pure(": "), print_term(param.type_)]),
+        (Some(label), None) => flat([pure(label.to_string()), pure(": "), print_term(param.type_)]),
         (None, _) => print_term(param.type_),
     }
 }
@@ -1599,7 +1599,7 @@ fn print_top_induct_case(case: TopCase) -> Printer {
             flat([
                 print_plicity(param.plicity),
                 print_field(TupleTypeParam {
-                    label: param.label,
+                    label: param.label.map(Label::from),
                     func_params: None,
                     type_: param.type_,
                 }),
@@ -2085,7 +2085,7 @@ pub(crate) fn print_case_head(case: &TopCase) -> Printer {
             flat([
                 print_plicity(param.plicity),
                 print_field(TupleTypeParam {
-                    label: param.label,
+                    label: param.label.map(Label::from),
                     func_params: None,
                     type_: param.type_,
                 }),
@@ -2115,7 +2115,7 @@ pub(crate) fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printe
             flat([
                 print_plicity(param.plicity),
                 print_field(TupleTypeParam {
-                    label: param.label,
+                    label: param.label.map(Label::from),
                     func_params: None,
                     type_: param.type_,
                 }),

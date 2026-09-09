@@ -100,7 +100,8 @@ pub struct FuncTypeParam {
 /// One Σ-type / struct-declaration field as written: an optional label and the field type. Shared by tuple types and `struct` declarations (the `TopStruct` fields reuse this grammar).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleTypeParam {
-    pub label: Option<String>,
+    /// The written label, carrying the span of the word alone, or `None` for a positional field. Spanned because a `struct` declaration reuses this grammar and its duplicate-field refusal points at the label that arrived second, as every other duplicate refusal in this stage does.
+    pub label: Option<Label>,
     /// `Some` for the signature sugar `label(params) -> type_` — the written parameter list, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label : (params) -> type_` (see `TupleTypeParam::desugared_type`). Always paired with a label.
     pub func_params: Option<Vec<FuncTypeParam>>,
     pub type_: Term,
