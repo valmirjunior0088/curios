@@ -6,7 +6,9 @@
 mod tests;
 
 use {
-    curios_core::{Free, Global, Intrinsic, Subterm, Telescope, Term, TupleType, UniverseContext},
+    curios_core::{
+        Free, Global, Intrinsic, Spelling, Subterm, Telescope, Term, TupleType, UniverseContext,
+    },
     curios_utilities::{Grain, Qualifier},
     std::fmt,
 };
@@ -26,6 +28,25 @@ pub(crate) struct Witness {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[curios_archive::archived]
 pub struct WitnessKey(pub Vec<HeadKey>);
+
+impl WitnessKey {
+    /// This key as a reader sees it: [`Display`](fmt::Display)'s rendering with each nominal head shortened against what the report's module has in scope.
+    ///
+    /// `Display` stays faithful, as `Term`'s does. A key is core's identity for a witness — the thing the registry is indexed by — so a rendering of one must not depend on where it is being looked at from; only a *diagnostic* has a reader to spell it for.
+    pub(crate) fn spelled(&self, spelling: &Spelling) -> String {
+        match self.0.as_slice() {
+            [single] => single.spelled(spelling),
+            heads => {
+                let heads = heads
+                    .iter()
+                    .map(|head| head.spelled(spelling))
+                    .collect::<Vec<_>>();
+
+                format!("({})", heads.join(", "))
+            }
+        }
+    }
+}
 
 impl fmt::Display for WitnessKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -65,6 +86,14 @@ pub enum HeadKey {
 }
 
 impl HeadKey {
+    /// This head as a reader sees it, for [`WitnessKey::spelled`]. Only a nominal head carries a name to shorten; every other case is a fixed word or a shape, and renders as [`Display`](fmt::Display) does.
+    fn spelled(&self, spelling: &Spelling) -> String {
+        match self {
+            HeadKey::Nominal(name) => spelling.symbol(name),
+            head => head.to_string(),
+        }
+    }
+
     /// The key of a term already in weak-head normal form, if its head is rigid and nominal, intrinsic or a tuple shape. A `Func` head is the higher-kinded case (a type constructor like `Option` reduces to `λA. Option-normal-form`): its *body* supplies the key, so `Monad(Option)` keys on `Option`. `None` for anything else — variables, metavariables, `Type`/`Prop` — which are not keyable.
     pub(crate) fn of_whnf(term: &Term) -> Option<HeadKey> {
         match &**term {

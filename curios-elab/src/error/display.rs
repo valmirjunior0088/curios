@@ -750,6 +750,7 @@ impl fmt::Display for Displayed<'_> {
                     1 => "head",
                     _ => "key",
                 };
+                let key = key.spelled(spelling);
                 // One clause when both sit in the same module, which is the common case while a program is being written: naming that module twice reads as two coordinates and is one. The carets on each declaration are what separate them.
                 let where_ = match first == second {
                     true => format!("both are declared in {}", declaring_module(first)),
@@ -775,6 +776,7 @@ impl fmt::Display for Displayed<'_> {
                     1 => "head",
                     _ => "key",
                 };
+                let key = key.spelled(spelling);
                 write!(
                     f,
                     "orphan witness of '{concept}' for {noun} '{key}', declared in {}\n  a witness may only be declared where the concept or a type in its {noun} is already declared",

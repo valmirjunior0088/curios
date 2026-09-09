@@ -58,7 +58,7 @@ fn duplicate_witness_reports_its_declaring_module() {
     let rendered = error(source);
     assert!(
         rendered.contains(
-            "duplicate witness of 'C' for head '/M/T'\n  \
+            "duplicate witness of 'C' for head 'T'\n  \
              both are declared in module '/M'\n  \
              every concept-head pair has at most one witness, program-wide"
         ),
@@ -93,7 +93,7 @@ fn a_duplicate_across_two_modules_names_both() {
     let rendered = error(source);
     assert!(
         rendered.contains(
-            "duplicate witness of 'C' for head '/A/T'\n  \
+            "duplicate witness of 'C' for head 'T'\n  \
              one is declared in module '/A', another in module '/B'\n  \
              every concept-head pair has at most one witness, program-wide"
         ),
@@ -209,10 +209,9 @@ fn a_group_member_with_a_taken_key_is_a_duplicate() {
         /std/print("unreachable")
         "#;
 
-    // The concept is spelled through the shortening table and the key is not — `Error::DuplicateWitness` renders `key` with a bare `Display` — so a head declared in the entry module still reports absolute while the concept beside it does not.
     let report = error(source);
     assert!(
-        report.contains("duplicate witness of 'Show' for head '/A'"),
+        report.contains("duplicate witness of 'Show' for head 'A'"),
         "expected the member refused as a duplicate:\n{report}"
     );
 }
