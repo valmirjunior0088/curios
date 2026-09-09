@@ -58,7 +58,7 @@ fn duplicate_witness_reports_its_declaring_module() {
     let rendered = error(source);
     assert!(
         rendered.contains(
-            "duplicate witness of '/M/C' for head '/M/T'\n  \
+            "duplicate witness of 'C' for head '/M/T'\n  \
              both are declared in module '/M'\n  \
              every concept-head pair has at most one witness, program-wide"
         ),
@@ -93,7 +93,7 @@ fn a_duplicate_across_two_modules_names_both() {
     let rendered = error(source);
     assert!(
         rendered.contains(
-            "duplicate witness of '/A/C' for head '/A/T'\n  \
+            "duplicate witness of 'C' for head '/A/T'\n  \
              one is declared in module '/A', another in module '/B'\n  \
              every concept-head pair has at most one witness, program-wide"
         ),
@@ -116,7 +116,7 @@ fn orphan_witness_is_rejected() {
     let rendered = error(source);
     assert!(
         rendered.contains(
-            "orphan witness of '/std/Ordered/Ordered' for head 'Bool', declared in the entry module\n  \
+            "orphan witness of 'Ordered' for head 'Bool', declared in the entry module\n  \
              a witness may only be declared where the concept or a type in its head is already declared"
         ),
         "{rendered}"
@@ -140,7 +140,7 @@ fn a_standard_library_witness_cannot_be_shadowed() {
     let rendered = error(source);
     assert!(
         rendered.contains(
-            "orphan witness of '/std/Show/Show' for head 'Bool', declared in the entry module\n  \
+            "orphan witness of 'Show' for head 'Bool', declared in the entry module\n  \
              a witness may only be declared where the concept or a type in its head is already declared"
         ),
         "{rendered}"
@@ -235,7 +235,7 @@ fn a_duplicate_tuple_shape_is_refused() {
 
     let report = error(source);
     assert!(
-        report.contains("duplicate witness of '/Tag' for head '{_, _}'"),
+        report.contains("duplicate witness of 'Tag' for head '{_, _}'"),
         "expected the shape refused as a duplicate:\n{report}"
     );
 }
@@ -253,7 +253,7 @@ fn a_tuple_witness_for_a_standard_concept_is_an_orphan() {
 
     let report = error(source);
     assert!(
-        report.contains("orphan witness of '/std/Show/Show' for head '{_, _}'"),
+        report.contains("orphan witness of 'Show' for head '{_, _}'"),
         "expected the shape refused as an orphan:\n{report}"
     );
 }

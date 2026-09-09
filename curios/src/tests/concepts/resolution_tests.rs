@@ -201,7 +201,7 @@ fn prelude_monad_resolves_by_imitation() {
 #[test]
 fn written_higher_kinded_argument_resolves_the_witness() {
     let source = r#"
-        use /syn/{Monad};
+        use /std/{Monad};
         use /std/{Nat, Str, Option};
         pub let lift(@M : (Type) -> Type, use Monad(M), seed : Nat) -> M(Nat) =
             Monad/pure(seed);
@@ -216,7 +216,7 @@ fn written_higher_kinded_argument_resolves_the_witness() {
 #[test]
 fn written_hidden_argument_after_an_explicit_slot_resolves() {
     let source = r#"
-        use /syn/{Monad};
+        use /std/{Monad};
         use /std/{Nat, Str, Option};
         pub let lift2(seed : Nat, @M : (Type) -> Type, use Monad(M)) -> M(Nat) =
             Monad/pure(seed);
@@ -231,7 +231,7 @@ fn written_hidden_argument_after_an_explicit_slot_resolves() {
 #[test]
 fn written_type_lambda_argument_resolves_the_witness() {
     let source = r#"
-        use /syn/{Monad};
+        use /std/{Monad};
         use /std/{Nat, Str, Result};
         struct Box(A : Type) : pub Type {
             A
@@ -253,7 +253,7 @@ fn written_type_lambda_argument_resolves_the_witness() {
 #[test]
 fn bare_generic_reference_resolves_toward_a_rigid_expectation() {
     let source = r#"
-        use /syn/{Monad};
+        use /std/{Monad};
         use /std/{Nat, Str, Option};
         pub let mk(@M : (Type) -> Type, use Monad(M)) -> M(Nat) =
             Monad/pure(5);

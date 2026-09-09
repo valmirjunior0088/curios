@@ -68,7 +68,7 @@ fn a_self_reference_in_an_index_binder_type_does_not_elaborate() {
 fn an_index_domain_over_the_declaration_is_reachable_only_by_storing_its_witness() {
     rejected_by(
         r#"
-        use /syn/{False};
+        use /std/{False};
 
         induct A : pub Type
         | mk(@f : (A) -> False, b : B(f))
@@ -91,7 +91,7 @@ fn an_index_domain_over_the_declaration_is_reachable_only_by_storing_its_witness
 fn a_recursive_occurrence_in_an_index_target_is_admitted() {
     let source = r#"
         use /std/{Nat};
-        use /syn/{False};
+        use /std/{False};
 
         induct Bad : (t : Type) -> pub Type
         | c() : ((Bad(Nat)) -> False)

@@ -30,7 +30,7 @@ fn a_declaration_recursing_through_a_type_former_parameter_is_refused() {
 fn a_negative_occurrence_is_rejected() {
     rejected(
         r#"
-        use /syn/{False};
+        use /std/{False};
 
         induct Bad : pub Type
         | c(f : (Bad) -> False)
@@ -46,7 +46,7 @@ fn a_negative_occurrence_is_rejected() {
 fn a_positive_but_not_strictly_positive_occurrence_is_rejected() {
     rejected(
         r#"
-        use /syn/{False};
+        use /std/{False};
 
         induct Bad2 : pub Type
         | c(f : ((Bad2) -> False) -> False)
@@ -82,7 +82,7 @@ fn a_negative_occurrence_borrowed_through_another_declaration_is_rejected() {
 fn a_negative_cycle_through_a_mutual_group_is_rejected() {
     rejected(
         r#"
-        use /syn/{False};
+        use /std/{False};
 
         induct Left : Type
         | wrap(Right)
@@ -100,7 +100,7 @@ fn a_negative_cycle_through_a_mutual_group_is_rejected() {
 fn a_negative_struct_field_is_rejected() {
     rejected(
         r#"
-        use /syn/{False};
+        use /std/{False};
 
         struct Consume : pub Type {
             run : (Consume) -> False,

@@ -244,7 +244,7 @@ fn a_mismatch_over_an_applied_head_is_located() {
 fn an_abstract_witness_folds_back_to_its_operator() {
     // Under a `use Add(A)` parameter the projection is stuck on a witness that is a *binderso no amount of reduction reaches the operator: the fold must resolve it through the concept the binder's declared type names, or the report spells `a + a` as `(#6561).0(a, a)`.
     let source = r#"
-        use /syn/{Add};
+        use /std/{Add};
         use /std/{Nat, Eq};
         let bad(@A : Type, use Add(A), a : A) -> Eq(a + a, a + a) = ?;
         0
@@ -264,7 +264,7 @@ fn an_abstract_witness_folds_back_to_its_operator() {
 fn an_abstract_witness_folds_back_in_a_mismatch_too() {
     // The mismatch path denoises by normalizing, which suffices only while the operand type is concrete. The abstract case needs the same structural fold the goal path runs.
     let source = r#"
-        use /syn/{Add};
+        use /std/{Add};
         use /std/{Nat, Eq};
         let bad(@A : Type, use Add(A), a : A) -> Eq(a + a, a) = Eq/refl();
         0

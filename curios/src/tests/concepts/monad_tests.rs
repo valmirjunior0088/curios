@@ -34,7 +34,7 @@ fn monadic_sugar_binds_through_the_concept() {
 #[test]
 fn bang_works_in_monad_generic_code() {
     let source = r#"
-        use /syn/{Monad};
+        use /std/{Monad};
         use /std/{Nat, Str, Option, List};
         pub let add_both(@M : (Type) -> Type, use Monad(M), a : M(Nat), b : M(Nat)) -> M(Nat) =
             Monad/pure(a! + b!);

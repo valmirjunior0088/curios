@@ -89,7 +89,7 @@ fn a_conversion_parked_under_refinements_notes_the_dependence() {
 fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
     // The Item 2 acceptance shape: the proof argument is checked before anything pins `@b`, against `Nat/Lt(0, Bytes/len(?b))` — a match stuck on the metavariable. The goal must park and discharge once the witness argument solves `?b`, in either argument order.
     let source = r#"
-        use /syn/Str/{Scan, Utf8};
+        use /std/Str/{Scan, Utf8};
         use /std/{Nat, Byte, Bytes, True, Io};
 
         let proof_first(@b: Bytes, nz: Nat/Lt(0, Bytes/len(b)), w: Utf8(Scan/lead(), b)) -> {} = ();

@@ -131,7 +131,7 @@ fn the_index_lists_every_address_and_a_page_carries_the_field() {
         std::env::temp_dir().join(format!("curios-document-{}-{nanos}", std::process::id()));
     write_documentation(&record, &directory).unwrap();
 
-    // The record's order, a member beneath its declaration by what its kind calls one, the facade at its home, and no row for the witness or the nameless constraint.
+    // The record's order, a member beneath its declaration by what its kind calls one, the facade under the name the page shows it by rather than the private module it was written in, and no row for the witness or the nameless constraint.
     let index = fs::read_to_string(directory.join("static").join("index.js")).unwrap();
     assert_eq!(
         index,
@@ -142,8 +142,8 @@ fn the_index_lists_every_address_and_a_page_carries_the_field() {
             "[\"case\",\"/shapes/Shape/circle\",\"index.html#Shape/circle\"],",
             "[\"concept\",\"/shapes/Area\",\"index.html#Area\"],",
             "[\"method\",\"/shapes/Area/area\",\"index.html#Area/area\"],",
-            "[\"induct\",\"/shapes/hidden/Token\",\"index.html#Token\"],",
-            "[\"case\",\"/shapes/hidden/Token/token\",\"index.html#Token/token\"],",
+            "[\"induct\",\"/shapes/Token\",\"index.html#Token\"],",
+            "[\"case\",\"/shapes/Token/token\",\"index.html#Token/token\"],",
             "[\"mod\",\"/shapes/geometry\",\"geometry.crs.html\"],",
             "[\"let\",\"/shapes/geometry/origin\",\"geometry.crs.html#origin\"]",
             "];\n"
