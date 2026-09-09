@@ -1,2 +1,7 @@
-pub use /syn/{And};
-pub use /syn/And/{and};
+-- | Conjunction, which `&&` dispatches through.
+pub concept And(A: Type): pub Type {
+    -- | Both.
+    and(A, A) -> A,
+}
+
+pub use And/{and};

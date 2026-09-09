@@ -1,2 +1,7 @@
-pub use /syn/{Multiply};
-pub use /syn/Multiply/{mul};
+-- | Multiplication, which `*` dispatches through.
+pub concept Multiply(A: Type): pub Type {
+    -- | The product of the two.
+    mul(A, A) -> A,
+}
+
+pub use Multiply/{mul};

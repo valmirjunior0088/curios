@@ -1,2 +1,7 @@
-pub use /syn/{Or};
-pub use /syn/Or/{or};
+-- | Disjunction, which `||` dispatches through.
+pub concept Or(A: Type): pub Type {
+    -- | Either.
+    or(A, A) -> A,
+}
+
+pub use Or/{or};

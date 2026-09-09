@@ -1,2 +1,13 @@
-pub use /syn/{Lift};
-pub use /syn/Lift/{lift};
+use /std/{Monad};
+
+-- | The canonical embedding of one monad into another, which `!` inserts where an action's monad differs from its region's.
+-- |
+-- | One witness may occupy each ordered pair, so which embedding runs is a fact about the program rather than about a call site, and embeddings never chain.
+pub concept Lift(M: (Type) -> Type, N: (Type) -> Type): pub Type {
+    use Monad(M),
+    use Monad(N),
+    -- | The action, carried into the second monad.
+    lift(@A: Type, M(A)) -> N(A),
+}
+
+pub use Lift/{lift};

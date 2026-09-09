@@ -1,2 +1,15 @@
-pub use /syn/{Compare};
-pub use /syn/Compare/{lt, le, gt, ge};
+use /std/{Bool};
+
+-- | The order comparisons, which `<`, `<=`, `>` and `>=` dispatch through.
+pub concept Compare(A: Type): pub Type {
+    -- | Whether the first is below the second.
+    lt(A, A) -> Bool,
+    -- | Whether the first is below the second or equal to it.
+    le(A, A) -> Bool,
+    -- | Whether the first is above the second.
+    gt(A, A) -> Bool,
+    -- | Whether the first is above the second or equal to it.
+    ge(A, A) -> Bool,
+}
+
+pub use Compare/{lt, le, gt, ge};

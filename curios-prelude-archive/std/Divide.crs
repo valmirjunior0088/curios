@@ -1,2 +1,9 @@
-pub use /syn/{Divide};
-pub use /syn/Divide/{div};
+-- | Division, which `/` dispatches through.
+pub concept Divide(A: Type): pub Type {
+    -- | The precondition this carrier states for a divisor: `True` where division is total, and a proposition the caller must discharge where it is not.
+    Ok(A) -> Prop,
+    -- | The quotient, under the evidence that `b` may be divided by.
+    div(a: A, b: A, @ok: Ok(b)) -> A,
+}
+
+pub use Divide/{div};
