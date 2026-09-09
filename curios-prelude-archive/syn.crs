@@ -92,12 +92,6 @@ pub use Char/{let Char};
 pub mod Str;
 pub use Str/{let Str};
 
-pub mod Nat;
-
-pub mod Int;
-
-pub mod Flt;
-
 pub mod Test;
 
 pub mod Spell;

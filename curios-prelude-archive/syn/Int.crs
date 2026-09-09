@@ -1,9 +1,0 @@
-use /std/{Int, Bool};
-
--- | That `a` is not zero, decided as `Nat/Lt` is — what `/` and `%` on `Int` ask of a divisor.
-pub let NonZero(a: Int) -> Prop =
-    Bool/Holds(Int/neq(a, 0));
-
--- | That `a` is zero or above, decided.
-pub let NonNeg(a: Int) -> Prop =
-    Bool/Holds(Int/ge(a, 0));

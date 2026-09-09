@@ -1,10 +1,13 @@
 pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
-pub use /syn/Flt/{FourBytes};
 pub use /sys/Bound/{Finite, NonNeg};
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat, Equal, Compare,
     Add, Subtract, Multiply, Divide, Remainder, Show, Spell, Ordered, True};
+
+-- | That `b` is four bytes long, decided.
+pub let FourBytes(b: Bytes) -> Prop =
+    Bool/Holds(Nat/eql(Bytes/len(b), 4));
 
 -- | Positive infinity.
 pub let pos_inf: Flt =

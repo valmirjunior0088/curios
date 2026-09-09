@@ -1,5 +1,0 @@
-use /std/{Nat, Bytes, Bool};
-
--- | That `b` is four bytes long, decided.
-pub let FourBytes(b: Bytes) -> Prop =
-    Bool/Holds(Nat/eql(Bytes/len(b), 4));

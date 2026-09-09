@@ -1,5 +1,5 @@
-pub use /syn/Nat/{Le};
 use /std/{Nat, Bool, Option, True, Eq};
+use /std/Nat/{Le};
 
 -- | `a <= b` as an inductive proposition: `z` proves `0 <= n` and `s` lifts `a <= b` to `a + 1 <= b + 1`, so a proof can recurse over the evidence.
 pub mod Ind;

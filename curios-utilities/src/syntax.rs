@@ -1,4 +1,4 @@
-//! The shape of the compiler's `/syn` vocabulary — every name a stage emits, with the values supplied by the crate that owns the source declarations.
+//! The shape of the compiler's emitted vocabulary — every name a stage writes into a term it builds, with the values supplied by the crate that owns the source declarations.
 //!
 //! Every enumeration below opens by destructuring the struct it enumerates: a pattern naming fewer fields than the struct has does not compile, so a slot added to a group is a compile error until it is enumerated — exactly as it is a compile error at every fill site until it is filled.
 //!

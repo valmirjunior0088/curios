@@ -1,6 +1,5 @@
-pub use /syn/Nat/{Lt};
 use /std/{Nat, Bool, Option, True};
-use /std/Nat/{Le};
+use /std/Nat/{Le, Lt};
 use /std/Nat/Le/{Ind};
 
 -- | The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
