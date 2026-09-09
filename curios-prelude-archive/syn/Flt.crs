@@ -1,19 +1,5 @@
-use /std/{Nat, Bytes, Flt, Bool};
+use /std/{Nat, Bytes, Bool};
 
 -- | That `b` is four bytes long, decided.
 pub let FourBytes(b: Bytes) -> Prop =
     Bool/Holds(Nat/eql(Bytes/len(b), 4));
-
-let max: Flt =
-    +340282350000000000000000000000000000000.0;
-
-let min: Flt =
-    -340282350000000000000000000000000000000.0;
-
--- | That `a` is neither infinite nor beyond what `Flt` represents, decided.
-pub let Finite(a: Flt) -> Prop =
-    Bool/Holds(Flt/le(min, a) && Flt/le(a, max));
-
--- | That `a` is zero or above and within range, decided.
-pub let NonNeg(a: Flt) -> Prop =
-    Bool/Holds(Flt/ge(a, +0.0) && Flt/le(a, max));

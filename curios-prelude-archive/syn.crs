@@ -86,12 +86,6 @@ pub concept Lift(M: (Type) -> Type, N: (Type) -> Type): pub Type {
     lift(@A: Type, M(A)) -> N(A),
 }
 
--- | The proposition that always holds.
-pub induct True: pub Prop
--- | Its proof, which anything may produce.
-| qed()
-end
-
 pub mod Char;
 pub use Char/{let Char};
 

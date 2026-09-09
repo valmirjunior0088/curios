@@ -213,7 +213,7 @@ fn a_bound_behind_a_parameter_evaluates_nothing() {
     .expect("a bound over an opaque parameter reduces nothing");
 }
 
-/// **The two narrowings out of `Flt` state their domains, and a guard discharges them.** `Flt/to_nat` demands `/syn/Flt/NonNeg` and `Flt/to_int` demands `/syn/Flt/Finite`, both decided over the raw comparisons — so refining the scrutinee is what makes the obligation reduce to `True`, exactly as `Int/to_nat`'s bound does.
+/// **The two narrowings out of `Flt` state their domains, and a guard discharges them.** `Flt/to_nat` demands `/sys/Bound/NonNeg` and `Flt/to_int` demands `/sys/Bound/Finite`, both decided over the raw comparisons — so refining the scrutinee is what makes the obligation reduce to `True`, exactly as `Int/to_nat`'s bound does.
 ///
 /// The `try_` forms are the same discharge routed through `/std/Flt`'s deciders, which is the shape a caller who cannot guard in place reaches for. A closed literal is deliberately *not* probed here: it needs the fold, which is the next commit's, and this fixture is what says the bounds stand without it.
 #[test]

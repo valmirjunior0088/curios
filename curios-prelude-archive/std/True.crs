@@ -1,2 +1,2 @@
-pub use /syn/{True};
-pub use /syn/True/{qed};
+pub use /sys/Bound/{True};
+pub use /sys/Bound/True/{qed};

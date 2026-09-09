@@ -185,7 +185,7 @@ impl Floating {
         self.bits == NAN_BITS
     }
 
-    /// Whether this is a *number*: finite, so neither infinity and not the NaN. The same reading `/syn/Flt/Finite` states, and what the surface lexer refuses a literal for.
+    /// Whether this is a *number*: finite, so neither infinity and not the NaN. The same reading `/sys/Bound/Finite` states, and what the surface lexer refuses a literal for.
     pub fn is_finite(self) -> bool {
         self.bits & EXPONENT_MASK != EXPONENT_MASK
     }
@@ -515,7 +515,7 @@ impl Floating {
         }
     }
 
-    /// The exact natural this truncates toward zero to, or `None` outside the domain `/syn/Flt/NonNeg` states — a NaN, an infinity, or a negative value other than `-0.0`.
+    /// The exact natural this truncates toward zero to, or `None` outside the domain `/sys/Bound/NonNeg` states — a NaN, an infinity, or a negative value other than `-0.0`.
     ///
     /// Exact and unbounded: `to_natural(3.0e9)` is the natural `3000000000`, which no runtime carrier holds and which is refused downstream exactly as an overflowing `Nat` is, rather than being bent to fit here.
     pub fn to_natural(self) -> Option<Natural> {
@@ -531,7 +531,7 @@ impl Floating {
         }
     }
 
-    /// The exact integer this truncates toward zero to, or `None` on a NaN or an infinity — the domain `/syn/Flt/Finite` states.
+    /// The exact integer this truncates toward zero to, or `None` on a NaN or an infinity — the domain `/sys/Bound/Finite` states.
     pub fn to_integer(self) -> Option<Integer> {
         match self.unpack() {
             Unpacked::Nan | Unpacked::Infinite { .. } => None,

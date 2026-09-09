@@ -1,5 +1,6 @@
 pub use /sys/{Bool};
 pub use /sys/Bool/{and, or, xor, eql};
+pub use /sys/Bound/{Holds};
 use /std/{Str, Option, Eq, False, True, Equal, Or, And, Show, Spell, Ordering, Compare, Ordered};
 
 -- | The other value.
@@ -17,12 +18,6 @@ pub let of_str(s: Str) -> Option(Bool) =
     | s == "false" => Option/some(false)
     | _ => Option/none()
     end;
-
--- | That `b` is `true`, as a proposition: `True` where it is and `False` where it is not.
--- |
--- | The reflection of a decision into a claim, which is what every decided bound is made of — `Nat/Lt(a, b)` is `Bool/Holds(Nat/lt(a, b))`. A literal divisor discharges what `/` demands because the decision reduces and this reduces with it.
-pub let Holds(b: Bool) -> Prop =
-    match b | true => True | false => False end;
 
 -- | `false` and `true` are distinct: the absurdity every decision procedure over a `Bool` discharges its impossible arm with.
 pub let false_neq_true(p: Eq(false, true)) -> False =
