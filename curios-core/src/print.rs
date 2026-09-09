@@ -322,11 +322,11 @@ pub fn build_shorten(symbols: &[Global]) -> HashMap<Global, String> {
     build_shorten_layered(&[], symbols)
 }
 
-/// [`build_shorten`] for a render a reader looks at from inside `own`'s module: `own`'s own declarations claim their spelling first, and everything `scope` put around them takes what is left.
+/// [`build_shorten`] for a render a reader looks at from inside `own`'s unit: a declaration sitting directly in that unit takes its bare label before anything around it may compete for the suffix.
 ///
-/// The tiers exist because a segment-suffix is not by itself a spelling anyone can write. `/std/Bool/Holds` is reachable as `Bool/Holds` and in full, never as a bare `Holds` — reaching it needs a `use` naming `Holds` itself, and then [`Imports::spellings`](crate::Imports::spellings) overrides this table with what was written. Counting the suffix it cannot claim against a reader's own root-declared `Holds` tied the two, so *neither* shortened and the name the reader had just written reported as `/Holds` while the one they could not reach reported as `Bool/Holds`.
+/// The tier exists because a segment-suffix is not by itself a spelling anyone can write. `/std/Bool/Holds` is reachable as `Bool/Holds` and in full, never as a bare `Holds` — reaching it needs a `use` naming `Holds` itself, and then [`Imports::spellings`](crate::Imports::spellings) overrides this table with what was written. Counting the suffix it cannot claim against a reader's own root-declared `Holds` tied the two, so *neither* shortened and the name the reader had just written reported as `/Holds` while the one they could not reach reported as `Bool/Holds`.
 ///
-/// A tie inside one tier is still a tie: two of a module's own declarations sharing a suffix decide it between themselves exactly as before, and a scope name may take only a suffix that is unambiguous overall *and* that no own declaration claimed.
+/// Only a single-segment name gets the claim, because only its bare label is writable: reaching a reader's own `/Vec/nil` needs `Vec/nil` or an import just as the environment's does, so a nested own name has no better title to `nil` than the shared contest below gives it. Handing it one spelled a goal candidate — `? ≈ nil()` — that the reader could not paste.
 pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global, String> {
     // One global can be listed twice (an inductive is both an `induct_decls` registry key and an `items` type-constructor definition), and a unit listed in both tiers lists it in both; count distinct names, or such a name would look ambiguous with itself and never shorten.
     let own = own.iter().collect::<BTreeSet<_>>();
@@ -347,15 +347,9 @@ pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global
             .collect()
     };
 
-    // How many distinct globals carry each segment-suffix: among the reader's own declarations, which is what settles those, and over everything, which is what settles the rest.
-    let mut own_count: HashMap<String, usize> = HashMap::new();
-    for name in &own {
-        for suffix in suffixes(name) {
-            *own_count.entry(suffix).or_insert(0) += 1;
-        }
-    }
-    let mut count = own_count.clone();
-    for name in &scope {
+    // How many distinct globals carry each segment-suffix.
+    let mut count: HashMap<String, usize> = HashMap::new();
+    for name in own.iter().chain(scope.iter()) {
         for suffix in suffixes(name) {
             *count.entry(suffix).or_insert(0) += 1;
         }
@@ -364,21 +358,21 @@ pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global
     let mut map = HashMap::new();
     let mut claimed = BTreeSet::new();
 
+    // Two single-segment names cannot collide — one label, one declaration — so this needs no ambiguity test of its own.
     for name in &own {
-        let Some(shortest) = suffixes(name)
-            .into_iter()
-            .find(|suffix| own_count.get(suffix) == Some(&1))
-        else {
+        let Some([label]) = name.qualifier().map(Qualifier::segments) else {
             continue;
         };
-        // Claimed whether or not it is recorded, so the tier below cannot take a spelling this one is already answering to.
-        claimed.insert(shortest.clone());
-        if shortest.len() < name.to_string().len() {
-            map.insert((*name).clone(), shortest);
-        }
+
+        claimed.insert(label.clone());
+        map.insert((*name).clone(), label.clone());
     }
 
-    for name in &scope {
+    for name in own.iter().chain(scope.iter()) {
+        if map.contains_key(*name) {
+            continue;
+        }
+
         let rendered = name.to_string();
         if let Some(shortest) = suffixes(name)
             .into_iter()

@@ -26,19 +26,21 @@ fn a_readers_own_declaration_claims_the_bare_name_before_its_environment() {
     assert_eq!(shorten.get(&nested).map(String::as_str), Some("Bool/Holds"));
 }
 
-/// Two of one module's own declarations still decide a shared suffix between themselves: neither may claim it, so both keep a spelling that tells them apart.
+/// A *nested* own declaration gets no such claim. Reaching `/Vec/nil` needs `Vec/nil` or an import, exactly as reaching `/std/Vec/nil` does, so its bare label is no more writable than the environment's and it stays in the shared contest — where a genuine tie leaves both spelled in full.
+///
+/// Handing it the label instead spelled a goal candidate the reader could not paste: `? \u{2248} nil()` for a constructor only `Vec/nil()` reaches.
 #[test]
-fn two_own_declarations_sharing_a_suffix_settle_it_between_themselves() {
-    let first = Global::Authored(Qualifier::from(["Left", "run"]));
-    let second = Global::Authored(Qualifier::from(["Right", "run"]));
-    let outer = Global::Authored(Qualifier::from(["std", "Task", "run"]));
+fn a_nested_own_declaration_does_not_claim_its_bare_label() {
+    let own_type = Global::Authored(Qualifier::from(["Vec"]));
+    let own_ctor = Global::Authored(Qualifier::from(["Vec", "nil"]));
+    let outer = Global::Authored(Qualifier::from(["std", "Vec", "nil"]));
 
-    let own = [first.clone(), second.clone()];
+    let own = [own_type.clone(), own_ctor.clone()];
     let shorten = build_shorten_layered(&own, std::slice::from_ref(&outer));
 
-    assert_eq!(shorten.get(&first).map(String::as_str), Some("Left/run"));
-    assert_eq!(shorten.get(&second).map(String::as_str), Some("Right/run"));
-    assert_eq!(shorten.get(&outer).map(String::as_str), Some("Task/run"));
+    // The type itself does sit at the unit root, so it takes its label and the environment's twin gives way.
+    assert_eq!(shorten.get(&own_type).map(String::as_str), Some("Vec"));
+    assert_eq!(shorten.get(&own_ctor), None);
 }
 
 /// Building a document descends once per link, so this is what [`sub`]'s guard is for — and the depth a diagnostic's term can reach is the elaborator's, not the writer's. Deep enough that a regression is a stack overflow rather than a slow test. The other two walks over a document, running and freeing it, are fixtured in `curios-utilities` at the same depth.
