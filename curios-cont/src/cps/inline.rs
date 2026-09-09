@@ -177,7 +177,10 @@ pub(super) fn inline_continuation(
             Some(CpsNode::ApplyFun {
                 callee: CpsCallee::Closure(value),
                 ..
-            }) if matches!(substitutions.get(value), Some(CpsAtom::Literal(_)))
+            }) if matches!(
+                substitutions.get(value),
+                Some(CpsAtom::Literal(_) | CpsAtom::Filler)
+            )
         )
     }) {
         return false;
@@ -248,10 +251,10 @@ pub(super) fn inline_call(
         .zip(args.iter().cloned())
         .collect::<BTreeMap<_, _>>();
 
-    // Bail before minting anything: only a parameter can map a closure callee to a literal (locals map to fresh values below), so this check is complete against the parameter substitutions alone, and an aborted attempt must leave no orphaned arena entries behind.
+    // Bail before minting anything: only a parameter can map a closure callee to a literal or a filler (locals map to fresh values below), so this check is complete against the parameter substitutions alone, and an aborted attempt must leave no orphaned arena entries behind. The filler half is what `split_workers`' padding and dead-parameter elimination can put in an argument position; neither is a callee `map_callee` could name, and reaching it there would panic after minting rather than declining here.
     if nodes.values().any(|node| {
         matches!(node, CpsNode::ApplyFun { callee: CpsCallee::Closure(value), .. }
-            if matches!(values.get(value), Some(CpsAtom::Literal(_))))
+            if matches!(values.get(value), Some(CpsAtom::Literal(_) | CpsAtom::Filler)))
     }) {
         return false;
     }
@@ -332,7 +335,7 @@ pub(super) fn inline_call(
         CpsCallee::Closure(value) => match map_atom(&CpsAtom::Value(*value)) {
             CpsAtom::Value(value) => CpsCallee::Closure(value),
             CpsAtom::Fun(function) => CpsCallee::Known(function),
-            // The pre-minting bail above already rejected every literal-mapped closure callee, and bailing here would leak the minted values and reserved slots.
+            // The pre-minting bail above already rejected every closure callee a parameter maps to a literal or a filler, and bailing here would leak the minted values and reserved slots.
             CpsAtom::Literal(_) | CpsAtom::Filler => unreachable!(),
         },
     };
