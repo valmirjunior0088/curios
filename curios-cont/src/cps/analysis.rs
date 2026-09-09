@@ -105,35 +105,53 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
         analysis.call_graph.entry(function).or_default();
     }
 
+    // The function references each body names, collected beside `escaping` off the same atoms, and which bodies hold a closure callee at all. The recursion verdict below needs both; the body-only `call_graph` must carry neither, since a reference is not a call site.
+    let mut named_in: BTreeMap<CpsFunId, BTreeSet<CpsFunId>> = BTreeMap::new();
+    let mut applies_a_closure: BTreeSet<CpsFunId> = BTreeSet::new();
     for owner in module.functions.live_ids().collect::<Vec<_>>() {
         for node_id in function_nodes(module, owner) {
             analysis.node_owners.insert(node_id, owner);
             let node = module.node(node_id).unwrap();
-            if let CpsNode::ApplyFun {
-                callee: CpsCallee::Known(callee),
-                ..
-            } = node
-            {
-                analysis
-                    .call_sites
-                    .entry(*callee)
-                    .or_default()
-                    .push(node_id);
-                analysis
-                    .call_graph
-                    .entry(owner)
-                    .or_default()
-                    .insert(*callee);
+            match node {
+                CpsNode::ApplyFun {
+                    callee: CpsCallee::Known(callee),
+                    ..
+                } => {
+                    analysis
+                        .call_sites
+                        .entry(*callee)
+                        .or_default()
+                        .push(node_id);
+                    analysis
+                        .call_graph
+                        .entry(owner)
+                        .or_default()
+                        .insert(*callee);
+                }
+                CpsNode::ApplyFun {
+                    callee: CpsCallee::Closure(_),
+                    ..
+                } => {
+                    applies_a_closure.insert(owner);
+                }
+                _ => {}
             }
             for atom in atoms(node) {
                 if let CpsAtom::Fun(function) = atom {
                     analysis.escaping.insert(*function);
+                    named_in.entry(owner).or_default().insert(*function);
                 }
             }
         }
     }
 
-    // A function is recursive, for the inliner, when it lies on a cycle of what an inline *copies*. A callee's extent carries every function defined lexically within it (`copied_extent`), so a call one of those makes is reproduced by each copy as surely as a call the callee's own body makes — and a copy that reaches back to the caller is a call the next sweep meets again, with nothing but the size limits to end it. That is how a by-need knot's forcing function, its initializer and the closure the initializer builds — three small functions, none calling itself, each reaching the next through a call or a definition — inlined one another without bound. So the verdict is taken over the call graph closed under definition: an owner inherits the calls of every function nested within it, transitively. The body-only graph and its components stay what specialization and contification read, since to them a nested closure is a function of its own, and folding it into its definer's component would let an escaping closure disqualify a component it merely sits in.
+    // A function is recursive, for the inliner, when it lies on a cycle of what an inline *copies*. A callee's extent carries every function defined lexically within it (`copied_extent`), so a call one of those makes is reproduced by each copy as surely as a call the callee's own body makes — and a copy that reaches back to the caller is a call the next sweep meets again, with nothing but the size limits to end it. That is how a by-need knot's forcing function, its initializer and the closure the initializer builds — three small functions, none calling itself, each reaching the next through a call or a definition — inlined one another without bound. So the verdict is taken over the call graph closed under definition: an owner inherits the calls of every function nested within it, transitively.
+    //
+    // A body that *names* a function can reach it the same way, and this is the second half of the closure rather than a separate rule. `map_atom` carries a `CpsAtom::Fun` through a copy unchanged, and substituting one into a closure callee is what turns it into a known call, so a reference such a body reproduces is a call it reproduces. Without that edge two functions handing each other's reference back and forth are a knot the verdict cannot see: `a(p) = p(b)` and `b(q) = q(a)`, called as `a(b)`, oscillate with period four under the sweep — each round devirtualizes to the other, neither ever closes a cycle of `Known` callees, the node count never moves, and so no size limit ever applies.
+    //
+    // The edge is conditional on the naming body *applying* a closure, because that is precisely what the rewrite needs: `map_callee` turns a reference into a call only where a substituted parameter stood in a `CpsCallee::Closure`. A body that merely hands a reference onward — an initializer returning the closure it built, which is the shape beside this one — cannot devirtualize anything, and reading its reference as a call would make the closure it defines recursive on a cycle no inline can travel.
+    //
+    // The body-only graph and its components stay what specialization and contification read, since to them a nested closure is a function of its own, and folding it into its definer's component would let an escaping closure disqualify a component it merely sits in. That is why the reference edges are seeded into `closed` alone and never into `call_graph`.
     let mut nested_in: BTreeMap<CpsFunId, Vec<CpsFunId>> = BTreeMap::new();
     for (&node_id, &owner) in &analysis.node_owners {
         if let Some(CpsNode::LetFun { functions, .. }) = module.node(node_id) {
@@ -144,6 +162,14 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
         }
     }
     let mut closed = analysis.call_graph.clone();
+    for (owner, referenced) in &named_in {
+        if applies_a_closure.contains(owner) {
+            closed
+                .entry(*owner)
+                .or_default()
+                .extend(referenced.iter().copied());
+        }
+    }
     // Nesting is a forest, so this settles in as many rounds as it is deep.
     let mut changed = true;
     while changed {

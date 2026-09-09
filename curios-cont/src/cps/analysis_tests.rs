@@ -14,6 +14,90 @@ use {
     std::collections::BTreeMap,
 };
 
+/// Two functions in one group, each applying its own parameter and passing a reference onward: `a(p) = p(b)`, and `b(q) = q(a)` when `mutual`, else `b(q) = q(1)`. `main` calls `a(b)`. Neither ever calls the other by name, so the knot exists only in the references — which is the whole point.
+fn two_functions_passing_references(mutual: bool) -> (CpsModule, CpsFunId, CpsFunId) {
+    let mut module = CpsModule::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let a = module.reserve_function();
+    let a_return = module.reserve_continuation();
+    let b = module.reserve_function();
+    let b_return = module.reserve_continuation();
+
+    let p = module.add_value(Some("p".into()));
+    let a_body = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Closure(p),
+        args: vec![CpsAtom::Fun(b)],
+        return_to: a_return,
+    });
+    module.define_function(
+        a,
+        CpsFunction {
+            debug_name: Some("a".into()),
+            params: vec![p],
+            return_cont: a_return,
+            body: a_body,
+        },
+    );
+
+    let q = module.add_value(Some("q".into()));
+    let b_body = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Closure(q),
+        args: vec![match mutual {
+            true => CpsAtom::Fun(a),
+            false => CpsAtom::Literal(CpsLiteral::Nat(1)),
+        }],
+        return_to: b_return,
+    });
+    module.define_function(
+        b,
+        CpsFunction {
+            debug_name: Some("b".into()),
+            params: vec![q],
+            return_cont: b_return,
+            body: b_body,
+        },
+    );
+
+    let call_a = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(a),
+        args: vec![CpsAtom::Fun(b)],
+        return_to: entry_return,
+    });
+    // One group, because each body must be able to name the other: mutual recursion is the shape that produces a multi-member `LetFun`.
+    let body = module.add_node(CpsNode::LetFun {
+        functions: vec![a, b],
+        body: call_a,
+    });
+    module.define_function(
+        entry,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_return,
+            body,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+    (module, a, b)
+}
+
+#[test]
+fn a_knot_of_function_references_is_recursive_though_neither_body_calls_the_other() {
+    // Neither `a` nor `b` holds a `Known` callee naming the other, so the body-only call graph is empty of edges between them and the verdict has to come from the references. It must, because an inline reproduces a `CpsAtom::Fun` exactly as it reproduces a nested definition, and substituting one into a closure callee turns it into a call: without the edge these two devirtualize into each other with period four, growing nothing and so tripping no size limit, until the sweep and then the round limit run out.
+    let (mutual, a, b) = two_functions_passing_references(true);
+    let analysis = analyze_calls(&mutual);
+    assert!(analysis.recursive.contains(&a), "`a` lies on the knot");
+    assert!(analysis.recursive.contains(&b), "`b` lies on the knot");
+
+    // The guard against reading every reference as a cycle: `b` names nothing, so the chain `a -> b` ends and neither is recursive.
+    let (chain, a, b) = two_functions_passing_references(false);
+    let analysis = analyze_calls(&chain);
+    assert!(!analysis.recursive.contains(&a), "`a` reaches only `b`");
+    assert!(!analysis.recursive.contains(&b), "`b` reaches nothing");
+}
+
 /// `g(p, n) = let _ = p() in g(p, n)`, a self-recursive member whose closure parameter every entry feeds the same function `f`, called once from `h() = g(f, 0)`. With `nested`, `f` is defined inside `h` — outside `g`'s lexical scope; otherwise it sits in the root group beside `g` and `h`.
 fn a_recursive_member_fed_one_function(nested: bool) -> (CpsModule, CpsValueId) {
     let mut module = CpsModule::new();
