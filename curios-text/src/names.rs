@@ -7,10 +7,14 @@ use {
     },
 };
 
-/// A surface reference, exactly as written in source: a [`Qualifier`] plus an `is_abs` flag marking a leading `/` (an absolute, root-anchored path). It is *not* a canonical identity — resolution turns a `Name` into an always-absolute `Qualifier` — so equality and hashing compare the written form (ignoring the span, as everywhere in this crate).
+/// A surface reference, exactly as written in source: a [`Qualifier`] plus an `is_abs` flag marking a leading `/` (an absolute, root-anchored path). It is *not* a canonical identity — resolution turns a `Name` into an always-absolute `Qualifier` — so equality and hashing compare the written form (ignoring the spans, as everywhere in this crate).
 #[derive(Debug, Clone)]
 pub struct Name {
     span: Option<Span>,
+    /// Where the *last* segment alone was written, when it was written apart from the path that reaches it — a `use m/{a, b}` group member, whose path is the group's and whose word is its own. `None` for a name written as one run of text, where [`Name::span`] already covers the last segment.
+    ///
+    /// Two spans, because a resolution can fail about either half and a reader needs the caret on the half that is wrong: `use /nope/{a}` is about `/nope` and `use /std/{nope}` is about `nope`. See `into_core::context::attach`, which picks between them by asking the refusal which half it names.
+    leaf: Option<Span>,
     is_abs: bool,
     qualifier: Qualifier,
 }
@@ -19,6 +23,7 @@ impl Name {
     pub(crate) fn new(is_abs: bool, qualifier: Qualifier) -> Self {
         Self {
             span: None,
+            leaf: None,
             is_abs,
             qualifier,
         }
@@ -33,6 +38,11 @@ impl Name {
         self.span.as_ref()
     }
 
+    /// Where the last segment alone was written, falling back to the whole path's span when the two were written together.
+    pub(crate) fn leaf_span(&self) -> Option<&Span> {
+        self.leaf.as_ref().or(self.span.as_ref())
+    }
+
     pub(crate) fn is_abs(&self) -> bool {
         self.is_abs
     }
@@ -44,8 +54,17 @@ impl Name {
     pub(crate) fn with(&self, segment: &str) -> Self {
         Self {
             span: self.span.clone(),
+            leaf: None,
             is_abs: self.is_abs,
             qualifier: self.qualifier.with(segment),
+        }
+    }
+
+    /// This name extended by a segment the reader wrote *apart* from it — a `use m/{a}` group member. The path keeps its own span and the segment contributes [`Name::leaf_span`], so a refusal about `a` underlines `a` while one about `m` still underlines `m`.
+    pub(crate) fn with_label(&self, label: &Label) -> Self {
+        Self {
+            leaf: label.span().cloned(),
+            ..self.with(label)
         }
     }
 
@@ -93,6 +112,7 @@ where
     fn from(iter: I) -> Self {
         Self {
             span: None,
+            leaf: None,
             is_abs: false,
             qualifier: Qualifier::from(iter),
         }

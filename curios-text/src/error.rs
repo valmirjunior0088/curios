@@ -131,6 +131,24 @@ pub enum Error {
 }
 
 impl Error {
+    /// Whether the refusal is about the *last* segment of the path it was raised for, rather than about the path that reaches it.
+    ///
+    /// A `use m/{a, b}` member is written apart from its group's path, so the two halves have separate spans ([`Name::leaf_span`](crate::Name::leaf_span)) and only the refusal knows which one it is talking about: `use /nope/{a}` cannot find `/nope` and `use /std/{nope}` cannot find `nope` in it.
+    pub(crate) fn names_the_leaf(&self) -> bool {
+        match self {
+            Self::Located { error, .. } => error.names_the_leaf(),
+            Self::PrivateChildModule { .. }
+            | Self::PrivateBinding { .. }
+            | Self::BindingNotFound { .. }
+            | Self::NotAModule { .. }
+            | Self::NotABinding { .. }
+            | Self::NoSuchUseTarget { .. }
+            | Self::QualifierConflict { .. }
+            | Self::BindingConflict { .. } => true,
+            _ => false,
+        }
+    }
+
     pub(crate) fn at(self, span: Span) -> Self {
         match self {
             Self::Located { .. } => self,

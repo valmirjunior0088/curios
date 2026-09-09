@@ -916,8 +916,14 @@ impl<'a> Context<'a> {
     }
 }
 
+// The refusal of a resolution, located at the half of the written name it is about: a `use m/{a}` member carries the group's span for its path and the selector's own for its last segment, and only the error says which is wrong. Every other name was written as one run of text, where the two are the same span.
 fn attach(error: Error, name: &Name) -> Error {
-    match name.span() {
+    let span = match error.names_the_leaf() {
+        true => name.leaf_span(),
+        false => name.span(),
+    };
+
+    match span {
         Some(span) => error.at(span.clone()),
         None => error,
     }

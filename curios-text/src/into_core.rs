@@ -500,7 +500,7 @@ fn process_items(
                 match &use_item.group {
                     UseGroup::Named(items) => {
                         for item in items {
-                            let full = use_item.name.with(item.label());
+                            let full = use_item.name.with_label(item.label());
                             context.open_site(UseSite {
                                 span: item.label().span().cloned(),
                                 what: UseSiteKind::Selector(item.label().clone()),

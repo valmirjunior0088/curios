@@ -146,6 +146,55 @@ fn rejects_use_of_unknown_item() {
     );
 }
 
+// The caret run a report ends with, which is what says how much of the source line it underlined.
+fn underline(report: &str) -> String {
+    report
+        .lines()
+        .next_back()
+        .unwrap_or_default()
+        .trim()
+        .trim_start_matches('|')
+        .trim()
+        .to_string()
+}
+
+// A group member is written apart from the path that reaches it, so the two halves are located separately and the caret goes on the half the refusal is about. Both directions are pinned, because one span for the whole name satisfied the first test and put every member's caret on the group's path.
+//
+// The names are deliberately of different lengths: the caret run can then only belong to one of them.
+#[test]
+fn an_unknown_group_member_is_located_at_the_member() {
+    let report = run_err_report(
+        r#"
+        pub mod Foo
+            pub let x : Type = Type;
+        end
+        use /Foo/{nonesuch};
+        Type
+    "#,
+    );
+    assert!(
+        report.contains("no module or binding named nonesuch") && underline(&report) == "^^^^^^^^",
+        "reported {report}"
+    );
+}
+
+#[test]
+fn an_unknown_group_path_is_located_at_the_path() {
+    let report = run_err_report(
+        r#"
+        pub mod Foo
+            pub let x : Type = Type;
+        end
+        use /Nonesuch/{x};
+        Type
+    "#,
+    );
+    assert!(
+        report.contains("child module not found: Nonesuch") && underline(&report) == "^^^^^^^^^",
+        "reported {report}"
+    );
+}
+
 #[test]
 fn use_of_dual_existence_registers_both() {
     run(r#"
