@@ -50,7 +50,7 @@ pub(super) fn parse_top_test<'a>(vis_pub: bool) -> Parser<'a, TopItem> {
         true => fail("a test is never `pub`: its name is its report line, not an export"),
         false => pure(()),
     }
-    .and_keep(parse_label())
+    .and_keep(parse_declared_label())
     .and(commit(
         parse_literal("=")
             .and_keep(lazy(parse_term))
@@ -144,7 +144,7 @@ pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
 
 // `foreign name : T;` — a name and a wire signature with no body, bound to a host-provided implementation at link time. Mirrors `parse_top_let`, but ends after the signature instead of parsing `= body`.
 pub(super) fn parse_top_foreign<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopItem> {
-    parse_label()
+    parse_declared_label()
         .and_drop(parse_literal(":"))
         .and(parse_wire_signature())
         .and_drop(parse_literal(";"))
@@ -163,7 +163,7 @@ pub(super) fn parse_top_mod<'a>(
     vis_pub: bool,
     start: Mark,
 ) -> Parser<'a, TopItem> {
-    parse_label().flat_map(move |label| {
+    parse_declared_label().flat_map(move |label| {
         many0(parse_top_item)
             .and_drop(parse_keyword("end"))
             .map(|items| Some(Module { items }))
@@ -230,12 +230,12 @@ pub(super) fn parse_use_path<'a>() -> Parser<'a, Name> {
 
 pub(super) fn parse_group_item<'a>() -> Parser<'a, GroupItem> {
     parse_keyword("mod")
-        .and_keep(parse_label())
+        .and_keep(parse_declared_label())
         .map(GroupItem::Mod)
         .or(parse_keyword("let")
-            .and_keep(parse_label())
+            .and_keep(parse_declared_label())
             .map(GroupItem::Let))
-        .or(parse_label().map(GroupItem::Both))
+        .or(parse_declared_label().map(GroupItem::Both))
 }
 
 // The `{` is the prefix that discriminates a group, so the rest commits and owns its fault. Left recoverable, a missing `}` failed here and fell through to `parse_use_group`'s last alternative, whose committed refusal outranks the offset — so a reader who forgot one brace was told at length how to write the group already on their screen, with the caret on the `/` before it.
@@ -376,7 +376,7 @@ pub(super) fn parse_induct_arity<'a>() -> Parser<'a, InductArity> {
 }
 
 pub(super) fn parse_top_induct_body<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopInduct> {
-    parse_label()
+    parse_declared_label()
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
@@ -457,7 +457,7 @@ fn parse_struct_field<'a>() -> Parser<'a, StructField> {
 
 // One structure of a `struct` item, after its `pub` and keyword: the name, the parameters, the result sort with its own `pub`, and the fields.
 fn parse_struct_member<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopStruct> {
-    parse_label()
+    parse_declared_label()
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
@@ -537,7 +537,7 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
 
 // One concept of a `concept` item, after its `pub` and keyword — the struct member's shape with concept fields.
 fn parse_concept_member<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopConcept> {
-    parse_label()
+    parse_declared_label()
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))

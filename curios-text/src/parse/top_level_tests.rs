@@ -7,6 +7,59 @@ use {
     curios_utilities::Plicity,
 };
 
+// The declaring and the referring side agree on what a name is: `parse_name` refuses a keyword segment in a path, so a declaration may not bind one either — bound, it names something no later reference can spell.
+//
+// The refusal is committed at a declaration's own name, which is what makes it the report. Uncommitted it lost `Parser::or`'s tie-break every time: this input reported through the struct-pattern alternative as `path 'match' contains a reserved keyword`.
+#[test]
+fn a_reserved_keyword_cannot_name_a_declaration() {
+    let error = "let match : Nat = 1;".parse::<Module>().unwrap_err();
+    assert!(
+        error.format().contains("'match' is a reserved keyword"),
+        "{}",
+        error.format()
+    );
+}
+
+#[test]
+fn a_reserved_keyword_cannot_name_a_use_selector() {
+    let error = "use /std/{end};".parse::<Module>().unwrap_err();
+    assert!(
+        error.format().contains("'end' is a reserved keyword"),
+        "{}",
+        error.format()
+    );
+}
+
+// The refusal reaches every declaring form, not only the one it was found through.
+#[test]
+fn a_reserved_keyword_cannot_name_an_induct_a_struct_or_a_module() {
+    for source in [
+        "induct end : Type\nend",
+        "struct use : Type { n : Type }",
+        "mod true\nend",
+    ] {
+        let error = source.parse::<Module>().unwrap_err();
+        assert!(
+            error.format().contains("is a reserved keyword"),
+            "{source}: {}",
+            error.format()
+        );
+    }
+}
+
+// Every keyword-valued spelling the grammar does admit is parsed by an alternative earlier than the binder the refusal sits in, so it still parses.
+#[test]
+fn the_keywords_the_grammar_spells_itself_still_parse() {
+    for source in [
+        "let f : (Bool) -> Nat = (b) => match b | true => 1 | false => 0 end;",
+        "let g : (Nat) -> Nat = (n) => match n | 0 => 0 | p + 1; ih => ih end;",
+    ] {
+        if let Err(error) = source.parse::<Module>() {
+            panic!("{source}\n{}", error.format());
+        }
+    }
+}
+
 #[test]
 fn top_let_without_pub() {
     assert_eq!(

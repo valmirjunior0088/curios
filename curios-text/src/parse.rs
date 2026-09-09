@@ -240,10 +240,37 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
 }
 
 // An identifier at a declaring position, carrying the span of the word alone: the trailing whitespace is consumed after the span closes, so a report about the declaration underlines the name and nothing after it.
+//
+// A keyword is refused here for the reason `parse_name` refuses one in a path (`name_from_segments`): the declaring and the referring side have to agree on what a name is, or a declaration binds a word no reference can spell. `let match : Nat = 1;` was accepted and then unreachable — every later `match` is the keyword, so the binding reported only as unused, and in expression position the tail read as a match with no scrutinee.
+//
+// Safe as the last alternative of a choice because every keyword-valued spelling the grammar does admit is parsed by an earlier one: `parse_bool_match_pattern` precedes `parse_binder` in `parse_match_pattern_inner`, exactly as it already precedes `parse_name`'s identical refusal.
 fn parse_label<'a>() -> Parser<'a, Label> {
-    spanned(parse_identifier_raw())
-        .map(|(span, text)| Label::spanned(text, span))
+    parse_label_owning(false)
+}
+
+// A *declaration's own* name — the word after `let`, `mod`, `induct`, `struct`, `concept`, `foreign` or `test`, and each selector of a `use` group. [`parse_label`] with its keyword refusal committed: these positions sit past the prefix that discriminates them, so the refusal is the branch's diagnosis rather than a guess, and `Parser::or` must not discard it for a sibling that happened to read further before giving up.
+//
+// Uncommitted it was discarded every time. `let match : Nat = 1;` reported at second hand through the struct-pattern alternative, as `path 'match' contains a reserved keyword` with the caret past the word, and `use /std/{match}` reported as `Expected '}', obtained 'm'`, which names the brace for a mistake about a name.
+pub(super) fn parse_declared_label<'a>() -> Parser<'a, Label> {
+    parse_label_owning(true)
+}
+
+fn parse_label_owning<'a>(owns_the_fault: bool) -> Parser<'a, Label> {
+    mark()
+        .and(spanned(parse_identifier_raw()))
+        .flat_map(move |(start, (span, text))| {
+            match (is_keyword(text), owns_the_fault) {
+                (false, _) => pure(Label::spanned(text, span)),
+                // Reported where the word begins, as `parse_keyword` reports a misspelled one, so the caret stands on the name rather than after it. Only the committed side may rewind: an uncommitted error that gives back the offset it read loses `Parser::or`'s tie-break to every sibling, which is how this refusal reached no reader at all.
+                (true, true) => commit(fail_from(&start, reserved_keyword(text))),
+                (true, false) => fail(reserved_keyword(text)),
+            }
+        })
         .and_drop(parse_whitespace())
+}
+
+fn reserved_keyword(word: &str) -> String {
+    format!("'{word}' is a reserved keyword, so it cannot be a name")
 }
 
 fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> Parser<'a, Name> {
