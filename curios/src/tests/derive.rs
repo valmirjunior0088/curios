@@ -526,7 +526,7 @@ fn the_signature_refusals_fire_on_a_body_less_witness_as_on_a_written_one() {
     let rendered = error(duplicate);
     assert!(
         rendered.contains(
-            "duplicate witness of '/Show' for head 'Nat'\n  \
+            "duplicate witness of 'Show' for head 'Nat'\n  \
              both are declared in the entry module\n  \
              every concept-head pair has at most one witness, program-wide"
         ),

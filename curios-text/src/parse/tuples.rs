@@ -22,7 +22,7 @@ pub(super) fn parse_parens<'a>() -> Parser<'a, Term> {
 
 // A Σ-type / struct-declaration field: an optional label and the field type, or the signature sugar `label(params) -> type` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and `struct` decls. The sugared catch spans through `->`, so a positional field that merely starts with an application (`f(x)`) backtracks cleanly.
 pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
-    parse_field_label()
+    parse_label()
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_func_type_param, || {
@@ -40,7 +40,7 @@ pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
                 type_: output,
             },
         )
-        .or(parse_field_label()
+        .or(parse_label()
             .and_drop(parse_literal(":"))
             .and(commit(lazy(parse_term)))
             .map(|(label, type_): (Label, Term)| TupleTypeParam {
@@ -53,6 +53,21 @@ pub(super) fn parse_tuple_type_field<'a>() -> Parser<'a, TupleTypeParam> {
             func_params: None,
             type_,
         }))
+        .or(refuse_keyword_field_label())
+}
+
+// A keyword written where a field is labelled. Tried last, so reaching it means none of the three real forms could read this field, and it commits: `parse_label` refuses a keyword uncommittedly — it has to, since a positional field is a term and a term may open with one — and the refusal was then discarded for the enclosing `}`, which reported `Expected '}', obtained 'e'` for a field written `end : Nat`.
+//
+// The introducer is required, and is what keeps this from claiming a positional field that merely opens with a keyword: `{ match b | true => T end }` reaches here only if the term failed, and its `match` is followed by a scrutinee rather than by `:` or `(`, so the arm's own diagnosis stands. A term that *is* `<keyword> (` — a `let` over a tuple pattern — parses as the positional form and never reaches this alternative at all.
+fn refuse_keyword_field_label<'a>() -> Parser<'a, TupleTypeParam> {
+    mark()
+        .and(parse_identifier_raw())
+        .and_drop(parse_whitespace())
+        .and_drop(look_ahead(parse_literal(":").or(parse_literal("("))))
+        .flat_map(|(start, word)| match is_keyword(word) {
+            true => commit(fail_from(&start, reserved_keyword(word))),
+            false => fail("not a keyword written as a field label"),
+        })
 }
 
 pub(super) fn parse_tuple_type<'a>() -> Parser<'a, Term> {

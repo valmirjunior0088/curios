@@ -175,3 +175,40 @@ fn struct_literal_disambiguates_from_tuple_type() {
         .into()
     );
 }
+
+// A field label is a name like any other, so a keyword may not spell one. The refusal has to be an alternative of its own: `parse_label` may only refuse a keyword uncommittedly here, since a *positional* field is a term and a term may open with a keyword — and uncommitted it was discarded for the enclosing `}`, which reported `Expected '}', obtained 'e'` for a field written `end : Nat`.
+#[test]
+fn a_reserved_keyword_cannot_label_a_field() {
+    for source in [
+        "{end : Type}",
+        "{n : Type, match : Type}",
+        "{use(x : Type) -> Type}",
+    ] {
+        let error = source.parse::<Term>().unwrap_err();
+        assert!(
+            error.format().contains("is a reserved keyword"),
+            "{source}: {}",
+            error.format()
+        );
+    }
+}
+
+// The refusal claims only a field the writer meant to label, which is what its introducer lookahead is for: a positional field that merely opens with a keyword keeps its own diagnosis, and one that parses stays parsed.
+#[test]
+fn a_positional_field_opening_with_a_keyword_is_left_alone() {
+    let error = "{match b | true => , Type}".parse::<Term>().unwrap_err();
+    assert!(
+        !error.format().contains("reserved keyword"),
+        "{}",
+        error.format()
+    );
+
+    for source in [
+        "{match b | true => Type end, Type}",
+        "{let (a, b) : P = p; a, Type}",
+    ] {
+        if let Err(error) = source.parse::<Term>() {
+            panic!("{source}\n{}", error.format());
+        }
+    }
+}

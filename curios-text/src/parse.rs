@@ -228,7 +228,7 @@ fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {
 }
 
 // The identifier characters alone, consuming no whitespace — the building block of the tight (whitespace-free) positions like a `Bits`/`Bytes` literal's `\..` spread operand.
-fn parse_identifier_raw<'a>() -> Parser<'a, &'a str> {
+pub(super) fn parse_identifier_raw<'a>() -> Parser<'a, &'a str> {
     take_while(is_identifier_char).flat_map(|identifier| match identifier.is_empty() {
         true => fail("Expected identifier"),
         false => pure(identifier),
@@ -269,14 +269,7 @@ fn parse_label_owning<'a>(owns_the_fault: bool) -> Parser<'a, Label> {
         .and_drop(parse_whitespace())
 }
 
-// A field's label. Span-carrying like [`parse_label`], and deliberately without its keyword rule: a field is not a path segment. It is reached by projection and by a field pattern, never by a `use` or a qualified name, so `struct S : Type { end : Nat }` is written and read back as `s.end` today and the referring side has no keyword to collide with.
-pub(super) fn parse_field_label<'a>() -> Parser<'a, Label> {
-    spanned(parse_identifier_raw())
-        .map(|(span, text)| Label::spanned(text, span))
-        .and_drop(parse_whitespace())
-}
-
-fn reserved_keyword(word: &str) -> String {
+pub(super) fn reserved_keyword(word: &str) -> String {
     format!("'{word}' is a reserved keyword, so it cannot be a name")
 }
 
