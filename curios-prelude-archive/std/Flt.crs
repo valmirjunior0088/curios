@@ -1,7 +1,7 @@
 pub use /sys/{Flt};
-pub use /syn/Flt/{FourBytes, Finite, NonNeg};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
+pub use /syn/Flt/{FourBytes, Finite, NonNeg};
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat, Equal, Compare,
     Add, Subtract, Multiply, Divide, Remainder, Show, Spell, Ordered, True};
 

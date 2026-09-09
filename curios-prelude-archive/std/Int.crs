@@ -1,7 +1,7 @@
 pub use /sys/{Int};
-pub use /syn/Int/{NonZero, NonNeg};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
     to_flt};
+pub use /syn/Int/{NonZero, NonNeg};
 use /std/{Nat, Bool, Str, Option, Ordering, Equal, Compare, Add, Subtract, Multiply, Divide,
     Remainder, Show, Spell, Ordered, True};
 
