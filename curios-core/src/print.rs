@@ -38,7 +38,7 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 //
 // axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a global's displayed rendering — the axis-(b) shortened form where that map shortens it — take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
-// axis (b) — globals: a *shorten map* (built by `build_shorten` over `Module::module_symbols`) replaces each qualified path with its shortest unambiguous `/`-suffix — the name in scope, since Curios has no `use … as` aliasing. Used by error rendering *and* `Module` display.
+// axis (b) — globals: a *shorten map* (built by `build_shorten` over `Module::module_symbols`) replaces each qualified path with its shortest unambiguous `/`-suffix — the name in scope, since Curios has no `use … as` aliasing. Used by error rendering *and* `Module` display. A render that knows which module its reader stands in builds it through `build_shorten_layered` instead, so the declarations that reader wrote settle their own spelling before what surrounds them competes for it.
 //
 // axis (c) — universe instances: a flag suppressing the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. Diagnostics set it; `wonder stage`'s dumps deliberately do not, because a dump is read *about* the compiler and its levels are the point.
 //
@@ -319,8 +319,23 @@ pub fn build_rename(
 
 /// Map each global to the shortest `/`-suffix of its path that no other global shares — the name it has in scope, since Curios has no `use … as` aliasing, so an in-scope name is always a suffix. Only entries that actually shorten are recorded; an ambiguous (or single-segment) name keeps its full path.
 pub fn build_shorten(symbols: &[Global]) -> HashMap<Global, String> {
-    // One global can be listed twice (an inductive is both an `induct_decls` registry key and an `items` type-constructor definition); count distinct names, or such a name would look ambiguous with itself and never shorten.
-    let symbols = symbols.iter().collect::<BTreeSet<_>>();
+    build_shorten_layered(&[], symbols)
+}
+
+/// [`build_shorten`] for a render a reader looks at from inside `own`'s module: `own`'s own declarations claim their spelling first, and everything `scope` put around them takes what is left.
+///
+/// The tiers exist because a segment-suffix is not by itself a spelling anyone can write. `/std/Bool/Holds` is reachable as `Bool/Holds` and in full, never as a bare `Holds` — reaching it needs a `use` naming `Holds` itself, and then [`Imports::spellings`](crate::Imports::spellings) overrides this table with what was written. Counting the suffix it cannot claim against a reader's own root-declared `Holds` tied the two, so *neither* shortened and the name the reader had just written reported as `/Holds` while the one they could not reach reported as `Bool/Holds`.
+///
+/// A tie inside one tier is still a tie: two of a module's own declarations sharing a suffix decide it between themselves exactly as before, and a scope name may take only a suffix that is unambiguous overall *and* that no own declaration claimed.
+pub fn build_shorten_layered(own: &[Global], scope: &[Global]) -> HashMap<Global, String> {
+    // One global can be listed twice (an inductive is both an `induct_decls` registry key and an `items` type-constructor definition), and a unit listed in both tiers lists it in both; count distinct names, or such a name would look ambiguous with itself and never shorten.
+    let own = own.iter().collect::<BTreeSet<_>>();
+    let scope = scope
+        .iter()
+        .collect::<BTreeSet<_>>()
+        .difference(&own)
+        .copied()
+        .collect::<BTreeSet<_>>();
 
     // Suffixes are taken over the *segments* a name is made of, never over its rendered text: `/Foobar` is not a suffix of `/Foo/bar`, and only the structure says so.
     let suffixes = |name: &Global| -> Vec<String> {
@@ -332,20 +347,42 @@ pub fn build_shorten(symbols: &[Global]) -> HashMap<Global, String> {
             .collect()
     };
 
-    // How many distinct globals carry each segment-suffix.
-    let mut count: HashMap<String, usize> = HashMap::new();
-    for name in &symbols {
+    // How many distinct globals carry each segment-suffix: among the reader's own declarations, which is what settles those, and over everything, which is what settles the rest.
+    let mut own_count: HashMap<String, usize> = HashMap::new();
+    for name in &own {
+        for suffix in suffixes(name) {
+            *own_count.entry(suffix).or_insert(0) += 1;
+        }
+    }
+    let mut count = own_count.clone();
+    for name in &scope {
         for suffix in suffixes(name) {
             *count.entry(suffix).or_insert(0) += 1;
         }
     }
 
     let mut map = HashMap::new();
-    for name in &symbols {
+    let mut claimed = BTreeSet::new();
+
+    for name in &own {
+        let Some(shortest) = suffixes(name)
+            .into_iter()
+            .find(|suffix| own_count.get(suffix) == Some(&1))
+        else {
+            continue;
+        };
+        // Claimed whether or not it is recorded, so the tier below cannot take a spelling this one is already answering to.
+        claimed.insert(shortest.clone());
+        if shortest.len() < name.to_string().len() {
+            map.insert((*name).clone(), shortest);
+        }
+    }
+
+    for name in &scope {
         let rendered = name.to_string();
         if let Some(shortest) = suffixes(name)
             .into_iter()
-            .find(|suffix| count.get(suffix) == Some(&1))
+            .find(|suffix| count.get(suffix) == Some(&1) && !claimed.contains(suffix))
             && shortest.len() < rendered.len()
         {
             map.insert((*name).clone(), shortest);

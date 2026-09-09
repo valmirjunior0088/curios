@@ -50,7 +50,7 @@ use {
     curios_core::{
         Atom, Consumption, Cost, DEFAULT_RETENTION_QUOTA, Free, Global, InductDecl, Level,
         LevelHead, Module, Polarity, ReduceError, Reducer, Retention, Spelling, StructDecl, Term,
-        UniverseConstraint, UniverseContext, UniverseError, build_shorten,
+        UniverseConstraint, UniverseContext, UniverseError, build_shorten_layered,
     },
     curios_utilities::SyntaxRegistry,
     std::{fmt, rc::Rc},
@@ -187,8 +187,9 @@ impl KernelError {
         scope: &[&Module],
         syntax: &SyntaxRegistry,
     ) -> String {
-        // See `curios_elab::Error::format_with`: a module carries only its own declarations, so *both* halves of the spelling have to be told what its environment put in scope — the shortening table and the plicity marks alike.
-        let mut symbols = module.module_symbols();
+        // See `curios_elab::Error::format_with`: a module carries only its own declarations, so *both* halves of the spelling have to be told what its environment put in scope — the shortening table and the plicity marks alike. The shortening keeps the two apart as that one does, so `module`'s own declarations settle their spelling before the environment competes for it.
+        let own = module.module_symbols();
+        let mut symbols = Vec::new();
         let mut plicities = module.nominal_plicities();
         for unit in scope {
             symbols.extend(unit.module_symbols());
@@ -199,7 +200,7 @@ impl KernelError {
 
         let spelling = Rc::new(
             Spelling::default()
-                .with_short_names(Rc::new(build_shorten(&symbols)))
+                .with_short_names(Rc::new(build_shorten_layered(&own, &symbols)))
                 .with_nominal_plicities(Rc::new(plicities))
                 .with_string_literals(Global::Authored(syntax.string.string.qualifier())),
         );

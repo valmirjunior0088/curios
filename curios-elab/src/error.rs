@@ -5,7 +5,8 @@ use {
     super::{Erased, HeadKey, WitnessKey},
     curios_core::{
         Atom, Free, Global, Imports, Level, Module, Polarity, ReduceError, Spelling, Subterm, Term,
-        UniverseConstraintOrigin, UniverseError, build_rename, build_shorten, display_names,
+        UniverseConstraintOrigin, UniverseError, build_rename, build_shorten_layered,
+        display_names,
     },
     curios_num::{Integer, Natural},
     curios_utilities::{Grain, Plicity, Qualifier, Report, Span, SyntaxRegistry},
@@ -1169,7 +1170,10 @@ impl Error {
         // Everything a reader could see: `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so both halves of the spelling have to be told the prelude exists — the shortening table to know `Vec` is an unambiguous suffix, and the plicity marks to know `Eq`'s first parameter is implicit.
         //
         // Taking the scope as a `Module` rather than as one of its projections is deliberate: this was first fixed by passing a name slice, which repaired the shortening and left the plicities reading a module that no longer holds the prelude. A second projection would have been a second thing to forget.
-        let mut symbols = module.module_symbols();
+        //
+        // The two halves stay apart for the shortening, which is what `build_shorten_layered` wants: a declaration this reader wrote settles its own spelling before the environment competes for it, so a root `Holds` beside `/std/Bool/Holds` reports as the `Holds` that was written rather than as `/Holds`. The plicities merge, having no such contest — a name resolves to one declaration and reads its marks off that one.
+        let own = module.module_symbols();
+        let mut symbols = Vec::new();
         let mut plicities = module.nominal_plicities();
         for unit in scope {
             symbols.extend(unit.module_symbols());
@@ -1178,7 +1182,7 @@ impl Error {
             }
         }
 
-        let mut shorten = build_shorten(&symbols);
+        let mut shorten = build_shorten_layered(&own, &symbols);
         for (global, spelling) in imports.spellings() {
             shorten.insert(global, spelling.to_string());
         }

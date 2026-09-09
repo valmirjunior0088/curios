@@ -12,6 +12,35 @@ fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
     assert_eq!(rename.get(&binder).map(String::as_str), Some("helper2"));
 }
 
+/// A reader's own declaration keeps the bare name, and a like-named one from the environment takes the longer spelling that actually reaches it.
+///
+/// One suffix table over both tiers tied `Holds` between the two, so *neither* shortened: the name the reader had just written reported as `/Holds` while `/std/Bool/Holds` — which no bare `Holds` reaches — reported as `Bool/Holds`.
+#[test]
+fn a_readers_own_declaration_claims_the_bare_name_before_its_environment() {
+    let own = Global::Authored(Qualifier::from(["Holds"]));
+    let nested = Global::Authored(Qualifier::from(["std", "Bool", "Holds"]));
+
+    let shorten = build_shorten_layered(std::slice::from_ref(&own), std::slice::from_ref(&nested));
+
+    assert_eq!(shorten.get(&own).map(String::as_str), Some("Holds"));
+    assert_eq!(shorten.get(&nested).map(String::as_str), Some("Bool/Holds"));
+}
+
+/// Two of one module's own declarations still decide a shared suffix between themselves: neither may claim it, so both keep a spelling that tells them apart.
+#[test]
+fn two_own_declarations_sharing_a_suffix_settle_it_between_themselves() {
+    let first = Global::Authored(Qualifier::from(["Left", "run"]));
+    let second = Global::Authored(Qualifier::from(["Right", "run"]));
+    let outer = Global::Authored(Qualifier::from(["std", "Task", "run"]));
+
+    let own = [first.clone(), second.clone()];
+    let shorten = build_shorten_layered(&own, std::slice::from_ref(&outer));
+
+    assert_eq!(shorten.get(&first).map(String::as_str), Some("Left/run"));
+    assert_eq!(shorten.get(&second).map(String::as_str), Some("Right/run"));
+    assert_eq!(shorten.get(&outer).map(String::as_str), Some("Task/run"));
+}
+
 /// Building a document descends once per link, so this is what [`sub`]'s guard is for — and the depth a diagnostic's term can reach is the elaborator's, not the writer's. Deep enough that a regression is a stack overflow rather than a slow test. The other two walks over a document, running and freeing it, are fixtured in `curios-utilities` at the same depth.
 #[test]
 fn a_deep_term_is_printed_without_overflowing() {
