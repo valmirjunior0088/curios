@@ -7,4 +7,5 @@ mod index_tests;
 mod metavariable_tests;
 mod mutation_tests;
 mod proposition_tests;
+mod subsumption_tests;
 mod test_support;

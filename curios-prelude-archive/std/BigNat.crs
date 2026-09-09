@@ -45,7 +45,7 @@ pub let trim_is_trimmed(bits: Bits) -> Eq(is_trimmed(trim(bits)), true) =
     end;
 
 let canonical_of_is_trimmed(bits: Bits, p: Eq(is_trimmed(bits), true)) -> Canonical(bits) =
-    Eq/subst((b: Bool) => Bool/Holds(b), Eq/sym(p), True/qed());
+    Eq/subst(Bool/Holds, Eq/sym(p), True/qed());
 
 let canonical_of_trim(bits: Bits) -> Canonical(trim(bits)) =
     canonical_of_is_trimmed(trim(bits), trim_is_trimmed(bits));

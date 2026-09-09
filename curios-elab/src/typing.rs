@@ -180,16 +180,22 @@ fn required_region_type(context: &mut Context, sequenced: &Term) -> Option<Term>
     Some(sequenced.traverse(&mut visit))
 }
 
-pub(crate) fn expect(
+/// Whether `inferred` is admissible where `expected` is wanted: the subsumption relation `A ≤ B`, decided structurally as `curios_cert`'s `subsumes` decides it — `Prop ≤ Type v`, `Type u ≤ Type v` under the level algebra, and `Π(x:A).B ≤ Π(x:A').B'` when `A ≡ A'` and `B ≤ B'` — falling through to conversion otherwise.
+///
+/// **The function-type case is what makes this a relation rather than a traversal artifact.** Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices; checking a *name* against one does not, and the Π is formed and compared whole. Left to conversion that refused `(b: Bool) -> Prop` where `(Bool) -> Type` was wanted — a program the kernel's relation admits, repairable only by an η-expansion the report never named. See `documentation/design/language/subsumption-is-a-relation-not-a-traversal-order.md`.
+///
+/// Domains stay invariant, as they do in the kernel: reading one covariantly would hand a function that takes only small arguments a large one.
+fn subsume(
     context: &mut Context,
     term: &Term,
     inferred: &Term,
     expected: &Term,
-) -> Result<(), Error> {
-    let inferred_sort = reduce_with(context, inferred)?;
-    let expected_sort = reduce_with(context, expected)?;
-    if let Subterm::Type(upper) = &*expected_sort {
-        let lower = match &*inferred_sort {
+) -> Result<Outcome, Error> {
+    let lower_type = reduce_with(context, inferred)?;
+    let upper_type = reduce_with(context, expected)?;
+
+    if let Subterm::Type(upper) = &*upper_type {
+        let lower = match &*lower_type {
             Subterm::Prop => Some(Level::zero()),
             Subterm::Type(lower) => Some(lower.clone()),
             _ => None,
@@ -208,16 +214,85 @@ pub(crate) fn expect(
                     },
                 )
                 .map_err(Error::from)?;
-            return context.retry_parked();
+            return Ok(Outcome::Converts);
         }
     }
 
-    let outcome = super::convert_outcome(context, &Term::type_ground(), inferred, expected)
-        .map_err(|error| {
-            Error::from_reduce(error, || {
-                Error::convert_exhausted(inferred.clone(), expected.clone())
-            })
-        })?;
+    // Both sides rigid function types of one calling convention. A side still stuck on an unsolved metavariable has no shape to decompose — conversion parks it instead, which is what lets a later solution decide it.
+    if let (Subterm::FuncType(lower), Subterm::FuncType(upper)) = (&*lower_type, &*upper_type)
+        && lower.plicities() == upper.plicities()
+        && !stuck_on_metavar(context, &lower_type)
+        && !stuck_on_metavar(context, &upper_type)
+    {
+        let (lower, upper) = (lower.telescope.clone(), upper.telescope.clone());
+        let decided =
+            context.with_frame(|context| subsume_telescope(context, term, lower, upper))?;
+
+        if let Some(outcome) = decided {
+            return Ok(outcome);
+        }
+    }
+
+    super::convert_outcome(context, &Term::type_ground(), inferred, expected).map_err(|error| {
+        Error::from_reduce(error, || {
+            Error::convert_exhausted(inferred.clone(), expected.clone())
+        })
+    })
+}
+
+/// [`subsume`] through a function type's telescope: each domain by conversion, the terminal codomains by subsumption, under one shared set of binders. `None` when the walk could not decide, which is the caller's cue to hand the whole pair to conversion instead.
+///
+/// Opening both sides at the *same* occurrence is what makes the codomain comparison meaningful — the domains have just been compared, so a single binder stands for both.
+///
+/// **A blocked rung abandons the walk rather than surrendering its goals.** Both of the things that would have to be true to park one are false here: `Context::park` freezes the *live* frame, so a goal naming a binder this walk minted would be retried under a frame that no longer assumes it; and a parked conversion is discharged by `retry_conversion` through `convert_outcome`, which decides a codomain by equality — the very rule this relation exists to widen. Conversion's own goals have neither problem, so the fallback is to let it park the pair. The cost is that a subsumption blocked on a metavariable is decided by conversion, refusing some programs the relation admits; those are exactly the programs refused before the relation was stated, so nothing regresses, and lifting it wants a `ParkedWork` that carries the relation.
+fn subsume_telescope(
+    context: &mut Context,
+    term: &Term,
+    mut this: Telescope<Term>,
+    mut that: Telescope<Term>,
+) -> Result<Option<Outcome>, Error> {
+    loop {
+        match (this, that) {
+            (Telescope::Cons(left, left_rest), Telescope::Cons(right, right_rest)) => {
+                let outcome = super::convert_outcome(context, &Term::type_ground(), &left, &right)
+                    .map_err(|error| {
+                        Error::from_reduce(error, || {
+                            Error::convert_exhausted(left.clone(), right.clone())
+                        })
+                    })?;
+
+                match outcome {
+                    Outcome::Converts => {}
+                    Outcome::Mismatch => return Ok(Some(Outcome::Mismatch)),
+                    Outcome::Blocked(_) => return Ok(None),
+                }
+
+                let binder = context.fresh(left_rest.first_hint());
+                context.assume(&binder, &left);
+                let occurrence = Term::free_var(&binder);
+
+                this = left_rest.open(&[&occurrence]);
+                that = right_rest.open(&[&occurrence]);
+            }
+            (Telescope::Done(left), Telescope::Done(right)) => {
+                return Ok(match subsume(context, term, &left, &right)? {
+                    Outcome::Blocked(_) => None,
+                    decided => Some(decided),
+                });
+            }
+            // Different arities. A function type is not curried in this representation, so this is a real mismatch rather than a shape to normalize.
+            _ => return Ok(Some(Outcome::Mismatch)),
+        }
+    }
+}
+
+pub(crate) fn expect(
+    context: &mut Context,
+    term: &Term,
+    inferred: &Term,
+    expected: &Term,
+) -> Result<(), Error> {
+    let outcome = subsume(context, term, inferred, expected)?;
 
     match outcome {
         Outcome::Converts => context.retry_parked(),
