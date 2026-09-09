@@ -180,36 +180,39 @@ impl ModuleInfo {
         }
     }
 
-    pub(super) fn insert_child(&mut self, label: String, vis_pub: bool) -> Result<(), Error> {
-        if self.children.contains_key(&label) {
-            return Err(Error::DuplicatePublicDeclaration { label });
+    pub(super) fn insert_child(&mut self, label: &Label, vis_pub: bool) -> Result<(), Error> {
+        if self.children.contains_key(label.as_str()) {
+            return Err(duplicate(label));
         }
 
-        self.children.insert(label, ChildInfo::Ordinary { vis_pub });
+        self.children
+            .insert(label.to_string(), ChildInfo::Ordinary { vis_pub });
         Ok(())
     }
 
     pub(super) fn insert_induct_child(
         &mut self,
-        label: String,
+        label: &Label,
         vis_pub: bool,
         rep_pub: bool,
     ) -> Result<(), Error> {
-        if self.children.contains_key(&label) {
-            return Err(Error::DuplicatePublicDeclaration { label });
+        if self.children.contains_key(label.as_str()) {
+            return Err(duplicate(label));
         }
 
-        self.children
-            .insert(label, ChildInfo::InductConstructors { vis_pub, rep_pub });
+        self.children.insert(
+            label.to_string(),
+            ChildInfo::InductConstructors { vis_pub, rep_pub },
+        );
         Ok(())
     }
 
-    pub(super) fn insert_binding(&mut self, label: String, vis_pub: bool) -> Result<(), Error> {
-        if self.bindings.contains_key(&label) {
-            return Err(Error::DuplicatePublicDeclaration { label });
+    pub(super) fn insert_binding(&mut self, label: &Label, vis_pub: bool) -> Result<(), Error> {
+        if self.bindings.contains_key(label.as_str()) {
+            return Err(duplicate(label));
         }
 
-        self.bindings.insert(label, vis_pub);
+        self.bindings.insert(label.to_string(), vis_pub);
         Ok(())
     }
 
@@ -915,6 +918,18 @@ impl<'a> Context<'a> {
 
 fn attach(error: Error, name: &Name) -> Error {
     match name.span() {
+        Some(span) => error.at(span.clone()),
+        None => error,
+    }
+}
+
+// The refusal of a name a module already declares, located at the declaration that arrived second — which is why the inserters take the written [`Label`] rather than a copy of its text. A label the compiler spelled rather than parsed carries no span and reports unlocated, which is right for the one caller that has none: a mount claims a prefix on no source line.
+fn duplicate(label: &Label) -> Error {
+    let error = Error::DuplicateDeclaration {
+        label: label.to_string(),
+    };
+
+    match label.span() {
         Some(span) => error.at(span.clone()),
         None => error,
     }

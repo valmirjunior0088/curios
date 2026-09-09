@@ -58,7 +58,7 @@ fn declaration_call_lowers() {
 fn duplicate_foreign_declaration_in_one_scope_is_rejected() {
     assert!(
         run_err("foreign frobnicate : Nat; foreign frobnicate : Nat; 0")
-            .contains("duplicate public declaration")
+            .contains("`frobnicate` is already declared in this module")
     );
 }
 

@@ -238,7 +238,7 @@ impl<'a> Resolved<'a> {
         // Writing it lands in this unit's own layer, which shadows whatever the scope's layer said, so listing only `own` here silently hides the scope's mounts from a unit being compiled against them. That is what made `/std` unreachable from a mounted unit, and the test that says a unit reaches a mounted name is what caught it.
         let mut root_info = scan_module_info(source.root_items())?;
         for child in mounted_children(scope_mounts.iter().chain(own)) {
-            root_info.insert_child(child, true)?;
+            root_info.insert_child(&Label::from(child), true)?;
         }
         resolved.table.insert(Qualifier::empty(), root_info);
 
@@ -307,37 +307,37 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
 
     for item in items {
         match item {
-            TopItem::Mod(m) => info.insert_child(m.label.to_string(), m.vis_pub)?,
+            TopItem::Mod(m) => info.insert_child(&m.label, m.vis_pub)?,
             TopItem::Let(ls) => {
                 for l in ls {
-                    info.insert_binding(l.label.to_string(), l.vis_pub)?;
+                    info.insert_binding(&l.label, l.vis_pub)?;
                 }
             }
             TopItem::Induct(group) => {
                 for u in group {
-                    info.insert_induct_child(u.label.to_string(), u.vis_pub, u.rep_pub)?;
-                    info.insert_binding(u.label.to_string(), u.vis_pub)?;
+                    info.insert_induct_child(&u.label, u.vis_pub, u.rep_pub)?;
+                    info.insert_binding(&u.label, u.vis_pub)?;
                 }
             }
             // A struct declares one binding (the type-former), like a `let` — there are no value constructors and no nested namespace, so no child module.
             TopItem::Struct(group) => {
                 for s in group {
-                    info.insert_binding(s.label.to_string(), s.vis_pub)?;
+                    info.insert_binding(&s.label, s.vis_pub)?;
                 }
             }
             // A concept declares the type-former binding *and* a nested namespace (its method wrappers), like an inductive.
             TopItem::Concept(group) => {
                 for c in group {
-                    info.insert_child(c.label.to_string(), c.vis_pub)?;
-                    info.insert_binding(c.label.to_string(), c.vis_pub)?;
+                    info.insert_child(&c.label, c.vis_pub)?;
+                    info.insert_binding(&c.label, c.vis_pub)?;
                 }
             }
             // A witness is anonymous: it declares no binding and occupies no lexical scope — its backing definition gets a compiler name.
             TopItem::Witness(_) => {}
             // A `foreign` declaration is an ordinary binding, like a `let` — it has no body of its own, but it is called the same way.
-            TopItem::Foreign(f) => info.insert_binding(f.label.to_string(), f.vis_pub)?,
+            TopItem::Foreign(f) => info.insert_binding(&f.label, f.vis_pub)?,
             // A test binds its name privately — referable within its subtree, colliding with a like-named sibling, never `pub`.
-            TopItem::Test(t) => info.insert_binding(t.label.to_string(), false)?,
+            TopItem::Test(t) => info.insert_binding(&t.label, false)?,
             _ => {}
         }
     }

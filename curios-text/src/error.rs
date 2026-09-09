@@ -64,7 +64,8 @@ pub enum Error {
         label: String,
         parent: String,
     },
-    DuplicatePublicDeclaration {
+    /// A module declares one name twice. About the name occupying a slot rather than about `pub`, which is why neither declaration's visibility appears: two private `let`s collide exactly as two public ones do.
+    DuplicateDeclaration {
         label: String,
     },
     ExportConflict {
@@ -232,8 +233,8 @@ impl fmt::Display for Error {
             Error::NoSuchUseTarget { label, parent } => {
                 write!(f, "no module or binding named {label} in {parent}")
             }
-            Error::DuplicatePublicDeclaration { label } => {
-                write!(f, "duplicate public declaration: {label}")
+            Error::DuplicateDeclaration { label } => {
+                write!(f, "`{label}` is already declared in this module")
             }
             Error::ExportConflict { label } => {
                 write!(f, "export conflict for label: {label}")

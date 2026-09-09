@@ -297,17 +297,33 @@ fn rejects_cyclic_re_export_with_no_concrete_target() {
     );
 }
 
-// Two public declarations of the same label in the same namespace conflict at phase 2, before any elaboration.
+// Two declarations of the same label in the same namespace conflict at phase 2, before any elaboration. The refusal is about the name occupying a slot, so it holds whatever the two wrote for visibility and says nothing about it — and it points at the one that arrived second, which is the one the reader deletes.
 #[test]
-fn rejects_duplicate_public_declaration() {
-    assert!(
-        run_err(
-            r#"
+fn rejects_a_duplicate_declaration() {
+    let report = run_err_report(
+        r#"
         pub let x : Type = Type;
         pub let x : Type = Type;
         Type
-    "#
-        )
-        .contains("duplicate public declaration")
+    "#,
+    );
+    assert!(
+        report.contains("`x` is already declared in this module") && report.contains("3 |"),
+        "reported {report}"
+    );
+}
+
+#[test]
+fn rejects_a_duplicate_private_declaration_without_calling_it_public() {
+    let report = run_err_report(
+        r#"
+        let x : Type = Type;
+        let x : Type = Type;
+        Type
+    "#,
+    );
+    assert!(
+        report.contains("`x` is already declared in this module") && !report.contains("public"),
+        "reported {report}"
     );
 }
