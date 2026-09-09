@@ -175,6 +175,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Five measured cliffs where an ordinary spelling cost superlinearly, or refused
 - [x] [A product of two symbolic sums is its own weak-head form](design/toolchain/a-sum-is-merged-when-it-is-forced-not-when-it-is-built.md)
 - [x] [A stuck comparison is spelled one way](design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md)
+- [ ] [A closed term evaluates at an interpreter's speed](roadmap/faster-conversion-oracle-spec.md) (not refined yet)
 
 ## IO
 
