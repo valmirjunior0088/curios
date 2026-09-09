@@ -24,7 +24,7 @@ fn rejects_sys_reference_in_term_from_user_code() {
     );
 }
 
-// The guard rides the *resolved* qualifier, not the spelling, so a relative reference is rejected exactly as the absolute one is — the leading `/` is not the boundary.
+// A relative spelling reaches the same root by another route, so it is refused with the absolute one: the head `sys` is an ambient module of this scope rather than a name an import brought in, and the leading `/` is not the boundary.
 #[test]
 fn rejects_relative_sys_reference_in_term() {
     let error = lower_with_prelude("sys/Nat/add(1, 2)").unwrap_err();
@@ -81,7 +81,7 @@ fn rejects_syn_reference_in_term_from_user_code() {
     );
 }
 
-// The guard rides the resolved qualifier here too, so the relative spelling is refused with the absolute one.
+// The relative spelling is refused with the absolute one here too, and for the same reason: nothing imported `syn`.
 #[test]
 fn rejects_relative_syn_reference_in_term() {
     let error = lower_with_prelude("syn/Nat/Lt").unwrap_err();
@@ -99,6 +99,12 @@ fn rejects_syn_pub_use_reexport_from_user_code() {
         error.contains("internal to the standard library"),
         "unexpected error: {error}"
     );
+}
+
+// **A type re-exported out of a closed root carries its constructors with it.** The `use` naming it was vetted against the facade where it was written, so walking into what it holds is reaching through that facade rather than past it: the guard answers for the reach an author spelled, not for where the library keeps the declaration. Closing `/syn` without this left `Scalar/below` and `Verdict/passed` unwritable by any spelling at all.
+#[test]
+fn allows_a_constructor_of_a_type_re_exported_out_of_a_closed_root() {
+    assert!(lower_with_prelude("use /std/Nat/{Proof}; Proof/qed()").is_ok());
 }
 
 // The same declaration reached through its `/std` facade resolves, which is the door every consumer goes through.

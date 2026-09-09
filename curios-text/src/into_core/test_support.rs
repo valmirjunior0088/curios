@@ -244,7 +244,7 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
             pub mod Nat
                 pub let Nat : Type = Type;
                 pub let add : Type = Type;
-                pub use /syn/Nat/{Lt};
+                pub use /syn/Nat/{Lt, Proof};
             end
         "#
         .parse()
@@ -258,6 +258,9 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
             pub mod Nat
                 pub let Lt : Type = Type;
                 pub let Le : Type = Type;
+                pub induct Proof: pub Type
+                | qed()
+                end
             end
             pub mod Int
                 pub let NonZero : Type = Type;

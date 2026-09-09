@@ -595,12 +595,16 @@ impl<'a> Context<'a> {
         }
     }
 
-    // Resolve the module named by `name`'s first `upto` segments: from the module root (absolute) or the lexically-bound head qualifier (relative — the head is consumed as the start, so the walk runs over `segments[1..upto]`). Guards the *resolved* module, so a relative spelling is rejected exactly as the absolute one is.
+    // Resolve the module named by `name`'s first `upto` segments: from the module root (absolute) or the lexically-bound head qualifier (relative — the head is consumed as the start, so the walk runs over `segments[1..upto]`).
+    //
+    // **What is guarded is the reach the author spelled, not where the name they wrote happens to live.** An absolute path names its root outright, and a relative one whose head is a module of this scope reaches the same place by another spelling — both are guarded at the head, so `sys/Nat/add` is refused exactly as `/sys/Nat/add` is. A head an *import* put in scope is not: that `use` was vetted where it was written, against the facade the standard library offers, and a type re-exported out of an internal root carries its constructors with it. Walking into them is reaching through the facade rather than past it, so `Scalar/below` under `use /std/Char/{Scalar}` is the consumer's to write even though the declaration sits in `/syn`.
     fn resolve_module_prefix(&self, name: &Name, upto: usize) -> Result<Qualifier, Error> {
         let segments = name.qualifier().segments();
 
         let resolved = if name.is_abs() {
-            self.walk_children(Qualifier::empty(), &segments[..upto])?
+            let resolved = self.walk_children(Qualifier::empty(), &segments[..upto])?;
+            super::guard_internal_root(self.mounts, &self.prefix, resolved.segments())?;
+            resolved
         } else {
             let head = name.head();
             let start = self
@@ -613,10 +617,14 @@ impl<'a> Context<'a> {
                 .clone();
             self.note_qualifier_use(head);
 
+            // An imported label carries the site its `use` came through; a declaration and an ambient sibling module carry none, and those are the heads a guard still answers for.
+            if !self.qualifier_sites.contains_key(head) {
+                super::guard_internal_root(self.mounts, &self.prefix, start.segments())?;
+            }
+
             self.walk_children(start, &segments[1..upto])?
         };
 
-        super::guard_internal_root(self.mounts, &self.prefix, resolved.segments())?;
         Ok(resolved)
     }
 
