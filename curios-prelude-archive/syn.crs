@@ -92,10 +92,6 @@ pub induct True: pub Prop
 | qed()
 end
 
--- | The proposition with no proof, which anything may be concluded from.
-pub induct False: pub Prop
-end
-
 pub mod Char;
 pub use Char/{let Char};
 

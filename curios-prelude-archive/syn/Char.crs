@@ -1,5 +1,4 @@
-use /std/{Nat, Bool};
-use /syn/{False};
+use /std/{Nat, Bool, False};
 
 -- | That `code` is below `bound`, decided.
 pub let Below(code: Nat, bound: Nat) -> Prop =
