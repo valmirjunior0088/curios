@@ -151,7 +151,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] A copied body reproduces the definitions nested inside it
 - [x] Moving an application into the function that returns it, so a monadic step stops allocating
 - [x] An idiomatic string walk stops building a suffix and a closure per character
-- [ ] [A combinator specialized on a known function argument stops calling through it](roadmap/known-function-specialization-spec.md) (not refined yet)
+- [ ] [A combinator specialized on a known function argument stops calling through it](roadmap/known-function-specialization-spec.md) (`/std/Str/fold` still dispatches through a closure once per character)
 - [x] The unfolding discard decides on progress
 - [x] [A reduction step costs what it builds](design/toolchain/a-reduction-step-costs-what-it-builds.md)
 - [x] [A type-level concatenation no longer copies what it joins](soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md)
