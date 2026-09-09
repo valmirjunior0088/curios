@@ -1,6 +1,6 @@
 # curios-prelude-archive
 
-Build-scoped archived ownership of Curios's fixed `/sys`, `/syn`, and `/std` prelude: the authored `/syn` and `/std` sources, the canonical registry of compiler-emitted `/syn` names, and the build script that compiles all three roots into the rkyv image production compilation replays. `/sys` is the one root with no `.crs` here — it is generated from `curios-abi`'s host store by `curios-text`'s `sys_module` and mounted alongside the authored two, which is what the mirror below is about. The archive and replay APIs belong to the crate rustdoc; every authored source module must be registered in its Curios index.
+Build-scoped archived ownership of Curios's fixed `/sys`, `/syn`, and `/std` prelude: the authored `/syn` and `/std` sources, the canonical registry of compiler-emitted `/syn` names, and the build script that compiles all three roots into the rkyv image production compilation replays. `/sys` is the one root with no `.crs` here — it is built by `curios-text`'s `sys_module` from `curios-abi`'s host store and the intrinsic table, and mounted alongside the authored two, which is what the mirror below is about. That root owns one authored module of its own, `/sys/Bound`, which lives beside the generator that includes it because an intrinsic has no surface spelling while a proposition over intrinsics is ordinary Curios. The archive and replay APIs belong to the crate rustdoc; every authored source module must be registered in its Curios index.
 
 ## Why this is not `curios-prelude`
 

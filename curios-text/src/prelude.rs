@@ -12,7 +12,12 @@ use {
     std::sync::Arc,
 };
 
-// The `sys` module is the home of every intrinsic type and operation. It is built directly as `text` AST (never parsed) and prepended to every parsed `Entrypoint`, so intrinsics participate in the module system like any other binding. Bodies bake the `text::Intrinsic::*` nodes in directly, so the prelude needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/syn` names this module cannot spell and takes from the registry instead.
+#[cfg(test)]
+mod tests;
+
+// The `sys` module is the home of every intrinsic type and operation. Its roster is built directly as `text` AST and prepended to every parsed `Entrypoint`, so intrinsics participate in the module system like any other binding. Bodies bake the `text::Intrinsic::*` nodes in directly, so the roster needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/syn` names this module cannot spell and takes from the registry instead.
+//
+// `/sys/Bound` is the one part written rather than built, and so the one part parsed — see `bound` below. What separates the two is whether a surface spelling exists: an intrinsic has none and must be constructed, while a proposition over intrinsics is ordinary Curios.
 
 fn name(label: &str) -> Term {
     Subterm::Name(Name::from([label.to_string()])).into()
@@ -181,6 +186,19 @@ fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
         label: label.into(),
         module: Some(Module { items }),
     })
+}
+
+// The one part of `/sys` written rather than built. An intrinsic has no surface spelling, so the roster above has to be constructed; a proposition *over* intrinsics is ordinary Curios, and authoring it is what lets a reader read it, the formatter check it and the lints see it.
+//
+// Included and parsed rather than declared as `mod Bound;` and loaded: `/sys` stays one supplied root with no file to resolve, so every fixture that mounts it needs nothing beside it, and the module arrives inline — which is what keeps it inside the `Io`-has-no-eliminator walk over this roster.
+const BOUND: &str = include_str!("prelude/Bound.crs");
+
+fn bound() -> TopItem {
+    let module = BOUND.parse::<Module>().unwrap_or_else(|error| {
+        panic!("curios-text/src/prelude/Bound.crs does not parse: {error:?}")
+    });
+
+    pub_mod("Bound", module.items)
 }
 
 // `pub use Label/{let Label}` — the facade re-export that hoists a submodule's own type binding up to the library root, so `/sys/{Label}` names the type.
@@ -1441,6 +1459,8 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
             ),
         ),
         pub_use("Io"),
+        // After the carriers, because it states propositions over them.
+        bound(),
     ];
 
     items.extend(host_operations(subjects));

@@ -1,0 +1,31 @@
+use /sys/{Bool, Flt};
+
+-- | The proposition that always holds.
+pub induct True: pub Prop
+-- | Its proof, which anything may produce.
+| qed()
+end
+
+-- | The proposition with no proof, which anything may be concluded from.
+pub induct False: pub Prop
+end
+
+-- | The reflection of a decision into a claim, which is what every decided bound is made of.
+-- |
+-- | A literal operand discharges what an intrinsic demands because the decision reduces and this reduces with it.
+pub let Holds(b: Bool) -> Prop =
+    match b | true => True | false => False end;
+
+let max: Flt =
+    +340282350000000000000000000000000000000.0;
+
+let min: Flt =
+    -340282350000000000000000000000000000000.0;
+
+-- | That `a` is neither infinite nor beyond what `Flt` represents, decided.
+pub let Finite(a: Flt) -> Prop =
+    Holds(Bool/and(Flt/le(min, a), Flt/le(a, max)));
+
+-- | That `a` is zero or above and within range, decided.
+pub let NonNeg(a: Flt) -> Prop =
+    Holds(Bool/and(Flt/ge(a, +0.0), Flt/le(a, max)));
