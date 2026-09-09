@@ -96,7 +96,7 @@ The build recipes are `cargo x <recipe>`, reached through the alias in `.cargo/c
 
 ### While iterating
 
-- Run the smallest check or test that exercises the changed behavior, and prefer stage-local crate checks. **Never run two Cargo builds concurrently.**
+- Run the smallest check or test that exercises the changed behavior, and prefer stage-local crate checks.
 - **In a multi-step task, run the full gate once, after the last step.** Between steps, `cargo clippy --workspace --all-targets --all-features -- -Dwarnings` plus `cargo fmt --all` is the check, even when each step is its own commit. Do not add `cargo check` beside it.
 - Keep the feature set constant within a work session: `--all-features` enables `profile` and a plain `cargo build` does not, and alternating maintains two prelude archives that evict each other.
 - The full suite can take more than five minutes. Run it in the background with output redirected to a file, and read the file after completion.
