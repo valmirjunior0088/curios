@@ -238,10 +238,11 @@ pub(super) fn parse_group_item<'a>() -> Parser<'a, GroupItem> {
         .or(parse_label().map(GroupItem::Both))
 }
 
+// The `{` is the prefix that discriminates a group, so the rest commits and owns its fault. Left recoverable, a missing `}` failed here and fell through to `parse_use_group`'s last alternative, whose committed refusal outranks the offset — so a reader who forgot one brace was told at length how to write the group already on their screen, with the caret on the `/` before it.
 pub(super) fn parse_brace_group<'a>() -> Parser<'a, Vec<GroupItem>> {
-    parse_literal("{")
-        .and_keep(sep_by0_trailing(parse_group_item, || parse_literal(",")))
-        .and_drop(parse_literal("}"))
+    parse_literal("{").and_keep(commit(
+        sep_by0_trailing(parse_group_item, || parse_literal(",")).and_drop(parse_literal("}")),
+    ))
 }
 
 pub(super) fn parse_use_group<'a>() -> Parser<'a, UseGroup> {

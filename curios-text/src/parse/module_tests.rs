@@ -183,6 +183,16 @@ fn use_brace_group_empty() {
     );
 }
 
+// An unclosed group is a fault of the group, not evidence that a group was the wrong reading: once `{` is read the alternative owns its tail, so the report names the brace and points at where it was owed. Left recoverable, this fell through to the arm that says there is no bare `use path;` form — a message about a form the reader did not write, aimed at the `/` before the brace they did.
+#[test]
+fn an_unclosed_use_group_is_reported_as_a_missing_brace() {
+    let error = "use /std/{Nat;".parse::<Module>().unwrap_err().format();
+    assert!(
+        error.contains("Expected '}'") && !error.contains("bare `use path;`"),
+        "unexpected error: {error}"
+    );
+}
+
 #[test]
 fn parse_use_glob() {
     assert_eq!(
