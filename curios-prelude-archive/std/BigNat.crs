@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Bits, Eq, False, True};
+use /std/{Nat, Bool, Bits, Eq, True};
 use /std/Bool/{false_neq_true};
 
 -- | Whether `bits` has no redundant high zero bit.
@@ -10,7 +10,7 @@ pub let is_trimmed(bits: Bits) -> Bool =
 
 -- | The proposition that `bits` is trimmed.
 pub let Canonical(bits: Bits) -> Prop =
-    match is_trimmed(bits) | true => True | false => False end;
+    Bool/Holds(is_trimmed(bits));
 
 -- | `t` with `head` as a new low bit, trimmed: `combine(false, b[])` is `b[]`.
 pub let combine(head: Bool, t: Bits) -> Bits =
@@ -45,10 +45,7 @@ pub let trim_is_trimmed(bits: Bits) -> Eq(is_trimmed(trim(bits)), true) =
     end;
 
 let canonical_of_is_trimmed(bits: Bits, p: Eq(is_trimmed(bits), true)) -> Canonical(bits) =
-    Eq/subst(
-        (b: Bool) => match b: (_) => Prop | true => True | false => False end,
-        Eq/sym(p),
-        True/qed());
+    Eq/subst((b: Bool) => Bool/Holds(b), Eq/sym(p), True/qed());
 
 let canonical_of_trim(bits: Bits) -> Canonical(trim(bits)) =
     canonical_of_is_trimmed(trim(bits), trim_is_trimmed(bits));

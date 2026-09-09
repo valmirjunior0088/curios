@@ -1,11 +1,11 @@
 pub use /syn/Nat/{Lt};
-use /std/{Nat, Option, True, False};
+use /std/{Nat, Bool, Option, True};
 use /std/Nat/{Le};
 use /std/Nat/Le/{Ind};
 
 -- | The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
-    match a < b: (r) => Option(match r: (_) => Prop | true => True | false => False end)
+    match a < b: (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;

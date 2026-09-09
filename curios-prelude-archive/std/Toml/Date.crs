@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Option, True, False};
+use /std/{Nat, Bool, Option, True};
 
 let leap(year: Nat) -> Bool =
     choose
@@ -23,7 +23,7 @@ let sound(year: Nat, month: Nat, day: Nat) -> Bool =
 
 -- | That the three spell a day: a year of at most four digits, a month of the year, and a day the month has.
 pub let Valid(year: Nat, month: Nat, day: Nat) -> Prop =
-    match sound(year, month, day) | true => True | false => False end;
+    Bool/Holds(sound(year, month, day));
 
 -- | A calendar date.
 pub struct Date: pub Type {
@@ -38,8 +38,7 @@ pub let of(year: Nat, month: Nat, day: Nat, @ok: Valid(year, month, day)) -> Dat
     Date { year = year, month = month, day = day, ok = ok };
 
 let try_valid(year: Nat, month: Nat, day: Nat) -> Option(Valid(year, month, day)) =
-    match sound(year, month, day): (r) =>
-        Option(match r: (_) => Prop | true => True | false => False end)
+    match sound(year, month, day): (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;

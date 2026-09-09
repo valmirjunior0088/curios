@@ -1,5 +1,5 @@
 pub use /syn/Nat/{Le};
-use /std/{Nat, Option, True, False, Eq};
+use /std/{Nat, Bool, Option, True, Eq};
 
 -- | `a <= b` as an inductive proposition: `z` proves `0 <= n` and `s` lifts `a <= b` to `a + 1 <= b + 1`, so a proof can recurse over the evidence.
 pub mod Ind;
@@ -30,7 +30,7 @@ pub let succ_r(a: Nat, b: Nat, p: Le(a, b)) -> Le(a, b + 1) =
 
 -- | The procedure that decides `a <= b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Nat, b: Nat) -> Option(Le(a, b)) =
-    match a <= b: (r) => Option(match r: (_) => Prop | true => True | false => False end)
+    match a <= b: (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;

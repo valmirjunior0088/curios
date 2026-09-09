@@ -268,7 +268,7 @@ let sound(cli: Cli) -> Bool =
 
 -- | That the declaration parses unambiguously: no reserved names, one `rest` after every positional, and subcommands one level deep. Decided by reduction and demanded by `main`.
 pub let WellFormed(cli: Cli) -> Prop =
-    match sound(cli) | true => True | false => False end;
+    Bool/Holds(sound(cli));
 
 -- | Why a line was refused.
 pub induct Failure: pub Type

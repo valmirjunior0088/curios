@@ -1,11 +1,11 @@
-use /std/{Nat, Bool, Option, True, False};
+use /std/{Nat, Bool, Option, True};
 
 let sound(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Bool =
     hour <= 23 && minute <= 59 && second <= 60 && nanosecond <= 999999999;
 
 -- | That the four spell a time of day. A second of `60` is admitted, since RFC 3339 writes a leap second that way.
 pub let Valid(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Prop =
-    match sound(hour, minute, second, nanosecond) | true => True | false => False end;
+    Bool/Holds(sound(hour, minute, second, nanosecond));
 
 -- | A time of day, to the nanosecond.
 pub struct Time: pub Type {
@@ -32,8 +32,7 @@ let try_valid(
     second: Nat,
     nanosecond: Nat,
 ) -> Option(Valid(hour, minute, second, nanosecond)) =
-    match sound(hour, minute, second, nanosecond): (r) =>
-        Option(match r: (_) => Prop | true => True | false => False end)
+    match sound(hour, minute, second, nanosecond): (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;

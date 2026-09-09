@@ -227,13 +227,13 @@ fn proofs_and_implicit_payloads_take_no_part_in_equality() {
 fn the_eql_derivation_shares_the_eligibility_and_the_provenance() {
     let proposition = r#"
         use /std/{Str, Equal};
-        induct Holds: pub Prop | yes() end
-        satisfy Equal(Holds);
+        induct Attested: pub Prop | yes() end
+        satisfy Equal(Attested);
         /std/print("")
         "#;
     let report = error(proposition);
     assert!(
-        report.contains("cannot derive 'Equal' for Holds\n  Holds is a proposition, whose values erase; write the body"),
+        report.contains("cannot derive 'Equal' for Attested\n  Attested is a proposition, whose values erase; write the body"),
         "{report}"
     );
 
@@ -290,13 +290,13 @@ fn the_standard_library_derives_option_result_and_order() {
 fn an_ineligible_key_is_refused_by_its_shape() {
     let proposition = r#"
         use /std/{Str, Spell};
-        induct Holds: pub Prop | yes() end
-        satisfy Spell(Holds);
+        induct Attested: pub Prop | yes() end
+        satisfy Spell(Attested);
         /std/print("")
         "#;
     let report = error(proposition);
     assert!(
-        report.contains("cannot derive 'Spell' for Holds\n  Holds is a proposition, whose values erase; write the body"),
+        report.contains("cannot derive 'Spell' for Attested\n  Attested is a proposition, whose values erase; write the body"),
         "{report}"
     );
 

@@ -3,7 +3,7 @@ pub use /syn/Flt/{FourBytes, Finite, NonNeg};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat, Equal, Compare,
-    Add, Subtract, Multiply, Divide, Remainder, Show, Spell, Ordered, True, False};
+    Add, Subtract, Multiply, Divide, Remainder, Show, Spell, Ordered, True};
 
 -- | Positive infinity.
 pub let pos_inf: Flt =
@@ -31,16 +31,14 @@ pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
 -- | The procedure that decides `Finite(f)`: the evidence when `f` is a number, `none` otherwise.
 pub let finite(f: Flt) -> Option(Finite(f)) =
     match -340282350000000000000000000000000000000.0 <= f
-        && f <= +340282350000000000000000000000000000000.0: (r) =>
-        Option(match r: (_) => Prop | true => True | false => False end)
+        && f <= +340282350000000000000000000000000000000.0: (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
 -- | The procedure that decides `NonNeg(f)`: the evidence when `f` is a non-negative number, `none` otherwise. `-0.0` qualifies.
 pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
-    match f >= +0.0 && f <= +340282350000000000000000000000000000000.0: (r) =>
-        Option(match r: (_) => Prop | true => True | false => False end)
+    match f >= +0.0 && f <= +340282350000000000000000000000000000000.0: (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
