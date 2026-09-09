@@ -101,6 +101,18 @@ fn rejects_syn_pub_use_reexport_from_user_code() {
     );
 }
 
+// **A report never spells a route it would refuse.** `/std/Nat` and `/syn/Nat` both carry the name at the same depth, so a candidate list keyed on depth alone offers the closed one beside the open one — and the reader who takes it meets the refusal above, carrying the `/std` redirect that belonged in the first message.
+#[test]
+fn does_not_offer_a_closed_root_as_a_way_out_of_an_unresolved_name() {
+    let error = lower_with_prelude("Nat/add(1, 2)").unwrap_err();
+    assert!(
+        error.contains("unresolved qualifier: Nat")
+            && error.contains("`Nat` is `/std/Nat`")
+            && !error.contains("/syn/Nat"),
+        "unexpected error: {error}"
+    );
+}
+
 // **A type re-exported out of a closed root carries its constructors with it.** The `use` naming it was vetted against the facade where it was written, so walking into what it holds is reaching through that facade rather than past it: the guard answers for the reach an author spelled, not for where the library keeps the declaration. Closing `/syn` without this left `Scalar/below` and `Verdict/passed` unwritable by any spelling at all.
 #[test]
 fn allows_a_constructor_of_a_type_re_exported_out_of_a_closed_root() {

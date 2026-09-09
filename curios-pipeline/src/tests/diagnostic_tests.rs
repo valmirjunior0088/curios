@@ -61,6 +61,10 @@ fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
         !error.contains("/sys/Bool/Bool"),
         "a deeper route to the same name is not offered: {error}"
     );
+    assert!(
+        !error.contains("/sys/Bool"),
+        "a route this program may not write is not offered: {error}"
+    );
 }
 
 #[test]

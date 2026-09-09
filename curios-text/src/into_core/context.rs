@@ -511,35 +511,41 @@ impl<'a> Context<'a> {
         &self.bindings
     }
 
-    /// Mint the binder an unresolved bare name lowers to, and record beside it every public binding in scope that carries the name — as the absolute path a reader could write. Read off the public interfaces, where a `pub use` is a binding of the re-exporting module, rather than the declaration table, because the facade's spelling is the one a reader is told everything comes from: `/std/Bool` is `pub use Bool/{let Bool}`, and Core knows only the `/sys/Bool/Bool` it stands for. Only the shortest paths are kept — a longer one is the same name through a deeper module — in the path's own order, which is deterministic and nothing more.
-    pub(super) fn unbound_binder(&self, label: &str) -> curios_core::Free {
+    /// Every public interface in scope that `carries` `label`, as the absolute path `label` names there — the candidates an unresolved name's report spells the way out with. Read off the public interfaces, where a `pub use` is a binding of the re-exporting module, rather than the declaration table, because the facade's spelling is the one a reader is told everything comes from: `/std/Bool` is `pub use Bool/{let Bool}`, and Core knows only the `/sys/Bool/Bool` it stands for. Only the shortest paths are kept — a longer one is the same name through a deeper module — in the path's own order, which is deterministic and nothing more.
+    ///
+    /// A candidate this module may not reference is dropped first, because a report that offered one would spell a way out the next compile refuses — and refuses with the redirect that belonged in *this* message. Dropping before the shortest paths are kept rather than after is what makes the rule reachability instead of depth: `/sys/Nat` stands beside `/std/Nat` at the same length, and a reachable route below an internal one is still worth offering.
+    fn candidates(
+        &self,
+        label: &str,
+        carries: impl Fn(&PublicInterface) -> bool,
+    ) -> Vec<Qualifier> {
         let mut found = self
             .public
             .iter()
-            .filter(|(_, interface)| interface.bindings.contains_key(label))
+            .filter(|(_, interface)| carries(interface))
             .map(|(module, _)| module.with(label))
+            .filter(|path| {
+                super::guard_internal_root(self.mounts, &self.prefix, path.segments()).is_ok()
+            })
             .collect::<Vec<_>>();
         found.sort_by_key(|path| (path.segments().len(), path.join()));
         let shortest = found.first().map(|path| path.segments().len());
         found.retain(|path| Some(path.segments().len()) == shortest);
+        found
+    }
+
+    /// Mint the binder an unresolved bare name lowers to, and record beside it every binding in scope that could have been meant — see [`Context::candidates`].
+    pub(super) fn unbound_binder(&self, label: &str) -> curios_core::Free {
+        let found = self.candidates(label, |interface| interface.bindings.contains_key(label));
 
         let binder = self.fresh_binder(Some(label));
         self.unbound.borrow_mut().insert(binder.clone(), found);
         binder
     }
 
-    /// Every public child module in scope that carries `label` — what an unresolved qualifier could have meant, gathered as [`Context::unbound_binder`] gathers a binding's candidates: off the public interfaces, shortest paths only, in the path's own order.
+    /// Every public child module in scope that carries `label` — what an unresolved qualifier could have meant, gathered as [`Context::unbound_binder`] gathers a binding's candidates.
     fn unbound_qualifier(&self, label: &str) -> Vec<Qualifier> {
-        let mut found = self
-            .public
-            .iter()
-            .filter(|(_, interface)| interface.children.contains_key(label))
-            .map(|(module, _)| module.with(label))
-            .collect::<Vec<_>>();
-        found.sort_by_key(|path| (path.segments().len(), path.join()));
-        let shortest = found.first().map(|path| path.segments().len());
-        found.retain(|path| Some(path.segments().len()) == shortest);
-        found
+        self.candidates(label, |interface| interface.children.contains_key(label))
     }
 
     pub(super) fn insert_scope(&mut self, qualifier: String, name: Qualifier) -> Result<(), Error> {
