@@ -90,7 +90,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `Flt` (bit-preserving binary32 identity, with the full arithmetic and comparison family)
   - [x] Packed `Bits` and `Bytes` (shared immutable windows; O(1) slices and tails)
   - [x] `Flt` specified by a hardware-independent model, stated in this repository
-  - [ ] [An operation whose meaning needs a width belongs to the carrier that has one](roadmap/bits-width-operations-spec.md) (not refined yet)
   - [x] `List`
   - [x] `Cell` (a mutable reference cell over any carrier, with `set` and `get`)
 - [x] [Total `/sys` primitives](design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md) — an operation whose reduction could fail states its precondition
