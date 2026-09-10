@@ -1025,8 +1025,8 @@ fn io_ops() -> Vec<TopItem> {
 }
 
 // The values and operations of the `/sys/Handle` type: the three standard streams, handle identity, and `host` — the store rows whose subject is the handle itself (`read`, `write`, `poll`, `close`), which join their type module rather than open one of their own.
-fn handle_ops(mut host: Vec<TopItem>) -> Vec<TopItem> {
-    let mut items = vec![
+fn handle_ops() -> Vec<TopItem> {
+    vec![
         documented(
             &["The stream the host feeds the program."],
             pub_let(
@@ -1051,68 +1051,93 @@ fn handle_ops(mut host: Vec<TopItem>) -> Vec<TopItem> {
                 intrinsic(Intrinsic::Handle(stdio::STDERR)),
             ),
         ),
-    ];
-
-    items.append(&mut host);
-    items
+    ]
 }
 
-// Every store-described host op, grouped by the `/sys` module its own row names as its subject — groups in the order their first row appears, rows within a group in store order. The grouping is read off the rows rather than listed here, so a new row lands under its subject with nothing beside the table to update. The 0-arity clocks and `args` are constants rather than nullary functions: the function abstraction existed to keep an effectful intrinsic body unevaluated at definition time, and a description is already unevaluated (see `host_fn`).
-fn host_subjects(foreigns: &ForeignStore) -> Vec<(String, Vec<TopItem>)> {
-    let mut subjects: Vec<(String, Vec<TopItem>)> = vec![];
+/// One `/sys` module, before the host's rows are folded into it.
+///
+/// **The label is the key, and that is the whole of this restructure.** `/sys` used to be assembled by two independent passes — the carrier modules written by hand from the intrinsic table, the subject modules built from `curios-abi`'s store — emitting into one namespace with nothing to merge them. `Handle` is in both inputs, so the one collision was reconciled by lifting its rows out by string before the generic pass and appending them by hand, with a `panic!` if the row ever went missing. Keying the modules removes the removal: a host row joins the module its subject names, whether that module already exists or is created by the row, and `Handle` stops being a special case and becomes the one label that happens to have both.
+struct SysModule {
+    label: String,
+    /// The carrier declarations for this label: its type former and the intrinsic operations over it. Empty for a module that is nothing but host rows.
+    items: Vec<TopItem>,
+    /// Whether the root re-exports the type this module declares — every carrier a program reaches by name, and no module of operations alone.
+    hoisted: bool,
+}
 
+impl SysModule {
+    /// A carrier: a type former, its documentation, and the operations over it, hoisted to the root.
+    fn carrier(label: &str, doc: &[&str], former: TopItem, ops: Vec<TopItem>) -> Self {
+        Self {
+            label: label.to_string(),
+            items: with_type(documented(doc, former), ops),
+            hoisted: true,
+        }
+    }
+
+    /// A carrier whose type the root does not re-export — a packed run, reached through its own module because two of them share every operation name.
+    fn nested(self) -> Self {
+        Self {
+            hoisted: false,
+            ..self
+        }
+    }
+
+    /// A module the host's rows alone will fill.
+    fn rows(label: &str) -> Self {
+        Self {
+            label: label.to_string(),
+            items: Vec::new(),
+            hoisted: false,
+        }
+    }
+}
+
+/// Fold every store-described host op into the module its own row names as its subject, creating one where no carrier claims the label.
+///
+/// Groups keep the order their first row appears in after the carriers, and rows keep store order within a group — so a new row lands under its subject with nothing beside the table to update. The 0-arity clocks and `args` are constants rather than nullary functions: the function abstraction existed to keep an effectful intrinsic body unevaluated at definition time, and a description is already unevaluated (see `host_fn`).
+fn absorb_host_rows(modules: &mut Vec<SysModule>, foreigns: &ForeignStore) {
     for function in foreigns.iter() {
         let subject = function
             .subject
             .clone()
             .expect("a builtin host operation names its /sys subject");
-        let item = TopItem::Let(vec![host_fn(function, true)]);
 
-        match subjects.iter_mut().find(|(label, _)| *label == subject) {
-            Some((_, items)) => items.push(item),
-            None => subjects.push((subject, vec![item])),
-        }
-    }
-
-    subjects
-}
-
-// Lift one subject's operations out of the grouping, leaving the rest for `host_operations`. `Handle`'s rows are the caller: they belong inside the type module `sys_module` already builds, so they cannot be emitted as a root module of their own.
-fn take_subject(subjects: &mut Vec<(String, Vec<TopItem>)>, subject: &str) -> Vec<TopItem> {
-    let index = subjects
-        .iter()
-        .position(|(label, _)| label == subject)
-        .unwrap_or_else(|| panic!("no host operation names the '{subject}' subject"));
-
-    subjects.remove(index).1
-}
-
-// The remaining host-operation subjects, `exit`, and the wire-code mirror: one `/sys` module per subject, then the code modules, each named by the tag it holds — `status`, `event`, `open_mode`, `file_kind`, `stdio_mode` — as `curios-abi`'s `codes` names them. Every one of these names is lowercase because no type backs it — a capitalized `/sys` module is one whose type the root facade re-exports, and the code modules are `Nat` constants.
-fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
-    let mut items = subjects
-        .into_iter()
-        .map(|(subject, mut ops)| {
-            // `exit` is `Intrinsic::ProcExit` rather than a store row — it traps instead of returning, so no `WireSignature` describes it — but it is a process operation like `args` and `env`, so it is placed by hand in the module its subject already opened. `(@A : Type, n : Nat) -> Io(A)`: the description yields whatever the region wanted, which is sound because `Io` has no eliminator — an inhabitant of `Io(False)` proves nothing — and is what lets an exiting arm end a region of any type instead of only a unit one.
-            if subject == "proc" {
-                ops.push(pub_fn_marked(
-                    "exit",
-                    vec![
-                        (Plicity::Implicit, "A", type_()),
-                        (Plicity::Explicit, "n", nat()),
-                    ],
-                    io_of(name("A")),
-                    intrinsic(Intrinsic::ProcExit {
-                        result: name("A"),
-                        code: name("n"),
-                    }),
-                ));
+        let index = match modules.iter().position(|module| module.label == subject) {
+            Some(index) => index,
+            None => {
+                modules.push(SysModule::rows(&subject));
+                modules.len() - 1
             }
+        };
 
-            pub_mod(&subject, ops)
-        })
-        .collect::<Vec<_>>();
+        modules[index]
+            .items
+            .push(TopItem::Let(vec![host_fn(function, true)]));
+    }
+}
 
-    items.extend([
+/// The one operation placed by hand rather than by a row: `exit` is `Intrinsic::ProcExit` and traps instead of returning, so no `WireSignature` describes it — but it is a process operation like `args` and `env`, so it joins the module its subject already opened.
+///
+/// `(@A : Type, n : Nat) -> Io(A)`: the description yields whatever the region wanted, which is sound because `Io` has no eliminator — an inhabitant of `Io(False)` proves nothing — and is what lets an exiting arm end a region of any type instead of only a unit one.
+fn proc_exit() -> TopItem {
+    pub_fn_marked(
+        "exit",
+        vec![
+            (Plicity::Implicit, "A", type_()),
+            (Plicity::Explicit, "n", nat()),
+        ],
+        io_of(name("A")),
+        intrinsic(Intrinsic::ProcExit {
+            result: name("A"),
+            code: name("n"),
+        }),
+    )
+}
+
+/// The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source. Each is named by the tag it holds — `status`, `event`, `open_mode`, `file_kind`, `stdio_mode` — as `curios-abi`'s `codes` names them, and all are lowercase because no type backs them.
+fn code_modules() -> Vec<TopItem> {
+    vec![
         // The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source.
         pub_mod(
             "status",
@@ -1169,152 +1194,122 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
                 pub_let("null", nat(), nat_lit(stdio_mode::NULL)),
             ],
         ),
-    ]);
-
-    items
+    ]
 }
 
-/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `List`, `Cell`, `Io`) holds its type and operations and hoists the type to the `/sys` root; each host-operation subject the store names becomes a module of its own (`file`, `socket`, `dns`, …) except `Handle`'s, which join their type module; then the code modules. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
-pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
-    let mut subjects = host_subjects(foreigns);
-    let handle_host = take_subject(&mut subjects, "Handle");
-
-    let mut items = vec![
-        pub_mod(
+/// The carrier modules, in the order `/sys` declares them: each holds its type former and the intrinsic operations over it, and all but the two packed runs hoist the type to the root.
+fn carriers(syntax: &SyntaxRegistry) -> Vec<SysModule> {
+    vec![
+        SysModule::carrier(
             "Nat",
-            with_type(
-                documented(
-                    &["The whole numbers from zero up, with no highest."],
-                    pub_let("Nat", type_(), nat()),
-                ),
-                nat_ops(syntax),
-            ),
+            &["The whole numbers from zero up, with no highest."],
+            pub_let("Nat", type_(), nat()),
+            nat_ops(syntax),
         ),
-        pub_use("Nat"),
-        pub_mod(
+        SysModule::carrier(
             "Byte",
-            with_type(
-                documented(
-                    &["A single byte, from zero through 255."],
-                    pub_let("Byte", type_(), byte()),
-                ),
-                byte_ops(),
-            ),
+            &["A single byte, from zero through 255."],
+            pub_let("Byte", type_(), byte()),
+            byte_ops(),
         ),
-        pub_use("Byte"),
-        pub_mod(
+        SysModule::carrier(
             "Int",
-            with_type(
-                documented(
-                    &["The whole numbers, negative and not, with no least and no greatest."],
-                    pub_let("Int", type_(), int()),
-                ),
-                int_ops(syntax),
-            ),
+            &["The whole numbers, negative and not, with no least and no greatest."],
+            pub_let("Int", type_(), int()),
+            int_ops(syntax),
         ),
-        pub_use("Int"),
-        pub_mod(
+        SysModule::carrier(
             "Flt",
-            with_type(
-                documented(
-                    &["A binary32 floating-point number."],
-                    pub_let("Flt", type_(), flt()),
-                ),
-                flt_ops(syntax),
-            ),
+            &["A binary32 floating-point number."],
+            pub_let("Flt", type_(), flt()),
+            flt_ops(syntax),
         ),
-        pub_use("Flt"),
-        pub_mod(
+        // The two packed runs share every operation name, so neither type is hoisted: `Bits` and `Bytes` are reached through their own modules.
+        SysModule::carrier(
             "Bits",
-            with_type(
-                documented(
-                    &["A packed run of bits, written `b[…]`."],
-                    pub_let("Bits", type_(), bin(Grain::B)),
-                ),
-                bin_ops(Grain::B, syntax),
-            ),
-        ),
-        pub_mod(
+            &["A packed run of bits, written `b[…]`."],
+            pub_let("Bits", type_(), bin(Grain::B)),
+            bin_ops(Grain::B, syntax),
+        )
+        .nested(),
+        SysModule::carrier(
             "Bytes",
-            with_type(
-                documented(
-                    &["A packed run of bytes, written `x[…]`."],
-                    pub_let("Bytes", type_(), bin(Grain::X)),
-                ),
-                bin_ops(Grain::X, syntax),
-            ),
-        ),
-        pub_mod(
+            &["A packed run of bytes, written `x[…]`."],
+            pub_let("Bytes", type_(), bin(Grain::X)),
+            bin_ops(Grain::X, syntax),
+        )
+        .nested(),
+        SysModule::carrier(
             "Bool",
-            with_type(
-                documented(
-                    &["The two truth values, `true` and `false`."],
-                    pub_let("Bool", type_(), bool_()),
-                ),
-                bool_ops(),
-            ),
+            &["The two truth values, `true` and `false`."],
+            pub_let("Bool", type_(), bool_()),
+            bool_ops(),
         ),
-        pub_use("Bool"),
-        pub_mod(
+        // The one label in both inputs: its carrier declarations here, its host rows folded in by `absorb_host_rows` like any other subject's.
+        SysModule::carrier(
             "Handle",
-            with_type(
-                documented(
-                    &[
-                        "An open stream the host holds — a file, a socket, or one of the three standard streams.",
-                    ],
-                    pub_let("Handle", type_(), handle()),
-                ),
-                handle_ops(handle_host),
-            ),
+            &[
+                "An open stream the host holds — a file, a socket, or one of the three standard streams.",
+            ],
+            pub_let("Handle", type_(), handle()),
+            handle_ops(),
         ),
-        pub_use("Handle"),
-        pub_mod(
+        SysModule::carrier(
             "List",
-            with_type(
-                documented(
-                    &["A run of values of one type, written `[…]`."],
-                    pub_fn("List", vec![("T", type_())], type_(), list_of(name("T"))),
-                ),
-                list_ops(syntax),
-            ),
+            &["A run of values of one type, written `[…]`."],
+            pub_fn("List", vec![("T", type_())], type_(), list_of(name("T"))),
+            list_ops(syntax),
         ),
-        pub_use("List"),
-        pub_mod(
+        SysModule::carrier(
             "Cell",
-            with_type(
-                documented(
-                    &[
-                        "A mutable holder of one value.",
-                        "",
-                        "Reading answers the last value written through any name for the same cell, so two names for one cell are not two cells.",
-                    ],
-                    pub_fn("Cell", vec![("T", type_())], type_(), cell_of(name("T"))),
-                ),
-                cell_ops(),
-            ),
+            &[
+                "A mutable holder of one value.",
+                "",
+                "Reading answers the last value written through any name for the same cell, so two names for one cell are not two cells.",
+            ],
+            pub_fn("Cell", vec![("T", type_())], type_(), cell_of(name("T"))),
+            cell_ops(),
         ),
-        pub_use("Cell"),
-        pub_mod(
+        SysModule::carrier(
             "Io",
-            with_type(
-                documented(
-                    &[
-                        "A description of something the host does, yielding a `T`.",
-                        "",
-                        "Holding one performs nothing: a description runs by being the program's tail, so forcing the same one twice does the work twice, and there is no operation taking an `Io(T)` back to a `T`.",
-                    ],
-                    pub_fn("Io", vec![("T", type_())], type_(), io_of(name("T"))),
-                ),
-                io_ops(),
-            ),
+            &[
+                "A description of something the host does, yielding a `T`.",
+                "",
+                "Holding one performs nothing: a description runs by being the program's tail, so forcing the same one twice does the work twice, and there is no operation taking an `Io(T)` back to a `T`.",
+            ],
+            pub_fn("Io", vec![("T", type_())], type_(), io_of(name("T"))),
+            io_ops(),
         ),
-        pub_use("Io"),
-        true_prop(),
-        false_prop(),
-        holds(),
-    ];
+    ]
+}
 
-    items.extend(host_operations(subjects));
+/// Construct the generated `/sys` surface module from the authoritative host function store.
+///
+/// **One keyed pass, where there were two independent ones.** Every `/sys` module is a [`SysModule`] with a label: the carriers are written from the intrinsic table, then each host row joins the module its own subject names — creating one where no carrier claims the label, which is how `file`, `socket` and `dns` come to exist, and joining the carrier where one does, which is how `Handle`'s rows come to sit beside its type. Then the propositions `/sys`'s own preconditions are stated in, and the wire-code mirror.
+///
+/// Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
+pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
+    let mut modules = carriers(syntax);
+    absorb_host_rows(&mut modules, foreigns);
+
+    if let Some(proc) = modules.iter_mut().find(|module| module.label == "proc") {
+        proc.items.push(proc_exit());
+    }
+
+    let mut items = modules
+        .into_iter()
+        .flat_map(|module| {
+            let hoist = module.hoisted.then(|| pub_use(&module.label));
+
+            [pub_mod(&module.label, module.items)]
+                .into_iter()
+                .chain(hoist)
+        })
+        .collect::<Vec<_>>();
+
+    // The propositions `/sys`'s own operations state their preconditions in, at the root rather than in a module of their own: a precondition is about the operation that demands it, and `Holds` is written beside every bound in the roster.
+    items.extend([true_prop(), false_prop(), holds()]);
+    items.extend(code_modules());
 
     Module { items }
 }
