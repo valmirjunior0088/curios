@@ -13,6 +13,11 @@ use {
     },
 };
 
+/// How many value bits the scalar envelope holds — the width of an `i31ref`'s payload, and the one width in the whole pipeline that is a fact about the target rather than about the language.
+///
+/// It is named here rather than at each use because two readers need it and they are not the same kind of reader: [`CpsIntrinsic::effect`] states *which* operations it makes partial, and `into_wasm` emits the guards that enforce it. Above this crate nothing knows the number — `curios-core` computes unbounded and `curios-ersd`'s constants carry whatever the theory produced — which is why every guard for it lives below, and why this constant may not travel upward.
+pub(crate) const ENVELOPE_BITS: i32 = 31;
+
 // Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see `documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md`.
 id!(CpsNodeId, "~n");
 id!(CpsValueId, "~v");

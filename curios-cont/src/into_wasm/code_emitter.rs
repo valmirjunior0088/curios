@@ -3,7 +3,7 @@ use {
         Context, EmissionCode, EmissionValueName, ImmediateLayout, LoadAs, Panic, RopeData, Table,
         box_instr,
     },
-    crate::{CpsIntrinsic, CpsSlot, Repr},
+    crate::{CpsIntrinsic, CpsSlot, ENVELOPE_BITS, Repr},
     curios_utilities::Grain,
 };
 
@@ -126,7 +126,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instr(curios_wasm::Instr::LocalTee {
             local_name: local_name.clone(),
         });
-        self.emit_instr(curios_wasm::Instr::I32Const { value: 31 });
+        self.emit_instr(curios_wasm::Instr::I32Const {
+            value: ENVELOPE_BITS,
+        });
         self.emit_instr(curios_wasm::Instr::I32ShrU);
         self.emit_instr(curios_wasm::Instr::If {
             label_name: self.context.table().special_label(),
@@ -171,7 +173,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             local_name: local_name.clone(),
         });
         self.emit_instr(curios_wasm::Instr::I32Xor);
-        self.emit_instr(curios_wasm::Instr::I32Const { value: 31 });
+        self.emit_instr(curios_wasm::Instr::I32Const {
+            value: ENVELOPE_BITS,
+        });
         self.emit_instr(curios_wasm::Instr::I32ShrU);
         self.emit_instr(curios_wasm::Instr::If {
             label_name: self.context.table().special_label(),
@@ -203,11 +207,15 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instr(curios_wasm::Instr::LocalTee {
             local_name: count_local.clone(),
         });
-        self.emit_instr(curios_wasm::Instr::I32Const { value: 31 });
+        self.emit_instr(curios_wasm::Instr::I32Const {
+            value: ENVELOPE_BITS,
+        });
         self.emit_instr(curios_wasm::Instr::LocalGet {
             local_name: count_local,
         });
-        self.emit_instr(curios_wasm::Instr::I32Const { value: 31 });
+        self.emit_instr(curios_wasm::Instr::I32Const {
+            value: ENVELOPE_BITS,
+        });
         self.emit_instr(curios_wasm::Instr::I32LtU);
         self.emit_instr(curios_wasm::Instr::Select {
             val_types: vec![curios_wasm::ValType::Num(curios_wasm::NumType::I32)],
@@ -246,11 +254,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
 
         match signed {
-            // Sign-extending from bit 30 and comparing is the `i64` spelling of `emit_checked_int_op`'s bit-30-agrees-with-bit-31 test.
+            // Sign-extending from bit 30 and comparing is the `i64` spelling of `emit_checked_int_op`'s bit-30-agrees-with-bit-31 test. The shift is the envelope's complement in an `i64`, so it moves with the envelope rather than beside it.
             true => {
-                self.emit_instr(curios_wasm::Instr::I64Const { value: 33 });
+                let complement = i64::BITS as i64 - i64::from(ENVELOPE_BITS);
+
+                self.emit_instr(curios_wasm::Instr::I64Const { value: complement });
                 self.emit_instr(curios_wasm::Instr::I64Shl);
-                self.emit_instr(curios_wasm::Instr::I64Const { value: 33 });
+                self.emit_instr(curios_wasm::Instr::I64Const { value: complement });
                 self.emit_instr(curios_wasm::Instr::I64ShrS);
                 self.emit_instr(curios_wasm::Instr::LocalGet {
                     local_name: wide_local.clone(),
@@ -258,7 +268,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::I64Ne);
             }
             false => {
-                self.emit_instr(curios_wasm::Instr::I64Const { value: 31 });
+                self.emit_instr(curios_wasm::Instr::I64Const {
+                    value: i64::from(ENVELOPE_BITS),
+                });
                 self.emit_instr(curios_wasm::Instr::I64ShrU);
                 self.emit_instr(curios_wasm::Instr::I32WrapI64);
             }
@@ -1119,7 +1131,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::LocalTee {
                     local_name: local_name.clone(),
                 });
-                self.emit_instr(curios_wasm::Instr::I64Const { value: 31 });
+                self.emit_instr(curios_wasm::Instr::I64Const {
+                    value: i64::from(ENVELOPE_BITS),
+                });
                 self.emit_instr(curios_wasm::Instr::I64ShrU);
                 self.emit_instr(curios_wasm::Instr::I32WrapI64);
                 self.emit_instr(curios_wasm::Instr::If {
@@ -1404,7 +1418,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::LocalTee {
                     local_name: local_name.clone(),
                 });
-                self.emit_instr(curios_wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(curios_wasm::Instr::I32Const {
+                    value: ENVELOPE_BITS,
+                });
                 self.emit_instr(curios_wasm::Instr::I32ShrU);
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
@@ -1522,7 +1538,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::LocalTee {
                     local_name: local_name.clone(),
                 });
-                self.emit_instr(curios_wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(curios_wasm::Instr::I32Const {
+                    value: ENVELOPE_BITS,
+                });
                 self.emit_instr(curios_wasm::Instr::I32ShrU);
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
@@ -1549,7 +1567,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: local_name.clone(),
                 });
                 self.emit_instr(curios_wasm::Instr::I32Xor);
-                self.emit_instr(curios_wasm::Instr::I32Const { value: 31 });
+                self.emit_instr(curios_wasm::Instr::I32Const {
+                    value: ENVELOPE_BITS,
+                });
                 self.emit_instr(curios_wasm::Instr::I32ShrU);
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
