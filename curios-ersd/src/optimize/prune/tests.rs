@@ -1,3 +1,5 @@
+use curios_num::Natural;
+
 use {
     crate::*,
     curios_abi::{ForeignFunction, Namespace, WireResults, WireSignature, WireType},
@@ -7,7 +9,7 @@ use {
 #[test]
 fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
     let mut builder = ErsdBuilder::new();
-    let one = builder.constant(Constant::Nat(1));
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     let _pure_unused = builder.item_value(
         Some("pure_unused".into()),
         Rhs::Operation {
@@ -15,7 +17,7 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
             operands: vec![Atom::Constant(one), Atom::Constant(one)],
         },
     );
-    let two = builder.constant(Constant::Nat(2));
+    let two = builder.constant(Constant::Nat(Natural::from(2u32)));
     let used = builder.item_value(Some("used".into()), Rhs::Alias(Atom::Constant(two)));
     let row = std::sync::Arc::new(ForeignFunction {
         namespace: Namespace::Sys,
@@ -111,7 +113,7 @@ fn drops_dead_function_webs_and_keeps_reached_groups_whole() {
 fn pruning_is_deterministic() {
     let build = || {
         let mut builder = ErsdBuilder::new();
-        let one = builder.constant(Constant::Nat(1));
+        let one = builder.constant(Constant::Nat(Natural::from(1u32)));
         let _dead = builder.item_value(
             None,
             Rhs::Operation {

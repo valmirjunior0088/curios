@@ -1,3 +1,5 @@
+use curios_num::{Integer, Natural};
+
 use {
     super::{Storage, storage},
     crate::Repr,
@@ -33,7 +35,7 @@ fn through_continuation(
     let head = module.reserve_continuation();
     let args = params
         .iter()
-        .map(|_| CpsAtom::Literal(CpsLiteral::Nat(0)))
+        .map(|_| CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))))
         .collect();
 
     module.define_continuation(
@@ -67,7 +69,10 @@ fn an_intrinsic_operand_position_demands_the_raw_carrier() {
     let body = module.add_node(CpsNode::LetIntrinsic {
         result,
         op: CpsIntrinsic::NatAdd,
-        args: vec![CpsAtom::Value(param), CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![
+            CpsAtom::Value(param),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+        ],
         next: done,
     });
     let enter = through_continuation(&mut module, vec![param], body);
@@ -133,7 +138,10 @@ fn an_edge_argument_inherits_the_storage_of_the_parameter_it_feeds() {
     let head_body = module.add_node(CpsNode::LetIntrinsic {
         result,
         op: CpsIntrinsic::NatAdd,
-        args: vec![CpsAtom::Value(param), CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![
+            CpsAtom::Value(param),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+        ],
         next: done,
     });
     module.define_continuation(
@@ -154,8 +162,8 @@ fn an_edge_argument_inherits_the_storage_of_the_parameter_it_feeds() {
         result: carried,
         op: CpsIntrinsic::NatAdd,
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
-            CpsAtom::Literal(CpsLiteral::Nat(2)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
         ],
         next: jump,
     });
@@ -177,14 +185,20 @@ fn disagreeing_raw_carriers_settle_at_conflict_rather_than_oscillating() {
     let signed = module.add_node(CpsNode::LetIntrinsic {
         result: second,
         op: CpsIntrinsic::IntAdd,
-        args: vec![CpsAtom::Value(shared), CpsAtom::Literal(CpsLiteral::Int(1))],
+        args: vec![
+            CpsAtom::Value(shared),
+            CpsAtom::Literal(CpsLiteral::Int(Integer::from(1))),
+        ],
         next: done,
     });
     // ...and as an unsigned one here.
     let body = module.add_node(CpsNode::LetIntrinsic {
         result: first,
         op: CpsIntrinsic::NatAdd,
-        args: vec![CpsAtom::Value(shared), CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![
+            CpsAtom::Value(shared),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+        ],
         next: signed,
     });
     let enter = through_continuation(&mut module, vec![shared], body);
@@ -206,7 +220,10 @@ fn a_function_parameter_stays_boxed_however_its_body_reads_it() {
     let body = module.add_node(CpsNode::LetIntrinsic {
         result,
         op: CpsIntrinsic::NatAdd,
-        args: vec![CpsAtom::Value(param), CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![
+            CpsAtom::Value(param),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+        ],
         next: done,
     });
     entry(&mut module, vec![param], body);
@@ -231,7 +248,7 @@ fn a_value_free_in_another_function_stays_boxed() {
         op: CpsIntrinsic::NatAdd,
         args: vec![
             CpsAtom::Value(escaping),
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
         ],
         next: callee_done,
     });
@@ -255,8 +272,8 @@ fn a_value_free_in_another_function_stays_boxed() {
         result: escaping,
         op: CpsIntrinsic::NatAdd,
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
-            CpsAtom::Literal(CpsLiteral::Nat(2)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
         ],
         next: call,
     });
@@ -280,7 +297,7 @@ fn a_call_result_stays_boxed_however_its_continuation_reads_it() {
         op: CpsIntrinsic::NatAdd,
         args: vec![
             CpsAtom::Value(returned),
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
         ],
         next: done,
     });

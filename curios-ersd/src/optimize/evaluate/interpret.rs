@@ -6,7 +6,7 @@
 
 use {
     super::{
-        budget::Budget,
+        budget::{Budget, MAX_FOLD_BITS},
         value::{Bail, Closure, ListWindow, Value},
     },
     crate::{
@@ -14,6 +14,7 @@ use {
         FunctionId, Intrinsic, Module, Operation, Rhs, Semantics, SequenceGrain, SequenceOp,
         Statement, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
+    curios_num::Natural,
     curios_utilities::Grain,
     std::{
         cell::RefCell,
@@ -445,7 +446,11 @@ impl<'m> Evaluator<'m> {
         let Some(constants) = leaves(&operands) else {
             return Outcome::Bail(Bail::Unsupported);
         };
-        fold(Semantics::fold_operation(operation, &constants))
+        fold(Semantics::fold_operation(
+            operation,
+            &constants,
+            MAX_FOLD_BITS,
+        ))
     }
 
     fn eval_sequence(
@@ -523,7 +528,7 @@ impl<'m> Evaluator<'m> {
                 return Outcome::Bail(bail);
             }
             let mark = frame.mark();
-            frame.push(step.predecessor, Value::Nat(predecessor));
+            frame.push(step.predecessor, Value::Nat(Natural::from(predecessor)));
             frame.push(step.hypothesis, accumulator);
             let result = self.value_of_block(step.block, frame);
             frame.restore(mark);
@@ -731,12 +736,12 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
         _ => Err(Bail::Unsupported),
     };
     let index = |position: usize| match operands.get(position) {
-        Some(Value::Nat(value)) => Ok(*value as usize),
+        Some(Value::Nat(value)) => value.to_usize().ok_or(Bail::Unsupported),
         _ => Err(Bail::Unsupported),
     };
     match operation {
         ListBuild => Ok(Value::List(ListWindow::new(operands.to_vec()))),
-        ListLen => Ok(Value::Nat(list(0)?.len() as u32)),
+        ListLen => Ok(Value::Nat(Natural::from(list(0)?.len()))),
         ListGet => match list(0)?.get(index(1)?) {
             Some(element) => Ok(element.clone()),
             None => Err(Bail::Trap),

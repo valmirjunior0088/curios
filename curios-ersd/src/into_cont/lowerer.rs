@@ -12,6 +12,7 @@ use {
     },
     crate::Intrinsic,
     curios_abi::ForeignFunction,
+    curios_num::Natural,
     curios_utilities::recurse,
     std::{collections::BTreeMap, sync::Arc},
 };
@@ -296,7 +297,9 @@ impl Lowerer<'_> {
                     value: curios_cont::CpsValueExpr::Row(
                         row,
                         vec![
-                            curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(UNFORCED)),
+                            curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(
+                                Natural::from(UNFORCED),
+                            )),
                             curios_cont::CpsAtom::Fun(*thunk),
                         ],
                     ),
@@ -554,7 +557,9 @@ impl Lowerer<'_> {
                     } else {
                         let value = match fields.first() {
                             Some(&payload) => self.emitter.lower_atom(payload),
-                            None => curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
+                            None => curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(
+                                Natural::zero(),
+                            )),
                         };
                         self.emitter.values.insert(result, value);
                         self.lower_statements(rest, terminator, target)
@@ -609,7 +614,9 @@ impl Lowerer<'_> {
                         .map(|index| self.emitter.module.pad(Some(family), index))
                         .collect::<Vec<_>>();
                     let mut marked = vec![false; width];
-                    atoms[0] = curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(tag));
+                    atoms[0] = curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(
+                        Natural::from(tag),
+                    ));
                     for (field, &atom) in fields.iter().enumerate() {
                         atoms[places[field]] = self.emitter.lower_atom(atom);
                         marked[places[field]] =
@@ -796,7 +803,9 @@ impl Lowerer<'_> {
                         op: curios_cont::CpsIntrinsic::NatAnd,
                         args: vec![
                             value,
-                            curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0xFF)),
+                            curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(
+                                Natural::from(0xFFu32),
+                            )),
                         ],
                         next,
                     }
@@ -1308,7 +1317,9 @@ impl Lowerer<'_> {
                 op: curios_cont::CpsIntrinsic::NatAdd,
                 args: vec![
                     curios_cont::CpsAtom::Value(step_index),
-                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(1)),
+                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(Natural::from(
+                        1u32,
+                    ))),
                 ],
                 next: loop_back,
             });
@@ -1376,7 +1387,7 @@ impl Lowerer<'_> {
         let zero_jump = self.emitter.jump(
             loop_cont,
             vec![
-                curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
+                curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(Natural::zero())),
                 curios_cont::CpsAtom::Value(zero_acc),
             ],
         );
@@ -1430,11 +1441,13 @@ impl Lowerer<'_> {
             grain,
             &sequence,
             element,
-            curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
+            curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(Natural::zero())),
             suffix.map(|suffix| {
                 (
                     suffix,
-                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(1)),
+                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(Natural::from(
+                        1u32,
+                    ))),
                 )
             }),
             cons_body,
@@ -1552,7 +1565,9 @@ impl Lowerer<'_> {
                 op: curios_cont::CpsIntrinsic::NatSub,
                 args: vec![
                     curios_cont::CpsAtom::Value(step_index),
-                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(1)),
+                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(Natural::from(
+                        1u32,
+                    ))),
                 ],
                 next: step_body,
             });
@@ -1591,7 +1606,7 @@ impl Lowerer<'_> {
                 op: curios_cont::CpsIntrinsic::NatEql,
                 args: vec![
                     curios_cont::CpsAtom::Value(loop_index),
-                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
+                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(Natural::zero())),
                 ],
                 next: switch,
             });
@@ -1660,7 +1675,7 @@ impl Lowerer<'_> {
         let params = if result_arity == 0 {
             self.emitter.values.insert(
                 result,
-                curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
+                curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(Natural::zero())),
             );
             Vec::new()
         } else {

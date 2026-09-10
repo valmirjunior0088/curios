@@ -4,6 +4,7 @@ use {
         EmissionData, EmissionValue, EmissionValueName, Frame, ImmediateLayout, LayoutItem, LoadAs,
         LocalData, Panic, region_layout, slot_zero_instrs,
     },
+    crate::cps::{int_fits_envelope, nat_fits_envelope},
     curios_utilities::{Grain, recurse},
     std::collections::{BTreeMap, HashMap, HashSet},
 };
@@ -59,12 +60,12 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     pub(crate) fn emit_data(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
         match value {
-            &EmissionData::Nat(value) => {
-                // A folded u32 value the i31 carrier cannot box traps at its materialization point — the same backend boundary where the checked runtime computation of the value would have trapped.
-                if value >> 31 != 0 {
+            EmissionData::Nat(value) => {
+                // The carriers are unbounded from here up, so a value the envelope cannot box traps at its materialization point — the same backend boundary where the checked runtime computation of it would have trapped.
+                let Some(value) = nat_fits_envelope(value).then(|| value.to_u32()).flatten() else {
                     self.emit_instrs(self.context.table().refuse_instrs(Panic::NatCarrier));
                     return;
-                }
+                };
 
                 self.emit_instrs([
                     curios_wasm::Instr::I32Const {
@@ -73,12 +74,12 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     curios_wasm::Instr::RefI31,
                 ])
             }
-            &EmissionData::Int(value) => {
-                // In-range iff bit 30 agrees with the sign bit — the signed analogue of the `Nat` check above; out of range traps at the materialization point instead of silently wrapping to 31 bits.
-                if value >> 30 != value >> 31 {
+            EmissionData::Int(value) => {
+                // In range exactly when the bit below the sign agrees with it — the signed analogue of the `Nat` check above; out of range traps at the materialization point instead of silently wrapping to the envelope.
+                let Some(value) = int_fits_envelope(value).then(|| value.to_i32()).flatten() else {
                     self.emit_instrs(self.context.table().refuse_instrs(Panic::IntCarrier));
                     return;
-                }
+                };
 
                 self.emit_instrs([
                     curios_wasm::Instr::I32Const { value },
@@ -214,16 +215,20 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     /// The range checks survive being moved onto this path, and that is deliberate: they are what keeps every register-held `Nat` inside the i31 envelope, so *boxing* one later — at a call argument, a constructor field, a jump to a boxed parameter — is a bare `ref.i31` that never has to re-check. Dropping them here would move the trap to the boxing coercion and change which programs trap.
     fn emit_let_pure(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
         match (self.context.table().raw_carrier(value_name), value) {
-            (Some(_), &EmissionData::Nat(value)) => match value >> 31 {
-                0 => self.emit_instr(curios_wasm::Instr::I32Const {
-                    value: value as i32,
-                }),
-                _ => self.emit_instrs(self.context.table().refuse_instrs(Panic::NatCarrier)),
-            },
-            (Some(_), &EmissionData::Int(value)) => match value >> 30 == value >> 31 {
-                true => self.emit_instr(curios_wasm::Instr::I32Const { value }),
-                false => self.emit_instrs(self.context.table().refuse_instrs(Panic::IntCarrier)),
-            },
+            (Some(_), EmissionData::Nat(value)) => {
+                match nat_fits_envelope(value).then(|| value.to_u32()).flatten() {
+                    Some(value) => self.emit_instr(curios_wasm::Instr::I32Const {
+                        value: value as i32,
+                    }),
+                    None => self.emit_instrs(self.context.table().refuse_instrs(Panic::NatCarrier)),
+                }
+            }
+            (Some(_), EmissionData::Int(value)) => {
+                match int_fits_envelope(value).then(|| value.to_i32()).flatten() {
+                    Some(value) => self.emit_instr(curios_wasm::Instr::I32Const { value }),
+                    None => self.emit_instrs(self.context.table().refuse_instrs(Panic::IntCarrier)),
+                }
+            }
             (Some(_), &EmissionData::Flt(value)) => {
                 self.emit_instr(curios_wasm::Instr::F64Const { value })
             }

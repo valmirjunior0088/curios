@@ -4,6 +4,8 @@
 
 //! Backend lowering coverage: build a [`CpsModule`](crate::CpsModule) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
+use curios_num::{Integer, Natural};
+
 use {
     crate::{
         CpsAtom, CpsCallee, CpsCellOp, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsic,
@@ -52,12 +54,12 @@ pub(super) fn assert_total(wat: &str) {
     );
 }
 
-pub(super) const fn nat(value: u32) -> CpsAtom {
-    CpsAtom::Literal(CpsLiteral::Nat(value))
+pub(super) fn nat(value: u32) -> CpsAtom {
+    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(value)))
 }
 
-pub(super) const fn int(value: i32) -> CpsAtom {
-    CpsAtom::Literal(CpsLiteral::Int(value))
+pub(super) fn int(value: i32) -> CpsAtom {
+    CpsAtom::Literal(CpsLiteral::Int(Integer::from(value)))
 }
 
 pub(super) fn flt(value: f64) -> CpsAtom {

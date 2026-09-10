@@ -1,3 +1,5 @@
+use curios_num::{Integer, Natural};
+
 use {
     crate::*,
     curios_num::Floating,
@@ -7,13 +9,16 @@ use {
 #[test]
 fn constants_intern_by_exact_bitwise_identity() {
     let mut module = Module::new();
-    let a = module.intern_constant(Constant::Nat(7));
-    let b = module.intern_constant(Constant::Nat(7));
+    let a = module.intern_constant(Constant::Nat(Natural::from(7u32)));
+    let b = module.intern_constant(Constant::Nat(Natural::from(7u32)));
     assert_eq!(a, b);
-    assert_ne!(a, module.intern_constant(Constant::Nat(8)));
     assert_ne!(
-        module.intern_constant(Constant::Nat(0)),
-        module.intern_constant(Constant::Int(0)),
+        a,
+        module.intern_constant(Constant::Nat(Natural::from(8u32)))
+    );
+    assert_ne!(
+        module.intern_constant(Constant::Nat(Natural::from(0u32))),
+        module.intern_constant(Constant::Int(Integer::from(0))),
         "shapes are distinct even at equal bits"
     );
     assert_eq!(module.constants().len(), 4);
@@ -50,7 +55,7 @@ fn a_hand_built_module_round_trips_through_its_accessors() {
     let mut module = Module::new();
 
     // let one = 1; let doubled = NatAdd(one, one); return doubled
-    let one = module.intern_constant(Constant::Nat(1));
+    let one = module.intern_constant(Constant::Nat(Natural::from(1u32)));
     let bound = module.add_value(Some("one".into()));
     let alias = module.add_statement(Statement::Let {
         result: bound,

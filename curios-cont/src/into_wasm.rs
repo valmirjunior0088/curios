@@ -4,6 +4,7 @@ use {
         machine::lower, machine::structurize, machine::value_id, machine::value_name,
     },
     curios_abi::ForeignFunction,
+    curios_num::{Integer, Natural},
     curios_utilities::{Grain, PackedBin, grown},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -99,8 +100,8 @@ fn raw_locals(module: &CpsModule) -> HashMap<EmissionValueName, Repr> {
 /// A constructed value: the scalar immediates, packed `Bits`/`Bytes`, `List`/`Tuple` aggregates, and `EmissionClosure` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `EmissionData` — so constructing one is a single allocation. `EmissionData` is also the payload of module consts, where codegen materialises it into a wasm global.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionData {
-    Nat(u32),
-    Int(i32),
+    Nat(Natural),
+    Int(Integer),
     Flt(f64),
     Bin(Grain, PackedBin),
     List(Vec<EmissionValueName>),

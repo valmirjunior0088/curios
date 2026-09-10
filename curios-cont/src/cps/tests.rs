@@ -1,3 +1,5 @@
+use curios_num::Natural;
+
 use {
     super::{
         CpsAtom, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsic,
@@ -34,7 +36,7 @@ fn minimal_module() -> CpsModule {
     }));
     let body = module.add_node(CpsNode::LetValue {
         result,
-        value: CpsValueExpr::Literal(CpsLiteral::Nat(0)),
+        value: CpsValueExpr::Literal(CpsLiteral::Nat(Natural::from(0u32))),
         next: return_node,
     });
     module.define_function(
@@ -114,7 +116,7 @@ fn verifier_rejects_intrinsic_arity_mismatch() {
     module.add_node(CpsNode::LetIntrinsic {
         result,
         op: CpsIntrinsic::NatAdd,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
         next,
     });
     let bad = CpsNodeId((module.nodes.len() - 1) as u32);
@@ -142,8 +144,8 @@ fn verifier_rejects_a_read_in_the_other_vocabulary() {
         // Ahead of the minimal body rather than in place of it, so every other clause of the verifier is satisfied and the vocabulary one is the only thing left to refuse.
         let next = module.function(CpsFunId(0)).unwrap().body;
         let atoms = vec![
-            CpsAtom::Literal(CpsLiteral::Nat(0)),
-            CpsAtom::Literal(CpsLiteral::Nat(0)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
         ];
         let read = module.add_node(CpsNode::LetIntrinsic {
             result: field,
@@ -216,7 +218,7 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
     );
 
     let switch = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Literal(CpsLiteral::Nat(0)),
+        scrutinee: CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
         cases: BTreeMap::from([
             (
                 0,
@@ -242,8 +244,8 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
     let construction = module.add_node(CpsNode::LetValue {
         result: built,
         value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(0)),
-            CpsAtom::Literal(CpsLiteral::Nat(0)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
         ]),
         next: let_cont,
     });
@@ -300,7 +302,7 @@ fn verifier_rejects_shared_return_continuations() {
     let second = module.reserve_function();
     let body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: shared_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
     }));
     module.define_function(
         second,
@@ -327,7 +329,7 @@ fn verifier_rejects_another_functions_return_target() {
     let second_return = module.reserve_continuation();
     let second_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: second_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
     }));
     module.define_function(
         second,
@@ -344,7 +346,7 @@ fn verifier_rejects_another_functions_return_target() {
         entry_body,
         CpsNode::ApplyCont(CpsEdge {
             target: second_return,
-            args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+            args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
         }),
     );
     assert!(

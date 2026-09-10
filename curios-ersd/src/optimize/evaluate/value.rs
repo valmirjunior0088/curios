@@ -4,7 +4,7 @@
 
 use {
     crate::{Constant, ConstructorId, FunctionId, Module, ProductId, ValueId},
-    curios_num::Floating,
+    curios_num::{Floating, Integer, Natural},
     curios_utilities::{Grain, PackedBin},
     std::{cell::RefCell, ops::Deref, rc::Rc},
 };
@@ -15,9 +15,9 @@ pub(super) enum Value {
     /// The unit value — the carrier of an erased proof or type slot.
     Unit,
     Bool(bool),
-    Nat(u32),
+    Nat(Natural),
     Byte(u8),
-    Int(i32),
+    Int(Integer),
     Flt(Floating),
     Handle(u32),
     Bin(Grain, Rc<PackedBin>),
@@ -108,9 +108,9 @@ impl Value {
         Some(match self {
             Value::Unit => Constant::Unit,
             Value::Bool(value) => Constant::Bool(*value),
-            Value::Nat(value) => Constant::Nat(*value),
+            Value::Nat(value) => Constant::Nat(value.clone()),
             Value::Byte(value) => Constant::Byte(*value),
-            Value::Int(value) => Constant::Int(*value),
+            Value::Int(value) => Constant::Int(value.clone()),
             Value::Flt(value) => Constant::Flt(*value),
             Value::Handle(value) => Constant::Handle(*value),
             Value::Bin(grain, value) => Constant::Bin(*grain, value.as_ref().clone()),
@@ -125,18 +125,19 @@ impl Value {
         match constant {
             Constant::Unit => Value::Unit,
             Constant::Bool(value) => Value::Bool(*value),
-            Constant::Nat(value) => Value::Nat(*value),
+            Constant::Nat(value) => Value::Nat(value.clone()),
             Constant::Byte(value) => Value::Byte(*value),
-            Constant::Int(value) => Value::Int(*value),
+            Constant::Int(value) => Value::Int(value.clone()),
             Constant::Flt(value) => Value::Flt(*value),
             Constant::Handle(value) => Value::Handle(*value),
             Constant::Bin(grain, value) => Value::Bin(*grain, Rc::new(value.clone())),
         }
     }
 
+    /// The value as a machine natural, declining one no `u32` holds — every consumer is an index or a count, which a wider value cannot be.
     pub(super) fn nat(&self) -> Result<u32, Bail> {
         match self {
-            Value::Nat(value) => Ok(*value),
+            Value::Nat(value) => value.to_u32().ok_or(Bail::Unsupported),
             _ => Err(Bail::Unsupported),
         }
     }

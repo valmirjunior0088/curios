@@ -43,7 +43,7 @@ mod eliminate;
 mod recursion;
 
 mod intrinsic;
-use intrinsic::narrow_nat;
+use intrinsic::narrow_case_key;
 
 #[cfg(test)]
 mod tests;

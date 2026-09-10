@@ -1,8 +1,11 @@
-use {crate::*, curios_num::Floating};
+use {
+    crate::*,
+    curios_num::{Floating, Natural},
+};
 
 fn doubling_module() -> Module {
     let mut builder = ErsdBuilder::new();
-    let one = builder.constant(Constant::Nat(1));
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     let bound = builder.item_value(Some("one".into()), Rhs::Alias(Atom::Constant(one)));
     builder.open_block();
     let doubled = builder.let_value(
@@ -36,8 +39,8 @@ fn a_recursive_module_prints_exactly() {
     let mut builder = ErsdBuilder::new();
     let function = builder.reserve_function();
     let n = builder.value(Some("n".into()));
-    let zero = builder.constant(Constant::Nat(0));
-    let one = builder.constant(Constant::Nat(1));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     builder.open_block();
     let zero_case = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
     builder.open_block();
@@ -72,7 +75,7 @@ fn a_recursive_module_prints_exactly() {
     builder.define_function(function, Some("loop".into()), vec![n], body);
     builder.item_functions(vec![function]);
     builder.open_block();
-    let ten = builder.constant(Constant::Nat(10));
+    let ten = builder.constant(Constant::Nat(Natural::from(10u32)));
     let run = builder.let_value(
         None,
         Rhs::Apply {
@@ -167,7 +170,7 @@ fn printing_is_deterministic_across_constructions() {
 #[test]
 fn a_deep_module_prints_without_native_stack() {
     let mut builder = ErsdBuilder::new();
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     let scrutinee = builder.item_value(Some("scrutinee".into()), Rhs::Alias(Atom::Constant(zero)));
     builder.open_block();
     let mut chain = builder.seal_block(Terminator::Return(Atom::Value(scrutinee)));

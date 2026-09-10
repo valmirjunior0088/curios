@@ -1,3 +1,5 @@
+use curios_num::Natural;
+
 use {
     crate::*,
     curios_abi::{ForeignFunction, Namespace, WireResults, WireSignature, WireType},
@@ -9,8 +11,8 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
     let mut builder = ErsdBuilder::new();
     let count = builder.reserve_function();
     let n = builder.value(Some("n".into()));
-    let zero = builder.constant(Constant::Nat(0));
-    let one = builder.constant(Constant::Nat(1));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
 
     builder.open_block();
     let zero_arm = builder.seal_block(Terminator::Return(Atom::Constant(zero)));

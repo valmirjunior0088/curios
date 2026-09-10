@@ -1,8 +1,10 @@
+use curios_num::Natural;
+
 use crate::*;
 
 fn doubling_module() -> Module {
     let mut builder = ErsdBuilder::new();
-    let one = builder.constant(Constant::Nat(1));
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     let bound = builder.item_value(Some("one".into()), Rhs::Alias(Atom::Constant(one)));
     builder.open_block();
     let doubled = builder.let_value(
@@ -31,7 +33,7 @@ fn use_counts_are_exact() {
 #[test]
 fn free_values_derive_transitively_through_nested_functions() {
     let mut builder = ErsdBuilder::new();
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     let glob = builder.item_value(Some("glob".into()), Rhs::Alias(Atom::Constant(zero)));
 
     let outer = builder.reserve_function();
@@ -178,7 +180,7 @@ fn analysis_is_deterministic() {
 #[test]
 fn a_deep_module_analyzes_without_native_stack() {
     let mut builder = ErsdBuilder::new();
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     let scrutinee = builder.item_value(Some("scrutinee".into()), Rhs::Alias(Atom::Constant(zero)));
     builder.open_block();
     let mut chain = builder.seal_block(Terminator::Return(Atom::Value(scrutinee)));

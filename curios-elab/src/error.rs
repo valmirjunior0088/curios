@@ -481,16 +481,13 @@ pub enum Error {
     },
     /// A witness telescope declares an explicit parameter; nothing could supply it at resolution time.
     ExplicitWitnessParam,
-    NatOverflow {
+    /// A natural-dispatch case key that does not fit `ersd`'s `NatCase`. A `Nat` *value* is unbounded through every erased stage — only materialization refuses one — but a key selects an arm of a branch table, which is a slot rather than a value.
+    NatCaseKeyOverflow {
         value: Natural,
     },
     /// A program whose erased module fails the erased representation's verifier — any of its rules, from the recursion classes the language rejects (a computed-only recursive cycle no initialization order satisfies) to the structural ones, and the frame quotes the detail rather than presuming which. The verifier owns rejection; erasure only surfaces its diagnostic.
     ErasedModuleInvalid {
         detail: String,
-    },
-    /// An `Int` literal that survived to `erase` but does not fit `ersd`'s `i32` carrier — the type level is unbounded, so the representation narrowing lives at the erase boundary, like [`Error::NatOverflow`]'s u32. (The runtime's own i31 limit is enforced where it appears: `cont` → wasm lowering.)
-    IntOverflow {
-        value: Box<Integer>,
     },
     /// A written motive binds the wrong number of names. An eliminator's motive abstracts the scrutinee's indices, in declaration order, and then the scrutinee — `expected` of them. `name` is the eliminated family when there is one to name (an intrinsic carrier has none).
     MotiveBinderCount {
@@ -1055,18 +1052,12 @@ impl Error {
         }
     }
 
-    pub(crate) fn nat_overflow(value: Natural) -> Self {
-        Self::NatOverflow { value }
+    pub(crate) fn nat_case_key_overflow(value: Natural) -> Self {
+        Self::NatCaseKeyOverflow { value }
     }
 
     pub(crate) fn erased_module_invalid(detail: String) -> Self {
         Self::ErasedModuleInvalid { detail }
-    }
-
-    pub(crate) fn int_overflow(value: Integer) -> Self {
-        Self::IntOverflow {
-            value: Box::new(value),
-        }
     }
 
     pub(crate) fn motive_binder_count(

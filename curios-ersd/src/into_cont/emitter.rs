@@ -110,11 +110,11 @@ impl<'a> Emitter<'a> {
     pub(super) fn lower_constant(&self, constant: ConstantId) -> curios_cont::CpsLiteral {
         match self.source.constant(constant).expect("live constant") {
             // Unit, Bool, and Byte collapse onto the Nat runtime carrier here, at the one-way door — never earlier.
-            Constant::Unit => curios_cont::CpsLiteral::Nat(0),
-            Constant::Bool(value) => curios_cont::CpsLiteral::Nat(u32::from(*value)),
-            Constant::Nat(value) => curios_cont::CpsLiteral::Nat(*value),
-            Constant::Byte(value) => curios_cont::CpsLiteral::Nat(u32::from(*value)),
-            Constant::Int(value) => curios_cont::CpsLiteral::Int(*value),
+            Constant::Unit => curios_cont::CpsLiteral::Nat(Natural::zero()),
+            Constant::Bool(value) => curios_cont::CpsLiteral::Nat(Natural::from(u32::from(*value))),
+            Constant::Nat(value) => curios_cont::CpsLiteral::Nat(value.clone()),
+            Constant::Byte(value) => curios_cont::CpsLiteral::Nat(Natural::from(u32::from(*value))),
+            Constant::Int(value) => curios_cont::CpsLiteral::Int(value.clone()),
             Constant::Flt(value) => curios_cont::CpsLiteral::Flt(*value),
             Constant::Bin(grain, value) => curios_cont::CpsLiteral::Bin(*grain, value.clone()),
             // A Handle descriptor token rides the packed-binary carrier at byte grain, spelled by the one encoding the host reads back.
@@ -346,7 +346,9 @@ impl<'a> Emitter<'a> {
             value: curios_cont::CpsValueExpr::Row(
                 row,
                 vec![
-                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(FORCED)),
+                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(Natural::from(
+                        FORCED,
+                    ))),
                     curios_cont::CpsAtom::Value(produced),
                 ],
             ),
@@ -398,7 +400,9 @@ impl<'a> Emitter<'a> {
             value: curios_cont::CpsValueExpr::Row(
                 row,
                 vec![
-                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(FORCING)),
+                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(Natural::from(
+                        FORCING,
+                    ))),
                     curios_cont::CpsAtom::Filler,
                 ],
             ),

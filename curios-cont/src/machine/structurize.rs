@@ -16,6 +16,7 @@ use {
             EmissionValueName,
         },
     },
+    curios_num::Natural,
     curios_utilities::Entropy,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -305,7 +306,7 @@ impl<'a> MachineFunctionBridge<'a> {
             MachineTerminator::Exit(value) => {
                 let code = match value {
                     Some(value) => self.operand(value, values),
-                    None => self.literal(&CpsLiteral::Nat(0), values),
+                    None => self.literal(&CpsLiteral::Nat(Natural::zero()), values),
                 };
                 EmissionTail::Host(EmissionHostTarget::Exit { code })
             }
@@ -469,7 +470,7 @@ impl<'a> MachineFunctionBridge<'a> {
             MachineOperand::Value(value) => value_name(*value),
             MachineOperand::Literal(literal) => self.literal(literal, values),
             // Every transfer defers its fillers through `jump_args`; the positions left to this arm read a scalar — an intrinsic operand, a host operand, an exit code — and a filler never reaches one.
-            MachineOperand::Filler => self.literal(&CpsLiteral::Nat(0), values),
+            MachineOperand::Filler => self.literal(&CpsLiteral::Nat(Natural::zero()), values),
         }
     }
 
@@ -614,8 +615,8 @@ fn block_successors(terminator: &MachineTerminator) -> Vec<MachineBlockId> {
 
 fn literal_data(literal: &CpsLiteral) -> EmissionData {
     match literal {
-        CpsLiteral::Nat(value) => EmissionData::Nat(*value),
-        CpsLiteral::Int(value) => EmissionData::Int(*value),
+        CpsLiteral::Nat(value) => EmissionData::Nat(value.clone()),
+        CpsLiteral::Int(value) => EmissionData::Int(value.clone()),
         CpsLiteral::Flt(value) => EmissionData::Flt(value.to_f64()),
         CpsLiteral::Bin(grain, value) => EmissionData::Bin(*grain, value.clone()),
     }

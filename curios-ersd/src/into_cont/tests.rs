@@ -1,10 +1,11 @@
 use {
     crate::*,
+    curios_num::Natural,
     curios_utilities::{Grain, PackedBin},
 };
 
 fn nat(builder: &mut ErsdBuilder, value: u32) -> Atom {
-    let constant = builder.constant(Constant::Nat(value));
+    let constant = builder.constant(Constant::Nat(Natural::from(value)));
     Atom::Constant(constant)
 }
 

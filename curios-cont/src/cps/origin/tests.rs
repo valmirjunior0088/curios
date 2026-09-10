@@ -1,3 +1,5 @@
+use curios_num::Natural;
+
 use {
     super::{Origin, origins},
     crate::cps::test_support::module_with,
@@ -33,8 +35,8 @@ fn a_construction_reaches_its_parameter_exactly() {
         let build = module.add_node(CpsNode::LetValue {
             result: built,
             value: CpsValueExpr::Tuple(vec![
-                CpsAtom::Literal(CpsLiteral::Nat(1)),
-                CpsAtom::Literal(CpsLiteral::Nat(2)),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
             ]),
             next: jump,
         });
@@ -87,8 +89,8 @@ fn a_loop_alias_edge_keeps_the_region_exact() {
         let build = module.add_node(CpsNode::LetValue {
             result: built,
             value: CpsValueExpr::Tuple(vec![
-                CpsAtom::Literal(CpsLiteral::Nat(1)),
-                CpsAtom::Literal(CpsLiteral::Nat(2)),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
             ]),
             next: enter,
         });
@@ -139,17 +141,17 @@ fn merged_arities_travel_as_a_variant() {
         let build_triple = module.add_node(CpsNode::LetValue {
             result: triple,
             value: CpsValueExpr::Tuple(vec![
-                CpsAtom::Literal(CpsLiteral::Nat(1)),
-                CpsAtom::Literal(CpsLiteral::Nat(2)),
-                CpsAtom::Literal(CpsLiteral::Nat(3)),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(3u32))),
             ]),
             next: split,
         });
         let build_pair = module.add_node(CpsNode::LetValue {
             result: pair,
             value: CpsValueExpr::Tuple(vec![
-                CpsAtom::Literal(CpsLiteral::Nat(1)),
-                CpsAtom::Literal(CpsLiteral::Nat(2)),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
             ]),
             next: build_triple,
         });
@@ -288,8 +290,8 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
         let build = module.add_node(CpsNode::LetValue {
             result: built,
             value: CpsValueExpr::Tuple(vec![
-                CpsAtom::Literal(CpsLiteral::Nat(1)),
-                CpsAtom::Literal(CpsLiteral::Nat(2)),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
             ]),
             next: call,
         });
@@ -352,8 +354,8 @@ fn a_variant_construction_carries_its_family() {
             value: CpsValueExpr::Row(
                 row,
                 vec![
-                    CpsAtom::Literal(CpsLiteral::Nat(0)),
-                    CpsAtom::Literal(CpsLiteral::Nat(1)),
+                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
                     CpsAtom::Filler,
                 ],
             ),
@@ -400,7 +402,7 @@ fn two_constructors_of_a_family_merge_to_the_family() {
         );
         // One switch, one edge per constructor, so both constructions flow into the single join.
         let switch = module.add_node(CpsNode::Switch {
-            scrutinee: CpsAtom::Literal(CpsLiteral::Nat(0)),
+            scrutinee: CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
             cases: [
                 (
                     0,
@@ -425,7 +427,10 @@ fn two_constructors_of_a_family_merge_to_the_family() {
             result: narrow,
             value: CpsValueExpr::Row(
                 row,
-                vec![CpsAtom::Literal(CpsLiteral::Nat(1)), CpsAtom::Filler],
+                vec![
+                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+                    CpsAtom::Filler,
+                ],
             ),
             next: switch,
         });
@@ -434,8 +439,8 @@ fn two_constructors_of_a_family_merge_to_the_family() {
             value: CpsValueExpr::Row(
                 row,
                 vec![
-                    CpsAtom::Literal(CpsLiteral::Nat(0)),
-                    CpsAtom::Literal(CpsLiteral::Nat(7)),
+                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
                 ],
             ),
             next: build_narrow,

@@ -1,7 +1,7 @@
-use crate::*;
+use {crate::*, curios_num::Natural};
 
 fn nat_atom(builder: &mut ErsdBuilder, value: u32) -> Atom {
-    let constant = builder.constant(Constant::Nat(value));
+    let constant = builder.constant(Constant::Nat(Natural::from(value)));
     Atom::Constant(constant)
 }
 
@@ -419,7 +419,7 @@ fn an_unused_direct_self_knot_is_admitted() {
     let group = builder.rec_group(vec![], vec![(value, init)]);
     builder.item_rec(group);
     builder.open_block();
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
     builder.set_entry(entry);
     builder

@@ -842,17 +842,14 @@ impl fmt::Display for Displayed<'_> {
                     "this witness declares an explicit parameter\n  witness parameters must be implicit ('@') or 'use' premises — nothing supplies explicit arguments during resolution"
                 )
             }
-            Error::NatOverflow { value } => {
-                write!(f, "Nat literal {value} overflows u32 at the erase boundary")
+            Error::NatCaseKeyOverflow { value } => {
+                write!(
+                    f,
+                    "natural dispatch key {value} does not fit a branch table"
+                )
             }
             Error::ErasedModuleInvalid { detail } => {
                 write!(f, "the erased module failed verification: {detail}")
-            }
-            Error::IntOverflow { value } => {
-                write!(
-                    f,
-                    "Int literal {value:+} overflows i32 at the erase boundary"
-                )
             }
             Error::MotiveBinderCount {
                 name,

@@ -10,9 +10,8 @@ mod tests;
 use {
     super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator},
     curios_num::{
-        Floating, Integer, Natural, ScalarTrap, flt_to_int, flt_to_nat, int_add, int_div, int_mul,
-        int_rem, int_shl, int_shr, int_sub, int_to_nat, nat_add, nat_div, nat_mul, nat_rem,
-        nat_shl, nat_shr, nat_sub, nat_to_int,
+        Floating, Integer, Natural, ScalarTrap, flt_to_int, flt_to_nat, int_div, int_mul, int_rem,
+        int_shl, int_shr, int_to_nat, nat_div, nat_mul, nat_rem, nat_shl, nat_shr, nat_sub,
     },
     curios_utilities::{Grain, PackedBin},
 };
@@ -311,8 +310,6 @@ pub enum FoldOutcome {
 pub enum TrapKind {
     /// Integer division or remainder by a zero divisor.
     DivisionByZero,
-    /// Signed integer division overflow (`i32::MIN / -1`).
-    IntegerOverflow,
     /// A float-to-integer conversion of a non-finite or out-of-range value.
     ConversionRange,
     /// A sequence index outside its bounds.
@@ -325,15 +322,19 @@ pub enum TrapKind {
 
 impl Semantics {
     /// Constant-fold a scalar operation over its operands, under the numeric law: exact `u32`/`i32` — add, multiply, and left shift refuse a result past the carrier as a [`FoldOutcome::WouldTrap`], never wrapping it, while `Nat` subtraction is monus — and bit-preserving binary64. Comparisons yield a [`Constant::Bool`]; the `0`/`1` carrier is the lowering's decision. i31 appears nowhere here.
-    pub fn fold_operation(operation: Operation, operands: &[Constant]) -> FoldOutcome {
+    pub fn fold_operation(
+        operation: Operation,
+        operands: &[Constant],
+        allowance: u64,
+    ) -> FoldOutcome {
         use Operation::*;
 
         let nat = |index: usize| match operands.get(index) {
-            Some(Constant::Nat(value)) => Some(*value),
+            Some(Constant::Nat(value)) => Some(value),
             _ => None,
         };
         let int = |index: usize| match operands.get(index) {
-            Some(Constant::Int(value)) => Some(*value),
+            Some(Constant::Int(value)) => Some(value),
             _ => None,
         };
         let byte = |index: usize| match operands.get(index) {
@@ -361,13 +362,9 @@ impl Semantics {
                 BoolEql => Constant::Bool(bool_(0)? == bool_(1)?),
                 BoolNeq => Constant::Bool(bool_(0)? != bool_(1)?),
 
-                NatAdd => {
-                    return Some(scalar_result(nat_add(nat(0)?, nat(1)?), Constant::Nat));
-                }
+                NatAdd => Constant::Nat(nat(0)? + nat(1)?),
                 NatSub => Constant::Nat(nat_sub(nat(0)?, nat(1)?)),
-                NatMul => {
-                    return Some(scalar_result(nat_mul(nat(0)?, nat(1)?), Constant::Nat));
-                }
+                NatMul => Constant::Nat(nat_mul(nat(0)?, nat(1)?, allowance)?),
                 NatDiv => {
                     return Some(scalar_result(nat_div(nat(0)?, nat(1)?), Constant::Nat));
                 }
@@ -377,9 +374,7 @@ impl Semantics {
                 NatAnd => Constant::Nat(nat(0)? & nat(1)?),
                 NatOr => Constant::Nat(nat(0)? | nat(1)?),
                 NatXor => Constant::Nat(nat(0)? ^ nat(1)?),
-                NatShl => {
-                    return Some(scalar_result(nat_shl(nat(0)?, nat(1)?), Constant::Nat));
-                }
+                NatShl => Constant::Nat(nat_shl(nat(0)?, nat(1)?, allowance)?),
                 NatShr => Constant::Nat(nat_shr(nat(0)?, nat(1)?)),
                 NatEql => Constant::Bool(nat(0)? == nat(1)?),
                 NatNeq => Constant::Bool(nat(0)? != nat(1)?),
@@ -390,27 +385,19 @@ impl Semantics {
                 ByteLt => Constant::Bool(byte(0)? < byte(1)?),
                 ByteLe => Constant::Bool(byte(0)? <= byte(1)?),
 
-                IntAdd => {
-                    return Some(scalar_result(int_add(int(0)?, int(1)?), Constant::Int));
-                }
-                IntSub => {
-                    return Some(scalar_result(int_sub(int(0)?, int(1)?), Constant::Int));
-                }
-                IntMul => {
-                    return Some(scalar_result(int_mul(int(0)?, int(1)?), Constant::Int));
-                }
+                IntAdd => Constant::Int(int(0)?.clone() + int(1)?.clone()),
+                IntSub => Constant::Int(int(0)?.clone() - int(1)?.clone()),
+                IntMul => Constant::Int(int_mul(int(0)?, int(1)?, allowance)?),
                 IntDiv => {
                     return Some(scalar_result(int_div(int(0)?, int(1)?), Constant::Int));
                 }
                 IntRem => {
                     return Some(scalar_result(int_rem(int(0)?, int(1)?), Constant::Int));
                 }
-                IntAnd => Constant::Int(int(0)? & int(1)?),
-                IntOr => Constant::Int(int(0)? | int(1)?),
-                IntXor => Constant::Int(int(0)? ^ int(1)?),
-                IntShl => {
-                    return Some(scalar_result(int_shl(int(0)?, nat(1)?), Constant::Int));
-                }
+                IntAnd => Constant::Int(int(0)?.clone() & int(1)?.clone()),
+                IntOr => Constant::Int(int(0)?.clone() | int(1)?.clone()),
+                IntXor => Constant::Int(int(0)?.clone() ^ int(1)?.clone()),
+                IntShl => Constant::Int(int_shl(int(0)?, nat(1)?, allowance)?),
                 IntShr => Constant::Int(int_shr(int(0)?, nat(1)?)),
                 IntEql => Constant::Bool(int(0)? == int(1)?),
                 IntNeq => Constant::Bool(int(0)? != int(1)?),
@@ -437,14 +424,14 @@ impl Semantics {
                 FltLt => Constant::Bool(flt(0)?.lt(flt(1)?)),
                 FltLe => Constant::Bool(flt(0)?.le(flt(1)?)),
 
-                NatToInt => return Some(scalar_result(nat_to_int(nat(0)?), Constant::Int)),
-                NatToFlt => Constant::Flt(Floating::of_natural(&Natural::from(nat(0)?))),
+                NatToInt => Constant::Int(Integer::from(nat(0)?.clone())),
+                NatToFlt => Constant::Flt(Floating::of_natural(nat(0)?)),
                 IntToNat => return Some(scalar_result(int_to_nat(int(0)?), Constant::Nat)),
-                IntToFlt => Constant::Flt(Floating::of_integer(&Integer::from(int(0)?))),
+                IntToFlt => Constant::Flt(Floating::of_integer(int(0)?)),
                 FltToNat => return Some(scalar_result(flt_to_nat(flt(0)?), Constant::Nat)),
                 FltToInt => return Some(scalar_result(flt_to_int(flt(0)?), Constant::Int)),
-                ByteToNat => Constant::Nat(byte(0)? as u32),
-                NatToByte => Constant::Byte(nat(0)? as u8),
+                ByteToNat => Constant::Nat(Natural::from(byte(0)?)),
+                NatToByte => Constant::Byte(nat(0)?.to_u32()? as u8),
                 FltToLeBytes => Constant::Bin(
                     Grain::X,
                     PackedBin::from_bytes(flt(0)?.to_bits().to_le_bytes().to_vec()),
@@ -464,7 +451,7 @@ impl Semantics {
             _ => None,
         };
         let nat = |index: usize| match operands.get(index) {
-            Some(Constant::Nat(value)) => Some(*value),
+            Some(Constant::Nat(value)) => Some(value),
             _ => None,
         };
         let byte = |index: usize| match operands.get(index) {
@@ -478,16 +465,16 @@ impl Semantics {
 
         let compute = || -> Option<Result<Constant, TrapKind>> {
             Some(Ok(match operation {
-                BinLen(grain) => Constant::Nat(bin(0, grain)?.len(grain) as u32),
+                BinLen(grain) => Constant::Nat(Natural::from(bin(0, grain)?.len(grain))),
                 BinEql(grain) => Constant::Bool(bin(0, grain)? == bin(1, grain)?),
                 BinGet(Grain::X) => {
-                    return Some(match bin(0, Grain::X)?.byte(nat(1)? as usize) {
+                    return Some(match bin(0, Grain::X)?.byte(nat(1)?.to_usize()?) {
                         Some(byte) => Ok(Constant::Byte(byte)),
                         None => Err(TrapKind::IndexOutOfBounds),
                     });
                 }
                 BinGet(Grain::B) => {
-                    return Some(match bin(0, Grain::B)?.bit(nat(1)? as usize) {
+                    return Some(match bin(0, Grain::B)?.bit(nat(1)?.to_usize()?) {
                         Some(bit) => Ok(Constant::Bool(bit)),
                         None => Err(TrapKind::IndexOutOfBounds),
                     });
@@ -495,7 +482,7 @@ impl Semantics {
                 // A window is `(start, length)`; the packed view takes a half-open range, so the end is computed here and an end past `usize` is the out-of-bounds it would have been anyway.
                 BinSlice(grain) => {
                     let value = bin(0, grain)?;
-                    let (start, count) = (nat(1)? as usize, nat(2)? as usize);
+                    let (start, count) = (nat(1)?.to_usize()?, nat(2)?.to_usize()?);
                     return Some(
                         match start
                             .checked_add(count)
@@ -545,7 +532,6 @@ fn scalar_result<T>(
     match result {
         Ok(value) => Ok(wrap(value)),
         Err(ScalarTrap::DivisionByZero) => Err(TrapKind::DivisionByZero),
-        Err(ScalarTrap::Overflow) => Err(TrapKind::IntegerOverflow),
         Err(ScalarTrap::ConversionRange) => Err(TrapKind::ConversionRange),
     }
 }

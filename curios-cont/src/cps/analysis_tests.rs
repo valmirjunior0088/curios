@@ -1,5 +1,7 @@
 //! What the SCC and known-value analyses derive before any pass rewrites a node.
 
+use curios_num::Natural;
+
 use {
     super::test_support::call_graph,
     crate::cps::{
@@ -45,7 +47,7 @@ fn two_functions_passing_references(mutual: bool) -> (CpsModule, CpsFunId, CpsFu
         callee: CpsCallee::Closure(q),
         args: vec![match mutual {
             true => CpsAtom::Fun(a),
-            false => CpsAtom::Literal(CpsLiteral::Nat(1)),
+            false => CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
         }],
         return_to: b_return,
     });
@@ -122,7 +124,7 @@ fn a_recursive_member_fed_one_function(shape: FeedShape) -> (CpsModule, CpsValue
 
     let f_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: f_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
     }));
     module.define_function(
         f,
@@ -172,7 +174,10 @@ fn a_recursive_member_fed_one_function(shape: FeedShape) -> (CpsModule, CpsValue
 
     let call_g = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(g),
-        args: vec![CpsAtom::Fun(f), CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![
+            CpsAtom::Fun(f),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+        ],
         return_to: h_return,
     });
     let h_body = match shape {
@@ -360,7 +365,7 @@ fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_s
     );
     let call = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: continuation,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(7))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))],
     }));
     let body = module.add_node(CpsNode::LetCont {
         continuations: vec![continuation],
@@ -380,13 +385,13 @@ fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_s
 
     assert_eq!(
         known_values(&module).get(&parameter),
-        Some(&CpsAtom::Literal(CpsLiteral::Nat(7)))
+        Some(&CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))))
     );
     assert!(inline_single_use_continuations(&mut module));
     assert!(matches!(
         module.node(call),
         Some(CpsNode::ApplyCont(CpsEdge { args, .. }))
-            if args == &[CpsAtom::Literal(CpsLiteral::Nat(7))]
+            if args == &[CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))]
     ));
 }
 
@@ -400,7 +405,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
     let callee_return = module.reserve_continuation();
     let callee_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: callee_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(3))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(3u32)))],
     }));
     module.define_function(
         callee,
@@ -433,7 +438,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
     });
     let jump = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: join,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(7))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))],
     }));
     let calling = module.reserve_continuation();
     let jumping = module.reserve_continuation();
@@ -519,7 +524,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
     );
     let untaken_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: return_cont,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
     }));
     module.define_continuation(
         untaken,
@@ -569,16 +574,16 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
             CpsEdge {
                 target: join,
                 args: vec![
-                    CpsAtom::Literal(CpsLiteral::Nat(1)),
-                    CpsAtom::Literal(CpsLiteral::Nat(10)),
+                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(10u32))),
                 ],
             },
         )]),
         default: Some(CpsEdge {
             target: join,
             args: vec![
-                CpsAtom::Literal(CpsLiteral::Nat(1)),
-                CpsAtom::Literal(CpsLiteral::Nat(20)),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(20u32))),
             ],
         }),
     });
@@ -599,7 +604,10 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
     module.verify().unwrap();
 
     let known = known_values(&module);
-    assert_eq!(known.get(&tag), Some(&CpsAtom::Literal(CpsLiteral::Nat(1))));
+    assert_eq!(
+        known.get(&tag),
+        Some(&CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))))
+    );
     assert!(
         !known.contains_key(&payload),
         "the payload differs per transfer"

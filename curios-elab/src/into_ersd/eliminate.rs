@@ -8,7 +8,7 @@ use {
     super::{
         Atom, Carrier, Cases, Context, Error, InductArm, InductDecl, InductType, Intrinsic,
         IntrinsicHead, Lowering, Many, Match, Nat, Outcome, Scope, Subterm, Telescope, Term, Three,
-        Two, emitted, expect_intrinsic_head, infer, is_erasable, narrow_nat, reduce_with,
+        Two, emitted, expect_intrinsic_head, infer, is_erasable, narrow_case_key, reduce_with,
         refine_head,
     },
     curios_core::{Free, Level},
@@ -263,7 +263,7 @@ impl Lowering {
             // Where the case key stops being unbounded. Core dispatches on a `Natural`; `curios-ersd`'s `NatCase` is a `u32`, and a key past it is refused here rather than wrapped — the discipline of [Numeric carriers narrow by refusing, never by changing a value](../../../../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md), and the same narrowing every `Nat` literal takes.
             //
             // Located at the arm's body, which is the only span the arm has: `walk` would otherwise attach the enclosing `Match`'s, and a synthesized match has none at all.
-            let key = narrow_nat(value).map_err(|error| match body.span() {
+            let key = narrow_case_key(value).map_err(|error| match body.span() {
                 Some(span) => error.at(span),
                 None => error,
             })?;

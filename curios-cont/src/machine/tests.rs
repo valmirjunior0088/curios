@@ -1,3 +1,5 @@
+use curios_num::Natural;
+
 use {
     super::{
         MachineFunction, MachineInstruction, MachineOperand, MachineTerminator, MachineValueId,
@@ -17,7 +19,7 @@ fn return_sentinel_becomes_machine_return_without_a_block() {
     let return_cont = source.reserve_continuation();
     let body = source.add_node(CpsNode::ApplyCont(CpsEdge {
         target: return_cont,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(7))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))],
     }));
     source.define_function(
         function,
@@ -38,7 +40,7 @@ fn return_sentinel_becomes_machine_return_without_a_block() {
     };
     assert!(matches!(
         operands.as_slice(),
-        [MachineOperand::Literal(CpsLiteral::Nat(7))]
+        [MachineOperand::Literal(CpsLiteral::Nat(value))] if *value == Natural::from(7u32)
     ));
 }
 
@@ -51,7 +53,7 @@ fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
     let callee_return = source.reserve_continuation();
     let callee_body = source.add_node(CpsNode::ApplyCont(CpsEdge {
         target: callee_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
     }));
     source.define_function(
         callee,
@@ -99,7 +101,7 @@ fn exit_stays_direct_termination_through_structurization() {
     let main = source.reserve_function();
     let return_cont = source.reserve_continuation();
     let body = source.add_node(CpsNode::Exit {
-        value: Some(CpsAtom::Literal(CpsLiteral::Nat(7))),
+        value: Some(CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))),
     });
     source.define_function(
         main,
@@ -145,7 +147,7 @@ fn repeated_first_class_use_materializes_one_closure() {
     let target_return = source.reserve_continuation();
     let target_body = source.add_node(CpsNode::ApplyCont(CpsEdge {
         target: target_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
     }));
     source.define_function(
         target,
@@ -162,7 +164,7 @@ fn repeated_first_class_use_materializes_one_closure() {
     let consumer_return = source.reserve_continuation();
     let consumer_body = source.add_node(CpsNode::ApplyCont(CpsEdge {
         target: consumer_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
     }));
     source.define_function(
         consumer,
@@ -208,7 +210,7 @@ fn mixed_direct_and_escaping_use_keeps_the_call_direct() {
     let target_return = source.reserve_continuation();
     let target_body = source.add_node(CpsNode::ApplyCont(CpsEdge {
         target: target_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
     }));
     source.define_function(
         target,
@@ -270,7 +272,7 @@ fn exiting_main() -> (CpsModule, CpsFunId) {
     let main = source.reserve_function();
     let return_cont = source.reserve_continuation();
     let body = source.add_node(CpsNode::Exit {
-        value: Some(CpsAtom::Literal(CpsLiteral::Nat(0))),
+        value: Some(CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))),
     });
     source.define_function(
         main,
@@ -319,7 +321,7 @@ fn verify_rejects_a_nested_block_with_no_lexical_owner() {
     });
     let enter = source.add_node(CpsNode::ApplyCont(CpsEdge {
         target: resume,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
     }));
     let body = source.add_node(CpsNode::LetCont {
         continuations: vec![resume],

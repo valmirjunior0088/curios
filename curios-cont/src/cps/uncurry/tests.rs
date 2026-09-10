@@ -1,3 +1,5 @@
+use curios_num::Natural;
+
 use {
     super::{uncurry_returns, uncurryable},
     crate::{
@@ -222,7 +224,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
     };
     let bound = module.add_node(CpsNode::LetValue {
         result: argument,
-        value: CpsValueExpr::Literal(CpsLiteral::Nat(1)),
+        value: CpsValueExpr::Literal(CpsLiteral::Nat(Natural::from(1u32))),
         next: first,
     });
     // Both members are introduced here, or a `Known` call to either names a function out of scope.
@@ -466,7 +468,7 @@ fn a_forwarded_application_declines_uncurrying() {
 
     let apply = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Closure(forwarded),
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
         return_to: caller_ret,
     });
     module.define_continuation(

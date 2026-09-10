@@ -1,5 +1,7 @@
 //! Specializing an SCC, a call pattern, and a jump pattern, each against its clone and growth budget.
 
+use curios_num::Natural;
+
 use {
     super::test_support::{
         PolymorphicLoop, has_switch, known_callee, polymorphic_loop, tagged_consumer, tagged_join,
@@ -31,7 +33,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
     let helper_return = module.reserve_continuation();
     let helper_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: helper_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
     }));
     module.define_function(
         helper,
@@ -93,7 +95,10 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
 
     let call = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(loop_function),
-        args: vec![CpsAtom::Fun(helper), CpsAtom::Literal(CpsLiteral::Nat(3))],
+        args: vec![
+            CpsAtom::Fun(helper),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(3u32))),
+        ],
         return_to: entry_return,
     });
     let body = module.add_node(CpsNode::LetFun {
@@ -417,8 +422,8 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
     let ctor = module.add_node(CpsNode::LetValue {
         result: root,
         value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(0)),
-            CpsAtom::Literal(CpsLiteral::Nat(5)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(5u32))),
         ]),
         next: call,
     });

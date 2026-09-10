@@ -4,7 +4,7 @@
 
 use {
     curios_abi::ForeignFunction,
-    curios_num::Floating,
+    curios_num::{Floating, Integer, Natural},
     curios_utilities::{Arena, ArenaId, Grain, PackedBin, id},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -17,6 +17,22 @@ use {
 ///
 /// It is named here rather than at each use because two readers need it and they are not the same kind of reader: [`CpsIntrinsic::effect`] states *which* operations it makes partial, and `into_wasm` emits the guards that enforce it. Above this crate nothing knows the number — `curios-core` computes unbounded and `curios-ersd`'s constants carry whatever the theory produced — which is why every guard for it lives below, and why this constant may not travel upward.
 pub(crate) const ENVELOPE_BITS: i32 = 31;
+
+/// Whether `value` is a `Nat` the envelope can box.
+///
+/// Stated here beside the width rather than at the materialization site, because two readers ask it — the emitter, which must raise a refusal instead of a constant, and constant hoisting, which must keep such a value out of the const table since a trap is no constant instruction.
+pub(crate) fn nat_fits_envelope(value: &Natural) -> bool {
+    value
+        .to_u32()
+        .is_some_and(|value| value >> ENVELOPE_BITS == 0)
+}
+
+/// Whether `value` is an `Int` the envelope can box: in range exactly when the bit below the sign agrees with it.
+pub(crate) fn int_fits_envelope(value: &Integer) -> bool {
+    value
+        .to_i32()
+        .is_some_and(|value| value >> (ENVELOPE_BITS - 1) == value >> ENVELOPE_BITS)
+}
 
 // Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see `documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md`.
 id!(CpsNodeId, "~n");
@@ -34,8 +50,8 @@ impl CpsFunId {
 /// A literal operand. `Flt` holds the bitwise [`Floating`] rather than an `f64` so that the derived equality is identity on the bit pattern: under IEEE equality a NaN literal is unequal to itself, and a pass comparing an edge it rebuilt against the edge it read would report a change on every round — `forward_continuations` did exactly that, and the fixpoint ran to its backstop on any module carrying a `NaN` through a jump.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CpsLiteral {
-    Nat(u32),
-    Int(i32),
+    Nat(Natural),
+    Int(Integer),
     Flt(Floating),
     Bin(Grain, PackedBin),
 }
@@ -832,8 +848,8 @@ impl CpsModule {
     /// What a transfer hands a slot its construction never wrote: what the constructed row's field holds there — zero for a register slot, since a register has no null, and null, as [`CpsAtom::Filler`], for a reference. `None` is a tuple, whose every field is a reference.
     pub fn pad(&self, row: Option<CpsRowId>, index: usize) -> CpsAtom {
         match row.map(|row| self.row(row).slots[index]) {
-            Some(CpsSlot::Tag | CpsSlot::Nat) => CpsAtom::Literal(CpsLiteral::Nat(0)),
-            Some(CpsSlot::Int) => CpsAtom::Literal(CpsLiteral::Int(0)),
+            Some(CpsSlot::Tag | CpsSlot::Nat) => CpsAtom::Literal(CpsLiteral::Nat(Natural::zero())),
+            Some(CpsSlot::Int) => CpsAtom::Literal(CpsLiteral::Int(Integer::from(0u32))),
             Some(CpsSlot::Flt) => CpsAtom::Literal(CpsLiteral::Flt(Floating::zero(false))),
             Some(CpsSlot::List | CpsSlot::Closure(_) | CpsSlot::Row(_) | CpsSlot::Opaque)
             | None => CpsAtom::Filler,

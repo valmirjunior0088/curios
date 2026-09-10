@@ -1,5 +1,7 @@
 //! Inlining a known call and a single-use continuation, and what each must clone rather than share.
 
+use curios_num::Natural;
+
 use {
     super::test_support::capture_unmentioned_by_owner,
     crate::cps::inline::{inline_known_calls, inline_single_use_continuations},
@@ -49,7 +51,7 @@ fn continuation_beta_rewrites_parameters_captured_by_nested_functions() {
     );
     let call = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: continuation,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(7))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))],
     }));
     let body = module.add_node(CpsNode::LetCont {
         continuations: vec![continuation],
@@ -70,7 +72,7 @@ fn continuation_beta_rewrites_parameters_captured_by_nested_functions() {
     assert!(matches!(
         module.node(nested_body),
         Some(CpsNode::ApplyCont(CpsEdge { args, .. }))
-            if args == &[CpsAtom::Literal(CpsLiteral::Nat(7))]
+            if args == &[CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))]
     ));
     module.verify().unwrap();
 }
@@ -116,7 +118,7 @@ fn known_call_inlining_clones_recursive_local_continuations() {
     );
     let call = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(callee),
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
         return_to: entry_return,
     });
     let body = module.add_node(CpsNode::LetFun {

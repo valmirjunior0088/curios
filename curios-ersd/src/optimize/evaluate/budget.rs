@@ -29,6 +29,11 @@ pub(crate) const DESCRIPTION_COPY_NODE_LIMIT: usize = 128;
 /// Steps were already pooled across a pass and growth was not, which is the asymmetry this closes. Exhaustion stops further replacements for the pass; partial evaluation that folds less is always sound, so the bound costs optimization rather than correctness.
 pub(super) const PASS_REIFY_BUDGET: usize = 100_000;
 
+/// The widest scalar a fold may build, in bits — [`MAX_REIFY_BYTES`] read in the unit a numeral grows in.
+///
+/// The erased carriers are unbounded, so multiplication and the left shifts can be asked to build without bound while costing one step each; a step budget cannot see that and a width can. A constant wider than one replacement may reify could not be placed in the module even if it were built, so this is the point past which folding is work with no possible use. Exhaustion here is a *decline*, like every other bound in this module: partial evaluation that folds less is always sound.
+pub(super) const MAX_FOLD_BITS: u64 = MAX_REIFY_BYTES as u64 * 8;
+
 /// The step fuel shared across a pass, plus the per-candidate counters.
 pub(super) struct Budget {
     pool: usize,

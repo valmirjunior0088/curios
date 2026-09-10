@@ -335,7 +335,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
         .map(|field| module.add_value(Some(format!("field#{field}"))))
         .collect();
     let mut rebuilt = Vec::with_capacity(arity);
-    rebuilt.push(CpsAtom::Literal(CpsLiteral::Nat(tag)));
+    rebuilt.push(CpsAtom::Literal(CpsLiteral::Nat(Natural::from(tag))));
     rebuilt.extend(field_params.iter().map(|&p| CpsAtom::Value(p)));
     let entry = module.add_node(CpsNode::LetValue {
         result: old_param,
@@ -412,8 +412,10 @@ pub(super) fn tagged_tuple_values(
             } => (value, fields, Some(*row)),
             _ => continue,
         };
-        if let Some(CpsAtom::Literal(CpsLiteral::Nat(tag))) = fields.first() {
-            result.insert(*value, (*tag, fields.clone(), row));
+        if let Some(CpsAtom::Literal(CpsLiteral::Nat(tag))) = fields.first()
+            && let Some(tag) = tag.to_u32()
+        {
+            result.insert(*value, (tag, fields.clone(), row));
         }
     }
     result
@@ -543,7 +545,7 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
         .map(|field| module.add_value(Some(format!("field#{field}"))))
         .collect();
     let mut rebuilt = Vec::with_capacity(arity);
-    rebuilt.push(CpsAtom::Literal(CpsLiteral::Nat(tag)));
+    rebuilt.push(CpsAtom::Literal(CpsLiteral::Nat(Natural::from(tag))));
     rebuilt.extend(field_params.iter().map(|&p| CpsAtom::Value(p)));
     let entry = module.add_node(CpsNode::LetValue {
         result: old_param,

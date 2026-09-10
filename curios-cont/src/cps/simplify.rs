@@ -1,6 +1,7 @@
 use {
     super::evaluate::evaluate,
     super::*,
+    curios_num::{Integer, Natural},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -178,7 +179,12 @@ pub(super) fn simplify_nodes(module: &mut CpsModule) -> bool {
                 cases,
                 default,
             } => {
-                if let Some(edge) = cases.get(tag).or(default.as_ref()).cloned() {
+                if let Some(edge) = tag
+                    .to_u32()
+                    .and_then(|tag| cases.get(&tag))
+                    .or(default.as_ref())
+                    .cloned()
+                {
                     *node = CpsNode::ApplyCont(edge);
                     changed = true;
                 }
@@ -199,30 +205,25 @@ enum IdentityFold {
 /// Trap discipline: `nat_add`/`nat_mul` wrap and `nat_sub` is monus, so the only runtime trap of the `MayTrap` members is the backend's i31 range check on the result. Every fold here returns either an operand that is already a live in-range value or a literal inside the envelope, and a `/ 1` or `% 1` divisor can never be the trapping zero, so no trap is added or dropped. `Flt` deliberately has no laws here: `x + 0.0` is not the identity on `-0.0`.
 fn identity_fold(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<IdentityFold> {
     let [left, right] = args else { return None };
-    let nat = |atom: &CpsAtom| match atom {
-        CpsAtom::Literal(CpsLiteral::Nat(value)) => Some(*value),
-        _ => None,
-    };
-    let int = |atom: &CpsAtom| match atom {
-        CpsAtom::Literal(CpsLiteral::Int(value)) => Some(*value),
-        _ => None,
-    };
+    // The carriers are unbounded, so a law tests a literal against a value rather than reading a machine scalar out of it.
+    let nat = |atom: &CpsAtom, expected: u32| matches!(atom, CpsAtom::Literal(CpsLiteral::Nat(value)) if *value == Natural::from(expected));
+    let int = |atom: &CpsAtom, expected: i32| matches!(atom, CpsAtom::Literal(CpsLiteral::Int(value)) if *value == Integer::from(expected));
     let operand = |atom: &CpsAtom| Some(IdentityFold::Operand(atom.clone()));
 
     match op {
         CpsIntrinsic::NatAdd | CpsIntrinsic::NatOr | CpsIntrinsic::NatXor => {
-            if nat(right) == Some(0) {
+            if nat(right, 0) {
                 operand(left)
-            } else if nat(left) == Some(0) {
+            } else if nat(left, 0) {
                 operand(right)
             } else {
                 None
             }
         }
         CpsIntrinsic::IntAdd | CpsIntrinsic::IntOr | CpsIntrinsic::IntXor => {
-            if int(right) == Some(0) {
+            if int(right, 0) {
                 operand(left)
-            } else if int(left) == Some(0) {
+            } else if int(left, 0) {
                 operand(right)
             } else {
                 None
@@ -233,42 +234,42 @@ fn identity_fold(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<IdentityFold> {
         | CpsIntrinsic::NatShl
         | CpsIntrinsic::NatShr
         | CpsIntrinsic::IntShl
-        | CpsIntrinsic::IntShr => (nat(right) == Some(0)).then(|| operand(left)).flatten(),
-        CpsIntrinsic::IntSub => (int(right) == Some(0)).then(|| operand(left)).flatten(),
+        | CpsIntrinsic::IntShr => (nat(right, 0)).then(|| operand(left)).flatten(),
+        CpsIntrinsic::IntSub => (int(right, 0)).then(|| operand(left)).flatten(),
         CpsIntrinsic::NatMul => {
-            if nat(right) == Some(1) {
+            if nat(right, 1) {
                 operand(left)
-            } else if nat(left) == Some(1) {
+            } else if nat(left, 1) {
                 operand(right)
-            } else if nat(right) == Some(0) || nat(left) == Some(0) {
-                Some(IdentityFold::Literal(CpsLiteral::Nat(0)))
+            } else if nat(right, 0) || nat(left, 0) {
+                Some(IdentityFold::Literal(CpsLiteral::Nat(Natural::zero())))
             } else {
                 None
             }
         }
         CpsIntrinsic::IntMul => {
-            if int(right) == Some(1) {
+            if int(right, 1) {
                 operand(left)
-            } else if int(left) == Some(1) {
+            } else if int(left, 1) {
                 operand(right)
-            } else if int(right) == Some(0) || int(left) == Some(0) {
-                Some(IdentityFold::Literal(CpsLiteral::Int(0)))
+            } else if int(right, 0) || int(left, 0) {
+                Some(IdentityFold::Literal(CpsLiteral::Int(Integer::from(0u32))))
             } else {
                 None
             }
         }
-        CpsIntrinsic::NatDiv => (nat(right) == Some(1)).then(|| operand(left)).flatten(),
-        CpsIntrinsic::IntDiv => (int(right) == Some(1)).then(|| operand(left)).flatten(),
+        CpsIntrinsic::NatDiv => (nat(right, 1)).then(|| operand(left)).flatten(),
+        CpsIntrinsic::IntDiv => (int(right, 1)).then(|| operand(left)).flatten(),
         CpsIntrinsic::NatRem => {
-            (nat(right) == Some(1)).then_some(IdentityFold::Literal(CpsLiteral::Nat(0)))
+            (nat(right, 1)).then_some(IdentityFold::Literal(CpsLiteral::Nat(Natural::zero())))
         }
         CpsIntrinsic::IntRem => {
-            (int(right) == Some(1)).then_some(IdentityFold::Literal(CpsLiteral::Int(0)))
+            (int(right, 1)).then_some(IdentityFold::Literal(CpsLiteral::Int(Integer::from(0u32))))
         }
-        CpsIntrinsic::NatAnd => (nat(right) == Some(0) || nat(left) == Some(0))
-            .then_some(IdentityFold::Literal(CpsLiteral::Nat(0))),
-        CpsIntrinsic::IntAnd => (int(right) == Some(0) || int(left) == Some(0))
-            .then_some(IdentityFold::Literal(CpsLiteral::Int(0))),
+        CpsIntrinsic::NatAnd => (nat(right, 0) || nat(left, 0))
+            .then_some(IdentityFold::Literal(CpsLiteral::Nat(Natural::zero()))),
+        CpsIntrinsic::IntAnd => (int(right, 0) || int(left, 0))
+            .then_some(IdentityFold::Literal(CpsLiteral::Int(Integer::from(0u32)))),
         _ => None,
     }
 }

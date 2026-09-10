@@ -1,3 +1,5 @@
+use curios_num::Natural;
+
 use {
     super::{split_parameters, split_workers},
     crate::{
@@ -64,14 +66,17 @@ fn loop_module() -> (CpsModule, CpsFunId, CpsContId, CpsValueId) {
         result: next,
         value: CpsValueExpr::Tuple(vec![
             CpsAtom::Value(bumped),
-            CpsAtom::Literal(CpsLiteral::Nat(7)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
         ]),
         next: spin,
     });
     let bump = module.add_node(CpsNode::LetIntrinsic {
         result: bumped,
         op: CpsIntrinsic::NatAdd,
-        args: vec![CpsAtom::Value(read), CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![
+            CpsAtom::Value(read),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+        ],
         next: build,
     });
     let project = module.add_node(CpsNode::LetIntrinsic {
@@ -97,8 +102,8 @@ fn loop_module() -> (CpsModule, CpsFunId, CpsContId, CpsValueId) {
     let plant = module.add_node(CpsNode::LetValue {
         result: seed,
         value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(0)),
-            CpsAtom::Literal(CpsLiteral::Nat(7)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
         ]),
         next: enter,
     });
@@ -234,16 +239,16 @@ fn two_joins_module(chained: bool) -> (CpsModule, CpsContId, CpsContId) {
     let plant_second = module.add_node(CpsNode::LetValue {
         result: second_pair,
         value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
-            CpsAtom::Literal(CpsLiteral::Nat(8)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(8u32))),
         ]),
         next: enter,
     });
     let plant_first = module.add_node(CpsNode::LetValue {
         result: first_pair,
         value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(0)),
-            CpsAtom::Literal(CpsLiteral::Nat(7)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
         ]),
         next: plant_second,
     });
@@ -426,8 +431,8 @@ fn a_mixed_origin_is_declined() {
     let build = module.add_node(CpsNode::LetValue {
         result: built,
         value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
-            CpsAtom::Literal(CpsLiteral::Nat(2)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
         ]),
         next: split_paths,
     });
@@ -506,10 +511,10 @@ fn variant_loop_module() -> (CpsModule, CpsContId, CpsValueId) {
     let build = module.add_node(CpsNode::LetValue {
         result: wide,
         value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
-            CpsAtom::Literal(CpsLiteral::Nat(7)),
-            CpsAtom::Literal(CpsLiteral::Nat(8)),
-            CpsAtom::Literal(CpsLiteral::Nat(9)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(8u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(9u32))),
         ]),
         next: spin,
     });
@@ -535,7 +540,7 @@ fn variant_loop_module() -> (CpsModule, CpsContId, CpsValueId) {
     }));
     let plant = module.add_node(CpsNode::LetValue {
         result: narrow,
-        value: CpsValueExpr::Tuple(vec![CpsAtom::Literal(CpsLiteral::Nat(0))]),
+        value: CpsValueExpr::Tuple(vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))]),
         next: enter,
     });
     let body = module.add_node(CpsNode::LetCont {
@@ -733,14 +738,14 @@ fn merged_argument_module() -> (CpsModule, CpsFunId, CpsValueId) {
     let build_wide = module.add_node(CpsNode::LetValue {
         result: wide,
         value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(0)),
-            CpsAtom::Literal(CpsLiteral::Nat(5)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(5u32))),
         ]),
         next: pick,
     });
     let build_narrow = module.add_node(CpsNode::LetValue {
         result: narrow,
-        value: CpsValueExpr::Tuple(vec![CpsAtom::Literal(CpsLiteral::Nat(1))]),
+        value: CpsValueExpr::Tuple(vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))]),
         next: build_wide,
     });
     let scope = module.add_node(CpsNode::LetCont {
@@ -894,13 +899,19 @@ fn walk_module() -> (CpsModule, crate::CpsContId) {
     let slice = module.add_node(CpsNode::LetIntrinsic {
         result: tail,
         op: CpsIntrinsic::BinRest(curios_utilities::Grain::X),
-        args: vec![CpsAtom::Value(window), CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![
+            CpsAtom::Value(window),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+        ],
         next: spin,
     });
     let read = module.add_node(CpsNode::LetIntrinsic {
         result: head,
         op: CpsIntrinsic::BinGet(curios_utilities::Grain::X),
-        args: vec![CpsAtom::Value(window), CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![
+            CpsAtom::Value(window),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+        ],
         next: slice,
     });
     let measure = module.add_node(CpsNode::LetIntrinsic {
@@ -1077,10 +1088,10 @@ fn row_consumer(slots: Vec<CpsSlot>, pad_second: bool) -> (CpsModule, CpsFunId) 
         value: CpsValueExpr::Row(
             row,
             vec![
-                CpsAtom::Literal(CpsLiteral::Nat(1)),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
                 match pad_second {
                     true => CpsAtom::Filler,
-                    false => CpsAtom::Literal(CpsLiteral::Nat(2)),
+                    false => CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
                 },
             ],
         ),
@@ -1106,8 +1117,8 @@ fn row_consumer(slots: Vec<CpsSlot>, pad_second: bool) -> (CpsModule, CpsFunId) 
         value: CpsValueExpr::Row(
             row,
             vec![
-                CpsAtom::Literal(CpsLiteral::Nat(0)),
-                CpsAtom::Literal(CpsLiteral::Nat(7)),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
             ],
         ),
         next: call_first,

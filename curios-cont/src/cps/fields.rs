@@ -20,6 +20,7 @@ use {
         analysis::analyze_calls, demand_of, demands, optimize::PARAM_SPLIT_GROWTH_LIMIT, origins,
         simplify::rewire_node,
     },
+    curios_num::Natural,
     curios_utilities::Grain,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -897,7 +898,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
                         });
                         vec![
                             atom,
-                            CpsAtom::Literal(CpsLiteral::Nat(0)),
+                            CpsAtom::Literal(CpsLiteral::Nat(Natural::zero())),
                             CpsAtom::Value(length),
                         ]
                     }

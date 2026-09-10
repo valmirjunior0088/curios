@@ -1,9 +1,11 @@
+use curios_num::Natural;
+
 use crate::*;
 
 /// let one = 1 (item); entry { let doubled = NatAdd(one, one); return doubled }
 fn doubling_module() -> Result<Module, VerifyError> {
     let mut builder = ErsdBuilder::new();
-    let one = builder.constant(Constant::Nat(1));
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     let bound = builder.item_value(Some("one".into()), Rhs::Alias(Atom::Constant(one)));
     builder.open_block();
     let doubled = builder.let_value(
@@ -32,8 +34,8 @@ fn a_recursive_function_builds_through_reserve_and_define() {
 
     // fn loop(n) = switch n { 0 => 0, _ => loop(NatSub(n, 1)) }
     let n = builder.value(Some("n".into()));
-    let zero = builder.constant(Constant::Nat(0));
-    let one = builder.constant(Constant::Nat(1));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     builder.open_block();
     let zero_case = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
     builder.open_block();
@@ -69,7 +71,7 @@ fn a_recursive_function_builds_through_reserve_and_define() {
     builder.item_functions(vec![function]);
 
     builder.open_block();
-    let ten = builder.constant(Constant::Nat(10));
+    let ten = builder.constant(Constant::Nat(Natural::from(10u32)));
     let run = builder.let_value(
         None,
         Rhs::Apply {

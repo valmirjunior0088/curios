@@ -1,36 +1,59 @@
-//! `flt_min`/`flt_max` were here, pinning that an equal pair answers by sign and that a NaN operand declines the fold. Neither is this module's to state any more: the model answers both — 754-2019's `minimum`/`maximum`, NaN propagated — and `Floating`'s own edge grid checks them against the host over every pair of the IEEE corners. What is left of `Flt` here is the *carrier* narrowing, which has no oracle but the carrier's width.
+//! `flt_min`/`flt_max` were here, pinning that an equal pair answers by sign and that a NaN operand declines the fold. Neither is this module's to state any more: the model answers both — 754-2019's `minimum`/`maximum`, NaN propagated — and `Floating`'s own edge grid checks them against the host over every pair of the IEEE corners. What is left is the *allowance*, which has no oracle but the caller's own resources.
 
-use super::{ScalarTrap, int_shl, nat_shl};
+use {
+    super::{int_mul, int_shl, nat_mul, nat_shl},
+    crate::{Integer, Natural},
+};
 
-/// A left shift refuses every product past its carrier, at every count.
+fn nat(value: u64) -> Natural {
+    Natural::from(value)
+}
+
+fn int(value: i64) -> Integer {
+    Integer::from(value)
+}
+
+/// `2^power`, for stating an expected result whose magnitude no literal spells.
+fn pow2(power: u64) -> Natural {
+    Natural::from(1u64)
+        .checked_shl(Natural::from(power))
+        .expect("a power the host holds")
+}
+
+/// A growing operation answers the exact value inside its allowance and declines outside it — never a truncation, and never an allocation the caller did not sanction.
 ///
-/// Widening the intermediate to `u64` is not the condition on its own: a large enough count pushes the value past *its* top too, and `2^30 << 40` — `2^70`, whose low sixty-four bits are zero — came back as a representable `Ok(0)`. `curios-core`'s unbounded `Natural` is the oracle, so the only permitted answers are the exact product or a refusal, and a folded `0` where the backend traps is a third one.
+/// The allowance is stated in *result* bits rather than operand bits, because that is the quantity the caller is protecting: `2^30 << 40` is `2^70`, which two thirty-bit operands do not predict.
 #[test]
-fn a_left_shift_refuses_every_product_past_the_carrier() {
-    for (value, shift) in [
-        (1_u32 << 30, 40_u32),
-        (1 << 30, 34),
-        (1 << 30, 33),
-        (2, 63),
-        (1 << 20, 44),
-    ] {
-        assert_eq!(
-            nat_shl(value, shift),
-            Err(ScalarTrap::Overflow),
-            "nat_shl({value}, {shift})"
-        );
-    }
-    for (value, shift) in [(1_i32 << 29, 35_u32), (-(1 << 29), 35), (1 << 29, 40)] {
-        assert_eq!(
-            int_shl(value, shift),
-            Err(ScalarTrap::Overflow),
-            "int_shl({value}, {shift})"
-        );
-    }
+fn a_growing_operation_declines_past_its_allowance() {
+    assert_eq!(nat_shl(&nat(1 << 30), &nat(40), 128), Some(pow2(70)));
+    assert_eq!(nat_shl(&nat(1 << 30), &nat(40), 64), None);
+    assert_eq!(
+        int_shl(&int(-(1 << 29)), &nat(35), 128),
+        Some(-Integer::from(pow2(64)))
+    );
+    assert_eq!(int_shl(&int(-(1 << 29)), &nat(35), 32), None);
 
-    // The clamp decides only what had already left the carrier: zero is zero at every count, and an in-range product still folds.
-    assert_eq!(nat_shl(0, 40), Ok(0));
-    assert_eq!(nat_shl(3, 29), Ok(3 << 29));
-    assert_eq!(int_shl(0, 40), Ok(0));
-    assert_eq!(int_shl(-1, 31), Ok(i32::MIN));
+    assert_eq!(nat_mul(&nat(1 << 40), &nat(1 << 40), 128), Some(pow2(80)));
+    assert_eq!(nat_mul(&nat(1 << 40), &nat(1 << 40), 64), None);
+    assert_eq!(
+        int_mul(&int(1 << 40), &int(-(1 << 40)), 128),
+        Some(-Integer::from(pow2(80)))
+    );
+    assert_eq!(int_mul(&int(1 << 40), &int(-(1 << 40)), 64), None);
+}
+
+/// Zero is answered before the count is consulted, so an allowance never leaves a fold undone for a value that could not grow.
+#[test]
+fn a_shift_of_zero_folds_under_any_allowance() {
+    assert_eq!(nat_shl(&Natural::zero(), &nat(1 << 40), 0), Some(nat(0)));
+    assert_eq!(int_shl(&int(0), &nat(1 << 40), 0), Some(int(0)));
+}
+
+/// A count no machine word holds declines rather than being reduced modulo anything: the theory's answer is a numeral with that many bits, and refusing to build it is the only answer that is not a different number.
+#[test]
+fn a_count_past_a_machine_word_declines() {
+    let huge = pow2(70);
+
+    assert_eq!(nat_shl(&nat(1), &huge, u64::MAX), None);
+    assert_eq!(int_shl(&int(1), &huge, u64::MAX), None);
 }

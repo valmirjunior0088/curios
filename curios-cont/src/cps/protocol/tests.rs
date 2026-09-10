@@ -1,3 +1,5 @@
+use curios_num::Natural;
+
 use {
     super::{ReturnProtocol, ReturnShape, return_protocols, split_returns},
     crate::{
@@ -343,7 +345,10 @@ fn row_returning_callee(module: &mut CpsModule, name: &str, row: CpsRowId) -> Cp
         result: built,
         value: CpsValueExpr::Row(
             row,
-            vec![CpsAtom::Literal(CpsLiteral::Nat(1)), CpsAtom::Value(field)],
+            vec![
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+                CpsAtom::Value(field),
+            ],
         ),
         next: ret,
     });

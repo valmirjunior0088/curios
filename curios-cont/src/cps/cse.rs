@@ -5,6 +5,7 @@
 use {
     super::simplify::{rewire_node, rewrite_atoms},
     super::*,
+    curios_num::{Integer, Natural},
     curios_utilities::{Grain, PackedBin},
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -16,8 +17,8 @@ use {
 enum AtomKey {
     Value(u32),
     Fun(u32),
-    Nat(u32),
-    Int(i32),
+    Nat(Natural),
+    Int(Integer),
     Flt(u64),
     Bin(Grain, PackedBin),
     Filler,
@@ -27,8 +28,8 @@ fn atom_key(atom: &CpsAtom) -> AtomKey {
     match atom {
         CpsAtom::Value(value) => AtomKey::Value(value.index() as u32),
         CpsAtom::Fun(function) => AtomKey::Fun(function.index() as u32),
-        CpsAtom::Literal(CpsLiteral::Nat(value)) => AtomKey::Nat(*value),
-        CpsAtom::Literal(CpsLiteral::Int(value)) => AtomKey::Int(*value),
+        CpsAtom::Literal(CpsLiteral::Nat(value)) => AtomKey::Nat(value.clone()),
+        CpsAtom::Literal(CpsLiteral::Int(value)) => AtomKey::Int(value.clone()),
         CpsAtom::Literal(CpsLiteral::Flt(value)) => AtomKey::Flt(value.to_bits()),
         CpsAtom::Literal(CpsLiteral::Bin(grain, value)) => AtomKey::Bin(*grain, value.clone()),
         CpsAtom::Filler => AtomKey::Filler,

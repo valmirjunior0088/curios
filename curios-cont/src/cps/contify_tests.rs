@@ -1,5 +1,7 @@
 //! Turning a function into a continuation, and the call shapes that forbid it.
 
+use curios_num::Natural;
+
 use {
     super::test_support::{capture_unmentioned_by_owner, helper_called},
     crate::cps::{contify::contify_calls, optimize::optimize},
@@ -61,7 +63,7 @@ fn contifies_a_single_entry_tail_loop_and_bridges_switch_returns() {
     );
     let call = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(loop_function),
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
         return_to: entry_return,
     });
     let body = module.add_node(CpsNode::LetFun {
@@ -171,7 +173,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
     // main() = outer(0)
     let call_outer = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(outer),
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
         return_to: entry_return,
     });
     let body = module.add_node(CpsNode::LetFun {

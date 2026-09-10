@@ -8,6 +8,7 @@ use {
         EmissionData, EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue,
         EmissionValueName, Panic,
     },
+    crate::cps::{int_fits_envelope, nat_fits_envelope},
     curios_utilities::{Grain, PackedBin},
     std::collections::HashMap,
 };
@@ -15,6 +16,7 @@ use {
 /// A structural identity for constant data, with element names already canonicalized to interned const names — so two aggregates of equal shape and equal constant elements collide however they were spelled.
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum ConstKey {
+    /// A machine scalar rather than the unbounded carrier: the guard above admits only what the envelope can box, so nothing wider ever reaches the const table.
     Nat(u32),
     Int(i32),
     Flt(u64),
@@ -83,17 +85,17 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
         match data {
             // An out-of-range scalar materialises as a trap, which is no constant instruction and must stay at its execution point rather than fail validation or trap at instantiation — so it is never a candidate, which also keeps every aggregate over it inline.
             EmissionData::Nat(value) => {
-                if value >> 31 == 0 {
+                if let Some(value) = nat_fits_envelope(value).then(|| value.to_u32()).flatten() {
                     consts
                         .scalars
-                        .insert(name.clone(), (ConstKey::Nat(*value), data.clone()));
+                        .insert(name.clone(), (ConstKey::Nat(value), data.clone()));
                 }
             }
             EmissionData::Int(value) => {
-                if value >> 30 == value >> 31 {
+                if let Some(value) = int_fits_envelope(value).then(|| value.to_i32()).flatten() {
                     consts
                         .scalars
-                        .insert(name.clone(), (ConstKey::Int(*value), data.clone()));
+                        .insert(name.clone(), (ConstKey::Int(value), data.clone()));
                 }
             }
             EmissionData::Flt(value) => {

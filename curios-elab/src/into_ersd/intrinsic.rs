@@ -4,23 +4,19 @@
 
 use {
     super::{Context, Error, Intrinsic, Lowering, Nat, Natural, Outcome, Subterm, Term, emitted},
-    curios_num::Integer,
     curios_utilities::Grain,
 };
 
-/// The `Nat` half of the Core border: an unbounded type-level numeral to the erased `u32`, refusing what it cannot represent rather than wrapping it.
+/// The `Nat` half of the Core border, which no longer narrows: the erased carriers are unbounded too, so a numeral crosses whole and only materialization in `curios-cont` refuses one the envelope cannot box.
 ///
 /// `pub(super)` because it is not this module's alone — `eliminate`'s switch narrows its case keys through it. Core keys a `Cases::Switch` by `Natural`, so the width is chosen here, at the one boundary that owns it, and every literal reaching Ersd is narrowed by the same routine.
-pub(super) fn narrow_nat(value: &Natural) -> Result<u32, Error> {
+/// A natural-dispatch case key as `curios-ersd`'s `NatCase` carries it, refusing one no branch table indexes.
+///
+/// The one narrowing left at this boundary. A `Nat` *value* is unbounded from here down — the erased carriers hold whatever the theory computed and only materialization refuses — but a dispatch *key* is not a value: it selects an arm, and an arm is a slot in a table the backend builds.
+pub(super) fn narrow_case_key(value: &Natural) -> Result<u32, Error> {
     value
         .to_u32()
-        .ok_or_else(|| Error::nat_overflow(value.clone()))
-}
-
-fn narrow_int(value: &Integer) -> Result<i32, Error> {
-    value
-        .to_i32()
-        .ok_or_else(|| Error::int_overflow(value.clone()))
+        .ok_or_else(|| Error::nat_case_key_overflow(value.clone()))
 }
 
 fn nat_type() -> Term {
@@ -188,9 +184,11 @@ pub(super) fn erase_intrinsic(
         Intrinsic::ByteLt(l, r) => op!(curios_ersd::Operation::ByteLt, byte_type, l, r),
         Intrinsic::ByteLe(l, r) => op!(curios_ersd::Operation::ByteLe, byte_type, l, r),
 
-        Intrinsic::Nat(Nat::Zero) => Ok(lowering.constant(curios_ersd::Constant::Nat(0))),
+        Intrinsic::Nat(Nat::Zero) => {
+            Ok(lowering.constant(curios_ersd::Constant::Nat(Natural::zero())))
+        }
         Intrinsic::Nat(Nat::Succ(spine, inner)) => {
-            let spine = narrow_nat(spine)?;
+            let spine = spine.clone();
             if matches!(
                 inner.as_ref(),
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))
@@ -234,9 +232,7 @@ pub(super) fn erase_intrinsic(
         Intrinsic::NatShl(l, r) => op!(curios_ersd::Operation::NatShl, nat_type, l, r),
         Intrinsic::NatShr(l, r) => op!(curios_ersd::Operation::NatShr, nat_type, l, r),
 
-        Intrinsic::Int(value) => {
-            Ok(lowering.constant(curios_ersd::Constant::Int(narrow_int(value)?)))
-        }
+        Intrinsic::Int(value) => Ok(lowering.constant(curios_ersd::Constant::Int(value.clone()))),
         Intrinsic::IntEql(l, r) => op!(curios_ersd::Operation::IntEql, int_type, l, r),
         Intrinsic::IntNeq(l, r) => op!(curios_ersd::Operation::IntNeq, int_type, l, r),
         Intrinsic::IntAdd(l, r) => op!(curios_ersd::Operation::IntAdd, int_type, l, r),

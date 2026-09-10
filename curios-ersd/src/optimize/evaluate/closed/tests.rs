@@ -1,3 +1,5 @@
+use curios_num::Natural;
+
 use {
     super::evaluate_closed_terms,
     crate::*,
@@ -53,11 +55,11 @@ fn define_host(builder: &mut ErsdBuilder, make: FunctionId, one: ConstantId, nam
 fn two_block_candidates() -> Module {
     let mut builder = ErsdBuilder::new();
     let make = define_maker(&mut builder);
-    let one = builder.constant(Constant::Nat(1));
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
     define_host(&mut builder, make, one, "first");
     define_host(&mut builder, make, one, "second");
 
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     builder.open_block();
     let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
     builder.set_entry(entry);
@@ -140,7 +142,7 @@ fn define_knot(builder: &mut ErsdBuilder) -> (ValueId, FunctionId, FunctionId) {
     let method_body = builder.seal_block(Terminator::Return(Atom::Value(x)));
     builder.define_function(method, Some("method".into()), vec![x], method_body);
     builder.let_functions(vec![method]);
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     let built = builder.let_value(
         None,
         Rhs::Product {
@@ -187,7 +189,7 @@ fn a_knots_function_is_not_copied_out_of_its_initializer() {
     let host_body = builder.seal_block(Terminator::Return(Atom::Value(projected)));
     builder.define_function(host, Some("host".into()), vec![], host_body);
     builder.item_functions(vec![host]);
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     builder.open_block();
     let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
     builder.set_entry(entry);
@@ -235,7 +237,7 @@ fn a_knots_function_still_folds_within_its_initializer() {
     let init = builder.seal_block(Terminator::Return(Atom::Value(picked)));
     let group = builder.rec_group(vec![], vec![(dict, init)]);
     builder.item_rec(group);
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     builder.open_block();
     let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
     builder.set_entry(entry);
@@ -278,7 +280,7 @@ fn sequence_candidate(
 
 /// Finish the fixture with an entry returning zero, fold it, and read the constant `value` was folded to.
 fn folded(mut builder: ErsdBuilder, value: ValueId) -> Constant {
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     builder.open_block();
     let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
     builder.set_entry(entry);
@@ -313,7 +315,7 @@ fn a_peel_hands_the_cons_arm_the_suffix_after_the_element() {
         Grain::X,
         PackedBin::from_bytes(vec![1, 2, 3]),
     ));
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
 
     let candidate = sequence_candidate(&mut builder, Atom::Constant(bytes), |builder, s| {
         builder.open_block();
@@ -344,16 +346,19 @@ fn a_peel_hands_the_cons_arm_the_suffix_after_the_element() {
         )
     });
 
-    assert_eq!(folded(builder, candidate), Constant::Nat(2));
+    assert_eq!(
+        folded(builder, candidate),
+        Constant::Nat(Natural::from(2u32))
+    );
 }
 
 /// `uncons s | [] => 0 | [_, ..t] => ListGet(ListSlice(t, 1, 1), 0)` over `[10, 20, 30]`: a slice of the suffix indexes from the suffix's own start, not the list's, so the answer is the third element.
 #[test]
 fn a_list_suffix_is_a_window_whose_slices_index_from_its_own_start() {
     let mut builder = ErsdBuilder::new();
-    let operands = Vec::from(
-        [10, 20, 30].map(|element| Atom::Constant(builder.constant(Constant::Nat(element)))),
-    );
+    let operands = Vec::from([10, 20, 30].map(|element| {
+        Atom::Constant(builder.constant(Constant::Nat(Natural::from(element as u32))))
+    }));
     let list = builder.item_value(
         Some("l".into()),
         Rhs::Sequence {
@@ -361,8 +366,8 @@ fn a_list_suffix_is_a_window_whose_slices_index_from_its_own_start() {
             operands,
         },
     );
-    let zero = builder.constant(Constant::Nat(0));
-    let one = builder.constant(Constant::Nat(1));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
 
     let candidate = sequence_candidate(&mut builder, Atom::Value(list), |builder, s| {
         builder.open_block();
@@ -404,7 +409,10 @@ fn a_list_suffix_is_a_window_whose_slices_index_from_its_own_start() {
         )
     });
 
-    assert_eq!(folded(builder, candidate), Constant::Nat(30));
+    assert_eq!(
+        folded(builder, candidate),
+        Constant::Nat(Natural::from(30u32))
+    );
 }
 
 /// `fold s | x[] => 0 | x[_, ..t]; acc => BinLen(t) + acc` over `x[1, 2, 3]`: the last element sees the empty suffix and each earlier one the suffix after it, so the suffix lengths sum to three.
@@ -415,7 +423,7 @@ fn a_fold_step_sees_the_suffix_after_its_element() {
         Grain::X,
         PackedBin::from_bytes(vec![1, 2, 3]),
     ));
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
 
     let candidate = sequence_candidate(&mut builder, Atom::Constant(bytes), |builder, s| {
         builder.open_block();
@@ -455,7 +463,10 @@ fn a_fold_step_sees_the_suffix_after_its_element() {
         )
     });
 
-    assert_eq!(folded(builder, candidate), Constant::Nat(3));
+    assert_eq!(
+        folded(builder, candidate),
+        Constant::Nat(Natural::from(3u32))
+    );
 }
 
 /// `id(f) = f`, bound as an item, so applying it to a function yields that function as a closure over nothing.
@@ -502,7 +513,7 @@ fn a_closure_over_a_block_bound_value() -> Module {
     builder.define_function(host, Some("host".into()), vec![], host_body);
     builder.item_functions(vec![host]);
 
-    let zero = builder.constant(Constant::Nat(0));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     builder.open_block();
     let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
     builder.set_entry(entry);

@@ -1,3 +1,5 @@
+use curios_num::Natural;
+
 use {
     super::*,
     crate::{CpsAtom, CpsEdge, CpsLiteral, CpsNode, CpsValueExpr},
@@ -17,7 +19,7 @@ fn module_naming(names: &[Option<&str>]) -> CpsModule {
         }));
         let body = module.add_node(CpsNode::LetValue {
             result,
-            value: CpsValueExpr::Literal(CpsLiteral::Nat(0)),
+            value: CpsValueExpr::Literal(CpsLiteral::Nat(Natural::from(0u32))),
             next: return_node,
         });
 

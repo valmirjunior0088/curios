@@ -4,6 +4,8 @@
 //!
 //! `pub(super)` rather than private: these are consumed by sibling modules across `cps`, and nothing outside it.
 
+use curios_num::Natural;
+
 use {
     crate::cps::analysis::function_nodes,
     crate::{
@@ -138,8 +140,8 @@ pub(super) fn polymorphic_loop(second_is_mul: bool, padding: usize) -> Polymorph
             result: dead,
             op: CpsIntrinsic::NatAdd,
             args: vec![
-                CpsAtom::Literal(CpsLiteral::Nat(0)),
-                CpsAtom::Literal(CpsLiteral::Nat(0)),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
             ],
             next: loop_body,
         });
@@ -158,7 +160,10 @@ pub(super) fn polymorphic_loop(second_is_mul: bool, padding: usize) -> Polymorph
     let x1 = module.add_value(Some("x1".into()));
     let call2 = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(loop_fn),
-        args: vec![CpsAtom::Fun(second), CpsAtom::Literal(CpsLiteral::Nat(4))],
+        args: vec![
+            CpsAtom::Fun(second),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(4u32))),
+        ],
         return_to: entry_return,
     });
     let k1 = module.reserve_continuation();
@@ -172,7 +177,10 @@ pub(super) fn polymorphic_loop(second_is_mul: bool, padding: usize) -> Polymorph
     );
     let call1 = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(loop_fn),
-        args: vec![CpsAtom::Fun(add), CpsAtom::Literal(CpsLiteral::Nat(3))],
+        args: vec![
+            CpsAtom::Fun(add),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(3u32))),
+        ],
         return_to: k1,
     });
     let outer = module.add_node(CpsNode::LetCont {
@@ -237,7 +245,7 @@ pub(super) fn helper_called(two_sites: bool) -> (CpsModule, CpsFunId) {
     let inner = if two_sites {
         let call2 = module.add_node(CpsNode::ApplyFun {
             callee: CpsCallee::Known(helper),
-            args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
+            args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
             return_to: entry_return,
         });
         let param = module.add_value(None);
@@ -252,7 +260,7 @@ pub(super) fn helper_called(two_sites: bool) -> (CpsModule, CpsFunId) {
         );
         let call1 = module.add_node(CpsNode::ApplyFun {
             callee: CpsCallee::Known(helper),
-            args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+            args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
             return_to: bridge,
         });
         module.add_node(CpsNode::LetCont {
@@ -262,7 +270,7 @@ pub(super) fn helper_called(two_sites: bool) -> (CpsModule, CpsFunId) {
     } else {
         module.add_node(CpsNode::ApplyFun {
             callee: CpsCallee::Known(helper),
-            args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+            args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
             return_to: entry_return,
         })
     };
@@ -328,7 +336,7 @@ pub(super) fn capture_unmentioned_by_owner() -> (CpsModule, CpsFunId, CpsFunId) 
 
     let call_owner = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(owner),
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
         return_to: entry_return,
     });
     let group = module.add_node(CpsNode::LetFun {
@@ -337,7 +345,7 @@ pub(super) fn capture_unmentioned_by_owner() -> (CpsModule, CpsFunId, CpsFunId) 
     });
     let body = module.add_node(CpsNode::LetValue {
         result: v,
-        value: CpsValueExpr::Literal(CpsLiteral::Nat(7)),
+        value: CpsValueExpr::Literal(CpsLiteral::Nat(Natural::from(7u32))),
         next: group,
     });
     module.define_function(
@@ -381,13 +389,13 @@ pub(super) fn tagged_consumer(
                 1,
                 CpsEdge {
                     target: consume_return,
-                    args: vec![CpsAtom::Literal(CpsLiteral::Nat(999))],
+                    args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(999u32)))],
                 },
             ),
         ]),
         default: Some(CpsEdge {
             target: consume_return,
-            args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+            args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
         }),
     });
     let project_val = module.add_node(CpsNode::LetIntrinsic {
@@ -408,8 +416,8 @@ pub(super) fn tagged_consumer(
             result: dead,
             op: CpsIntrinsic::NatAdd,
             args: vec![
-                CpsAtom::Literal(CpsLiteral::Nat(0)),
-                CpsAtom::Literal(CpsLiteral::Nat(0)),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
             ],
             next: consume_body,
         });
@@ -437,7 +445,7 @@ pub(super) fn tagged_consumer(
         target: entry_return,
         args: vec![match results.last() {
             Some(&last) => CpsAtom::Value(last),
-            None => CpsAtom::Literal(CpsLiteral::Nat(0)),
+            None => CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
         }],
     }));
     for i in 0..count {
@@ -447,8 +455,8 @@ pub(super) fn tagged_consumer(
             CpsNode::LetValue {
                 result: value,
                 value: CpsValueExpr::Tuple(vec![
-                    CpsAtom::Literal(CpsLiteral::Nat(sites[i])),
-                    CpsAtom::Literal(CpsLiteral::Nat(i as u32)),
+                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(sites[i]))),
+                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(i as u32))),
                 ]),
                 next: calls[i],
             },
@@ -624,7 +632,7 @@ pub(super) fn tagged_join() -> (CpsModule, CpsContId, CpsNodeId, CpsNodeId, CpsV
     );
     let none_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: return_cont,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(7))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))],
     }));
     module.define_continuation(
         none_arm,
@@ -685,7 +693,7 @@ pub(super) fn tagged_join() -> (CpsModule, CpsContId, CpsNodeId, CpsNodeId, CpsV
     let build_some = module.add_node(CpsNode::LetValue {
         result: some_value,
         value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(0)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
             CpsAtom::Value(x),
         ]),
         next: some_jump,
@@ -704,7 +712,7 @@ pub(super) fn tagged_join() -> (CpsModule, CpsContId, CpsNodeId, CpsNodeId, CpsV
     }));
     let build_none = module.add_node(CpsNode::LetValue {
         result: none_value,
-        value: CpsValueExpr::Tuple(vec![CpsAtom::Literal(CpsLiteral::Nat(1))]),
+        value: CpsValueExpr::Tuple(vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))]),
         next: none_jump,
     });
     module.define_continuation(

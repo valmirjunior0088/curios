@@ -20,6 +20,7 @@ use {
         Atom, Block, BlockId, Constant, Function, FunctionId, Module, Operation, Rhs, Statement,
         StatementId, Terminator, walk::control_blocks,
     },
+    curios_num::{Integer, Natural},
     std::collections::BTreeSet,
 };
 
@@ -74,8 +75,8 @@ impl Monoid {
     /// The identity element seeded into the accumulator.
     fn identity(self) -> Constant {
         match self {
-            Monoid::NatAdd | Monoid::NatOr => Constant::Nat(0),
-            Monoid::IntOr => Constant::Int(0),
+            Monoid::NatAdd | Monoid::NatOr => Constant::Nat(Natural::zero()),
+            Monoid::IntOr => Constant::Int(Integer::from(0u32)),
         }
     }
 

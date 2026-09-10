@@ -1,5 +1,7 @@
 //! Dead code, jump forwarding, atom rewriting, and the intrinsic identities the simplifier folds.
 
+use curios_num::{Integer, Natural};
+
 use {
     super::test_support::unary_intrinsic_module,
     crate::cps::simplify::{
@@ -21,15 +23,15 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
     let return_cont = module.reserve_continuation();
     let return_node = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: return_cont,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
     }));
     let dead_total = module.add_value(Some("dead total".into()));
     let total_node = module.add_node(CpsNode::LetIntrinsic {
         result: dead_total,
         op: CpsIntrinsic::NatEql,
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
-            CpsAtom::Literal(CpsLiteral::Nat(2)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
         ],
         next: return_node,
     });
@@ -38,8 +40,8 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
         result: dead_trap,
         op: CpsIntrinsic::NatDiv,
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
-            CpsAtom::Literal(CpsLiteral::Nat(0)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
         ],
         next: total_node,
     });
@@ -92,8 +94,8 @@ fn dead_parameter_elimination_rewrites_known_calls() {
     let call = module.add_node(CpsNode::ApplyFun {
         callee: CpsCallee::Known(callee),
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
-            CpsAtom::Literal(CpsLiteral::Nat(2)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
         ],
         return_to: main_return,
     });
@@ -117,7 +119,7 @@ fn dead_parameter_elimination_rewrites_known_calls() {
     assert!(matches!(
         module.node(call),
         Some(CpsNode::ApplyFun { args, .. })
-            if args == &[CpsAtom::Literal(CpsLiteral::Nat(1))]
+            if args == &[CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))]
     ));
     module.verify().unwrap();
 }
@@ -147,7 +149,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
     let forwarding_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target,
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
             CpsAtom::Value(forwarded),
         ],
     }));
@@ -161,7 +163,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
     );
     let call = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: forwarding,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(7))],
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))],
     }));
     let body = module.add_node(CpsNode::LetCont {
         continuations: vec![forwarding, target],
@@ -184,8 +186,8 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
         Some(CpsNode::ApplyCont(CpsEdge { target: actual, args }))
             if *actual == target
                 && args == &[
-                    CpsAtom::Literal(CpsLiteral::Nat(1)),
-                    CpsAtom::Literal(CpsLiteral::Nat(7)),
+                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
                 ]
     ));
     module.verify().unwrap();
@@ -322,7 +324,7 @@ fn forwards_a_chain_of_projections_in_one_sweep() {
         result: t2,
         value: CpsValueExpr::Tuple(vec![
             CpsAtom::Value(p),
-            CpsAtom::Literal(CpsLiteral::Nat(2)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
         ]),
         next: read_q,
     });
@@ -336,7 +338,7 @@ fn forwards_a_chain_of_projections_in_one_sweep() {
         result: t1,
         value: CpsValueExpr::Tuple(vec![
             CpsAtom::Value(a),
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
+            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
         ]),
         next: read_p,
     });
@@ -374,19 +376,71 @@ fn forwards_a_chain_of_projections_in_one_sweep() {
 #[test]
 fn identity_folds_forward_the_surviving_operand() {
     let cases = [
-        (CpsIntrinsic::NatAdd, CpsLiteral::Nat(0), true),
-        (CpsIntrinsic::NatAdd, CpsLiteral::Nat(0), false),
-        (CpsIntrinsic::NatSub, CpsLiteral::Nat(0), true),
-        (CpsIntrinsic::NatMul, CpsLiteral::Nat(1), true),
-        (CpsIntrinsic::NatMul, CpsLiteral::Nat(1), false),
-        (CpsIntrinsic::NatDiv, CpsLiteral::Nat(1), true),
-        (CpsIntrinsic::NatOr, CpsLiteral::Nat(0), true),
-        (CpsIntrinsic::NatXor, CpsLiteral::Nat(0), false),
-        (CpsIntrinsic::NatShl, CpsLiteral::Nat(0), true),
-        (CpsIntrinsic::IntAdd, CpsLiteral::Int(0), false),
-        (CpsIntrinsic::IntSub, CpsLiteral::Int(0), true),
-        (CpsIntrinsic::IntMul, CpsLiteral::Int(1), true),
-        (CpsIntrinsic::IntShr, CpsLiteral::Nat(0), true),
+        (
+            CpsIntrinsic::NatAdd,
+            CpsLiteral::Nat(Natural::from(0u32)),
+            true,
+        ),
+        (
+            CpsIntrinsic::NatAdd,
+            CpsLiteral::Nat(Natural::from(0u32)),
+            false,
+        ),
+        (
+            CpsIntrinsic::NatSub,
+            CpsLiteral::Nat(Natural::from(0u32)),
+            true,
+        ),
+        (
+            CpsIntrinsic::NatMul,
+            CpsLiteral::Nat(Natural::from(1u32)),
+            true,
+        ),
+        (
+            CpsIntrinsic::NatMul,
+            CpsLiteral::Nat(Natural::from(1u32)),
+            false,
+        ),
+        (
+            CpsIntrinsic::NatDiv,
+            CpsLiteral::Nat(Natural::from(1u32)),
+            true,
+        ),
+        (
+            CpsIntrinsic::NatOr,
+            CpsLiteral::Nat(Natural::from(0u32)),
+            true,
+        ),
+        (
+            CpsIntrinsic::NatXor,
+            CpsLiteral::Nat(Natural::from(0u32)),
+            false,
+        ),
+        (
+            CpsIntrinsic::NatShl,
+            CpsLiteral::Nat(Natural::from(0u32)),
+            true,
+        ),
+        (
+            CpsIntrinsic::IntAdd,
+            CpsLiteral::Int(Integer::from(0)),
+            false,
+        ),
+        (
+            CpsIntrinsic::IntSub,
+            CpsLiteral::Int(Integer::from(0)),
+            true,
+        ),
+        (
+            CpsIntrinsic::IntMul,
+            CpsLiteral::Int(Integer::from(1)),
+            true,
+        ),
+        (
+            CpsIntrinsic::IntShr,
+            CpsLiteral::Nat(Natural::from(0u32)),
+            true,
+        ),
     ];
     for (op, literal, literal_on_right) in cases {
         let x = CpsValueId(0);
@@ -413,11 +467,31 @@ fn identity_folds_forward_the_surviving_operand() {
 #[test]
 fn identity_folds_pin_absorbing_results() {
     let cases = [
-        (CpsIntrinsic::NatMul, CpsLiteral::Nat(0), CpsLiteral::Nat(0)),
-        (CpsIntrinsic::NatAnd, CpsLiteral::Nat(0), CpsLiteral::Nat(0)),
-        (CpsIntrinsic::NatRem, CpsLiteral::Nat(1), CpsLiteral::Nat(0)),
-        (CpsIntrinsic::IntMul, CpsLiteral::Int(0), CpsLiteral::Int(0)),
-        (CpsIntrinsic::IntRem, CpsLiteral::Int(1), CpsLiteral::Int(0)),
+        (
+            CpsIntrinsic::NatMul,
+            CpsLiteral::Nat(Natural::from(0u32)),
+            CpsLiteral::Nat(Natural::from(0u32)),
+        ),
+        (
+            CpsIntrinsic::NatAnd,
+            CpsLiteral::Nat(Natural::from(0u32)),
+            CpsLiteral::Nat(Natural::from(0u32)),
+        ),
+        (
+            CpsIntrinsic::NatRem,
+            CpsLiteral::Nat(Natural::from(1u32)),
+            CpsLiteral::Nat(Natural::from(0u32)),
+        ),
+        (
+            CpsIntrinsic::IntMul,
+            CpsLiteral::Int(Integer::from(0)),
+            CpsLiteral::Int(Integer::from(0)),
+        ),
+        (
+            CpsIntrinsic::IntRem,
+            CpsLiteral::Int(Integer::from(1)),
+            CpsLiteral::Int(Integer::from(0)),
+        ),
     ];
     for (op, literal, expected) in cases {
         let x = CpsValueId(0);
@@ -448,11 +522,17 @@ fn identity_folds_leave_traps_and_flt_untouched() {
     let cases = [
         (
             CpsIntrinsic::NatDiv,
-            vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Nat(0))],
+            vec![
+                CpsAtom::Value(x),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            ],
         ),
         (
             CpsIntrinsic::NatAdd,
-            vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Nat(2))],
+            vec![
+                CpsAtom::Value(x),
+                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
+            ],
         ),
         (
             CpsIntrinsic::FltAdd,
