@@ -1,4 +1,4 @@
-//! The authored prelude as a root source: `/sys` synthesized from the host table, `/std` parsed from this crate's one tree. Shared by the build script, which lowers it into the archive, and by the tests, which hold the same sources to what the archive cannot check — that they lint clean.
+//! The prelude's two roots as sources: `/sys` synthesized from the host table and the intrinsic roster, `/std` parsed from this crate's one tree. Shared by the build script, which lowers it into the archive, and by the tests, which hold the same sources to what the archive cannot check — that they lint clean.
 
 use {
     curios_abi::host_ops,
@@ -61,12 +61,19 @@ fn source_qualifier(manifest: &Path, source: &Path) -> Qualifier {
     Qualifier::from(segments)
 }
 
-/// The two roots the fixed prelude is lowered from, with every authored module under `manifest` filed at its qualifier.
-///
-/// `/sys` is supplied whole by `sys_module`; `/std` is this crate's authored tree. There is no third root: what `/syn` held is now declared where its consumers are, and the compiler reaches those names through the registry rather than through a root of its own.
-pub(crate) fn authored_prelude(manifest: &Path) -> RootSource {
+/// The `/sys` root, supplied whole by `sys_module` — the first unit of the prelude fold, which nothing precedes.
+pub(crate) fn sys_source() -> RootSource {
     let mut modules = RootSource::supplied();
     modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops(), &SYNTAX));
+
+    modules
+}
+
+/// The `/std` root, with every authored module under `manifest` filed at its qualifier — the second unit, compiled against `/sys`.
+///
+/// Two sources rather than one because they are two units: `/std` references `/sys` and `/sys` references nothing above it, so the fold has an order and each half is lowered against what precedes it. What `/syn` once made impossible was exactly this — it sat between them and referenced both.
+pub(crate) fn std_source(manifest: &Path) -> RootSource {
+    let mut modules = RootSource::supplied();
     modules.insert_root(
         "std",
         RootKind::Privileged,

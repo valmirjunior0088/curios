@@ -8,7 +8,6 @@ use {
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_unit::Prefix,
-    std::slice::from_ref,
 };
 
 /// A fixture's entrypoint, stating its own type when the fixture is a bare *term* rather than a program.
@@ -73,7 +72,7 @@ pub(super) fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String>
     with_prelude(|prelude| {
         crate::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
-            Prefix::over(from_ref(&prelude)),
+            Prefix::over(prelude),
             &SYNTAX,
             &entrypoint,
             &RootSource::none(),
@@ -93,7 +92,7 @@ pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::M
     let (module, core_type, _foreigns, _records) = with_prelude(|prelude| {
         crate::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
-            Prefix::over(from_ref(&prelude)),
+            Prefix::over(prelude),
             &SYNTAX,
             &entrypoint,
             &RootSource::none(),
@@ -104,9 +103,10 @@ pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::M
     .unwrap();
     let module = curios_core::Zonked::project(&module).expect("the elaborated module is zonked");
     with_prelude(|prelude| {
+        let scope = Prefix::over(prelude);
         erase_unit(
             &mut Context::with_default_budget(SYNTAX),
-            Resumed::of(from_ref(&prelude.core()), prelude.arena()),
+            Resumed::of(&scope.cores(), scope.arena()),
             &module,
             Some(&core_type),
         )
@@ -147,13 +147,15 @@ pub(super) fn compile_with_units(
             .collect::<Vec<_>>();
         let produced = compile_units(
             DEFAULT_STEP_BUDGET,
-            Prefix::over(from_ref(&prelude)),
+            Prefix::over(prelude),
             &SYNTAX,
             &sources,
             None,
             |_| {},
         )?;
-        let scope = std::iter::once(prelude)
+        let scope = prelude
+            .iter()
+            .copied()
             .chain(produced.iter())
             .collect::<Vec<_>>();
 

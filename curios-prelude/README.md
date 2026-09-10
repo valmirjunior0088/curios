@@ -1,6 +1,6 @@
 # curios-prelude
 
-Curios's fixed prelude, certified by the independent kernel as a condition of this crate building: its build script restores the image `curios-prelude-archive` produced, walks every item with `curios-cert`, and fails the build on any refusal. Depend on this crate, never on `curios-prelude-archive` directly — that one hands out an image no kernel has seen. What the crate re-exports belongs to the crate rustdoc; what the image holds is `curios-prelude-archive/README.md`'s.
+Curios's fixed prelude, certified by the independent kernel as a condition of this crate building: its build script restores the two images `curios-prelude-archive` produced — `/sys`, then `/std` against it — walks every item with `curios-cert` in that order, and fails the build on any refusal. The environment is mounted root by root as the fold goes, because `/std` names `/sys` and an empty one would refuse every carrier it wraps. Depend on this crate, never on `curios-prelude-archive` directly — that one hands out an image no kernel has seen. What the crate re-exports belongs to the crate rustdoc; what the image holds is `curios-prelude-archive/README.md`'s.
 
 ## Design
 

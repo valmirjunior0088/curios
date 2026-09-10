@@ -1,7 +1,10 @@
 //! What this crate's own sources must be true of, beyond elaborating.
 
 use {
-    crate::{SYNTAX, sources::authored_prelude},
+    crate::{
+        SYNTAX,
+        sources::{std_source, sys_source},
+    },
     curios_text::{Formatted, prepare_prelude},
     std::{fs, path::PathBuf},
 };
@@ -61,11 +64,14 @@ fn every_authored_source_is_canonically_formatted() {
 #[test]
 fn every_authored_source_is_lint_clean() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let prepared = prepare_prelude(&authored_prelude(&manifest), &SYNTAX)
-        .unwrap_or_else(|error| panic!("the prelude failed to lower: {}", error.format()));
-    let lints = prepared
-        .lints()
+    // Both roots, in the order the build script folds them: `/std`'s imports resolve only against a lowered `/sys`, and an unresolved import is not a lint but a lowering failure.
+    let sys = prepare_prelude(&sys_source(), &[], &SYNTAX)
+        .unwrap_or_else(|error| panic!("/sys failed to lower: {}", error.format()));
+    let std = prepare_prelude(&std_source(&manifest), &[&sys], &SYNTAX)
+        .unwrap_or_else(|error| panic!("/std failed to lower: {}", error.format()));
+    let lints = [&sys, &std]
         .iter()
+        .flat_map(|prepared| prepared.lints())
         .map(|lint| lint.render())
         .collect::<Vec<_>>();
     assert!(

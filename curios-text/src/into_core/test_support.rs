@@ -264,7 +264,8 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
         .unwrap(),
     );
     // `/sys` states each decided precondition as `Holds` over one of its own comparisons, and names `Holds` and the two `Flt` bounds through the registry — so the scope has to hold whatever this fixture's registry points those at. Stubs, not definitions: these tests lower and never elaborate, so a name that resolves is the whole requirement.
-    let prepared = super::prepare_prelude(&modules, syntax()).map_err(|error| error.to_string())?;
+    let prepared =
+        super::prepare_prelude(&modules, &[], syntax()).map_err(|error| error.to_string())?;
     super::into_core_with_prelude(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),

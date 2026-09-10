@@ -1,6 +1,6 @@
 # curios-unit
 
-The compilation unit: what one unit hands its successors — one opaque artifact per stage — and the `Prefix` of borrowed predecessors each stage is compiled against. A compilation is a set of units folded over a dependency order; the standard library is a unit, a package is a unit, and the program asked for is the unit with no successors, which is what lets it own the empty prefix and carry the entrypoint. What `Unit` and `Prefix` expose belongs to the crate rustdoc.
+The compilation unit: what one unit hands its successors — one opaque artifact per stage — and the `Prefix` of borrowed predecessors each stage is compiled against. A compilation is a set of units folded over a dependency order; the intrinsic root is a unit, the standard library above it is a unit, a package is a unit, and the program asked for is the unit with no successors, which is what lets it own the empty prefix and carry the entrypoint. What `Unit` and `Prefix` expose belongs to the crate rustdoc.
 
 ## Design
 

@@ -156,7 +156,7 @@ fn a_supplied_source_and_a_directory_resolve_alike() {
     );
 
     let names = |source: &RootSource| {
-        super::prepare_prelude(source, syntax())
+        super::prepare_prelude(source, &[], syntax())
             .expect("a mounted unit lowers")
             .core()
             .items

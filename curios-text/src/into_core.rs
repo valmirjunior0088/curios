@@ -1337,7 +1337,7 @@ impl<'a> UnitSource<'a> {
 
 /// Lower one unit against the units already lowered.
 ///
-/// **This is the whole of what used to be three functions.** They differed in where their items sat, whether anything was already in scope, and where four counters started — every one of which is an argument here. `into_core` was the no-scope entry spelling, kept for `curios-text`'s own tests; `prepare_prelude` was the no-scope mounted spelling; `into_core_with_prelude` was the entry spelling with one predecessor. Three copies of one walk agreed by being read, which is the shape every configuration-dependent defect in this stage has had.
+/// **This is the whole of what used to be three functions.** They differed in where their items sat, whether anything was already in scope, and where four counters started — every one of which is an argument here. `into_core` was the no-scope entry spelling, kept for `curios-text`'s own tests; `prepare_prelude` was the mounted spelling; `into_core_with_prelude` was the entry spelling with one predecessor. Three copies of one walk agreed by being read, which is the shape every configuration-dependent defect in this stage has had.
 ///
 /// `scope` is in dependency order. Reads span it and the unit's own; writes only ever touch the unit's own, which is what makes a layer sufficient where a copy was used.
 pub fn into_core_unit(
@@ -1606,9 +1606,15 @@ pub fn into_core(
     ))
 }
 
-/// Resolve and lower the fixed roots once for build-time archival.
-pub fn prepare_prelude(input: &RootSource, syntax: &SyntaxRegistry) -> Result<PreparedText, Error> {
-    into_core_unit(&UnitSource::mounted(input), &[], syntax)
+/// Resolve and lower one fixed root once for build-time archival, against the fixed roots already lowered.
+///
+/// `scope` is empty for the first root and holds its predecessors for every later one: the fixed prelude is a fold like any other, so the root that references another is lowered after it rather than beside it.
+pub fn prepare_prelude(
+    input: &RootSource,
+    scope: &[&PreparedText],
+    syntax: &SyntaxRegistry,
+) -> Result<PreparedText, Error> {
+    into_core_unit(&UnitSource::mounted(input), scope, syntax)
 }
 
 /// The entry program lowered: its module, the floors elaboration's counters start above, its `foreign` rows, the unresolved-name table its `unbound variable` reports read from, and its lints.

@@ -41,9 +41,8 @@ fn the_standard_library_documents_from_the_archive() {
         |_| {},
         |prelude, _| {
             prelude
-                .text()
-                .documentation()
-                .cloned()
+                .iter()
+                .find_map(|root| root.text().documentation().cloned())
                 .ok_or_else(|| CompileError::failure("the image carries no record".to_string()))
         },
     )
@@ -198,9 +197,8 @@ fn no_internal_root_reaches_a_rendered_page() {
         |_| {},
         |prelude, _| {
             prelude
-                .text()
-                .documentation()
-                .cloned()
+                .iter()
+                .find_map(|root| root.text().documentation().cloned())
                 .ok_or_else(|| CompileError::failure("the image carries no record".to_string()))
         },
     )

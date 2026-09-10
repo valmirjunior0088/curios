@@ -1,3 +1,5 @@
+//! What the restored images must be true of, asserted over the prelude as the fold sees it: two roots in dependency order, whose claims are about their union unless the claim is about one of them.
+
 use {
     super::*,
     crate::SYNTAX,
@@ -9,6 +11,7 @@ use {
         Bound, Cases, Global, Item, Match, Subterm, Term, Visit, Zonked, derived_binder_floor,
     },
     curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedArena, Resumed, erase_unit},
+    curios_unit::Unit,
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet},
@@ -18,15 +21,24 @@ use {
     },
 };
 
+/// Every item the prelude declares, across its roots — what a claim about "the prelude" is a claim about, now that it is more than one unit.
+fn items<'a>(prelude: &'a [&'a Unit]) -> impl Iterator<Item = &'a Item> {
+    prelude.iter().flat_map(|root| root.core().items.iter())
+}
+
 #[test]
-fn embedded_archive_validates() {
-    validate_archive().unwrap();
+fn embedded_archives_validate() {
+    for archived in validate_archives() {
+        archived.unwrap();
+    }
 }
 
 /// A prelude test would ride into every compilation and surface in every downstream `curios test` run, so the standard library shipping none is a contract, not an accident of today's sources.
 #[test]
 fn the_stored_prelude_declares_no_tests() {
-    with_prelude(|prelude| assert!(prelude.core().tests.is_empty()));
+    with_prelude(|prelude| {
+        assert!(prelude.iter().all(|root| root.core().tests.is_empty()));
+    });
 }
 
 /// The declarations a literal expands into *per byte* are monomorphic, so no occurrence mints universe metavariables in the data's length.
@@ -45,7 +57,7 @@ fn string_literal_machinery_is_monomorphic() {
 
     with_prelude(|prelude| {
         let mut parameters = std::collections::BTreeMap::new();
-        for item in &prelude.core().items {
+        for item in items(prelude) {
             match item {
                 Item::Let(definition) => {
                     parameters.insert(
@@ -85,28 +97,28 @@ fn string_literal_machinery_is_monomorphic() {
 }
 
 #[test]
-fn truncated_archive_is_rejected() {
-    let truncated = &BYTES[..BYTES.len() / 2];
-    assert!(validate_bytes(truncated).is_err());
+fn a_truncated_archive_is_rejected() {
+    for (root, bytes) in ROOTS {
+        assert!(validate_bytes(root, &bytes[..bytes.len() / 2]).is_err());
+    }
 }
 
+/// The last root's, because the arena is cumulative: each unit's erasure resumes over the one before it, so the prefix's whole artifact is the arena the last root carries.
 #[test]
 fn ersd_clones_are_fresh() {
     with_prelude(|prelude| {
-        let first = prelude.arena();
+        let last = prelude.last().expect("the prelude has roots");
+        let first = last.arena();
         assert!(!first.is_empty());
         drop(first);
-        assert!(!prelude.arena().is_empty());
+        assert!(!last.arena().is_empty());
     });
 }
 
 #[test]
 fn every_syntax_target_is_present_after_restore() {
     with_prelude(|prelude| {
-        let names = prelude
-            .core()
-            .items
-            .iter()
+        let names = items(prelude)
             .flat_map(Item::declared_names)
             .cloned()
             .collect::<BTreeSet<_>>();
@@ -125,9 +137,12 @@ fn every_registered_concept_declares_its_method_after_restore() {
     with_prelude(|prelude| {
         for target in SYNTAX.concept_fields() {
             let concept = prelude
-                .core()
-                .concepts
-                .get(&Global::Authored(target.concept.qualifier()))
+                .iter()
+                .find_map(|root| {
+                    root.core()
+                        .concepts
+                        .get(&Global::Authored(target.concept.qualifier()))
+                })
                 .unwrap_or_else(|| panic!("missing concept {}", target.concept.symbol()));
             assert!(
                 concept.fields.iter().any(|field| field == target.field),
@@ -191,9 +206,21 @@ fn class(error: &KernelError) -> String {
 #[ignore = "inventory: measures where the kernel disagrees rather than asserting"]
 fn kernel_disagreements() {
     with_prelude(|prelude| {
-        let zonked = Zonked::project(prelude.core()).expect("the restored prelude is zonked");
-        let verdicts =
-            recheck_module_verdicts(&zonked, DEFAULT_STEP_BUDGET, &Globals::default(), SYNTAX);
+        let mut globals = Globals::default();
+        let mut verdicts = Vec::new();
+
+        // Each root against the roots before it, which is the environment it was elaborated in: walking `/std` from an empty one would tally a refusal per intrinsic carrier it wraps and say nothing about the kernel.
+        for root in prelude {
+            let core = root.core();
+            let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
+            verdicts.extend(recheck_module_verdicts(
+                &zonked,
+                DEFAULT_STEP_BUDGET,
+                &globals,
+                SYNTAX,
+            ));
+            globals.mount(core, root.binder_floor());
+        }
 
         let mut tally: BTreeMap<String, usize> = BTreeMap::new();
         for verdict in &verdicts {
@@ -203,7 +230,7 @@ fn kernel_disagreements() {
         println!(
             "\n=== {} refusals over {} prelude items ===",
             verdicts.len(),
-            prelude.core().items.len()
+            items(prelude).count()
         );
         for (class, count) in &tally {
             println!("  {count:>4}  {class}");
@@ -227,16 +254,17 @@ fn kernel_disagreements() {
 #[ignore = "parity: runs the whole-prelude walk twice, the second time uncached"]
 fn kernel_memo_parity() {
     with_prelude(|prelude| {
-        let zonked = Zonked::project(prelude.core()).expect("the restored prelude is zonked");
-        assert_eq!(
-            recheck_module_verdicts(&zonked, DEFAULT_STEP_BUDGET, &Globals::default(), SYNTAX),
-            recheck_module_verdicts_uncached(
-                &zonked,
-                DEFAULT_STEP_BUDGET,
-                &Globals::default(),
-                SYNTAX,
-            ),
-        );
+        let mut globals = Globals::default();
+
+        for root in prelude {
+            let core = root.core();
+            let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
+            assert_eq!(
+                recheck_module_verdicts(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX),
+                recheck_module_verdicts_uncached(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX),
+            );
+            globals.mount(core, root.binder_floor());
+        }
     });
 }
 
@@ -302,88 +330,108 @@ fn stored_prelude_measurements() {
     .expect("the restoring thread");
 
     with_prelude(|prelude| {
-        let core = prelude.core();
-        let zonked = Zonked::project(core).expect("the restored prelude is zonked");
-
-        // Averaged, because a single shot at this magnitude is not a measurement: the other three take long enough that one sample says something, and this one does not.
+        // Averaged, because a single shot at this magnitude is not a measurement: the other three take long enough that one sample says something, and this one does not. The last root's arena is the whole prefix's — see `ersd_clones_are_fresh`.
         const CLONES: u32 = 100;
+        let last = prelude.last().expect("the prelude has roots");
         let start = Instant::now();
         for _ in 0..CLONES {
-            drop(prelude.arena());
+            drop(last.arena());
         }
         let clone = start.elapsed() / CLONES;
 
-        let mut erasure_context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
-        let start = Instant::now();
-        erase_unit(
-            &mut erasure_context,
-            Resumed::of(&[], ErasedArena::default()),
-            &zonked,
-            None,
-        )
-        .expect("the stored prelude re-erases");
-        let erasure = start.elapsed();
-
-        let start = Instant::now();
-        let (verdicts, kernel) =
-            recheck_module_measured(&zonked, DEFAULT_STEP_BUDGET, &Globals::default(), SYNTAX);
-        let certification = start.elapsed();
-        let retained = kernel.retained();
-        let heaviest = kernel.heaviest_declaration();
-
-        let definitions: usize = core
-            .items
-            .iter()
-            .map(|item| match item {
-                Item::Let(_) => 1,
-                Item::Rec(rec) => rec.definitions().len(),
-            })
-            .sum();
-
-        println!("\n=== timings, over the stored image ===");
-        println!("  cold restore                 {:>10.1?}", cold);
+        println!("\n=== timings, over the stored images ===");
+        println!(
+            "  cold restore                 {:>10.1?}   (both roots)",
+            cold
+        );
         println!(
             "  erased-prefix clone          {:>10.1?}   (mean of {CLONES})",
             clone
         );
-        println!("  re-erasing one whole unit    {:>10.1?}", erasure);
-        println!(
-            "  certifying one whole unit    {:>10.1?}  ({} refusals)",
-            certification,
-            verdicts.len()
-        );
-        println!(
-            "  ...retaining                 {retained:>10} units   (elaborator side, over the re-erasure: {})",
-            erasure_context.retained()
-        );
-        println!(
-            "  ...heaviest declaration      {:>10} units   (depth {}, costing {} of them)",
-            heaviest.units(),
-            heaviest.peak_depth(),
-            heaviest.frame_units()
-        );
 
-        println!("\n=== shape ===");
-        println!("  items                        {:>10}", core.items.len());
-        println!("  definitions                  {definitions:>10}");
-        println!(
-            "  witnesses                    {:>10}",
-            core.witnesses.len()
-        );
-        println!(
-            "  inductives                   {:>10}",
-            core.induct_decls.len()
-        );
-        println!(
-            "  structures                   {:>10}",
-            core.struct_decls.len()
-        );
-        println!("  concepts                     {:>10}", core.concepts.len());
-        println!(
-            "  derived binder floor         {:>10}   (lowering watermark {})",
-            derived_binder_floor(core),
-            core.binder_floor
-        );
+        // Per root, against the roots before it: the figures are per *unit*, and the prelude is two of them, so summing them would report a cost no single operation has.
+        let mut globals = Globals::default();
+        let mut cores = Vec::new();
+        let mut arena = ErasedArena::default();
+
+        for root in prelude {
+            let core = root.core();
+            let name = core
+                .mounts
+                .first()
+                .map(|mount| mount.prefix.join())
+                .unwrap_or_else(|| "?".to_string());
+            let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
+
+            let mut erasure_context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
+            let start = Instant::now();
+            let erased = erase_unit(
+                &mut erasure_context,
+                Resumed::of(&cores, arena.clone()),
+                &zonked,
+                None,
+            )
+            .expect("a stored prelude root re-erases");
+            let erasure = start.elapsed();
+
+            let start = Instant::now();
+            let (verdicts, kernel) =
+                recheck_module_measured(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+            let certification = start.elapsed();
+            let retained = kernel.retained();
+            let heaviest = kernel.heaviest_declaration();
+
+            let definitions: usize = core
+                .items
+                .iter()
+                .map(|item| match item {
+                    Item::Let(_) => 1,
+                    Item::Rec(rec) => rec.definitions().len(),
+                })
+                .sum();
+
+            println!("\n=== /{name} ===");
+            println!("  re-erasing the unit          {:>10.1?}", erasure);
+            println!(
+                "  certifying the unit          {:>10.1?}  ({} refusals)",
+                certification,
+                verdicts.len()
+            );
+            println!(
+                "  ...retaining                 {retained:>10} units   (elaborator side, over the re-erasure: {})",
+                erasure_context.retained()
+            );
+            println!(
+                "  ...heaviest declaration      {:>10} units   (depth {}, costing {} of them)",
+                heaviest.units(),
+                heaviest.peak_depth(),
+                heaviest.frame_units()
+            );
+            println!("  items                        {:>10}", core.items.len());
+            println!("  definitions                  {definitions:>10}");
+            println!(
+                "  witnesses                    {:>10}",
+                core.witnesses.len()
+            );
+            println!(
+                "  inductives                   {:>10}",
+                core.induct_decls.len()
+            );
+            println!(
+                "  structures                   {:>10}",
+                core.struct_decls.len()
+            );
+            println!("  concepts                     {:>10}", core.concepts.len());
+            println!(
+                "  derived binder floor         {:>10}   (lowering watermark {})",
+                derived_binder_floor(core),
+                core.binder_floor
+            );
+
+            globals.mount(core, root.binder_floor());
+            cores.push(core);
+            arena = erased;
+        }
 
         println!(
             "\nNot measured here: the elaboration figures, which the build script already writes to `OUT_DIR/profile.tsv` (retake with `cargo build --release --package curios-prelude --features profile`), and the witness inventory B1 needs, which is a term walk.\n"
@@ -395,7 +443,6 @@ fn stored_prelude_measurements() {
 #[test]
 fn the_restored_prelude_pairs_every_mark_with_its_binder() {
     with_prelude(|prelude| {
-        let core = prelude.core();
         let drifted = Rc::new(RefCell::new(Vec::new()));
         let inspected = Rc::new(Cell::new(0usize));
         let (sink, counter) = (Rc::clone(&drifted), Rc::clone(&inspected));
@@ -427,11 +474,14 @@ fn the_restored_prelude_pairs_every_mark_with_its_binder() {
             }),
         );
 
-        for definition in core.items.iter().flat_map(Item::definitions) {
+        for definition in items(prelude).flat_map(Item::definitions) {
             definition.type_.traverse(&mut visit);
             definition.body.traverse(&mut visit);
         }
-        for declaration in core.induct_decls.values() {
+        for declaration in prelude
+            .iter()
+            .flat_map(|root| root.core().induct_decls.values())
+        {
             for (tag, constructor) in &declaration.constructors {
                 assert_eq!(
                     constructor.plicities().len(),

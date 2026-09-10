@@ -2,7 +2,7 @@
 //!
 //! **The scope-agnostic half is [`compile_entrypoint`], and it stays that way.** It takes a [`Prefix`] and cannot tell which unit is `/std`; nothing here changes that, and nothing there calls anything here. What this module adds is the *standard* prefix — the one every product puts in scope — so that the answer to "what does a Curios program get for free" is written once.
 //!
-//! It used to be written three times. The native product, the browser product and this crate's own test suite each spelled `with_prelude(|prelude| … Prefix::over(from_ref(&prelude)), &SYNTAX, …)` by hand, under the reading that naming the standard library is a product's decision. That reading survives — a product may still hand the fold any prefix it likes — but three callers deciding it identically is a missing function rather than a policy, and the third of them was not a product at all.
+//! It used to be written three times. The native product, the browser product and this crate's own test suite each spelled `with_prelude(|prelude| … Prefix::over(prelude), &SYNTAX, …)` by hand, under the reading that naming the standard library is a product's decision. That reading survives — a product may still hand the fold any prefix it likes — but three callers deciding it identically is a missing function rather than a policy, and the third of them was not a product at all.
 
 use {
     crate::{
@@ -12,10 +12,9 @@ use {
     },
     curios_prelude::{SYNTAX, with_prelude},
     curios_unit::{Prefix, Unit},
-    std::slice::from_ref,
 };
 
-/// Compile `entrypoint` against the fixed prelude — the one unit every product path puts in scope.
+/// Compile `entrypoint` against the fixed prelude — the two units every product path puts in scope, `/sys` then `/std`.
 ///
 /// Reports no progress. Every caller of this one is a test, an embedder or the browser, none of which has a terminal to narrate to; the CLI takes [`compile_with_units`] instead.
 pub fn compile_with_prelude<O>(
@@ -153,7 +152,9 @@ where
         cache,
         progress,
         |prelude, produced, progress| {
-            let scope = std::iter::once(prelude)
+            let scope = prelude
+                .iter()
+                .copied()
                 .chain(produced.iter())
                 .collect::<Vec<_>>();
 
@@ -167,13 +168,13 @@ where
     )
 }
 
-/// The standard scope with nothing compiled on top, handed to `then` as the prelude and the units produced in order — for a reader of what the fold established, such as a query answering from the last unit's own tables. The same fold [`check_units_with_prelude`] runs; nothing executes.
+/// The standard scope with nothing compiled on top, handed to `then` as the prelude's roots in dependency order and the units produced in order — for a reader of what the fold established, such as a query answering from the last unit's own tables. The same fold [`check_units_with_prelude`] runs; nothing executes.
 pub fn with_units<P, T>(
     budget: u64,
     units: &[curios_text::RootSource],
     cache: Option<&dyn Cache>,
     progress: P,
-    then: impl FnOnce(&Unit, &[Unit]) -> Result<T, CompileError>,
+    then: impl FnOnce(&[&Unit], &[Unit]) -> Result<T, CompileError>,
 ) -> Result<T, CompileError>
 where
     P: FnMut(Progress<'_>),
@@ -183,13 +184,13 @@ where
     })
 }
 
-/// The standard scope, assembled once: the fixed prelude, then `units` compiled in the order given against it — what every entry point in this module compiles against — handed to `then` as the prelude, the units produced, and the progress reporter for whatever follows. The one spelling of the scope this module exists to write once; the three callers differ only in what they do with it.
+/// The standard scope, assembled once: the fixed prelude's roots, then `units` compiled in the order given against them — what every entry point in this module compiles against — handed to `then` as the prelude, the units produced, and the progress reporter for whatever follows. The one spelling of the scope this module exists to write once; the three callers differ only in what they do with it.
 fn with_standard_units<P, T>(
     budget: u64,
     units: &[curios_text::RootSource],
     cache: Option<&dyn Cache>,
     mut progress: P,
-    then: impl FnOnce(&Unit, Vec<Unit>, &mut P) -> Result<T, CompileError>,
+    then: impl FnOnce(&[&Unit], Vec<Unit>, &mut P) -> Result<T, CompileError>,
 ) -> Result<T, CompileError>
 where
     P: FnMut(Progress<'_>),
@@ -201,7 +202,7 @@ where
             .collect::<Vec<_>>();
         let produced = compile_units(
             budget,
-            Prefix::over(from_ref(&prelude)),
+            Prefix::over(prelude),
             &SYNTAX,
             &sources,
             cache,
@@ -219,13 +220,7 @@ pub fn typecheck_with_prelude(
     loader: &curios_text::RootSource,
 ) -> Result<(curios_core::Module, Vec<String>), CompileError> {
     with_prelude(|prelude| {
-        crate::typecheck_reporting(
-            budget,
-            Prefix::over(from_ref(&prelude)),
-            &SYNTAX,
-            entrypoint,
-            loader,
-        )
+        crate::typecheck_reporting(budget, Prefix::over(prelude), &SYNTAX, entrypoint, loader)
     })
 }
 
@@ -244,13 +239,7 @@ pub fn typecheck_with_prelude_measured(
     CompileError,
 > {
     with_prelude(|prelude| {
-        crate::typecheck_measured(
-            budget,
-            Prefix::over(from_ref(&prelude)),
-            &SYNTAX,
-            entrypoint,
-            loader,
-        )
+        crate::typecheck_measured(budget, Prefix::over(prelude), &SYNTAX, entrypoint, loader)
     })
 }
 
@@ -259,9 +248,7 @@ pub fn recheck_with_prelude_measured(
     module: &curios_core::Zonked<curios_core::Module>,
     budget: u64,
 ) -> (Vec<curios_cert::Verdict>, curios_cert::Kernel) {
-    with_prelude(|prelude| {
-        crate::recheck_measured(module, budget, Prefix::over(from_ref(&prelude)), &SYNTAX)
-    })
+    with_prelude(|prelude| crate::recheck_measured(module, budget, Prefix::over(prelude), &SYNTAX))
 }
 
 /// Put `module` to the independent kernel with the fixed prelude in scope. See [`recheck`].
@@ -269,5 +256,5 @@ pub fn recheck_with_prelude(
     module: &curios_core::Zonked<curios_core::Module>,
     budget: u64,
 ) -> Vec<curios_cert::Verdict> {
-    with_prelude(|prelude| recheck(module, budget, Prefix::over(from_ref(&prelude)), &SYNTAX))
+    with_prelude(|prelude| recheck(module, budget, Prefix::over(prelude), &SYNTAX))
 }

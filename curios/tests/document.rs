@@ -146,10 +146,10 @@ fn output_names_another_directory() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// The image the compiler was built with, where its build script filed it: the one `.rkyv` every checkout that built `curios` has.
+/// The image the compiler was built with, where its build script filed it: the `/std` half of the prelude, which is the half that carries a record — every checkout that built `curios` has it.
 const IMAGE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../curios-prelude-archive/.artifacts/archive.rkyv"
+    "/../curios-prelude-archive/.artifacts/std.rkyv"
 );
 
 #[test]
