@@ -1,65 +1,19 @@
-//! The prelude's two roots as sources: `/sys` synthesized from the host table and the intrinsic roster, `/std` parsed from this crate's one tree. Shared by the build script, which lowers it into the archive, and by the tests, which hold the same sources to what the archive cannot check — that they lint clean.
+//! The prelude's two roots as sources: `/sys` synthesized from the host table and the intrinsic roster, `/std` read from the package this crate holds. Shared by the build script, which lowers them into the archive, and by the tests, which hold the same sources to what the archive cannot check — that they lint clean.
 
 use {
     curios_abi::host_ops,
-    curios_text::{Module, RootSource, sys_module},
+    curios_text::{RootSource, sys_module},
     curios_utilities::{Qualifier, RootKind},
-    std::{
-        fs,
-        path::{Path, PathBuf},
-    },
+    std::path::Path,
 };
 
 use crate::syntax::SYNTAX;
 
-/// Every prelude source under `manifest`, the index first, the rest in path order.
-pub(crate) fn source_files(manifest: &Path) -> Vec<PathBuf> {
-    let mut files = vec![manifest.join("std.crs")];
-    collect_crs(&manifest.join("std"), &mut files);
-    files.sort();
-    files
-}
+/// What `/std`'s manifest declares it is. Spelled here and in `std/curios.toml`, which `src/tests.rs` holds to agreement: reading the manifest here would make `curios-package` a build prerequisite of this crate, and so of every crate that reaches the prelude, which would re-elaborate the standard library on every manifest edit.
+pub(crate) const STD_NAME: &str = "std";
 
-fn collect_crs(directory: &Path, files: &mut Vec<PathBuf>) {
-    let mut entries = fs::read_dir(directory)
-        .unwrap_or_else(|error| panic!("failed to read {}: {error}", directory.display()))
-        .map(|entry| {
-            entry
-                .expect("failed to read prelude directory entry")
-                .path()
-        })
-        .collect::<Vec<_>>();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            collect_crs(&path, files);
-        } else if path.extension().is_some_and(|extension| extension == "crs") {
-            files.push(path);
-        }
-    }
-}
-
-fn parse_module(path: impl AsRef<Path>) -> Module {
-    let path = path.as_ref();
-    Module::from_path(path)
-        .unwrap_or_else(|error| panic!("failed to parse {}: {error:?}", path.display()))
-}
-
-fn source_qualifier(manifest: &Path, source: &Path) -> Qualifier {
-    let relative = source
-        .strip_prefix(manifest)
-        .expect("prelude source lies below its crate");
-    let mut segments = relative
-        .components()
-        .map(|component| component.as_os_str().to_string_lossy().into_owned())
-        .collect::<Vec<_>>();
-    let last = segments.last_mut().expect("prelude source has a file name");
-    *last = last
-        .strip_suffix(".crs")
-        .expect("prelude source extension was filtered")
-        .to_owned();
-    Qualifier::from(segments)
-}
+/// See [`STD_NAME`].
+pub(crate) const STD_DESCRIPTION: &str = "The standard library: what every Curios program gets for free, compiled into the fixed prelude beside the syntax forms and the host's operations.";
 
 /// The `/sys` root, supplied whole by `sys_module` — the first unit of the prelude fold, which nothing precedes.
 pub(crate) fn sys_source() -> RootSource {
@@ -69,24 +23,21 @@ pub(crate) fn sys_source() -> RootSource {
     modules
 }
 
-/// The `/std` root, with every authored module under `manifest` filed at its qualifier — the second unit, compiled against `/sys`.
+/// The `/std` root, read from the package at `manifest/std` — the second unit, compiled against `/sys`.
 ///
 /// Two sources rather than one because they are two units: `/std` references `/sys` and `/sys` references nothing above it, so the fold has an order and each half is lowered against what precedes it. What `/syn` once made impossible was exactly this — it sat between them and referenced both.
+///
+/// **Read the way a package is read, because `/std` is one.** Its header is `lib.crs` beside its own `curios.toml` and its namespace *is* that directory, which is the exception `curios-package`'s layout states for a library; nothing here enumerates its modules, because a module enters a unit by being declared `mod` in a header and the resolver reads each one when discovery asks for it.
 pub(crate) fn std_source(manifest: &Path) -> RootSource {
-    let mut modules = RootSource::supplied();
-    modules.insert_root(
-        "std",
+    let directory = manifest.join(STD_NAME);
+
+    RootSource::mounted(
+        STD_NAME,
         RootKind::Ordinary,
-        parse_module(manifest.join("std.crs")),
-    );
-
-    for source in source_files(manifest)
-        .iter()
-        .filter(|path| path.starts_with(manifest.join("std")))
-    {
-        modules.insert_module(source_qualifier(manifest, source), parse_module(source));
-    }
-
+        directory.join("lib.crs"),
+        directory,
+    )
     // The one declaration of `/sys` anywhere. A closed root is in no unit's default set — it has no path for a manifest to name — so this is what lets `/std` wrap the intrinsics, and its absence everywhere else is what keeps them wrapped.
-    modules.declaring([Qualifier::from(["sys"])])
+    .declaring([Qualifier::from(["sys"])])
+    .documented(STD_NAME, Some(STD_DESCRIPTION))
 }

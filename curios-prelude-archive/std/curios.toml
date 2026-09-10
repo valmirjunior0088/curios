@@ -1,0 +1,2 @@
+name = "std"
+description = "The standard library: what every Curios program gets for free, compiled into the fixed prelude beside the syntax forms and the host's operations."

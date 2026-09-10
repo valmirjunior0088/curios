@@ -305,7 +305,7 @@ fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
 /// The other half of the gate, from the build script's own capture rather than `cargo`'s wall clock, because `cargo build` is mostly `rustc` and its RSS says nothing about elaboration:
 ///
 /// ```sh
-/// touch curios-prelude-archive/std.crs
+/// touch curios-prelude-archive/std/lib.crs
 /// cargo build --package curios-prelude-archive --features profile
 /// # target/debug/build/curios-prelude-archive-*/out/profile.tsv
 /// ```

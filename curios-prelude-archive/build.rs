@@ -19,9 +19,6 @@ use {
     std::{collections::BTreeSet, env, fs, path::PathBuf},
 };
 
-/// What the standard library's landing page says it is — the one description no manifest supplies.
-const STD_DESCRIPTION: &str = "The standard library: what every Curios program gets for free, compiled into the fixed prelude beside the syntax forms and the host's operations.";
-
 // Installed for the whole build script so the capture's memory columns are populated; the counters are what make this build's own footprint measurable, which is the question the prelude build most often raises.
 #[cfg(feature = "profile")]
 #[global_allocator]
@@ -64,17 +61,11 @@ fn build() {
     println!("cargo:rerun-if-changed=src/syntax.rs");
 
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
-    // The directory rather than each discovered file: Cargo scans a watched directory recursively, so a *newly added* source triggers the rerun a per-file directive cannot — it matches no directive from the run that predates it. The index sits beside the directory, not inside it, so it is named on its own.
-    for watched in ["std.crs", "std"] {
-        println!(
-            "cargo:rerun-if-changed={}",
-            manifest.join(watched).display()
-        );
-    }
+    // The directory rather than each discovered file: Cargo scans a watched directory recursively, so a *newly added* source triggers the rerun a per-file directive cannot — it matches no directive from the run that predates it. One directive now, where there were two: `/std`'s header moved inside its own package, which is where its manifest is too.
+    println!("cargo:rerun-if-changed={}", manifest.join("std").display());
 
     let sys_modules = sys_source();
-    // The standard library is the one prelude mount a program reaches for by name, so it is the one the image documents; `/sys` is the host's rows and the intrinsic carriers, which no consumer reads for.
-    let std_modules = std_source(&manifest).documented("std", Some(STD_DESCRIPTION));
+    let std_modules = std_source(&manifest);
 
     // Both roots lowered before either is elaborated, because the registry spans them: a target check over `/sys` alone would miss every `/std` slot and one over `/std` alone every `/sys` slot, so the check runs once over the union and there is no half to pass by being asked the wrong question.
     let sys_text = lower("sys", &sys_modules, &[]);
