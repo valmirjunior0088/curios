@@ -283,7 +283,92 @@ impl Nat {
                 }
             }
         }
-        combination
+        Self::recombine(combination)
+    }
+
+    /// A factor read as `m / k` or `m % k` at a literal `k` above one, with the half it is.
+    ///
+    /// **The proof field takes no part.** Two divisions of one dividend by one divisor are the same operation whatever inhabits their bound — `Prop` is irrelevant — so keying on it would make [`Nat::recombine`] miss a pair that differs only in how its precondition was discharged. A divisor of one is excluded because `m / 1` and `m % 1` fold before they reach here, and a divisor of zero because the operation traps.
+    fn euclid_part(term: &Term) -> Option<(bool, Term, Natural)> {
+        let Subterm::Intrinsic(intrinsic) = &**term else {
+            return None;
+        };
+        let (remainder, dividend, divisor) = match intrinsic {
+            Intrinsic::NatDiv {
+                dividend, divisor, ..
+            } => (false, dividend, divisor),
+            Intrinsic::NatRem {
+                dividend, divisor, ..
+            } => (true, dividend, divisor),
+            _ => return None,
+        };
+        let divisor = divisor.as_nat()?.to_natural()?;
+
+        (divisor > Natural::one()).then(|| (remainder, dividend.clone(), divisor))
+    }
+
+    /// Collapse `k · (m / k) + m % k` to `m` in a combination [`Nat::linear`] has already merged.
+    ///
+    /// **This is Euclid's identity, and it is the fact about a quotient the reducer did not know.** The floor seam gives the *constructive* direction — a sum built as `k · x + b` divides back to `x` and remainders to `b` — and this is the destructive one, over a dividend nothing built. Without it a base-`k` encoding cannot be proved injective, because the proof reaches "the remainders agree and the quotients agree" and has no way to conclude that the numbers do.
+    ///
+    /// **Termination is by a measure rather than by inspection.** Each collapse removes `k + 1` units of coefficient mass and adds one, and `k` is above one, so the total strictly decreases; a combination is finite, so the pass ends. It is also idempotent, which is what keeps the reducer from oscillating: a collapse drives one of the two halves to zero, where it is dropped, so the pair it matched cannot match again.
+    fn recombine(combination: Vec<(Natural, Term)>) -> Vec<(Natural, Term)> {
+        curios_profile::profile!("nat::recombine");
+        let mut remainders: HashMap<(Term, Natural), usize> = HashMap::new();
+        for (index, (_, factor)) in combination.iter().enumerate() {
+            if let Some((true, dividend, divisor)) = Self::euclid_part(factor) {
+                remainders.insert((crate::project_erased_universes(&dividend), divisor), index);
+            }
+        }
+
+        if remainders.is_empty() {
+            return combination;
+        }
+
+        let mut combination = combination;
+        let mut recovered: Vec<(Natural, Term)> = Vec::new();
+        for index in 0..combination.len() {
+            let Some((false, dividend, divisor)) = Self::euclid_part(&combination[index].1) else {
+                continue;
+            };
+            let key = (crate::project_erased_universes(&dividend), divisor.clone());
+            let Some(&remainder) = remainders.get(&key) else {
+                continue;
+            };
+
+            // Whole collapses only: `3k · (m / k) + 3 · (m % k)` is `3 · m`, and a leftover of either half stays as it was.
+            let times = (combination[index].0.clone() / divisor.clone())
+                .min(combination[remainder].0.clone());
+            if times.is_zero() {
+                continue;
+            }
+
+            combination[index].0 = &combination[index].0 - &(&times * &divisor);
+            combination[remainder].0 = &combination[remainder].0 - &times;
+            recovered.push((times, dividend));
+        }
+
+        if recovered.is_empty() {
+            return combination;
+        }
+
+        // One merge pass, not a re-entry: a recovered dividend may be a factor the combination already carries.
+        let mut merged: Vec<(Natural, Term)> = Vec::new();
+        let mut index_of: HashMap<Term, usize> = HashMap::new();
+        for (coefficient, factor) in combination.into_iter().chain(recovered) {
+            if coefficient.is_zero() {
+                continue;
+            }
+            let key = crate::project_erased_universes(&factor);
+            match index_of.get(&key) {
+                Some(&index) => merged[index].0 += coefficient,
+                None => {
+                    index_of.insert(key, merged.len());
+                    merged.push((coefficient, factor));
+                }
+            }
+        }
+        merged
     }
 
     /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`], [`Nat::summands`] and [`Nat::linear`] read back: like terms merged, each spelled by [`Nat::scaled`], folded left-to-right.

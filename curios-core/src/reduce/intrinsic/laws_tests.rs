@@ -902,6 +902,70 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
                 vec![(&nat_x, lit(2)), (&nat_y, lit(9))],
             ],
         ),
+        // Euclid's identity, the destructive direction: the floor seam recovers the digits of a sum it *built*, and this recovers a dividend nothing built. Three shapes, because the collapse reads a coefficient rather than a spelling — the plain pair, the halves reversed, and a whole multiple of both.
+        (
+            "256 * (x / 256) + x % 256 = x",
+            plus(
+                Term::intrinsic(Intrinsic::nat_mul(
+                    lit(256),
+                    Term::intrinsic(Intrinsic::NatDiv {
+                        dividend: x.clone(),
+                        divisor: lit(256),
+                        non_zero: qed(),
+                    }),
+                )),
+                Term::intrinsic(Intrinsic::NatRem {
+                    dividend: x.clone(),
+                    divisor: lit(256),
+                    non_zero: qed(),
+                }),
+            ),
+            x.clone(),
+            nats(),
+        ),
+        (
+            "x % 2 + 2 * (x / 2) = x",
+            plus(
+                Term::intrinsic(Intrinsic::NatRem {
+                    dividend: x.clone(),
+                    divisor: lit(2),
+                    non_zero: qed(),
+                }),
+                Term::intrinsic(Intrinsic::nat_mul(
+                    lit(2),
+                    Term::intrinsic(Intrinsic::NatDiv {
+                        dividend: x.clone(),
+                        divisor: lit(2),
+                        non_zero: qed(),
+                    }),
+                )),
+            ),
+            x.clone(),
+            nats(),
+        ),
+        (
+            "768 * (x / 256) + 3 * (x % 256) = 3 * x",
+            plus(
+                Term::intrinsic(Intrinsic::nat_mul(
+                    lit(768),
+                    Term::intrinsic(Intrinsic::NatDiv {
+                        dividend: x.clone(),
+                        divisor: lit(256),
+                        non_zero: qed(),
+                    }),
+                )),
+                Term::intrinsic(Intrinsic::nat_mul(
+                    lit(3),
+                    Term::intrinsic(Intrinsic::NatRem {
+                        dividend: x.clone(),
+                        divisor: lit(256),
+                        non_zero: qed(),
+                    }),
+                )),
+            ),
+            Term::intrinsic(Intrinsic::nat_mul(lit(3), x.clone())),
+            nats(),
+        ),
         (
             "x / 1 = x",
             Term::intrinsic(Intrinsic::NatDiv {

@@ -84,6 +84,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq(0 % (x + 1), 0)",
             "Eq((x + 1) / (x + 1), 1)",
             "Eq((x + 1) % (x + 1), 0)",
+            // Euclid's identity, over a dividend nothing built. The floor seam gives the constructive direction — a sum built as `k * y + b` divides back to `y` — and this is the destructive one, which is what an encoding's injectivity reaches for and could not have.
+            "Eq(256 * (x / 256) + x % 256, x)",
+            "Eq(x % 2 + 2 * (x / 2), x)",
+            "Eq(768 * (x / 256) + 3 * (x % 256), 3 * x)",
         ],
         refused: &[],
     },
