@@ -675,7 +675,7 @@ fn an_order_derivation_needs_the_equality_its_concept_requires() {
     let report = error(source);
     assert!(
         report.contains(
-            "no witness of Eql(Colour) found\n  needed by '/std/Ord/Ord' for its superclass"
+            "no witness of Eql(Colour) found\n  needed by '/std/Ord/Ord' for its 'Eql' superclass"
         ),
         "{report}"
     );

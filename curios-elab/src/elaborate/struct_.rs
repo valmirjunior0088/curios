@@ -106,9 +106,10 @@ pub(super) fn elaborate_struct_type(
 /// Where one field position's value comes from: a written term to check, or — for a concept's `use`-marked field with no written fill — a witness goal to mint at the position's instantiated type.
 pub(super) enum FieldSource<'a> {
     Written(&'a Term),
-    /// An unfilled `use` position: a superclass edge the literal left to resolution. It carries no binder because there is none to carry — the field is anonymous, and the goal's own line already names the concept sought.
+    /// An unfilled `use` position: a superclass edge the literal left to resolution. `edge` names the concept edged to rather than a field label, because the field is anonymous — there is no label to carry, and the edge is what a reader needs.
     Resolve {
         func: String,
+        edge: String,
     },
 }
 
@@ -125,10 +126,10 @@ pub(super) fn check_dependent_fields(
         Telescope::Cons(ty, rest) => {
             let head = match &sources[0] {
                 FieldSource::Written(field) => check(context, field, ty)?,
-                FieldSource::Resolve { func } => {
+                FieldSource::Resolve { func, edge } => {
                     let provenance = WitnessOrigin {
                         func: func.clone(),
-                        binder: "its superclass".to_string(),
+                        binder: format!("its '{edge}' superclass"),
                     };
                     let (id, metavar) = context.fresh_witness_metavar(
                         ty.clone(),
@@ -211,11 +212,12 @@ pub(super) fn elaborate_struct(
     let field_telescope = struct_decl.fields_at(&resolved);
 
     // A concept's `use`-marked (superclass) fields leave the positional field sequence, exactly like witness slots at call sites: plain written fields pair with the plain positions, explicit `use <term>` entries pair with the `use` positions in declaration order (no skipping), and every remaining `use` position becomes a witness-resolution goal. Note the check order is telescope order, not written order — the same model as call-site witness arguments.
-    let use_positions: Vec<usize> = match context.concept(name) {
-        Some(concept) => concept.supers.iter().map(|(index, _)| *index).collect(),
+    // The concept each `use` position edges to is kept beside it rather than dropped: an unfilled position becomes a resolution goal, and that goal's provenance is the one place the superclass can be named as itself.
+    let use_positions: Vec<(usize, Global)> = match context.concept(name) {
+        Some(concept) => concept.supers.clone(),
         None => Vec::new(),
     };
-    debug_assert!(use_positions.windows(2).all(|w| w[0] < w[1]));
+    debug_assert!(use_positions.windows(2).all(|w| w[0].0 < w[1].0));
 
     // Partition the written entries; an empty entry list is all-plain-unlabeled (the internal normal form).
     let mut plain: Vec<(Option<&str>, &Term)> = Vec::new();
@@ -249,7 +251,7 @@ pub(super) fn elaborate_struct(
     let plain_labels: Vec<&str> = labels
         .iter()
         .enumerate()
-        .filter(|(position, _)| !use_positions.contains(position))
+        .filter(|(position, _)| !use_positions.iter().any(|(index, _)| index == position))
         .map(|(_, label)| *label)
         .collect();
 
@@ -283,12 +285,16 @@ pub(super) fn elaborate_struct(
     let mut fill_values = fills.iter().copied();
     let mut sources = Vec::with_capacity(field_telescope.len());
     for position in 0..field_telescope.len() {
-        if use_positions.contains(&position) {
+        if let Some((_, edge)) = use_positions.iter().find(|(index, _)| *index == position) {
             sources.push(match fill_values.next() {
                 Some(fill) => FieldSource::Written(fill),
-                // A `use` position is an anonymous superclass field, so the provenance says *superclass* rather than reaching for a label: the minted internal one must never surface, and the placeholder that stood in for it read as `its 'use' field '_'` — noise beside a first line that already names the concept sought.
+                // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label: the minted internal one must never surface, and the placeholder that stood in for it read as `its 'use' field '_'`. The short name, since the goal's own line already carries the application it is wanted at.
                 None => FieldSource::Resolve {
                     func: name.symbol(),
+                    edge: edge
+                        .qualifier()
+                        .map(|path| path.last().to_string())
+                        .unwrap_or_default(),
                 },
             });
         } else {
@@ -412,11 +418,12 @@ pub(super) fn elaborate_struct_spread(
 
         let field_telescope = struct_decl.fields_at(&resolved);
 
-        let use_positions: Vec<usize> = match context.concept(name) {
-            Some(concept) => concept.supers.iter().map(|(index, _)| *index).collect(),
+        // Same shape as the plain path's, so the two read alike; the edge itself is unused here, because a spread *copies* a superclass field from the base rather than re-resolving it.
+        let use_positions: Vec<(usize, Global)> = match context.concept(name) {
+            Some(concept) => concept.supers.clone(),
             None => Vec::new(),
         };
-        debug_assert!(use_positions.windows(2).all(|w| w[0] < w[1]));
+        debug_assert!(use_positions.windows(2).all(|w| w[0].0 < w[1].0));
 
         // Partition the overrides (everything after the spread). Positional values are ambiguous across the spread's gaps, so every plain override must be labeled.
         let mut plain: Vec<(&str, &Term)> = Vec::new();
@@ -448,7 +455,7 @@ pub(super) fn elaborate_struct_spread(
         let plain_positions: Vec<(usize, &str)> = labels
             .iter()
             .enumerate()
-            .filter(|(position, _)| !use_positions.contains(position))
+            .filter(|(position, _)| !use_positions.iter().any(|(index, _)| index == position))
             .map(|(position, label)| (position, *label))
             .collect();
 
@@ -494,7 +501,7 @@ pub(super) fn elaborate_struct_spread(
 
         // Explicit `use` fills pair with the `use` positions in declaration order (no skipping), exactly as in the plain path.
         let mut fill_values = fills.iter().copied();
-        for position in &use_positions {
+        for (position, _) in &use_positions {
             match fill_values.next() {
                 Some(fill) => overrides[*position] = Some(fill),
                 None => break,
