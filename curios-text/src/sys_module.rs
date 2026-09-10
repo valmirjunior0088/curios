@@ -1045,8 +1045,8 @@ fn code_modules() -> Vec<SysModule> {
     ]
 }
 
-/// The carrier modules, in the order `/sys` declares them: each holds its type former and the intrinsic operations over it, and all but the two packed runs hoist the type to the root.
-fn carriers(syntax: &SyntaxRegistry) -> Vec<SysModule> {
+/// Every module `/sys` declares before the host's rows join them: the carriers in the order the root lists them, each holding its type former and the intrinsic operations over it and all but the two packed runs hoisting the type to the root, then the one module of operations that no carrier opens.
+fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
     vec![
         SysModule::carrier(
             "Nat",
@@ -1126,22 +1126,18 @@ fn carriers(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             pub_fn("Io", vec![("T", type_())], type_(), io_of(name("T"))),
             io_ops(),
         ),
+        // Declared rather than pushed in after the join, which is what a module of operations is for: `exit` used to be placed by a `find` over the joined roster, so a store that stopped carrying a `proc` row would have dropped it with no error at all. Declaring the module is what makes that unrepresentable — and it puts `exit` ahead of the rows, since a declared module precedes every module the join opens.
+        SysModule::ops("proc", vec![proc_exit()]),
     ]
 }
 
 /// Construct the generated `/sys` surface module from the authoritative host function store.
 ///
-/// **One keyed pass, where there were two independent ones.** Every `/sys` module is a `SysModule` with a label: the carriers are written from the intrinsic table, then each host row joins the module its own subject names — creating one where no carrier claims the label, which is how `file`, `socket` and `dns` come to exist, and joining the carrier where one does, which is how `Handle`'s rows come to sit beside its type. Then the propositions `/sys`'s own preconditions are stated in, and the wire-code mirror.
+/// **One keyed pass over one declared roster.** Every `/sys` module is a `SysModule` with a label: the ones written here from the intrinsic table, then each host row joining the module its own subject names — opening one where nothing declared the label, which is how `file`, `socket` and `dns` come to exist, and joining the declaration where something did, which is how `Handle`'s rows come to sit beside its type and `proc`'s beside `exit`. Then the propositions `/sys`'s own preconditions are stated in, and the wire-code mirror.
 ///
 /// Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
-    let mut modules = absorb_host_rows(carriers(syntax), foreigns);
-
-    if let Some(proc) = modules.iter_mut().find(|module| module.label == "proc") {
-        proc.decls.push(proc_exit());
-    }
-
-    let mut items = modules
+    let mut items = absorb_host_rows(declared(syntax), foreigns)
         .into_iter()
         .flat_map(SysModule::into_items)
         .collect::<Vec<_>>();
