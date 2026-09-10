@@ -12,44 +12,92 @@ use {
     curios_utilities::Plicity,
 };
 
-pub(super) fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
-    TopItem::Let(vec![TopLet {
-        doc: None,
-        vis_pub: true,
-        label: label.into(),
-        signature: LetSignature::Name {
-            type_: Some(type_),
-            body,
-        },
-    }])
+/// One `/sys` binding, before it is a [`TopItem`].
+///
+/// **Every field a declaration has is a field here.** That is what removes the patch-after-build this roster used to need: a gloss, a plicity mark and a telescope are stated where the declaration is written rather than written into a finished node afterwards, and a builder that does not take one cannot silently leave it out. The lowering happens once, in [`Decl::into_item`] — the only place a `/sys` `TopItem::Let` is spelled.
+pub(super) struct Decl {
+    pub(super) doc: Option<Doc>,
+    pub(super) vis_pub: bool,
+    pub(super) label: String,
+    /// The telescope, in written order. **Empty is a constant, not a nullary function**: `LetSignature::Func` with no parameters lowers through `func_sugar_lambda` to a binderless lambda, which is a different declaration. The two forms are one rule, stated in [`Decl::signature`].
+    pub(super) params: Vec<(Plicity, String, Term)>,
+    pub(super) output: Term,
+    pub(super) body: Term,
 }
 
-/// `item` under `lines`, the block a `-- |` would have put above it — written first here for the same reason it is written first there. An empty line is a paragraph break, exactly as it is in the surface syntax.
+impl Decl {
+    /// The signature a telescope, output and body make. A row with no parameters becomes a *constant* rather than a nullary function: the nullary function was the previous discipline's workaround — a top-level value binding would force-reduce its effectful body where a type-level effect was refused — and a description needs no thunk, being one already.
+    fn signature(params: Vec<(Plicity, String, Term)>, output: Term, body: Term) -> LetSignature {
+        if params.is_empty() {
+            return LetSignature::Name {
+                type_: Some(output),
+                body,
+            };
+        }
+
+        LetSignature::Func {
+            params: params
+                .into_iter()
+                .map(|(plicity, label, type_)| FuncSugarParam {
+                    plicity,
+                    label: Pattern::Binder(Some(label.into())),
+                    type_,
+                })
+                .collect(),
+            output,
+            body,
+        }
+    }
+
+    pub(super) fn into_let(self) -> TopLet {
+        let Self {
+            doc,
+            vis_pub,
+            label,
+            params,
+            output,
+            body,
+        } = self;
+
+        TopLet {
+            doc,
+            vis_pub,
+            label: label.into(),
+            signature: Self::signature(params, output, body),
+        }
+    }
+
+    pub(super) fn into_item(self) -> TopItem {
+        TopItem::Let(vec![self.into_let()])
+    }
+}
+
+/// A run of declarations as the items they lower to.
+pub(super) fn items(decls: Vec<Decl>) -> Vec<TopItem> {
+    decls.into_iter().map(Decl::into_item).collect()
+}
+
+pub(super) fn pub_let(label: &str, type_: Term, body: Term) -> Decl {
+    Decl {
+        doc: None,
+        vis_pub: true,
+        label: label.to_string(),
+        params: Vec::new(),
+        output: type_,
+        body,
+    }
+}
+
+/// `decl` under `lines`, the block a `-- |` would have put above it — written first here for the same reason it is written first there. An empty line is a paragraph break, exactly as it is in the surface syntax.
 ///
 /// **A gloss says what the operation is, not what its carrier will not hold.** Where a value leaves the carrier is one rule stated once — `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`, and `curios-num`'s `scalar` per operation — and repeating it on every row would be sixty copies to keep in step. What a gloss must say is where an operation departs from the obvious reading of its name: that `sub` is monus, that `shr` divides.
-///
-/// **Only a lone declaration takes one.** Every builder here makes one declaration per item, so the group form would leave all but the first silently undocumented; asserted rather than assumed, since nothing else would notice.
-pub(super) fn documented(lines: &[&str], item: TopItem) -> TopItem {
-    let doc = Some(Doc {
-        lines: lines.iter().map(|line| (*line).to_string()).collect(),
-        span: None,
-    });
-
-    match item {
-        TopItem::Let(mut members) => {
-            assert_eq!(
-                members.len(),
-                1,
-                "a documented `/sys` item declares one name"
-            );
-            members[0].doc = doc;
-            TopItem::Let(members)
-        }
-        TopItem::Mod(mut module) => {
-            module.doc = doc;
-            TopItem::Mod(module)
-        }
-        _ => panic!("only a definition or a module carries a `/sys` gloss"),
+pub(super) fn documented(lines: &[&str], decl: Decl) -> Decl {
+    Decl {
+        doc: Some(Doc {
+            lines: lines.iter().map(|line| (*line).to_string()).collect(),
+            span: None,
+        }),
+        ..decl
     }
 }
 
@@ -62,6 +110,7 @@ pub(super) fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
         module: Some(Module { items }),
     })
 }
+
 // `pub use Label/{let Label}` — the facade re-export that hoists a submodule's own type binding up to the library root, so `/sys/{Label}` names the type.
 pub(super) fn pub_use(label: &str) -> TopItem {
     TopItem::Use(TopUse {
@@ -73,13 +122,11 @@ pub(super) fn pub_use(label: &str) -> TopItem {
 }
 
 // An intrinsic module's items: its type declaration first, then its operations, so the type lives *inside* its module and the root facade re-exports it.
-pub(super) fn with_type(type_decl: TopItem, mut ops: Vec<TopItem>) -> Vec<TopItem> {
-    let mut items = vec![type_decl];
-    items.append(&mut ops);
-    items
+pub(super) fn with_type(type_decl: Decl, ops: Vec<Decl>) -> Vec<TopItem> {
+    items(std::iter::once(type_decl).chain(ops).collect())
 }
 
-pub(super) fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body: Term) -> TopItem {
+pub(super) fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body: Term) -> Decl {
     pub_fn_marked(
         label,
         params
@@ -96,33 +143,17 @@ pub(super) fn pub_fn_marked(
     params: Vec<(Plicity, &str, Term)>,
     output: Term,
     body: Term,
-) -> TopItem {
-    TopItem::Let(vec![fn_marked(true, label, params, output, body)])
-}
-
-pub(super) fn fn_marked(
-    vis_pub: bool,
-    label: &str,
-    params: Vec<(Plicity, &str, Term)>,
-    output: Term,
-    body: Term,
-) -> TopLet {
-    TopLet {
+) -> Decl {
+    Decl {
         doc: None,
-        vis_pub,
-        label: label.into(),
-        signature: LetSignature::Func {
-            params: params
-                .into_iter()
-                .map(|(p, n, t)| FuncSugarParam {
-                    plicity: p,
-                    label: Pattern::Binder(Some(n.into())),
-                    type_: t,
-                })
-                .collect(),
-            output,
-            body,
-        },
+        vis_pub: true,
+        label: label.to_string(),
+        params: params
+            .into_iter()
+            .map(|(plicity, label, type_)| (plicity, label.to_string(), type_))
+            .collect(),
+        output,
+        body,
     }
 }
 
@@ -131,7 +162,7 @@ pub(super) fn binary(
     operand: Term,
     output: Term,
     ctor: fn(Term, Term) -> Intrinsic,
-) -> TopItem {
+) -> Decl {
     pub_fn(
         label,
         vec![("a", operand.clone()), ("b", operand)],
@@ -147,7 +178,7 @@ pub(super) fn guarded_binary(
     output: Term,
     bound: Term,
     ctor: fn(Term, Term, Term) -> Intrinsic,
-) -> TopItem {
+) -> Decl {
     pub_fn_marked(
         label,
         vec![
@@ -167,7 +198,7 @@ pub(super) fn guarded_unary(
     output: Term,
     bound: Term,
     ctor: fn(Term, Term) -> Intrinsic,
-) -> TopItem {
+) -> Decl {
     pub_fn_marked(
         label,
         vec![
@@ -179,12 +210,7 @@ pub(super) fn guarded_unary(
     )
 }
 
-pub(super) fn unary(
-    label: &str,
-    input: Term,
-    output: Term,
-    ctor: fn(Term) -> Intrinsic,
-) -> TopItem {
+pub(super) fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> Intrinsic) -> Decl {
     pub_fn(
         label,
         vec![("a", input)],
@@ -192,6 +218,7 @@ pub(super) fn unary(
         intrinsic(ctor(name("a"))),
     )
 }
+
 /// One `/sys` module, before the host's rows are folded into it.
 ///
 /// **The label is the key, and that is the whole of this restructure.** `/sys` used to be assembled by two independent passes — the carrier modules written by hand from the intrinsic table, the subject modules built from `curios-abi`'s store — emitting into one namespace with nothing to merge them. `Handle` is in both inputs, so the one collision was reconciled by lifting its rows out by string before the generic pass and appending them by hand, with a `panic!` if the row ever went missing. Keying the modules removes the removal: a host row joins the module its subject names, whether that module already exists or is created by the row, and `Handle` stops being a special case and becomes the one label that happens to have both.
@@ -205,7 +232,7 @@ pub(super) struct SysModule {
 
 impl SysModule {
     /// A carrier: a type former, its documentation, and the operations over it, hoisted to the root.
-    pub(super) fn carrier(label: &str, doc: &[&str], former: TopItem, ops: Vec<TopItem>) -> Self {
+    pub(super) fn carrier(label: &str, doc: &[&str], former: Decl, ops: Vec<Decl>) -> Self {
         Self {
             label: label.to_string(),
             items: with_type(documented(doc, former), ops),
@@ -251,6 +278,6 @@ pub(super) fn absorb_host_rows(modules: &mut Vec<SysModule>, foreigns: &ForeignS
 
         modules[index]
             .items
-            .push(TopItem::Let(vec![host_fn(function, true)]));
+            .push(host_fn(function, true).into_item());
     }
 }

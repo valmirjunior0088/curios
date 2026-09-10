@@ -17,7 +17,7 @@ use helpers::*;
 use {
     super::{
         Doc, Intrinsic, LetSignature, Match, MatchPattern, MatrixArm, Module, Nat, NatLiteral,
-        Subterm, Term, TopCase, TopForeign, TopInduct, TopItem, TopLet,
+        Subterm, Term, TopCase, TopForeign, TopInduct, TopItem,
     },
     curios_abi::{
         ForeignFunction, ForeignStore, Namespace, ResultShape, WireType, event, file_kind,
@@ -73,7 +73,7 @@ fn false_prop() -> TopItem {
 }
 
 // `pub let Holds(b: Bool) -> Prop = match b | true => True | false => False end;` — the reflection of a decision into a claim, which every decided bound this roster states is built from. A refined comparison reduces the match away, which is what discharges an obligation with nothing written.
-fn holds() -> TopItem {
+fn holds() -> Decl {
     documented(
         &[
             "That `b` is `true`, as a proposition: `True` where it is and `False` where it is not.",
@@ -104,7 +104,7 @@ fn holds() -> TopItem {
 }
 
 // The two `Flt` narrowings' domains, stated inside `/sys/Flt` because that is the carrier they are about. Each is a conjunction rather than one comparison, which is why `Intrinsic::signature` names them instead of building them as it builds the rest.
-fn flt_bounds(syntax: &SyntaxRegistry) -> Vec<TopItem> {
+fn flt_bounds(syntax: &SyntaxRegistry) -> Vec<Decl> {
     let and = |left: Term, right: Term| intrinsic(Intrinsic::BoolAnd(left, right));
     let le = |left: Term, right: Term| intrinsic(Intrinsic::FltLe(left, right));
 
@@ -158,8 +158,8 @@ fn wire_type(type_: &WireType) -> Term {
 ///
 /// The result is an `Io`, and this one site is what makes that true of every row the store describes — a user's own `foreign` declaration included, since a call across the wire is a host effect whoever declared it. The wire contract does not move: `curios-abi` describes the same shapes and only the guest-facing type changes, so a multi-result row reads `Io({status : Nat, bytes : Bytes})` with the record still inside the wrapper.
 ///
-/// A row with no parameters becomes a *constant* rather than a nullary function. The nullary function was the previous discipline's workaround — a top-level value binding would force-reduce its effectful body where a type-level effect was refused — and a description needs no thunk, being one already.
-fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
+/// A row with no parameters becomes a *constant* rather than a nullary function, which is not a case here but a consequence of handing [`Decl`] an empty telescope — see `Decl::signature`.
+fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
     // What the row says of itself, which for a builtin is the roster's own `///` and for a user's `foreign` is nothing — their prose sits on the declaration they wrote.
     let doc = match function.description.is_empty() {
         true => None,
@@ -191,31 +191,18 @@ fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> TopLet {
             .collect(),
     ));
 
-    if signature.params.is_empty() {
-        return TopLet {
-            doc,
-            vis_pub,
-            label: function.label.clone().into(),
-            signature: LetSignature::Name {
-                type_: Some(output),
-                body,
-            },
-        };
-    }
-
-    let mut declaration = fn_marked(
+    Decl {
+        doc,
         vis_pub,
-        &function.label,
-        signature
+        label: function.label.clone(),
+        params: signature
             .params
             .iter()
-            .map(|(param, type_)| (Plicity::Explicit, param.as_str(), wire_type(type_)))
+            .map(|(param, type_)| (Plicity::Explicit, param.clone(), wire_type(type_)))
             .collect(),
         output,
         body,
-    );
-    declaration.doc = doc;
-    declaration
+    }
 }
 
 /// Handle one user-written `foreign` declaration: register its [`ForeignFunction`] into the compilation's (non-`host_ops`) foreign store, and return the ordinary [`LetSignature`] `into_core` lowers it as — wire-type bookkeeping and `host_fn`'s shape stay internal to this module, so `into_core` only ever deals with the same `LetSignature` it already knows how to lower for a plain `TopItem::Let`. `name` is the declaration's fully qualified name (leading `/`, the caller's current position while walking the module tree), which becomes the wasm import string under the `ffi` namespace. Qualified names are unique per compilation (a same-scope duplicate is a binding conflict long before lowering reaches this point), so `register`'s duplicate panic stays what it is everywhere else: a construction bug.
@@ -236,10 +223,12 @@ pub(crate) fn foreign_signature(
 
     foreigns.register(function.clone());
 
-    host_fn(&Arc::new(function), declaration.vis_pub).signature
+    host_fn(&Arc::new(function), declaration.vis_pub)
+        .into_let()
+        .signature
 }
 
-fn nat_succ() -> TopItem {
+fn nat_succ() -> Decl {
     pub_fn(
         "succ",
         vec![("a", nat())],
@@ -272,7 +261,7 @@ fn int_nonzero(syntax: &SyntaxRegistry) -> Term {
     )
 }
 
-fn nat_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
+fn nat_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(&["One more than `a`."], nat_succ()),
         documented(
@@ -377,7 +366,7 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     ]
 }
 
-fn byte_ops() -> Vec<TopItem> {
+fn byte_ops() -> Vec<Decl> {
     vec![
         documented(
             &["The same number as a `Nat`."],
@@ -407,7 +396,7 @@ fn byte_ops() -> Vec<TopItem> {
 }
 
 // `Bool` rides the same i31ref/u32 carrier as `Nat`, with `false`/`true` as `0`/`1`. `and`/`or`/`xor` are bitwise machine ops on those bits — exact boolean logic — and `eql` is the `Nat` equality op (`i32.eq`) on that single bit, so all four are intrinsics rather than `match` definitions. `not` has no machine instruction; `/std/Bool` defines it as `xor(b, true)`.
-fn bool_ops() -> Vec<TopItem> {
+fn bool_ops() -> Vec<Decl> {
     vec![
         documented(
             &["True when both are."],
@@ -428,7 +417,7 @@ fn bool_ops() -> Vec<TopItem> {
     ]
 }
 
-fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
+fn int_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(
             &["Whether the two are equal."],
@@ -548,8 +537,8 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     ]
 }
 
-fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
-    let mut items = vec![
+fn flt_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
+    let items = vec![
         documented(
             &["Their sum."],
             binary("add", flt(), flt(), Intrinsic::FltAdd),
@@ -679,11 +668,10 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         ),
     ];
 
-    items.extend(flt_bounds(syntax));
-    items
+    items.into_iter().chain(flt_bounds(syntax)).collect()
 }
 
-fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
+fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
     let type_ = bin(grain);
     let atom = match grain {
         Grain::B => bool_(),
@@ -801,7 +789,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
     ]
 }
 
-fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
+fn list_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(
             &["How many it holds."],
@@ -941,7 +929,7 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
 }
 
 // Allocating a cell, reading one, and writing one are all host effects, so all three return descriptions. `Cell/get` is the operation the whole discipline was named for: a scrutinee spelled `Cell/get(c)` denotes a different value before and after a `Cell/set`, and giving it an `Io` result is what makes that spelling ill-typed in scrutinee position rather than something an analysis has to notice.
-fn cell_ops() -> Vec<TopItem> {
+fn cell_ops() -> Vec<Decl> {
     vec![
         documented(
             &["A new cell holding `x`."],
@@ -994,7 +982,7 @@ fn cell_ops() -> Vec<TopItem> {
 }
 
 // The monad of the `/sys/Io` type, and nothing else: `Io` owns the sequencing, never the operations. An operation belongs with its subject — the one its own store row names, not the type its result wears.
-fn io_ops() -> Vec<TopItem> {
+fn io_ops() -> Vec<Decl> {
     vec![
         documented(
             &["The description that performs nothing and yields `x`."],
@@ -1034,7 +1022,7 @@ fn io_ops() -> Vec<TopItem> {
 }
 
 // The values and operations of the `/sys/Handle` type: the three standard streams, handle identity, and `host` — the store rows whose subject is the handle itself (`read`, `write`, `poll`, `close`), which join their type module rather than open one of their own.
-fn handle_ops() -> Vec<TopItem> {
+fn handle_ops() -> Vec<Decl> {
     vec![
         documented(
             &["The stream the host feeds the program."],
@@ -1066,7 +1054,7 @@ fn handle_ops() -> Vec<TopItem> {
 /// The one operation placed by hand rather than by a row: `exit` is `Intrinsic::ProcExit` and traps instead of returning, so no `WireSignature` describes it — but it is a process operation like `args` and `env`, so it joins the module its subject already opened.
 ///
 /// `(@A : Type, n : Nat) -> Io(A)`: the description yields whatever the region wanted, which is sound because `Io` has no eliminator — an inhabitant of `Io(False)` proves nothing — and is what lets an exiting arm end a region of any type instead of only a unit one.
-fn proc_exit() -> TopItem {
+fn proc_exit() -> Decl {
     pub_fn_marked(
         "exit",
         vec![
@@ -1087,7 +1075,7 @@ fn code_modules() -> Vec<TopItem> {
         // The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source.
         pub_mod(
             "status",
-            vec![
+            items(vec![
                 pub_let("ok", nat(), nat_lit(status::OK)),
                 pub_let("eof", nat(), nat_lit(status::EOF)),
                 pub_let("not_found", nat(), nat_lit(status::NOT_FOUND)),
@@ -1104,41 +1092,41 @@ fn code_modules() -> Vec<TopItem> {
                 pub_let("is_directory", nat(), nat_lit(status::IS_DIRECTORY)),
                 pub_let("not_directory", nat(), nat_lit(status::NOT_DIRECTORY)),
                 pub_let("other_base", nat(), nat_lit(status::OTHER_BASE)),
-            ],
+            ]),
         ),
         pub_mod(
             "event",
-            vec![
+            items(vec![
                 pub_let("read", nat(), nat_lit(event::READ)),
                 pub_let("write", nat(), nat_lit(event::WRITE)),
                 pub_let("err", nat(), nat_lit(event::ERR)),
                 pub_let("hup", nat(), nat_lit(event::HUP)),
-            ],
+            ]),
         ),
         pub_mod(
             "open_mode",
-            vec![
+            items(vec![
                 pub_let("read", nat(), nat_lit(open_mode::READ)),
                 pub_let("write", nat(), nat_lit(open_mode::WRITE)),
                 pub_let("append", nat(), nat_lit(open_mode::APPEND)),
-            ],
+            ]),
         ),
         pub_mod(
             "file_kind",
-            vec![
+            items(vec![
                 pub_let("file", nat(), nat_lit(file_kind::FILE)),
                 pub_let("directory", nat(), nat_lit(file_kind::DIRECTORY)),
                 pub_let("symlink", nat(), nat_lit(file_kind::SYMLINK)),
                 pub_let("other", nat(), nat_lit(file_kind::OTHER)),
-            ],
+            ]),
         ),
         pub_mod(
             "stdio_mode",
-            vec![
+            items(vec![
                 pub_let("inherit", nat(), nat_lit(stdio_mode::INHERIT)),
                 pub_let("pipe", nat(), nat_lit(stdio_mode::PIPE)),
                 pub_let("null", nat(), nat_lit(stdio_mode::NULL)),
-            ],
+            ]),
         ),
     ]
 }
@@ -1239,7 +1227,7 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
     absorb_host_rows(&mut modules, foreigns);
 
     if let Some(proc) = modules.iter_mut().find(|module| module.label == "proc") {
-        proc.items.push(proc_exit());
+        proc.items.push(proc_exit().into_item());
     }
 
     let mut items = modules
@@ -1254,7 +1242,7 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
         .collect::<Vec<_>>();
 
     // The propositions `/sys`'s own operations state their preconditions in, at the root rather than in a module of their own: a precondition is about the operation that demands it, and `Holds` is written beside every bound in the roster.
-    items.extend([true_prop(), false_prop(), holds()]);
+    items.extend([true_prop(), false_prop(), holds().into_item()]);
     items.extend(code_modules());
 
     Module { items }
