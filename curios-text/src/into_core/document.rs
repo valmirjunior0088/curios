@@ -27,6 +27,27 @@ const INDENT: usize = 4;
 
 /// The interface of the unit mounted at `prefix`, read off the tables the lowering just built: `modules` are the file-backed modules discovery parsed, `table` and `public` the direct interface and the export view over the whole scope, and `imports` what each definition's `use` lines brought into scope.
 ///
+/// The mounts whose declarations reach a consumer only through the documented one, each with the word a page chips onto them.
+///
+/// **Decided here, from the compilation's mount table.** A root is adopted because a consumer cannot name it and it is not the one being documented — a fact about what this compilation mounts, not about the source the documented unit was read from. That distinction is what the prelude's split forces: the adopted root is a *different unit's* mount, so no source could claim it and no assertion against its own bases could hold.
+fn adopted_mounts(mounts: &[Mount], documented: &Qualifier) -> Vec<(Qualifier, Option<String>)> {
+    mounts
+        .iter()
+        .filter(|mount| mount.kind == RootKind::Internal && &mount.prefix != documented)
+        .map(|mount| (mount.prefix.clone(), chip(&mount.prefix)))
+        .collect()
+}
+
+/// The word a page shows on every declaration it adopts out of `prefix`, where there is one to show.
+///
+/// Spelled here because `/sys` is this crate's own root — `sys_module` builds it — so the word for what it holds is this crate's to know. A root with no entry is still adopted and merely says nothing about itself.
+fn chip(prefix: &Qualifier) -> Option<String> {
+    match prefix.join().as_str() {
+        "sys" => Some("intrinsic".to_string()),
+        _ => None,
+    }
+}
+
 /// Infallible, because every module it visits is one discovery loaded a moment ago: a prefix without a module in the map is a broken invariant of this stage, not a condition a caller can meet.
 pub(super) fn document(
     modules: &HashMap<Qualifier, Rc<Module>>,
@@ -34,16 +55,17 @@ pub(super) fn document(
     public: &Scoped<'_, PublicInterface>,
     imports: &Imports,
     prefix: &Qualifier,
-    adopted: &[(Qualifier, Option<String>)],
+    mounts: &[Mount],
     description: Option<String>,
 ) -> Documentation {
+    let adopted = adopted_mounts(mounts, prefix);
     let mut reader = Reader {
         modules,
         table,
         public,
         imports,
         prefix,
-        adopted,
+        adopted: &adopted,
         public_names: HashMap::new(),
     };
     // Read before the walk, because a signature anywhere in the unit may name an adopted declaration, and taken through the reader because knowing which modules have pages is its own rule.

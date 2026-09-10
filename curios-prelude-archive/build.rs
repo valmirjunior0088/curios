@@ -72,9 +72,7 @@ fn build() {
         );
     }
     // The standard library is the one prelude mount a program reaches for by name, so it is the one the image documents; `/sys` is the host's rows and the intrinsic carriers, which no consumer reads for.
-    let modules = authored_prelude(&manifest)
-        .documented("std", Some(STD_DESCRIPTION))
-        .adopting("sys", "intrinsic");
+    let modules = authored_prelude(&manifest).documented("std", Some(STD_DESCRIPTION));
 
     let prepared = prepare_prelude(&modules, &SYNTAX)
         .unwrap_or_else(|error| panic!("fixed prelude failed to lower: {}", error.format()));

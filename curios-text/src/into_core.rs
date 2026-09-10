@@ -1323,11 +1323,6 @@ impl<'a> UnitSource<'a> {
         }
     }
 
-    /// The mounts this unit's documented interface adopts, each with its chip. See [`RootSource::adopted_mounts`].
-    fn adopted(&self) -> Vec<(Qualifier, Option<String>)> {
-        self.source.adopted_mounts()
-    }
-
     /// The entrypoint this source carries, for the one unit that has one.
     fn entrypoint(&self) -> Option<&Entrypoint> {
         self.entrypoint
@@ -1556,7 +1551,7 @@ fn into_core_unit_within(
             &public,
             &imports.borrow(),
             &prefix,
-            &source.adopted(),
+            &mounts,
             description,
         )
     });

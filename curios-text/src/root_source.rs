@@ -24,8 +24,6 @@ pub struct RootSource {
     bases: Vec<(Mount, Base)>,
     /// The mount whose interface the unit documents, with its description — a package's library with the manifest's sentence, the standard library with a constant. At most one, so a unit file carries one record; `None` for every other unit, since a program has no consumer and a prelude mount nobody names has no page. See [`RootSource::documented`].
     documented: Option<(Qualifier, Option<String>)>,
-    /// A word naming what an internal mount holds, by prefix — what a page chips onto every declaration it adopts out of that root. Optional per root: which roots are adopted follows from their tier and never from this map, so a root added without an entry is still adopted and merely says nothing about itself. See [`RootSource::adopting`].
-    chips: BTreeMap<Qualifier, String>,
     /// Text consulted before the disk for every file this source would read. See [`Overlay`].
     overlay: Overlay,
     /// Every file this source has read, by the canonical path it was read from. See [`RootSource::reads`].
@@ -95,7 +93,6 @@ impl RootSource {
         Self {
             bases,
             documented: None,
-            chips: BTreeMap::new(),
             overlay: Overlay::default(),
             reads: RefCell::new(BTreeMap::new()),
         }
@@ -117,32 +114,6 @@ impl RootSource {
     /// The mount this source documents, with its description, when one was marked.
     pub(crate) fn documented_mount(&self) -> Option<(Qualifier, Option<String>)> {
         self.documented.clone()
-    }
-
-    /// This source with `chip` as the word a page shows on every declaration it adopts out of `prefix` — `intrinsic` for `/sys`'s carriers. The prefix must be an internal mount this source claims.
-    pub fn adopting(mut self, prefix: &str, chip: &str) -> Self {
-        let prefix = Qualifier::from([prefix]);
-        assert!(
-            self.bases
-                .iter()
-                .any(|(mount, _)| mount.prefix == prefix && mount.kind == RootKind::Internal),
-            "'{}' is not an internal mount this source claims",
-            prefix.join()
-        );
-
-        self.chips.insert(prefix, chip.to_string());
-        self
-    }
-
-    /// The mounts whose declarations reach a consumer only through the documented one, each with the word a page chips onto them.
-    ///
-    /// **Read off the tier, never off a list.** A root is adopted because it is [`RootKind::Internal`] — the same fact that stops a consumer naming it — so a root added to the prelude is adopted the day it is mounted, and no second place has to be kept in step for its declarations to stay off the pages under their own path.
-    pub(crate) fn adopted_mounts(&self) -> Vec<(Qualifier, Option<String>)> {
-        self.bases
-            .iter()
-            .filter(|(mount, _)| mount.kind == RootKind::Internal)
-            .map(|(mount, _)| (mount.prefix.clone(), self.chips.get(&mount.prefix).cloned()))
-            .collect()
     }
 
     /// This source with `overlay` consulted before the disk on every read.
