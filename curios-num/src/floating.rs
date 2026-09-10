@@ -11,36 +11,38 @@ use {
 };
 
 /// The sign bit, the only bit any of `neg`, `abs` and `copysign` touches.
-const SIGN_MASK: u32 = 0x8000_0000;
-const EXPONENT_MASK: u32 = 0x7f80_0000;
-const MANTISSA_MASK: u32 = 0x007f_ffff;
+const SIGN_MASK: u64 = 0x8000_0000_0000_0000;
+const EXPONENT_MASK: u64 = 0x7ff0_0000_0000_0000;
+const MANTISSA_MASK: u64 = 0x000f_ffff_ffff_ffff;
 /// The one NaN. Every constructor canonicalizes to it, which is what makes the derived `Eq` and `Hash` value identity rather than bit identity.
-const NAN_BITS: u32 = 0x7fc0_0000;
+const NAN_BITS: u64 = 0x7ff8_0000_0000_0000;
 /// A normal magnitude occupies exactly this many bits — the hidden bit included.
-const SIGNIFICAND_BITS: u32 = 24;
+const SIGNIFICAND_BITS: u32 = 53;
+/// How wide the *stored* mantissa field is — the significand without its hidden bit, and the distance the exponent field sits above bit zero.
+const MANTISSA_BITS: u32 = 52;
 /// The hidden bit's weight, which is also the least normal magnitude.
-const HIDDEN_BIT: u32 = 1 << 23;
+const HIDDEN_BIT: u64 = 1 << MANTISSA_BITS;
 /// The exponent every subnormal has, and the floor no result's exponent goes below.
-const MIN_EXPONENT: i32 = -149;
+const MIN_EXPONENT: i32 = -1074;
 /// What a magnitude's exponent gains to reach its stored field.
-const EXPONENT_BIAS: i32 = 150;
+const EXPONENT_BIAS: i32 = 1075;
 /// The field an infinity and a NaN share.
-const INFINITE_FIELD: i32 = 255;
+const INFINITE_FIELD: i32 = 2047;
 
-/// IEEE 754-2019 binary32 with exactly one NaN, computed exactly over unbounded integers and rounded once.
+/// IEEE 754-2019 binary64 with exactly one NaN, computed exactly over unbounded integers and rounded once.
 ///
-/// The bit pattern is the representation, and the invariant is that *a NaN is `NAN_BITS`* — enforced by [`Floating::from_bits`], which every other constructor routes through. With one NaN, bitwise identity is value identity: `0.0` and `-0.0` are distinct values and stay distinct, `nan` is one value, and the derived `Eq` and `Hash` say exactly that. Terms must be hashable and decidably equal, which IEEE `f32` is not.
+/// The bit pattern is the representation, and the invariant is that *a NaN is `NAN_BITS`* — enforced by [`Floating::from_bits`], which every other constructor routes through. With one NaN, bitwise identity is value identity: `0.0` and `-0.0` are distinct values and stay distinct, `nan` is one value, and the derived `Eq` and `Hash` say exactly that. Terms must be hashable and decidably equal, which IEEE `f64` is not.
 ///
-/// **No operation below calls an `f32` operation.** Every one unpacks its operands to a signed zero, a signed infinity, the NaN, or a `(sign, magnitude, exponent)` triple with the magnitude under `2^24`; computes exactly over [`Natural`]; and packs the result through the single `round` that owns the subnormal grid, the carry renormalization and the overflow to infinity. That is the whole of why a float means the same thing on every host the compiler runs on, and the reason `to_f32` survives at all is rendering and the tests' oracle — never semantics.
+/// **No operation below calls an `f64` operation.** Every one unpacks its operands to a signed zero, a signed infinity, the NaN, or a `(sign, magnitude, exponent)` triple with the magnitude under `2^53`; computes exactly over [`Natural`]; and packs the result through the single `round` that owns the subnormal grid, the carry renormalization and the overflow to infinity. That is the whole of why a float means the same thing on every host the compiler runs on, and the reason `to_f64` survives at all is rendering and the tests' oracle — never semantics.
 ///
 /// The choices IEEE leaves open are pinned rather than inherited: `min`/`max` propagate a NaN and order `-0.0` below `+0.0`, which is 754-2019's `minimum`/`maximum` and what Wasm mandates; `nearest` is ties-to-even; `rem` is exact `fmod`; `copysign(x, nan)` is `abs(x)`, since the one NaN has no sign to read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Floating {
-    bits: u32,
+    bits: u64,
 }
 
-/// What a bit pattern denotes: the four cases binary32 has, with a finite value carried as `(-1)^negative · magnitude · 2^exponent`.
+/// What a bit pattern denotes: the four cases binary64 has, with a finite value carried as `(-1)^negative · magnitude · 2^exponent`.
 ///
 /// Written out rather than read off the fields at each use because every operation's special cases are stated over these four, and the arithmetic below is then one clause per pair rather than a mask per line.
 #[derive(Debug, Clone)]
@@ -52,7 +54,7 @@ enum Unpacked {
         negative: bool,
     },
     Nan,
-    /// `magnitude` is nonzero and under `2^24`; `exponent` is at least [`MIN_EXPONENT`].
+    /// `magnitude` is nonzero and under `2^53`; `exponent` is at least [`MIN_EXPONENT`].
     Finite {
         negative: bool,
         magnitude: Natural,
@@ -80,9 +82,9 @@ fn is_odd(value: &Natural) -> bool {
     !(value & &Natural::one()).is_zero()
 }
 
-/// The binary32 nearest to `(-1)^negative · (magnitude + ε) · 2^exponent`, round to nearest with ties to even, where `ε` is a residue in `(0, 1)` reported by `sticky` and zero when it is not.
+/// The binary64 nearest to `(-1)^negative · (magnitude + ε) · 2^exponent`, round to nearest with ties to even, where `ε` is a residue in `(0, 1)` reported by `sticky` and zero when it is not.
 ///
-/// The one place the format's shape is written down. It owns three things nothing above it repeats: the subnormal grid, since a result below `2^-126` is rounded on the `2^-149` lattice directly from the same magnitude and so is never rounded twice; the carry out of the top significand bit, which renormalizes and which crosses a subnormal into the least normal with no special case, because that encoding already agrees; and the overflow past the largest finite value, which answers the infinity of the sign, as round-to-nearest requires.
+/// The one place the format's shape is written down. It owns three things nothing above it repeats: the subnormal grid, since a result below `2^-1022` is rounded on the `2^-1074` lattice directly from the same magnitude and so is never rounded twice; the carry out of the top significand bit, which renormalizes and which crosses a subnormal into the least normal with no special case, because that encoding already agrees; and the overflow past the largest finite value, which answers the infinity of the sign, as round-to-nearest requires.
 ///
 /// A caller that can lose bits — the divisions and the square root — must hand in an `exponent` low enough that at least one bit is dropped here, which is what makes `sticky` meaningful. The exact operations pass `false` and are normalized instead.
 fn round(negative: bool, magnitude: &Natural, exponent: i32, sticky: bool) -> Floating {
@@ -131,7 +133,7 @@ fn round(negative: bool, magnitude: &Natural, exponent: i32, sticky: bool) -> Fl
     };
     let exponent = exponent + shift as i32;
 
-    // Rounding up can carry out of the significand: `0xffffff` becomes `0x1000000`, one bit wider.
+    // Rounding up can carry out of the significand: `0x1f_ffff_ffff_ffff` becomes `0x20_0000_0000_0000`, one bit wider.
     match kept.bits() > u64::from(SIGNIFICAND_BITS) {
         true => Floating::encode(negative, &shift_right(&kept, 1), exponent + 1),
         false => Floating::encode(negative, &kept, exponent),
@@ -140,27 +142,27 @@ fn round(negative: bool, magnitude: &Natural, exponent: i32, sticky: bool) -> Fl
 
 impl Floating {
     /// Adopt `bits`, canonicalizing every NaN pattern to the one NaN — the invariant the whole type rests on, and what makes `of_le_bytes` of any NaN pattern the NaN.
-    pub fn from_bits(bits: u32) -> Self {
-        let exponent_field = (bits & EXPONENT_MASK) >> 23;
+    pub fn from_bits(bits: u64) -> Self {
+        let exponent_field = (bits & EXPONENT_MASK) >> MANTISSA_BITS;
         let mantissa = bits & MANTISSA_MASK;
 
-        match exponent_field == 0xff && mantissa != 0 {
+        match exponent_field == INFINITE_FIELD as u64 && mantissa != 0 {
             true => Self { bits: NAN_BITS },
             false => Self { bits },
         }
     }
 
-    /// Capture `v`'s bit pattern, canonicalizing a NaN. Not a semantics: this is how a test's oracle and a literal's host parse hand a value in, and [`Floating::to_f32`] is how a printer reads one out.
-    pub fn from_f32(v: f32) -> Self {
+    /// Capture `v`'s bit pattern, canonicalizing a NaN. Not a semantics: this is how a test's oracle and a literal's host parse hand a value in, and [`Floating::to_f64`] is how a printer reads one out.
+    pub fn from_f64(v: f64) -> Self {
         Self::from_bits(v.to_bits())
     }
 
-    pub fn to_f32(self) -> f32 {
-        f32::from_bits(self.bits)
+    pub fn to_f64(self) -> f64 {
+        f64::from_bits(self.bits)
     }
 
     /// The stored bit pattern — the identity `Eq` and `Hash` are derived over, for a caller keying on it.
-    pub fn to_bits(self) -> u32 {
+    pub fn to_bits(self) -> u64 {
         self.bits
     }
 
@@ -190,7 +192,7 @@ impl Floating {
         self.bits & EXPONENT_MASK != EXPONENT_MASK
     }
 
-    fn sign_bit(negative: bool) -> u32 {
+    fn sign_bit(negative: bool) -> u64 {
         match negative {
             true => SIGN_MASK,
             false => 0,
@@ -203,7 +205,7 @@ impl Floating {
 
     /// Pack a finite value whose `magnitude` is either full-width (a normal) or sits at [`MIN_EXPONENT`] (a subnormal), answering the infinity of the sign past the largest finite value.
     fn encode(negative: bool, magnitude: &Natural, exponent: i32) -> Self {
-        let Some(magnitude) = magnitude.to_u32() else {
+        let Some(magnitude) = magnitude.to_u64() else {
             return Self::infinite(negative);
         };
 
@@ -224,14 +226,16 @@ impl Floating {
         match field >= INFINITE_FIELD {
             true => Self::infinite(negative),
             false => Self {
-                bits: Self::sign_bit(negative) | ((field as u32) << 23) | (magnitude - HIDDEN_BIT),
+                bits: Self::sign_bit(negative)
+                    | ((field as u64) << MANTISSA_BITS)
+                    | (magnitude - HIDDEN_BIT),
             },
         }
     }
 
     fn unpack(self) -> Unpacked {
         let negative = self.is_negative();
-        let field = ((self.bits & EXPONENT_MASK) >> 23) as i32;
+        let field = ((self.bits & EXPONENT_MASK) >> MANTISSA_BITS) as i32;
         let mantissa = self.bits & MANTISSA_MASK;
 
         match (field, mantissa) {
@@ -257,7 +261,7 @@ impl Floating {
         let raise = |(magnitude, own): (&Natural, i32)| {
             shift_left(
                 magnitude,
-                u32::try_from(own - exponent).expect("an exponent difference of binary32 width"),
+                u32::try_from(own - exponent).expect("an exponent difference of binary64 width"),
             )
         };
 
@@ -322,7 +326,7 @@ impl Floating {
                 let half = exponent.div_euclid(2);
                 let odd = exponent.rem_euclid(2) as u32;
 
-                let width = i64::try_from(magnitude.bits()).expect("a magnitude of binary32 width");
+                let width = i64::try_from(magnitude.bits()).expect("a magnitude of binary64 width");
                 let scale = ((2 * i64::from(SIGNIFICAND_BITS) + 6 - width - i64::from(odd) + 1)
                     / 2)
                 .max(i64::from(half) - i64::from(MIN_EXPONENT) + 1)
@@ -380,7 +384,7 @@ impl Floating {
             return self;
         }
 
-        let drop = u32::try_from(-exponent).expect("a fractional width of binary32 range");
+        let drop = u32::try_from(-exponent).expect("a fractional width of binary64 range");
 
         let integral = shift_right(&magnitude, drop);
         let fraction = magnitude - shift_left(&integral, drop);
@@ -391,7 +395,7 @@ impl Floating {
             false => integral,
         };
 
-        // Every integral value a binary32 holds is one binary32 holds exactly, so nothing is dropped a second time.
+        // Every integral value a binary64 holds is one binary64 holds exactly, so nothing is dropped a second time.
         round(negative, &integral, 0, false)
     }
 
@@ -496,7 +500,7 @@ impl Floating {
         matches!(self.compare(other), Some(Ordering::Less | Ordering::Equal))
     }
 
-    /// The correctly rounded binary32 nearest `value`, total: rounding is the canonical extension of the embedding, and a magnitude past the largest finite value answers `+inf`.
+    /// The correctly rounded binary64 nearest `value`, total: rounding is the canonical extension of the embedding, and a magnitude past the largest finite value answers `+inf`.
     pub fn of_natural(value: &Natural) -> Self {
         round(false, value, 0, false)
     }
@@ -561,7 +565,7 @@ impl Floating {
         }
     }
 
-    /// The binary32 nearest `(-1)^negative · digits · 10^exponent`, correctly rounded, with the sign applied last so a zero keeps it.
+    /// The binary64 nearest `(-1)^negative · digits · 10^exponent`, correctly rounded, with the sign applied last so a zero keeps it.
     ///
     /// The clamps are what keep the exact arithmetic affordable: `digits` spelled in `d` decimal places bounds the value between `10^(d - 1 + exponent)` and `10^(d + exponent)`, which decides underflow and overflow before any power of ten is built. Inside them the numerator and denominator are exact and the quotient settles the rounding — one rounding, at the end, which is the whole difference between this and a chain of float multiplications.
     pub fn of_decimal(negative: bool, digits: &Natural, exponent: i32) -> Self {
@@ -571,11 +575,11 @@ impl Floating {
 
         let places = i32::try_from(digits.to_string().len()).expect("a numeral of stated width");
 
-        // `10^-46 < 2^-150`, half the least subnormal; `10^39 > 2^128`, past the rounding threshold above the largest finite value.
-        if places + exponent <= -46 {
+        // `10^-324 < 2^-1075`, half the least subnormal; `10^309 > 2^1024`, past the rounding threshold above the largest finite value.
+        if places + exponent <= -324 {
             return Self::zero(negative);
         }
-        if places - 1 + exponent >= 39 {
+        if places - 1 + exponent >= 309 {
             return Self::infinite(negative);
         }
 
@@ -785,6 +789,6 @@ impl Neg for Floating {
 
 impl fmt::Display for Floating {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_f32())
+        write!(f, "{}", self.to_f64())
     }
 }

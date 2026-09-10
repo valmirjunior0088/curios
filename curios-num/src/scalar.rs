@@ -1,8 +1,8 @@
-//! Exact scalar semantics of the erased numeric carriers — `Nat` as `u32`, `Int` as `i32`, `Flt` as binary32 — shared by every stage's constant folder so their arithmetic cannot drift. The runtime's i31 envelope appears nowhere in this module: a value the backend cannot box traps at the Wasm boundary instead of changing.
+//! Exact scalar semantics of the erased numeric carriers — `Nat` as `u32`, `Int` as `i32`, `Flt` as binary64 — shared by every stage's constant folder so their arithmetic cannot drift. The runtime's i31 envelope appears nowhere in this module: a value the backend cannot box traps at the Wasm boundary instead of changing.
 //!
 //! Only operations with semantic freedom live here — saturating-versus-refusing choices, trap conditions, fold-decline conditions. Comparisons and plain bitwise operations have exactly one meaning and stay as native operators at their use sites.
 //!
-//! **What a signature here says.** `Result<_, ScalarTrap>` is an operation the program can trap on, and `Err` means it does at this argument: an answer the theory has that the carrier cannot hold, or an operand the operation's proof precondition excludes — which only an unsound proof delivers, and the runtime refuses. A folder must record that rather than decline. A bare return is total. Nothing here is undefined at a well-typed argument: a shift count is a `Nat` on both carriers, so the negative count the theory would have had to leave silent cannot be written. `curios-core` folds the same operations over unbounded `Natural`/`Integer` and over `Floating`'s binary32 model, and is the oracle for every one of them: what is stated here must be Core's answer or a refusal, never a third value. That is why the `Flt` narrowings below compute through the model and add only the carrier's own width — the semantics is not consulted about `u32`, and the carrier is not consulted about what a float means.
+//! **What a signature here says.** `Result<_, ScalarTrap>` is an operation the program can trap on, and `Err` means it does at this argument: an answer the theory has that the carrier cannot hold, or an operand the operation's proof precondition excludes — which only an unsound proof delivers, and the runtime refuses. A folder must record that rather than decline. A bare return is total. Nothing here is undefined at a well-typed argument: a shift count is a `Nat` on both carriers, so the negative count the theory would have had to leave silent cannot be written. `curios-core` folds the same operations over unbounded `Natural`/`Integer` and over `Floating`'s binary64 model, and is the oracle for every one of them: what is stated here must be Core's answer or a refusal, never a third value. That is why the `Flt` narrowings below compute through the model and add only the carrier's own width — the semantics is not consulted about `u32`, and the carrier is not consulted about what a float means.
 
 #[cfg(test)]
 mod tests;
@@ -136,7 +136,7 @@ pub fn int_to_nat(value: i32) -> Result<u32, ScalarTrap> {
     u32::try_from(value).map_err(|_| ScalarTrap::ConversionRange)
 }
 
-/// Truncate a binary32 to `u32`, refusing outside the domain [`Floating::to_natural`] states and past the carrier.
+/// Truncate a binary64 to `u32`, refusing outside the domain [`Floating::to_natural`] states and past the carrier.
 ///
 /// Two refusals, and only the second belongs here. The model decides what the truncation *is* — undefined on a NaN, an infinity or a negative — and this adds the erased carrier's own width on top of it. The semantics is not consulted about `u32`, and the carrier is not consulted about what a float means.
 pub fn flt_to_nat(value: Floating) -> Result<u32, ScalarTrap> {
@@ -146,7 +146,7 @@ pub fn flt_to_nat(value: Floating) -> Result<u32, ScalarTrap> {
         .ok_or(ScalarTrap::ConversionRange)
 }
 
-/// Truncate a binary32 to `i32`, the twin of [`flt_to_nat`] over [`Floating::to_integer`]'s domain.
+/// Truncate a binary64 to `i32`, the twin of [`flt_to_nat`] over [`Floating::to_integer`]'s domain.
 pub fn flt_to_int(value: Floating) -> Result<i32, ScalarTrap> {
     value
         .to_integer()
