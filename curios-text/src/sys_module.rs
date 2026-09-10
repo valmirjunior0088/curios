@@ -18,6 +18,9 @@ mod host_rows;
 // `pub(crate)` rather than plain, and the one place this module widens anything: `foreign_signature` answers `into_core`'s user-written `foreign`, and it reaches the crate root through here.
 pub(crate) use host_rows::*;
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, Nat, NatLiteral, Subterm, Term,
