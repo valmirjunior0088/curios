@@ -283,7 +283,7 @@ fn prelude_fixture() -> RootSource {
                 pub let NonNeg : Type = Type;
             end
             pub mod Flt
-                pub let FourBytes : Type = Type;
+                pub let EightBytes : Type = Type;
                 pub let Finite : Type = Type;
                 pub let NonNeg : Type = Type;
             end

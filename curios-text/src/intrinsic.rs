@@ -120,7 +120,7 @@ pub enum Intrinsic {
     FltToLeBytes(Term),
     FltOfLeBytes {
         bin: Term,
-        four_bytes: Term,
+        eight_bytes: Term,
     },
     FltToInt {
         flt: Term,

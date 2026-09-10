@@ -1283,16 +1283,16 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Eqz)
             }
             CpsIntrinsic::FltAdd => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Add)
+                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Add)
             }
             CpsIntrinsic::FltSub => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Sub)
+                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Sub)
             }
             CpsIntrinsic::FltMul => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Mul)
+                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Mul)
             }
             CpsIntrinsic::FltDiv => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Div)
+                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Div)
             }
             // WebAssembly has no `f32.rem`; the shared helper computes the exact `fmod` the folders compute (see `Table::flt_rem_func`).
             CpsIntrinsic::FltRem => {
@@ -1304,52 +1304,52 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_store(dest, &op.result_repr());
             }
             CpsIntrinsic::FltEql => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Eq)
+                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Eq)
             }
             CpsIntrinsic::FltNeq => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Ne)
+                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Ne)
             }
             CpsIntrinsic::FltLt => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Lt)
+                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Lt)
             }
             CpsIntrinsic::FltLe => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Le)
+                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Le)
             }
             CpsIntrinsic::FltMin => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Min)
+                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Min)
             }
             CpsIntrinsic::FltMax => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Max)
+                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Max)
             }
             CpsIntrinsic::FltNeg => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F32Neg)
+                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Neg)
             }
             CpsIntrinsic::FltAbs => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F32Abs)
+                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Abs)
             }
             CpsIntrinsic::FltSqrt => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F32Sqrt)
+                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Sqrt)
             }
             CpsIntrinsic::FltFloor => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F32Floor)
+                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Floor)
             }
             CpsIntrinsic::FltCeil => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F32Ceil)
+                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Ceil)
             }
             CpsIntrinsic::FltTrunc => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F32Trunc)
+                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Trunc)
             }
             CpsIntrinsic::FltNearest => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F32Nearest)
+                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Nearest)
             }
             // One of the two operations whose non-NaN result would otherwise read a NaN's bits, and so one of the two the engine must be held to the model at. `Flt` has exactly one NaN, which has no sign; Wasm's `f32.copysign` reads the sign bit of whatever pattern the hardware produced, and x86's default NaN is negative where ARM's is positive. Substituting `+0.0` for a NaN sign operand answers `abs(x)`, which is what the model says and what every engine then computes.
             CpsIntrinsic::FltCopysign => {
                 let sign_local = self.context.push_local(
                     "copysign_sign",
-                    curios_wasm::ValType::Num(curios_wasm::NumType::F32),
+                    curios_wasm::ValType::Num(curios_wasm::NumType::F64),
                 );
                 self.emit_operand(&op, 0, &args[0]);
-                self.emit_instr(curios_wasm::Instr::F32Const { value: 0.0 });
+                self.emit_instr(curios_wasm::Instr::F64Const { value: 0.0 });
                 self.emit_operand(&op, 1, &args[1]);
                 self.emit_instr(curios_wasm::Instr::LocalTee {
                     local_name: sign_local.clone(),
@@ -1361,11 +1361,11 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: sign_local,
                 });
                 // `x != x` is the NaN test that reads no bits.
-                self.emit_instr(curios_wasm::Instr::F32Ne);
+                self.emit_instr(curios_wasm::Instr::F64Ne);
                 self.emit_instr(curios_wasm::Instr::Select {
-                    val_types: vec![curios_wasm::ValType::Num(curios_wasm::NumType::F32)],
+                    val_types: vec![curios_wasm::ValType::Num(curios_wasm::NumType::F64)],
                 });
-                self.emit_instr(curios_wasm::Instr::F32Copysign);
+                self.emit_instr(curios_wasm::Instr::F64Copysign);
                 self.emit_store(dest, &op.result_repr());
             }
             CpsIntrinsic::NatToInt => {
@@ -1391,7 +1391,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_store(dest, &op.result_repr());
             }
             CpsIntrinsic::NatToFlt => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F32ConvertI32U)
+                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64ConvertI32U)
             }
             CpsIntrinsic::IntToNat => {
                 let operand = &args[0];
@@ -1416,52 +1416,57 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_store(dest, &op.result_repr());
             }
             CpsIntrinsic::IntToFlt => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F32ConvertI32S)
+                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64ConvertI32S)
             }
             CpsIntrinsic::FltToLeBytes => {
                 let operand = &args[0];
-                // Reinterpret the f32 as its IEEE-754 bit pattern and split it into the four little-endian bytes. The `$bytes` payload is `i8`-packed, so `array.new_fixed` truncates each shifted i32 to its low byte -- byte-for-byte `f32::to_le_bytes`, with no host round-trip.
+                // Reinterpret the f64 as its IEEE-754 bit pattern and split it into the eight little-endian bytes. The `$bytes` payload is `i8`-packed, so `array.new_fixed` truncates each wrapped i32 to its low byte -- byte-for-byte `f64::to_le_bytes`, with no host round-trip. The pattern is sixty-four bits wide, so each byte is shifted out in i64 and wrapped, rather than shifted in i32 as binary32's was.
                 let bits_local = self.context.push_local(
                     "flt_bits",
-                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+                    curios_wasm::ValType::Num(curios_wasm::NumType::I64),
                 );
                 // The other canonicalizing site. Wasm leaves a computed NaN's sign and payload to the implementation, so reinterpreting one would hand the program bits the model does not define; the model has one NaN, and this is where that is made true of the running program. Selected rather than branched: `x != x` decides NaN without reading a bit, and the non-NaN path pays one `select`.
                 let flt_local = self.context.push_local(
                     "flt_value",
-                    curios_wasm::ValType::Num(curios_wasm::NumType::F32),
+                    curios_wasm::ValType::Num(curios_wasm::NumType::F64),
                 );
                 let rope = self.context.table().bin_rope();
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
-                self.emit_instr(curios_wasm::Instr::I32Const { value: 4 });
-                self.emit_instr(curios_wasm::Instr::I32Const { value: 0x7fc0_0000 });
+                self.emit_instr(curios_wasm::Instr::I32Const { value: 8 });
+                self.emit_instr(curios_wasm::Instr::I64Const {
+                    value: 0x7ff8_0000_0000_0000,
+                });
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
                 self.emit_instr(curios_wasm::Instr::LocalTee {
                     local_name: flt_local.clone(),
                 });
-                self.emit_instr(curios_wasm::Instr::I32ReinterpretF32);
+                self.emit_instr(curios_wasm::Instr::I64ReinterpretF64);
                 self.emit_instr(curios_wasm::Instr::LocalGet {
                     local_name: flt_local.clone(),
                 });
                 self.emit_instr(curios_wasm::Instr::LocalGet {
                     local_name: flt_local,
                 });
-                self.emit_instr(curios_wasm::Instr::F32Ne);
+                self.emit_instr(curios_wasm::Instr::F64Ne);
                 self.emit_instr(curios_wasm::Instr::Select {
-                    val_types: vec![curios_wasm::ValType::Num(curios_wasm::NumType::I32)],
+                    val_types: vec![curios_wasm::ValType::Num(curios_wasm::NumType::I64)],
                 });
-                self.emit_instr(curios_wasm::Instr::LocalTee {
+                self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: bits_local.clone(),
                 });
-                for shift in [8, 16, 24] {
+                for shift in [0, 8, 16, 24, 32, 40, 48, 56] {
                     self.emit_instr(curios_wasm::Instr::LocalGet {
                         local_name: bits_local.clone(),
                     });
-                    self.emit_instr(curios_wasm::Instr::I32Const { value: shift });
-                    self.emit_instr(curios_wasm::Instr::I32ShrU);
+                    if shift != 0 {
+                        self.emit_instr(curios_wasm::Instr::I64Const { value: shift });
+                        self.emit_instr(curios_wasm::Instr::I64ShrU);
+                    }
+                    self.emit_instr(curios_wasm::Instr::I32WrapI64);
                 }
                 self.emit_instr(curios_wasm::Instr::ArrayNewFixed {
                     type_name: rope.payload,
-                    length: 4,
+                    length: 8,
                 });
                 self.emit_instr(curios_wasm::Instr::StructNew {
                     type_name: rope.leaf,
@@ -1470,7 +1475,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             CpsIntrinsic::FltOfLeBytes => {
                 let operand = &args[0];
-                // The inverse of `FltToLeBytes`: trap (via the special label) unless the `Bin` is exactly 4 bytes, then OR the bytes back into an i32 -- each `$bytes/read` zero-extends its packed byte -- and reinterpret. Byte-for-byte `f32::from_le_bytes`, no host round-trip.
+                // The inverse of `FltToLeBytes`: trap (via the special label) unless the `Bin` is exactly 8 bytes, then OR the bytes back into an i64 -- each `$bytes/read` zero-extends its packed byte to i32, which is widened again before it is shifted into place -- and reinterpret. Byte-for-byte `f64::from_le_bytes`, no host round-trip.
                 let rope = self.context.table().bin_rope();
                 let read = self.context.table().bytes_read_func();
                 self.emit_instrs(
@@ -1478,7 +1483,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                         .load_value_instrs(operand, LoadAs::Bin(Grain::X)),
                 );
                 self.emit_instr(Self::rope_get(&rope, &rope.len_field));
-                self.emit_instr(curios_wasm::Instr::I32Const { value: 4 });
+                self.emit_instr(curios_wasm::Instr::I32Const { value: 8 });
                 self.emit_instr(curios_wasm::Instr::I32Ne);
                 self.emit_instr(curios_wasm::Instr::If {
                     label_name: self.context.table().special_label(),
@@ -1486,7 +1491,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     then_instructions: self.context.table().refuse_instrs(Panic::FltDecode),
                     else_instructions: vec![],
                 });
-                for shift in [0, 8, 16, 24] {
+                for shift in [0, 8, 16, 24, 32, 40, 48, 56] {
                     self.emit_instrs(
                         self.context
                             .load_value_instrs(operand, LoadAs::Bin(Grain::X)),
@@ -1495,13 +1500,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     self.emit_instr(curios_wasm::Instr::Call {
                         func_name: read.clone(),
                     });
+                    self.emit_instr(curios_wasm::Instr::I64ExtendI32U);
                     if shift != 0 {
-                        self.emit_instr(curios_wasm::Instr::I32Const { value: shift });
-                        self.emit_instr(curios_wasm::Instr::I32Shl);
-                        self.emit_instr(curios_wasm::Instr::I32Or);
+                        self.emit_instr(curios_wasm::Instr::I64Const { value: i64::from(shift) });
+                        self.emit_instr(curios_wasm::Instr::I64Shl);
+                        self.emit_instr(curios_wasm::Instr::I64Or);
                     }
                 }
-                self.emit_instr(curios_wasm::Instr::F32ReinterpretI32);
+                self.emit_instr(curios_wasm::Instr::F64ReinterpretI64);
                 self.emit_store(dest, &op.result_repr());
             }
             CpsIntrinsic::FltToNat => {
@@ -1510,7 +1516,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
                 );
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Flt));
-                self.emit_instr(curios_wasm::Instr::I32TruncF32U);
+                self.emit_instr(curios_wasm::Instr::I32TruncF64U);
                 self.emit_instr(curios_wasm::Instr::LocalTee {
                     local_name: local_name.clone(),
                 });
@@ -1531,7 +1537,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
                 );
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Flt));
-                self.emit_instr(curios_wasm::Instr::I32TruncF32S);
+                self.emit_instr(curios_wasm::Instr::I32TruncF64S);
                 self.emit_instr(curios_wasm::Instr::LocalTee {
                     local_name: local_name.clone(),
                 });

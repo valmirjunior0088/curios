@@ -85,7 +85,7 @@ impl Intrinsic {
             )
         };
 
-        // A bound stated over a comparison this table can build: `Holds` applied to the decision itself, rather than a proposition named per operand shape. The five that used to be named — `Lt`, `Le`, `NonZero`, `NonNeg`, `FourBytes` — were each one comparison under the same reflection, and naming them is what made the `/sys` roster reference a root above it.
+        // A bound stated over a comparison this table can build: `Holds` applied to the decision itself, rather than a proposition named per operand shape. The five that used to be named — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes` — were each one comparison under the same reflection, and naming them is what made the `/sys` roster reference a root above it.
         let holds =
             |decision: Intrinsic| decided(syntax.proof.holds, vec![Term::intrinsic(decision)]);
 
@@ -210,7 +210,7 @@ impl Intrinsic {
                     Operand::At(bin_type(Grain::X)),
                     Operand::At(holds(NatEql(
                         bin_len(Grain::X, bin.clone()),
-                        Term::intrinsic(Nat(self::Nat::new(4u32))),
+                        Term::intrinsic(Nat(self::Nat::new(8u32))),
                     ))),
                 ],
                 flt_type(),

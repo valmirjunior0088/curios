@@ -616,7 +616,7 @@ fn literal_data(literal: &CpsLiteral) -> EmissionData {
     match literal {
         CpsLiteral::Nat(value) => EmissionData::Nat(*value),
         CpsLiteral::Int(value) => EmissionData::Int(*value),
-        CpsLiteral::Flt(value) => EmissionData::Flt(value.to_f32()),
+        CpsLiteral::Flt(value) => EmissionData::Flt(value.to_f64()),
         CpsLiteral::Bin(grain, value) => EmissionData::Bin(*grain, value.clone()),
     }
 }

@@ -86,7 +86,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 ])
             }
             &EmissionData::Flt(value) => self.emit_instrs([
-                curios_wasm::Instr::F32Const { value },
+                curios_wasm::Instr::F64Const { value },
                 curios_wasm::Instr::StructNew {
                     type_name: self.context.table().flt_type(),
                 },
@@ -225,7 +225,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 false => self.emit_instrs(self.context.table().refuse_instrs(Panic::IntCarrier)),
             },
             (Some(_), &EmissionData::Flt(value)) => {
-                self.emit_instr(curios_wasm::Instr::F32Const { value })
+                self.emit_instr(curios_wasm::Instr::F64Const { value })
             }
             // No other shape is ever offered a register, so this arm builds the reference and reads it straight back down. It exists to keep the match total rather than to be taken.
             (Some(carrier), value) => {

@@ -234,7 +234,7 @@ fn spine_key(value: &Value, out: &mut String) {
             let _ = write!(out, "i{number}");
         }
         Value::Flt(number) => {
-            let _ = write!(out, "f{:08x}", number.to_f32().to_bits());
+            let _ = write!(out, "f{:016x}", number.to_bits());
         }
         Value::Handle(token) => {
             let _ = write!(out, "o{token}");

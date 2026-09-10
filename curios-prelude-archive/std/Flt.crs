@@ -7,7 +7,7 @@ use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 -- | That `b` is four bytes long, decided.
-pub let FourBytes(b: Bytes) -> Prop =
+pub let EightBytes(b: Bytes) -> Prop =
     Bool/Holds(Nat/eql(Bytes/len(b), 4));
 
 -- | Positive infinity.

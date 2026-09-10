@@ -891,7 +891,7 @@ pub(crate) fn slot_zero_instrs(slot: CpsSlot) -> Vec<curios_wasm::Instr> {
         CpsSlot::Tag | CpsSlot::Nat | CpsSlot::Int => {
             vec![curios_wasm::Instr::I32Const { value: 0 }]
         }
-        CpsSlot::Flt => vec![curios_wasm::Instr::F32Const { value: 0.0 }],
+        CpsSlot::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
         CpsSlot::List | CpsSlot::Closure(_) | CpsSlot::Row(_) | CpsSlot::Opaque => null_instrs(),
     }
 }
@@ -907,7 +907,7 @@ pub(crate) fn null_instrs() -> Vec<curios_wasm::Instr> {
 pub(crate) fn zero_instrs(carrier: Repr) -> Vec<curios_wasm::Instr> {
     match carrier {
         Repr::Nat | Repr::Int => vec![curios_wasm::Instr::I32Const { value: 0 }],
-        Repr::Flt => vec![curios_wasm::Instr::F32Const { value: 0.0 }],
+        Repr::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
         Repr::Bin(_) => vec![
             curios_wasm::Instr::I32Const { value: 0 },
             curios_wasm::Instr::RefI31,

@@ -968,7 +968,7 @@ impl<'a> Table<'a> {
     pub(crate) fn local_type(&self, value_name: &EmissionValueName) -> curios_wasm::ValType {
         match self.raw_carrier(value_name) {
             Some(Repr::Nat | Repr::Int) => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
-            Some(Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F32),
+            Some(Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
             Some(Repr::Bin(_) | Repr::List | Repr::Ref) | None => Table::top_type(true),
         }
     }

@@ -550,12 +550,12 @@ fn scalar_result<T>(
     }
 }
 
-/// Decode a little-endian binary32, trapping unless exactly four bytes.
+/// Decode a little-endian binary64, trapping unless exactly eight bytes.
 fn flt_of_le_bytes(value: &PackedBin) -> Result<Constant, TrapKind> {
     value
         .to_bytes()
         .as_deref()
-        .and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
-        .map(|le_bytes| Constant::Flt(Floating::from_bits(u32::from_le_bytes(le_bytes))))
+        .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
+        .map(|le_bytes| Constant::Flt(Floating::from_bits(u64::from_le_bytes(le_bytes))))
         .ok_or(TrapKind::MalformedInput)
 }

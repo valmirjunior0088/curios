@@ -255,7 +255,7 @@ pub struct ProofSyntax {
     pub true_type: SyntaxName,
     /// The reflection of a decided comparison into a proposition — `Holds(b)`, which reduces to [`ProofSyntax::true_type`] on a refined scrutinee, and that is what lets an obligation be discharged without a written proof.
     ///
-    /// **Every bound stated over an intrinsic comparison is built from this one rather than named.** A comparison is a term the table already holds the operands of, so naming five separate propositions — `Lt`, `Le`, `NonZero`, `NonNeg`, `FourBytes` — made the roster reach into a root above it for what it could spell itself. What survives beside this are the two `Flt` bounds, whose decision is a conjunction and so is authored rather than constructed.
+    /// **Every bound stated over an intrinsic comparison is built from this one rather than named.** A comparison is a term the table already holds the operands of, so naming five separate propositions — `Lt`, `Le`, `NonZero`, `NonNeg`, `EightBytes` — made the roster reach into a root above it for what it could spell itself. What survives beside this are the two `Flt` bounds, whose decision is a conjunction and so is authored rather than constructed.
     pub holds: SyntaxName,
     /// `a` is a number over `Flt` — finite, so neither infinity nor the NaN — the precondition truncating one to an `Int` states.
     pub flt_finite: SyntaxName,

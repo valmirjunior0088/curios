@@ -23,7 +23,7 @@ pub fn flt_sub_type(special_field: curios_wasm::FieldName) -> curios_wasm::SubTy
             special_field,
             curios_wasm::FieldType {
                 storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(
-                    curios_wasm::NumType::F32,
+                    curios_wasm::NumType::F64,
                 )),
                 mutability: curios_wasm::Mutability::Const,
             },

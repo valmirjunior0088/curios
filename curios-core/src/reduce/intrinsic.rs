@@ -538,14 +538,14 @@ pub fn reduce_intrinsic(
             },
             Intrinsic::FltToLeBytes,
         ),
-        Intrinsic::FltOfLeBytes { bin, four_bytes } => {
+        Intrinsic::FltOfLeBytes { bin, eight_bytes } => {
             let bin = reducer.reduce_forced(bin.clone())?;
 
             let folded = match &*bin {
                 Subterm::Intrinsic(Intrinsic::Bin(Grain::X, packed)) => packed
                     .to_bytes()
-                    .and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
-                    .map(|bytes| Intrinsic::Flt(Floating::from_bits(u32::from_le_bytes(bytes)))),
+                    .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
+                    .map(|bytes| Intrinsic::Flt(Floating::from_bits(u64::from_le_bytes(bytes)))),
                 _ => None,
             };
 
@@ -553,7 +553,7 @@ pub fn reduce_intrinsic(
                 Some(intrinsic) => intrinsic,
                 None => Intrinsic::FltOfLeBytes {
                     bin,
-                    four_bytes: four_bytes.clone(),
+                    eight_bytes: eight_bytes.clone(),
                 },
             }))
         }

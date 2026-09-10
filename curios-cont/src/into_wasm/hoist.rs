@@ -17,7 +17,7 @@ use {
 enum ConstKey {
     Nat(u32),
     Int(i32),
-    Flt(u32),
+    Flt(u64),
     /// The [`PackedBin`] itself, which carries its logical length. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — and a key built from packed bytes interned them into one constant, whose emitted length was whichever literal arrived first.
     Bin(Grain, PackedBin),
     List(Vec<String>),

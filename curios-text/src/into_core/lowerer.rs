@@ -1329,8 +1329,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::FltToLeBytes(inner) => {
                 curios_core::Intrinsic::flt_to_le_bytes(self.term(inner)?)
             }
-            Intrinsic::FltOfLeBytes { bin, four_bytes } => {
-                curios_core::Intrinsic::flt_of_le_bytes(self.term(bin)?, self.term(four_bytes)?)
+            Intrinsic::FltOfLeBytes { bin, eight_bytes } => {
+                curios_core::Intrinsic::flt_of_le_bytes(self.term(bin)?, self.term(eight_bytes)?)
             }
             Intrinsic::NatToInt(inner) => curios_core::Intrinsic::nat_to_int(self.term(inner)?),
             Intrinsic::HandleType => curios_core::Intrinsic::HandleType,

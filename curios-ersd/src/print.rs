@@ -492,11 +492,11 @@ fn render_constant(constant: &Constant) -> String {
         Constant::Nat(value) => format!("{value}"),
         Constant::Int(value) => format!("{value}:int"),
         Constant::Flt(value) => {
-            let float = value.to_f32();
+            let float = value.to_f64();
             if float.is_finite() {
                 format!("{float:?}:flt")
             } else {
-                format!("flt:0x{:08x}", float.to_bits())
+                format!("flt:0x{:016x}", float.to_bits())
             }
         }
         Constant::Byte(value) => format!("{value}:byte"),

@@ -1386,11 +1386,11 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let ax = curios_wasm::LocalName::from("ax");
         let ay = curios_wasm::LocalName::from("ay");
         let t = curios_wasm::LocalName::from("t");
-        let f32_val = curios_wasm::ValType::Num(curios_wasm::NumType::F32);
+        let f32_val = curios_wasm::ValType::Num(curios_wasm::NumType::F64);
         fn label(name: &str) -> curios_wasm::LabelName {
             curios_wasm::LabelName::from(name)
         }
-        let f32_const = |value: f32| curios_wasm::Instr::F32Const { value };
+        let f64_const = |value: f64| curios_wasm::Instr::F64Const { value };
         let not = || curios_wasm::Instr::I32Eqz;
         let br_if = |name: &str| curios_wasm::Instr::BrIf {
             label_name: label(name),
@@ -1418,48 +1418,48 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             vec![
                 get(&x),
                 get(&x),
-                curios_wasm::Instr::F32Ne,
+                curios_wasm::Instr::F64Ne,
                 get(&y),
                 get(&y),
-                curios_wasm::Instr::F32Ne,
+                curios_wasm::Instr::F64Ne,
                 curios_wasm::Instr::I32Or,
                 get(&x),
-                curios_wasm::Instr::F32Abs,
-                f32_const(f32::INFINITY),
-                curios_wasm::Instr::F32Eq,
+                curios_wasm::Instr::F64Abs,
+                f64_const(f64::INFINITY),
+                curios_wasm::Instr::F64Eq,
                 curios_wasm::Instr::I32Or,
                 get(&y),
-                f32_const(0.0),
-                curios_wasm::Instr::F32Eq,
+                f64_const(0.0),
+                curios_wasm::Instr::F64Eq,
                 curios_wasm::Instr::I32Or,
             ],
-            vec![f32_const(f32::NAN)],
+            vec![f64_const(f64::NAN)],
         ));
         // An infinite divisor or a zero dividend leaves the dividend as it is, its sign included.
         instrs.extend(return_if(
             vec![
                 get(&y),
-                curios_wasm::Instr::F32Abs,
-                f32_const(f32::INFINITY),
-                curios_wasm::Instr::F32Eq,
+                curios_wasm::Instr::F64Abs,
+                f64_const(f64::INFINITY),
+                curios_wasm::Instr::F64Eq,
                 get(&x),
-                f32_const(0.0),
-                curios_wasm::Instr::F32Eq,
+                f64_const(0.0),
+                curios_wasm::Instr::F64Eq,
                 curios_wasm::Instr::I32Or,
             ],
             vec![get(&x)],
         ));
         instrs.extend([
             get(&x),
-            curios_wasm::Instr::F32Abs,
+            curios_wasm::Instr::F64Abs,
             set(&ax),
             get(&y),
-            curios_wasm::Instr::F32Abs,
+            curios_wasm::Instr::F64Abs,
             set(&ay),
         ]);
         // A dividend below the divisor is its own remainder.
         instrs.extend(return_if(
-            vec![get(&ax), get(&ay), curios_wasm::Instr::F32Lt],
+            vec![get(&ax), get(&ay), curios_wasm::Instr::F64Lt],
             vec![get(&x)],
         ));
         // t = |y| · 2^k, the largest such at or below |x|.
@@ -1474,15 +1474,15 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                     block_type: curios_wasm::BlockType::Empty,
                     instructions: vec![
                         get(&t),
-                        f32_const(2.0),
-                        curios_wasm::Instr::F32Mul,
+                        f64_const(2.0),
+                        curios_wasm::Instr::F64Mul,
                         get(&ax),
-                        curios_wasm::Instr::F32Le,
+                        curios_wasm::Instr::F64Le,
                         not(),
                         br_if("scaled"),
                         get(&t),
-                        f32_const(2.0),
-                        curios_wasm::Instr::F32Mul,
+                        f64_const(2.0),
+                        curios_wasm::Instr::F64Mul,
                         set(&t),
                         br("double"),
                     ],
@@ -1499,7 +1499,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                 instructions: vec![
                     get(&ax),
                     get(&ay),
-                    curios_wasm::Instr::F32Ge,
+                    curios_wasm::Instr::F64Ge,
                     not(),
                     br_if("reduced"),
                     curios_wasm::Instr::Block {
@@ -1511,12 +1511,12 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                             instructions: vec![
                                 get(&t),
                                 get(&ax),
-                                curios_wasm::Instr::F32Gt,
+                                curios_wasm::Instr::F64Gt,
                                 not(),
                                 br_if("aligned"),
                                 get(&t),
-                                f32_const(0.5),
-                                curios_wasm::Instr::F32Mul,
+                                f64_const(0.5),
+                                curios_wasm::Instr::F64Mul,
                                 set(&t),
                                 br("halve"),
                             ],
@@ -1524,13 +1524,13 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                     },
                     get(&ax),
                     get(&t),
-                    curios_wasm::Instr::F32Sub,
+                    curios_wasm::Instr::F64Sub,
                     set(&ax),
                     br("subtract"),
                 ],
             }],
         });
-        instrs.extend([get(&ax), get(&x), curios_wasm::Instr::F32Copysign]);
+        instrs.extend([get(&ax), get(&x), curios_wasm::Instr::F64Copysign]);
 
         self.add_helper(
             func_name,

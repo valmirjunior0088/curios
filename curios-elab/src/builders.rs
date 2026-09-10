@@ -283,7 +283,7 @@ pub trait IntrinsicBuilders {
         T: Into<Term>;
 
     /// A `FltOfLeBytes` node (a float assembled from its four little-endian bytes) from anything term-shaped.
-    fn flt_of_le_bytes<T, P>(bin: T, four_bytes: P) -> Self
+    fn flt_of_le_bytes<T, P>(bin: T, eight_bytes: P) -> Self
     where
         T: Into<Term>,
         P: Into<Term>;
@@ -607,14 +607,14 @@ impl IntrinsicBuilders for Intrinsic {
         Self::FltToLeBytes(inner.into())
     }
 
-    fn flt_of_le_bytes<T, P>(bin: T, four_bytes: P) -> Self
+    fn flt_of_le_bytes<T, P>(bin: T, eight_bytes: P) -> Self
     where
         T: Into<Term>,
         P: Into<Term>,
     {
         Self::FltOfLeBytes {
             bin: bin.into(),
-            four_bytes: four_bytes.into(),
+            eight_bytes: eight_bytes.into(),
         }
     }
 

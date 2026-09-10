@@ -144,10 +144,10 @@ pub enum Intrinsic {
         non_neg: Term,
     },
     FltToLeBytes(Term),
-    /// `four_bytes` proves `len(bin) = 4`, which is the whole of what reinterpreting a binary32 needs.
+    /// `eight_bytes` proves `len(bin) = 8`, which is the whole of what reinterpreting a binary64 needs.
     FltOfLeBytes {
         bin: Term,
-        four_bytes: Term,
+        eight_bytes: Term,
     },
     /// `finite` proves the operand is a number — neither infinity, and not the NaN — which is the whole of what truncating toward zero needs.
     FltToInt {
@@ -726,7 +726,7 @@ impl Intrinsic {
 
             Intrinsic::FltOfLeBytes {
                 bin: a,
-                four_bytes: p,
+                eight_bytes: p,
             }
             | Intrinsic::IntToNat { int: a, non_neg: p }
             | Intrinsic::FltToNat { flt: a, non_neg: p }
@@ -968,9 +968,9 @@ impl Intrinsic {
             Intrinsic::FltTrunc(inner) => Intrinsic::FltTrunc(visit.visit_subterm(inner)),
             Intrinsic::FltNearest(inner) => Intrinsic::FltNearest(visit.visit_subterm(inner)),
             Intrinsic::FltToLeBytes(inner) => Intrinsic::FltToLeBytes(visit.visit_subterm(inner)),
-            Intrinsic::FltOfLeBytes { bin, four_bytes } => Intrinsic::FltOfLeBytes {
+            Intrinsic::FltOfLeBytes { bin, eight_bytes } => Intrinsic::FltOfLeBytes {
                 bin: visit.visit_subterm(bin),
-                four_bytes: visit.visit_subterm(four_bytes),
+                eight_bytes: visit.visit_subterm(eight_bytes),
             },
             Intrinsic::NatToInt(inner) => Intrinsic::NatToInt(visit.visit_subterm(inner)),
             Intrinsic::NatToFlt(inner) => Intrinsic::NatToFlt(visit.visit_subterm(inner)),

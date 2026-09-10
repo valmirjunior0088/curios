@@ -134,7 +134,7 @@ pub(super) fn reduce_int_division(
     }))
 }
 
-/// `Flt` operations fold on literal operands by calling the model, `curios_num::Floating` — binary32 computed exactly over unbounded integers and rounded once, rather than whatever the compiler's host computes. There is no decline gate: with exactly one NaN and a runtime held to the same clauses, the model leaves nothing undetermined, so `1.0 + 1.0` is `2.0`, `1.0 / 0.0` is `+inf`, `0.0 / 0.0` is the NaN, and each is true of the running program. A symbolic operand rebuilds the neutral term.
+/// `Flt` operations fold on literal operands by calling the model, `curios_num::Floating` — binary64 computed exactly over unbounded integers and rounded once, rather than whatever the compiler's host computes. There is no decline gate: with exactly one NaN and a runtime held to the same clauses, the model leaves nothing undetermined, so `1.0 + 1.0` is `2.0`, `1.0 / 0.0` is `+inf`, `0.0 / 0.0` is the NaN, and each is true of the running program. A symbolic operand rebuilds the neutral term.
 ///
 /// **Why folding here is not the hazard the opacity this replaced was afraid of.** IEEE equality identifies `0.0` with `-0.0`, which `FltToLeBytes` tells apart — the singleton-forgery shape — but folding `FltEql(0.0, -0.0)` to the `Bool` `true` creates no convertibility: `Eq` still needs `refl`, conversion on literals is bitwise, and scrutinee refinement rewrites the scrutinee term rather than an operand. What *would* be a hazard is a fold the running program can disagree with, and the only thing IEEE and Wasm leave to the implementation is a computed NaN's sign and payload — which the one canonical NaN removes, and which `into_wasm` closes at the two operations that could read those bits.
 ///

@@ -580,7 +580,7 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
                         ],
                     ),
                 ),
-                |bin, four_bytes| Intrinsic::FltOfLeBytes { bin, four_bytes },
+                |bin, eight_bytes| Intrinsic::FltOfLeBytes { bin, eight_bytes },
             ),
         ),
     ];

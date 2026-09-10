@@ -442,11 +442,11 @@ fn list_segments(value: &Term) -> Option<Vec<(&Term, usize)>> {
 
 /// How many generators an already-reduced `Bin` value carries. `None` where the value is not wholly measurable, or where the total does not fit a `usize`.
 ///
-/// **Deliberately a superset of [`bin_segments`] rather than a fold over it.** A *segment* is something `Bin/get` and `Bin/slice` may read *into*; this walk additionally credits an operation whose result arity is fixed by the operation rather than by any operand. Today that is `Flt/to_le_bytes` alone, which writes four bytes for every float, NaN and both zeros included.
+/// **Deliberately a superset of [`bin_segments`] rather than a fold over it.** A *segment* is something `Bin/get` and `Bin/slice` may read *into*; this walk additionally credits an operation whose result arity is fixed by the operation rather than by any operand. Today that is `Flt/to_le_bytes` alone, which writes eight bytes for every float, NaN and both zeros included.
 ///
 /// Crediting it as a segment instead would be wrong twice over: `bin_locate` would hand the node back to `Bin/get` as the operand holding the index, which re-enters this same node and never terminates, and `bin_window` would try to narrow a value it cannot read.
 ///
-/// The length is the one thing about such a node knowable without observing the float, and that is what this reads. `Flt` folds through the binary32 model now, so a *literal* operand is answered by `reduce::intrinsic` before it ever reaches here; what survives is the case this was written for — a **symbolic** operand, where `Bin/len(Flt/to_le_bytes(x))` is still `4` because it is the arity of the result rather than anything about the float. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
+/// The length is the one thing about such a node knowable without observing the float, and that is what this reads. `Flt` folds through the binary64 model now, so a *literal* operand is answered by `reduce::intrinsic` before it ever reaches here; what survives is the case this was written for — a **symbolic** operand, where `Bin/len(Flt/to_le_bytes(x))` is still `8` because it is the arity of the result rather than anything about the float. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
 pub(crate) fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
     let mut total = 0usize;
     let mut pending = vec![value];
@@ -462,7 +462,7 @@ pub(crate) fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
                 pending.extend(operands.iter());
                 continue;
             }
-            Subterm::Intrinsic(Intrinsic::FltToLeBytes(_)) if grain == Grain::X => 4,
+            Subterm::Intrinsic(Intrinsic::FltToLeBytes(_)) if grain == Grain::X => 8,
             _ => return None,
         };
         total = total.checked_add(length)?;

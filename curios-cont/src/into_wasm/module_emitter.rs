@@ -320,7 +320,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::I32))
             }
             CpsSlot::Flt => {
-                curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::F32))
+                curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::F64))
             }
             CpsSlot::List => reference(self.table.list_rope().base.clone()),
             CpsSlot::Closure(arity) => reference(self.table.find_envr_type(arity)),

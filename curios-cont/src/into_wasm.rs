@@ -101,7 +101,7 @@ fn raw_locals(module: &CpsModule) -> HashMap<EmissionValueName, Repr> {
 pub(crate) enum EmissionData {
     Nat(u32),
     Int(i32),
-    Flt(f32),
+    Flt(f64),
     Bin(Grain, PackedBin),
     List(Vec<EmissionValueName>),
     Tuple(Vec<EmissionValueName>),

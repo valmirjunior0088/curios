@@ -18,7 +18,7 @@ enum AtomKey {
     Fun(u32),
     Nat(u32),
     Int(i32),
-    Flt(u32),
+    Flt(u64),
     Bin(Grain, PackedBin),
     Filler,
 }
