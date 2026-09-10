@@ -185,7 +185,7 @@ fn a_stored_unit_may_not_declare_a_witness_under_a_mount_it_does_not_own() {
         Term::intrinsic(crate::Intrinsic::NatType),
     );
     module.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
-    let witness = Global::Witness(WitnessId::new(Qualifier::from(["theirs"]), 0));
+    let witness = Global::Witness(WitnessId::new(Qualifier::from(["theirs", "Shape"]), 0));
     module.witnesses.insert(witness.clone());
 
     assert_eq!(
@@ -201,7 +201,7 @@ fn a_stored_unit_may_not_declare_a_witness_under_a_mount_it_does_not_own() {
 fn a_stored_unit_may_name_a_witness_another_mount_declared() {
     let mut module = stored(
         Term::free_var(&Free::Global(Global::Witness(WitnessId::new(
-            Qualifier::from(["theirs"]),
+            Qualifier::from(["theirs", "Shape"]),
             3,
         )))),
         Term::intrinsic(crate::Intrinsic::NatType),

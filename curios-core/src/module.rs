@@ -605,10 +605,8 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
     );
 
     if let Some(witness) = module.witnesses.iter().find(|witness| match witness {
-        Global::Witness(id) => !module
-            .mounts
-            .iter()
-            .any(|mount| &mount.prefix == id.mount()),
+        // Containment rather than equality: the identity names the *module* that declares it, which lies within one of this unit's mounts rather than being one.
+        Global::Witness(id) => Mount::owning(&module.mounts, id.module()).is_none(),
         Global::Authored(_) => false,
     }) {
         return Err(Positional::UnscopedWitness {

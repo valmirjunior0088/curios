@@ -458,19 +458,17 @@ impl<'a> Context<'a> {
         result
     }
 
-    /// Mint a witness identity under the mount that declares it.
+    /// Mint a witness identity in the module that declares it.
     ///
-    /// A `satisfy` declaration is anonymous by design, so it gets an identity rather than a manufactured name — see [`curios_core::Global::Witness`]. The ordinal is per mount rather than per program: two units both counting from zero is exactly what makes a bare ordinal unstorable, and the mount is what makes the pair disjoint without either unit knowing the other exists.
+    /// A `satisfy` declaration is anonymous by design, so it gets an identity rather than a manufactured name — see [`curios_core::Global::Witness`]. The ordinal is per module rather than per program: two units both counting from zero is exactly what makes a bare ordinal unstorable, and the module is what makes the pair disjoint without either unit knowing the other exists — modules are disjoint within a mount, and mounts across units.
     ///
-    /// The mount is the one this context's prefix lies within. A prefix owned by nothing is the synthetic compilation root, which only arises while no unit has claimed anything yet.
+    /// The module is this context's own prefix. It used to be the mount that prefix lies within, which was disjoint enough to be sound and too coarse to be *placed*: an import scope is keyed by `Global`, and a page asks which declarations belong to the module it renders, to which every witness in the standard library answered `/std`.
     pub(super) fn fresh_witness(&self) -> curios_core::WitnessId {
-        let mount = Mount::owning(self.reach.mounts(), &self.prefix)
-            .map(|mount| mount.prefix.clone())
-            .unwrap_or_default();
+        let module = self.prefix.clone();
 
         let mut witnesses = self.witnesses.borrow_mut();
-        let ordinal = witnesses.entry(mount.clone()).or_default();
-        let minted = curios_core::WitnessId::new(mount, *ordinal);
+        let ordinal = witnesses.entry(module.clone()).or_default();
+        let minted = curios_core::WitnessId::new(module, *ordinal);
         *ordinal += 1;
 
         minted

@@ -14,34 +14,36 @@ use {
 
 name!(Atom; archive);
 
-/// A witness's identity: the mount that declares it, and its ordinal within that mount.
+/// A witness's identity: the module that declares it, and its ordinal within that module.
 ///
-/// **Not a program-global counter, and that is the point.** Two units elaborated in separate compilations both mint from zero, so a bare ordinal means something only in the compilation that assigned it — the positional identity a stored unit may not carry, and the last of the four classes to be scoped. Pairing the ordinal with its declaring mount makes two witnesses disjoint by the same argument mount disjointness carries everywhere else, so restoring two independently compiled units together cannot alias one onto the other.
+/// **Not a program-global counter, and that is the point.** Two units elaborated in separate compilations both mint from zero, so a bare ordinal means something only in the compilation that assigned it — the positional identity a stored unit may not carry, and the last of the four classes to be scoped. Pairing the ordinal with its declaring module makes two witnesses disjoint by the argument mount disjointness already carries: modules are disjoint within a mount and mounts are disjoint across units, so restoring two independently compiled units together cannot alias one onto the other.
 ///
-/// It is also what removes the floor. A counter seeded above the archived prelude's watermark tied a unit's identities to *where it sat*; per-mount ordinals depend on nothing but the unit itself.
+/// It is also what removes the floor. A counter seeded above the archived prelude's watermark tied a unit's identities to *where it sat*; per-module ordinals depend on nothing but the unit itself.
+///
+/// **The module rather than the mount, which is finer than disjointness needs.** It is what lets a witness be *placed*: `by_item` keys an import scope by `Global`, and a documentation page asks which declarations belong to the module it is rendering. A mount answers `/std` for every witness in the standard library, which is no answer at all; the declaring module answers `/std/Tuple`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct WitnessId {
-    mount: Qualifier,
+    module: Qualifier,
     ordinal: u32,
 }
 
 impl WitnessId {
-    /// The `ordinal`th witness declared under `mount`.
-    pub fn new(mount: Qualifier, ordinal: u32) -> Self {
-        Self { mount, ordinal }
+    /// The `ordinal`th witness declared in `module`.
+    pub fn new(module: Qualifier, ordinal: u32) -> Self {
+        Self { module, ordinal }
     }
 
-    /// The mount that declares it.
-    pub fn mount(&self) -> &Qualifier {
-        &self.mount
+    /// The module that declares it.
+    pub fn module(&self) -> &Qualifier {
+        &self.module
     }
 }
 
 impl fmt::Display for WitnessId {
-    /// Mount-qualified — which is the spelling two of this workspace's diagnostics already used while the identity behind it was still a bare counter.
+    /// Module-qualified — the spelling two of this workspace's diagnostics already used while the identity behind it was still a bare counter, now naming the module a reader would look in rather than the mount.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}/witness@{}", self.mount.join(), self.ordinal)
+        write!(formatter, "{}/witness@{}", self.module.join(), self.ordinal)
     }
 }
 
