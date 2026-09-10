@@ -106,7 +106,10 @@ pub(super) fn elaborate_struct_type(
 /// Where one field position's value comes from: a written term to check, or — for a concept's `use`-marked field with no written fill — a witness goal to mint at the position's instantiated type.
 pub(super) enum FieldSource<'a> {
     Written(&'a Term),
-    Resolve { func: String, binder: String },
+    /// An unfilled `use` position: a superclass edge the literal left to resolution. It carries no binder because there is none to carry — the field is anonymous, and the goal's own line already names the concept sought.
+    Resolve {
+        func: String,
+    },
 }
 
 /// Check each positional field against its type in a dependent field telescope, pushing the elaborated fields onto `elaborated`. Shared by struct and tuple literal elaboration. The rest of the telescope is opened with the *elaborated* field, not the raw surface term: the elaborated form carries label projections rebuilt positionally (and implicits inserted), whereas a raw `Field::Label` substituted into a later field type would panic once that type is reduced (e.g. `Async(b.A)` arising from a field typed `Async(A)` in `{ A : Type, t : Async(A) }`). A `Resolve` source mints a witness metavar plus an eagerly-attempted resolution goal — the `insert_auto_argument` pattern — anchored at `origin`, and the metavar threads the telescope like any elaborated field.
@@ -122,10 +125,10 @@ pub(super) fn check_dependent_fields(
         Telescope::Cons(ty, rest) => {
             let head = match &sources[0] {
                 FieldSource::Written(field) => check(context, field, ty)?,
-                FieldSource::Resolve { func, binder } => {
+                FieldSource::Resolve { func } => {
                     let provenance = WitnessOrigin {
                         func: func.clone(),
-                        binder: format!("its 'use' field '{binder}'"),
+                        binder: "its superclass".to_string(),
                     };
                     let (id, metavar) = context.fresh_witness_metavar(
                         ty.clone(),
@@ -283,10 +286,9 @@ pub(super) fn elaborate_struct(
         if use_positions.contains(&position) {
             sources.push(match fill_values.next() {
                 Some(fill) => FieldSource::Written(fill),
-                // A `use` position is an anonymous superclass field; its minted internal label must never surface, so the goal's provenance names it `_` (the goal itself already shows the concept).
+                // A `use` position is an anonymous superclass field, so the provenance says *superclass* rather than reaching for a label: the minted internal one must never surface, and the placeholder that stood in for it read as `its 'use' field '_'` — noise beside a first line that already names the concept sought.
                 None => FieldSource::Resolve {
                     func: name.symbol(),
-                    binder: "_".to_string(),
                 },
             });
         } else {
