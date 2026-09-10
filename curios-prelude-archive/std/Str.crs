@@ -121,7 +121,7 @@ pub let eq_of_bytes(a: Str, b: Str, p: Eq(a.bytes, b.bytes)) -> Eq(a, b) =
     Eq/subst(
         (bytes: Bytes) => (valid: Valid(bytes)) -> Eq(a, Str { bytes = bytes, valid = valid }),
         p,
-        (_valid: Valid(a.bytes)) => Eq/refl())(b.valid);
+        (_: Valid(a.bytes)) => Eq/refl())(b.valid);
 
 -- | `a` then `b`.
 pub let concat(a: Str, b: Str) -> Str =
@@ -173,7 +173,7 @@ pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
 
 -- | `s` written `n` times.
 pub let repeat(s: Str, n: Nat) -> Str =
-    List/balanced(n, "", (_i) => s, (l, r) => concat(l, r));
+    List/balanced(n, "", (_) => s, (l, r) => concat(l, r));
 
 -- | Left to right over the characters with `f(char, acc)`.
 pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
@@ -189,10 +189,10 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                     peel_byte(True/qed(), valid),
                     match classify(h)
                     | ascii() => (f(certify_decoded(Byte/to_nat(h)), acc.0), 0)
-                    | lead(_width, _lo, _hi, payload) => (acc.0, payload)
+                    | lead(_, _, _, payload) => (acc.0, payload)
                     | bad() => acc
                     end)
-            | cont(rem, _lo, _hi) =>
+            | cont(rem, _, _) =>
                 let partial = acc.1 * 0x40 + (Byte/to_nat(h) - 0x80);
                 go(
                     step(h, sc),
@@ -278,11 +278,11 @@ pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
                         t,
                         peel_byte(True/qed(), valid),
                         pred,
-                        match le: (x, y, _le) => Nat/Le/Ind(x - 1, y - 1)
-                        | s(@_a, @_c, prev) => prev
+                        match le: (x, y, _) => Nat/Le/Ind(x - 1, y - 1)
+                        | s(@_, @_, prev) => prev
                         end)
                 end
-            | cont(_rem, _lo, _hi) => go(step(h, sc), t, peel_byte(True/qed(), valid), i, le)
+            | cont(_, _, _) => go(step(h, sc), t, peel_byte(True/qed(), valid), i, le)
             | bad() => go(step(h, Scan/bad()), t, peel_byte(True/qed(), valid), i, le)
             end
         end;

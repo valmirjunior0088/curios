@@ -13,7 +13,7 @@ satisfy Monad(Io) {
 
 -- | The identity edge, for a witness whose premise is `Lift(Io, M)` at `M = Io`.
 satisfy Lift(Io, Io) {
-    lift(@_A, m) = m,
+    lift(@_, m) = m,
 }
 
 -- | What one read answers with.

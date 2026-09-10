@@ -66,7 +66,7 @@ pub let max(a: Nat, b: Nat) -> Nat =
 
 -- | `base` to the power `exp`.
 pub let pow(base: Nat, exp: Nat) -> Nat =
-    match exp | 0 => 1 | _pred + 1; acc => acc * base end;
+    match exp | 0 => 1 | _ + 1; acc => acc * base end;
 
 -- | The greatest common divisor, with `gcd(a, 0)` as `a`. General recursion, so a type may not mention it.
 pub let gcd(a: Nat, b: Nat) -> Nat =

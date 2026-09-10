@@ -17,7 +17,7 @@ pub let cong_raw(@s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(raw(s), raw(t)) =
 let raw_nonempty(x: Bits) -> Eq(nonempty(raw(x)), true) =
     match x: (a) => Eq(nonempty(raw(a)), true)
     | b[] => Eq/refl()
-    | b[h, .._t] => match h | true => Eq/refl() | false => Eq/refl() end
+    | b[h, .._] => match h | true => Eq/refl() | false => Eq/refl() end
     end;
 
 -- | The successor of a trimmed word is trimmed.

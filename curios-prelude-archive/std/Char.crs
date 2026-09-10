@@ -49,7 +49,7 @@ pub let eq_of_code(a: Char, b: Char, proof: Eq(a.code, b.code)) -> Eq(a, b) =
     Eq/subst(
         (code: Nat) => (scalar: Scalar(code)) -> Eq(a, Char { code = code, scalar = scalar }),
         proof,
-        (_scalar: Scalar(a.code)) => Eq/refl())(b.scalar);
+        (_: Scalar(a.code)) => Eq/refl())(b.scalar);
 
 -- | Whether the two are equal.
 pub let eql(a: Char, b: Char) -> Bool =

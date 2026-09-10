@@ -8,9 +8,9 @@ pub let Frame(w: Nat, h: Nat) -> Type =
 
 let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T, n)) -> Vec(T, m) =
     (match m: (k) => (j: Nat, Vec(T, j)) -> Vec(T, k)
-    | 0 => (_j, _x) => Vec/nil()
-    | _p + 1; ih =>
-        (_j, x) =>
+    | 0 => (_, _) => Vec/nil()
+    | _ + 1; ih =>
+        (_, x) =>
             match x
             | nil() => Vec/cons(fill, ih(0, Vec/nil()))
             | cons(@q, y, ys) => Vec/cons(y, ih(q, ys))
@@ -20,7 +20,7 @@ let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T, n)) -> Vec(T, m) =
 let drop_upto(@T: Type, l: List(T), k: Nat) -> List(T) =
     match k
     | 0 => l
-    | _p + 1; ih => match ih | [] => [] | [_, ..rest] => rest end
+    | _ + 1; ih => match ih | [] => [] | [_, ..rest] => rest end
     end;
 
 -- | `w` by `h` of blank tiles.

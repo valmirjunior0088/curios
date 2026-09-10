@@ -152,7 +152,7 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
                 end
             end
         end;
-    let paste(_opener: Nat, start: Nat) -> Step(E) =
+    let paste(_: Nat, start: Nat) -> Step(E) =
         let find(j: Nat) -> Option(Nat) =
             match at(input, j)
             | none() => Option/none()

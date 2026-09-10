@@ -126,9 +126,9 @@ pub let render(
 ) -> Frame(w, h) =
     match s
     | leaf(@name, pw, ph) => paint(name, pw, ph)
-    | stacked(@_ps, @_sw, @_sh, col) => render_column(col, paint)
-    | ranged(@_ps, @_sw, @_sh, row) => render_row(row, paint)
-    | fitted(@_il, @_w0, @_h0, fw, fh, inner) => Frame/fit(render(inner, paint), fw, fh)
+    | stacked(@_, @_, @_, col) => render_column(col, paint)
+    | ranged(@_, @_, @_, row) => render_row(row, paint)
+    | fitted(@_, @_, @_, fw, fh, inner) => Frame/fit(render(inner, paint), fw, fh)
     end
 and render_column(
     @ps: List({Constraint, Layout}),
@@ -139,7 +139,7 @@ and render_column(
 ) -> Frame(w, h) =
     match col
     | col_stop(@cw) => Frame/blank(cw, 0)
-    | col_part(@_c, @_l, @_rest, @_cw, @_h1, @_h2, head, tail) =>
+    | col_part(@_, @_, @_, @_, @_, @_, head, tail) =>
         Frame/above(render(head, paint), render_column(tail, paint))
     end
 and render_row(
@@ -151,14 +151,14 @@ and render_row(
 ) -> Frame(w, h) =
     match row
     | row_stop(@rh) => Frame/blank(0, rh)
-    | row_part(@_c, @_l, @_rest, @_w1, @_w2, @_rh, head, tail) =>
+    | row_part(@_, @_, @_, @_, @_, @_, head, tail) =>
         Frame/beside(render(head, paint), render_row(tail, paint))
     end;
 
 -- | `w` by `h` shared along the tree, each child at its share and the whole fitted to the size asked for.
 pub let split(l: Layout, w: Nat, h: Nat) -> Sizes(l, w, h) =
     match l
-    | pane(_name) => leaf(w, h)
+    | pane(_) => leaf(w, h)
     | rows(ps) =>
         let built = split_column(ps, w, distribute(List/map(ps, (p) => p.0), h));
         fitted(w, h, stacked(built.col))

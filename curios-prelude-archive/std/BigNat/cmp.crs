@@ -95,7 +95,7 @@ let cong_cmp_match(
 ) -> Eq(
     match s: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
     match t: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end) =
-    match p: (u, v, _q) =>
+    match p: (u, v, _) =>
         Eq(
             match u: (_) => Ordering
             | eq() => E
@@ -107,7 +107,7 @@ let cong_cmp_match(
             | lt() => Ordering/lt()
             | gt() => Ordering/gt()
             end)
-    | refl(@_z) => Eq/refl()
+    | refl(@_) => Eq/refl()
     end;
 
 -- | Words that compare equal are equal.
@@ -318,10 +318,10 @@ let trans_cons(
         raw(xt, zt),
         Ordering/lt()),
 ) -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt()) =
-    match s1: (_r1) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
+    match s1: (_) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
     | gt() => match gt_neq_lt(reduce_whole(e1, p)) end
     | lt() =>
-        match s2: (_r2) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
+        match s2: (_) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
         | gt() => match gt_neq_lt(reduce_whole(e2, q)) end
         | lt() => cons_lt(xh, zh, ih(e1)(e2))
         | eq() =>
@@ -331,7 +331,7 @@ let trans_cons(
                 Eq/subst((w: Bits) => Eq(raw(xt, w), Ordering/lt()), raw_to_eq(yt, zt, e2), e1))
         end
     | eq() =>
-        match s2: (_r3) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
+        match s2: (_) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
         | gt() => match gt_neq_lt(reduce_whole(e2, q)) end
         | lt() =>
             cons_lt(
@@ -362,19 +362,19 @@ pub let raw_trans(
     | b[] =>
         match y
         | b[] => match eq_neq_lt(p) end
-        | b[_yh, .._yt] =>
+        | b[_, .._] =>
             match z
             | b[] => match gt_neq_lt(q) end
             | b[_, .._] => Eq/refl()
             end
         end
-    | b[_xh, ..xt] =>
+    | b[_, ..xt] =>
         match y
         | b[] => match gt_neq_lt(p) end
-        | b[_yh, ..yt] =>
+        | b[_, ..yt] =>
             match z
             | b[] => match gt_neq_lt(q) end
-            | b[_zh, ..zt] =>
+            | b[_, ..zt] =>
                 trans_cons(
                     raw(xt, yt),
                     Eq/refl(),

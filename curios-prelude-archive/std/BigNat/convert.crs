@@ -39,7 +39,7 @@ pub let Decimal(s: Str) -> Prop =
     Bool/Holds(is_decimal(s));
 
 -- | The number `s` spells, under the evidence that it is decimal.
-pub let of_decimal(s: Str, @_ok: Decimal(s)) -> BigNat =
+pub let of_decimal(s: Str, @_: Decimal(s)) -> BigNat =
     Str/fold(s, zero, (cp, acc) => add/add(mul/small(acc, 10), of_nat(Char/to_nat(cp) - 0x30)));
 
 -- | The number `s` spells, or `none` for any other text.

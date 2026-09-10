@@ -13,19 +13,19 @@ pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
 pub let le_one_of_positive(@n: Nat, p: Lt(0, n)) -> Nat/Le(1, n) =
     match n
     | 0 => match p end
-    | _pred + 1 => True/qed()
+    | _ + 1 => True/qed()
     end;
 
 -- | `a <= b` by induction gives `a < b + 1`.
 pub let succ_of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Lt(a, b + 1) =
-    match p: (x, y, _w) => Lt(x, y + 1)
+    match p: (x, y, _) => Lt(x, y + 1)
     | z(@_) => True/qed()
     | s(@_, @_, prev) => succ_of_ind(prev)
     end;
 
 -- | `a + 1 <= b` by induction gives `a < b`.
 pub let of_ind_succ(@a: Nat, @b: Nat, p: Ind(a + 1, b)) -> Lt(a, b) =
-    match p: (x, y, _w) => Lt(x - 1, y) | s(@_a2, @_b2, prev) => succ_of_ind(prev) end;
+    match p: (x, y, _) => Lt(x - 1, y) | s(@_, @_, prev) => succ_of_ind(prev) end;
 
 -- | `a < b` as the inductive `Ind(a, b)`: the strict bound weakened into the family a proof can recurse over.
 pub let ind_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Ind(a, b) =
@@ -62,10 +62,10 @@ pub let strong(
     let go(k: Nat, n: Nat, le: Nat/Le(n, k)) -> P(n) =
         match k
         | 0 =>
-            step(n, (_m, lt) =>
+            step(n, (_, lt) =>
                 match n
                 | 0 => match lt end
-                | _np + 1 => match le end
+                | _ + 1 => match le end
                 end)
         | kp + 1 => step(n, (m, lt) => go(kp, m, Le/trans(le_succ_of_lt(m, n, lt), le)))
         end;

@@ -22,7 +22,7 @@ pub concept Key(K: Type): pub Type {
 -- | The identity encoding.
 satisfy Key(Bytes) {
     to_bytes(b) = b,
-    injective(_a, _b, same) = same,
+    injective(_, _, same) = same,
 }
 
 -- | The UTF-8 bytes.
@@ -106,7 +106,7 @@ let insert1(@V: Type, t: Node(V), k: Bytes, v: V) -> {Node(V), Nat, Nat} =
 
 let remove1(@V: Type, t: Node(V), k: Bytes) -> {Node(V), Nat} =
     match t
-    | leaf(k0, _v0) => match Bytes/eql(k0, k) | true => (t, 2) | false => (t, 0) end
+    | leaf(k0, _) => match Bytes/eql(k0, k) | true => (t, 2) | false => (t, 0) end
     | fork(c, z, o) =>
         match bit(k, c)
         | 0 =>
@@ -174,7 +174,7 @@ pub let fold(@V: Type, @A: Type, m: Map(V), init: A, f: (Bytes, V, A) -> A) -> A
     | none() => init
     | some(n) =>
         let go(t: Node(V), acc: A) -> A =
-            match t | leaf(k, v) => f(k, v, acc) | fork(_c, z, o) => go(o, go(z, acc)) end;
+            match t | leaf(k, v) => f(k, v, acc) | fork(_, z, o) => go(o, go(z, acc)) end;
         go(n, init)
     end;
 

@@ -2,7 +2,7 @@ use /std/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /std/{Char, Nat, Byte, Bytes, Eq, Option, False, True};
 
 let seq(@s: Scan, @a: Bytes, @b: Bytes, va: Utf8(s, a), vb: Valid(b)) -> Utf8(s, x[..a, ..b]) =
-    match va: (q, x, _w) => Utf8(q, x[..x, ..b])
+    match va: (q, x, _) => Utf8(q, x[..x, ..b])
     | stop() => vb
     | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
     end;
@@ -17,7 +17,7 @@ pub let check(s: Scan, b: Bytes) -> Option(Utf8(s, b)) =
     | x[] =>
         match s
         | lead() => Option/some(Utf8/stop())
-        | cont(_rem, _lo, _hi) => Option/none()
+        | cont(_, _, _) => Option/none()
         | bad() => Option/none()
         end
     | x[h, ..t] =>
@@ -34,7 +34,7 @@ pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
     | x[h, ..t] =>
         match s
         | lead() => match n | 0 => 0 | pred + 1 => 1 + drop_width(pred, step(h, Scan/lead()), t) end
-        | cont(_rem, _lo, _hi) => 1 + drop_width(n, step(h, s), t)
+        | cont(_, _, _) => 1 + drop_width(n, step(h, s), t)
         | bad() => 1 + drop_width(n, step(h, Scan/bad()), t)
         end
     end;
@@ -50,7 +50,7 @@ pub let drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, 
             | 0 => True/qed()
             | pred + 1 => drop_width_within(pred, step(h, Scan/lead()), t)
             end
-        | cont(_rem, _lo, _hi) => drop_width_within(n, step(h, s), t)
+        | cont(_, _, _) => drop_width_within(n, step(h, s), t)
         | bad() => drop_width_within(n, step(h, Scan/bad()), t)
         end
     end;
@@ -66,15 +66,14 @@ pub let drop_valid(
     | lead() =>
         match d
         | stop() => Utf8/stop()
-        | more(c, _st, t, rest) =>
+        | more(c, _, t, rest) =>
             match n
             | 0 => Utf8/more(c, Scan/lead(), t, rest)
             | pred + 1 => drop_valid(pred, step(c, Scan/lead()), rest)
             end
         end
-    | cont(_rem, _lo, _hi) =>
-        match d | more(c, _st, _t, rest) => drop_valid(n, step(c, s), rest) end
-    | bad() => match d | more(c, _st, _t, rest) => drop_valid(n, step(c, Scan/bad()), rest) end
+    | cont(_, _, _) => match d | more(c, _, _, rest) => drop_valid(n, step(c, s), rest) end
+    | bad() => match d | more(c, _, _, rest) => drop_valid(n, step(c, Scan/bad()), rest) end
     end;
 
 -- | The witness carried onto the first `n` characters.
@@ -88,7 +87,7 @@ pub let take_valid(
     | lead() =>
         match d
         | stop() => Utf8/stop()
-        | more(c, _st, t, rest) =>
+        | more(c, _, t, rest) =>
             match n
             | 0 => Utf8/stop()
             | pred + 1 =>
@@ -105,7 +104,7 @@ pub let take_valid(
         end
     | cont(rem, lo, hi) =>
         match d
-        | more(c, _st, t, rest) =>
+        | more(c, _, t, rest) =>
             Utf8/more(
                 c,
                 Scan/cont(rem, lo, hi),
@@ -118,7 +117,7 @@ pub let take_valid(
         end
     | bad() =>
         match d
-        | more(c, _st, t, rest) =>
+        | more(c, _, t, rest) =>
             Utf8/more(
                 c,
                 Scan/bad(),
@@ -133,7 +132,7 @@ pub let take_valid(
 
 -- | Nothing scans from the bad state.
 pub let bad_uninhabited(@x: Bytes, w: Utf8(Scan/bad(), x)) -> False =
-    match w | more(_c, _st, _t, rest) => bad_uninhabited(rest) end;
+    match w | more(_, _, _, rest) => bad_uninhabited(rest) end;
 
 -- | Inside a sequence, at least the remaining continuation bytes follow.
 pub let cont_len(
@@ -147,7 +146,7 @@ pub let cont_len(
     | 0 => Nat/Le/Ind/z()
     | kp + 1 =>
         match w
-        | more(c, _st, _tt, rest) =>
+        | more(c, _, _, rest) =>
             match kp
             | 0 => Nat/Le/Ind/s(Nat/Le/Ind/z())
             | kpp + 1 =>
@@ -168,7 +167,7 @@ pub let cont0_uninhabited(
     w: Utf8(Scan/cont(0, lo, hi), t),
 ) -> False =
     match w
-    | more(c, _st, _t2, rest) =>
+    | more(c, _, _, rest) =>
         match Nat/in_range(Byte/to_nat(c), lo, hi)
         | true => cont0_uninhabited(rest)
         | false => bad_uninhabited(rest)
@@ -210,7 +209,7 @@ pub let peel_byte(
 ) -> Utf8(step(Bytes/get(b, 0, @nz), s), Bytes/drop(b, 1, @Nat/Lt/le_one_of_positive(nz))) =
     match w
     | stop() => match nz end
-    | more(_c, _st, _t, rest) => rest
+    | more(_, _, _, rest) => rest
     end;
 
 -- | How many characters `b` holds from scan state `s`.
@@ -220,7 +219,7 @@ pub let count_scalars(s: Scan, b: Bytes) -> Nat =
     | x[h, ..t] =>
         match s
         | lead() => count_scalars(step(h, Scan/lead()), t) + 1
-        | cont(_rem, _lo, _hi) => count_scalars(step(h, s), t)
+        | cont(_, _, _) => count_scalars(step(h, s), t)
         | bad() => count_scalars(step(h, Scan/bad()), t)
         end
     end;
@@ -239,8 +238,8 @@ let step_scans(c: Byte) -> Eq(step(c, Scan/lead()), scan_of_class(classify(c))) 
 pub let decode_head_raw(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> Nat =
     let peeled = Eq/subst((sc: Scan) => Utf8(sc, t), step_scans(c), peel_byte(True/qed(), w));
     (match classify(c): (cl) => (w2: Utf8(scan_of_class(cl), t)) -> Nat
-    | ascii() => (_w2) => Byte/to_nat(c)
-    | lead(k, _lo, _hi, payload) => (w2) => take_continuations(t, 0, k, payload, cont_len(k, w2)).0
+    | ascii() => (_) => Byte/to_nat(c)
+    | lead(k, _, _, payload) => (w2) => take_continuations(t, 0, k, payload, cont_len(k, w2)).0
     | bad() => (w2) => match bad_uninhabited(w2) end
     end)(peeled);
 

@@ -64,7 +64,7 @@ pub let trim_non_zero(
                 end
             | false => match false_neq_true(tr) end
             end
-        | b[_ath, .._att] =>
+        | b[_, .._] =>
             match b
             | b[] =>
                 trim_head_non_zero(

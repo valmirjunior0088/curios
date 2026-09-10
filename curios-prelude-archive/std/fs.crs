@@ -72,7 +72,7 @@ let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
 
 -- | Whether anything is at `path`.
 pub let exists(path: Path) -> Try(Io, Io/Error, Bool) =
-    kind_is(path, (_k) => true);
+    kind_is(path, (_) => true);
 
 -- | Whether a regular file is at `path`.
 pub let is_file(path: Path) -> Try(Io, Io/Error, Bool) =

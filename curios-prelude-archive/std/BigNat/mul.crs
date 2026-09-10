@@ -16,7 +16,7 @@ pub let mul(a: BigNat, b: BigNat) -> BigNat =
 
 -- | `a` times two to the `k`.
 pub let pow2(a: BigNat, k: Nat) -> BigNat =
-    match k | 0 => a | _kp + 1; ih => dbl(ih) end;
+    match k | 0 => a | _ + 1; ih => dbl(ih) end;
 
 -- | `a` times the machine natural `c`.
 pub let small(a: BigNat, c: Nat) -> BigNat =
@@ -434,5 +434,5 @@ pub let pow2_mul_l(a: BigNat, b: BigNat, k: Nat) -> Eq(pow2(mul(a, b), k), mul(p
 pub let pow2_compose(a: BigNat, j: Nat, k: Nat) -> Eq(pow2(pow2(a, j), k), pow2(a, j + k)) =
     match k: (n) => Eq(pow2(pow2(a, j), n), pow2(a, j + n))
     | 0 => refl_at(pow2(a, j))
-    | _pred + 1; ih => cong_dbl(ih)
+    | _ + 1; ih => cong_dbl(ih)
     end;

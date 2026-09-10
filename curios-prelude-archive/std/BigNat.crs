@@ -21,7 +21,7 @@ pub let combine(head: Bool, t: Bits) -> Bits =
 
 -- | `bits` with its redundant high zero bits removed.
 pub let trim(bits: Bits) -> Bits =
-    match bits | b[] => b[] | b[head, .._tail]; ih => combine(head, ih) end;
+    match bits | b[] => b[] | b[head, .._]; ih => combine(head, ih) end;
 
 let combine_is_trimmed(
     head: Bool,
@@ -163,7 +163,7 @@ pub let eq(a: BigNat, b: BigNat, p: Eq(a.bits, b.bits)) -> Eq(a, b) =
     Eq/subst(
         (r: Bits) => (c: Canonical(r)) -> Eq(a, BigNat { bits = r, canonical = c }),
         p,
-        (_c: Canonical(a.bits)) => Eq/refl())(b.canonical);
+        (_: Canonical(a.bits)) => Eq/refl())(b.canonical);
 
 -- | Congruence for a word extended by two bits.
 pub let cong_cons2(
@@ -174,9 +174,8 @@ pub let cong_cons2(
     @t2: Bits,
     pt: Eq(t1, t2),
 ) -> Eq(b[h1, ..t1], b[h2, ..t2]) =
-    match ph: (a, b, _q) => Eq(b[a, ..t1], b[b, ..t2])
-    | refl(@_z) =>
-        match pt: (a2, b2, _q2) => Eq(b[h1, ..a2], b[h1, ..b2]) | refl(@_z2) => Eq/refl() end
+    match ph: (a, b, _) => Eq(b[a, ..t1], b[b, ..t2])
+    | refl(@_) => match pt: (a2, b2, _) => Eq(b[h1, ..a2], b[h1, ..b2]) | refl(@_) => Eq/refl() end
     end;
 
 -- | Congruence of `combine` in its tail.
@@ -199,7 +198,7 @@ let cons_inj_head(
     @t2: Bits,
     p: Eq(b[h1, ..t1], b[h2, ..t2]),
 ) -> Eq(h1, h2) =
-    match p: (s, t, _q) => Eq(head_of(s), head_of(t)) | refl(@_z) => Eq/refl() end;
+    match p: (s, t, _) => Eq(head_of(s), head_of(t)) | refl(@_) => Eq/refl() end;
 
 let cons_inj_tail(
     @h1: Bool,
@@ -208,7 +207,7 @@ let cons_inj_tail(
     @t2: Bits,
     p: Eq(b[h1, ..t1], b[h2, ..t2]),
 ) -> Eq(t1, t2) =
-    match p: (s, t, _q) => Eq(tail_of(s), tail_of(t)) | refl(@_z) => Eq/refl() end;
+    match p: (s, t, _) => Eq(tail_of(s), tail_of(t)) | refl(@_) => Eq/refl() end;
 
 let nonempty(x: Bits) -> Bool =
     match x | b[] => false | b[_, .._] => true end;

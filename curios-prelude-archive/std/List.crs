@@ -137,7 +137,7 @@ pub let range(lo: Nat, hi: Nat) -> List(Nat) =
 
 -- | `n` copies of `x`.
 pub let replicate(@T: Type, n: Nat, x: T) -> List(T) =
-    match n | 0 => [] | _k + 1; acc => [x, ..acc] end;
+    match n | 0 => [] | _ + 1; acc => [x, ..acc] end;
 
 -- | `f` on every element, the results concatenated.
 pub let concat_map(@T: Type, @B: Type, l: List(T), f: (T) -> List(B)) -> List(B) =
@@ -181,7 +181,7 @@ let insert_by(@T: Type, x: T, sorted: List(T), cmp: (T, T) -> Ordering) -> List(
 
 -- | A stable sort by `cmp`.
 pub let sort_by(@T: Type, l: List(T), cmp: (T, T) -> Ordering) -> List(T) =
-    match l | [] => [] | [h, .._t]; sorted => insert_by(h, sorted, cmp) end;
+    match l | [] => [] | [h, .._]; sorted => insert_by(h, sorted, cmp) end;
 
 -- | A stable sort by `T`'s order.
 pub let sort(@T: Type, use Ordered(T), l: List(T)) -> List(T) =

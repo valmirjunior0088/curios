@@ -210,10 +210,10 @@ pub let to_str(f: Flt) -> Str =
 
 -- | Ten to the power `n`, as a float.
 pub let pow10(n: Nat) -> Flt =
-    match n | 0 => +1.0 | _pred + 1; ih => ih * +10.0 end;
+    match n | 0 => +1.0 | _ + 1; ih => ih * +10.0 end;
 
 let pow10_big(n: Nat) -> BigNat =
-    match n | 0 => BigNat/of_nat(1) | _p + 1; ih => BigNat/mul/small(ih, 10) end;
+    match n | 0 => BigNat/of_nat(1) | _ + 1; ih => BigNat/mul/small(ih, 10) end;
 
 let digits_big(s: Str) -> Option(BigNat) =
     Str/fold(
@@ -229,8 +229,8 @@ let digits_big(s: Str) -> Option(BigNat) =
 let two_pow(e: Int) -> Flt =
     let mag = Int/abs(e);
     match e >= +0
-    | true => match mag | 0 => +1.0 | _k + 1; ih => ih * +2.0 end
-    | false => match mag | 0 => +1.0 | _k + 1; ih => ih * +0.5 end
+    | true => match mag | 0 => +1.0 | _ + 1; ih => ih * +2.0 end
+    | false => match mag | 0 => +1.0 | _ + 1; ih => ih * +0.5 end
     end;
 
 let quotient(n: BigNat, d: BigNat, bits: Nat, acc: Nat) -> {Nat, BigNat} =
@@ -368,13 +368,13 @@ satisfy Multiply(Flt) {
 
 -- | No precondition: IEEE division is total.
 satisfy Divide(Flt) {
-    Ok(_b) = True,
+    Ok(_) = True,
     div(a, b) = div(a, b),
 }
 
 -- | No precondition: IEEE remainder is total.
 satisfy Remainder(Flt) {
-    Ok(_b) = True,
+    Ok(_) = True,
     rem(a, b) = rem(a, b),
 }
 

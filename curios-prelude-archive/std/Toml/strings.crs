@@ -56,7 +56,7 @@ let crlf: Parse(Option({Byte, Byte})) =
     Parse/optional(Parse/and(Parse/take_byte(0xD), Parse/take_byte(0xA)));
 
 let quotes(quote: Byte, count: Nat) -> Bytes =
-    match count | 0 => x[] | _pred + 1; ih => x[..ih, quote] end;
+    match count | 0 => x[] | _ + 1; ih => x[..ih, quote] end;
 
 let basic_body(acc: Bytes) -> Parse(Bytes) =
     let next = Parse/peek!;

@@ -744,5 +744,5 @@ satisfy Lift(Io, Async) {
 }
 
 satisfy Lift(Async, Async) {
-    lift(@_A, m) = m,
+    lift(@_, m) = m,
 }

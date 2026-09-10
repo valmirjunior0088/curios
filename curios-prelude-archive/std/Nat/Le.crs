@@ -11,7 +11,7 @@ pub let refl(n: Nat) -> Le(n, n) =
 
 -- | The inductive form as the decided one.
 pub let of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Le(a, b) =
-    match p: (x, y, _w) => Le(x, y) | z(@_) => True/qed() | s(@_, @_, prev) => of_ind(prev) end;
+    match p: (x, y, _) => Le(x, y) | z(@_) => True/qed() | s(@_, @_, prev) => of_ind(prev) end;
 
 -- | The decided form as the inductive one.
 pub let to_ind(a: Nat, b: Nat, p: Le(a, b)) -> Ind(a, b) =

@@ -16,7 +16,7 @@ pub let eq(a: BigPos, b: BigPos, p: Eq(a.value, b.value)) -> Eq(a, b) =
     Eq/subst(
         (m: BigNat) => (nz: is_cons(m.bits)) -> Eq(a, BigPos { value = m, non_zero = nz }),
         p,
-        (_nz: is_cons(a.value.bits)) => Eq/refl())(b.non_zero);
+        (_: is_cons(a.value.bits)) => Eq/refl())(b.non_zero);
 
 -- | The magnitude's word is trimmed.
 pub let nz_trimmed(t: BigPos) -> Eq(is_trimmed(t.value.bits), true) =

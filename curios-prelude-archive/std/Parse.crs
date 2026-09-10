@@ -18,11 +18,11 @@ pub let run(@A: Type, p: Parse(A), input: Bytes) -> Result(Error, A) =
 
 -- | `a`, consuming nothing.
 pub let pure(@A: Type, a: A) -> Parse(A) =
-    Parse { run(_input, pos) = Result/success((pos, a)) };
+    Parse { run(_, pos) = Result/success((pos, a)) };
 
 -- | Decline with `msg`, consuming nothing.
 pub let fail(@A: Type, msg: Str) -> Parse(A) =
-    Parse { run(_input, pos) = Result/failure(Error/declined(msg, pos)) };
+    Parse { run(_, pos) = Result/failure(Error/declined(msg, pos)) };
 
 -- | `f` on the value.
 pub let map(@A: Type, @B: Type, p: Parse(A), f: (A) -> B) -> Parse(B) =
@@ -194,7 +194,7 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
                     match Bytes/len(input) - pos: (_) =>
                         {taken: Nat, within: Nat/Le(pos + taken, Bytes/len(input)), stopped: Bool}
                     | 0 => (0, within, false)
-                    | _step + 1; ih =>
+                    | _ + 1; ih =>
                         let (taken, at_cur, stopped) = ih;
                         match stopped
                         | true => ih
