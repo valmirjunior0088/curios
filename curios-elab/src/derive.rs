@@ -6,11 +6,13 @@
 //!
 //! **Eligibility.** A derivation writes from a declaration, and only from one: the key must reduce to a registered `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — that is representation-transparent at the declaring island and not `Prop`-sorted, its parameters and indices given by the key. Sealing is refused before any of that, with the rule a written literal meets, so that derivation is never a door through representation privacy; a concept with no derivation refuses by name, since derivability is registered per concept and never inferred from its shape. Every refusal is a hard error at the `satisfy` span.
 //!
-//! **Payloads.** Both derivations read a declaration the same way: the constructor telescopes (or the field telescope) opened at the key's parameters, one binder minted per payload, each explicit payload classified by its type under the binders before it. A payload that is itself a type is refused; a proof payload takes no part beyond what the derivation states for it; every other payload takes part through the concept's own method, `Spell/spell` or `Eql/eql`, applied with a `use` argument the body supplies as a witness goal of its own — resolved by ordinary resolution in the witness's scope (a telescope premise, the witness's own entry, an `and` sibling), and reported unresolved under a provenance naming the constructor and the payload, with the telescope premise to add when the payload's type is a telescope variable. An implicit payload is bound and never named. A field or payload the lowerer named `_{position}` had no written label, which is the one mark Core keeps of it.
+//! **Payloads.** Every derivation reads a declaration the same way: the constructor telescopes (or the field telescope) opened at the key's parameters, one binder minted per payload, each explicit payload classified by its type under the binders before it. A payload that is itself a type is refused; a proof payload takes no part beyond what the derivation states for it; every other payload takes part through the concept's own method — `Spell/spell`, `Eql/eql`, `Ord/ord` — applied with a `use` argument the body supplies as a witness goal of its own — resolved by ordinary resolution in the witness's scope (a telescope premise, the witness's own entry, an `and` sibling), and reported unresolved under a provenance naming the constructor and the payload, with the telescope premise to add when the payload's type is a telescope variable. An implicit payload is bound and never named. A field or payload the lowerer named `_{position}` had no written label, which is the one mark Core keeps of it.
 //!
 //! **The `Spell` body.** One match arm per constructor in declaration order, the motive omitted as a written match omits it, and per arm a single renderer application over structured pieces: `Spell/call("/Tree/node", [spell(l), …])` for a constructor, `Spell/record("/Point", [("x", spell(x)), …])` for a struct, whose fields are projected. A value therefore spells as its constructor's absolute path applied to its explicit payloads, so the text re-parses from any module that sees the names; a struct spells labeled, or positionally where its field has no label; a proof payload spells as the written goal `"?"`.
 //!
 //! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs and implicit payloads do not take part. `neq` negates the same comparison, built a second time over binders of its own.
+//!
+//! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `tied` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it.
 
 use {
     super::{
@@ -21,9 +23,10 @@ use {
         Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many, MetavarOrigin, Scope,
         StructDecl, StructType, Subterm, Term, WitnessOrigin,
     },
+    curios_num::Natural,
     curios_utilities::{
-        ConceptField, Derivation, EqlDerivation, InfixOp, Plicity, Qualifier, Span,
-        SpellDerivation, SyntaxRegistry,
+        ConceptField, Derivation, EqlDerivation, InfixOp, OrdDerivation, Plicity, Qualifier, Sign,
+        Span, SpellDerivation, SyntaxRegistry,
     },
 };
 
@@ -86,6 +89,7 @@ pub(crate) fn elaborate_derive(
     let body = match derivation {
         Derivation::Spell(row) => spell_body(context, &site, &subject, row)?,
         Derivation::Eql(row) => eql_body(context, &site, &subject, row)?,
+        Derivation::Ord(row) => ord_body(context, &site, &subject, row)?,
     };
     elaborate(context, &body, mode)
 }
@@ -675,6 +679,163 @@ fn compare(
                 arms,
                 None,
             )))
+        }
+    }
+}
+
+/// The `Ord` witness record: `ord` over the derived comparison.
+///
+/// One plain field, and the superclass `Eql` slot deliberately left unfilled — `elaborate_struct` pairs written fields with the plain positions and mints a resolution goal for every `use` position left over, so the key's own equality witness is found exactly as it would be for a written literal that omitted it.
+fn ord_body(
+    context: &mut Context,
+    site: &Site<'_>,
+    subject: &Subject,
+    row: OrdDerivation,
+) -> Result<Term, Error> {
+    let left = context.fresh(Some("left"));
+    let right = context.fresh(Some("right"));
+    let ordered = order(context, site, subject, row, &left, &right)?;
+    let method = Term::func(
+        [
+            (left, Term::hole(context.mint_metavar())),
+            (right, Term::hole(context.mint_metavar())),
+        ],
+        ordered,
+    );
+
+    Ok(site.at(Term::struct_(
+        site.concept.clone(),
+        Vec::<Term>::new(),
+        [method],
+    )))
+}
+
+/// How `left` orders against `right`, as an `Ordering`-valued term over the two binders.
+///
+/// **The constructors decide first, and the payloads only where they agree.** [`compare`]'s shape cannot serve here: its inner match names the one constructor the outer arm committed to and gives every other tag a *constant* default, and a constant cannot name the tag the answer depends on — a mismatched pair orders by which constructor is which. Deciding by ordinal up front costs two extra matches and stays linear in the constructor count, where an arm per pair would be quadratic in it.
+fn order(
+    context: &mut Context,
+    site: &Site<'_>,
+    subject: &Subject,
+    row: OrdDerivation,
+    left: &Free,
+    right: &Free,
+) -> Result<Term, Error> {
+    // The payload comparisons read through `reads`, folded first-difference-wins by `/std/Ord`. A proof takes no part, which under that fold is exactly what answering `eq` would be.
+    let lexicographic =
+        |context: &mut Context, parts: &[Classified], reads: &dyn Fn(usize) -> (Term, Term)| {
+            let pieces = parts
+                .iter()
+                .filter_map(|classified| match &classified.part {
+                    Part::Proof => None,
+                    Part::Value { premise } => {
+                        let (this, that) = reads(classified.position);
+                        Some(witness_call(
+                            context,
+                            site,
+                            row.ord,
+                            classified,
+                            premise.as_deref(),
+                            vec![this, that],
+                        ))
+                    }
+                })
+                .collect::<Vec<_>>();
+            let items = list(context, pieces);
+            site.at(syn_call(row.lexicographic, [items]))
+        };
+
+    match subject {
+        Subject::Struct { name, decl, params } => {
+            let parts = struct_parts(context, site, name, decl, params, left)?;
+            Ok(lexicographic(context, &parts, &|index| {
+                (
+                    Term::proj(Term::free_var(left), index),
+                    Term::proj(Term::free_var(right), index),
+                )
+            }))
+        }
+        Subject::Induct { name, decl, params } => {
+            // One arm per constructor answering its declaration position — the ordinal `by_tag` orders on, and the thing a constant default has no way to carry.
+            let ordinal = |context: &mut Context, value: &Free| {
+                let mut arms = Vec::new();
+                for (index, (tag, signature)) in decl.constructors.iter().enumerate() {
+                    let constructor = Constructor {
+                        owner: name,
+                        tag: tag.as_str(),
+                        signature,
+                        param_count: decl.param_count(),
+                        params,
+                    };
+                    let binders = constructor.binders(context);
+                    arms.push((
+                        tag.clone(),
+                        constructor
+                            .plicities()
+                            .into_iter()
+                            .zip(binders)
+                            .collect::<Vec<_>>(),
+                        Term::num_lit(Natural::from(index), Sign::Unmarked),
+                    ));
+                }
+
+                let motive = motive(context);
+                site.at(Term::induct_match_scoped_marked(
+                    Term::free_var(value),
+                    motive,
+                    arms,
+                    None,
+                ))
+            };
+            let tags = [ordinal(context, left), ordinal(context, right)];
+
+            let mut arms = Vec::new();
+            for (tag, signature) in &decl.constructors {
+                let constructor = Constructor {
+                    owner: name,
+                    tag: tag.as_str(),
+                    signature,
+                    param_count: decl.param_count(),
+                    params,
+                };
+                let lefts = constructor.binders(context);
+                let rights = constructor.binders(context);
+                let parts = constructor.parts(context, site, &lefts, left)?;
+                let compared = lexicographic(context, &parts, &|position| {
+                    (
+                        Term::free_var(&lefts[position]),
+                        Term::free_var(&rights[position]),
+                    )
+                });
+                let plicities = constructor.plicities();
+
+                // The default is unreachable — `by_tag` consults this term only where the ordinals already agreed, so the right is at the same constructor — but a one-arm match still owes one.
+                let inner = site.at(Term::induct_match_scoped_marked(
+                    Term::free_var(right),
+                    motive(context),
+                    [(
+                        tag.clone(),
+                        plicities.iter().copied().zip(rights).collect::<Vec<_>>(),
+                        compared,
+                    )],
+                    Some(Term::free_var(&Free::global(row.tied.qualifier()))),
+                ));
+                arms.push((
+                    tag.clone(),
+                    plicities.into_iter().zip(lefts).collect::<Vec<_>>(),
+                    inner,
+                ));
+            }
+
+            let motive = motive(context);
+            let same = site.at(Term::induct_match_scoped_marked(
+                Term::free_var(left),
+                motive,
+                arms,
+                None,
+            ));
+            let [left_tag, right_tag] = tags;
+            Ok(site.at(syn_call(row.by_tag, [left_tag, right_tag, same])))
         }
     }
 }

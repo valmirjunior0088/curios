@@ -2,8 +2,8 @@
 
 use curios_utilities::{
     CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, LiftSyntax, MonadSyntax,
-    OperatorSyntax, ProofSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
-    TestSyntax,
+    OperatorSyntax, OrdDerivation, ProofSyntax, SpellDerivation, StringSyntax, SyntaxName,
+    SyntaxRegistry, TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -75,6 +75,12 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         // `Eql`'s method is named here as well as in `OperatorSyntax`, deliberately: `==` dispatches through it and this derivation applies it, and the two are free to move apart. Sharing one slot made them agree by coincidence rather than by decision.
         eql: EqlDerivation {
             eql: field(&["std", "ops", "Eql", "Eql"], "eql"),
+        },
+        ord: OrdDerivation {
+            ord: field(&["std", "Ord", "Ord"], "ord"),
+            lexicographic: name(&["std", "Ord", "lexicographic"]),
+            by_tag: name(&["std", "Ord", "by_tag"]),
+            tied: name(&["std", "Ord", "tied"]),
         },
     },
 };

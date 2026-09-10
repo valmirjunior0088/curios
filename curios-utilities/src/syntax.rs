@@ -301,14 +301,20 @@ impl TestSyntax {
 pub struct DerivationSyntax {
     pub spell: SpellDerivation,
     pub eql: EqlDerivation,
+    pub ord: OrdDerivation,
 }
 
 impl DerivationSyntax {
     /// Every row, for the concept lookup and the scheduler's edges. Destructures `Self`, so a row added and not yielded here does not compile.
     pub fn rows(self) -> impl Iterator<Item = Derivation> {
-        let Self { spell, eql } = self;
+        let Self { spell, eql, ord } = self;
 
-        [Derivation::Spell(spell), Derivation::Eql(eql)].into_iter()
+        [
+            Derivation::Spell(spell),
+            Derivation::Eql(eql),
+            Derivation::Ord(ord),
+        ]
+        .into_iter()
     }
 
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
@@ -338,11 +344,23 @@ pub struct EqlDerivation {
     pub eql: ConceptField,
 }
 
+/// The names a derived `Ord` witness body is written with: its own method, applied to each payload pair, and the two `/std/Ord` combinators the body folds their answers through — `lexicographic` within one constructor, `by_tag` across two, with `tied` filling the arm that cannot be reached because the tags already agreed.
+///
+/// No string machinery, and deliberately: `lexicographic` takes the payload answers alone, where `Spell`'s renderers take a constructor path. An `Ordering` has no text to re-parse and no report to read, so the path would be a literal nothing consumes — and carrying one would put every `/std/Str` name back into this row's vocabulary for a value that is never rendered.
+#[derive(Debug, Clone, Copy)]
+pub struct OrdDerivation {
+    pub ord: ConceptField,
+    pub lexicographic: SyntaxName,
+    pub by_tag: SyntaxName,
+    pub tied: SyntaxName,
+}
+
 /// One row of the roster as the lookup yields it: the tag a body writer dispatches on, carrying the names that writer applies.
 #[derive(Debug, Clone, Copy)]
 pub enum Derivation {
     Spell(SpellDerivation),
     Eql(EqlDerivation),
+    Ord(OrdDerivation),
 }
 
 impl Derivation {
@@ -351,6 +369,7 @@ impl Derivation {
         match self {
             Derivation::Spell(row) => row.spell,
             Derivation::Eql(row) => row.eql,
+            Derivation::Ord(row) => row.ord,
         }
     }
 
@@ -377,6 +396,15 @@ impl Derivation {
                 )
                 .collect(),
             Derivation::Eql(EqlDerivation { eql: _ }) => vec![method],
+            Derivation::Ord(OrdDerivation {
+                ord: _,
+                lexicographic,
+                by_tag,
+                tied,
+            }) => [method]
+                .into_iter()
+                .chain([lexicographic, by_tag, tied].map(SyntaxName::qualifier))
+                .collect(),
         }
     }
 
@@ -393,6 +421,12 @@ impl Derivation {
                 .chain(string.targets())
                 .collect::<Vec<_>>(),
             Derivation::Eql(EqlDerivation { eql }) => vec![eql.concept],
+            Derivation::Ord(OrdDerivation {
+                ord,
+                lexicographic,
+                by_tag,
+                tied,
+            }) => vec![ord.concept, lexicographic, by_tag, tied],
         }
         .into_iter()
     }

@@ -1,4 +1,4 @@
-use /std/{Bool, Eq, False, Show, Spell};
+use /std/{Bool, Eq, False, Ord, Show, Spell};
 use /std/ops/{Eql};
 use /std/Bool/{false_neq_true};
 
@@ -73,3 +73,5 @@ satisfy Show(Ordering) {
 }
 
 satisfy Spell(Ordering);
+
+satisfy Ord(Ordering);

@@ -1,4 +1,4 @@
-use /std/{Ordering};
+use /std/{Ordering, Nat, List};
 use /std/ops/{Eql};
 
 -- | A total order: `ord` decides `lt`, `eq` or `gt`, and `Eql` is its superclass.
@@ -8,3 +8,17 @@ pub concept Ord(A: Type): pub Type {
 }
 
 pub use Ord/*;
+
+-- | The first answer that is not `eq`, or `eq` where they all agree.
+pub let lexicographic(pieces: List(Ordering)) -> Ordering =
+    List/fold(pieces, Ordering/eq(), (piece, acc) => match acc | eq() => piece | _ => acc end);
+
+-- | Two constructors ordered by declaration position, answering `same` where they agree.
+-- |
+-- | A derived witness compares the constructors before it looks at payloads and consults `same` only when they match, so a value of a later constructor is above one of an earlier constructor whatever the payloads say.
+pub let by_tag(left: Nat, right: Nat, same: Ordering) -> Ordering =
+    match Nat/cmp(left, right) | lt() => Ordering/lt() | eq() => same | gt() => Ordering/gt() end;
+
+-- | Nothing left to distinguish.
+pub let tied: Ordering =
+    Ordering/eq();
