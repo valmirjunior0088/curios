@@ -5,9 +5,9 @@
 //! **Behind `test-support`, not `#[cfg(test)]`.** That cfg is set only while *this* crate is its own test harness, so a `cfg(test)` item is invisible to another crate's tests — which is exactly the case here, and the same reason `curios-runtime`'s `test_support` is a feature. The gate also keeps this module out of every normal build, which matters more than convenience: it spells prelude names, and keeping them out of every build that ships is what the gate is for.
 
 use curios_utilities::{
-    CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, LiftSyntax, MonadSyntax,
-    OperatorSyntax, OrdDerivation, ProofSyntax, SpellDerivation, StringSyntax, SyntaxName,
-    SyntaxRegistry, TestSyntax,
+    CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation, LiftSyntax,
+    MonadSyntax, OperatorSyntax, OrdDerivation, ProofSyntax, SpellDerivation, StringSyntax,
+    SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 const fn name(segments: &'static [&'static str]) -> SyntaxName {
@@ -82,6 +82,10 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             lexicographic: name(&["std", "Ord", "lexicographic"]),
             by_tag: name(&["std", "Ord", "by_tag"]),
             tied: name(&["std", "Ord", "tied"]),
+        },
+        hash: HashDerivation {
+            hash: field(&["std", "Digest", "Digest"], "digest"),
+            tagged: name(&["std", "Digest", "tagged"]),
         },
     },
 };

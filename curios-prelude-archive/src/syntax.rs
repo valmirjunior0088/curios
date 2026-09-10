@@ -1,9 +1,9 @@
 //! Canonical compiler-known names, owned by the authored `/std` source tree that declares them.
 
 use curios_utilities::{
-    CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, LiftSyntax, MonadSyntax,
-    OperatorSyntax, OrdDerivation, ProofSyntax, SpellDerivation, StringSyntax, SyntaxName,
-    SyntaxRegistry, TestSyntax,
+    CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation, LiftSyntax,
+    MonadSyntax, OperatorSyntax, OrdDerivation, ProofSyntax, SpellDerivation, StringSyntax,
+    SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -81,6 +81,10 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             lexicographic: name(&["std", "Ord", "lexicographic"]),
             by_tag: name(&["std", "Ord", "by_tag"]),
             tied: name(&["std", "Ord", "tied"]),
+        },
+        hash: HashDerivation {
+            hash: field(&["std", "Hash", "Hash"], "hash"),
+            tagged: name(&["std", "Hash", "tagged"]),
         },
     },
 };

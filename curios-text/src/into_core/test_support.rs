@@ -5,9 +5,9 @@
 use crate::{Entrypoint, RootSource, sys_module};
 use curios_abi::host_ops;
 use curios_utilities::{
-    CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, LiftSyntax, MonadSyntax,
-    OperatorSyntax, OrdDerivation, ProofSyntax, Qualifier, RootKind, SpellDerivation, StringSyntax,
-    SyntaxName, SyntaxRegistry, TestSyntax,
+    CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation, LiftSyntax,
+    MonadSyntax, OperatorSyntax, OrdDerivation, ProofSyntax, Qualifier, RootKind, SpellDerivation,
+    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 use std::{
     fs,
@@ -91,6 +91,10 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             lexicographic: registry_name(&["std", "Ord", "lexicographic"]),
             by_tag: registry_name(&["std", "Ord", "by_tag"]),
             tied: registry_name(&["std", "Ord", "tied"]),
+        },
+        hash: HashDerivation {
+            hash: registry_field(&["std", "Digest", "Digest"], "digest"),
+            tagged: registry_name(&["std", "Digest", "tagged"]),
         },
     },
 };

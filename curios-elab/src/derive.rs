@@ -25,8 +25,8 @@ use {
     },
     curios_num::Natural,
     curios_utilities::{
-        ConceptField, Derivation, EqlDerivation, InfixOp, OrdDerivation, Plicity, Qualifier, Sign,
-        Span, SpellDerivation, SyntaxRegistry,
+        ConceptField, Derivation, EqlDerivation, HashDerivation, InfixOp, OrdDerivation, Plicity,
+        Qualifier, Sign, Span, SpellDerivation, SyntaxRegistry,
     },
 };
 
@@ -90,6 +90,7 @@ pub(crate) fn elaborate_derive(
         Derivation::Spell(row) => spell_body(context, &site, &subject, row)?,
         Derivation::Eql(row) => eql_body(context, &site, &subject, row)?,
         Derivation::Ord(row) => ord_body(context, &site, &subject, row)?,
+        Derivation::Hash(row) => hash_body(context, &site, &subject, row)?,
     };
     elaborate(context, &body, mode)
 }
@@ -544,6 +545,98 @@ fn spell_body(
     };
 
     let method = Term::func([(value, Term::hole(context.mint_metavar()))], rendered);
+    Ok(site.at(Term::struct_(
+        site.concept.clone(),
+        Vec::<Term>::new(),
+        [method],
+    )))
+}
+
+/// The `Hash` witness record: `hash` over the derived encoding.
+///
+/// One arm per constructor, each `Hash/tagged(ordinal, [hash(p₀), …])` — the constructor's position followed by its explicit payloads' encodings, every part framed by `tagged` so that no two distinct values share a byte string. A struct has one shape and takes ordinal zero.
+///
+/// **A proof payload is omitted rather than encoded.** `Spell` renders one as `"?"` because a reader wants to see it; here two values differing only in a proof *are* the same value, so giving them different encodings would be wrong — and erasure drops the payload anyway, so nothing could produce the bytes at run time.
+fn hash_body(
+    context: &mut Context,
+    site: &Site<'_>,
+    subject: &Subject,
+    row: HashDerivation,
+) -> Result<Term, Error> {
+    let value = context.fresh(Some("value"));
+
+    // The encoding of one classified payload read through `read`, or nothing where the payload is a proof.
+    let encode = |context: &mut Context, classified: &Classified, read: Term| match &classified.part
+    {
+        Part::Proof => None,
+        Part::Value { premise } => Some(witness_call(
+            context,
+            site,
+            row.hash,
+            classified,
+            premise.as_deref(),
+            vec![read],
+        )),
+    };
+
+    let ordinal = |index: usize| Term::num_lit(Natural::from(index), Sign::Unmarked);
+
+    let encoded = match subject {
+        Subject::Struct { name, decl, params } => {
+            let parts = struct_parts(context, site, name, decl, params, &value)?;
+            let pieces = parts
+                .iter()
+                .filter_map(|classified| {
+                    let read = Term::proj(Term::free_var(&value), classified.position);
+                    encode(context, classified, read)
+                })
+                .collect::<Vec<_>>();
+            let items = list(context, pieces);
+            site.at(syn_call(row.tagged, [ordinal(0), items]))
+        }
+        Subject::Induct { name, decl, params } => {
+            let mut arms = Vec::new();
+            for (index, (tag, signature)) in decl.constructors.iter().enumerate() {
+                let constructor = Constructor {
+                    owner: name,
+                    tag: tag.as_str(),
+                    signature,
+                    param_count: decl.param_count(),
+                    params,
+                };
+                let binders = constructor.binders(context);
+                let parts = constructor.parts(context, site, &binders, &value)?;
+                let pieces = parts
+                    .iter()
+                    .filter_map(|classified| {
+                        let read = Term::free_var(&binders[classified.position]);
+                        encode(context, classified, read)
+                    })
+                    .collect::<Vec<_>>();
+                let items = list(context, pieces);
+                let body = site.at(syn_call(row.tagged, [ordinal(index), items]));
+                arms.push((
+                    tag.clone(),
+                    constructor
+                        .plicities()
+                        .into_iter()
+                        .zip(binders)
+                        .collect::<Vec<_>>(),
+                    body,
+                ));
+            }
+
+            let motive = motive(context);
+            site.at(Term::induct_match_scoped_marked(
+                Term::free_var(&value),
+                motive,
+                arms,
+                None,
+            ))
+        }
+    };
+
+    let method = Term::func([(value, Term::hole(context.mint_metavar()))], encoded);
     Ok(site.at(Term::struct_(
         site.concept.clone(),
         Vec::<Term>::new(),

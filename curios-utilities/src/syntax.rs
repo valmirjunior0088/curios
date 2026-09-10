@@ -302,17 +302,24 @@ pub struct DerivationSyntax {
     pub spell: SpellDerivation,
     pub eql: EqlDerivation,
     pub ord: OrdDerivation,
+    pub hash: HashDerivation,
 }
 
 impl DerivationSyntax {
     /// Every row, for the concept lookup and the scheduler's edges. Destructures `Self`, so a row added and not yielded here does not compile.
     pub fn rows(self) -> impl Iterator<Item = Derivation> {
-        let Self { spell, eql, ord } = self;
+        let Self {
+            spell,
+            eql,
+            ord,
+            hash,
+        } = self;
 
         [
             Derivation::Spell(spell),
             Derivation::Eql(eql),
             Derivation::Ord(ord),
+            Derivation::Hash(hash),
         ]
         .into_iter()
     }
@@ -355,12 +362,22 @@ pub struct OrdDerivation {
     pub tied: SyntaxName,
 }
 
+/// The names a derived `Hash` witness body is written with: its own method, applied to each payload, and the one `/std/Hash` combinator the body folds their encodings through — `tagged`, which writes the constructor's ordinal and frames every part.
+///
+/// One combinator where `Ord` needs three, because framing is the whole of the structure: a tag and a list of already-encoded parts determine the answer, so there is no across-constructors case to spell separately and no tie to fill. No string machinery, for `Ord`'s reason — an encoding is `Bytes`, which the body builds as an intrinsic literal and needs no name for.
+#[derive(Debug, Clone, Copy)]
+pub struct HashDerivation {
+    pub hash: ConceptField,
+    pub tagged: SyntaxName,
+}
+
 /// One row of the roster as the lookup yields it: the tag a body writer dispatches on, carrying the names that writer applies.
 #[derive(Debug, Clone, Copy)]
 pub enum Derivation {
     Spell(SpellDerivation),
     Eql(EqlDerivation),
     Ord(OrdDerivation),
+    Hash(HashDerivation),
 }
 
 impl Derivation {
@@ -370,6 +387,7 @@ impl Derivation {
             Derivation::Spell(row) => row.spell,
             Derivation::Eql(row) => row.eql,
             Derivation::Ord(row) => row.ord,
+            Derivation::Hash(row) => row.hash,
         }
     }
 
@@ -405,6 +423,9 @@ impl Derivation {
                 .into_iter()
                 .chain([lexicographic, by_tag, tied].map(SyntaxName::qualifier))
                 .collect(),
+            Derivation::Hash(HashDerivation { hash: _, tagged }) => {
+                vec![method, tagged.qualifier()]
+            }
         }
     }
 
@@ -427,6 +448,7 @@ impl Derivation {
                 by_tag,
                 tied,
             }) => vec![ord.concept, lexicographic, by_tag, tied],
+            Derivation::Hash(HashDerivation { hash, tagged }) => vec![hash.concept, tagged],
         }
         .into_iter()
     }
