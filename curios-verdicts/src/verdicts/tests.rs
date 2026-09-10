@@ -47,7 +47,8 @@ fn reused_overlaid(root: &std::path::Path, overlay: &Overlay) -> bool {
 }
 
 fn reused_through(root: &std::path::Path, shape: &std::path::Path, cache: &dyn Cache) -> bool {
-    let library = curios_package::mounted(&[shape.to_path_buf()]).expect("a mountable package");
+    let governing = curios_package::Governing::of(shape).expect("a governed package");
+    let library = curios_package::order(&governing).expect("a resolvable library");
     let (entrypoint, loader, _source) =
         Entrypoint::opened(&root.join("exe.crs")).expect("an openable entrypoint");
 

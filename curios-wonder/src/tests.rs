@@ -338,7 +338,7 @@ fn an_open_document_refuses_a_hit_only_when_it_is_edited() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// Two mountable packages and nothing else, at a directory of its own.
+/// Two packages at a directory of its own, the second declaring the first — which is what makes them a scope of two, in that order.
 fn mounted_project(name: &str) -> PathBuf {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -349,11 +349,17 @@ fn mounted_project(name: &str) -> PathBuf {
         std::process::id()
     ));
 
-    for (directory, package) in [("a", "alpha"), ("b", "beta")] {
+    for (directory, package, declares) in [("a", "alpha", ""), ("b", "beta", "alpha")] {
+        let dependency = match declares.is_empty() {
+            true => String::new(),
+            false => {
+                format!("\n[dependencies]\n{declares} = {{ source = \"path\", path = \"../a\" }}\n")
+            }
+        };
         write(
             &root,
             &format!("{directory}/curios.toml"),
-            &format!("name = \"{package}\"\n"),
+            &format!("name = \"{package}\"\n{dependency}"),
         );
         write(
             &root,
@@ -403,9 +409,12 @@ fn folded(root: &Path, overlay: &Overlay) -> Vec<String> {
     events
 }
 
-/// Both packages, mounted in the order they are compiled in.
+/// Both packages, in the order they are compiled in — resolved from `beta`'s declared dependency on `alpha` rather than listed, which is the only way a scope is assembled now.
 fn mounted(root: &Path) -> Vec<curios_text::RootSource> {
-    curios_package::mounted(&[root.join("a"), root.join("b")]).expect("two mountable packages")
+    let governing =
+        curios_package::Governing::of(&root.join("b")).expect("a governed second package");
+
+    curios_package::order(&governing).expect("two resolvable units")
 }
 
 /// An overlay holding `path`'s own text: a document an editor has open and has not yet changed.

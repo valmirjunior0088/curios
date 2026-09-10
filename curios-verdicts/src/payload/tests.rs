@@ -29,15 +29,11 @@ struct Invocation {
     refused: Option<String>,
 }
 
-/// One invocation of `target`, standing in `directory`, with `mounted` in front of whatever the manifest declares.
+/// One invocation of `target`, standing in `directory`, over exactly what its manifest declares.
 ///
-/// The same sequence `payload_of` runs — consult, compile what must be compiled, file what was made — minus the terminal it reports to. `mounted` is the `--unit` flag, which is how a package outside the project enters the compilation.
-fn invoke(directory: &Path, target: Option<&str>, mounted: &[PathBuf]) -> Invocation {
-    invoke_over(
-        directory,
-        target,
-        curios_package::mounted(mounted).expect("mountable packages"),
-    )
+/// The same sequence `payload_of` runs — consult, compile what must be compiled, file what was made — minus the terminal it reports to.
+fn invoke(directory: &Path, target: Option<&str>) -> Invocation {
+    invoke_over(directory, target, Vec::new())
 }
 
 /// [`invoke`] over a scope whose front is already built, for the one unit a directory cannot supply.
@@ -102,9 +98,19 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
     }
 }
 
-/// [`invoke`] over the governing package's sole executable, with nothing mounted by hand.
+/// [`invoke`] over the governing package's sole executable.
 fn run(root: &Path) -> Invocation {
-    invoke(root, None, &[])
+    invoke(root, None)
+}
+
+/// `root`'s manifest with a path dependency on the package at `directory` appended — the only way another unit enters a compilation.
+fn declaring(root: &Path, name: &str, directory: &Path) -> String {
+    let manifest = fs::read_to_string(root.join("curios.toml")).expect("a manifest to extend");
+
+    format!(
+        "{manifest}\n[dependencies]\n{name} = {{ source = \"path\", path = {:?} }}\n",
+        directory
+    )
 }
 
 /// A directory of its own, shared with no other test.
@@ -268,21 +274,24 @@ fn a_changed_dependency_set_moves_the_address() {
     assert!(run(&root).reused, "one slot, filed and found");
     assert_eq!(slots(&root), 1);
 
-    let mounted = [shape.clone()];
+    // The dependency set is what the manifest declares, so changing it is a manifest edit — which is also what makes this test about a configuration rather than about a flag.
+    let plain = fs::read_to_string(root.join("curios.toml")).expect("a manifest");
+    let with_shape = declaring(&root, "shape", &shape);
+
+    write(&root, "curios.toml", &with_shape);
     assert!(
-        !invoke(&root, None, &mounted).reused,
-        "mounting another unit is a different compilation, so it is a different address"
+        !run(&root).reused,
+        "declaring another unit is a different compilation, so it is a different address"
     );
     assert_eq!(slots(&root), 2, "and the first slot is still there");
 
+    write(&root, "curios.toml", &plain);
     assert!(
         run(&root).reused,
         "which is why dropping the dependency again finds the original payload rather than a mismatched record"
     );
-    assert!(
-        invoke(&root, None, &mounted).reused,
-        "and so does keeping it"
-    );
+    write(&root, "curios.toml", &with_shape);
+    assert!(run(&root).reused, "and so does keeping it");
     assert_eq!(slots(&root), 2, "two configurations, two slots, forever");
 
     fs::remove_dir_all(root).unwrap();
@@ -303,14 +312,14 @@ fn two_executables_occupy_two_slots() {
     write(&root, "one.crs", "/std/print(/app/word)\n");
     write(&root, "two.crs", "/std/print(\"different\")\n");
 
-    let one = invoke(&root, Some("one"), &[]);
-    let two = invoke(&root, Some("two"), &[]);
+    let one = invoke(&root, Some("one"));
+    let two = invoke(&root, Some("two"));
     assert!(!one.reused && !two.reused, "neither is stored yet");
     assert_ne!(one.payload, two.payload, "and they are different programs");
 
     assert_eq!(slots(&root), 2, "one slot each");
-    assert!(invoke(&root, Some("one"), &[]).reused);
-    assert!(invoke(&root, Some("two"), &[]).reused);
+    assert!(invoke(&root, Some("one")).reused);
+    assert!(invoke(&root, Some("two")).reused);
 
     fs::remove_dir_all(root).unwrap();
 }
@@ -395,14 +404,19 @@ fn a_slot_does_not_answer_for_another_projects_program() {
     write(&mine, "tool.crs", "/std/print(/shape/word)\n");
     write(&theirs, "tool.crs", "/std/print(\"theirs\")\n");
 
-    let mounted = [shape.clone()];
-    let filed = invoke(&theirs, None, &mounted);
+    // Both declare it, because the premise is that they address identically: one source outside either project, reached by each through its own manifest.
+    for project in [&mine, &theirs] {
+        let declared = declaring(project, "shape", &shape);
+        write(project, "curios.toml", &declared);
+    }
+
+    let filed = run(&theirs);
     assert!(!filed.reused);
 
     // Copied rather than shared through `CURIOS_CACHE`, since the store's hermeticity rests on no test ever setting it — and what is under test is the verification, which cannot tell how a foreign slot arrived.
     stage(&theirs, &mine);
 
-    let asked = invoke(&mine, None, &mounted);
+    let asked = run(&mine);
     assert!(
         !asked.reused,
         "their record names their entry, which is not mine to have compiled"
