@@ -10,8 +10,9 @@
 mod tests;
 
 use {
-    crate::{Executable, Governing, Package, order},
+    crate::{Executable, Governing, Package, declared, order},
     curios_text::RootSource,
+    curios_utilities::Qualifier,
     std::path::{Path, PathBuf},
 };
 
@@ -32,6 +33,10 @@ pub enum Target {
         /// The governing root, which is where the store sits. Carried because what a compilation may reuse is a fact about the project it is in, and only the walk knows which project that is.
         root: PathBuf,
         units: Vec<RootSource>,
+        /// The prefixes the entry may name: its package's declared dependencies, its own library, and `/std`.
+        ///
+        /// Carried rather than derived by the caller, because it is the manifest's statement and nothing downstream reads a manifest. An executable is part of its package, so it reaches the package's own library without declaring it — a program does not depend on itself.
+        declares: Vec<Qualifier>,
     },
 }
 
@@ -99,6 +104,10 @@ impl Target {
             name: executable.name.clone(),
             package: governing.package.name.clone(),
             entry: governing.directory.join(&executable.path),
+            declares: declared(&governing.package)
+                .into_iter()
+                .chain([Qualifier::from([governing.package.name.as_str()])])
+                .collect(),
             units: order(&governing)?,
         })
     }

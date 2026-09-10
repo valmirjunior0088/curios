@@ -10,7 +10,7 @@ use {
     std::{collections::BTreeSet, path::PathBuf},
 };
 
-/// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject resolved into — what `curios lint` reads a package's unused dependencies off.
+/// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject was *written* under — what `curios lint` reads a package's unused dependencies off.
 pub struct Diagnosed {
     pub diagnostics: Vec<Diagnostic>,
     pub reached: BTreeSet<Qualifier>,
@@ -24,6 +24,10 @@ pub enum Subject {
     Entry {
         units: Vec<RootSource>,
         origin: Origin,
+        /// The prefixes the entry may name, as its manifest declares them — `None` for a standalone program, which has no manifest and so sees every open prefix in scope.
+        ///
+        /// An `Option` rather than a possibly-empty list, because the two differ: a program that declared *none* sees nothing but its own names, and one that declared *nothing* sees everything a program may name. A standalone file is the second.
+        declares: Option<Vec<Qualifier>>,
     },
     /// A unit: the last of `units`, compiled against the ones before it. Its verdicts are the answer.
     Unit { units: Vec<RootSource> },
@@ -84,8 +88,12 @@ pub fn diagnosed(
             );
             (checked, true)
         }
-        Subject::Entry { units, origin } => {
-            let (entrypoint, loader) = match open(origin, overlay) {
+        Subject::Entry {
+            units,
+            origin,
+            declares,
+        } => {
+            let (entrypoint, loader) = match open(origin, declares, overlay) {
                 Ok(opened) => opened,
                 Err(refusal) => {
                     return Diagnosed {
@@ -143,6 +151,7 @@ impl Diagnosed {
 /// `program` parsed, with the loader its modules resolve through — both reading through `overlay` — or the one diagnostic a program that does not parse gets.
 pub(crate) fn open(
     origin: Origin,
+    declares: Option<Vec<Qualifier>>,
     overlay: &Overlay,
 ) -> Result<(Entrypoint, RootSource), Vec<Diagnostic>> {
     let opened = match origin {
@@ -156,7 +165,15 @@ pub(crate) fn open(
     };
 
     match opened {
-        Ok((entrypoint, loader, _source)) => Ok((entrypoint, loader.with_overlay(overlay.clone()))),
+        Ok((entrypoint, loader, _source)) => Ok((
+            entrypoint,
+            // Declared before the overlay, so the two builders compose in the order they are written rather than one dropping the other.
+            match declares {
+                Some(declares) => loader.declaring(declares),
+                None => loader,
+            }
+            .with_overlay(overlay.clone()),
+        )),
         Err(report) => Err(vec![Diagnostic {
             severity: Severity::Error,
             report,

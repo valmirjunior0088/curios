@@ -24,8 +24,12 @@ pub fn declared_tests(
             let units = crate::overlaid(units, overlay);
             unit_test_paths(budget, &units, cache, |_| {})?
         }
-        Subject::Entry { units, origin } => {
-            let (entrypoint, loader) = open(origin, overlay).map_err(|refusal| {
+        Subject::Entry {
+            units,
+            origin,
+            declares,
+        } => {
+            let (entrypoint, loader) = open(origin, declares, overlay).map_err(|refusal| {
                 CompileError::failure(
                     refusal
                         .iter()

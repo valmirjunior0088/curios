@@ -6,6 +6,7 @@ use {
     crate::{Diagnostic, Origin, ReadOnly, of_error, open, overlaid},
     curios_pipeline::{Cache, Stage, compile_with_units},
     curios_text::{Overlay, RootSource},
+    curios_utilities::Qualifier,
     curios_verdicts::Verdicts,
 };
 
@@ -40,6 +41,7 @@ pub fn stage(
     budget: u64,
     units: Vec<RootSource>,
     origin: Origin,
+    declares: Option<Vec<Qualifier>>,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     name: &str,
@@ -50,7 +52,7 @@ pub fn stage(
         });
     };
 
-    let (entrypoint, loader) = open(origin, overlay).map_err(Refusal::Diagnostics)?;
+    let (entrypoint, loader) = open(origin, declares, overlay).map_err(Refusal::Diagnostics)?;
     let units = overlaid(units, overlay);
     let read_only = cache.map(|cache| ReadOnly { cache, overlay });
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);

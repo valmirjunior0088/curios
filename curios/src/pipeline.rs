@@ -23,25 +23,36 @@ pub(crate) fn payload_of(budget: u64, target: Target) -> Result<Vec<u8>, Compile
     let subject = subject_of(&target);
 
     // Neither standalone form has a project, so neither has a store to consult: what a compilation may reuse is a fact about the project it is in, and these are in none.
-    let (entry, declared, cache) = match target {
-        Target::Stdin => (None, None, None),
-        Target::File(path) => (Some(path), None, None),
+    let (entry, declared, declares, cache) = match target {
+        Target::Stdin => (None, None, None, None),
+        Target::File(path) => (Some(path), None, None, None),
         Target::Executable {
             entry,
             units,
             root,
             package,
             name,
+            declares,
             ..
         } => {
             scope.extend(units);
 
-            (Some(entry), Some((package, name)), Some(Verdicts::at(root)))
+            (
+                Some(entry),
+                Some((package, name)),
+                Some(declares),
+                Some(Verdicts::at(root)),
+            )
         }
     };
 
     // Opened before the store is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.
     let (entrypoint, loader, source) = open(entry.as_deref())?;
+    // What the manifest declared, onto the resolver the entry's own names go through. A standalone file has no manifest, so it declares nothing and sees every open prefix — which is the whole scope it was given, since nothing mounted anything beside the prelude.
+    let loader = match declares {
+        Some(declares) => loader.declaring(declares),
+        None => loader,
+    };
 
     // A payload is filed only where all three exist: a store to put it in, a declared name to file it under, and an entry file to verify it against. Standard input has none of them, and reaches this as the `None` that skips both the get and the put.
     let filed = cache

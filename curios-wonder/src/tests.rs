@@ -17,6 +17,7 @@ fn of(text: &str) -> Vec<crate::Diagnostic> {
         DEFAULT_STEP_BUDGET,
         Subject::Entry {
             units: Vec::new(),
+            declares: None,
             origin: Origin::Text {
                 label: "<stdin>".to_string(),
                 text: text.to_string(),
@@ -36,6 +37,7 @@ fn rung(name: &str, text: &str) -> Result<crate::Rendering, crate::Refusal> {
             label: "<stdin>".to_string(),
             text: text.to_string(),
         },
+        None,
         &Overlay::default(),
         None,
         name,
@@ -449,6 +451,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
     let asked = |text: &str| Asked {
         subject: Subject::Entry {
             units: Vec::new(),
+            declares: None,
             origin: Origin::Text {
                 label: "<stdin>".to_string(),
                 text: text.to_string(),

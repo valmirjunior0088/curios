@@ -14,7 +14,7 @@ mod tests;
 use {
     crate::{LIBRARY, MANIFEST, Manifest, Package},
     curios_text::{Module, RootSource, TopItem},
-    curios_utilities::RootKind,
+    curios_utilities::{Qualifier, RootKind},
     std::{collections::BTreeMap, path::Path},
 };
 
@@ -32,6 +32,20 @@ pub fn package_at(directory: &Path) -> Result<(Package, Option<RootSource>), Str
     let source = package_source(&package, directory)?;
 
     Ok((package, source))
+}
+
+/// The prefixes `package`'s library may name: every dependency it declares, plus the standard library.
+///
+/// **Direct dependencies only.** A dependency of a dependency is in the fold — it had to be, for the one in between to compile — and is unspellable here, which is what makes a manifest's rows the whole statement of what a unit reaches. Law 3 said it before this enforced it: membership organizes and dependency compiles.
+///
+/// `/std` is implicit because it is the one unit every program is entitled to and no manifest declares: a row for it would be ceremony every package in existence repeats. It is named here rather than derived, which is the one place in this crate that knows the standard library by name; the root beneath it, `/sys`, is named by nothing here at all — it has no path, so no manifest can reach it and `curios-pipeline`'s `standard` module makes the one grant of it.
+pub(crate) fn declared(package: &Package) -> Vec<Qualifier> {
+    package
+        .dependencies
+        .keys()
+        .map(|name| Qualifier::from([name.as_str()]))
+        .chain([Qualifier::from(["std"])])
+        .collect()
 }
 
 /// The resolver `package`'s library is lowered from, its header beside the manifest in `directory`, or `None` when there is no header there.
@@ -52,6 +66,7 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
         // The library is what a package documents, described as the manifest describes it.
         true => Ok(Some(
             RootSource::mounted(&package.name, RootKind::Ordinary, header, directory)
+                .declaring(declared(package))
                 .documented(&package.name, package.description.as_deref()),
         )),
     }

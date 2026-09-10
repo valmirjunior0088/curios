@@ -49,6 +49,7 @@ fn every_program_lints_clean() {
         wrong.extend(findings(Subject::Entry {
             units: Vec::new(),
             origin: Origin::File(path),
+            declares: None,
         }));
     }
     assert!(

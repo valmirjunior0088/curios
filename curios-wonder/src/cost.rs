@@ -9,6 +9,7 @@ use {
     curios_cont::{Fate, descendants, fates},
     curios_pipeline::{Cache, Stage, compile_with_units},
     curios_text::{Overlay, RootSource},
+    curios_utilities::Qualifier,
     curios_verdicts::Verdicts,
     std::collections::BTreeMap,
 };
@@ -22,10 +23,11 @@ pub fn cost(
     budget: u64,
     units: Vec<RootSource>,
     origin: Origin,
+    declares: Option<Vec<Qualifier>>,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
 ) -> Result<Vec<Fate>, Vec<Diagnostic>> {
-    let (entrypoint, loader) = open(origin, overlay)?;
+    let (entrypoint, loader) = open(origin, declares, overlay)?;
     let units = overlaid(units, overlay);
     let read_only = cache.map(|cache| ReadOnly { cache, overlay });
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);

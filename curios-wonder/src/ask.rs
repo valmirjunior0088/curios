@@ -34,6 +34,7 @@ impl Asked {
                 subject: Subject::Entry {
                     units: Vec::new(),
                     origin: Origin::File(file.to_path_buf()),
+                    declares: None,
                 },
                 store: None,
             },
@@ -42,11 +43,16 @@ impl Asked {
                 store: Some(Verdicts::at(root)),
             },
             Membership::Executable {
-                entry, root, units, ..
+                entry,
+                root,
+                units,
+                declares,
+                ..
             } => Self {
                 subject: Subject::Entry {
                     units,
                     origin: Origin::File(entry),
+                    declares: Some(declares),
                 },
                 store: Some(Verdicts::at(root)),
             },
@@ -56,7 +62,11 @@ impl Asked {
     /// The declared executable `target` names, or the sole one.
     fn about_executable(target: Option<&str>, manifest: Option<&Path>) -> Result<Self, String> {
         let Target::Executable {
-            entry, root, units, ..
+            entry,
+            root,
+            units,
+            declares,
+            ..
         } = Target::here(target, manifest)?
         else {
             unreachable!("neither `-` nor a path reaches here");
@@ -66,6 +76,7 @@ impl Asked {
             subject: Subject::Entry {
                 units,
                 origin: Origin::File(entry),
+                declares: Some(declares),
             },
             store: Some(Verdicts::at(root)),
         })
@@ -76,6 +87,7 @@ impl Asked {
         Ok(Self {
             subject: Subject::Entry {
                 units: Vec::new(),
+                declares: None,
                 origin: Origin::Text {
                     label: STDIN_LABEL.to_string(),
                     text,
@@ -194,14 +206,19 @@ pub fn wonder_stage(
         Form::Named(name) => Asked::about_executable(name.as_deref(), manifest)?,
     };
 
-    let Subject::Entry { units, origin } = asked.subject else {
+    let Subject::Entry {
+        units,
+        origin,
+        declares,
+    } = asked.subject
+    else {
         return Err(
             "a library has no stages of its own — name an executable or a program file".to_string(),
         );
     };
     let cache = asked.store.as_ref();
 
-    match stage(budget, units, origin, &overlay, cache, name) {
+    match stage(budget, units, origin, declares, &overlay, cache, name) {
         Ok(Reached::Rendered(rendering)) => {
             println!("{}", rendering.text);
             // The rung is the answer and goes to stdout; what stopped the compilation afterwards is context and goes to stderr, so a pipeline reading the rendering is unaffected by it.
@@ -244,7 +261,12 @@ pub fn wonder_cost(
         Form::Named(name) => Asked::about_executable(name.as_deref(), manifest)?,
     };
 
-    let Subject::Entry { units, origin } = asked.subject else {
+    let Subject::Entry {
+        units,
+        origin,
+        declares,
+    } = asked.subject
+    else {
         return Err(
             "a library is not compiled to a program — name an executable or a program file"
                 .to_string(),
@@ -252,7 +274,7 @@ pub fn wonder_cost(
     };
     let cache = asked.store.as_ref();
 
-    match cost(budget, units, origin, &overlay, cache) {
+    match cost(budget, units, origin, declares, &overlay, cache) {
         Ok(fates) => {
             for fate in fates {
                 // The outcome is one token and its count, so a column stays a column: `specialized 3` reads as one answer and splits as one field.

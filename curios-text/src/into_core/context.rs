@@ -394,9 +394,11 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// A reference resolved to `target`: the mount owning it is reached. The entry's empty prefix owns every name nothing else claims, and is recorded like any other; the consumer knows which prefixes it asked about.
-    fn note_reached(&self, target: &Qualifier) {
-        if let Some(mount) = Mount::owning(self.reach.mounts(), target) {
+    /// A reference was *written* under `spelled`: the mount owning that path is reached. The entry's empty prefix owns every name nothing else claims, and is recorded like any other; the consumer knows which prefixes it asked about.
+    ///
+    /// **The path the reader wrote, never the one it resolved to.** A re-export means the two differ: `/std/Nat` is `pub use /sys/{Nat}`, so resolving `use /std/{Nat}` lands on `/sys/Nat` and a record of the *target* would say every program reached `/sys`. What a declared dependency is answerable to is what the reader spelled, which is also the only thing they can change.
+    fn note_spelled(&self, spelled: &Qualifier) {
+        if let Some(mount) = Mount::owning(self.reach.mounts(), spelled) {
             self.reached.borrow_mut().insert(mount.prefix.clone());
         }
     }
@@ -638,7 +640,7 @@ impl<'a> Context<'a> {
                 if let Some(site) = self.current_site {
                     self.qualifier_sites.insert(label.to_string(), site);
                 }
-                self.note_reached(&target);
+                self.note_spelled(parent);
                 self.record_module_import(&target, label);
                 Ok(target)
             }
@@ -674,6 +676,7 @@ impl<'a> Context<'a> {
                 if let Some(site) = self.current_site {
                     self.binding_sites.insert(label.to_string(), site);
                 }
+                self.note_spelled(parent);
                 self.record_import(&target, label.to_string());
                 Ok(target)
             }
@@ -709,7 +712,7 @@ impl<'a> Context<'a> {
             if let Some(site) = self.current_site {
                 self.qualifier_sites.insert(label.to_string(), site);
             }
-            self.note_reached(&target);
+            self.note_spelled(parent);
             self.record_module_import(&target, label);
             result.module = Some(target);
         }
@@ -719,6 +722,7 @@ impl<'a> Context<'a> {
             if let Some(site) = self.current_site {
                 self.binding_sites.insert(label.to_string(), site);
             }
+            self.note_spelled(parent);
             self.record_import(&target, label.to_string());
             result.binding = Some(target);
         }
@@ -728,7 +732,6 @@ impl<'a> Context<'a> {
 
     // Record that `target` is in scope of this body under `spelling`, from here on. A target already in scope under a spelling no longer than this one is not recorded again — both resolve, and the shorter is the one a reader would write; a shorter spelling arriving later is a second entry, so an item between the two sees only the first.
     fn record_import(&mut self, target: &Qualifier, spelling: String) {
-        self.note_reached(target);
         let global = curios_core::Global::Authored(target.clone());
         let mut imports = self.imports.borrow_mut();
         let shadowed = self.in_scope.iter().any(|index| {
@@ -886,7 +889,7 @@ impl<'a> Context<'a> {
                 &label,
             ) {
                 Some(target) => {
-                    self.note_reached(&target);
+                    self.note_spelled(&parent);
                     Ok(target)
                 }
                 None => Err(

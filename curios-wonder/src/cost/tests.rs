@@ -15,6 +15,7 @@ fn fates_of(text: &str) -> Vec<Fate> {
             label: "<stdin>".to_string(),
             text: text.to_string(),
         },
+        None,
         &Overlay::default(),
         None,
     )

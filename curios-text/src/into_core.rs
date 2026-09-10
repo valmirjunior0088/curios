@@ -186,7 +186,7 @@ pub struct PreparedText {
     imports: curios_core::Imports,
     /// Every lint the lowering found, in reading order — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its scope's interfaces.
     lints: Vec<Lint>,
-    /// The prefix of every mount some reference of this unit resolved into — see `Context::reached`.
+    /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_spelled`.
     reached: BTreeSet<Qualifier>,
     /// This unit's interface for its consumers, when its resolver marked a mount as documented — built here, as the last thing the lowering does, so it travels with the unit. See `document`.
     documentation: Option<Documentation>,

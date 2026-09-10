@@ -10,6 +10,7 @@ mod tests;
 use {
     crate::{Governing, LIBRARY, MANIFEST, Manifest, order},
     curios_text::{RootSource, identity},
+    curios_utilities::Qualifier,
     std::path::{Path, PathBuf},
 };
 
@@ -28,6 +29,8 @@ pub enum Membership {
         entry: PathBuf,
         root: PathBuf,
         units: Vec<RootSource>,
+        /// The prefixes the entry may name, as its manifest declares them — see `Target::Executable`'s own field.
+        declares: Vec<Qualifier>,
     },
 }
 
@@ -62,6 +65,10 @@ impl Membership {
                     name: executable.name.clone(),
                     entry,
                     root: governing.root.clone(),
+                    declares: crate::declared(&governing.package)
+                        .into_iter()
+                        .chain([Qualifier::from([governing.package.name.as_str()])])
+                        .collect(),
                     units: order(&governing)?,
                 });
             }
