@@ -1,7 +1,29 @@
-pub use /syn/{Char};
-pub use /syn/Char/{Below, InRange, Scalar};
-use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, True, Str, Equal, Compare, Show, Spell,
-    Ordered};
+use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, False, True, Str, Equal, Compare, Show,
+    Spell, Ordered};
+
+-- | That `code` is below `bound`, decided.
+pub let Below(code: Nat, bound: Nat) -> Prop =
+    Bool/Holds(code < bound);
+
+-- | That `code` lies between `lo` and `hi`, both ends included, decided.
+pub let InRange(code: Nat, lo: Nat, hi: Nat) -> Prop =
+    match code >= lo | true => Bool/Holds(code <= hi) | false => False end;
+
+-- | That `code` is a Unicode scalar value, which is every code point but the surrogates.
+pub induct Scalar: (Nat) -> pub Prop
+-- | Below the surrogate range.
+| below(@code: Nat, proof: Below(code, 0xD800)): (code)
+-- | Above the surrogate range, up to the last code point.
+| above(@code: Nat, proof: InRange(code, 0xE000, 0x10FFFF)): (code)
+end
+
+-- | One Unicode scalar value.
+pub struct Char: pub Type {
+    -- | Its code point.
+    code: Nat,
+    -- | Why that code point is a scalar value rather than a surrogate.
+    scalar: Scalar(code),
+}
 
 -- | The code point.
 pub let to_nat(c: Char) -> Nat =

@@ -130,7 +130,7 @@ impl Qualifier {
 
     /// The canonical flattened spelling — `/`-joined with a leading `/`, the empty string for the root — which is the exact string definition keys and hand-built references use, so it must match character-for-character.
     pub fn join(&self) -> String {
-        // A canonical resolved identity is absolute: it carries a leading `/` so a hand-built reference (e.g. the string-literal meta-emitter's `/syn/Str/…`) matches a definition's key unambiguously. The empty (root) qualifier joins to the empty string, not a bare `/`.
+        // A canonical resolved identity is absolute: it carries a leading `/` so a hand-built reference (e.g. the string-literal meta-emitter's `/std/Str/…`) matches a definition's key unambiguously. The empty (root) qualifier joins to the empty string, not a bare `/`.
         match self.segments_slice().is_empty() {
             true => String::new(),
             false => format!("/{}", self.segments_slice().join("/")),

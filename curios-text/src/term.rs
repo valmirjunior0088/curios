@@ -531,14 +531,14 @@ pub enum Subterm {
     NumLit(NumLit),
 }
 
-/// The literals the lowerer desugars to a `/syn` construction: a character becomes a proof-carrying `/syn/Char`, and a string becomes a proof-carrying `/syn/Str`. Held as a dedicated [`Subterm`] variant (not an `Intrinsic`) because the result is a core term, never a core intrinsic.
+/// The literals the lowerer desugars to a `/syn` construction: a character becomes a proof-carrying `/std/Char`, and a string becomes a proof-carrying `/std/Str`. Held as a dedicated [`Subterm`] variant (not an `Intrinsic`) because the result is a core term, never a core intrinsic.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Syn {
     Char(char),
     Str(StrLit),
 }
 
-/// A string literal's value with the spelling it was written in, so the printer rounds a block back to a block. Purely presentational, as a numeral's [`Radix`] is: dropped at lowering, where both spellings are the same `/syn/Str`.
+/// A string literal's value with the spelling it was written in, so the printer rounds a block back to a block. Purely presentational, as a numeral's [`Radix`] is: dropped at lowering, where both spellings are the same `/std/Str`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrLit {
     pub value: String,

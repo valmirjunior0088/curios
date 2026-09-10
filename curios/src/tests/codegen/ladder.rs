@@ -139,7 +139,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 /// | read the byte | `call $bytes/read` |
 /// | **allocate a rope view** for the tail | `call $bytes/slice` |
 /// | **allocate the scan state** to hand to `step` | `struct.new $tuple/4` |
-/// | the UTF-8 scan | `call $syn/Str/step`, then `classify` |
+/// | the UTF-8 scan | `call $std/Str/step`, then `classify` |
 /// | **indirect call** through `f` | `call_ref $clsr/2` |
 /// | **allocate the accumulator tuple** | `struct.new $tuple/2` |
 ///
@@ -161,7 +161,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// The `struct.new $tuple/4` row above was a spelling, not a compiler obligation. The cont arm passed `step(h, Scan/cont(rem, lo, hi))` with `sc` — the parameter holding exactly that value — in scope, and match refinement makes the two spellings definitionally equal, so `/std` now passes the held parameter at every such site: `fold`, `at`, `utf8/drop_width`, `utf8/count_scalars`, and their proof twins, which keeps function and proof unfolding in the same spelling. The kernel recertified the prelude over the change, and the walk, `len` and `slice` each lost a per-continuation-byte allocation at once.
 ///
-/// The emitted fold body for `programs/parse_multibyte.crs` now holds five `struct.new $tuple/2`, no `struct.new $tuple/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`, and the only arity-4 constructions left in that module are the two genuine transitions inside `/syn/Str/step` — the probe now spelled [`the_per_character_walk_carries_its_scan_without_allocating`] held both facts. Timed **2026-08-17** with the native-binary protocol above, five runs each, `user` seconds:
+/// The emitted fold body for `programs/parse_multibyte.crs` now holds five `struct.new $tuple/2`, no `struct.new $tuple/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`, and the only arity-4 constructions left in that module are the two genuine transitions inside `/std/Str/step` — the probe now spelled [`the_per_character_walk_carries_its_scan_without_allocating`] held both facts. Timed **2026-08-17** with the native-binary protocol above, five runs each, `user` seconds:
 ///
 /// | Program | before | after |
 /// | --- | --- | --- |
@@ -172,7 +172,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// ## After step's result crossed as fields (M1a, 2026-08-17)
 ///
-/// Interprocedural demand made `split_returns` eligible on `/syn/Str/step`'s component — once `check` stopped capturing the scan into a closure chain — so step returns four fields and constructs nothing. What each caller does with them is the measured story: every resume must rebuild the tuple to jump it into the loop, and dynamic fields admit no interning, so the digit walk that used to receive an interned `lead()` for free now reboxes per character:
+/// Interprocedural demand made `split_returns` eligible on `/std/Str/step`'s component — once `check` stopped capturing the scan into a closure chain — so step returns four fields and constructs nothing. What each caller does with them is the measured story: every resume must rebuild the tuple to jump it into the loop, and dynamic fields admit no interning, so the digit walk that used to receive an interned `lead()` for free now reboxes per character:
 ///
 /// | Program | after the sweep | after M1a |
 /// | --- | --- | --- |
@@ -207,7 +207,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// ## After the scan crossed as fields (variant-width, 2026-08-17)
 ///
-/// The last obligation on the per-character path. The loop's scan parameter travels as a discriminant and three payload slots with the interned nullary constructors filled, and `/syn/Str/step` takes those four slots as parameters, so the emitted `/std/Str/fold` body holds no `struct.new` of any kind.
+/// The last obligation on the per-character path. The loop's scan parameter travels as a discriminant and three payload slots with the interned nullary constructors filled, and `/std/Str/step` takes those four slots as parameters, so the emitted `/std/Str/fold` body holds no `struct.new` of any kind.
 ///
 /// **This row carries its own control, and every row above it should be read as though it did not.** The rows above compare against figures taken days and several commits apart — the closure-table swap alone moved these walks by 27% and 11% — so a delta read across two of them is not attributable to the change named beside it. Both columns here were built from the same tree at two commits and timed in one interleaved session on one machine: the control is `9e7e81e8`, the campaign's own base.
 ///
@@ -373,7 +373,7 @@ fn walk_mirror_family_isolates_each_obligation() {
 
 /// Probe one of the four attributions: the returned scan state, tracked by where its construction lives — and the rung at which it stops having one.
 ///
-/// M1a's interprocedural demand made `split_returns` eligible on the step component, so `/syn/Str/step` hands its `Scan` back as four results rather than a tuple; each caller's resume then rebuilt that tuple once per arm, which is the allocation this probe used to pin at three sites. Variant-width splitting removed them in two moves. The fold's loop carries the scan as a discriminant and three payload slots, the interned nullary constructors entering it as one field and filler — which left exactly one construction, the head materialization the known call to `step` kept alive, because `step` took the aggregate whole. Splitting `step`'s own parameter removed that boundary too.
+/// M1a's interprocedural demand made `split_returns` eligible on the step component, so `/std/Str/step` hands its `Scan` back as four results rather than a tuple; each caller's resume then rebuilt that tuple once per arm, which is the allocation this probe used to pin at three sites. Variant-width splitting removed them in two moves. The fold's loop carries the scan as a discriminant and three payload slots, the interned nullary constructors entering it as one field and filler — which left exactly one construction, the head materialization the known call to `step` kept alive, because `step` took the aggregate whole. Splitting `step`'s own parameter removed that boundary too.
 ///
 /// **So the per-character path of an idiomatic UTF-8 walk allocates nothing.** `step` takes four field parameters beside its byte and hands back four results, constructing no scan at either end, and the fold's whole body carries no `struct.new` of any kind: not the accumulator, not the suffix view, not the scan. That last assertion is the strongest form this probe can take and is deliberately about *every* allocation rather than the tuple shapes the campaign named, because a rewrite that moved the cost into some other object would satisfy the narrow reading and fail this one.
 #[test]
@@ -389,7 +389,7 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
 
     let step = split
         .iter()
-        .find(|function| function.name.contains("/syn/Str/step"))
+        .find(|function| function.name.contains("/std/Str/step"))
         .expect("step survives as a function in this module");
     assert!(
         step.body.contains("(type $func/5/4)"),
@@ -416,7 +416,7 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
     );
     // Matched on the name rather than through `in_fold`, because the emitted call spells the callee's index before its hint and that index is not stable across passes.
     assert_eq!(
-        fold.body.matches("$/syn/Str/step").count(),
+        fold.body.matches("$/std/Str/step").count(),
         3,
         "the scan step is still a known call per arm — the fields travel through it rather than around it",
     );

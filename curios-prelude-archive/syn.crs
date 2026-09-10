@@ -1,9 +1,3 @@
-pub mod Char;
-pub use Char/{let Char};
-
-pub mod Str;
-pub use Str/{let Str};
-
 pub mod Test;
 
 pub mod Spell;

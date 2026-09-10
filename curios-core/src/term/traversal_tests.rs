@@ -124,7 +124,7 @@ fn any_metavar_visits_a_shared_subterm_once() {
 
 #[test]
 fn has_local_free_flags_locals_not_globals() {
-    let binder_0 = Free::local(0, Some("/syn/Str/step"));
+    let binder_0 = Free::local(0, Some("/std/Str/step"));
     let binder_1 = Free::local(1, Some("c#1"));
     let binder_2 = Free::local(2, Some("x#9"));
     fn global(path: [&str; 2]) -> Term {

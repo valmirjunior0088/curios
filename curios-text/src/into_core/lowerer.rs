@@ -272,13 +272,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    // The meta-emitter: a string literal becomes a proof-carrying `/syn/Str/Str` value `Str { bytes = <Bytes>, valid = <proof> }`. `valid` is erased, so at runtime `Str` collapses to its `Bytes` field — a literal costs exactly what a `Bytes` literal does.
+    // The meta-emitter: a string literal becomes a proof-carrying `/std/Str/Str` value `Str { bytes = <Bytes>, valid = <proof> }`. `valid` is erased, so at runtime `Str` collapses to its `Bytes` field — a literal costs exactly what a `Bytes` literal does.
     //
     // # Why the proof is a computation and not a derivation
     //
     // `Valid(b)` is `Utf8(lead, b)`, an inductive family whose canonical inhabitant is one `more` link per byte. Writing that out made the *term* linear in the data, and everything that walks a term inherited it: elaboration, zonking, both erasure obligations, the printer, and the kernel's typing judgment. Five separate stack-overflow or quadratic defects traced to that one shape, and the reduction budget capped a literal near 23KiB regardless.
     //
-    // So the proof emitted here is `of_scan_eq(b, refl_scan(b))`: constant size, discharged by *running* the `scan_from` fold rather than by traversing a derivation. `/syn/Str/of_scan_eq` rebuilds the derivation by reduction for the lemmas in `/std/Str/utf8` that genuinely eliminate it, so none of them changed.
+    // So the proof emitted here is `of_scan_eq(b, refl_scan(b))`: constant size, discharged by *running* the `scan_from` fold rather than by traversing a derivation. `/std/Str/of_scan_eq` rebuilds the derivation by reduction for the lemmas in `/std/Str/utf8` that genuinely eliminate it, so none of them changed.
     //
     // # What bounds a literal now
     //
@@ -292,7 +292,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, x[])` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter rather than lowered to a core intrinsic.
     pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
         match syn {
-            // A character literal is a polymorphic literal like a numeral: elaboration realizes it — `/syn/Char` by default, a numeric carrier where one is expected — so the certified value is built there, not here.
+            // A character literal is a polymorphic literal like a numeral: elaboration realizes it — `/std/Char` by default, a numeric carrier where one is expected — so the certified value is built there, not here.
             Syn::Char(character) => Ok(curios_core::Term::num_lit_char(*character)),
             Syn::Str(string) => Ok(self.str_literal(string.value.as_bytes())),
         }

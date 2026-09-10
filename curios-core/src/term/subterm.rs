@@ -139,7 +139,7 @@ impl Subterm {
         });
     }
 
-    /// Collect the head name of every inductive/struct *construction* and *type-former normal form* occurring in this subterm. These names are not `Var`s (they live in the registry, not the variable graph), so they do not appear in `free_vars`; the reachability prune (`order_flat_items`) needs them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the string-literal meta-emitter's `/syn/Str/Str`) keeps the backing type-former and field-type definitions alive even when no `Var` mentions them.
+    /// Collect the head name of every inductive/struct *construction* and *type-former normal form* occurring in this subterm. These names are not `Var`s (they live in the registry, not the variable graph), so they do not appear in `free_vars`; the reachability prune (`order_flat_items`) needs them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the string-literal meta-emitter's `/std/Str/Str`) keeps the backing type-former and field-type definitions alive even when no `Var` mentions them.
     pub fn construction_names(&self) -> BTreeSet<Global> {
         let mut names = BTreeSet::new();
         self.collect_construction_names(&mut names);

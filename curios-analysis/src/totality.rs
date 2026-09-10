@@ -380,7 +380,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// Unfold weak-head steps until the term reads as a shape, or stops moving.
     ///
-    /// Definitions stand between a term and its constructor shape, and no enumeration of *which* closes the set: measured over the corpus, 206 of 288 load-bearing unfoldings are witness projections (an operator resolves a witness, so `n - 1` arrives as `(w).0(n, 1)`), 11 are `/sys` intrinsic wrappers, and 65 are ordinary definitions like `/std/BigNat/mul/small` and `/syn/Str/step`. Unfolding is uniform over all of them because δ and β preserve meaning: a decrease visible after unfolding is a decrease in the term's value.
+    /// Definitions stand between a term and its constructor shape, and no enumeration of *which* closes the set: measured over the corpus, 206 of 288 load-bearing unfoldings are witness projections (an operator resolves a witness, so `n - 1` arrives as `(w).0(n, 1)`), 11 are `/sys` intrinsic wrappers, and 65 are ordinary definitions like `/std/BigNat/mul/small` and `/std/Str/step`. Unfolding is uniform over all of them because δ and β preserve meaning: a decrease visible after unfolding is a decrease in the term's value.
     ///
     /// There is no step count. Termination rests on what this pass is handed rather than on a budget: `check_rec_group` types every member body *before* asking for a verdict, positivity refuses a negative occurrence, and the universe hierarchy refuses `Type : Type` — so a well-typed rec-free term normalizes. [`readable`] keeps `rec` out, and the kernel's own reduction budget (`kernel::whnf`) remains the backstop for anything that still fails to settle.
     ///

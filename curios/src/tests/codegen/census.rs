@@ -1091,7 +1091,7 @@ fn aggregate_flow_census() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-17**, when the limit read 24: `/syn/Str/step` extent 37, `/syn/Str/classify` 52, `/std/Str/fold` 76. So specializing `step` per tag would clone 37 nodes against a budget of 24 — a refusal by less than a factor of two, confirming the budget rather than any rule is what declines it, and that raising the limit to admit `step` would also be admitting per-tag clones of everything else this size. Retaken after M1a and M2 (same day): step 30, classify 52, fold 70 — the split protocol and the fields split slimmed both walkers, and the refusal stands. Retaken again after variant-width splitting (same day): step 26, classify 52, fold 63 — the refusal stands by a wider margin, and the reason it no longer matters is that the reconstruction the specializer was being weighed against is gone.
+/// Taken **2026-08-17**, when the limit read 24: `/std/Str/step` extent 37, `/std/Str/classify` 52, `/std/Str/fold` 76. So specializing `step` per tag would clone 37 nodes against a budget of 24 — a refusal by less than a factor of two, confirming the budget rather than any rule is what declines it, and that raising the limit to admit `step` would also be admitting per-tag clones of everything else this size. Retaken after M1a and M2 (same day): step 30, classify 52, fold 70 — the split protocol and the fields split slimmed both walkers, and the refusal stands. Retaken again after variant-width splitting (same day): step 26, classify 52, fold 63 — the refusal stands by a wider margin, and the reason it no longer matters is that the reconstruction the specializer was being weighed against is gone.
 #[test]
 #[ignore = "measurement: reports the extents the specializer's budget compares"]
 fn step_specialization_extent() {
@@ -1107,7 +1107,7 @@ fn step_specialization_extent() {
         let Some(name) = &function.debug_name else {
             continue;
         };
-        if ["/syn/Str/step", "/syn/Str/classify", "/std/Str/fold"]
+        if ["/std/Str/step", "/std/Str/classify", "/std/Str/fold"]
             .iter()
             .any(|hint| name.contains(hint))
         {

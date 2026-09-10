@@ -58,7 +58,7 @@ fn not_ahead_digit<'a>() -> Parser<'a, ()> {
     })
 }
 
-// A character literal is a monomorphic, proof-certified `/syn/Char` value.
+// A character literal is a monomorphic, proof-certified `/std/Char` value.
 pub(super) fn parse_char_lit<'a>() -> Parser<'a, Term> {
     take_exact("'")
         .and_keep(parse_char_value())

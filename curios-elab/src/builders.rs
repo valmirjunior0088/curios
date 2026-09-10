@@ -20,7 +20,7 @@ pub(crate) fn syn_call(name: SyntaxName, args: impl IntoIterator<Item = Term>) -
     )
 }
 
-/// The Core expansion of a string literal: the `/syn/Str` struct over the packed bytes and the `of_scan_eq(b, refl_scan(b))` validity derivation, built from the [`StringSyntax`] slots alone. Owned here so the surface lowering and the synthesized test tail expand a literal identically — two expansions would be two opportunities for the scan bridge to drift.
+/// The Core expansion of a string literal: the `/std/Str` struct over the packed bytes and the `of_scan_eq(b, refl_scan(b))` validity derivation, built from the [`StringSyntax`] slots alone. Owned here so the surface lowering and the synthesized test tail expand a literal identically — two expansions would be two opportunities for the scan bridge to drift.
 pub fn str_literal(syntax: &StringSyntax, bytes: &[u8]) -> Term {
     let packed = Term::intrinsic(Intrinsic::Bin(
         Grain::X,
@@ -680,7 +680,7 @@ pub trait TermBuilders {
     /// A polymorphic numeric literal ([`NumLit`]) — elaboration-transient, resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_num_lit`.
     fn num_lit(magnitude: Natural, sign: Sign) -> Self;
 
-    /// A character-spelled polymorphic literal ([`NumLit::Character`]) — elaboration-transient like the numeral form, defaulting to `/syn/Char`.
+    /// A character-spelled polymorphic literal ([`NumLit::Character`]) — elaboration-transient like the numeral form, defaulting to `/std/Char`.
     fn num_lit_char(character: char) -> Self;
 
     /// A struct literal carrying the written entry shapes from `into_core`; elaboration validates them against the declared fields and rebuilds entry-free, exactly like `tuple_named`.

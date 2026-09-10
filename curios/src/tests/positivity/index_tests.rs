@@ -4,7 +4,7 @@
 
 use {super::test_support::*, crate::tests::run};
 
-// `syn/Str`'s `Utf8`, which recurses at an index computed from its own payload. Indices are walked opaquely — an inductive is not uniform in them — so what has to survive is the *payload* occurrence, not the index.
+// `/std/Str`'s `Utf8`, which recurses at an index computed from its own payload. Indices are walked opaquely — an inductive is not uniform in them — so what has to survive is the *payload* occurrence, not the index.
 #[test]
 fn an_indexed_family_recursing_at_a_computed_index_is_admitted() {
     let source = r#"

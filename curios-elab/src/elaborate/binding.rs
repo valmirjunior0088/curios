@@ -219,7 +219,7 @@ pub(super) fn elaborate_num_lit(
     let int_type: Term = Subterm::Intrinsic(Intrinsic::IntType).into();
     let flt_type: Term = Subterm::Intrinsic(Intrinsic::FltType).into();
 
-    // A written sign rules out `Nat`, so a marked numeral defaults to `Int`; a character-spelled literal defaults to the certified `/syn/Char` value it has always denoted.
+    // A written sign rules out `Nat`, so a marked numeral defaults to `Int`; a character-spelled literal defaults to the certified `/std/Char` value it has always denoted.
     let default_type: Term = match num_lit {
         NumLit::Number { sign, .. } if sign.is_marked() => int_type.clone(),
         NumLit::Number { .. } => nat_type.clone(),
@@ -319,7 +319,7 @@ pub(super) fn elaborate_num_lit(
                 Subterm::Intrinsic(Intrinsic::IntType) => {
                     (Intrinsic::Int(Integer::from(code)), int_type)
                 }
-                // Everything else — the `Char` default, an expected `/syn/Char`, an unsolved metavariable, or a genuine mismatch — is answered by the certified value itself: elaborating it infers the `Char` struct type, solves a waiting metavariable to it, and reports any mismatch against the type the literal has always had.
+                // Everything else — the `Char` default, an expected `/std/Char`, an unsolved metavariable, or a genuine mismatch — is answered by the certified value itself: elaborating it infers the `Char` struct type, solves a waiting metavariable to it, and reports any mismatch against the type the literal has always had.
                 _ => {
                     let value = character_value(context, *character);
                     return elaborate(context, &value, mode);
@@ -335,7 +335,7 @@ pub(super) fn elaborate_num_lit(
     Ok((Term::intrinsic(intrinsic), type_))
 }
 
-/// The certified `/syn/Char` value a character literal denotes: the code point with its `Scalar` range proof, exactly the term the lowerer's meta-emitter used to build eagerly. A Rust `char` is already a Unicode scalar, so the range constructor is selected by the code alone and the proof is one closed `qed`.
+/// The certified `/std/Char` value a character literal denotes: the code point with its `Scalar` range proof, exactly the term the lowerer's meta-emitter used to build eagerly. A Rust `char` is already a Unicode scalar, so the range constructor is selected by the code alone and the proof is one closed `qed`.
 fn character_value(context: &Context, character: char) -> Term {
     let syntax = context.syntax();
     let code: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(character as u32))).into();

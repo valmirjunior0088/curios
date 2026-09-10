@@ -41,14 +41,14 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         or: field(&["std", "Or", "Or"], "or"),
     },
     character: CharacterSyntax {
-        character: name(&["syn", "Char", "Char"]),
-        scalar_below: name(&["syn", "Char", "Scalar", "below"]),
-        scalar_above: name(&["syn", "Char", "Scalar", "above"]),
+        character: name(&["std", "Char", "Char"]),
+        scalar_below: name(&["std", "Char", "Scalar", "below"]),
+        scalar_above: name(&["std", "Char", "Scalar", "above"]),
     },
     string: StringSyntax {
-        string: name(&["syn", "Str", "Str"]),
-        of_scan_eq: name(&["syn", "Str", "of_scan_eq"]),
-        refl_scan: name(&["syn", "Str", "refl_scan"]),
+        string: name(&["std", "Str", "Str"]),
+        of_scan_eq: name(&["std", "Str", "of_scan_eq"]),
+        refl_scan: name(&["std", "Str", "refl_scan"]),
     },
     proof: ProofSyntax {
         true_qed: name(&["sys", "Bound", "True", "qed"]),

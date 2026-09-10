@@ -452,7 +452,7 @@ fn a_mixed_origin_is_declined() {
     );
 }
 
-/// The loop-carried *variant*: a one-tuple nullary constructor enters the header and a four-tuple payload constructor circulates through it, so no exact product ever described the parameter. The UTF-8 scan state of `/syn/Str`, in miniature.
+/// The loop-carried *variant*: a one-tuple nullary constructor enters the header and a four-tuple payload constructor circulates through it, so no exact product ever described the parameter. The UTF-8 scan state of `/std/Str`, in miniature.
 fn variant_loop_module() -> (CpsModule, CpsContId, CpsValueId) {
     let mut module = CpsModule::default();
     let narrow = module.add_value(Some("narrow".into()));

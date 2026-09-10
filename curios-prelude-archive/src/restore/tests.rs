@@ -41,7 +41,7 @@ fn the_stored_prelude_declares_no_tests() {
 #[test]
 fn string_literal_machinery_is_monomorphic() {
     // The literal machinery whose universe parameters would be paid per literal *value* or per byte of *reduction* — not what lowering emits repeatedly, which is nothing (see above). `Str` and `Char` are the carriers a literal builds; `scan_from` is the fold its proof is discharged by running, so a level on it is minted once per byte checked. `of_scan_eq` and `refl_scan` are deliberately absent — see above. `scan_from` is deliberately not in `curios-prelude-archive/src/syntax.rs` either: nothing in Rust emits it, it is reached through the other two's types.
-    let pinned = ["/syn/Str/Str", "/syn/Str/scan_from", "/syn/Char/Char"];
+    let pinned = ["/std/Str/Str", "/std/Str/scan_from", "/std/Char/Char"];
 
     with_prelude(|prelude| {
         let mut parameters = std::collections::BTreeMap::new();
