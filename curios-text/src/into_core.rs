@@ -64,26 +64,58 @@ use {
     },
 };
 
-// Reject a reference that *resolves into* an internal root (`sys` or `syn`) when the consuming module lies outside the privileged roots. `resolved` is the segments of the qualifier the reference resolved to — not the raw spelled path — so absolute and relative spellings are guarded identically. A non-internal target or a privileged consumer passes through.
-fn guard_internal_root(
-    mounts: &[Mount],
-    consumer: &Qualifier,
-    resolved: &[String],
-) -> Result<(), Error> {
-    let Some(root) = resolved.first() else {
-        return Ok(());
-    };
+/// Every prefix the compilation mounts, and which of them the unit being compiled may name.
+///
+/// **Two lists rather than one, because a prefix a unit cannot name still exists.** It is in the fold — it minted identities, it contributed universe seeds, it holds the arena the erasure resumes over — and it owns names whose spelling decides which unit declares them. So `mounts` stays complete for every question about *what a name is*, and `visible` answers the one question about *who may write it*. Collapsing them would either hide a mount from `Mount::owning`, which decides coherence, or make an undeclared prefix indistinguishable from a prefix nobody mounted, which is the diagnostic this type exists to keep.
+///
+/// Carried as one value because it is threaded through the whole of resolution: the walk that follows a `use` to its provider asks both questions at every hop, and two parallel parameters through ten functions drift.
+#[derive(Clone, Copy)]
+pub(super) struct Reach<'a> {
+    mounts: &'a [Mount],
+    visible: &'a [Mount],
+}
 
-    if !is_internal_root(mounts, root) {
-        return Ok(());
+impl<'a> Reach<'a> {
+    /// `mounts` is every prefix in the compilation; `visible` is the subset this unit declared, plus its own.
+    pub(super) fn over(mounts: &'a [Mount], visible: &'a [Mount]) -> Self {
+        Self { mounts, visible }
     }
 
-    if Mount::privileged(mounts, consumer) {
-        Ok(())
-    } else {
-        Err(Error::InternalRootModule {
-            segment: root.clone(),
-        })
+    /// Every prefix the compilation mounts — what owns a name, never what may write one.
+    pub(super) fn mounts(&self) -> &'a [Mount] {
+        self.mounts
+    }
+
+    /// Reject a reference that *resolves into* a prefix this unit cannot name.
+    ///
+    /// `resolved` is the segments of the qualifier the reference resolved to — not the raw spelled path — so absolute and relative spellings are guarded identically. A target inside a visible prefix, or inside the reader's own, passes through.
+    ///
+    /// **The prefix stays discoverable and the reference is refused**, rather than the prefix being hidden and the name reported unbound. A hidden prefix makes `use /sys/{Nat}` read as a typo; a refused one says which unit holds the name and that this one did not ask for it, which is the difference between a diagnostic and a riddle.
+    fn guard(&self, consumer: &Qualifier, resolved: &[String]) -> Result<(), Error> {
+        let Some(root) = resolved.first() else {
+            return Ok(());
+        };
+
+        let prefix = Qualifier::from([root.as_str()]);
+        // Not a mount at all: an ordinary name under the compilation root, or one that will fail to resolve on its own terms.
+        if !self.mounts.iter().any(|mount| mount.prefix == prefix) {
+            return Ok(());
+        }
+
+        // An internal root is reachable only from a privileged reader. An independent rule, and checked first because it is the older and the narrower: it says which *roots* are the compiler's, where the rule below says which prefixes this unit asked for.
+        if is_internal_root(self.mounts, root) && !Mount::privileged(self.mounts, consumer) {
+            return Err(Error::InternalRootModule {
+                segment: root.clone(),
+            });
+        }
+
+        // A prefix the unit declared, or its own — `visible` carries both, because a unit does not declare a dependency on itself.
+        match self.visible.iter().any(|mount| mount.prefix == prefix) {
+            true => Ok(()),
+            false => Err(Error::UndeclaredPrefix {
+                prefix: root.clone(),
+            }),
+        }
     }
 }
 
@@ -1294,22 +1326,21 @@ impl<'a> UnitSource<'a> {
         }
     }
 
-    /// The units of `scope` this source may name, in dependency order — all of them unless [`UnitSource::seeing`] narrowed it.
+    /// The mounts of `scope` this source may name, plus `own` — every one of them unless [`UnitSource::seeing`] narrowed it.
     ///
-    /// Narrowing *resolution*, never allocation: the floors, the universe-seed table and the nominal audit read the whole of `scope`, because an identity minted against an invisible predecessor still exists and a bound that ignored it would alias.
-    fn visible_in<'s>(&self, scope: &[&'s PreparedText]) -> Vec<&'s PreparedText> {
-        let Some(visible) = &self.visible else {
-            return scope.to_vec();
-        };
-
+    /// Filtered per *mount* rather than per unit: what a manifest declares is a prefix, and a unit claiming two prefixes would otherwise hand over the one nobody asked for along with the one somebody did. `own` is always included, since a unit does not declare a dependency on itself.
+    ///
+    /// Narrowing *resolution*, never allocation: the floors, the universe-seed table and the nominal audit read the whole of `scope`, because an identity minted against an unspellable predecessor still exists and a bound that ignored it would alias.
+    fn visible_mounts(&self, scope: &[&PreparedText], own: &[Mount]) -> Vec<Mount> {
         scope
             .iter()
-            .copied()
-            .filter(|unit| {
-                unit.mounts
-                    .iter()
-                    .any(|mount| visible.contains(&mount.prefix))
+            .flat_map(|unit| unit.mounts.iter())
+            .filter(|mount| match &self.visible {
+                Some(visible) => visible.contains(&mount.prefix),
+                None => true,
             })
+            .chain(own.iter())
+            .cloned()
             .collect()
     }
 
@@ -1389,17 +1420,11 @@ fn into_core_unit_within(
     scope: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedText, Error> {
-    // Two readings of one scope, and the split is the whole of per-dependency visibility. `visible` is what names resolve against; `scope` is what the compilation *is* — every floor, the cumulative universe-seed table and the nominal audit read it whole, because a unit the reader cannot spell still minted identities the reader must not alias.
-    let visible = source.visible_in(scope);
-    let scope_tables = visible.iter().map(|unit| &unit.table).collect::<Vec<_>>();
-    let scope_public = visible.iter().map(|unit| &unit.public).collect::<Vec<_>>();
+    // The whole scope, in every reading but one. Per-dependency visibility narrows nothing here: a prefix this unit did not declare stays discoverable and its names stay resolvable, and what refuses is the reference itself — see `Reach::guard`. Hiding the tables instead would turn an undeclared dependency into an unbound name, which is the one diagnostic this campaign exists to stop producing.
+    let scope_tables = scope.iter().map(|unit| &unit.table).collect::<Vec<_>>();
+    let scope_public = scope.iter().map(|unit| &unit.public).collect::<Vec<_>>();
     let scope_cores = scope.iter().map(|unit| &unit.core).collect::<Vec<_>>();
-    let scope_mounts = visible
-        .iter()
-        .flat_map(|unit| unit.mounts.iter().cloned())
-        .collect::<Vec<_>>();
-    // Every prefix in the compilation, visible or not: claim disjointness is a property of the whole fold, and a unit that cannot see a mount still must not claim it.
-    let all_mounts = scope
+    let scope_mounts = scope
         .iter()
         .flat_map(|unit| unit.mounts.iter().cloned())
         .collect::<Vec<_>>();
@@ -1413,7 +1438,7 @@ fn into_core_unit_within(
     //
     // Mount-set disjointness is what `Scoped`'s shadowing rule, the registries' duplicate-key rejection and the `ffi` import namespace all rest on, so it is checked once here rather than assumed three times.
     for (claim, prefix) in claims(source, &own) {
-        if let Some(earlier) = all_mounts
+        if let Some(earlier) = scope_mounts
             .iter()
             .find(|earlier| !earlier.prefix.is_root() && earlier.prefix == prefix)
         {
@@ -1437,13 +1462,16 @@ fn into_core_unit_within(
         .cloned()
         .chain(own.iter().cloned())
         .collect::<Vec<_>>();
+    // The subset this unit declared, plus its own. The default is every predecessor, so this differs from `mounts` only for a caller that had a manifest to read one out of.
+    let visible_mounts = source.visible_mounts(scope, &own);
+    let reach = Reach::over(&mounts, &visible_mounts);
 
     let public = interface::resolve_unit(
         source,
         &own,
         &modules,
         &mut table,
-        &mounts,
+        reach,
         Scoped::over(&scope_public),
     )?;
 
@@ -1476,7 +1504,7 @@ fn into_core_unit_within(
     let mut context = Context::new(
         &table,
         &public,
-        &mounts,
+        reach,
         &metavars,
         &universes,
         &universe_role,

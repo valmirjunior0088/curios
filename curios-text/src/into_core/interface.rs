@@ -214,7 +214,7 @@ pub(super) fn resolve_unit<'a>(
     own: &[Mount],
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &mut Scoped<'_, ModuleInfo>,
-    mounts: &[Mount],
+    reach: super::Reach<'_>,
     scope: Scoped<'a, PublicInterface>,
 ) -> Result<Scoped<'a, PublicInterface>, Error> {
     let mut public = scope;
@@ -244,8 +244,8 @@ pub(super) fn resolve_unit<'a>(
         )?;
     }
 
-    fixed_point(&mut public, table, mounts, &pub_uses)?;
-    classify_dead(&public, table, mounts, &pub_uses)?;
+    fixed_point(&mut public, table, reach, &pub_uses)?;
+    classify_dead(&public, table, reach, &pub_uses)?;
     Ok(public)
 }
 
@@ -408,14 +408,14 @@ fn seed(
 fn fixed_point(
     public: &mut Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    mounts: &[Mount],
+    reach: super::Reach<'_>,
     pub_uses: &[PubUse],
 ) -> Result<(), Error> {
     loop {
         let mut changed = false;
 
         for use_ in pub_uses {
-            for (ns, label, target, representation) in resolvable(public, table, mounts, use_) {
+            for (ns, label, target, representation) in resolvable(public, table, reach, use_) {
                 let entry = Entry {
                     target,
                     representation,
@@ -436,10 +436,10 @@ fn fixed_point(
 fn resolvable(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    mounts: &[Mount],
+    reach: super::Reach<'_>,
     use_: &PubUse,
 ) -> Vec<(Ns, String, Qualifier, Option<Qualifier>)> {
-    let Some(provider) = provider(public, table, mounts, &use_.module, &use_.name) else {
+    let Some(provider) = provider(public, table, reach, &use_.module, &use_.name) else {
         return Vec::new();
     };
 
@@ -506,11 +506,11 @@ fn resolvable(
 fn provider(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    mounts: &[Mount],
+    reach: super::Reach<'_>,
     module: &Qualifier,
     name: &Name,
 ) -> Option<Qualifier> {
-    resolve_provider(public, table, mounts, module, name).ok()
+    resolve_provider(public, table, reach, module, name).ok()
 }
 
 // Insert one resolved entry into a slot. Returns whether the map changed.
@@ -542,11 +542,11 @@ fn insert(
 fn classify_dead(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    mounts: &[Mount],
+    reach: super::Reach<'_>,
     pub_uses: &[PubUse],
 ) -> Result<(), Error> {
     for use_ in pub_uses {
-        let provider = resolve_provider(public, table, mounts, &use_.module, &use_.name)?;
+        let provider = resolve_provider(public, table, reach, &use_.module, &use_.name)?;
 
         let interface = public.get(&provider).expect("seeded module");
 
@@ -577,7 +577,7 @@ fn classify_dead(
                     if !resolved {
                         let ns = if in_binding { Ns::Binding } else { Ns::Module };
                         return Err(classify_label(
-                            public, table, mounts, pub_uses, &provider, ns, label,
+                            public, table, reach, pub_uses, &provider, ns, label,
                         ));
                     }
                 }
@@ -592,7 +592,7 @@ fn classify_dead(
 fn classify_label(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    mounts: &[Mount],
+    reach: super::Reach<'_>,
     pub_uses: &[PubUse],
     module: &Qualifier,
     ns: Ns,
@@ -608,7 +608,7 @@ fn classify_label(
             };
         }
 
-        match producer(public, table, mounts, pub_uses, &current, ns, label) {
+        match producer(public, table, reach, pub_uses, &current, ns, label) {
             Some(next) => current = next,
             None => {
                 return Error::NoSuchUseTarget {
@@ -624,7 +624,7 @@ fn classify_label(
 fn producer(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    mounts: &[Mount],
+    reach: super::Reach<'_>,
     pub_uses: &[PubUse],
     module: &Qualifier,
     ns: Ns,
@@ -644,7 +644,7 @@ fn producer(
             }),
         };
 
-        if names && let Some(provider) = provider(public, table, mounts, module, &use_.name) {
+        if names && let Some(provider) = provider(public, table, reach, module, &use_.name) {
             return Some(provider);
         }
     }
@@ -656,7 +656,7 @@ fn producer(
 fn resolve_provider(
     public: &Scoped<'_, PublicInterface>,
     table: &Scoped<'_, ModuleInfo>,
-    mounts: &[Mount],
+    reach: super::Reach<'_>,
     module: &Qualifier,
     name: &Name,
 ) -> Result<Qualifier, Error> {
@@ -690,13 +690,13 @@ fn resolve_provider(
         (start, &segments[1..])
     };
 
-    super::guard_internal_root(mounts, module, current.segments())?;
+    reach.guard(module, current.segments())?;
     for segment in walk {
         match visible_child(public, table, module, &current, segment) {
             Some(target) => current = target,
             None => return Err(segment_error(table, &current, segment)),
         }
-        super::guard_internal_root(mounts, module, current.segments())?;
+        reach.guard(module, current.segments())?;
     }
 
     Ok(current)

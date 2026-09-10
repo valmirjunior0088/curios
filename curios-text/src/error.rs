@@ -29,6 +29,10 @@ pub enum Error {
     InternalRootModule {
         segment: String,
     },
+    /// A reference named a prefix the compilation mounts but the unit being compiled never declared a dependency on. The name exists; this unit did not ask to see it.
+    UndeclaredPrefix {
+        prefix: String,
+    },
     /// Two claimed prefixes are not disjoint: the same prefix twice, one lying inside the other's subtree, or a prefix the entry program already declares as a module. All are the same collision seen from a different side, and all name both parties — a reader has to know which two things to change, and only the mount table knows both.
     ///
     /// A prefix *is* a package's canonical name, so naming the prefixes is naming the packages.
@@ -222,6 +226,10 @@ impl fmt::Display for Error {
             Error::InternalRootModule { segment } => write!(
                 f,
                 "`{segment}` is internal to the standard library; use the corresponding `/std` module"
+            ),
+            Error::UndeclaredPrefix { prefix } => write!(
+                f,
+                "`{prefix}` is mounted by this compilation but `{prefix}` is not a declared dependency of this unit; declare it to reach its names"
             ),
             Error::MountCollision {
                 claim,

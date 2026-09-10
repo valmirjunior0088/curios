@@ -271,8 +271,8 @@ pub(super) struct UseResolved {
 // The per-body elaboration context. `table`/`public` are frozen interface views, shared read-only across all nested contexts. `qualifiers`/`bindings` are the lexical scope of the module body being elaborated, populated source-ordered by declarations and `use` imports.
 pub(super) struct Context<'a> {
     prefix: Qualifier,
-    // Every prefix this compilation mounts, with its privilege tier. Shared read-only by every nested context, like `table`/`public`: which mount owns a module is `Mount::owning` over its qualifier, so nesting carries nothing about roots and nothing re-derives one from a string.
-    mounts: &'a [Mount],
+    // Every prefix this compilation mounts and which of them this unit may name — see `super::Reach`. Shared read-only by every nested context, like `table`/`public`: which mount owns a module is `Mount::owning` over its qualifier, so nesting carries nothing about roots and nothing re-derives one from a string.
+    reach: super::Reach<'a>,
     table: &'a Scoped<'a, ModuleInfo>,
     public: &'a Scoped<'a, PublicInterface>,
     qualifiers: HashMap<String, Qualifier>,
@@ -309,7 +309,7 @@ impl<'a> Context<'a> {
     pub(super) fn new(
         table: &'a Scoped<'a, ModuleInfo>,
         public: &'a Scoped<'a, PublicInterface>,
-        mounts: &'a [Mount],
+        reach: super::Reach<'a>,
         metavars: &'a Entropy,
         universes: &'a Entropy,
         universe_role: &'a Cell<curios_core::UniverseRole>,
@@ -326,7 +326,7 @@ impl<'a> Context<'a> {
     ) -> Context<'a> {
         Context {
             prefix: Qualifier::empty(),
-            mounts,
+            reach,
             table,
             public,
             qualifiers: HashMap::new(),
@@ -354,7 +354,7 @@ impl<'a> Context<'a> {
     pub(super) fn nested(&self, label: &str) -> Context<'a> {
         Context {
             prefix: self.prefix.with(label),
-            mounts: self.mounts,
+            reach: self.reach,
             table: self.table,
             public: self.public,
             qualifiers: HashMap::new(),
@@ -409,7 +409,7 @@ impl<'a> Context<'a> {
 
     /// A reference resolved to `target`: the mount owning it is reached. The entry's empty prefix owns every name nothing else claims, and is recorded like any other; the consumer knows which prefixes it asked about.
     fn note_reached(&self, target: &Qualifier) {
-        if let Some(mount) = Mount::owning(self.mounts, target) {
+        if let Some(mount) = Mount::owning(self.reach.mounts(), target) {
             self.reached.borrow_mut().insert(mount.prefix.clone());
         }
     }
@@ -475,7 +475,7 @@ impl<'a> Context<'a> {
     ///
     /// The mount is the one this context's prefix lies within. A prefix owned by nothing is the synthetic compilation root, which only arises while no unit has claimed anything yet.
     pub(super) fn fresh_witness(&self) -> curios_core::WitnessId {
-        let mount = Mount::owning(self.mounts, &self.prefix)
+        let mount = Mount::owning(self.reach.mounts(), &self.prefix)
             .map(|mount| mount.prefix.clone())
             .unwrap_or_default();
 
@@ -527,9 +527,7 @@ impl<'a> Context<'a> {
             .iter()
             .filter(|(_, interface)| carries(interface))
             .map(|(module, _)| module.with(label))
-            .filter(|path| {
-                super::guard_internal_root(self.mounts, &self.prefix, path.segments()).is_ok()
-            })
+            .filter(|path| self.reach.guard(&self.prefix, path.segments()).is_ok())
             .collect::<Vec<_>>();
         found.sort_by_key(|path| (path.segments().len(), path.join()));
         let shortest = found.first().map(|path| path.segments().len());
@@ -612,7 +610,7 @@ impl<'a> Context<'a> {
 
         let resolved = if name.is_abs() {
             let resolved = self.walk_children(Qualifier::empty(), &segments[..upto])?;
-            super::guard_internal_root(self.mounts, &self.prefix, resolved.segments())?;
+            self.reach.guard(&self.prefix, resolved.segments())?;
             resolved
         } else {
             let head = name.head();
@@ -628,7 +626,7 @@ impl<'a> Context<'a> {
 
             // An imported label carries the site its `use` came through; a declaration and an ambient sibling module carry none, and those are the heads a guard still answers for.
             if !self.qualifier_sites.contains_key(head) {
-                super::guard_internal_root(self.mounts, &self.prefix, start.segments())?;
+                self.reach.guard(&self.prefix, start.segments())?;
             }
 
             self.walk_children(start, &segments[1..upto])?

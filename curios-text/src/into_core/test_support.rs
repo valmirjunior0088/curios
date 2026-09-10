@@ -228,6 +228,21 @@ pub(super) fn run_err_report(src: &str) -> String {
 
 // Lower against the real prelude (so `sys` and `std` are served and rooted), returning only success/error — the lens for the internal-root gate.
 pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
+    let modules = prelude_fixture();
+    let prepared =
+        super::prepare_prelude(&modules, &[], syntax()).map_err(|error| error.to_string())?;
+    super::into_core_with_prelude(
+        &src.parse::<Entrypoint>().unwrap(),
+        &RootSource::none(),
+        std::slice::from_ref(&&prepared),
+        syntax(),
+    )
+    .map(|_| ())
+    .map_err(|error| error.to_string())
+}
+
+/// The prelude these tests lower against: the real `/sys` roster, and a `/std` of stubs deep enough for every name `/sys` reaches through the registry.
+fn prelude_fixture() -> RootSource {
     let mut modules = RootSource::supplied();
     modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops(), &SYNTAX));
     modules.insert_root(
@@ -264,11 +279,24 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
         .unwrap(),
     );
     // `/sys` states each decided precondition as `Holds` over one of its own comparisons, and names `Holds` and the two `Flt` bounds through the registry — so the scope has to hold whatever this fixture's registry points those at. Stubs, not definitions: these tests lower and never elaborate, so a name that resolves is the whole requirement.
+    modules
+}
+
+/// [`lower_with_prelude`], with the entry seeing only `declared` of what the scope mounts — the lens for the undeclared-dependency refusal.
+pub(super) fn lower_declaring(declared: &[&str], src: &str) -> Result<(), String> {
+    let modules = prelude_fixture();
     let prepared =
         super::prepare_prelude(&modules, &[], syntax()).map_err(|error| error.to_string())?;
-    super::into_core_with_prelude(
-        &src.parse::<Entrypoint>().unwrap(),
-        &RootSource::none(),
+    let entrypoint = src.parse::<Entrypoint>().unwrap();
+    let loader = RootSource::none();
+
+    super::into_core_unit(
+        &super::UnitSource::entry(&entrypoint, &loader).seeing(
+            declared
+                .iter()
+                .map(|prefix| curios_utilities::Qualifier::from([*prefix]))
+                .collect(),
+        ),
         std::slice::from_ref(&&prepared),
         syntax(),
     )

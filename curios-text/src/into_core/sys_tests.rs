@@ -1,4 +1,4 @@
-//! The internal root `/sys` is reachable only through the standard library, and a user module may not collide with the prelude's.
+//! The internal root `/sys` is reachable only through the standard library, a unit reaches only the prefixes it declared, and a user module may not collide with the prelude's.
 
 use crate::{Intrinsic, LetSignature, Subterm, Term, TopItem, sys_module};
 use curios_abi::host_ops;
@@ -228,4 +228,20 @@ fn the_sys_io_roster_offers_no_eliminator() {
             "/sys/{label} takes an Io to a non-Io result, which is an eliminator for the effect type"
         );
     }
+}
+
+// The pair the undeclared-dependency refusal needs. A prefix a unit did not declare is *mounted* — discoverable, resolvable, owning real names — and the reference to it is what fails, naming the prefix; the same reference succeeds once the unit declares it. Either half alone proves nothing: the first could pass because the fixture is broken, the second because the rule never ran.
+#[test]
+fn refuses_a_prefix_the_unit_did_not_declare() {
+    let error = lower_declaring(&[], "use /std/Nat/{Nat}; Nat").unwrap_err();
+    assert!(
+        error.contains("`std` is mounted by this compilation")
+            && error.contains("not a declared dependency"),
+        "{error}"
+    );
+}
+
+#[test]
+fn reaches_a_prefix_the_unit_declared() {
+    assert!(lower_declaring(&["std"], "use /std/Nat/{Nat}; Nat").is_ok());
 }
