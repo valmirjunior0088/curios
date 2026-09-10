@@ -1,7 +1,7 @@
 pub use /sys/{Bool};
 pub use /sys/Bool/{and, or, xor, eql};
 pub use /sys/{Holds};
-use /std/{Str, Option, Eq, False, True, Equal, Or, And, Show, Spell, Ordering, Compare, Ordered};
+use /std/{Str, Option, Eq, False, True, Equal, Or, And, Show, Spell, Ordering, Compare, Ord};
 
 -- | The other value.
 pub let not(b: Bool) -> Bool =
@@ -58,6 +58,6 @@ satisfy Compare(Bool) {
     ge(a, b) = Ordering/is_ge(cmp(a, b)),
 }
 
-satisfy Ordered(Bool) {
-    cmp = cmp,
+satisfy Ord(Bool) {
+    ord = cmp,
 }

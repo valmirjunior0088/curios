@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Str, Char, Option, Equal, Compare, Subtract, Multiply, Show, Ordered, Spell};
+use /std/{Nat, Bool, Str, Char, Option, Equal, Compare, Subtract, Multiply, Show, Ord, Spell};
 use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, of_nat, view, zero, mod add, mod cmp, mod mul,
     mod sub};
 
@@ -74,6 +74,6 @@ satisfy Spell(BigNat) {
     spell(a) = Str/flatten(["BigNat/of_decimal(", Spell/spell(to_str(a)), ")"]),
 }
 
-satisfy Ordered(BigNat) {
-    cmp = cmp/cmp,
+satisfy Ord(BigNat) {
+    ord = cmp/cmp,
 }

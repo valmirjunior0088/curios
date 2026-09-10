@@ -1,5 +1,5 @@
 use /std/{Nat, Int, Bool, Str, Option, Ordering, BigNat, BigPos, Equal, Compare, Add, Subtract,
-    Multiply, Show, Ordered, Spell};
+    Multiply, Show, Ord, Spell};
 
 -- | A sign over a positive magnitude, or zero.
 pub induct BigInt: pub Type
@@ -194,6 +194,6 @@ satisfy Spell(BigInt) {
     spell(a) = Str/flatten(["BigInt/of_decimal(", Spell/spell(to_str(a)), ")"]),
 }
 
-satisfy Ordered(BigInt) {
-    cmp = cmp,
+satisfy Ord(BigInt) {
+    ord = cmp,
 }

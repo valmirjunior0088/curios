@@ -131,12 +131,12 @@ fn prelude_eql_resolves() {
     assert_eq!(run(source), b"true");
 }
 
-// The prelude `Ordered` concept resolves, and its `Equal` superclass is reachable by projection from an `Ordered` in scope.
+// The prelude `Ord` concept resolves, and its `Equal` superclass is reachable by projection from an `Ord` in scope.
 #[test]
 fn prelude_ord_superclass_projects() {
     let source = r#"
-        use /std/{Nat, Bool, Ordered, Equal};
-        pub let equal(@A : Type, use Ordered(A), x : A, y : A) -> Bool = Equal/eql(x, y);
+        use /std/{Nat, Bool, Ord, Equal};
+        pub let equal(@A : Type, use Ord(A), x : A, y : A) -> Bool = Equal/eql(x, y);
         let n : Nat = 4;
         /std/print(Bool/to_str(equal(n, n)))
         "#;

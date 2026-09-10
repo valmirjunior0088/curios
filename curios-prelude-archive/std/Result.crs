@@ -1,4 +1,4 @@
-use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ordered, Monad};
+use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ord, Monad};
 
 -- | Success or failure, the failure's type first.
 pub induct Result(E: Type, A: Type): pub Type
@@ -85,23 +85,23 @@ satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(E, A));
 pub let cmp(
     @A: Type,
     @E: Type,
-    use Ordered(A),
-    use Ordered(E),
+    use Ord(A),
+    use Ord(E),
     a: Result(E, A),
     b: Result(E, A),
 ) -> Ordering =
     match a
-    | failure(e) => match b | failure(f) => Ordered/cmp(e, f) | success(_) => Ordering/lt() end
-    | success(x) => match b | failure(_) => Ordering/gt() | success(y) => Ordered/cmp(x, y) end
+    | failure(e) => match b | failure(f) => Ord/ord(e, f) | success(_) => Ordering/lt() end
+    | success(x) => match b | failure(_) => Ordering/gt() | success(y) => Ord/ord(x, y) end
     end;
 
-satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Compare(Result(E, A)) {
+satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Compare(Result(E, A)) {
     lt(a, b) = Ordering/is_lt(cmp(a, b)),
     le(a, b) = Ordering/is_le(cmp(a, b)),
     gt(a, b) = Ordering/is_gt(cmp(a, b)),
     ge(a, b) = Ordering/is_ge(cmp(a, b)),
 }
 
-satisfy (@A: Type, @E: Type, use Ordered(A), use Ordered(E)) => Ordered(Result(E, A)) {
-    cmp = cmp,
+satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
+    ord = cmp,
 }

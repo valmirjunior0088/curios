@@ -2,7 +2,7 @@ pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
     to_flt};
 use /std/{Nat, Bool, Str, Option, Ordering, Equal, Compare, Add, Subtract, Multiply, Divide,
-    Remainder, Show, Spell, Ordered, True};
+    Remainder, Show, Spell, Ord, True};
 
 -- | That `a` is not zero, decided as `Nat/Lt` is — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =
@@ -114,6 +114,6 @@ satisfy Spell(Int) {
     spell = to_str,
 }
 
-satisfy Ordered(Int) {
-    cmp = cmp,
+satisfy Ord(Int) {
+    ord = cmp,
 }

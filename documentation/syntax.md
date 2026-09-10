@@ -955,13 +955,13 @@ satisfy Remainder(Nat) {
 A field beginning with `use` is an anonymous superclass edge. Its type must be a concept application.
 
 ```crs
-pub concept Ordered(A: Type): pub Type {
+pub concept Ord(A: Type): pub Type {
     use Equal(A),
-    cmp(A, A) -> Ordering,
+    ord(A, A) -> Ordering,
 }
 ```
 
-A local `Ordered(A)` witness can therefore satisfy an `Equal(A)` goal by superclass projection.
+A local `Ord(A)` witness can therefore satisfy an `Equal(A)` goal by superclass projection.
 
 A sealed concept's fields are not part of its public interface: a `pub` sealed concept may reference private names in its field types — a private superclass is a hidden obligation that resolution discharges without the consumer naming it. A transparent `pub` concept's field types are interface and must be `pub` themselves.
 
@@ -1017,7 +1017,7 @@ Only one witness may occupy a key across the whole program. Module visibility do
 To use a second dictionary for the same key on a *transparent* concept, construct an ordinary concept value and supply it explicitly (a sealed concept forbids the literal outside its module):
 
 ```crs
-let reverse: Ordered(Nat) = Ordered { cmp(a, b) = compare_reverse(a, b) };
+let reverse: Ord(Nat) = Ord { ord(a, b) = reversed(a, b) };
 sort(use reverse, values)
 ```
 
@@ -1055,7 +1055,7 @@ The coordinated `/sys` and `/std` roots are exempt from the restriction against 
 A concept's superclass fields remain positional slots in concept values and witness bodies. Omitting one asks witness resolution to fill it. `use value` fills the next superclass slot explicitly.
 
 ```crs
-Ordered { use custom_eql, cmp(a, b) = compare(a, b) }
+Ord { use custom_eql, ord(a, b) = reversed(a, b) }
 ```
 
 In a structure update, a spread copies superclass fields from the base. An explicit `use value` after the spread replaces the corresponding slot.

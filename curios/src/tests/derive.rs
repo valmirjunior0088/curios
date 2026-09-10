@@ -497,20 +497,20 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
 #[test]
 fn the_signature_refusals_fire_on_a_body_less_witness_as_on_a_written_one() {
     let orphan = r#"
-        use /std/{Bool, Ordered};
-        satisfy Ordered(Bool);
+        use /std/{Bool, Ord};
+        satisfy Ord(Bool);
         /std/print("")
         "#;
     let rendered = error(orphan);
     assert!(
         rendered.contains(
-            "orphan witness of 'Ordered' for head 'Bool', declared in the entry module\n  \
+            "orphan witness of 'Ord' for head 'Bool', declared in the entry module\n  \
              a witness may only be declared where the concept or a type in its head is already declared"
         ),
         "{rendered}"
     );
     // Located at the written concept application, exactly as the written form is: a body-less declaration has the same declared type.
-    assert!(rendered.contains("satisfy Ordered(Bool);"), "{rendered}");
+    assert!(rendered.contains("satisfy Ord(Bool);"), "{rendered}");
 
     let duplicate = r#"
         use /std/{Nat, Str};

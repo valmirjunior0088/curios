@@ -1,5 +1,5 @@
 use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, False, True, Str, Equal, Compare, Show,
-    Spell, Ordered};
+    Spell, Ord};
 
 -- | That `code` is below `bound`, decided.
 pub let Below(code: Nat, bound: Nat) -> Prop =
@@ -186,6 +186,6 @@ satisfy Spell(Char) {
         Str/concat("'", Str/concat(body, "'")),
 }
 
-satisfy Ordered(Char) {
-    cmp = cmp,
+satisfy Ord(Char) {
+    ord = cmp,
 }

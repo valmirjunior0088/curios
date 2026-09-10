@@ -1,4 +1,4 @@
-use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, Compare, Ordered};
+use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, Compare, Ord};
 
 -- | A value that may be absent.
 pub induct Option(A: Type): pub Type
@@ -88,19 +88,19 @@ satisfy Monad(Option) {
 }
 
 -- | `none` below `some`, and two values by `A`'s order.
-pub let cmp(@A: Type, use Ordered(A), a: Option(A), b: Option(A)) -> Ordering =
+pub let cmp(@A: Type, use Ord(A), a: Option(A), b: Option(A)) -> Ordering =
     match a
     | none() => match b | none() => Ordering/eq() | some(_) => Ordering/lt() end
-    | some(x) => match b | none() => Ordering/gt() | some(y) => Ordered/cmp(x, y) end
+    | some(x) => match b | none() => Ordering/gt() | some(y) => Ord/ord(x, y) end
     end;
 
-satisfy (@A: Type, use Ordered(A)) => Compare(Option(A)) {
+satisfy (@A: Type, use Ord(A)) => Compare(Option(A)) {
     lt(a, b) = Ordering/is_lt(cmp(a, b)),
     le(a, b) = Ordering/is_le(cmp(a, b)),
     gt(a, b) = Ordering/is_gt(cmp(a, b)),
     ge(a, b) = Ordering/is_ge(cmp(a, b)),
 }
 
-satisfy (@A: Type, use Ordered(A)) => Ordered(Option(A)) {
-    cmp = cmp,
+satisfy (@A: Type, use Ord(A)) => Ord(Option(A)) {
+    ord = cmp,
 }

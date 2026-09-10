@@ -1,4 +1,4 @@
-//! The ordering witnesses beyond the numerics: `Compare` and `Ordered` on strings, bytes, booleans, lists, options and results, and `Equal`/`Show` on maps.
+//! The ordering witnesses beyond the numerics: `Compare` and `Ord` on strings, bytes, booleans, lists, options and results, and `Equal`/`Show` on maps.
 
 use crate::tests::run;
 
@@ -21,22 +21,22 @@ fn strings_compare_by_code_point_and_bytes_and_booleans_bytewise() {
     );
 }
 
-// `List` is lexicographic with the shorter prefix first, `none` sits below `some`, and `failure` below `success`; each is stated once in its module and read here through `Ordered/cmp`.
+// `List` is lexicographic with the shorter prefix first, `none` sits below `some`, and `failure` below `success`; each is stated once in its module and read here through `Ord/ord`.
 #[test]
 fn lists_options_and_results_order_through_ord() {
     let source = r#"
-        use /std/{Str, Nat, List, Option, Result, Ordering, Ordered, Show, Bool};
+        use /std/{Str, Nat, List, Option, Result, Ordering, Ord, Show, Bool};
         let none: Option(Nat) = Option/none();
         let bad: Result(Str, Nat) = Result/failure("e");
         /std/print(Str/join(",", [
-            Show/show(Ordered/cmp([1, 2], [1, 3])),
-            Show/show(Ordered/cmp([1, 2], [1, 2])),
-            Show/show(Ordered/cmp([1], [1, 0])),
-            Show/show(Ordered/cmp(["b"], ["a", "z"])),
-            Show/show(Ordered/cmp(none, Option/some(0))),
-            Show/show(Ordered/cmp(Option/some(2), Option/some(1))),
-            Show/show(Ordered/cmp(bad, Result/success(0))),
-            Show/show(Ordered/cmp(Result/failure("a"), bad)),
+            Show/show(Ord/ord([1, 2], [1, 3])),
+            Show/show(Ord/ord([1, 2], [1, 2])),
+            Show/show(Ord/ord([1], [1, 0])),
+            Show/show(Ord/ord(["b"], ["a", "z"])),
+            Show/show(Ord/ord(none, Option/some(0))),
+            Show/show(Ord/ord(Option/some(2), Option/some(1))),
+            Show/show(Ord/ord(bad, Result/success(0))),
+            Show/show(Ord/ord(Result/failure("a"), bad)),
             Bool/to_str([1, 2] < [2]),
             Bool/to_str(Option/some(1) >= none)
         ]))

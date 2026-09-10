@@ -121,14 +121,14 @@ fn the_standard_library_documents_from_the_archive() {
     let ordered = documentation
         .modules
         .iter()
-        .find(|module| module.path.join() == "/std/Ordered")
+        .find(|module| module.path.join() == "/std/Ord")
         .and_then(|module| {
             module
                 .declarations
                 .iter()
-                .find(|declaration| declaration.name == "Ordered")
+                .find(|declaration| declaration.name == "Ord")
         })
-        .expect("the Ordered concept");
+        .expect("the Ord concept");
     assert_eq!(ordered.kind, Kind::Concept);
     assert_eq!(
         ordered
@@ -136,7 +136,7 @@ fn the_standard_library_documents_from_the_archive() {
             .iter()
             .map(|member| member.name.as_str())
             .collect::<Vec<_>>(),
-        ["", "cmp"],
+        ["", "ord"],
         "{:?}",
         ordered.members
     );

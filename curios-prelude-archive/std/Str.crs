@@ -1,5 +1,5 @@
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Equal, Show, Spell, Ordering, Compare,
-    Ordered, True};
+    Ord, True};
 
 -- | What a byte begins, as UTF-8 reads it.
 pub induct Class: pub Type
@@ -429,6 +429,6 @@ satisfy Compare(Str) {
     ge(a, b) = Ordering/is_ge(cmp(a, b)),
 }
 
-satisfy Ordered(Str) {
-    cmp = cmp,
+satisfy Ord(Str) {
+    ord = cmp,
 }

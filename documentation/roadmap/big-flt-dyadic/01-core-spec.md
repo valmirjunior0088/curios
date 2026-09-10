@@ -102,7 +102,7 @@ pub mod BigFlt;
 pub use BigFlt/{let BigFlt};
 ```
 
-`Add`, `Subtract`, `Multiply`, `Equal`, and `Compare` witnesses belong in the existing `/std` operator façade modules. `Show` and `Ordered` may be supplied where useful. There is no dyadic `Divide(BigFlt)` witness.
+`Add`, `Subtract`, `Multiply`, `Equal`, and `Compare` witnesses belong in the existing `/std` operator façade modules. `Show` and `Ord` may be supplied where useful. There is no dyadic `Divide(BigFlt)` witness.
 
 `BigFlt` belongs entirely to `/std`; no compiler lowering emits it, so `/syn` and the canonical syntax registry remain unchanged.
 

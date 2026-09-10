@@ -73,8 +73,8 @@ pub mod Spell;
 pub use Spell/{let Spell};
 
 -- | A total order, over an `Equal` superclass: what sorting and ordered collections ask for.
-pub mod Ordered;
-pub use Ordered/{let Ordered};
+pub mod Ord;
+pub use Ord/{let Ord};
 
 -- | Natural numbers: unbounded in the language, carried on the machine's word at run time, so a value past the carrier refuses rather than wraps.
 -- |

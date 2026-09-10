@@ -3,7 +3,7 @@ pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, le, ge, n
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
 pub use /sys/Flt/{Finite, NonNeg};
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat, Equal, Compare,
-    Add, Subtract, Multiply, Divide, Remainder, Show, Spell, Ordered, True};
+    Add, Subtract, Multiply, Divide, Remainder, Show, Spell, Ord, True};
 
 -- | That `b` is four bytes long, decided.
 pub let FourBytes(b: Bytes) -> Prop =
@@ -409,6 +409,6 @@ satisfy Spell(Flt) {
         end,
 }
 
-satisfy Ordered(Flt) {
-    cmp = cmp,
+satisfy Ord(Flt) {
+    ord = cmp,
 }

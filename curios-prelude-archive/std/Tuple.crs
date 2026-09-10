@@ -1,4 +1,4 @@
-use /std/{Show, Spell, Equal, Ordered, Ordering, Str, Bool, List};
+use /std/{Show, Spell, Equal, Ord, Ordering, Str, Bool, List};
 
 let parens(parts: List(Str)) -> Str =
     Str/concat("(", Str/concat(Str/join(", ", parts), ")"));
@@ -380,24 +380,20 @@ satisfy (
     neq(a, b) = Bool/not(a == b),
 }
 
-satisfy Ordered({}) {
-    cmp(_, _) = Ordering/eq(),
+satisfy Ord({}) {
+    ord(_, _) = Ordering/eq(),
 }
 
-satisfy (@A: Type, use Ordered(A)) => Ordered({A}) {
-    cmp(a, b) = Ordered/cmp(a.0, b.0),
+satisfy (@A: Type, use Ord(A)) => Ord({A}) {
+    ord(a, b) = Ord/ord(a.0, b.0),
 }
 
-satisfy (@A: Type, @B: Type, use Ordered(A), use Ordered(B)) => Ordered({A, B}) {
-    cmp(a, b) = then(Ordered/cmp(a.0, b.0), (_) => Ordered/cmp(a.1, b.1)),
+satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) => Ord({A, B}) {
+    ord(a, b) = then(Ord/ord(a.0, b.0), (_) => Ord/ord(a.1, b.1)),
 }
 
-satisfy (@A: Type, @B: Type, @C: Type, use Ordered(A), use Ordered(B), use Ordered(C)) => Ordered(
-    {A, B, C}) {
-    cmp(a, b) =
-        then(
-            Ordered/cmp(a.0, b.0),
-            (_) => then(Ordered/cmp(a.1, b.1), (_) => Ordered/cmp(a.2, b.2))),
+satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Ord({A, B, C}) {
+    ord(a, b) = then(Ord/ord(a.0, b.0), (_) => then(Ord/ord(a.1, b.1), (_) => Ord/ord(a.2, b.2))),
 }
 
 satisfy (
@@ -405,18 +401,16 @@ satisfy (
     @B: Type,
     @C: Type,
     @D: Type,
-    use Ordered(A),
-    use Ordered(B),
-    use Ordered(C),
-    use Ordered(D),
-) => Ordered({A, B, C, D}) {
-    cmp(a, b) =
+    use Ord(A),
+    use Ord(B),
+    use Ord(C),
+    use Ord(D),
+) => Ord({A, B, C, D}) {
+    ord(a, b) =
         then(
-            Ordered/cmp(a.0, b.0),
+            Ord/ord(a.0, b.0),
             (_) =>
-                then(
-                    Ordered/cmp(a.1, b.1),
-                    (_) => then(Ordered/cmp(a.2, b.2), (_) => Ordered/cmp(a.3, b.3)))),
+                then(Ord/ord(a.1, b.1), (_) => then(Ord/ord(a.2, b.2), (_) => Ord/ord(a.3, b.3)))),
 }
 
 satisfy (
@@ -425,22 +419,22 @@ satisfy (
     @C: Type,
     @D: Type,
     @E: Type,
-    use Ordered(A),
-    use Ordered(B),
-    use Ordered(C),
-    use Ordered(D),
-    use Ordered(E),
-) => Ordered({A, B, C, D, E}) {
-    cmp(a, b) =
+    use Ord(A),
+    use Ord(B),
+    use Ord(C),
+    use Ord(D),
+    use Ord(E),
+) => Ord({A, B, C, D, E}) {
+    ord(a, b) =
         then(
-            Ordered/cmp(a.0, b.0),
+            Ord/ord(a.0, b.0),
             (_) =>
                 then(
-                    Ordered/cmp(a.1, b.1),
+                    Ord/ord(a.1, b.1),
                     (_) =>
                         then(
-                            Ordered/cmp(a.2, b.2),
-                            (_) => then(Ordered/cmp(a.3, b.3), (_) => Ordered/cmp(a.4, b.4))))),
+                            Ord/ord(a.2, b.2),
+                            (_) => then(Ord/ord(a.3, b.3), (_) => Ord/ord(a.4, b.4))))),
 }
 
 satisfy (
@@ -450,29 +444,26 @@ satisfy (
     @D: Type,
     @E: Type,
     @F: Type,
-    use Ordered(A),
-    use Ordered(B),
-    use Ordered(C),
-    use Ordered(D),
-    use Ordered(E),
-    use Ordered(F),
-) => Ordered({A, B, C, D, E, F}) {
-    cmp(a, b) =
+    use Ord(A),
+    use Ord(B),
+    use Ord(C),
+    use Ord(D),
+    use Ord(E),
+    use Ord(F),
+) => Ord({A, B, C, D, E, F}) {
+    ord(a, b) =
         then(
-            Ordered/cmp(a.0, b.0),
+            Ord/ord(a.0, b.0),
             (_) =>
                 then(
-                    Ordered/cmp(a.1, b.1),
+                    Ord/ord(a.1, b.1),
                     (_) =>
                         then(
-                            Ordered/cmp(a.2, b.2),
+                            Ord/ord(a.2, b.2),
                             (_) =>
                                 then(
-                                    Ordered/cmp(a.3, b.3),
-                                    (_) =>
-                                        then(
-                                            Ordered/cmp(a.4, b.4),
-                                            (_) => Ordered/cmp(a.5, b.5)))))),
+                                    Ord/ord(a.3, b.3),
+                                    (_) => then(Ord/ord(a.4, b.4), (_) => Ord/ord(a.5, b.5)))))),
 }
 
 satisfy (
@@ -483,33 +474,33 @@ satisfy (
     @E: Type,
     @F: Type,
     @G: Type,
-    use Ordered(A),
-    use Ordered(B),
-    use Ordered(C),
-    use Ordered(D),
-    use Ordered(E),
-    use Ordered(F),
-    use Ordered(G),
-) => Ordered({A, B, C, D, E, F, G}) {
-    cmp(a, b) =
+    use Ord(A),
+    use Ord(B),
+    use Ord(C),
+    use Ord(D),
+    use Ord(E),
+    use Ord(F),
+    use Ord(G),
+) => Ord({A, B, C, D, E, F, G}) {
+    ord(a, b) =
         then(
-            Ordered/cmp(a.0, b.0),
+            Ord/ord(a.0, b.0),
             (_) =>
                 then(
-                    Ordered/cmp(a.1, b.1),
+                    Ord/ord(a.1, b.1),
                     (_) =>
                         then(
-                            Ordered/cmp(a.2, b.2),
+                            Ord/ord(a.2, b.2),
                             (_) =>
                                 then(
-                                    Ordered/cmp(a.3, b.3),
+                                    Ord/ord(a.3, b.3),
                                     (_) =>
                                         then(
-                                            Ordered/cmp(a.4, b.4),
+                                            Ord/ord(a.4, b.4),
                                             (_) =>
                                                 then(
-                                                    Ordered/cmp(a.5, b.5),
-                                                    (_) => Ordered/cmp(a.6, b.6))))))),
+                                                    Ord/ord(a.5, b.5),
+                                                    (_) => Ord/ord(a.6, b.6))))))),
 }
 
 satisfy (
@@ -521,35 +512,35 @@ satisfy (
     @F: Type,
     @G: Type,
     @H: Type,
-    use Ordered(A),
-    use Ordered(B),
-    use Ordered(C),
-    use Ordered(D),
-    use Ordered(E),
-    use Ordered(F),
-    use Ordered(G),
-    use Ordered(H),
-) => Ordered({A, B, C, D, E, F, G, H}) {
-    cmp(a, b) =
+    use Ord(A),
+    use Ord(B),
+    use Ord(C),
+    use Ord(D),
+    use Ord(E),
+    use Ord(F),
+    use Ord(G),
+    use Ord(H),
+) => Ord({A, B, C, D, E, F, G, H}) {
+    ord(a, b) =
         then(
-            Ordered/cmp(a.0, b.0),
+            Ord/ord(a.0, b.0),
             (_) =>
                 then(
-                    Ordered/cmp(a.1, b.1),
+                    Ord/ord(a.1, b.1),
                     (_) =>
                         then(
-                            Ordered/cmp(a.2, b.2),
+                            Ord/ord(a.2, b.2),
                             (_) =>
                                 then(
-                                    Ordered/cmp(a.3, b.3),
+                                    Ord/ord(a.3, b.3),
                                     (_) =>
                                         then(
-                                            Ordered/cmp(a.4, b.4),
+                                            Ord/ord(a.4, b.4),
                                             (_) =>
                                                 then(
-                                                    Ordered/cmp(a.5, b.5),
+                                                    Ord/ord(a.5, b.5),
                                                     (_) =>
                                                         then(
-                                                            Ordered/cmp(a.6, b.6),
-                                                            (_) => Ordered/cmp(a.7, b.7)))))))),
+                                                            Ord/ord(a.6, b.6),
+                                                            (_) => Ord/ord(a.7, b.7)))))))),
 }

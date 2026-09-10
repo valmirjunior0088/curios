@@ -2,7 +2,7 @@ pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr,
     to_int, to_flt, to_byte};
 use /std/{Str, Option, Char, Bool, Ordering, Equal, Compare, Add, Subtract, Multiply, Divide,
-    Remainder, Show, Spell, Ordered};
+    Remainder, Show, Spell, Ord};
 
 -- | That `a` is below `b`.
 -- |
@@ -141,8 +141,8 @@ satisfy Spell(Nat) {
     spell = to_str,
 }
 
-satisfy Ordered(Nat) {
-    cmp = cmp,
+satisfy Ord(Nat) {
+    ord = cmp,
 }
 
 -- | `a < b`'s bridges to the inductive order.
