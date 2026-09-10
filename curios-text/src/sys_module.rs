@@ -1285,7 +1285,7 @@ fn carriers(syntax: &SyntaxRegistry) -> Vec<SysModule> {
 
 /// Construct the generated `/sys` surface module from the authoritative host function store.
 ///
-/// **One keyed pass, where there were two independent ones.** Every `/sys` module is a [`SysModule`] with a label: the carriers are written from the intrinsic table, then each host row joins the module its own subject names — creating one where no carrier claims the label, which is how `file`, `socket` and `dns` come to exist, and joining the carrier where one does, which is how `Handle`'s rows come to sit beside its type. Then the propositions `/sys`'s own preconditions are stated in, and the wire-code mirror.
+/// **One keyed pass, where there were two independent ones.** Every `/sys` module is a `SysModule` with a label: the carriers are written from the intrinsic table, then each host row joins the module its own subject names — creating one where no carrier claims the label, which is how `file`, `socket` and `dns` come to exist, and joining the carrier where one does, which is how `Handle`'s rows come to sit beside its type. Then the propositions `/sys`'s own preconditions are stated in, and the wire-code mirror.
 ///
 /// Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
