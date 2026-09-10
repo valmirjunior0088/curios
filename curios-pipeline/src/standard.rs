@@ -12,7 +12,6 @@ use {
     },
     curios_prelude::{SYNTAX, with_prelude},
     curios_unit::{Prefix, Unit},
-    std::collections::BTreeSet,
 };
 
 /// Compile `entrypoint` against the fixed prelude — the two units every product path puts in scope, `/sys` then `/std`.
@@ -197,46 +196,12 @@ where
     P: FnMut(Progress<'_>),
 {
     with_prelude(|prelude| {
-        let claimed = units
-            .iter()
-            .flat_map(curios_text::RootSource::mounts)
-            .map(|mount| mount.prefix)
-            .collect::<BTreeSet<_>>();
-
-        // A unit compiled from source stands where the archived unit of the same prefix stood, rather than beside it. Without this a question about a prelude module claims `/std` twice and is refused as a mount collision, which is how `wonder diagnostics curios-prelude-archive/std/List.crs` came to report `expected a term, obtained 'end-of-file'` — the module was compiled as an *entry* because nothing placed it in a unit, and a library has no tail.
-        //
-        // Stated as superseding rather than as a case for the standard library, because it is the general fact: the archive is a cache of units, and a unit being compiled now is the authority on its own prefix.
-        let roots = prelude
-            .iter()
-            .copied()
-            .filter(|root| {
-                !root
-                    .mounts()
-                    .iter()
-                    .any(|mount| claimed.contains(&mount.prefix))
-            })
-            .collect::<Vec<_>>();
-
-        // What the superseded root could see, given to the source that replaces it: a prelude root reaches the roots beside it, and `/sys` is the one prefix no manifest can declare because it has no path. This is the one grant of it outside the archive's own build, made in the one module licensed to name the fixed prelude at all.
-        let seen = match roots.len() == prelude.len() {
-            true => Vec::new(),
-            false => roots
-                .iter()
-                .flat_map(|root| root.mounts())
-                .map(|mount| mount.prefix.clone())
-                .chain(claimed.iter().cloned())
-                .collect(),
-        };
+        // The prelude's roots are in scope unconditionally. A unit that claims a prefix one of them mounts collides with it and is refused, exactly as two source units claiming one prefix are: the archive is not a guess to be superseded by whatever is being compiled now, and a scope that changes shape depending on what its members happen to declare is not a scope.
+        let roots = prelude.to_vec();
 
         let sources = units
             .iter()
-            .map(|source| {
-                let source = curios_text::UnitSource::mounted(source);
-                match seen.is_empty() {
-                    true => source,
-                    false => source.seeing(seen.clone()),
-                }
-            })
+            .map(curios_text::UnitSource::mounted)
             .collect::<Vec<_>>();
         let produced = compile_units(
             budget,
