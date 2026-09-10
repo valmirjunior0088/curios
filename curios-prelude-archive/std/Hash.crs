@@ -1,0 +1,97 @@
+use /std/{Nat, Byte, Bytes, Bool, Str, List, Option, Int, Flt};
+
+-- | How a value encodes to the bytes that identify it.
+-- |
+-- | The encoding is a value's identity and is stable: `/std/Map`'s `Key` is this concept with injectivity added, and a byte string written down keeps its meaning. A declared type derives its witness with `satisfy Hash(T);`.
+pub concept Hash(T: Type): pub Type {
+    -- | The encoding.
+    hash(T) -> Bytes,
+}
+
+pub use Hash/*;
+
+let zeros(k: Nat) -> Bytes =
+    match k | 0 => x[] | _ + 1; ih => x[..ih, 0x0] end;
+
+-- | `b` behind enough leading zeros to reach `width`, or `b` itself when it is already that long.
+pub let padded(b: Bytes, width: Nat) -> Bytes =
+    Bytes/flatten([zeros(width - Bytes/len(b)), b]);
+
+-- | `b` behind its four-byte big-endian length.
+-- |
+-- | Four bytes because the minimal encoding of any length a `Bytes` value can have is at most that long, so the frame is self-delimiting: a concatenation of framed parts splits back into exactly the parts it was built from.
+pub let framed(b: Bytes) -> Bytes =
+    Bytes/flatten([padded(Bytes/of_nat(Bytes/len(b)), 4), b]);
+
+-- | A constructor's tag and its payloads' encodings, each framed.
+-- |
+-- | What a derived witness writes. Framing every part is what keeps two distinct values from sharing an encoding, and it is the whole of what an injectivity proof over this would need.
+pub let tagged(tag: Nat, parts: List(Bytes)) -> Bytes =
+    Bytes/flatten([framed(Bytes/of_nat(tag)), Bytes/flatten(List/map(parts, framed))]);
+
+-- | One polynomial lane: `acc · base + byte + 1` reduced modulo `prime`, folded over `b`.
+-- |
+-- | Spelled with `Nat/rem` rather than `%` because the modulus is a parameter. `%` states `Lt(0, b)` on its divisor and has nowhere to put the evidence, and an obligation discharges by reduction, by a guard's refinement, or by a written proof — never by a search of what happens to be in scope. This telescope holds the proof, so it hands it over.
+let lane(b: Bytes, base: Nat, prime: Nat, @ok: Nat/Lt(0, prime)) -> Nat =
+    Bytes/fold(b, 1, (byte, acc) => Nat/rem(acc * base + Byte/to_nat(byte) + 1, prime, @ok));
+
+-- | Eight bytes summarizing `b`.
+-- |
+-- | **Not stable across compiler versions: do not persist or transmit one.** Three polynomial lanes at distinct primes, which is enough for dedup, cache keys and bloom filters and is not adversarially resistant — anyone who chooses the input can collide it. Encode with `Hash/hash` where the bytes must keep meaning.
+-- |
+-- | Every intermediate stays below `2^31`, which is what lets a mixer be written in `Nat` at all: an accumulator is below its prime, so a product is below `prime · base`, and each pair below is chosen to keep that inside the carrier. A wider mixer would need wrapping arithmetic, which `Nat` refuses rather than performs.
+pub let digest(b: Bytes) -> Bytes =
+    Bytes/flatten([
+        padded(Bytes/of_nat(lane(b, 131, 8388593)), 3),
+        padded(Bytes/of_nat(lane(b, 137, 8388581)), 3),
+        padded(Bytes/of_nat(lane(b, 139, 8388571) % 65536), 2)]);
+
+-- | The digest of `v`'s encoding.
+pub let of(@T: Type, use Hash(T), v: T) -> Bytes =
+    digest(Hash/hash(v));
+
+-- | The identity encoding.
+satisfy Hash(Bytes) {
+    hash(b) = b,
+}
+
+-- | The UTF-8 bytes.
+satisfy Hash(Str) {
+    hash = Str/to_bytes,
+}
+
+-- | The minimal big-endian encoding.
+satisfy Hash(Nat) {
+    hash = Bytes/of_nat,
+}
+
+-- | A sign byte before the magnitude.
+satisfy Hash(Int) {
+    hash(i) =
+        Bytes/flatten([
+            match i >= +0 | true => x[0x0] | false => x[0x1] end,
+            Bytes/of_nat(Int/abs(i))]),
+}
+
+-- | The one byte itself.
+satisfy Hash(Byte) {
+    hash(b) = padded(Bytes/of_nat(Byte/to_nat(b)), 1),
+}
+
+satisfy Hash(Bool) {
+    hash(b) = match b | true => x[0x1] | false => x[0x0] end,
+}
+
+-- | The little-endian bit pattern, so distinct floats encode distinctly and the one NaN encodes once.
+satisfy Hash(Flt) {
+    hash = Flt/to_le_bytes,
+}
+
+satisfy (@A: Type, use Hash(A)) => Hash(List(A)) {
+    hash(values) = tagged(List/len(values), List/map(values, (value) => Hash/hash(value))),
+}
+
+satisfy (@A: Type, use Hash(A)) => Hash(Option(A)) {
+    hash(value) =
+        match value | none() => tagged(0, []) | some(inner) => tagged(1, [Hash/hash(inner)]) end,
+}

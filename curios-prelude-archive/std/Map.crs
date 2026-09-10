@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq, Show, Spell};
+use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq, Hash, Show, Spell};
 use /std/ops/{Eql};
 
 induct Node(V: Type): Type
@@ -13,6 +13,8 @@ pub struct Map(V: Type): Type {
 }
 
 -- | How a key type encodes to the byte string that identifies it.
+-- |
+-- | The encoding is `/std/Hash`'s, and every witness below spells it `Hash/hash` rather than repeating one: a type has one identity as bytes, and a key that disagreed with its hash would be a second. What this concept adds is the proof `Hash` does not carry — that the encoding is injective, so the trie cannot silently merge two keys into one entry.
 pub concept Key(K: Type): pub Type {
     -- | The encoding.
     to_bytes(K) -> Bytes,
@@ -22,13 +24,13 @@ pub concept Key(K: Type): pub Type {
 
 -- | The identity encoding.
 satisfy Key(Bytes) {
-    to_bytes(b) = b,
+    to_bytes = Hash/hash,
     injective(_, _, same) = same,
 }
 
 -- | The UTF-8 bytes.
 satisfy Key(Str) {
-    to_bytes = Str/to_bytes,
+    to_bytes = Hash/hash,
     injective(a, b, same) = Str/eq_of_bytes(a, b, same),
 }
 

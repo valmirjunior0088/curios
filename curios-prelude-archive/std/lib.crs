@@ -39,6 +39,12 @@ pub use Spell/{let Spell};
 pub mod Ord;
 pub use Ord/{let Ord};
 
+-- | A value's encoding as the bytes that identify it, and the digest of one.
+-- |
+-- | The encoding is stable and is what `Key` proves injective; the digest over it is not, and is for dedup and cache keys rather than for anything written down. A declared type derives its witness with `satisfy Hash(T);`.
+pub mod Hash;
+pub use Hash/{let Hash};
+
 -- | Natural numbers: unbounded in the language, carried on the machine's word at run time, so a value past the carrier refuses rather than wraps.
 -- |
 -- | Subtraction truncates at zero. Division and remainder carry the precondition `Lt(0, b)`. `Lt` and `Le` beneath are the decided propositions every bound in the library is stated in.
