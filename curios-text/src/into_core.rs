@@ -572,7 +572,9 @@ fn process_items(
                 let mut items = ls
                     .iter()
                     .map(|let_item| {
-                        context.record_import_scope(Some(&context.prefixed(&let_item.label)));
+                        context.record_import_scope(Some(&curios_core::Global::Authored(
+                            context.prefixed(&let_item.label),
+                        )));
                         let lower = Lowerer::new(context);
                         lower.enter_signature(&let_item.signature);
                         let type_ = lower.term(&let_item.signature.type_())?;
@@ -595,7 +597,9 @@ fn process_items(
             }
             // A test takes no parameters, so it is not function sugar — but it lowers to the same `() -> Test` a nullary one used to, because `Test/main` holds the whole schedule and must force only the one it selected. The output is emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on the declaration being importable.
             TopItem::Test(test) => {
-                context.record_import_scope(Some(&context.prefixed(&test.label)));
+                context.record_import_scope(Some(&curios_core::Global::Authored(
+                    context.prefixed(&test.label),
+                )));
                 let lower = Lowerer::new(context);
                 lower.enter_sugar();
                 let output = curios_core::Term::var(curios_core::Var::free(
@@ -620,6 +624,7 @@ fn process_items(
                 let path = context.prefixed(&f.label);
                 let signature = foreign_signature(f, foreigns, path.join());
 
+                context.record_import_scope(Some(&curios_core::Global::Authored(path.clone())));
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
@@ -636,8 +641,9 @@ fn process_items(
                 let type_flat_items = group
                     .iter()
                     .map(|u| {
-                        let lower = Lowerer::new(context);
                         let name = curios_core::Global::Authored(context.prefixed(&u.label));
+                        context.record_import_scope(Some(&name));
+                        let lower = Lowerer::new(context);
 
                         // Parameters and indices are minted before any of their types is lowered, and each type sees the binders before it — a later index type naming an earlier parameter must mean *that* binder.
                         let head_binders =
@@ -808,6 +814,9 @@ fn process_items(
                 // Step 2: constructor bindings. Each is a function whose body injects the variant as a tagged tuple.
                 for u in group {
                     for c in &u.cases {
+                        context.record_import_scope(Some(&curios_core::Global::Authored(
+                            context.prefixed(&u.label).with(&c.label),
+                        )));
                         let lower = Lowerer::new(context);
 
                         // Per-case payload binder names: the declared name, or a positional placeholder.
@@ -914,9 +923,10 @@ fn process_items(
             TopItem::Struct(group) => {
                 let mut formers = Vec::with_capacity(group.len());
                 for s in group {
+                    let name = curios_core::Global::Authored(context.prefixed(&s.label));
+                    context.record_import_scope(Some(&name));
                     let lower = Lowerer::new(context);
 
-                    let name = curios_core::Global::Authored(context.prefixed(&s.label));
                     // Declaring module: the type-former's qualifier prefix — identical to core's per-item `island` — for the representation-privacy checks.
                     let module = context.prefixed(&s.label).without_last();
 
@@ -1025,6 +1035,7 @@ fn process_items(
                     let name = curios_core::Global::Authored(context.prefixed(&concept.label));
                     let module = context.prefixed(&concept.label).without_last();
 
+                    context.record_import_scope(Some(&name));
                     let lower = Lowerer::new(context);
                     let param_binders =
                         lower.mint(concept.params.iter().map(|(_, n, _)| n.clone()));
@@ -1205,6 +1216,7 @@ fn process_items(
                     .iter()
                     .map(|witness| {
                         let name = curios_core::Global::Witness(context.fresh_witness());
+                        context.record_import_scope(Some(&name));
 
                         let concept_app =
                             witness_concept_application(&witness.concept, &witness.args);

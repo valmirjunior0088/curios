@@ -767,15 +767,14 @@ impl<'a> Context<'a> {
         }
     }
 
-    // Snapshot the imports in scope of this body as the view of the definition `owner` — what a goal inside it may be offered. `None` is the entrypoint tail, which closes the root body.
-    pub(super) fn record_import_scope(&self, owner: Option<&Qualifier>) {
+    // Snapshot the imports in scope of this body as the view of the declaration `owner` — what a goal inside it may be offered, and what a page resolves the names in its signature through. `None` is the entrypoint tail, which closes the root body.
+    //
+    // Keyed by `Global` rather than by `Qualifier`, because a `satisfy` is anonymous: its identity is a `Global::Witness` and there is no name to hand over. Every other declaration wraps its own qualifier at the call site, which is the same key this used to build.
+    pub(super) fn record_import_scope(&self, owner: Option<&curios_core::Global>) {
         let mut imports = self.imports.borrow_mut();
         match owner {
             Some(owner) => {
-                imports.by_item.insert(
-                    curios_core::Global::Authored(owner.clone()),
-                    self.in_scope.clone(),
-                );
+                imports.by_item.insert(owner.clone(), self.in_scope.clone());
             }
             None => imports.tail = self.in_scope.clone(),
         }
