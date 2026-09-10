@@ -1,6 +1,6 @@
 pub use /sys/{Bool};
 pub use /sys/Bool/{and, or, xor, eql};
-pub use /sys/Bound/{Holds};
+pub use /sys/{Holds};
 use /std/{Str, Option, Eq, False, True, Equal, Or, And, Show, Spell, Ordering, Compare, Ordered};
 
 -- | The other value.

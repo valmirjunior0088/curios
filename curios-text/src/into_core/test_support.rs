@@ -258,6 +258,7 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
             pub mod Bool
                 pub let Holds : Type = Type;
             end
+            pub use /sys/{True};
         "#
         .parse()
         .unwrap(),

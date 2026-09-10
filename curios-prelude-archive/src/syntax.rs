@@ -51,11 +51,11 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         refl_scan: name(&["std", "Str", "refl_scan"]),
     },
     proof: ProofSyntax {
-        true_qed: name(&["sys", "Bound", "True", "qed"]),
-        true_type: name(&["sys", "Bound", "True"]),
-        holds: name(&["sys", "Bound", "Holds"]),
-        flt_finite: name(&["sys", "Bound", "Finite"]),
-        flt_non_neg: name(&["sys", "Bound", "NonNeg"]),
+        true_qed: name(&["sys", "True", "qed"]),
+        true_type: name(&["sys", "True"]),
+        holds: name(&["sys", "Holds"]),
+        flt_finite: name(&["sys", "Flt", "Finite"]),
+        flt_non_neg: name(&["sys", "Flt", "NonNeg"]),
     },
     test: TestSyntax {
         test_type: name(&["std", "Test", "Test"]),

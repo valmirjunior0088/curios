@@ -1,2 +1,2 @@
-pub use /sys/Bound/{True};
-pub use /sys/Bound/True/{qed};
+pub use /sys/{True};
+pub use /sys/True/{qed};

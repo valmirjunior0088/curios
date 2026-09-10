@@ -1,4 +1,4 @@
-pub use /sys/Bound/{False};
+pub use /sys/{False};
 
 -- | The refutation of `P`.
 -- |

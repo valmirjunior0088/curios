@@ -77,13 +77,13 @@ fn does_not_offer_a_closed_root_as_a_way_out_of_an_unresolved_name() {
 // **A type re-exported out of a closed root carries its constructors with it.** The `use` naming it was vetted against the facade where it was written, so walking into what it holds is reaching through that facade rather than past it: the guard answers for the reach an author spelled, not for where the library keeps the declaration. Closing `/sys` without this left `Scalar/below` and `Verdict/passed` unwritable by any spelling at all.
 #[test]
 fn allows_a_constructor_of_a_type_re_exported_out_of_a_closed_root() {
-    assert!(lower_with_prelude("use /std/Nat/{Proof}; Proof/qed()").is_ok());
+    assert!(lower_with_prelude("use /std/{True}; True/qed()").is_ok());
 }
 
 // The same declaration reached through its `/std` facade resolves, which is the door every consumer goes through.
 #[test]
 fn allows_a_closed_root_declaration_through_its_std_facade() {
-    assert!(lower_with_prelude("use /std/Nat/{Lt}; Type").is_ok());
+    assert!(lower_with_prelude("use /std/{True}; Type").is_ok());
 }
 
 // **The desugaring never spells the root it reaches.** An operator lowers to a witness projection built from an already-resolved identity, so closing `/sys` to authors costs it nothing — the property that makes this tier affordable, checked here rather than argued.

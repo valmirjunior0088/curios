@@ -1,279 +1,136 @@
+mod helpers;
+use helpers::*;
+
 use {
     super::{
-        Apply, Argument, Doc, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Intrinsic, Label,
-        LetSignature, Module, Name, Nat, NatLiteral, Pattern, Subterm, Term, TopForeign, TopItem,
-        TopLet, TopMod, TopUse, TupleType, TupleTypeParam, UseGroup,
+        Doc, Intrinsic, LetSignature, Match, MatchPattern, MatrixArm, Module, Nat, NatLiteral,
+        Subterm, Term, TopCase, TopForeign, TopInduct, TopItem, TopLet,
     },
     curios_abi::{
         ForeignFunction, ForeignStore, Namespace, ResultShape, WireType, event, file_kind,
         open_mode, status, stdio, stdio_mode,
     },
     curios_num::Integer,
-    curios_utilities::{Grain, Plicity, SyntaxName, SyntaxRegistry},
+    curios_utilities::{Grain, Plicity, SyntaxRegistry},
     std::sync::Arc,
 };
 
-#[cfg(test)]
-mod tests;
-
 // The `sys` module is the home of every intrinsic type and operation. Its roster is built directly as `text` AST and prepended to every parsed `Entrypoint`, so intrinsics participate in the module system like any other binding. Bodies bake the `text::Intrinsic::*` nodes in directly, so the roster needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/sys`'s own and are named absolutely so a declaration resolves wherever the roster puts it.
 //
-// `/sys/Bound` is the one part written rather than built, and so the one part parsed — see `bound` below. What separates the two is whether a surface spelling exists: an intrinsic has none and must be constructed, while a proposition over intrinsics is ordinary Curios.
+// The propositions a decided bound is stated in are the one part written rather than built, and so the one part parsed — see `propositions` below. What separates the two is whether a surface spelling exists: an intrinsic has none and must be constructed, while a proposition over intrinsics is ordinary Curios.
 
-fn name(label: &str) -> Term {
-    Subterm::Name(Name::from([label.to_string()])).into()
-}
-
-// A registered name, absolute so it resolves against the compilation root rather than whatever module the generated declaration lands in.
-fn registered(target: SyntaxName) -> Term {
-    Subterm::Name(Name::new(true, target.qualifier())).into()
-}
-
-// One of this roster's own operations, named absolutely for the reason `registered` is: a declaration lands in whatever module the roster puts it in, so a relative name would resolve differently per site. Not a registry entry — the registry holds what a crate *below* `/sys` must be able to name, and these are `/sys` naming itself.
-fn sys_op(segments: &'static [&'static str]) -> Term {
-    registered(SyntaxName::new(segments))
-}
-
-// The proposition a decided bound is stated as: `Holds` applied to the decision itself. `curios-core`'s signature table builds the same shape over the intrinsic nodes these wrappers unfold to, and elaborating a `/sys` body is what holds the two together.
-fn decided(syntax: &SyntaxRegistry, decision: Term) -> Term {
-    applied(registered(syntax.proof.holds), vec![decision])
-}
-
-fn applied(head: Term, args: Vec<Term>) -> Term {
-    Subterm::Apply(Apply {
-        head,
-        arguments: args
-            .into_iter()
-            .map(|arg| Argument {
-                term: arg,
-                plicity: Plicity::Explicit,
-            })
-            .collect(),
-    })
-    .into()
-}
-
-fn intrinsic(p: Intrinsic) -> Term {
-    Subterm::Intrinsic(p).into()
-}
-
-fn nat() -> Term {
-    intrinsic(Intrinsic::NatType)
-}
-
-fn byte() -> Term {
-    intrinsic(Intrinsic::ByteType)
-}
-
-// A `Nat` literal value term, built exactly as the parser builds one: `0` is bare `Zero`, anything else is `Succ(n, Zero)`. Used to bake host-owned wire codes (`status`, `event`, `open_mode`, `file_kind` and `stdio_mode`) into the `/sys` code modules.
-fn nat_lit(n: u32) -> Term {
-    match n {
-        0 => intrinsic(Intrinsic::Nat(Nat::Zero)),
-        n => intrinsic(Intrinsic::Nat(Nat::Succ(
-            NatLiteral::number(n),
-            intrinsic(Intrinsic::Nat(Nat::Zero)),
-        ))),
-    }
-}
-
-/// `left + right` as a `/sys` term. The window bound is the one precondition stated over arithmetic rather than over an operand, so it is the one that has to build a sum.
-fn nat_plus(left: Term, right: Term) -> Term {
-    intrinsic(Intrinsic::NatAdd(left, right))
-}
-
-fn int() -> Term {
-    intrinsic(Intrinsic::IntType)
-}
-
-fn flt() -> Term {
-    intrinsic(Intrinsic::FltType)
-}
-
-fn bin(grain: Grain) -> Term {
-    intrinsic(Intrinsic::BinType(grain))
-}
-
-fn bool_() -> Term {
-    intrinsic(Intrinsic::BoolType)
-}
-
-fn handle() -> Term {
-    intrinsic(Intrinsic::HandleType)
-}
-
-fn unit() -> Term {
-    Subterm::TupleType(TupleType { fields: vec![] }).into()
-}
-
-fn record(fields: Vec<(&str, Term)>) -> Term {
-    Subterm::TupleType(TupleType {
-        fields: fields
-            .into_iter()
-            .map(|(label, type_)| TupleTypeParam {
-                label: Some(Label::from(label)),
-                func_params: None,
-                type_,
-            })
-            .collect(),
-    })
-    .into()
-}
-
-fn list_of(elem: Term) -> Term {
-    intrinsic(Intrinsic::ListType(elem))
-}
-
-// A single-argument function type `(domain) -> output`, for higher-order intrinsics (the `f` of `List/map`).
-fn fn_of(domain: Term, output: Term) -> Term {
-    Subterm::FuncType(FuncType {
-        params: vec![FuncTypeParam {
-            plicity: Plicity::Explicit,
-            label: None,
-            type_: domain,
-        }],
-        output,
-    })
-    .into()
-}
-
-fn cell_of(elem: Term) -> Term {
-    intrinsic(Intrinsic::CellType(elem))
-}
-
-fn io_of(result: Term) -> Term {
-    intrinsic(Intrinsic::IoType(result))
-}
-
-fn type_() -> Term {
-    Subterm::Type.into()
-}
-
-fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
-    TopItem::Let(vec![TopLet {
-        doc: None,
+// `pub induct True: pub Prop | qed() end` — the trivially true proposition and its proof, which every discharged obligation is answered with.
+fn true_prop() -> TopItem {
+    TopItem::Induct(vec![TopInduct {
+        doc: Some(Doc {
+            lines: vec!["The proposition that always holds.".to_string()],
+            span: None,
+        }),
         vis_pub: true,
-        label: label.into(),
-        signature: LetSignature::Name {
-            type_: Some(type_),
-            body,
-        },
+        rep_pub: true,
+        label: "True".into(),
+        params: Vec::new(),
+        indices: Vec::new(),
+        result_sort: prop(),
+        cases: vec![TopCase {
+            doc: Some(Doc {
+                lines: vec!["Its proof, which anything may produce.".to_string()],
+                span: None,
+            }),
+            label: "qed".into(),
+            payload: Vec::new(),
+            target: None,
+        }],
     }])
 }
 
-/// `item` under `lines`, the block a `-- |` would have put above it — written first here for the same reason it is written first there. An empty line is a paragraph break, exactly as it is in the surface syntax.
-///
-/// **A gloss says what the operation is, not what its carrier will not hold.** Where a value leaves the carrier is one rule stated once — `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`, and `curios-num`'s `scalar` per operation — and repeating it on every row would be sixty copies to keep in step. What a gloss must say is where an operation departs from the obvious reading of its name: that `sub` is monus, that `shr` divides.
-///
-/// **Only a lone declaration takes one.** Every builder here makes one declaration per item, so the group form would leave all but the first silently undocumented; asserted rather than assumed, since nothing else would notice.
-fn documented(lines: &[&str], item: TopItem) -> TopItem {
-    let doc = Some(Doc {
-        lines: lines.iter().map(|line| (*line).to_string()).collect(),
-        span: None,
-    });
-
-    match item {
-        TopItem::Let(mut members) => {
-            assert_eq!(
-                members.len(),
-                1,
-                "a documented `/sys` item declares one name"
-            );
-            members[0].doc = doc;
-            TopItem::Let(members)
-        }
-        TopItem::Mod(mut module) => {
-            module.doc = doc;
-            TopItem::Mod(module)
-        }
-        _ => panic!("only a definition or a module carries a `/sys` gloss"),
-    }
-}
-
-fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
-    TopItem::Mod(TopMod {
-        doc: None,
-        span: None,
+// `pub induct False: pub Prop end` — no cases, so a value of it is a contradiction and a match on one eliminates into anything.
+fn false_prop() -> TopItem {
+    TopItem::Induct(vec![TopInduct {
+        doc: Some(Doc {
+            lines: vec![
+                "The proposition with no proof, which anything may be concluded from.".to_string(),
+            ],
+            span: None,
+        }),
         vis_pub: true,
-        label: label.into(),
-        module: Some(Module { items }),
-    })
+        rep_pub: true,
+        label: "False".into(),
+        params: Vec::new(),
+        indices: Vec::new(),
+        result_sort: prop(),
+        cases: Vec::new(),
+    }])
 }
 
-// The one part of `/sys` written rather than built. An intrinsic has no surface spelling, so the roster above has to be constructed; a proposition *over* intrinsics is ordinary Curios, and authoring it is what lets a reader read it, the formatter check it and the lints see it.
-//
-// Included and parsed rather than declared as `mod Bound;` and loaded: `/sys` stays one supplied root with no file to resolve, so every fixture that mounts it needs nothing beside it, and the module arrives inline — which is what keeps it inside the `Io`-has-no-eliminator walk over this roster.
-const BOUND: &str = include_str!("prelude/Bound.crs");
-
-fn bound() -> TopItem {
-    let module = BOUND.parse::<Module>().unwrap_or_else(|error| {
-        panic!("curios-text/src/prelude/Bound.crs does not parse: {error:?}")
-    });
-
-    pub_mod("Bound", module.items)
-}
-
-// `pub use Label/{let Label}` — the facade re-export that hoists a submodule's own type binding up to the library root, so `/sys/{Label}` names the type.
-fn pub_use(label: &str) -> TopItem {
-    TopItem::Use(TopUse {
-        span: None,
-        vis_pub: true,
-        name: Name::from([label.to_string()]),
-        group: UseGroup::Named(vec![GroupItem::Let(label.into())]),
-    })
-}
-
-// An intrinsic module's items: its type declaration first, then its operations, so the type lives *inside* its module and the root facade re-exports it.
-fn with_type(type_decl: TopItem, mut ops: Vec<TopItem>) -> Vec<TopItem> {
-    let mut items = vec![type_decl];
-    items.append(&mut ops);
-    items
-}
-
-fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body: Term) -> TopItem {
-    pub_fn_marked(
-        label,
-        params
-            .into_iter()
-            .map(|(n, t)| (Plicity::Explicit, n, t))
-            .collect(),
-        output,
-        body,
+// `pub let Holds(b: Bool) -> Prop = match b | true => True | false => False end;` — the reflection of a decision into a claim, which every decided bound this roster states is built from. A refined comparison reduces the match away, which is what discharges an obligation with nothing written.
+fn holds() -> TopItem {
+    documented(
+        &[
+            "That `b` is `true`, as a proposition: `True` where it is and `False` where it is not.",
+            "",
+            "The reflection of a decision into a claim, which is what every decided bound is made of. A literal operand discharges what an intrinsic demands because the decision reduces and this reduces with it.",
+        ],
+        pub_fn(
+            "Holds",
+            vec![("b", bool_())],
+            prop(),
+            Subterm::Match(Match {
+                head: name("b"),
+                motive: None,
+                arms: vec![
+                    MatrixArm {
+                        pattern: MatchPattern::Bool(true),
+                        body: name("True"),
+                    },
+                    MatrixArm {
+                        pattern: MatchPattern::Bool(false),
+                        body: name("False"),
+                    },
+                ],
+            })
+            .into(),
+        ),
     )
 }
 
-fn pub_fn_marked(
-    label: &str,
-    params: Vec<(Plicity, &str, Term)>,
-    output: Term,
-    body: Term,
-) -> TopItem {
-    TopItem::Let(vec![fn_marked(true, label, params, output, body)])
-}
+// The two `Flt` narrowings' domains, stated inside `/sys/Flt` because that is the carrier they are about. Each is a conjunction rather than one comparison, which is why `Intrinsic::signature` names them instead of building them as it builds the rest.
+fn flt_bounds(syntax: &SyntaxRegistry) -> Vec<TopItem> {
+    let and = |left: Term, right: Term| intrinsic(Intrinsic::BoolAnd(left, right));
+    let le = |left: Term, right: Term| intrinsic(Intrinsic::FltLe(left, right));
 
-fn fn_marked(
-    vis_pub: bool,
-    label: &str,
-    params: Vec<(Plicity, &str, Term)>,
-    output: Term,
-    body: Term,
-) -> TopLet {
-    TopLet {
-        doc: None,
-        vis_pub,
-        label: label.into(),
-        signature: LetSignature::Func {
-            params: params
-                .into_iter()
-                .map(|(p, n, t)| FuncSugarParam {
-                    plicity: p,
-                    label: Pattern::Binder(Some(n.into())),
-                    type_: t,
-                })
-                .collect(),
-            output,
-            body,
-        },
-    }
+    vec![
+        documented(
+            &["That `a` is neither infinite nor beyond what `Flt` represents, decided."],
+            pub_fn(
+                "Finite",
+                vec![("a", flt())],
+                prop(),
+                decided(
+                    syntax,
+                    and(
+                        le(flt_lit(f32::MIN), name("a")),
+                        le(name("a"), flt_lit(f32::MAX)),
+                    ),
+                ),
+            ),
+        ),
+        documented(
+            &["That `a` is zero or above and within range, decided."],
+            pub_fn(
+                "NonNeg",
+                vec![("a", flt())],
+                prop(),
+                decided(
+                    syntax,
+                    and(
+                        le(flt_lit(0.0), name("a")),
+                        le(name("a"), flt_lit(f32::MAX)),
+                    ),
+                ),
+            ),
+        ),
+    ]
 }
 
 /// The surface type a host-boundary [`WireType`] denotes — the prelude's reading of the signature, mirrored by `core::wire_term` after lowering.
@@ -371,63 +228,6 @@ pub(crate) fn foreign_signature(
     foreigns.register(function.clone());
 
     host_fn(&Arc::new(function), declaration.vis_pub).signature
-}
-
-fn binary(label: &str, operand: Term, output: Term, ctor: fn(Term, Term) -> Intrinsic) -> TopItem {
-    pub_fn(
-        label,
-        vec![("a", operand.clone()), ("b", operand)],
-        output,
-        intrinsic(ctor(name("a"), name("b"))),
-    )
-}
-
-// A binary operation whose second operand carries a precondition — the divisions, whose fold reports rather than answers on a zero divisor. The bound is stated the way source states it, for the reason `bin_ops` gives: a refinement is keyed on the term written, and a caller can only write the operand.
-fn guarded_binary(
-    label: &str,
-    operand: Term,
-    output: Term,
-    bound: Term,
-    ctor: fn(Term, Term, Term) -> Intrinsic,
-) -> TopItem {
-    pub_fn_marked(
-        label,
-        vec![
-            (Plicity::Explicit, "a", operand.clone()),
-            (Plicity::Explicit, "b", operand),
-            (Plicity::Implicit, "ok", bound),
-        ],
-        output,
-        // The proof parameter is named in the body, which is what carries the bound into Core: an implicit nothing referenced would be checked here and forgotten, leaving the kernel nothing to re-verify.
-        intrinsic(ctor(name("a"), name("b"), name("ok"))),
-    )
-}
-
-fn guarded_unary(
-    label: &str,
-    input: Term,
-    output: Term,
-    bound: Term,
-    ctor: fn(Term, Term) -> Intrinsic,
-) -> TopItem {
-    pub_fn_marked(
-        label,
-        vec![
-            (Plicity::Explicit, "a", input),
-            (Plicity::Implicit, "ok", bound),
-        ],
-        output,
-        intrinsic(ctor(name("a"), name("ok"))),
-    )
-}
-
-fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> Intrinsic) -> TopItem {
-    pub_fn(
-        label,
-        vec![("a", input)],
-        output,
-        intrinsic(ctor(name("a"))),
-    )
 }
 
 fn nat_succ() -> TopItem {
@@ -740,7 +540,7 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
 }
 
 fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
-    vec![
+    let mut items = vec![
         documented(
             &["Their sum."],
             binary("add", flt(), flt(), Intrinsic::FltAdd),
@@ -868,7 +668,10 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 |bin, four_bytes| Intrinsic::FltOfLeBytes { bin, four_bytes },
             ),
         ),
-    ]
+    ];
+
+    items.extend(flt_bounds(syntax));
+    items
 }
 
 fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
@@ -1506,8 +1309,9 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
             ),
         ),
         pub_use("Io"),
-        // After the carriers, because it states propositions over them.
-        bound(),
+        true_prop(),
+        false_prop(),
+        holds(),
     ];
 
     items.extend(host_operations(subjects));
