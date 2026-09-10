@@ -1259,6 +1259,10 @@ fn process_items(
 pub struct UnitSource<'a> {
     entrypoint: Option<&'a Entrypoint>,
     source: &'a RootSource,
+    /// The prefixes this unit declared a dependency on, and so the only ones its names may resolve into — or `None` for every unit in scope.
+    ///
+    /// `None` is not "nothing declared" but "the caller did not decide", which is every caller that has no manifest to read one out of: a fold whose order is the whole of its dependency information cannot narrow, so the default has to be the complete scope. A unit that *does* declare them names them here, and a predecessor it did not name is then in the fold — contributing its identities, its universe seeds and its erased operands — while being unspellable.
+    visible: Option<Vec<Qualifier>>,
 }
 
 impl<'a> UnitSource<'a> {
@@ -1267,6 +1271,7 @@ impl<'a> UnitSource<'a> {
         Self {
             entrypoint: Some(entrypoint),
             source,
+            visible: None,
         }
     }
 
@@ -1275,7 +1280,37 @@ impl<'a> UnitSource<'a> {
         Self {
             entrypoint: None,
             source,
+            visible: None,
         }
+    }
+
+    /// The same unit, seeing only `prefixes` of what is in scope — what a declared dependency list narrows it to.
+    ///
+    /// Takes the prefixes rather than the units, because a dependency is declared by name: the caller knows which prefixes a manifest listed and not which position each occupies in a fold it did not build.
+    pub fn seeing(self, prefixes: Vec<Qualifier>) -> Self {
+        Self {
+            visible: Some(prefixes),
+            ..self
+        }
+    }
+
+    /// The units of `scope` this source may name, in dependency order — all of them unless [`UnitSource::seeing`] narrowed it.
+    ///
+    /// Narrowing *resolution*, never allocation: the floors, the universe-seed table and the nominal audit read the whole of `scope`, because an identity minted against an invisible predecessor still exists and a bound that ignored it would alias.
+    fn visible_in<'s>(&self, scope: &[&'s PreparedText]) -> Vec<&'s PreparedText> {
+        let Some(visible) = &self.visible else {
+            return scope.to_vec();
+        };
+
+        scope
+            .iter()
+            .copied()
+            .filter(|unit| {
+                unit.mounts
+                    .iter()
+                    .any(|mount| visible.contains(&mount.prefix))
+            })
+            .collect()
     }
 
     /// The prefixes this source claims.
@@ -1354,10 +1389,17 @@ fn into_core_unit_within(
     scope: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedText, Error> {
-    let scope_tables = scope.iter().map(|unit| &unit.table).collect::<Vec<_>>();
-    let scope_public = scope.iter().map(|unit| &unit.public).collect::<Vec<_>>();
+    // Two readings of one scope, and the split is the whole of per-dependency visibility. `visible` is what names resolve against; `scope` is what the compilation *is* — every floor, the cumulative universe-seed table and the nominal audit read it whole, because a unit the reader cannot spell still minted identities the reader must not alias.
+    let visible = source.visible_in(scope);
+    let scope_tables = visible.iter().map(|unit| &unit.table).collect::<Vec<_>>();
+    let scope_public = visible.iter().map(|unit| &unit.public).collect::<Vec<_>>();
     let scope_cores = scope.iter().map(|unit| &unit.core).collect::<Vec<_>>();
-    let scope_mounts = scope
+    let scope_mounts = visible
+        .iter()
+        .flat_map(|unit| unit.mounts.iter().cloned())
+        .collect::<Vec<_>>();
+    // Every prefix in the compilation, visible or not: claim disjointness is a property of the whole fold, and a unit that cannot see a mount still must not claim it.
+    let all_mounts = scope
         .iter()
         .flat_map(|unit| unit.mounts.iter().cloned())
         .collect::<Vec<_>>();
@@ -1371,7 +1413,7 @@ fn into_core_unit_within(
     //
     // Mount-set disjointness is what `Scoped`'s shadowing rule, the registries' duplicate-key rejection and the `ffi` import namespace all rest on, so it is checked once here rather than assumed three times.
     for (claim, prefix) in claims(source, &own) {
-        if let Some(earlier) = scope_mounts
+        if let Some(earlier) = all_mounts
             .iter()
             .find(|earlier| !earlier.prefix.is_root() && earlier.prefix == prefix)
         {
