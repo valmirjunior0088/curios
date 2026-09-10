@@ -845,14 +845,18 @@ impl Reader<'_> {
         visible_binding(self.public, self.table, module, &current, last)
     }
 
-    /// Every spelling a `use` in `module` brought into scope, with what it resolved to — the union over the module's definitions of the scopes the lowering recorded for them. `use` is point-of-use, so two definitions may differ in what they see, but a spelling that resolves two ways in one module is a program nobody writes, and the first recorded wins.
+    /// Every spelling a `use` in `module` brought into scope, with what it resolved to — the union over the module's declarations of the scopes the lowering recorded for them. `use` is point-of-use, so two declarations may differ in what they see, but a spelling that resolves two ways in one module is a program nobody writes, and the first recorded wins.
+    ///
+    /// **The union is over every declaration, which is what makes a concept-only module resolve at all.** The lowering once recorded a scope for a `let` and a `test` and nothing else, so a module whose declarations are a concept, an inductive or a structure had none to union, and every name in its signatures rendered as plain text — `/std/Show`'s `show(A) -> Str` did while `/std/Spell`'s identical method linked, because `Spell` happens to declare `let`s that import the same name.
     fn imports_of(&self, module: &Qualifier) -> HashMap<String, Qualifier> {
         let mut spellings = HashMap::new();
         for (owner, indices) in &self.imports.by_item {
-            let Global::Authored(owner) = owner else {
-                continue;
+            // A witness is anonymous, so it is placed by the module its identity names rather than by a qualifier it does not have; every other declaration is placed by the module its own name lies in.
+            let declaring = match owner {
+                Global::Authored(owner) => owner.without_last(),
+                Global::Witness(id) => id.module().clone(),
             };
-            if owner.without_last() != *module {
+            if declaring != *module {
                 continue;
             }
             for index in indices {
