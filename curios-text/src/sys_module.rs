@@ -14,18 +14,18 @@ use constructors::*;
 mod helpers;
 use helpers::*;
 
+mod host_rows;
+// `pub(crate)` rather than plain, and the one place this module widens anything: `foreign_signature` answers `into_core`'s user-written `foreign`, and it reaches the crate root through here.
+pub(crate) use host_rows::*;
+
 use {
     super::{
-        Doc, Intrinsic, LetSignature, Match, MatchPattern, MatrixArm, Module, Nat, NatLiteral,
-        Subterm, Term, TopCase, TopForeign, TopInduct, TopItem,
+        Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, Nat, NatLiteral, Subterm, Term,
+        TopCase, TopInduct, TopItem,
     },
-    curios_abi::{
-        ForeignFunction, ForeignStore, Namespace, ResultShape, WireType, event, file_kind,
-        open_mode, status, stdio, stdio_mode,
-    },
+    curios_abi::{ForeignStore, event, file_kind, open_mode, status, stdio, stdio_mode},
     curios_num::Integer,
     curios_utilities::{Grain, Plicity, SyntaxRegistry},
-    std::sync::Arc,
 };
 
 // `pub induct True: pub Prop | qed() end` — the trivially true proposition and its proof, which every discharged obligation is answered with.
@@ -140,92 +140,6 @@ fn flt_bounds(syntax: &SyntaxRegistry) -> Vec<Decl> {
             ),
         ),
     ]
-}
-
-/// The surface type a host-boundary [`WireType`] denotes — the prelude's reading of the signature, mirrored by `core::wire_term` after lowering.
-fn wire_type(type_: &WireType) -> Term {
-    match type_ {
-        WireType::Nat => nat(),
-        WireType::Int => int(),
-        WireType::Bool => bool_(),
-        WireType::Bytes => bin(Grain::X),
-        WireType::Handle => handle(),
-        WireType::List(element) => list_of(wire_type(&(*element).into())),
-    }
-}
-
-/// A host-function declaration generated from a foreign-store row: parameter names/types and the result shape (unit, bare type, named record) come off the `WireSignature`, and the body bakes the generic `Foreign` intrinsic applied to the parameter names. Used both for the builtin store's rows (always `pub`) and, via [`foreign_signature`], for a user's own `foreign` declaration (`vis_pub` follows what they wrote).
-///
-/// The result is an `Io`, and this one site is what makes that true of every row the store describes — a user's own `foreign` declaration included, since a call across the wire is a host effect whoever declared it. The wire contract does not move: `curios-abi` describes the same shapes and only the guest-facing type changes, so a multi-result row reads `Io({status : Nat, bytes : Bytes})` with the record still inside the wrapper.
-///
-/// A row with no parameters becomes a *constant* rather than a nullary function, which is not a case here but a consequence of handing [`Decl`] an empty telescope — see `Decl::signature`.
-fn host_fn(function: &Arc<ForeignFunction>, vis_pub: bool) -> Decl {
-    // What the row says of itself, which for a builtin is the roster's own `///` and for a user's `foreign` is nothing — their prose sits on the declaration they wrote.
-    let doc = match function.description.is_empty() {
-        true => None,
-        false => Some(Doc {
-            lines: vec![function.description.clone()],
-            span: None,
-        }),
-    };
-    let signature = &function.signature;
-
-    let result = match signature.results.shape() {
-        ResultShape::Unit => unit(),
-        ResultShape::Single(result) => wire_type(&result),
-        ResultShape::Record(fields) => record(
-            fields
-                .into_iter()
-                .map(|(label, result)| (label, wire_type(&result)))
-                .collect(),
-        ),
-    };
-    let output = io_of(result);
-
-    let body = Term::from(Subterm::Foreign(
-        Arc::clone(function),
-        signature
-            .params
-            .iter()
-            .map(|(param, _)| name(param))
-            .collect(),
-    ));
-
-    Decl {
-        doc,
-        vis_pub,
-        label: function.label.clone(),
-        params: signature
-            .params
-            .iter()
-            .map(|(param, type_)| (Plicity::Explicit, param.clone(), wire_type(type_)))
-            .collect(),
-        output,
-        body,
-    }
-}
-
-/// Handle one user-written `foreign` declaration: register its [`ForeignFunction`] into the compilation's (non-`host_ops`) foreign store, and return the ordinary [`LetSignature`] `into_core` lowers it as — wire-type bookkeeping and `host_fn`'s shape stay internal to this module, so `into_core` only ever deals with the same `LetSignature` it already knows how to lower for a plain `TopItem::Let`. `name` is the declaration's fully qualified name (leading `/`, the caller's current position while walking the module tree), which becomes the wasm import string under the `ffi` namespace. Qualified names are unique per compilation (a same-scope duplicate is a binding conflict long before lowering reaches this point), so `register`'s duplicate panic stays what it is everywhere else: a construction bug.
-pub(crate) fn foreign_signature(
-    declaration: &TopForeign,
-    foreigns: &mut ForeignStore,
-    name: String,
-) -> LetSignature {
-    let function = ForeignFunction {
-        namespace: Namespace::Ffi,
-        name,
-        subject: None,
-        label: declaration.label.to_string(),
-        signature: declaration.signature.clone(),
-        // A user's `foreign` carries its own `-- |` on the declaration they wrote, which is what a page reads; the row has nothing to add.
-        description: String::new(),
-    };
-
-    foreigns.register(function.clone());
-
-    host_fn(&Arc::new(function), declaration.vis_pub)
-        .into_let()
-        .signature
 }
 
 fn nat_succ() -> Decl {
