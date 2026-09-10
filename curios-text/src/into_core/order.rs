@@ -31,7 +31,9 @@ pub(super) fn node_reference_names(
     names
 }
 
-/// The names a derived witness body will reference once elaboration writes it — the vocabulary of the derivation registered for the concept its signature names, which the `Derive` transient stands for without spelling. Hard edges, as the written body's `Var`s would be: within the prelude's own unit the renderers and method wrappers must elaborate before the witness that applies them. Restricted to the signature's concept so one derivation's edges never reach the other's rows, and empty for an item that derives nothing.
+/// The names a derived witness body will reference once elaboration writes it — the vocabulary of the derivation registered for the concept its signature names, which the `Derive` transient stands for without spelling. Hard edges, as the written body's `Var`s would be: within the prelude's own unit the renderers, method wrappers and string machinery must elaborate before the witness that applies them. Restricted to the signature's concept so one derivation's edges never reach the other's rows, and empty for an item that derives nothing.
+///
+/// **Every name a body *writes*, and nothing it merely dispatches through.** A concept reached by infix operator is not here and must not be: `&&` in the equality body is rebuilt by `elaborate_infix` as a projection off a resolved witness, never a wrapper `Var`, so it names no global at all. It cannot even reach [`witness_dep_nodes`]' soft edges, whose operator half comes from `FlatItem::infix_ops` — which walks a body that is, at this point, a transient with no children.
 fn derived_vocabulary(item: &FlatItem, syntax: &SyntaxRegistry) -> Vec<curios_core::Global> {
     let lets = match item {
         FlatItem::Let(let_) => std::slice::from_ref(let_),
@@ -52,6 +54,10 @@ fn derived_vocabulary(item: &FlatItem, syntax: &SyntaxRegistry) -> Vec<curios_co
                 method(spell),
                 curios_core::Global::Authored(syntax.spell.call.qualifier()),
                 curios_core::Global::Authored(syntax.spell.record.qualifier()),
+                // Every rendered piece is built by `curios_elab::str_literal`, which names the scan certificate and *constructs* the carrier — three more names the transient hides, exactly as it hides the renderers. They reached the graph before only because `Spell/call`'s own body happens to carry string literals, which is a property of how that renderer is written rather than a dependency anything stated.
+                curios_core::Global::Authored(syntax.string.string.qualifier()),
+                curios_core::Global::Authored(syntax.string.of_scan_eq.qualifier()),
+                curios_core::Global::Authored(syntax.string.refl_scan.qualifier()),
             ]);
         }
         let eql = syntax.operator.eql;

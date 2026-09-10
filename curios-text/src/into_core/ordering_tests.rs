@@ -170,3 +170,87 @@ fn a_supplied_source_and_a_directory_resolve_alike() {
 
     fs::remove_dir_all(base).unwrap();
 }
+
+/// A body-less witness lowers to a `Derive` transient, which carries no `Var` — so the scheduler cannot see the renderers and method wrapper the written body would have named, and `derived_vocabulary` supplies them as hard edges instead. This is what those edges buy: the vocabulary is declared *after* the witness here and must still be emitted before it.
+///
+/// The names come from the fixture registry rather than from `/std`, so this suite is what makes those spellings load-bearing: a row whose concept does not match what the source declares yields no edges at all, and the assertion below is what says so.
+#[test]
+fn a_derived_spell_witness_orders_its_vocabulary_first() {
+    let module = lowered_module(
+        r#"
+        pub induct Colour : pub Type | red() end
+        satisfy /std/Spell/Spell(Colour);
+        pub mod std
+            pub mod Spell
+                pub concept Spell(A : Type) : pub Type {
+                    spell(A) -> Type,
+                }
+                pub let call : Type = Type;
+                pub let record : Type = Type;
+            end
+            pub mod Str
+                pub let Str : Type = Type;
+                pub let of_scan_eq : Type = Type;
+                pub let refl_scan : Type = Type;
+            end
+        end
+        Type
+        "#,
+    );
+
+    let names = module
+        .items
+        .iter()
+        .map(curios_core::Item::describe)
+        .collect::<Vec<_>>();
+    let at = |needle: &str| {
+        names
+            .iter()
+            .position(|name| name.contains(needle))
+            .unwrap_or_else(|| panic!("{needle} is not among {names:?}"))
+    };
+
+    let witness = at("witness");
+    assert!(at("/std/Spell/Spell/spell") < witness, "{names:?}");
+    assert!(at("/std/Spell/call") < witness, "{names:?}");
+    assert!(at("/std/Spell/record") < witness, "{names:?}");
+
+    // The rendered pieces are string literals, so the carrier and its scan certificate are as much a part of what the body writes as the renderers are.
+    assert!(at("/std/Str/Str") < witness, "{names:?}");
+    assert!(at("/std/Str/of_scan_eq") < witness, "{names:?}");
+    assert!(at("/std/Str/refl_scan") < witness, "{names:?}");
+}
+
+/// The equality derivation applies its concept's own method and nothing else — no renderer, and no string machinery, since it builds a `Bool` rather than text.
+#[test]
+fn a_derived_equality_witness_orders_its_method_first() {
+    let module = lowered_module(
+        r#"
+        pub induct Colour : pub Type | red() end
+        satisfy /std/Equal/Equal(Colour);
+        pub mod std
+            pub mod Equal
+                pub concept Equal(A : Type) : pub Type {
+                    eql(A, A) -> Type,
+                    neq(A, A) -> Type,
+                }
+            end
+        end
+        Type
+        "#,
+    );
+
+    let names = module
+        .items
+        .iter()
+        .map(curios_core::Item::describe)
+        .collect::<Vec<_>>();
+    let at = |needle: &str| {
+        names
+            .iter()
+            .position(|name| name.contains(needle))
+            .unwrap_or_else(|| panic!("{needle} is not among {names:?}"))
+    };
+
+    assert!(at("/std/Equal/Equal/eql") < at("witness"), "{names:?}");
+}
