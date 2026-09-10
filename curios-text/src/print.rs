@@ -310,8 +310,8 @@ fn print_motive(motive: Option<Term>) -> Printer {
     }
 }
 
-fn print_flt(value: f32) -> Printer {
-    // `Display` for `f32` never uses exponent notation (that is `{:e}`), so decimalizing is one suffix check.
+fn print_flt(value: f64) -> Printer {
+    // `Display` for `f64` never uses exponent notation (that is `{:e}`), so decimalizing is one suffix check.
     let mut string = value.to_string();
 
     if !string.contains('.') {
@@ -714,7 +714,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             print_intrinsic_call("Int/shr", vec![], vec![left, right])
         }
         Intrinsic::FltType => pure("Flt"),
-        Intrinsic::Flt(value) => print_flt(value.to_f32()),
+        Intrinsic::Flt(value) => print_flt(value.to_f64()),
         Intrinsic::FltAdd(left, right) => {
             print_intrinsic_call("Flt/add", vec![], vec![left, right])
         }

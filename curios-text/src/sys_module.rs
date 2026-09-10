@@ -110,6 +110,7 @@ fn holds() -> Decl {
 fn flt_bounds(syntax: &SyntaxRegistry) -> Vec<Decl> {
     let and = |left: Term, right: Term| intrinsic(Intrinsic::BoolAnd(left, right));
     let le = |left: Term, right: Term| intrinsic(Intrinsic::FltLe(left, right));
+    let lt = |left: Term, right: Term| intrinsic(Intrinsic::FltLt(left, right));
 
     vec![
         documented(
@@ -121,8 +122,8 @@ fn flt_bounds(syntax: &SyntaxRegistry) -> Vec<Decl> {
                 decided(
                     syntax,
                     and(
-                        le(flt_lit(f32::MIN), name("a")),
-                        le(name("a"), flt_lit(f32::MAX)),
+                        lt(flt_lit(f64::NEG_INFINITY), name("a")),
+                        lt(name("a"), flt_lit(f64::INFINITY)),
                     ),
                 ),
             ),
@@ -137,7 +138,7 @@ fn flt_bounds(syntax: &SyntaxRegistry) -> Vec<Decl> {
                     syntax,
                     and(
                         le(flt_lit(0.0), name("a")),
-                        le(name("a"), flt_lit(f32::MAX)),
+                        lt(name("a"), flt_lit(f64::INFINITY)),
                     ),
                 ),
             ),
@@ -561,11 +562,11 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             ),
         ),
         documented(
-            &["Its four bytes, least significant first."],
+            &["Its eight bytes, least significant first."],
             unary("to_le_bytes", flt(), bin(Grain::X), Intrinsic::FltToLeBytes),
         ),
         documented(
-            &["The number those four bytes spell, least significant first."],
+            &["The number those eight bytes spell, least significant first."],
             guarded_unary(
                 "of_le_bytes",
                 bin(Grain::X),
@@ -576,7 +577,7 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
                         sys_op(&["sys", "Nat", "eql"]),
                         vec![
                             applied(sys_op(&["sys", "Bytes", "len"]), vec![name("a")]),
-                            nat_lit(4),
+                            nat_lit(8),
                         ],
                     ),
                 ),

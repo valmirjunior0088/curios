@@ -146,7 +146,7 @@ pub(super) fn prop() -> Term {
     Subterm::Prop.into()
 }
 
-// A `Flt` literal, for the two range bounds below. Spelled from `f32`'s own extremes rather than from a written magnitude, so the bound is the carrier's by construction and no digit string has to be kept in step with it.
-pub(super) fn flt_lit(value: f32) -> Term {
-    intrinsic(Intrinsic::Flt(Floating::from_f32(value)))
+// A `Flt` literal, for the two range bounds below. The bounds are stated against the infinities rather than against a written magnitude, so no digit string has to be kept in step with the carrier.
+pub(super) fn flt_lit(value: f64) -> Term {
+    intrinsic(Intrinsic::Flt(Floating::from_f64(value)))
 }

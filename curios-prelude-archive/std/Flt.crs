@@ -6,9 +6,9 @@ use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat
     True};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
--- | That `b` is four bytes long, decided.
+-- | That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
-    Bool/Holds(Nat/eql(Bytes/len(b), 4));
+    Bool/Holds(Nat/eql(Bytes/len(b), 8));
 
 -- | Positive infinity.
 pub let pos_inf: Flt =
@@ -20,30 +20,29 @@ pub let neg_inf: Flt =
 
 -- | The one NaN, with a fixed bit pattern.
 pub let nan: Flt =
-    of_le_bytes(x[0x0, 0x0, 0xC0, 0x7F]);
+    of_le_bytes(x[0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xF8, 0x7F]);
 
 -- | Whether `f` is a number: neither infinity nor the NaN.
 pub let is_finite(f: Flt) -> Bool =
     f > neg_inf && f < pos_inf;
 
--- | The float whose little-endian bytes these are, or `none` unless there are exactly four.
+-- | The float whose little-endian bytes these are, or `none` unless there are exactly eight.
 pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
-    match Nat/eql(Bytes/len(b), 4): (_) => Option(Flt)
+    match Nat/eql(Bytes/len(b), 8): (_) => Option(Flt)
     | true => Option/some(of_le_bytes(b, @True/qed()))
     | false => Option/none()
     end;
 
 -- | The procedure that decides `Finite(f)`: the evidence when `f` is a number, `none` otherwise.
 pub let finite(f: Flt) -> Option(Finite(f)) =
-    match -340282350000000000000000000000000000000.0 <= f
-        && f <= +340282350000000000000000000000000000000.0: (r) => Option(Bool/Holds(r))
+    match neg_inf < f && f < pos_inf: (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
 -- | The procedure that decides `NonNeg(f)`: the evidence when `f` is a non-negative number, `none` otherwise. `-0.0` qualifies.
 pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
-    match f >= +0.0 && f <= +340282350000000000000000000000000000000.0: (r) => Option(Bool/Holds(r))
+    match f >= +0.0 && f < pos_inf: (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
@@ -122,35 +121,21 @@ let normalize(ds: List(Nat)) -> {List(Nat), Bool} =
         end
     end;
 
-let setup(f_mant: Nat, exp_field: Nat) -> {BigNat, BigNat, BigNat, BigNat} =
-    match exp_field >= 150
+let setup(f_mant: BigNat, exp_field: Nat) -> {BigNat, BigNat, BigNat, BigNat} =
+    let hidden = pow2(52);
+    match exp_field >= 1075
     | true =>
-        let ep = exp_field - 150;
-        match f_mant == 0x800000
-        | true =>
-            (
-                BigNat/mul/pow2(BigNat/of_nat(f_mant), ep + 2),
-                BigNat/of_nat(4),
-                pow2(ep + 1),
-                pow2(ep))
-        | false =>
-            (BigNat/mul/pow2(BigNat/of_nat(f_mant), ep + 1), BigNat/of_nat(2), pow2(ep), pow2(ep))
+        let ep = exp_field - 1075;
+        match f_mant == hidden
+        | true => (BigNat/mul/pow2(f_mant, ep + 2), BigNat/of_nat(4), pow2(ep + 1), pow2(ep))
+        | false => (BigNat/mul/pow2(f_mant, ep + 1), BigNat/of_nat(2), pow2(ep), pow2(ep))
         end
     | false =>
-        let abs_e = 150 - Nat/max(exp_field, 1);
-        match exp_field < 2 || Bool/not(f_mant == 0x800000)
-        | true =>
-            (
-                BigNat/mul/small(BigNat/of_nat(f_mant), 2),
-                pow2(abs_e + 1),
-                BigNat/of_nat(1),
-                BigNat/of_nat(1))
+        let abs_e = 1075 - Nat/max(exp_field, 1);
+        match exp_field < 2 || Bool/not(f_mant == hidden)
+        | true => (BigNat/mul/small(f_mant, 2), pow2(abs_e + 1), BigNat/of_nat(1), BigNat/of_nat(1))
         | false =>
-            (
-                BigNat/mul/small(BigNat/of_nat(f_mant), 4),
-                pow2(abs_e + 2),
-                BigNat/of_nat(2),
-                BigNat/of_nat(1))
+            (BigNat/mul/small(f_mant, 4), pow2(abs_e + 2), BigNat/of_nat(2), BigNat/of_nat(1))
         end
     end;
 
@@ -174,7 +159,7 @@ let layout(digits_str: Str, k: Int) -> Str =
         end
     end;
 
-let render(f_mant: Nat, exp_field: Nat, even: Bool) -> Str =
+let render(f_mant: BigNat, exp_field: Nat, even: Bool) -> Str =
     let (r0, s0, mp0, mm0) = setup(f_mant, exp_field);
     let (s1, k1) = scale_up(r0 + mp0, s0, +0);
     let (r1, mp1, mm1, k2) = scale_down(r0, mp0, mm0, s1, k1);
@@ -192,20 +177,26 @@ pub let cmp(x: Flt, y: Flt) -> Ordering =
 -- | The shortest decimal that reads back as `f`, always signed: `+2.5`, `-0`, `+inf`, `-inf` or `NaN`.
 pub let to_str(f: Flt) -> Str =
     let b = to_le_bytes(f);
-    let b0 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 0), 0));
-    let b1 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 1), 0));
-    let b2 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 2), 0));
-    let b3 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 3), 0));
-    let exp_field = b3 % 0x80 * 2 + b2 / 0x80;
-    let mant_field = b2 % 0x80 * 0x10000 + b1 * 0x100 + b0;
-    let sign = match b3 >= 0x80 | true => "-" | false => "+" end;
+    let at = (i: Nat) => Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, i), 0));
+    let b6 = at(6);
+    let b7 = at(7);
+    let exp_field = b7 % 0x80 * 16 + b6 / 0x10;
+    -- Fifty-two bits, so the significand is a `BigNat` from here down: the carrier `Nat` erases to holds thirty-one.
+    let place = (acc: BigNat, v: Nat) => BigNat/mul/pow2(acc, 8) + BigNat/of_nat(v);
+    let mant_field =
+        place(
+            place(
+                place(place(place(place(BigNat/of_nat(b6 % 0x10), at(5)), at(4)), at(3)), at(2)),
+                at(1)),
+            at(0));
+    let sign = match b7 >= 0x80 | true => "-" | false => "+" end;
     choose
-    | exp_field == 0xFF && mant_field == 0 => Str/concat(sign, "inf")
-    | exp_field == 0xFF => "NaN"
-    | exp_field == 0 && mant_field == 0 => Str/concat(sign, "0")
+    | exp_field == 0x7FF && BigNat/is_zero(mant_field) => Str/concat(sign, "inf")
+    | exp_field == 0x7FF => "NaN"
+    | exp_field == 0 && BigNat/is_zero(mant_field) => Str/concat(sign, "0")
     | _ =>
-        let f_mant = match exp_field == 0 | true => mant_field | false => mant_field + 0x800000 end;
-        let even = f_mant % 2 == 0;
+        let f_mant = match exp_field == 0 | true => mant_field | false => mant_field + pow2(52) end;
+        let even = BigNat/is_even(f_mant);
         Str/concat(sign, render(f_mant, exp_field, even))
     end;
 
@@ -227,51 +218,82 @@ let digits_big(s: Str) -> Option(BigNat) =
             | false => Option/none()
             end);
 
-let two_pow(e: Int) -> Flt =
-    let mag = Int/abs(e);
-    match e >= +0
-    | true => match mag | 0 => +1.0 | _ + 1; ih => ih * +2.0 end
-    | false => match mag | 0 => +1.0 | _ + 1; ih => ih * +0.5 end
+-- | `base` to the `n`, by squaring. Linear repetition would cost up to 1074 multiplications per call at this format's exponent range, and each step here is exact: every power of two below the overflow threshold is representable, so no intermediate rounds.
+let pow_by_squaring(base: Flt, n: Nat) -> Flt =
+    match n == 0
+    | true => +1.0
+    | false =>
+        let half = pow_by_squaring(base, n / 2);
+        let square = half * half;
+        match n % 2 == 1 | true => square * base | false => square end
     end;
 
-let quotient(n: BigNat, d: BigNat, bits: Nat, acc: Nat) -> {Nat, BigNat} =
+-- | Two to the `e`. A negative exponent halves rather than taking a reciprocal, because `1.0 / two_pow(1074)` divides by an infinity and answers zero.
+let two_pow(e: Int) -> Flt =
+    let mag = Int/abs(e);
+    match e >= +0 | true => pow_by_squaring(+2.0, mag) | false => pow_by_squaring(+0.5, mag) end;
+
+-- | `x` shifted right `k` places.
+let shr_big(x: BigNat, k: Nat) -> BigNat =
+    match k | 0 => x | _ + 1; ih => BigNat/div2(ih) end;
+
+-- | The low `width` bits of `m`, as a `Nat`. Every caller keeps `width` under the carrier's own, so the answer always fits.
+let low_bits(m: BigNat, width: Nat) -> Nat =
+    match width
+    | 0 => 0
+    | w + 1 =>
+        let head = match BigNat/is_even(m) | true => 0 | false => 1 end;
+        head + 2 * low_bits(BigNat/div2(m), w)
+    end;
+
+-- | A significand of at most 53 bits as a float, in three limbs no wider than the `Nat` carrier. Each limb converts exactly and each scale is a power of two, so the sum is exact whenever the significand is.
+let big_to_flt(m: BigNat) -> Flt =
+    let above18 = shr_big(m, 18);
+    Nat/to_flt(low_bits(shr_big(above18, 18), 17)) * two_pow(+36)
+        + Nat/to_flt(low_bits(above18, 18)) * two_pow(+18)
+        + Nat/to_flt(low_bits(m, 18));
+
+let quotient(n: BigNat, d: BigNat, bits: Nat, acc: BigNat) -> {BigNat, BigNat} =
     match bits
     | 0 => (acc, n)
     | b + 1 =>
         match n >= d
-        | true => quotient(n - d, BigNat/div2(d), b, acc * 2 + 1)
-        | false => quotient(n, BigNat/div2(d), b, acc * 2)
+        | true => quotient(n - d, BigNat/div2(d), b, BigNat/mul/small(acc, 2) + BigNat/of_nat(1))
+        | false => quotient(n, BigNat/div2(d), b, BigNat/mul/small(acc, 2))
         end
     end;
 
-let round_bits(q: Nat, shift: Nat, sticky: Bool) -> Nat =
-    let kept = Nat/shr(q, shift);
-    let dropped = q - Nat/shl(kept, shift);
-    let half = Nat/shl(1, shift - 1);
+let round_bits(q: BigNat, shift: Nat, sticky: Bool) -> BigNat =
+    let kept = shr_big(q, shift);
+    let dropped = q - BigNat/mul/pow2(kept, shift);
+    let half = pow2(shift - 1);
     let up =
         choose
         | dropped > half => true
         | dropped < half => false
         | sticky => true
-        | _ => Nat/rem(kept, 2) == 1
+        | _ => Bool/not(BigNat/is_even(kept))
         end;
-    match up | true => kept + 1 | false => kept end;
+    match up | true => BigNat/succ(kept) | false => kept end;
 
-let assemble(q: Nat, sticky: Bool, s: Int) -> Flt =
+let assemble(q: BigNat, sticky: Bool, s: Int) -> Flt =
     choose
-    | s > +127 => pos_inf
-    | s < -126 =>
-        let shift = Int/abs(+0 - (s + +124));
-        match shift >= 27
+    | s > +1023 => pos_inf
+    | s < -1022 =>
+        let shift = Int/abs(+0 - (s + +1020));
+        match shift >= 56
         | true => +0.0
-        | false => Nat/to_flt(round_bits(q, shift, sticky)) * two_pow(-149)
+        | false => big_to_flt(round_bits(q, shift, sticky)) * two_pow(-1074)
         end
     | _ =>
         let mant = round_bits(q, 2, sticky);
-        match mant == 0x1000000
+        match mant == pow2(53)
         | true =>
-            match s == +127 | true => pos_inf | false => Nat/to_flt(0x800000) * two_pow(s - +22) end
-        | false => Nat/to_flt(mant) * two_pow(s - +23)
+            match s == +1023
+            | true => pos_inf
+            | false => big_to_flt(pow2(52)) * two_pow(s - +51)
+            end
+        | false => big_to_flt(mant) * two_pow(s - +52)
         end
     end;
 
@@ -280,28 +302,28 @@ pub let of_decimal(negative: Bool, d: BigNat, e: Int, digits: Nat) -> Flt =
     let magnitude =
         choose
         | BigNat/is_zero(d) => +0.0
-        | e >= +0 && (BigNat/bit_len(d) >= 129 || e >= +39) => pos_inf
-        | e < +0 && Nat/to_int(digits) + e <= -46 => +0.0
+        | e >= +0 && (BigNat/bit_len(d) >= 1025 || e >= +309) => pos_inf
+        | e < +0 && Nat/to_int(digits) + e <= -324 => +0.0
         | _ =>
             let (n0, d0) =
                 match e >= +0: (_) => {BigNat, BigNat}
                 | true => (BigNat/mul(d, pow10_big(Int/abs(e))), BigNat/of_nat(1))
                 | false => (d, pow10_big(Int/abs(e)))
                 end;
-            let sh = Nat/to_int(25 + BigNat/bit_len(d0)) - Nat/to_int(BigNat/bit_len(n0));
+            let sh = Nat/to_int(54 + BigNat/bit_len(d0)) - Nat/to_int(BigNat/bit_len(n0));
             let (n1, d1) =
                 match sh >= +0: (_) => {BigNat, BigNat}
                 | true => (BigNat/mul/pow2(n0, Int/abs(sh)), d0)
                 | false => (n0, BigNat/mul/pow2(d0, Int/abs(sh)))
                 end;
-            let top = BigNat/mul/pow2(d1, 25);
+            let top = BigNat/mul/pow2(d1, 54);
             let (n2, sh2) =
                 match n1 < top: (_) => {BigNat, Int}
                 | true => (BigNat/mul/pow2(n1, 1), sh + +1)
                 | false => (n1, sh)
                 end;
-            let (q, rest) = quotient(n2, top, 26, 0);
-            assemble(q, Bool/not(BigNat/is_zero(rest)), +25 - sh2)
+            let (q, rest) = quotient(n2, top, 55, BigNat/zero);
+            assemble(q, Bool/not(BigNat/is_zero(rest)), +54 - sh2)
         end;
     match negative | true => neg(magnitude) | false => magnitude end;
 
