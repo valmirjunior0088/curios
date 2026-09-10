@@ -1070,12 +1070,12 @@ fn proc_exit() -> Decl {
 }
 
 /// The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source. Each is named by the tag it holds — `status`, `event`, `open_mode`, `file_kind`, `stdio_mode` — as `curios-abi`'s `codes` names them, and all are lowercase because no type backs them.
-fn code_modules() -> Vec<TopItem> {
+fn code_modules() -> Vec<SysModule> {
     vec![
         // The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source.
-        pub_mod(
+        SysModule::ops(
             "status",
-            items(vec![
+            vec![
                 pub_let("ok", nat(), nat_lit(status::OK)),
                 pub_let("eof", nat(), nat_lit(status::EOF)),
                 pub_let("not_found", nat(), nat_lit(status::NOT_FOUND)),
@@ -1092,41 +1092,41 @@ fn code_modules() -> Vec<TopItem> {
                 pub_let("is_directory", nat(), nat_lit(status::IS_DIRECTORY)),
                 pub_let("not_directory", nat(), nat_lit(status::NOT_DIRECTORY)),
                 pub_let("other_base", nat(), nat_lit(status::OTHER_BASE)),
-            ]),
+            ],
         ),
-        pub_mod(
+        SysModule::ops(
             "event",
-            items(vec![
+            vec![
                 pub_let("read", nat(), nat_lit(event::READ)),
                 pub_let("write", nat(), nat_lit(event::WRITE)),
                 pub_let("err", nat(), nat_lit(event::ERR)),
                 pub_let("hup", nat(), nat_lit(event::HUP)),
-            ]),
+            ],
         ),
-        pub_mod(
+        SysModule::ops(
             "open_mode",
-            items(vec![
+            vec![
                 pub_let("read", nat(), nat_lit(open_mode::READ)),
                 pub_let("write", nat(), nat_lit(open_mode::WRITE)),
                 pub_let("append", nat(), nat_lit(open_mode::APPEND)),
-            ]),
+            ],
         ),
-        pub_mod(
+        SysModule::ops(
             "file_kind",
-            items(vec![
+            vec![
                 pub_let("file", nat(), nat_lit(file_kind::FILE)),
                 pub_let("directory", nat(), nat_lit(file_kind::DIRECTORY)),
                 pub_let("symlink", nat(), nat_lit(file_kind::SYMLINK)),
                 pub_let("other", nat(), nat_lit(file_kind::OTHER)),
-            ]),
+            ],
         ),
-        pub_mod(
+        SysModule::ops(
             "stdio_mode",
-            items(vec![
+            vec![
                 pub_let("inherit", nat(), nat_lit(stdio_mode::INHERIT)),
                 pub_let("pipe", nat(), nat_lit(stdio_mode::PIPE)),
                 pub_let("null", nat(), nat_lit(stdio_mode::NULL)),
-            ]),
+            ],
         ),
     ]
 }
@@ -1159,20 +1159,18 @@ fn carriers(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             flt_ops(syntax),
         ),
         // The two packed runs share every operation name, so neither type is hoisted: `Bits` and `Bytes` are reached through their own modules.
-        SysModule::carrier(
+        SysModule::packed(
             "Bits",
             &["A packed run of bits, written `b[…]`."],
             pub_let("Bits", type_(), bin(Grain::B)),
             bin_ops(Grain::B, syntax),
-        )
-        .nested(),
-        SysModule::carrier(
+        ),
+        SysModule::packed(
             "Bytes",
             &["A packed run of bytes, written `x[…]`."],
             pub_let("Bytes", type_(), bin(Grain::X)),
             bin_ops(Grain::X, syntax),
-        )
-        .nested(),
+        ),
         SysModule::carrier(
             "Bool",
             &["The two truth values, `true` and `false`."],
@@ -1223,27 +1221,20 @@ fn carriers(syntax: &SyntaxRegistry) -> Vec<SysModule> {
 ///
 /// Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
-    let mut modules = carriers(syntax);
-    absorb_host_rows(&mut modules, foreigns);
+    let mut modules = absorb_host_rows(carriers(syntax), foreigns);
 
     if let Some(proc) = modules.iter_mut().find(|module| module.label == "proc") {
-        proc.items.push(proc_exit().into_item());
+        proc.decls.push(proc_exit());
     }
 
     let mut items = modules
         .into_iter()
-        .flat_map(|module| {
-            let hoist = module.hoisted.then(|| pub_use(&module.label));
-
-            [pub_mod(&module.label, module.items)]
-                .into_iter()
-                .chain(hoist)
-        })
+        .flat_map(SysModule::into_items)
         .collect::<Vec<_>>();
 
     // The propositions `/sys`'s own operations state their preconditions in, at the root rather than in a module of their own: a precondition is about the operation that demands it, and `Holds` is written beside every bound in the roster.
     items.extend([true_prop(), false_prop(), holds().into_item()]);
-    items.extend(code_modules());
+    items.extend(code_modules().into_iter().flat_map(SysModule::into_items));
 
     Module { items }
 }

@@ -121,11 +121,6 @@ pub(super) fn pub_use(label: &str) -> TopItem {
     })
 }
 
-// An intrinsic module's items: its type declaration first, then its operations, so the type lives *inside* its module and the root facade re-exports it.
-pub(super) fn with_type(type_decl: Decl, ops: Vec<Decl>) -> Vec<TopItem> {
-    items(std::iter::once(type_decl).chain(ops).collect())
-}
-
 pub(super) fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body: Term) -> Decl {
     pub_fn_marked(
         label,
@@ -222,46 +217,64 @@ pub(super) fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> In
 /// One `/sys` module, before the host's rows are folded into it.
 ///
 /// **The label is the key, and that is the whole of this restructure.** `/sys` used to be assembled by two independent passes — the carrier modules written by hand from the intrinsic table, the subject modules built from `curios-abi`'s store — emitting into one namespace with nothing to merge them. `Handle` is in both inputs, so the one collision was reconciled by lifting its rows out by string before the generic pass and appending them by hand, with a `panic!` if the row ever went missing. Keying the modules removes the removal: a host row joins the module its subject names, whether that module already exists or is created by the row, and `Handle` stops being a special case and becomes the one label that happens to have both.
+///
+/// **A `/sys` module carries no gloss of its own, and that is a decision rather than an omission.** `/sys` does build a documentation record — `/std`'s pages adopt declarations out of it — so a module here *could* carry one. A carrier's prose goes on its type former instead, which is the name a reader reaches for, and stating that in the type is what keeps the two from drifting into both being written.
 pub(super) struct SysModule {
     pub(super) label: String,
-    /// The carrier declarations for this label: its type former and the intrinsic operations over it. Empty for a module that is nothing but host rows.
-    pub(super) items: Vec<TopItem>,
+    /// What this label declares: a type former and the operations over it, then whatever host rows name it as their subject. **A `/sys` module holds nothing but `let` bindings** — the roster's two inductive propositions live at the root, and so does every re-export — which is why this is a run of declarations rather than of items.
+    pub(super) decls: Vec<Decl>,
     /// Whether the root re-exports the type this module declares — every carrier a program reaches by name, and no module of operations alone.
-    pub(super) hoisted: bool,
+    hoisted: bool,
 }
 
 impl SysModule {
-    /// A carrier: a type former, its documentation, and the operations over it, hoisted to the root.
+    /// A carrier: a type former, its gloss, and the operations over it, hoisted to the root.
     pub(super) fn carrier(label: &str, doc: &[&str], former: Decl, ops: Vec<Decl>) -> Self {
         Self {
             label: label.to_string(),
-            items: with_type(documented(doc, former), ops),
+            decls: std::iter::once(documented(doc, former))
+                .chain(ops)
+                .collect(),
             hoisted: true,
         }
     }
 
-    /// A carrier whose type the root does not re-export — a packed run, reached through its own module because two of them share every operation name.
-    pub(super) fn nested(self) -> Self {
+    /// A carrier the root does not re-export — a packed run, reached through its own module because the two of them share every operation name.
+    pub(super) fn packed(label: &str, doc: &[&str], former: Decl, ops: Vec<Decl>) -> Self {
         Self {
             hoisted: false,
-            ..self
+            ..Self::carrier(label, doc, former, ops)
         }
     }
 
-    /// A module the host's rows alone will fill.
-    pub(super) fn rows(label: &str) -> Self {
+    /// A module with no type former: the wire-code mirrors, the one process operation no row describes, and — with an empty run — a subject nothing declared, opened by the first host row that names it.
+    pub(super) fn ops(label: &str, decls: Vec<Decl>) -> Self {
         Self {
             label: label.to_string(),
-            items: Vec::new(),
+            decls,
             hoisted: false,
         }
+    }
+
+    /// The `pub mod` this label declares, and the `pub use` hoisting its type to the root where one is hoisted.
+    pub(super) fn into_items(self) -> impl Iterator<Item = TopItem> {
+        let hoist = self.hoisted.then(|| pub_use(&self.label));
+
+        [pub_mod(&self.label, items(self.decls))]
+            .into_iter()
+            .chain(hoist)
     }
 }
 
-/// Fold every store-described host op into the module its own row names as its subject, creating one where no carrier claims the label.
+/// Fold every store-described host op into the module its own row names as its subject, opening one where nothing declared the label.
 ///
-/// Groups keep the order their first row appears in after the carriers, and rows keep store order within a group — so a new row lands under its subject with nothing beside the table to update. The 0-arity clocks and `args` are constants rather than nullary functions: the function abstraction existed to keep an effectful intrinsic body unevaluated at definition time, and a description is already unevaluated (see `host_fn`).
-pub(super) fn absorb_host_rows(modules: &mut Vec<SysModule>, foreigns: &ForeignStore) {
+/// Consumes the declared roster and returns the joined one, so the roster is never a mutable value in the caller. Groups keep declaration order, then first-row order for a subject nothing declared, and rows keep store order within a group — so a new row lands under its subject with nothing beside the table to update. The 0-arity clocks and `args` are constants rather than nullary functions: the function abstraction existed to keep an effectful intrinsic body unevaluated at definition time, and a description is already unevaluated (see `host_fn`).
+pub(super) fn absorb_host_rows(
+    declared: Vec<SysModule>,
+    foreigns: &ForeignStore,
+) -> Vec<SysModule> {
+    let mut modules = declared;
+
     for function in foreigns.iter() {
         let subject = function
             .subject
@@ -271,13 +284,13 @@ pub(super) fn absorb_host_rows(modules: &mut Vec<SysModule>, foreigns: &ForeignS
         let index = match modules.iter().position(|module| module.label == subject) {
             Some(index) => index,
             None => {
-                modules.push(SysModule::rows(&subject));
+                modules.push(SysModule::ops(&subject, Vec::new()));
                 modules.len() - 1
             }
         };
 
-        modules[index]
-            .items
-            .push(host_fn(function, true).into_item());
+        modules[index].decls.push(host_fn(function, true));
     }
+
+    modules
 }
