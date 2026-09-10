@@ -1,4 +1,5 @@
-use /std/{Str, Nat, Bool, Show, Equal, Spell};
+use /std/{Str, Nat, Bool, Show, Spell};
+use /std/ops/{Eql};
 
 -- | Why a parser refused: what it wanted, the byte offset it stopped at, and whether the refusal is committed — the input recognized as the shape the parser was reading, so an enclosing `or` reports it rather than trying an alternative.
 pub struct Error: pub Type {
@@ -7,7 +8,7 @@ pub struct Error: pub Type {
     committed: Bool,
 }
 
-satisfy Equal(Error);
+satisfy Eql(Error);
 
 satisfy Spell(Error);
 

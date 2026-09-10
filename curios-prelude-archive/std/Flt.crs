@@ -2,8 +2,9 @@ pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
 pub use /sys/Flt/{Finite, NonNeg};
-use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat, Equal, Compare,
-    Add, Subtract, Multiply, Divide, Remainder, Show, Spell, Ord, True};
+use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat, Show, Spell, Ord,
+    True};
+use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 -- | That `b` is four bytes long, decided.
 pub let FourBytes(b: Bytes) -> Prop =
@@ -342,12 +343,12 @@ pub let of_str(s: Str) -> Option(Flt) =
         end
     end;
 
-satisfy Equal(Flt) {
+satisfy Eql(Flt) {
     eql = eql,
     neq = neq,
 }
 
-satisfy Compare(Flt) {
+satisfy Cmp(Flt) {
     lt = lt,
     le = le,
     gt = gt,
@@ -358,22 +359,22 @@ satisfy Add(Flt) {
     add = add,
 }
 
-satisfy Subtract(Flt) {
+satisfy Sub(Flt) {
     sub = sub,
 }
 
-satisfy Multiply(Flt) {
+satisfy Mul(Flt) {
     mul = mul,
 }
 
 -- | No precondition: IEEE division is total.
-satisfy Divide(Flt) {
+satisfy Div(Flt) {
     Ok(_) = True,
     div(a, b) = div(a, b),
 }
 
 -- | No precondition: IEEE remainder is total.
-satisfy Remainder(Flt) {
+satisfy Rem(Flt) {
     Ok(_) = True,
     rem(a, b) = rem(a, b),
 }

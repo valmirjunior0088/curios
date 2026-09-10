@@ -1,8 +1,9 @@
-use /std/{Ordering, Equal};
+use /std/{Ordering};
+use /std/ops/{Eql};
 
--- | A total order: `ord` decides `lt`, `eq` or `gt`, and `Equal` is its superclass.
+-- | A total order: `ord` decides `lt`, `eq` or `gt`, and `Eql` is its superclass.
 pub concept Ord(A: Type): pub Type {
-    use Equal(A),
+    use Eql(A),
     ord(A, A) -> Ordering,
 }
 

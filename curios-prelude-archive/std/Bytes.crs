@@ -1,6 +1,6 @@
 pub use /sys/Bytes/{let Bytes, get, len, eql, slice};
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Equal, Show, Spell, Ordering, Compare, Ord,
-    True};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Ordering, Ord, True};
+use /std/ops/{Eql, Cmp};
 
 -- | The byte at `i`, or `none` past the end.
 pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
@@ -74,12 +74,12 @@ pub let cmp(a: Bytes, b: Bytes) -> Ordering =
         end;
     go(0);
 
-satisfy Equal(Bytes) {
+satisfy Eql(Bytes) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
 }
 
-satisfy Compare(Bytes) {
+satisfy Cmp(Bytes) {
     lt(a, b) = Ordering/is_lt(cmp(a, b)),
     le(a, b) = Ordering/is_le(cmp(a, b)),
     gt(a, b) = Ordering/is_gt(cmp(a, b)),

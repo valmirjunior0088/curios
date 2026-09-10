@@ -4,7 +4,8 @@ use /std/Handle/{Interest};
 
 -- | How a child ended: with an exit code, or by a signal.
 pub mod Exit
-    use /std/{Nat, Str, Equal, Show};
+    use /std/{Nat, Str, Show};
+    use /std/ops/{Eql};
 
     -- | An exit code, or the signal that ended the child.
     pub induct Exit: pub Type
@@ -16,7 +17,7 @@ pub mod Exit
 
     pub use Exit/*;
 
-    satisfy Equal(Exit);
+    satisfy Eql(Exit);
 
     satisfy Show(Exit) {
         show(e) =

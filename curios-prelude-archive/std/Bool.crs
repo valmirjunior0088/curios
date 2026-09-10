@@ -1,7 +1,8 @@
 pub use /sys/{Bool};
 pub use /sys/Bool/{and, or, xor, eql};
 pub use /sys/{Holds};
-use /std/{Str, Option, Eq, False, True, Equal, Or, And, Show, Spell, Ordering, Compare, Ord};
+use /std/{Str, Option, Eq, False, True, Show, Spell, Ordering, Ord};
+use /std/ops/{Eql, Or, And, Cmp};
 
 -- | The other value.
 pub let not(b: Bool) -> Bool =
@@ -23,7 +24,7 @@ pub let of_str(s: Str) -> Option(Bool) =
 pub let false_neq_true(p: Eq(false, true)) -> False =
     Eq/subst((b: Bool) => match b | true => False | false => True end, p, True/qed());
 
-satisfy Equal(Bool) {
+satisfy Eql(Bool) {
     eql = eql,
     neq = xor,
 }
@@ -51,7 +52,7 @@ pub let cmp(a: Bool, b: Bool) -> Ordering =
     | true => match b | false => Ordering/gt() | true => Ordering/eq() end
     end;
 
-satisfy Compare(Bool) {
+satisfy Cmp(Bool) {
     lt(a, b) = Ordering/is_lt(cmp(a, b)),
     le(a, b) = Ordering/is_le(cmp(a, b)),
     gt(a, b) = Ordering/is_gt(cmp(a, b)),

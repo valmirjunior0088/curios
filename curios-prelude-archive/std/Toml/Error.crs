@@ -1,4 +1,5 @@
-use /std/{Str, Bytes, List, Parse, Show, Equal, Spell};
+use /std/{Str, Bytes, List, Parse, Show, Spell};
+use /std/ops/{Eql};
 
 -- | A table-construction rule a document breaks; `invariant` is a state the builder cannot reach, named so that it is reported rather than swallowed if it ever is.
 pub induct Rule: pub Type
@@ -34,7 +35,7 @@ end
 
 pub use Rule/*;
 
-satisfy Equal(Rule);
+satisfy Eql(Rule);
 
 satisfy Spell(Rule);
 

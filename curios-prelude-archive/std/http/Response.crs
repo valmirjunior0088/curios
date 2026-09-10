@@ -1,4 +1,5 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Parse, Json, Html, Equal, Spell};
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Parse, Json, Html, Spell};
+use /std/ops/{Eql};
 use /std/http/{Url};
 
 -- | The reply's status line.
@@ -8,7 +9,7 @@ pub struct Status: pub Type {
     reason: Str,
 }
 
-satisfy Equal(Status);
+satisfy Eql(Status);
 
 satisfy Spell(Status);
 
@@ -19,7 +20,7 @@ pub struct Response: pub Type {
     body: Bytes,
 }
 
-satisfy Equal(Response);
+satisfy Eql(Response);
 
 satisfy Spell(Response);
 

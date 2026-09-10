@@ -1,42 +1,5 @@
--- | Decidable equality: the concept `==` and `!=` dispatch to.
--- |
--- | A witness supplies both methods, since `!=` is not the negation of `eql`. A declared type derives its witness with `satisfy Equal(T);`.
-pub mod Equal;
-pub use Equal/{let Equal};
-
--- | Addition: the concept `+` dispatches to.
-pub mod Add;
-pub use Add/{let Add};
-
--- | Subtraction: the concept `-` dispatches to. Below zero is the carrier's own law: `Nat` truncates, `Int` and `Flt` go negative.
-pub mod Subtract;
-pub use Subtract/{let Subtract};
-
--- | Multiplication: the concept `*` dispatches to.
-pub mod Multiply;
-pub use Multiply/{let Multiply};
-
--- | Division: the concept `/` dispatches to, under the precondition `Ok` each carrier states on its divisor.
--- |
--- | A literal divisor discharges the precondition by reduction and a computed one behind a guard. A carrier whose division is total states `True`.
-pub mod Divide;
-pub use Divide/{let Divide};
-
--- | Remainder: the concept `%` dispatches to, under the same precondition as division.
-pub mod Remainder;
-pub use Remainder/{let Remainder};
-
--- | Conjunction: the concept `&&` dispatches to.
-pub mod And;
-pub use And/{let And};
-
--- | Disjunction: the concept `||` dispatches to.
-pub mod Or;
-pub use Or/{let Or};
-
--- | The four ordered comparisons: the concept `<`, `<=`, `>` and `>=` dispatch to, each answering a `Bool`.
-pub mod Compare;
-pub use Compare/{let Compare};
+-- | The concepts the infix operators dispatch through, each supplying the method its operator calls.
+pub mod ops;
 
 -- | Sequencing: the concept postfix `!` is a call to, in the monad of its region.
 -- |
@@ -72,7 +35,7 @@ pub use Show/{let Show};
 pub mod Spell;
 pub use Spell/{let Spell};
 
--- | A total order, over an `Equal` superclass: what sorting and ordered collections ask for.
+-- | A total order, over an `Eql` superclass: what sorting and ordered collections ask for.
 pub mod Ord;
 pub use Ord/{let Ord};
 
@@ -192,7 +155,7 @@ pub use Set/{let Set};
 pub mod WellFounded;
 pub use WellFounded/{let WellFounded};
 
--- | Propositional equality, with `refl` as its one constructor. The value-level decision behind `==` is `Equal`.
+-- | Propositional equality, with `refl` as its one constructor. The value-level decision behind `==` is `Eql`.
 pub mod Eq;
 pub use Eq/{let Eq};
 

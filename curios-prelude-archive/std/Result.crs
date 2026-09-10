@@ -1,4 +1,5 @@
-use /std/{Bool, Equal, Show, Spell, Str, Option, Ordering, Compare, Ord, Monad};
+use /std/{Bool, Show, Spell, Str, Option, Ordering, Ord, Monad};
+use /std/ops/{Eql, Cmp};
 
 -- | Success or failure, the failure's type first.
 pub induct Result(E: Type, A: Type): pub Type
@@ -69,7 +70,7 @@ satisfy (@E: Type) => Monad((A: Type) => Result(E, A)) {
     bind(@_, @_, m, f) = bind(m, f),
 }
 
-satisfy (@A: Type, @E: Type, use Equal(A), use Equal(E)) => Equal(Result(E, A));
+satisfy (@A: Type, @E: Type, use Eql(A), use Eql(E)) => Eql(Result(E, A));
 
 satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(E, A)) {
     show(r) =
@@ -95,7 +96,7 @@ pub let cmp(
     | success(x) => match b | failure(_) => Ordering/gt() | success(y) => Ord/ord(x, y) end
     end;
 
-satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Compare(Result(E, A)) {
+satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Cmp(Result(E, A)) {
     lt(a, b) = Ordering/is_lt(cmp(a, b)),
     le(a, b) = Ordering/is_le(cmp(a, b)),
     gt(a, b) = Ordering/is_gt(cmp(a, b)),

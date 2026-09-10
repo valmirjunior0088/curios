@@ -300,7 +300,8 @@ fn infix_mismatched_operand_types_are_rejected() {
 fn infix_add_on_a_user_record_resolves_its_witness() {
     assert_eq!(
         run(r#"
-            use /std/{Nat, Str, Add, Io};
+            use /std/{Nat, Str, Io};
+            use /std/ops/{Add};
             struct Point : pub Type { x : Nat, y : Nat }
             satisfy Add(Point) {
                 add(a, b) = Point { x = a.x + b.x, y = a.y + b.y }
@@ -319,7 +320,8 @@ fn infix_add_on_a_user_record_resolves_its_witness() {
 fn infix_resolves_against_a_local_use_premise() {
     assert_eq!(
         run(r#"
-            use /std/{Nat, Str, Add, Io};
+            use /std/{Nat, Str, Io};
+            use /std/ops/{Add};
             pub let double(@A : Type, use Add(A), x : A) -> A = x + x;
             let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(double(21))))!;
             /std/Io/pure(())
@@ -358,7 +360,8 @@ fn infix_without_witness_reports_no_witness() {
 #[test]
 fn infix_literal_against_a_user_type_is_rejected() {
     let source = r#"
-        use /std/{Nat, Str, Add, Io};
+        use /std/{Nat, Str, Io};
+        use /std/ops/{Add};
         struct Point : pub Type { x : Nat, y : Nat }
         satisfy Add(Point) {
             add(a, b) = Point { x = a.x + b.x, y = a.y + b.y }

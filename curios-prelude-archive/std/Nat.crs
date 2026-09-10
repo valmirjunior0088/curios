@@ -1,8 +1,8 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr,
     to_int, to_flt, to_byte};
-use /std/{Str, Option, Char, Bool, Ordering, Equal, Compare, Add, Subtract, Multiply, Divide,
-    Remainder, Show, Spell, Ord};
+use /std/{Str, Option, Char, Bool, Ordering, Show, Spell, Ord};
+use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 -- | That `a` is below `b`.
 -- |
@@ -97,12 +97,12 @@ pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
 pub let cmp(x: Nat, y: Nat) -> Ordering =
     choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
-satisfy Equal(Nat) {
+satisfy Eql(Nat) {
     eql = eql,
     neq = neq,
 }
 
-satisfy Compare(Nat) {
+satisfy Cmp(Nat) {
     lt = lt,
     le = le,
     gt = gt,
@@ -113,22 +113,22 @@ satisfy Add(Nat) {
     add = add,
 }
 
-satisfy Subtract(Nat) {
+satisfy Sub(Nat) {
     sub = sub,
 }
 
-satisfy Multiply(Nat) {
+satisfy Mul(Nat) {
     mul = mul,
 }
 
 -- | The divisor must be positive: `Lt(0, b)`.
-satisfy Divide(Nat) {
+satisfy Div(Nat) {
     Ok(b) = Lt(0, b),
     div = div,
 }
 
 -- | The divisor must be positive: `Lt(0, b)`.
-satisfy Remainder(Nat) {
+satisfy Rem(Nat) {
     Ok(b) = Lt(0, b),
     rem = rem,
 }

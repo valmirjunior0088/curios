@@ -1,7 +1,7 @@
 -- | Multiplication, which `*` dispatches through.
-pub concept Multiply(A: Type): pub Type {
+pub concept Mul(A: Type): pub Type {
     -- | The product of the two.
     mul(A, A) -> A,
 }
 
-pub use Multiply/{mul};
+pub use Mul/{mul};

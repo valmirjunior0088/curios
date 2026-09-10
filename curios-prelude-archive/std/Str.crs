@@ -1,5 +1,5 @@
-use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Equal, Show, Spell, Ordering, Compare,
-    Ord, True};
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Show, Spell, Ordering, Ord, True};
+use /std/ops/{Eql, Cmp};
 
 -- | What a byte begins, as UTF-8 reads it.
 pub induct Class: pub Type
@@ -116,7 +116,7 @@ pub let of_bytes(b: Bytes) -> Option(Str) =
 pub let of_char(c: Char) -> Str =
     Option/unwrap_or(of_bytes(Char/to_utf8(c)), "");
 
--- | Equal bytes are equal strings.
+-- | Eql bytes are equal strings.
 pub let eq_of_bytes(a: Str, b: Str, p: Eq(a.bytes, b.bytes)) -> Eq(a, b) =
     Eq/subst(
         (bytes: Bytes) => (valid: Valid(bytes)) -> Eq(a, Str { bytes = bytes, valid = valid }),
@@ -391,7 +391,7 @@ pub let pad_start(s: Str, n: Nat, c: Char) -> Str =
 pub let pad_end(s: Str, n: Nat, c: Char) -> Str =
     concat(s, repeat(of_char(c), n - len(s)));
 
-satisfy Equal(Str) {
+satisfy Eql(Str) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
 }
@@ -422,7 +422,7 @@ satisfy Spell(Str) {
 pub let cmp(a: Str, b: Str) -> Ordering =
     Bytes/cmp(to_bytes(a), to_bytes(b));
 
-satisfy Compare(Str) {
+satisfy Cmp(Str) {
     lt(a, b) = Ordering/is_lt(cmp(a, b)),
     le(a, b) = Ordering/is_le(cmp(a, b)),
     gt(a, b) = Ordering/is_gt(cmp(a, b)),

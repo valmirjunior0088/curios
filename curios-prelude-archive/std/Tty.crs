@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Str, Try, Async, Io, Handle, Equal, Show};
+use /std/{Nat, Bool, Str, Try, Async, Io, Handle, Show};
+use /std/ops/{Eql};
 
 -- | A terminal this process holds a handle on.
 pub struct Tty: Type {
@@ -15,7 +16,7 @@ pub struct Size: pub Type {
     rows: Nat,
 }
 
-satisfy Equal(Size);
+satisfy Eql(Size);
 
 satisfy Show(Size) {
     show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),

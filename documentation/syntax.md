@@ -72,7 +72,7 @@ Option/some         -- member of Option
 
 The root `/sys` is the compiler's own and a program may not name it: it holds the intrinsic types, the host's operations, and the propositions a decided bound is stated in. Naming it is refused, pointing at the `/std` module that stands in front of it — `Nat` is reached as `/std/Nat`. It is named in this document only where the mechanism behind a form is the point.
 
-That refusal is one case of a general rule: **a unit reaches the prefixes it declared a dependency on, plus `/std`, and no others.** A package declares them in its manifest; a transitive dependency is in the compilation, because the unit between it and this one had to compile, and is not one of them. Every unit in a compilation is mounted, so a prefix a unit did not declare is still there — it owns real names and nothing else may claim it — and writing one is refused at the reference, naming the prefix and saying it was not declared. A name is never reported unbound because a dependency was missing. The concepts the surface forms desugar into are ordinary `/std` declarations: `+` dispatches through `/std/Add`, a `!` through `/std/Monad`, and a `test` through `/std/Test`.
+That refusal is one case of a general rule: **a unit reaches the prefixes it declared a dependency on, plus `/std`, and no others.** A package declares them in its manifest; a transitive dependency is in the compilation, because the unit between it and this one had to compile, and is not one of them. Every unit in a compilation is mounted, so a prefix a unit did not declare is still there — it owns real names and nothing else may claim it — and writing one is refused at the reference, naming the prefix and saying it was not declared. A name is never reported unbound because a dependency was missing. The concepts the surface forms desugar into are ordinary `/std` declarations: `+` dispatches through `/std/ops/Add`, a `!` through `/std/Monad`, and a `test` through `/std/Test`.
 
 A path is whitespace-free: every separator touches both of its neighbors. Infix operators are the opposite — they require whitespace on both sides (see [Operators](#operators)) — so `a/b` is only ever the path and `a / b` only ever the division, and the asymmetric spellings `a/ b` and `a /b` satisfy neither grammar. A packed `Bits` or `Bytes` literal glues its grain letter to the opening bracket and admits whitespace freely thereafter; see [Packed literals](#packed-literals).
 
@@ -513,15 +513,15 @@ All infix operators require whitespace on both sides and associate to the left.
 | --- | --- | --- |
 | 1, loosest | `\|\|` | `Or` |
 | 2 | `&&` | `And` |
-| 3 | `==`, `!=`, `<`, `>`, `<=`, `>=` | `Equal`, `Compare` |
-| 4 | `+`, `-` | `Add`, `Subtract` |
-| 5, tightest | `*`, `/`, `%` | `Multiply`, `Divide`, `Remainder` |
+| 3 | `==`, `!=`, `<`, `>`, `<=`, `>=` | `Eql`, `Cmp` |
+| 4 | `+`, `-` | `Add`, `Sub` |
+| 5, tightest | `*`, `/`, `%` | `Mul`, `Div`, `Rem` |
 
-Both operands of an operator have the same type. `==` and `!=` are two separate methods of `Equal`, `eql` and `neq`, so a witness supplies both; `!=` is not a negation applied to `eql`.
+Both operands of an operator have the same type. `==` and `!=` are two separate methods of `Eql`, `eql` and `neq`, so a witness supplies both; `!=` is not a negation applied to `eql`.
 
 An operator's result type is whatever its concept's method declares: `+`, `-`, `*`, `/`, `%`, `&&` and `||` return the operand type, while `==`, `!=`, `<`, `>`, `<=` and `>=` return `Bool`.
 
-`/` and `%` additionally carry the precondition their concept declares. `Divide` and `Remainder` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/Lt(0, b)`. A carrier whose division is total states `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail.
+`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/Lt(0, b)`. A carrier whose division is total states `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail.
 
 Operator notation always uses witness resolution, including intrinsic operands. Standard witnesses cover the intrinsic types, while a `satisfy` declaration enables the same notation for a user-defined type.
 
@@ -943,10 +943,10 @@ pub concept Idem(A: Type): pub Type {
 
 A field whose type is a proposition about earlier fields is a law. `satisfy` cannot register a witness for such a concept without supplying a proof that discharges the law at the implementations that witness supplies, so a witness violating it is rejected where it is declared.
 
-A field's result may itself be a sort, which makes the field an associated type each witness chooses. `Divide`'s `Ok(A) -> Prop` is what lets every carrier state its own division precondition, and a witness supplies it with the same field sugar as any other:
+A field's result may itself be a sort, which makes the field an associated type each witness chooses. `Div`'s `Ok(A) -> Prop` is what lets every carrier state its own division precondition, and a witness supplies it with the same field sugar as any other:
 
 ```crs
-satisfy Remainder(Nat) {
+satisfy Rem(Nat) {
     Ok(b) = Nat/Lt(0, b),
     rem = rem,
 }
@@ -956,12 +956,12 @@ A field beginning with `use` is an anonymous superclass edge. Its type must be a
 
 ```crs
 pub concept Ord(A: Type): pub Type {
-    use Equal(A),
+    use Eql(A),
     ord(A, A) -> Ordering,
 }
 ```
 
-A local `Ord(A)` witness can therefore satisfy an `Equal(A)` goal by superclass projection.
+A local `Ord(A)` witness can therefore satisfy an `Eql(A)` goal by superclass projection.
 
 A sealed concept's fields are not part of its public interface: a `pub` sealed concept may reference private names in its field types — a private superclass is a hidden obligation that resolution discharges without the consumer naming it. A transparent `pub` concept's field types are interface and must be `pub` themselves.
 
@@ -995,7 +995,7 @@ satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
 }
 ```
 
-A function type is **not** keyed. Its useful key space is nearly one point — `(_) -> _` above all — so a concept's owner claiming a shape would claim it program-wide and forever, and no meaningful witness wanted one: `Show` at a function type is meaningless, `Equal` at one undecidable, and `Monad` at one declined deliberately, since the nominal wrapper — `/std/State`'s idiom — is how a function becomes a monad. A `satisfy` whose concept parameter reduces to a function type is refused as unkeyable, with the same report a variable head gets.
+A function type is **not** keyed. Its useful key space is nearly one point — `(_) -> _` above all — so a concept's owner claiming a shape would claim it program-wide and forever, and no meaningful witness wanted one: `Show` at a function type is meaningless, `Eql` at one undecidable, and `Monad` at one declined deliberately, since the nominal wrapper — `/std/State`'s idiom — is how a function becomes a monad. A `satisfy` whose concept parameter reduces to a function type is refused as unkeyable, with the same report a variable head gets.
 
 Two witnesses that resolve through each other are declared as one group with `and`; each member is a whole witness, with its own telescope where it has one, and the group's members register before any body elaborates. A lone witness may resolve through its own entry with nothing said; two that resolve through each other without being declared as a group are refused, naming both.
 
@@ -1023,7 +1023,7 @@ sort(use reverse, values)
 
 ### Derived witnesses
 
-A witness may omit its body: `satisfy Spell(Point);`, or `satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));` under a telescope, and either form may join an `and` group beside written members. The signature is the programmer's — it registers, keys, and meets the orphan and sealing rules exactly as a written witness does — and the compiler writes the body from the declaration of the type in the key. Derivability is a property of the concept: `Spell` and `Equal` derive, every other concept refuses the form by name, and the hand-written witness remains the norm.
+A witness may omit its body: `satisfy Spell(Point);`, or `satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));` under a telescope, and either form may join an `and` group beside written members. The signature is the programmer's — it registers, keys, and meets the orphan and sealing rules exactly as a written witness does — and the compiler writes the body from the declaration of the type in the key. Derivability is a property of the concept: `Spell` and `Eql` derive, every other concept refuses the form by name, and the hand-written witness remains the norm.
 
 ```crs
 struct Point: pub Type { x: Nat, y: Nat }
@@ -1031,12 +1031,12 @@ induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
 
 satisfy Spell(Point);
 satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));
-and (@A: Type, use Equal(A)) => Equal(Tree(A));
+and (@A: Type, use Eql(A)) => Eql(Tree(A));
 ```
 
 The key must be a declared `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — fully applied, representation-transparent where the witness is declared, and not a proposition. An implicit payload is inferred by the re-parsed text and takes no part; a proof payload spells as the written goal `?` and compares as nothing; a payload that is itself a type is refused; every other payload goes through its own witness, resolved in the witness's scope — a telescope premise, the witness's own entry, or a member of the same `and` group — and a missing one is reported against the constructor and payload, naming the `use` premise to add when the payload's type is a telescope variable.
 
-A derived `Spell` spells a value as its constructor, qualified by its type's own name, applied to its explicit payloads — `Tree/node(Tree/leaf(1), Tree/leaf(2))`, `Option/some(3)` — and a struct as its literal, `Point { x = 1, y = 2 }`, positionally where a field has no label; the text re-parses wherever the type's name is visible unqualified, which is wherever a value of it is written, and reads in a report as the author would have written it. A derived `Equal` is structural — the same constructor with pairwise equal payloads — and `!=` is its negation. The standard library derives both for `Option`, `Result` and `Ordering`.
+A derived `Spell` spells a value as its constructor, qualified by its type's own name, applied to its explicit payloads — `Tree/node(Tree/leaf(1), Tree/leaf(2))`, `Option/some(3)` — and a struct as its literal, `Point { x = 1, y = 2 }`, positionally where a field has no label; the text re-parses wherever the type's name is visible unqualified, which is wherever a value of it is written, and reads in a report as the author would have written it. A derived `Eql` is structural — the same constructor with pairwise equal payloads — and `!=` is its negation. The standard library derives both for `Option`, `Result` and `Ordering`.
 
 ### Witness premises
 
@@ -1113,7 +1113,7 @@ pub let sym(@A: Type, @x: A, @y: A, proof: Eq(x, y)) -> Eq(y, x) =
     end;
 ```
 
-The standard equality operations include reflexivity, symmetry, transitivity, congruence, and substitution. `Eq` is propositional equality; `Equal` is the value-level concept used by `==` and `!=`.
+The standard equality operations include reflexivity, symmetry, transitivity, congruence, and substitution. `Eq` is propositional equality; `Eql` is the value-level concept used by `==` and `!=`.
 
 ## Quick reference
 

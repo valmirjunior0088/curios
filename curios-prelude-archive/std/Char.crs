@@ -1,5 +1,5 @@
-use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, False, True, Str, Equal, Compare, Show,
-    Spell, Ord};
+use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, False, True, Str, Show, Spell, Ord};
+use /std/ops/{Eql, Cmp};
 
 -- | That `code` is below `bound`, decided.
 pub let Below(code: Nat, bound: Nat) -> Prop =
@@ -44,7 +44,7 @@ pub let of_nat(code: Nat) -> Option(Char) =
         end
     end;
 
--- | Equal code points are equal characters.
+-- | Eql code points are equal characters.
 pub let eq_of_code(a: Char, b: Char, proof: Eq(a.code, b.code)) -> Eq(a, b) =
     Eq/subst(
         (code: Nat) => (scalar: Scalar(code)) -> Eq(a, Char { code = code, scalar = scalar }),
@@ -155,12 +155,12 @@ pub let to_utf8(c: Char) -> Bytes =
     | _ => emit_continuations(x[Nat/to_byte(0xF0 + codepoint / 0x40000)], codepoint, 0x1000)
     end;
 
-satisfy Equal(Char) {
+satisfy Eql(Char) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
 }
 
-satisfy Compare(Char) {
+satisfy Cmp(Char) {
     lt = lt,
     le = le,
     gt = gt,

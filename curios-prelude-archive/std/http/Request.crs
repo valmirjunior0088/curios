@@ -1,4 +1,5 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Parse, Equal, Spell};
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Parse, Spell};
+use /std/ops/{Eql};
 use /std/http/{Method, Url};
 
 -- | What is sent: the method, where to, the headers and the body. Where to is the URL, whose scheme decides the connection and whose host and port the `Host` header.
@@ -9,7 +10,7 @@ pub struct Request: pub Type {
     body: Bytes,
 }
 
-satisfy Equal(Request);
+satisfy Eql(Request);
 
 satisfy Spell(Request);
 

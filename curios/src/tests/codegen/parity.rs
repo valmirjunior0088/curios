@@ -6,7 +6,8 @@ use crate::tests::cont_optm;
 #[test]
 fn concept_method_call_matches_direct_intrinsic_codegen() {
     let through_concept = r#"
-        use /std/{Nat, List, Str, Add, proc};
+        use /std/{Nat, List, Str, proc};
+        use /std/ops/{Add};
         pub let bump(x : Nat) -> Nat = Add/add(x, 1);
         let taint = List/len(proc/args!);
         let n : Nat = taint;
@@ -150,8 +151,9 @@ fn operation_ending_at(dump: &str, at: usize) -> Option<String> {
 #[test]
 fn concept_comparison_matches_direct_intrinsic_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Bool, List, Str, Compare, proc};
-        pub let small(x : Nat) -> Bool = Compare/lt(x, 10);
+        use /std/{Nat, Bool, List, Str, proc};
+        use /std/ops/{Cmp};
+        pub let small(x : Nat) -> Bool = Cmp/lt(x, 10);
         let taint = List/len(proc/args!);
         let n : Nat = taint;
         /std/print(Bool/to_str(small(n)))

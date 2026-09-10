@@ -1,4 +1,5 @@
-use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq, Equal, Show, Spell};
+use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq, Show, Spell};
+use /std/ops/{Eql};
 
 induct Node(V: Type): Type
 | leaf(key: Bytes, value: V)
@@ -230,7 +231,7 @@ pub let filter(@V: Type, m: Map(V), pred: (Bytes, V) -> Bool) -> Map(V) =
 pub let union(@V: Type, a: Map(V), b: Map(V)) -> Map(V) =
     fold(b, a, (k, v, acc) => insert(acc, k, v));
 
-let same_entries(@V: Type, use Equal(V), xs: List({Bytes, V}), ys: List({Bytes, V})) -> Bool =
+let same_entries(@V: Type, use Eql(V), xs: List({Bytes, V}), ys: List({Bytes, V})) -> Bool =
     match xs
     | [] => match ys | [] => true | _ => false end
     | [x, ..xt] =>
@@ -241,7 +242,7 @@ let same_entries(@V: Type, use Equal(V), xs: List({Bytes, V}), ys: List({Bytes, 
     end;
 
 -- | Entry by entry.
-satisfy (@V: Type, use Equal(V)) => Equal(Map(V)) {
+satisfy (@V: Type, use Eql(V)) => Eql(Map(V)) {
     eql(a, b) = same_entries(entries(a), entries(b)),
     neq(a, b) = Bool/not(same_entries(entries(a), entries(b))),
 }

@@ -1,7 +1,7 @@
 use /std/{Bool};
 
 -- | The order comparisons, which `<`, `<=`, `>` and `>=` dispatch through.
-pub concept Compare(A: Type): pub Type {
+pub concept Cmp(A: Type): pub Type {
     -- | Whether the first is below the second.
     lt(A, A) -> Bool,
     -- | Whether the first is below the second or equal to it.
@@ -12,4 +12,4 @@ pub concept Compare(A: Type): pub Type {
     ge(A, A) -> Bool,
 }
 
-pub use Compare/{lt, le, gt, ge};
+pub use Cmp/{lt, le, gt, ge};

@@ -1,4 +1,5 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, Option, List, Equal, Show, Spell};
+use /std/{Bytes, Byte, Str, Nat, Bool, Option, List, Show, Spell};
+use /std/ops/{Eql};
 
 -- | A path as the host holds it.
 pub struct Path: Type {
@@ -85,7 +86,7 @@ pub let extension(p: Path) -> Option(Path) =
                 end);
     match seen | true => Option/some(Path { current }) | false => Option/none() end;
 
-satisfy Equal(Path) {
+satisfy Eql(Path) {
     eql(a, b) = a.0 == b.0,
     neq(a, b) = a.0 != b.0,
 }

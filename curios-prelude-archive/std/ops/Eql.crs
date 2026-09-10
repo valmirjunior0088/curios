@@ -3,11 +3,11 @@ use /std/{Bool};
 -- | Equality as a decision, which `==` and `!=` dispatch through.
 -- |
 -- | Distinct from `Eq`, which is the proposition that two values are the same: a witness here answers, and owes no proof that its answer agrees.
-pub concept Equal(A: Type): pub Type {
+pub concept Eql(A: Type): pub Type {
     -- | Whether the two are equal.
     eql(A, A) -> Bool,
     -- | Whether the two differ, supplied in its own right rather than read off `eql`.
     neq(A, A) -> Bool,
 }
 
-pub use Equal/{eql, neq};
+pub use Eql/{eql, neq};

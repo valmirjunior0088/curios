@@ -1,4 +1,5 @@
-use /std/{Bool, Bits, Eq, False, Add};
+use /std/{Bool, Bits, Eq, False};
+use /std/ops/{Add};
 use /std/Bool/{false_neq_true};
 use /std/BigNat/{BigNat, cong_bits, cong_cons2, cong_is_trimmed, cons_inj_head, cons_inj_tail, eq,
     is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, nonempty, of_trimmed_bits, refl_at,

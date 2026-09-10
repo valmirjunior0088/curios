@@ -1,7 +1,7 @@
 -- | Subtraction, which `-` dispatches through.
-pub concept Subtract(A: Type): pub Type {
+pub concept Sub(A: Type): pub Type {
     -- | The second taken from the first.
     sub(A, A) -> A,
 }
 
-pub use Subtract/{sub};
+pub use Sub/{sub};

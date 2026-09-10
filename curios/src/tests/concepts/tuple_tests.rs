@@ -50,7 +50,8 @@ fn a_format_directive_shows_a_tuple() {
 #[test]
 fn equality_is_componentwise() {
     let source = r#"
-        use /std/{Show, Equal, Nat, Bool, Str, List};
+        use /std/{Show, Nat, Bool, Str, List};
+        use /std/ops/{Eql};
         let a: {Nat, Bool} = (1, true);
         let b: {Nat, Bool} = (2, true);
         let u: {} = ();

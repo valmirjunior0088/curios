@@ -158,7 +158,7 @@ pub let maj3(a: Bool, b: Bool, c: Bool) -> Bool =
     | false => match b | true => c | false => false end
     end;
 
--- | Equal words are equal numbers.
+-- | Eql words are equal numbers.
 pub let eq(a: BigNat, b: BigNat, p: Eq(a.bits, b.bits)) -> Eq(a, b) =
     Eq/subst(
         (r: Bits) => (c: Canonical(r)) -> Eq(a, BigNat { bits = r, canonical = c }),

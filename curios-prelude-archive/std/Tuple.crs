@@ -1,4 +1,5 @@
-use /std/{Show, Spell, Equal, Ord, Ordering, Str, Bool, List};
+use /std/{Show, Spell, Ord, Ordering, Str, Bool, List};
+use /std/ops/{Eql};
 
 let parens(parts: List(Str)) -> Str =
     Str/concat("(", Str/concat(Str/join(", ", parts), ")"));
@@ -264,23 +265,22 @@ satisfy (
             Spell/spell(t.7)]),
 }
 
-satisfy Equal({}) {
+satisfy Eql({}) {
     eql(_, _) = true,
     neq(_, _) = false,
 }
 
-satisfy (@A: Type, use Equal(A)) => Equal({A}) {
+satisfy (@A: Type, use Eql(A)) => Eql({A}) {
     eql(a, b) = a.0 == b.0,
     neq(a, b) = Bool/not(a == b),
 }
 
-satisfy (@A: Type, @B: Type, use Equal(A), use Equal(B)) => Equal({A, B}) {
+satisfy (@A: Type, @B: Type, use Eql(A), use Eql(B)) => Eql({A, B}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1,
     neq(a, b) = Bool/not(a == b),
 }
 
-satisfy (@A: Type, @B: Type, @C: Type, use Equal(A), use Equal(B), use Equal(C)) => Equal(
-    {A, B, C}) {
+satisfy (@A: Type, @B: Type, @C: Type, use Eql(A), use Eql(B), use Eql(C)) => Eql({A, B, C}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2,
     neq(a, b) = Bool/not(a == b),
 }
@@ -290,11 +290,11 @@ satisfy (
     @B: Type,
     @C: Type,
     @D: Type,
-    use Equal(A),
-    use Equal(B),
-    use Equal(C),
-    use Equal(D),
-) => Equal({A, B, C, D}) {
+    use Eql(A),
+    use Eql(B),
+    use Eql(C),
+    use Eql(D),
+) => Eql({A, B, C, D}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
     neq(a, b) = Bool/not(a == b),
 }
@@ -305,12 +305,12 @@ satisfy (
     @C: Type,
     @D: Type,
     @E: Type,
-    use Equal(A),
-    use Equal(B),
-    use Equal(C),
-    use Equal(D),
-    use Equal(E),
-) => Equal({A, B, C, D, E}) {
+    use Eql(A),
+    use Eql(B),
+    use Eql(C),
+    use Eql(D),
+    use Eql(E),
+) => Eql({A, B, C, D, E}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
     neq(a, b) = Bool/not(a == b),
 }
@@ -322,13 +322,13 @@ satisfy (
     @D: Type,
     @E: Type,
     @F: Type,
-    use Equal(A),
-    use Equal(B),
-    use Equal(C),
-    use Equal(D),
-    use Equal(E),
-    use Equal(F),
-) => Equal({A, B, C, D, E, F}) {
+    use Eql(A),
+    use Eql(B),
+    use Eql(C),
+    use Eql(D),
+    use Eql(E),
+    use Eql(F),
+) => Eql({A, B, C, D, E, F}) {
     eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
     neq(a, b) = Bool/not(a == b),
 }
@@ -341,14 +341,14 @@ satisfy (
     @E: Type,
     @F: Type,
     @G: Type,
-    use Equal(A),
-    use Equal(B),
-    use Equal(C),
-    use Equal(D),
-    use Equal(E),
-    use Equal(F),
-    use Equal(G),
-) => Equal({A, B, C, D, E, F, G}) {
+    use Eql(A),
+    use Eql(B),
+    use Eql(C),
+    use Eql(D),
+    use Eql(E),
+    use Eql(F),
+    use Eql(G),
+) => Eql({A, B, C, D, E, F, G}) {
     eql(a, b) =
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6,
@@ -364,15 +364,15 @@ satisfy (
     @F: Type,
     @G: Type,
     @H: Type,
-    use Equal(A),
-    use Equal(B),
-    use Equal(C),
-    use Equal(D),
-    use Equal(E),
-    use Equal(F),
-    use Equal(G),
-    use Equal(H),
-) => Equal({A, B, C, D, E, F, G, H}) {
+    use Eql(A),
+    use Eql(B),
+    use Eql(C),
+    use Eql(D),
+    use Eql(E),
+    use Eql(F),
+    use Eql(G),
+    use Eql(H),
+) => Eql({A, B, C, D, E, F, G, H}) {
     eql(a, b) =
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6

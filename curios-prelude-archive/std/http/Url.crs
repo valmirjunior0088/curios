@@ -1,5 +1,5 @@
-use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Equal, Spell, True,
-    False};
+use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Spell, True, False};
+use /std/ops/{Eql};
 
 -- | The scheme, which decides the port when none is written and whether the connection is under TLS.
 pub induct Scheme: pub Type
@@ -11,7 +11,7 @@ end
 
 pub use Scheme/*;
 
-satisfy Equal(Scheme);
+satisfy Eql(Scheme);
 
 satisfy Spell(Scheme);
 
@@ -24,7 +24,7 @@ pub struct Url: pub Type {
     query: Option(Str),
 }
 
-satisfy Equal(Url);
+satisfy Eql(Url);
 
 satisfy Spell(Url);
 

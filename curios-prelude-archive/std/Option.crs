@@ -1,4 +1,5 @@
-use /std/{Bool, Equal, Show, Spell, Str, Monad, Result, True, False, Ordering, Compare, Ord};
+use /std/{Bool, Show, Spell, Str, Monad, Result, True, False, Ordering, Ord};
+use /std/ops/{Eql, Cmp};
 
 -- | A value that may be absent.
 pub induct Option(A: Type): pub Type
@@ -70,7 +71,7 @@ pub let get(@A: Type, m: Option(A), @ok: IsSome(m)) -> A =
     | none() => match ok end
     end;
 
-satisfy (@A: Type, use Equal(A)) => Equal(Option(A));
+satisfy (@A: Type, use Eql(A)) => Eql(Option(A));
 
 satisfy (@A: Type, use Show(A)) => Show(Option(A)) {
     show(m) =
@@ -94,7 +95,7 @@ pub let cmp(@A: Type, use Ord(A), a: Option(A), b: Option(A)) -> Ordering =
     | some(x) => match b | none() => Ordering/gt() | some(y) => Ord/ord(x, y) end
     end;
 
-satisfy (@A: Type, use Ord(A)) => Compare(Option(A)) {
+satisfy (@A: Type, use Ord(A)) => Cmp(Option(A)) {
     lt(a, b) = Ordering/is_lt(cmp(a, b)),
     le(a, b) = Ordering/is_le(cmp(a, b)),
     gt(a, b) = Ordering/is_gt(cmp(a, b)),

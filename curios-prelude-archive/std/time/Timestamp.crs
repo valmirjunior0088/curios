@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Str, Io, Equal, Show};
+use /std/{Nat, Bool, Str, Io, Show};
+use /std/ops/{Eql};
 use /std/time/{Duration};
 
 -- | A moment, as seconds since the Unix epoch.
@@ -53,7 +54,7 @@ pub let diff(a: Timestamp, b: Timestamp) -> Duration =
         Duration/of(r_hi * 1000000000 + d_lo.digit, d_nanos.digit)
     end;
 
-satisfy Equal(Timestamp);
+satisfy Eql(Timestamp);
 
 -- | `secs.nanos`, the nanoseconds padded to nine digits.
 satisfy Show(Timestamp) {

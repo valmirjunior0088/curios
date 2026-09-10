@@ -1,6 +1,7 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map};
-use /std/{Nat, Bool, Option, Eq, Equal, Str, Show, Spell, Monad, Ordering, Compare, Ord, True};
+use /std/{Nat, Bool, Option, Eq, Str, Show, Spell, Monad, Ordering, Ord, True};
+use /std/ops/{Eql, Cmp};
 
 -- | The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
@@ -65,11 +66,11 @@ pub let all(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
     end;
 
 -- | Whether `x` is an element.
-pub let contains(@T: Type, use Equal(T), l: List(T), x: T) -> Bool =
+pub let contains(@T: Type, use Eql(T), l: List(T), x: T) -> Bool =
     any(l, (y) => y == x);
 
 -- | The index of the first `x`, or `none`.
-pub let index_of(@T: Type, use Equal(T), l: List(T), x: T) -> Option(Nat) =
+pub let index_of(@T: Type, use Eql(T), l: List(T), x: T) -> Option(Nat) =
     find_index(l, (y) => y == x);
 
 -- | The last element, or `none` of an empty list.
@@ -199,7 +200,7 @@ pub let balanced(@A: Type, n: Nat, empty: A, single: (Nat) -> A, combine: (A, A)
         end;
     go(0, n);
 
-satisfy (@A: Type, use Equal(A)) => Equal(List(A)) {
+satisfy (@A: Type, use Eql(A)) => Eql(List(A)) {
     eql(a, b) =
         match a
         | [] => match b | [] => true | _ => false end
@@ -237,7 +238,7 @@ pub let cmp(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Ordering =
         end
     end;
 
-satisfy (@T: Type, use Ord(T)) => Compare(List(T)) {
+satisfy (@T: Type, use Ord(T)) => Cmp(List(T)) {
     lt(a, b) = Ordering/is_lt(cmp(a, b)),
     le(a, b) = Ordering/is_le(cmp(a, b)),
     gt(a, b) = Ordering/is_gt(cmp(a, b)),

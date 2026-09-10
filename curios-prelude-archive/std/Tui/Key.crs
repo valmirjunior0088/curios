@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Char, Equal, Spell};
+use /std/{Nat, Bool, Char, Spell};
+use /std/ops/{Eql};
 
 -- | A character, or a named key. The End key is `end_key`, since `end` is a reserved word.
 pub induct Code: pub Type
@@ -38,7 +39,7 @@ end
 
 pub use Code/*;
 
-satisfy Equal(Code);
+satisfy Eql(Code);
 
 satisfy Spell(Code);
 
@@ -50,7 +51,7 @@ pub struct Key: pub Type {
     ctrl: Bool,
 }
 
-satisfy Equal(Key);
+satisfy Eql(Key);
 
 satisfy Spell(Key);
 

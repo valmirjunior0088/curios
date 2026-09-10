@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Equal, Spell, Show, print, proc};
+use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Spell, Show, print, proc};
+use /std/ops/{Eql};
 
 -- | How a test came out.
 pub induct Verdict: pub Type
@@ -25,7 +26,7 @@ pub let assert(condition: Bool) -> Test =
         end);
 
 -- | The test that holds when the two are equal, reporting both when they are not.
-pub let equal(@A: Type, use Equal(A), use Spell(A), actual: A, expected: A) -> Test =
+pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Test =
     match actual == expected
     | true => Test/verdict(Verdict/passed())
     | false =>

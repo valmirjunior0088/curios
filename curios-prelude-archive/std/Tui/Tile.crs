@@ -1,4 +1,5 @@
-use /std/{Str, Equal};
+use /std/{Str};
+use /std/ops/{Eql};
 use /std/Tui/{Style};
 
 -- | One tile of the screen: a column of a row, with the text drawn in it and the style it is drawn in.
@@ -8,7 +9,7 @@ pub struct Tile: pub Type {
     style: Style,
 }
 
-satisfy Equal(Tile);
+satisfy Eql(Tile);
 
 -- | A space in the plain style.
 pub let blank: Tile =

@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Str, List, Map, Equal, Show, Spell};
+use /std/{Nat, Bool, Str, List, Map, Show, Spell};
+use /std/ops/{Eql};
 use /std/Map/{Key};
 
 -- | A set of keys.
@@ -42,7 +43,7 @@ pub let of(@K: Type, use Key(K), l: List(K)) -> Set(K) =
 pub let union(@K: Type, a: Set(K), b: Set(K)) -> Set(K) =
     Set { map = Map/union(a.map, b.map) };
 
-satisfy (@K: Type, use Equal(K)) => Equal(Set(K)) {
+satisfy (@K: Type, use Eql(K)) => Eql(Set(K)) {
     eql(a, b) = to_list(a) == to_list(b),
     neq(a, b) = to_list(a) != to_list(b),
 }

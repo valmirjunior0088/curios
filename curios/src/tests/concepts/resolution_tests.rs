@@ -122,10 +122,11 @@ fn prelude_show_resolves() {
 #[test]
 fn prelude_eql_resolves() {
     let source = r#"
-        use /std/{Nat, Bool, Equal};
+        use /std/{Nat, Bool};
+        use /std/ops/{Eql};
         let a : Nat = 5;
         let b : Nat = 5;
-        /std/print(Bool/to_str(Equal/eql(a, b)))
+        /std/print(Bool/to_str(Eql/eql(a, b)))
         "#;
 
     assert_eq!(run(source), b"true");
@@ -135,8 +136,9 @@ fn prelude_eql_resolves() {
 #[test]
 fn prelude_ord_superclass_projects() {
     let source = r#"
-        use /std/{Nat, Bool, Ord, Equal};
-        pub let equal(@A : Type, use Ord(A), x : A, y : A) -> Bool = Equal/eql(x, y);
+        use /std/{Nat, Bool, Ord};
+        use /std/ops/{Eql};
+        pub let equal(@A : Type, use Ord(A), x : A, y : A) -> Bool = Eql/eql(x, y);
         let n : Nat = 4;
         /std/print(Bool/to_str(equal(n, n)))
         "#;
@@ -302,7 +304,8 @@ fn monad_over_intrinsic_constructor_resolves_by_imitation() {
 #[test]
 fn syn_add_concept_resolves_everywhere() {
     let source = r#"
-        use /std/{Nat, Str, Add};
+        use /std/{Nat, Str};
+        use /std/ops/{Add};
         struct Point : pub Type { x : Nat, y : Nat }
         satisfy Add(Point) {
             add(a, b) = Point { x = Nat/add(a.x, b.x), y = Nat/add(a.y, b.y) }
@@ -320,11 +323,12 @@ fn syn_add_concept_resolves_everywhere() {
 #[test]
 fn eql_and_cmp_resolve_across_intrinsics() {
     let source = r#"
-        use /std/{Nat, Flt, Bool, Str, Equal, Compare};
-        let a : Bool = Equal/eql(2, 2);
-        let b : Bool = Equal/eql("abc", "abc");
-        let c : Bool = Compare/lt(1.0, 2.0);
-        let d : Bool = Compare/ge(3, 3);
+        use /std/{Nat, Flt, Bool, Str};
+        use /std/ops/{Eql, Cmp};
+        let a : Bool = Eql/eql(2, 2);
+        let b : Bool = Eql/eql("abc", "abc");
+        let c : Bool = Cmp/lt(1.0, 2.0);
+        let d : Bool = Cmp/ge(3, 3);
         /std/print(Bool/to_str(Bool/and(Bool/and(a, b), Bool/and(c, d))))
         "#;
 
@@ -353,7 +357,8 @@ fn forward_declared_witness_resolves() {
 #[test]
 fn missing_witness_in_constructor_index_names_the_concept() {
     let source = r#"
-        use /std/{Nat, Add};
+        use /std/{Nat};
+        use /std/ops/{Add};
         pub struct Wrap : pub Type { n : Nat }
         pub induct Foo : (w : Wrap) -> pub Type
         | mk(@w : Wrap, prev : Foo(w)) : (w + w)
@@ -479,10 +484,11 @@ fn a_missing_witness_names_the_premise_by_position() {
 #[test]
 fn a_later_premise_is_named_by_its_own_position() {
     let source = r#"
-        use /std/{Nat, Str, Show, Equal};
+        use /std/{Nat, Str, Show};
+        use /std/ops/{Eql};
         induct T : pub Type | t() end
         satisfy Show(T) { show(x) = "t", }
-        let g(@A : Type, use Show(A), use Equal(A), a : A) -> Str = Show/show(a);
+        let g(@A : Type, use Show(A), use Eql(A), a : A) -> Str = Show/show(a);
         let s : Str = g(T/t());
         /std/print("unreachable")
         "#;

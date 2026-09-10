@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, Str, Char, Option, Equal, Compare, Subtract, Multiply, Show, Ord, Spell};
+use /std/{Nat, Bool, Str, Char, Option, Show, Ord, Spell};
+use /std/ops/{Eql, Cmp, Sub, Mul};
 use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, of_nat, view, zero, mod add, mod cmp, mod mul,
     mod sub};
 
@@ -46,23 +47,23 @@ pub let of_decimal(s: Str, @_: Decimal(s)) -> BigNat =
 pub let of_str(s: Str) -> Option(BigNat) =
     match is_decimal(s) | true => Option/some(of_decimal(s)) | false => Option/none() end;
 
-satisfy Equal(BigNat) {
+satisfy Eql(BigNat) {
     eql = cmp/eql,
     neq(a, b) = Bool/not(cmp/eql(a, b)),
 }
 
-satisfy Compare(BigNat) {
+satisfy Cmp(BigNat) {
     lt = cmp/lt,
     le = cmp/le,
     gt = cmp/gt,
     ge = cmp/ge,
 }
 
-satisfy Subtract(BigNat) {
+satisfy Sub(BigNat) {
     sub = sub/sub,
 }
 
-satisfy Multiply(BigNat) {
+satisfy Mul(BigNat) {
     mul = mul/mul,
 }
 

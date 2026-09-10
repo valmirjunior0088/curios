@@ -1,4 +1,5 @@
-use /std/{Nat, Byte, Equal};
+use /std/{Nat, Byte};
+use /std/ops/{Eql};
 use /std/Nat/{Lt};
 
 -- | The terminal's default, one of the sixteen the palette names, one of the 256-colour cube, or a direct 24-bit triple.
@@ -15,7 +16,7 @@ end
 
 pub use Color/*;
 
-satisfy Equal(Color);
+satisfy Eql(Color);
 
 -- | Palette colour 0.
 pub let black: Color =

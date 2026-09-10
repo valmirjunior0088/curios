@@ -1,8 +1,8 @@
 pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
     to_flt};
-use /std/{Nat, Bool, Str, Option, Ordering, Equal, Compare, Add, Subtract, Multiply, Divide,
-    Remainder, Show, Spell, Ord, True};
+use /std/{Nat, Bool, Str, Option, Ordering, Show, Spell, Ord, True};
+use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 -- | That `a` is not zero, decided as `Nat/Lt` is — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =
@@ -70,12 +70,12 @@ pub let max(a: Int, b: Int) -> Int =
 pub let sign(n: Int) -> Int =
     choose | n < +0 => -1 | n == +0 => +0 | _ => +1 end;
 
-satisfy Equal(Int) {
+satisfy Eql(Int) {
     eql = eql,
     neq = neq,
 }
 
-satisfy Compare(Int) {
+satisfy Cmp(Int) {
     lt = lt,
     le = le,
     gt = gt,
@@ -86,22 +86,22 @@ satisfy Add(Int) {
     add = add,
 }
 
-satisfy Subtract(Int) {
+satisfy Sub(Int) {
     sub = sub,
 }
 
-satisfy Multiply(Int) {
+satisfy Mul(Int) {
     mul = mul,
 }
 
 -- | The divisor must be nonzero.
-satisfy Divide(Int) {
+satisfy Div(Int) {
     Ok(b) = NonZero(b),
     div = div,
 }
 
 -- | The divisor must be nonzero.
-satisfy Remainder(Int) {
+satisfy Rem(Int) {
     Ok(b) = NonZero(b),
     rem = rem,
 }

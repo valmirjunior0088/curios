@@ -1,4 +1,5 @@
-use /std/{Bool, Eq, Equal, False, Show, Spell};
+use /std/{Bool, Eq, False, Show, Spell};
+use /std/ops/{Eql};
 use /std/Bool/{false_neq_true};
 
 -- | The three-way answer a comparison gives.
@@ -65,7 +66,7 @@ pub let eq_neq_gt(p: Eq(Ordering/eq(), Ordering/gt())) -> False =
 pub let lt_neq_gt(p: Eq(Ordering/lt(), Ordering/gt())) -> False =
     false_neq_true(match p: (s, t, _) => Eq(is_gt(s), is_gt(t)) | refl(@_) => Eq/refl() end);
 
-satisfy Equal(Ordering);
+satisfy Eql(Ordering);
 
 satisfy Show(Ordering) {
     show(r) = match r | lt() => "lt" | eq() => "eq" | gt() => "gt" end,

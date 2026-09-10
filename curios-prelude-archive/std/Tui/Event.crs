@@ -1,4 +1,5 @@
-use /std/{Nat, Str, Equal, Spell};
+use /std/{Nat, Str, Spell};
+use /std/ops/{Eql};
 use /std/Tui/{Key};
 
 -- | A key, the terminal's new size, a pasted text, or a value of the program's own `E`: the answer a `Directive/perform` came back with.
@@ -15,6 +16,6 @@ end
 
 pub use Event/*;
 
-satisfy (@E: Type, use Equal(E)) => Equal(Event(E));
+satisfy (@E: Type, use Eql(E)) => Eql(Event(E));
 
 satisfy (@E: Type, use Spell(E)) => Spell(Event(E));

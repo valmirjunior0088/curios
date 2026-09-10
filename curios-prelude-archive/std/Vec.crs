@@ -1,4 +1,5 @@
-use /std/{Nat, List, Equal, Show, Spell};
+use /std/{Nat, List, Show, Spell};
+use /std/ops/{Eql};
 
 -- | A list of exactly `n` elements.
 pub induct Vec(T: Type): (Nat) -> pub Type
@@ -66,7 +67,7 @@ pub let zip(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), w: Vec(B, n)) -> Vec({A, 
 pub let fold(@T: Type, @A: Type, @n: Nat, v: Vec(T, n), init: A, f: (T, A) -> A) -> A =
     match v: (_, _) => A | nil() => init | cons(@_, x, xs) => fold(xs, f(x, init), f) end;
 
-satisfy (@T: Type, @n: Nat, use Equal(T)) => Equal(Vec(T, n)) {
+satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T, n)) {
     eql(v, w) = to_list(v) == to_list(w),
     neq(v, w) = to_list(v) != to_list(w),
 }

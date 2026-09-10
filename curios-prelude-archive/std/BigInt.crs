@@ -1,5 +1,5 @@
-use /std/{Nat, Int, Bool, Str, Option, Ordering, BigNat, BigPos, Equal, Compare, Add, Subtract,
-    Multiply, Show, Ord, Spell};
+use /std/{Nat, Int, Bool, Str, Option, Ordering, BigNat, BigPos, Show, Ord, Spell};
+use /std/ops/{Eql, Cmp, Add, Sub, Mul};
 
 -- | A sign over a positive magnitude, or zero.
 pub induct BigInt: pub Type
@@ -162,12 +162,12 @@ pub let of_decimal(s: Str, @ok: Decimal(s)) -> BigInt =
 pub let of_str(s: Str) -> Option(BigInt) =
     match is_decimal(s) | true => Option/some(of_decimal(s)) | false => Option/none() end;
 
-satisfy Equal(BigInt) {
+satisfy Eql(BigInt) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
 }
 
-satisfy Compare(BigInt) {
+satisfy Cmp(BigInt) {
     lt = lt,
     le = le,
     gt = gt,
@@ -178,11 +178,11 @@ satisfy Add(BigInt) {
     add = add,
 }
 
-satisfy Subtract(BigInt) {
+satisfy Sub(BigInt) {
     sub = sub,
 }
 
-satisfy Multiply(BigInt) {
+satisfy Mul(BigInt) {
     mul = mul,
 }
 

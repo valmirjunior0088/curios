@@ -1,4 +1,5 @@
-use /std/{Nat, Bool, List, Option, Path, Try, Io, Equal, Show};
+use /std/{Nat, Bool, List, Option, Path, Try, Io, Show};
+use /std/ops/{Eql};
 use /std/time/{Timestamp};
 
 -- | What is at a path.
@@ -13,7 +14,7 @@ pub induct Kind: pub Type
 | other()
 end
 
-satisfy Equal(Kind);
+satisfy Eql(Kind);
 
 satisfy Show(Kind) {
     show(k) =
