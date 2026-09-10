@@ -52,6 +52,8 @@ fn chip(prefix: &Qualifier) -> Option<String> {
 }
 
 /// Infallible, because every module it visits is one discovery loaded a moment ago: a prefix without a module in the map is a broken invariant of this stage, not a condition a caller can meet.
+// One over the lint's line, and every argument is a table the lowering just built or a fact about the scope it built them in — there is one caller, which has each of them to hand under these names, so a struct here would be a second spelling of the same eight things.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn document(
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &Scoped<'_, ModuleInfo>,
