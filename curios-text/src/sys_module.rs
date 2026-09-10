@@ -1,3 +1,16 @@
+//! The roster of `/sys`: every intrinsic type and operation the language provides, built directly as `text` AST and prepended to every parsed `Entrypoint`, so intrinsics participate in the module system like any other binding.
+//!
+//! Bodies bake the `text::Intrinsic::*` nodes in directly, so the roster needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/sys`'s own and are named absolutely so a declaration resolves wherever the roster puts it.
+//!
+//! The propositions a decided bound is stated in are the one part written rather than built, and so the one part parsed — see `flt_bounds` and `holds` below. What separates the two is whether a surface spelling exists: an intrinsic has none and must be constructed, while a proposition over intrinsics is ordinary Curios.
+//!
+//! **These declarations are a second statement of `Intrinsic::signature`, not a projection of it.** The table is `curios-core`'s; this roster is what a caller actually names, and elaborating a body here checks its operands against that table and unifies its result with the declared one. A declaration disagreeing with the operation its body constructs does not compile, and the prelude build is where that is enforced — so deriving either from the other would make the check compare the roster with itself.
+//!
+//! This file holds the roster alone. How a declaration is built is `constructors.rs`, how a term is built is `helpers.rs`.
+
+mod constructors;
+use constructors::*;
+
 mod helpers;
 use helpers::*;
 
@@ -14,10 +27,6 @@ use {
     curios_utilities::{Grain, Plicity, SyntaxRegistry},
     std::sync::Arc,
 };
-
-// The `sys` module is the home of every intrinsic type and operation. Its roster is built directly as `text` AST and prepended to every parsed `Entrypoint`, so intrinsics participate in the module system like any other binding. Bodies bake the `text::Intrinsic::*` nodes in directly, so the roster needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/sys`'s own and are named absolutely so a declaration resolves wherever the roster puts it.
-//
-// The propositions a decided bound is stated in are the one part written rather than built, and so the one part parsed — see `propositions` below. What separates the two is whether a surface spelling exists: an intrinsic has none and must be constructed, while a proposition over intrinsics is ordinary Curios.
 
 // `pub induct True: pub Prop | qed() end` — the trivially true proposition and its proof, which every discharged obligation is answered with.
 fn true_prop() -> TopItem {
@@ -1052,69 +1061,6 @@ fn handle_ops() -> Vec<TopItem> {
             ),
         ),
     ]
-}
-
-/// One `/sys` module, before the host's rows are folded into it.
-///
-/// **The label is the key, and that is the whole of this restructure.** `/sys` used to be assembled by two independent passes — the carrier modules written by hand from the intrinsic table, the subject modules built from `curios-abi`'s store — emitting into one namespace with nothing to merge them. `Handle` is in both inputs, so the one collision was reconciled by lifting its rows out by string before the generic pass and appending them by hand, with a `panic!` if the row ever went missing. Keying the modules removes the removal: a host row joins the module its subject names, whether that module already exists or is created by the row, and `Handle` stops being a special case and becomes the one label that happens to have both.
-struct SysModule {
-    label: String,
-    /// The carrier declarations for this label: its type former and the intrinsic operations over it. Empty for a module that is nothing but host rows.
-    items: Vec<TopItem>,
-    /// Whether the root re-exports the type this module declares — every carrier a program reaches by name, and no module of operations alone.
-    hoisted: bool,
-}
-
-impl SysModule {
-    /// A carrier: a type former, its documentation, and the operations over it, hoisted to the root.
-    fn carrier(label: &str, doc: &[&str], former: TopItem, ops: Vec<TopItem>) -> Self {
-        Self {
-            label: label.to_string(),
-            items: with_type(documented(doc, former), ops),
-            hoisted: true,
-        }
-    }
-
-    /// A carrier whose type the root does not re-export — a packed run, reached through its own module because two of them share every operation name.
-    fn nested(self) -> Self {
-        Self {
-            hoisted: false,
-            ..self
-        }
-    }
-
-    /// A module the host's rows alone will fill.
-    fn rows(label: &str) -> Self {
-        Self {
-            label: label.to_string(),
-            items: Vec::new(),
-            hoisted: false,
-        }
-    }
-}
-
-/// Fold every store-described host op into the module its own row names as its subject, creating one where no carrier claims the label.
-///
-/// Groups keep the order their first row appears in after the carriers, and rows keep store order within a group — so a new row lands under its subject with nothing beside the table to update. The 0-arity clocks and `args` are constants rather than nullary functions: the function abstraction existed to keep an effectful intrinsic body unevaluated at definition time, and a description is already unevaluated (see `host_fn`).
-fn absorb_host_rows(modules: &mut Vec<SysModule>, foreigns: &ForeignStore) {
-    for function in foreigns.iter() {
-        let subject = function
-            .subject
-            .clone()
-            .expect("a builtin host operation names its /sys subject");
-
-        let index = match modules.iter().position(|module| module.label == subject) {
-            Some(index) => index,
-            None => {
-                modules.push(SysModule::rows(&subject));
-                modules.len() - 1
-            }
-        };
-
-        modules[index]
-            .items
-            .push(TopItem::Let(vec![host_fn(function, true)]));
-    }
 }
 
 /// The one operation placed by hand rather than by a row: `exit` is `Intrinsic::ProcExit` and traps instead of returning, so no `WireSignature` describes it — but it is a process operation like `args` and `env`, so it joins the module its subject already opened.

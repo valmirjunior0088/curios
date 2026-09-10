@@ -1,12 +1,11 @@
-//! Building blocks for the `/sys` roster: the term and item constructors its declarations are assembled from.
+//! Building blocks for the `/sys` roster: the term constructors its declarations are assembled from.
 //!
-//! Split from the roster itself so that `sys_module.rs` reads as *what `/sys` declares* and this reads as *how a declaration is built*. Nothing here knows what is in the roster; everything here is a shape.
+//! One rung below `constructors.rs`, which builds declarations out of what this builds. Nothing here knows what is in the roster, and nothing here names a declaration: everything is a term.
 
 use {
     crate::{
-        Apply, Argument, Doc, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Intrinsic, Label,
-        LetSignature, Module, Name, Nat, NatLiteral, Pattern, Subterm, Term, TopItem, TopLet,
-        TopMod, TopUse, TupleType, TupleTypeParam, UseGroup,
+        Apply, Argument, FuncType, FuncTypeParam, Intrinsic, Label, Name, Nat, NatLiteral, Subterm,
+        Term, TupleType, TupleTypeParam,
     },
     curios_num::Floating,
     curios_utilities::{Grain, Plicity, SyntaxName, SyntaxRegistry},
@@ -140,57 +139,6 @@ pub(super) fn type_() -> Term {
     Subterm::Type.into()
 }
 
-pub(super) fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
-    TopItem::Let(vec![TopLet {
-        doc: None,
-        vis_pub: true,
-        label: label.into(),
-        signature: LetSignature::Name {
-            type_: Some(type_),
-            body,
-        },
-    }])
-}
-
-/// `item` under `lines`, the block a `-- |` would have put above it — written first here for the same reason it is written first there. An empty line is a paragraph break, exactly as it is in the surface syntax.
-///
-/// **A gloss says what the operation is, not what its carrier will not hold.** Where a value leaves the carrier is one rule stated once — `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`, and `curios-num`'s `scalar` per operation — and repeating it on every row would be sixty copies to keep in step. What a gloss must say is where an operation departs from the obvious reading of its name: that `sub` is monus, that `shr` divides.
-///
-/// **Only a lone declaration takes one.** Every builder here makes one declaration per item, so the group form would leave all but the first silently undocumented; asserted rather than assumed, since nothing else would notice.
-pub(super) fn documented(lines: &[&str], item: TopItem) -> TopItem {
-    let doc = Some(Doc {
-        lines: lines.iter().map(|line| (*line).to_string()).collect(),
-        span: None,
-    });
-
-    match item {
-        TopItem::Let(mut members) => {
-            assert_eq!(
-                members.len(),
-                1,
-                "a documented `/sys` item declares one name"
-            );
-            members[0].doc = doc;
-            TopItem::Let(members)
-        }
-        TopItem::Mod(mut module) => {
-            module.doc = doc;
-            TopItem::Mod(module)
-        }
-        _ => panic!("only a definition or a module carries a `/sys` gloss"),
-    }
-}
-
-pub(super) fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
-    TopItem::Mod(TopMod {
-        doc: None,
-        span: None,
-        vis_pub: true,
-        label: label.into(),
-        module: Some(Module { items }),
-    })
-}
-
 // The propositions a decided bound is stated in. Built here like everything else this roster holds, and placed by the same rule: one stated over a carrier lives in that carrier's module, and one stated over none lives at the root.
 //
 // Authoring them in a `.crs` beside this file was tried and undone. It read better and placed worse: spliced at the root the `Flt` pair became `/sys/NonNeg`, saying nothing about which carrier, and the range constants collided with `/sys/Flt`'s `min` and `max` operations one segment away. Placement is what a generator is good at, so the generator keeps them.
@@ -201,135 +149,4 @@ pub(super) fn prop() -> Term {
 // A `Flt` literal, for the two range bounds below. Spelled from `f32`'s own extremes rather than from a written magnitude, so the bound is the carrier's by construction and no digit string has to be kept in step with it.
 pub(super) fn flt_lit(value: f32) -> Term {
     intrinsic(Intrinsic::Flt(Floating::from_f32(value)))
-}
-
-// `pub use Label/{let Label}` — the facade re-export that hoists a submodule's own type binding up to the library root, so `/sys/{Label}` names the type.
-pub(super) fn pub_use(label: &str) -> TopItem {
-    TopItem::Use(TopUse {
-        span: None,
-        vis_pub: true,
-        name: Name::from([label.to_string()]),
-        group: UseGroup::Named(vec![GroupItem::Let(label.into())]),
-    })
-}
-
-// An intrinsic module's items: its type declaration first, then its operations, so the type lives *inside* its module and the root facade re-exports it.
-pub(super) fn with_type(type_decl: TopItem, mut ops: Vec<TopItem>) -> Vec<TopItem> {
-    let mut items = vec![type_decl];
-    items.append(&mut ops);
-    items
-}
-
-pub(super) fn pub_fn(label: &str, params: Vec<(&str, Term)>, output: Term, body: Term) -> TopItem {
-    pub_fn_marked(
-        label,
-        params
-            .into_iter()
-            .map(|(n, t)| (Plicity::Explicit, n, t))
-            .collect(),
-        output,
-        body,
-    )
-}
-
-pub(super) fn pub_fn_marked(
-    label: &str,
-    params: Vec<(Plicity, &str, Term)>,
-    output: Term,
-    body: Term,
-) -> TopItem {
-    TopItem::Let(vec![fn_marked(true, label, params, output, body)])
-}
-
-pub(super) fn fn_marked(
-    vis_pub: bool,
-    label: &str,
-    params: Vec<(Plicity, &str, Term)>,
-    output: Term,
-    body: Term,
-) -> TopLet {
-    TopLet {
-        doc: None,
-        vis_pub,
-        label: label.into(),
-        signature: LetSignature::Func {
-            params: params
-                .into_iter()
-                .map(|(p, n, t)| FuncSugarParam {
-                    plicity: p,
-                    label: Pattern::Binder(Some(n.into())),
-                    type_: t,
-                })
-                .collect(),
-            output,
-            body,
-        },
-    }
-}
-
-pub(super) fn binary(
-    label: &str,
-    operand: Term,
-    output: Term,
-    ctor: fn(Term, Term) -> Intrinsic,
-) -> TopItem {
-    pub_fn(
-        label,
-        vec![("a", operand.clone()), ("b", operand)],
-        output,
-        intrinsic(ctor(name("a"), name("b"))),
-    )
-}
-
-// A binary operation whose second operand carries a precondition — the divisions, whose fold reports rather than answers on a zero divisor. The bound is stated the way source states it, for the reason `bin_ops` gives: a refinement is keyed on the term written, and a caller can only write the operand.
-pub(super) fn guarded_binary(
-    label: &str,
-    operand: Term,
-    output: Term,
-    bound: Term,
-    ctor: fn(Term, Term, Term) -> Intrinsic,
-) -> TopItem {
-    pub_fn_marked(
-        label,
-        vec![
-            (Plicity::Explicit, "a", operand.clone()),
-            (Plicity::Explicit, "b", operand),
-            (Plicity::Implicit, "ok", bound),
-        ],
-        output,
-        // The proof parameter is named in the body, which is what carries the bound into Core: an implicit nothing referenced would be checked here and forgotten, leaving the kernel nothing to re-verify.
-        intrinsic(ctor(name("a"), name("b"), name("ok"))),
-    )
-}
-
-pub(super) fn guarded_unary(
-    label: &str,
-    input: Term,
-    output: Term,
-    bound: Term,
-    ctor: fn(Term, Term) -> Intrinsic,
-) -> TopItem {
-    pub_fn_marked(
-        label,
-        vec![
-            (Plicity::Explicit, "a", input),
-            (Plicity::Implicit, "ok", bound),
-        ],
-        output,
-        intrinsic(ctor(name("a"), name("ok"))),
-    )
-}
-
-pub(super) fn unary(
-    label: &str,
-    input: Term,
-    output: Term,
-    ctor: fn(Term) -> Intrinsic,
-) -> TopItem {
-    pub_fn(
-        label,
-        vec![("a", input)],
-        output,
-        intrinsic(ctor(name("a"))),
-    )
 }
