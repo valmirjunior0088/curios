@@ -620,7 +620,7 @@ fn process_items(
                 }));
             }
             TopItem::Foreign(f) => {
-                // All FFI-specific bookkeeping (the `ForeignFunction`, its registration, and `host_fn`'s wire-typed signature shape) stays inside `prelude`; from here a `foreign` declaration lowers exactly like an ordinary `TopItem::Let`.
+                // All FFI-specific bookkeeping (the `ForeignFunction`, its registration, and `host_fn`'s wire-typed signature shape) stays inside `sys_module`'s `host_rows`; from here a `foreign` declaration lowers exactly like an ordinary `TopItem::Let`.
                 let path = context.prefixed(&f.label);
                 let signature = foreign_signature(f, foreigns, path.join());
 
