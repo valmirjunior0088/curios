@@ -247,7 +247,7 @@ fn prelude_fixture() -> RootSource {
     modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops(), &SYNTAX));
     modules.insert_root(
         "std",
-        RootKind::Privileged,
+        RootKind::Ordinary,
         r#"
             pub mod Str
                 pub let Valid : Type = Type;

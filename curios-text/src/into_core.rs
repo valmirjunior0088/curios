@@ -1372,6 +1372,13 @@ impl<'a> UnitSource<'a> {
         self.mounts()
     }
 
+    /// The prefixes this unit declared a dependency on, when it declared any — the other half of which unit this is.
+    ///
+    /// Two units of one source and one scope differing only in what they declared are two lowerings, because a name resolves in one and is refused in the other. So a store addresses them apart, which is what this is read for.
+    pub fn declared(&self) -> Option<&[Qualifier]> {
+        self.visible.as_deref()
+    }
+
     /// The prefix this unit claims, as a name to report it by — `/json` for a mounted package.
     ///
     /// The root for the entry, which owns the empty prefix: a caller that wants to *name* the entry knows what was asked for and this does not, so it supplies its own.
@@ -1611,7 +1618,7 @@ fn into_core_unit_within(
     });
 
     // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
-    let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls, syntax)?
+    let items = order_flat_items(flat_items, &induct_decls, &struct_decls, syntax)?
         .into_iter()
         .map(FlatItem::into_core)
         .collect();

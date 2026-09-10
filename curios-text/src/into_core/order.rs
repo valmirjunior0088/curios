@@ -2,11 +2,11 @@
 //!
 //! A stable Kahn pass keeps independent declarations in source order. A genuine value cycle leaves nodes unorderable, and they are emitted in source order for someone above to answer for: a declaration's own name is bound by the group it becomes, so a *self*-referencing witness is repaired by `curios_elab::elaborate_module_let` lowering it into a group of one, and a cycle between two witnesses is refused there by name — neither reaches the kernel as an unbound reference. Nothing else can form a cycle at all: definitions that name one another are one group, `let ... and` states it in the source, and a cycle the source did not declare is refused here by name.
 //!
-//! The embedded, fixed prelude is every item under a privileged root (`sys`/`syn`/`std` — see `RootKind::is_privileged`), classified structurally rather than off a hardcoded name list. `std` and `syn` genuinely cross-reference each other in both directions (e.g. `/std/Str`'s `classify` calls `/std/Nat`'s `in_range`, while `/std/Nat` itself uses `/std/Str`'s `Scan`/`Utf8`), so the three privileged roots are topologically sorted together as *one* graph — there is no valid fixed sys/std/std emission order to split them into independently. `sys` is not a distinct partition here as a result: it is always internally consistent with `syn`/`std` because all three are elaborated as one prelude block.
+//! **One partition, over the unit's own items.** This pass used to sort the fixed prelude ahead of everything else, because the prelude and the entry arrived as one item list and the prelude half had to be emitted first. They do not arrive together any more: a unit holds its own items and nothing else, so every item here is under one mount and every name from outside it is satisfied by the scope rather than by a node in this graph. The partition that expressed that, and the two panics that guarded the prelude half of it, are gone with it — a cycle is a cycle whoever wrote it, and it is reported as one.
 
 use {
     super::*,
-    curios_utilities::{Mount, Qualifier, SyntaxRegistry},
+    curios_utilities::{Qualifier, SyntaxRegistry},
     std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
 
@@ -240,65 +240,6 @@ fn hard_cycle(
     }
 }
 
-/// The prelude's topological order as positions *relative to* `prelude_nodes` (ascending), so the whole fixed-root block can be emitted before user code.
-///
-/// Also the one place the cross-root backward-reference invariant is checked: a privileged declaration referencing a name `rest_owner` maps (i.e. a name only the entry program declares) can never resolve, since the prelude is always emitted first. This can only mean a bug in the embedded `sys`/ `syn`/`std` source itself — never anything a user's own program can trigger — so it panics rather than surfacing as a normal `Error`. This runs only while constructing the build-scoped prepared prelude.
-fn prelude_permutation(
-    items: &[FlatItem],
-    prelude_nodes: &[usize],
-    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
-    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
-    rest_owner: &HashMap<curios_core::Global, usize>,
-    wrapper_owner: &HashMap<curios_core::Global, Qualifier>,
-    syntax: &SyntaxRegistry,
-) -> Vec<usize> {
-    let owner = owner_of(items, prelude_nodes);
-    let rows = witness_rows(items, prelude_nodes);
-    let mut deps = HashMap::with_capacity(prelude_nodes.len());
-    let mut soft_deps = HashMap::with_capacity(prelude_nodes.len());
-    for &n in prelude_nodes {
-        let declared = items[n].names();
-        let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls, syntax);
-        if let Some(name) = names
-            .iter()
-            .find(|name| !owner.contains_key(*name) && rest_owner.contains_key(*name))
-        {
-            panic!(
-                "'{}' (in the standard library) references '{}', which is only declared \
-                 in the entry program — the standard library is always compiled before the \
-                 entry program, so this is a bug in the embedded prelude source",
-                declared
-                    .first()
-                    .map_or("<anonymous>".to_string(), curios_core::Global::symbol),
-                name.symbol(),
-            );
-        }
-        deps.insert(n, dep_nodes(n, &names, &owner));
-        soft_deps.insert(
-            n,
-            witness_dep_nodes(n, &items[n], &names, wrapper_owner, &rows, syntax),
-        );
-    }
-
-    let relative = prelude_nodes
-        .iter()
-        .enumerate()
-        .map(|(rel, &node)| (node, rel))
-        .collect::<HashMap<usize, usize>>();
-
-    // A cycle here is a prelude bug for the same reason a forward cross-root reference is: no user program can put a `let` of its own among these nodes.
-    let order = topological_order(prelude_nodes, &deps, &soft_deps).unwrap_or_else(|cycle| {
-        panic!(
-            "the standard library declares {} as separate definitions that reference each other — \
-             a mutually recursive group is declared with `and`, so this is a bug in the embedded \
-             prelude source",
-            cycle_names(items, &cycle).join(", "),
-        )
-    });
-
-    order.iter().map(|node| relative[node]).collect()
-}
-
 /// The names a cycle is reported by: each node's first declared name, spelled as a path.
 fn cycle_names(items: &[FlatItem], cycle: &[usize]) -> Vec<String> {
     cycle
@@ -309,57 +250,29 @@ fn cycle_names(items: &[FlatItem], cycle: &[usize]) -> Vec<String> {
 
 pub(super) fn order_flat_items(
     items: Vec<FlatItem>,
-    mounts: &[Mount],
     induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
     syntax: &SyntaxRegistry,
 ) -> Result<Vec<FlatItem>, Error> {
-    let count = items.len();
-
-    let is_prelude = items
-        .iter()
-        .map(|item| item.in_prelude(mounts))
-        .collect::<Vec<bool>>();
-    let prelude_nodes = (0..count)
-        .filter(|&i| is_prelude[i])
-        .collect::<Vec<usize>>();
-    let rest = (0..count)
-        .filter(|&i| !is_prelude[i])
-        .collect::<Vec<usize>>();
-
-    let rest_owner = owner_of(&items, &rest);
+    let nodes = (0..items.len()).collect::<Vec<usize>>();
+    let owner = owner_of(&items, &nodes);
     let wrapper_owner = wrapper_owners(&items);
+    let rows = witness_rows(&items, &nodes);
 
-    let mut order = Vec::with_capacity(count);
-
-    if !prelude_nodes.is_empty() {
-        let permutation = prelude_permutation(
-            &items,
-            &prelude_nodes,
-            induct_decls,
-            struct_decls,
-            &rest_owner,
-            &wrapper_owner,
-            syntax,
-        );
-        order.extend(permutation.into_iter().map(|rel| prelude_nodes[rel]));
-    }
-
-    // Everything else (user code, plus any non-prelude library a custom loader serves): topologically ordered among itself, after the whole prelude. Its dependencies on prelude items are already satisfied by the prefix above, so the owner map (and thus the dep edges) need only cover `rest` — witness edges included: a rest item's needed prelude rows sit in the emitted prefix, and only its own partition's rows still need ordering.
-    let rest_rows = witness_rows(&items, &rest);
-    let mut rest_deps = HashMap::with_capacity(rest.len());
-    let mut rest_soft_deps = HashMap::with_capacity(rest.len());
-    for &n in &rest {
+    // Only this unit's own items, because only they are in this graph. A name from the scope is owned by no node here, so `dep_nodes` records no edge for it — which is right: the unit it belongs to was emitted whole before this one began.
+    let mut deps = HashMap::with_capacity(nodes.len());
+    let mut soft_deps = HashMap::with_capacity(nodes.len());
+    for &n in &nodes {
         let declared = items[n].names();
         let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls, syntax);
-        rest_deps.insert(n, dep_nodes(n, &names, &rest_owner));
-        rest_soft_deps.insert(
+        deps.insert(n, dep_nodes(n, &names, &owner));
+        soft_deps.insert(
             n,
-            witness_dep_nodes(n, &items[n], &names, &wrapper_owner, &rest_rows, syntax),
+            witness_dep_nodes(n, &items[n], &names, &wrapper_owner, &rows, syntax),
         );
     }
     // Refused at the first member's written name, which is what the reader prefixes with `and`: the report names every definition on the cycle, and the source position it needs is one the reader can act on. The written type is the fallback for a definition the compiler named, since function sugar synthesizes a type with no span of its own.
-    let rest_order = topological_order(&rest, &rest_deps, &rest_soft_deps).map_err(|cycle| {
+    let order = topological_order(&nodes, &deps, &soft_deps).map_err(|cycle| {
         let error = Error::UndeclaredCycle {
             names: cycle_names(&items, &cycle),
         };
@@ -369,7 +282,6 @@ pub(super) fn order_flat_items(
             None => error,
         }
     })?;
-    order.extend(rest_order);
 
     let mut slots = items
         .into_iter()

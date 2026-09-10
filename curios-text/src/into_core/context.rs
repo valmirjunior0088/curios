@@ -66,19 +66,6 @@ pub(super) enum FlatItem {
 }
 
 impl FlatItem {
-    /// Whether this flat item belongs to the fixed embedded prelude — every let in it is declared under a privileged mount. Asked of each let's declaring module against the mount table, so the answer comes from what this compilation actually mounted rather than from the spelling of a leading segment.
-    pub(super) fn in_prelude(&self, mounts: &[Mount]) -> bool {
-        let lets = match self {
-            FlatItem::Let(let_) => std::slice::from_ref(let_),
-            FlatItem::Rec(lets) => lets.as_slice(),
-        };
-
-        !lets.is_empty()
-            && lets
-                .iter()
-                .all(|let_| Mount::privileged(mounts, &let_.island))
-    }
-
     pub(super) fn names(&self) -> Vec<curios_core::Global> {
         match self {
             FlatItem::Let(let_) => vec![let_.name.clone()],

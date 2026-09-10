@@ -24,7 +24,7 @@ mod tests;
 
 use {
     crate::TreeHash,
-    curios_utilities::{Mount, RootKind},
+    curios_utilities::{Mount, Qualifier},
     sha2::{Digest, Sha256},
     std::{hash::Hasher, path::PathBuf},
 };
@@ -106,19 +106,26 @@ fn shared() -> Option<PathBuf> {
 /// What version of the verdict family's layout a key names.
 ///
 /// In the key rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what a slot holds, or what a hit is verified against, changes.
-const SCHEMA: &str = "u8";
+const SCHEMA: &str = "u9";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
 const PAYLOAD_SCHEMA: &str = "p2";
 
-/// The slot a unit compiled by `compiler`, after `predecessors`, claiming `mounts`, is filed under.
+/// The slot a unit compiled by `compiler`, after `predecessors`, claiming `mounts` and declaring `declared`, is filed under.
 ///
 /// **No file contents here, deliberately.** This names a *place*, not a version of what lives in it: "the unit for these mounts, by this compiler, after this chain". What was compiled is checked when the slot is opened, against the record of what was read, so a source edit changes the verification and not the address. That is what bounds the store — a project has as many slots as it has units, forever, rather than one per compile — and it is what the previous scheme got wrong by hashing the unit's whole source directory, which contains this store.
 ///
-/// **Three parts, and each is load-bearing.** The compiler is who judged it — see [`compiler`](crate::compiler()), and note that a key naming no compiler would be believed on behalf of any. The mounts are how the unit's names are spelled, which the lowering depends on and no read of its files reveals: they used to ride along by accident, in a manifest that happened to sit in the hashed directory. The predecessors are the part easiest to leave out and the reason this takes a list at all: a unit's lowering copies the *cumulative universe-seed table* from the unit before it, so the same source compiled after a different prefix is a different unit, byte for byte. What a predecessor *contains* is verified rather than keyed, for the same reason the unit's own source is.
+/// **Four parts, and each is load-bearing.** The compiler is who judged it — see [`compiler`](crate::compiler()), and note that a key naming no compiler would be believed on behalf of any. The mounts are how the unit's names are spelled, which the lowering depends on and no read of its files reveals: they used to ride along by accident, in a manifest that happened to sit in the hashed directory. The predecessors are the part easiest to leave out and the reason this takes a list at all: a unit's lowering copies the *cumulative universe-seed table* from the unit before it, so the same source compiled after a different prefix is a different unit, byte for byte. What a predecessor *contains* is verified rather than keyed, for the same reason the unit's own source is.
+///
+/// The fourth is what the unit declared it could see, which replaces the privilege tier the mounts used to carry. The tier answered "may these names reach that root" for a whole root at a time; a declared dependency answers it per unit, and it is the answer the lowering actually consults — the same source over the same scope, declaring different prefixes, resolves different names and is a different unit. `None` is its own value, not an empty list: it means the caller declared nothing, which is every open prefix in scope, where an empty list means a unit that asked for none of them.
 ///
 /// Ordered, not a set: the predecessors are a fold order, and two orders of one set are two different lowerings.
-pub fn unit_slot(compiler: &str, predecessors: &[String], mounts: &[Mount]) -> String {
+pub fn unit_slot(
+    compiler: &str,
+    predecessors: &[String],
+    mounts: &[Mount],
+    declared: Option<&[Qualifier]>,
+) -> String {
     let mut digest = Sha256::new();
 
     feed(&mut digest, SCHEMA);
@@ -130,15 +137,16 @@ pub fn unit_slot(compiler: &str, predecessors: &[String], mounts: &[Mount]) -> S
     feed(&mut digest, &mounts.len().to_string());
     for mount in mounts {
         feed(&mut digest, &mount.prefix.join());
-        // Spelled here rather than taken from `Debug`, which would make a key depend on the name of a variant instead of on the tier it means.
-        feed(
-            &mut digest,
-            match mount.kind {
-                RootKind::Internal => "internal",
-                RootKind::Privileged => "privileged",
-                RootKind::Ordinary => "ordinary",
-            },
-        );
+    }
+    match declared {
+        // Two distinguishable shapes rather than one, so "declared nothing" and "declared none" cannot collide: a length-prefixed list can never spell the sentinel.
+        None => feed(&mut digest, "*"),
+        Some(declared) => {
+            feed(&mut digest, &declared.len().to_string());
+            for prefix in declared {
+                feed(&mut digest, &prefix.join());
+            }
+        }
     }
 
     hex(digest)

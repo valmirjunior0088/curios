@@ -1,4 +1,7 @@
-use {super::*, curios_utilities::Qualifier};
+use {
+    super::*,
+    curios_utilities::{Qualifier, RootKind},
+};
 
 /// A binary nests under the package that declares it — so two members of one umbrella declaring `serve` cannot collide, and nothing has to refuse it.
 #[test]
@@ -72,45 +75,53 @@ fn every_part_of_a_slot_changes_it() {
     let other = [Mount::new(Qualifier::from(["yaml"]), RootKind::Ordinary)];
     let before = ["one".to_string(), "two".to_string()];
 
-    let slot = unit_slot("compiler", &before, &mounts);
+    let slot = unit_slot("compiler", &before, &mounts, None);
 
     assert_eq!(
         slot,
-        unit_slot("compiler", &before, &mounts),
+        unit_slot("compiler", &before, &mounts, None),
         "and it is a function"
     );
     assert_ne!(
         slot,
-        unit_slot("another", &before, &mounts),
+        unit_slot("another", &before, &mounts, None),
         "the compiler is in it"
     );
     assert_ne!(
         slot,
-        unit_slot("compiler", &before, &other),
+        unit_slot("compiler", &before, &other, None),
         "the mounts are in it"
     );
     assert_ne!(
         slot,
-        unit_slot("compiler", &["one".to_string()], &mounts),
+        unit_slot("compiler", &["one".to_string()], &mounts, None),
         "the predecessors are in it"
     );
     assert_ne!(
         slot,
-        unit_slot("compiler", &["two".to_string(), "one".to_string()], &mounts),
+        unit_slot(
+            "compiler",
+            &["two".to_string(), "one".to_string()],
+            &mounts,
+            None
+        ),
         "and their order is, because two orders of one set are two lowerings"
     );
 }
 
-/// The privilege a mount carries decides what its modules may reference, so two roots of one name and different tiers are two units rather than one.
+/// What a unit declared decides which names resolve in it, so one source over one scope declaring different prefixes is two units rather than one. Three shapes, because "declared nothing" is not "declared none": the first sees every open prefix in scope and the second sees only its own.
 #[test]
-fn a_mounts_tier_is_part_of_its_slot() {
-    let ordinary = [Mount::new(Qualifier::from(["std"]), RootKind::Ordinary)];
-    let privileged = [Mount::new(Qualifier::from(["std"]), RootKind::Privileged)];
+fn a_units_declared_dependencies_are_part_of_its_slot() {
+    let mounts = [Mount::new(Qualifier::from(["app"]), RootKind::Ordinary)];
+    let json = [Qualifier::from(["json"])];
 
-    assert_ne!(
-        unit_slot("compiler", &[], &ordinary),
-        unit_slot("compiler", &[], &privileged)
-    );
+    let undeclared = unit_slot("compiler", &[], &mounts, None);
+    let none = unit_slot("compiler", &[], &mounts, Some(&[]));
+    let one = unit_slot("compiler", &[], &mounts, Some(&json));
+
+    assert_ne!(undeclared, none);
+    assert_ne!(none, one);
+    assert_ne!(undeclared, one);
 }
 
 /// What a unit was compiled *from* is verified rather than addressed, so editing its source must leave the address alone — that is what keeps a project's slot count equal to its unit count instead of growing by one per compile, which is exactly how the tree-hashed scheme this replaced went wrong.
@@ -119,8 +130,8 @@ fn a_slot_does_not_move_when_its_source_changes() {
     let mounts = [Mount::new(Qualifier::from(["json"]), RootKind::Ordinary)];
 
     assert_eq!(
-        unit_slot("compiler", &[], &mounts),
-        unit_slot("compiler", &[], &mounts)
+        unit_slot("compiler", &[], &mounts, None),
+        unit_slot("compiler", &[], &mounts, None)
     );
     assert_ne!(
         digest(b"one"),
@@ -135,8 +146,8 @@ fn a_moved_boundary_is_a_different_slot() {
     let mounts = [Mount::new(Qualifier::from(["c"]), RootKind::Ordinary)];
 
     assert_ne!(
-        unit_slot("ab", &["c".to_string()], &mounts),
-        unit_slot("a", &["bc".to_string()], &mounts)
+        unit_slot("ab", &["c".to_string()], &mounts, None),
+        unit_slot("a", &["bc".to_string()], &mounts, None)
     );
     assert_ne!(
         payload_slot("c", &[], "ab", "c", "e"),

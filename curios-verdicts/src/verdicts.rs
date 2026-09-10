@@ -98,7 +98,12 @@ impl Verdicts {
             .map(|placed| placed.slot.clone())
             .collect::<Vec<_>>();
 
-        Some(unit_slot(compiler, &predecessors, &source.claims()))
+        Some(unit_slot(
+            compiler,
+            &predecessors,
+            &source.claims(),
+            source.declared(),
+        ))
     }
 
     /// The chain `sources` form, verified against the store without deserializing any of it — the probe [`Verdicts::payload_get`] decides a hit with.

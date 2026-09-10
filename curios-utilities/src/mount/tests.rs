@@ -3,8 +3,8 @@ use crate::*;
 fn compilation() -> Vec<Mount> {
     vec![
         Mount::new(Qualifier::from(["sys"]), RootKind::Internal),
-        Mount::new(Qualifier::from(["syn"]), RootKind::Privileged),
-        Mount::new(Qualifier::from(["std"]), RootKind::Privileged),
+        Mount::new(Qualifier::from(["std"]), RootKind::Ordinary),
+        Mount::new(Qualifier::from(["json"]), RootKind::Ordinary),
         Mount::new(Qualifier::empty(), RootKind::Ordinary),
     ]
 }
@@ -13,12 +13,12 @@ fn compilation() -> Vec<Mount> {
 fn a_name_is_owned_by_the_most_specific_prefix_it_lies_within() {
     let mounts = compilation();
 
-    // The entry's empty prefix contains every qualifier, so first-match would answer all four of these as ordinary.
+    // The entry's empty prefix contains every qualifier, so first-match would answer all three of these by it.
     assert_eq!(
         Mount::owning(&mounts, &Qualifier::from(["std", "Option", "Option"]))
             .unwrap()
-            .kind,
-        RootKind::Privileged
+            .prefix,
+        Qualifier::from(["std"])
     );
     assert_eq!(
         Mount::owning(&mounts, &Qualifier::from(["sys", "Nat"]))
@@ -47,22 +47,16 @@ fn a_longer_spelling_of_a_prefix_is_not_within_it() {
     );
 }
 
-/// While the fixed prelude is prepared the entry is not mounted, so the synthetic compilation root is owned by nobody — and an unowned name is not privileged, which is what keeps `/sys` unreachable from it.
+/// While a prelude root is prepared the entry is not mounted, so the synthetic compilation root is owned by nobody. A real answer rather than a missing one — every caller that asks about ownership has a case for a name no unit claims.
 #[test]
-fn an_unmounted_name_has_no_owner_and_no_privilege() {
-    let prelude_only = &compilation()[..3];
+fn an_unmounted_name_has_no_owner() {
+    let prelude_only = &compilation()[..2];
 
     assert!(Mount::owning(prelude_only, &Qualifier::empty()).is_none());
-    assert!(!Mount::privileged(prelude_only, &Qualifier::empty()));
-    assert!(Mount::privileged(
-        prelude_only,
-        &Qualifier::from(["std", "Str"])
-    ));
-}
-
-#[test]
-fn internal_and_privileged_may_reach_an_internal_root() {
-    assert!(RootKind::Internal.is_privileged());
-    assert!(RootKind::Privileged.is_privileged());
-    assert!(!RootKind::Ordinary.is_privileged());
+    assert_eq!(
+        Mount::owning(prelude_only, &Qualifier::from(["std", "Str"]))
+            .unwrap()
+            .prefix,
+        Qualifier::from(["std"])
+    );
 }

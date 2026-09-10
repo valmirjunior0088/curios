@@ -76,7 +76,7 @@ pub(crate) fn std_source(manifest: &Path) -> RootSource {
     let mut modules = RootSource::supplied();
     modules.insert_root(
         "std",
-        RootKind::Privileged,
+        RootKind::Ordinary,
         parse_module(manifest.join("std.crs")),
     );
 
