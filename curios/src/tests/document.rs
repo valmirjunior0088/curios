@@ -14,6 +14,27 @@ use {
     },
 };
 
+/// The standard library's record, off the image the compiler was built with.
+///
+/// **The record of `/std`, named by its prefix rather than taken as the first one found.** Both prelude roots carry one — `/sys` documents itself so that `/std` has something to adopt its intrinsic declarations out of — and the fold puts `/sys` first, so a search for "the" record finds the wrong half.
+fn standard_library() -> curios_document::Documentation {
+    with_units(
+        DEFAULT_STEP_BUDGET,
+        &[],
+        None,
+        |_| {},
+        |prelude, _| {
+            prelude
+                .iter()
+                .filter_map(|root| root.text().documentation())
+                .find(|record| record.prefix == Qualifier::from(["std"]))
+                .cloned()
+                .ok_or_else(|| CompileError::failure("the image carries no record".to_string()))
+        },
+    )
+    .expect("the standard library documents")
+}
+
 /// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
 fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
     let millis = SystemTime::now()
@@ -34,19 +55,7 @@ fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
 /// The standard library's record rides in the image it ships in: no sources, no checkout, no second compilation — the build that made the image built the record. It is the honest test of the record, holding opaque types, derived witnesses, concepts and re-exports.
 #[test]
 fn the_standard_library_documents_from_the_archive() {
-    let documentation = with_units(
-        DEFAULT_STEP_BUDGET,
-        &[],
-        None,
-        |_| {},
-        |prelude, _| {
-            prelude
-                .iter()
-                .find_map(|root| root.text().documentation().cloned())
-                .ok_or_else(|| CompileError::failure("the image carries no record".to_string()))
-        },
-    )
-    .expect("the standard library documents");
+    let documentation = standard_library();
 
     assert!(
         documentation.modules.len() > 50,
@@ -190,19 +199,7 @@ fn the_standard_library_documents_from_the_archive() {
 /// Rendered and read back rather than checked against the record, because the record is only half the claim. A path can reach a reader through a template as easily as through a field, and the file is the thing a reader opens.
 #[test]
 fn no_internal_root_reaches_a_rendered_page() {
-    let documentation = with_units(
-        DEFAULT_STEP_BUDGET,
-        &[],
-        None,
-        |_| {},
-        |prelude, _| {
-            prelude
-                .iter()
-                .find_map(|root| root.text().documentation().cloned())
-                .ok_or_else(|| CompileError::failure("the image carries no record".to_string()))
-        },
-    )
-    .expect("the standard library documents");
+    let documentation = standard_library();
 
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
