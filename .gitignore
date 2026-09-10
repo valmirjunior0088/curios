@@ -1,5 +1,6 @@
 .DS_Store
 .artifacts/
+.curios/
 .lake/
 target/
 node_modules/
