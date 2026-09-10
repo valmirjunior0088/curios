@@ -483,7 +483,7 @@ const NESTING: &[Row] = &[
     },
 ];
 
-/// The float lexemes the old nine-digit significand scaled by repeated `pow10` multiplication got wrong — a mantissa past nine digits, exponents past `10^10`, subnormals, and the overflow boundary, where `3.4028236e38` is above the largest finite value yet rounds down to it — each pinned to the bit pattern Rust's correctly rounded parser gives. These rows' expectations are computed rather than written, so they are not a `Row` table.
+/// The float lexemes a narrowing gets wrong — a mantissa past seventeen digits, large exponents, subnormals, and the overflow boundary, where `1.7976931348623159e308` is above the largest finite value and rounds to an infinity — each pinned to the bit pattern Rust's correctly rounded parser gives. These rows' expectations are computed rather than written, so they are not a `Row` table.
 const ROUNDED_FLOATS: &[&str] = &[
     "1.2345678901234567e-5",
     "123456.789012345",

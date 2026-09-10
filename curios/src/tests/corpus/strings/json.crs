@@ -79,9 +79,7 @@ test a_non_finite_number_encodes_as_null =
             written(Json/num(Flt/nan)),
             written(
                 Json/num(
-                    Flt/mul(
-                        +1000000000000000000000000000000.0,
-                        +1000000000000000000000000000000.0))),
+                    Flt/mul(+1.0e200, +1.0e200))),
             written(Json/arr([Json/num(+1.0), Json/num(Flt/pos_inf)])),
             written(Json/num(+1.5)),
             written(Json/num(-1.5)),

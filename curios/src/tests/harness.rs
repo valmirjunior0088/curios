@@ -170,7 +170,7 @@ fn floats_spell_as_literals_and_non_finites_by_name() {
         let _ = line(Spell/spell(Flt/nan))!;
         let _ = line(Spell/spell(Flt/pos_inf))!;
         let _ = line(Spell/spell(Flt/neg_inf))!;
-        let _ = line(Spell/spell(Flt/mul(1.0e30, 1.0e30)))!;
+        let _ = line(Spell/spell(Flt/mul(1.0e200, 1.0e200)))!;
         Io/pure(())
         "#),
         concat!(

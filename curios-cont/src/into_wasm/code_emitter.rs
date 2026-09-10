@@ -1502,7 +1502,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     });
                     self.emit_instr(curios_wasm::Instr::I64ExtendI32U);
                     if shift != 0 {
-                        self.emit_instr(curios_wasm::Instr::I64Const { value: i64::from(shift) });
+                        self.emit_instr(curios_wasm::Instr::I64Const {
+                            value: i64::from(shift),
+                        });
                         self.emit_instr(curios_wasm::Instr::I64Shl);
                         self.emit_instr(curios_wasm::Instr::I64Or);
                     }
