@@ -185,7 +185,7 @@ fn a_test_declaration_registers_by_kind_in_declaration_order() {
         .collect();
     let expected_type = curios_core::Term::func_type(
         [] as [(curios_core::Free, curios_core::Term); 0],
-        curios_core::Term::var(curios_core::Var::free(global("syn/Test/Test"))),
+        curios_core::Term::var(curios_core::Var::free(global("std/Test/Test"))),
     );
     for name in ["Inner/inner_holds", "outer_holds"] {
         let (_, kind, type_) = kinds
@@ -216,7 +216,7 @@ fn a_test_lowers_to_the_thunk_its_surface_no_longer_spells() {
     assert!(func_type.plicities().is_empty());
     assert_eq!(
         *func_type.telescope.terminal(),
-        curios_core::Term::var(curios_core::Var::free(global("syn/Test/Test")))
+        curios_core::Term::var(curios_core::Var::free(global("std/Test/Test")))
     );
     let curios_core::Subterm::Func(func) = &*definition.body else {
         panic!("expected a lambda, got {:?}", definition.body);

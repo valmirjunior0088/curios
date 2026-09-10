@@ -62,53 +62,14 @@ fn rejects_sys_pub_use_reexport_from_user_code() {
     );
 }
 
-// `syn` is closed for the same reason `sys` is: it is the vocabulary the surface forms desugar into rather than anybody's interface, and `/std` re-exports every name of it a program may write.
-#[test]
-fn rejects_syn_use_from_user_code() {
-    let error = lower_with_prelude("use /std/Nat/{Lt}; Type").unwrap_err();
-    assert!(
-        error.contains("internal to the standard library"),
-        "unexpected error: {error}"
-    );
-}
-
-#[test]
-fn rejects_syn_reference_in_term_from_user_code() {
-    let error = lower_with_prelude("/std/Nat/Lt").unwrap_err();
-    assert!(
-        error.contains("internal to the standard library"),
-        "unexpected error: {error}"
-    );
-}
-
-// The relative spelling is refused with the absolute one here too, and for the same reason: nothing imported `syn`.
-#[test]
-fn rejects_relative_syn_reference_in_term() {
-    let error = lower_with_prelude("syn/Nat/Lt").unwrap_err();
-    assert!(
-        error.contains("internal to the standard library"),
-        "unexpected error: {error}"
-    );
-}
-
-#[test]
-fn rejects_syn_pub_use_reexport_from_user_code() {
-    let error =
-        lower_with_prelude("pub mod Foo\n    pub use /std/Nat/{Lt};\nend\nType").unwrap_err();
-    assert!(
-        error.contains("internal to the standard library"),
-        "unexpected error: {error}"
-    );
-}
-
-// **A report never spells a route it would refuse.** `/std/Nat` and `/std/Nat` both carry the name at the same depth, so a candidate list keyed on depth alone offers the closed one beside the open one — and the reader who takes it meets the refusal above, carrying the `/std` redirect that belonged in the first message.
+// **A report never spells a route it would refuse.** `/sys/Nat` and `/std/Nat` both carry the name at the same depth, so a candidate list keyed on depth alone offers the closed one beside the open one — and the reader who takes it meets the refusal above, carrying the `/std` redirect that belonged in the first message.
 #[test]
 fn does_not_offer_a_closed_root_as_a_way_out_of_an_unresolved_name() {
     let error = lower_with_prelude("Nat/add(1, 2)").unwrap_err();
     assert!(
         error.contains("unresolved qualifier: Nat")
             && error.contains("`Nat` is `/std/Nat`")
-            && !error.contains("/std/Nat"),
+            && !error.contains("/sys/Nat"),
         "unexpected error: {error}"
     );
 }
@@ -121,7 +82,7 @@ fn allows_a_constructor_of_a_type_re_exported_out_of_a_closed_root() {
 
 // The same declaration reached through its `/std` facade resolves, which is the door every consumer goes through.
 #[test]
-fn allows_a_syn_declaration_through_its_std_facade() {
+fn allows_a_closed_root_declaration_through_its_std_facade() {
     assert!(lower_with_prelude("use /std/Nat/{Lt}; Type").is_ok());
 }
 
