@@ -1379,14 +1379,14 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$flt/rem (f32, f32) -> f32`: exact `fmod` over binary32, the one scalar helper among the rope ones — it shares their declaration path and nothing else. Long division by exponent-scaled subtraction, in f32 instructions alone: `t` starts at `|y|` and doubles while `2t ≤ |x|` (past the largest finite value the doubling gives `inf`, which fails the test and stops); then while `|x| ≥ |y|`, `t` halves until it no longer exceeds `|x|` and is subtracted. Each halving stays at or above `|y|`, so it is exact even in the subnormal range, and each subtraction has `t ≤ |x| < 2t`, which is Sterbenz's condition for exactness — so the result is the exact remainder `fmodf` computes. The sign is the dividend's, as C defines it. Checked bit-for-bit against `fmodf` over two million random pairs and the NaN, zero, infinity and extreme-magnitude grid before it was written down here; the worst case, the largest finite value against the smallest subnormal, takes a few hundred iterations.
+    /// `$flt/rem (f64, f64) -> f64`: exact `fmod` over binary64, the one scalar helper among the rope ones — it shares their declaration path and nothing else. Long division by exponent-scaled subtraction, in f64 instructions alone: `t` starts at `|y|` and doubles while `2t ≤ |x|` (past the largest finite value the doubling gives `inf`, which fails the test and stops); then while `|x| ≥ |y|`, `t` halves until it no longer exceeds `|x|` and is subtracted. Each halving stays at or above `|y|`, so it is exact even in the subnormal range, and each subtraction has `t ≤ |x| < 2t`, which is Sterbenz's condition for exactness — so the result is the exact remainder `fmod` computes. The sign is the dividend's, as C defines it. Checked bit-for-bit against `fmod` over two million random pairs and the NaN, zero, infinity and extreme-magnitude grid before it was written down here; the worst case, the largest finite value against the smallest subnormal, takes a few hundred iterations.
     pub(crate) fn emit_flt_rem_func(&mut self, func_name: curios_wasm::FuncName) {
         let x = curios_wasm::LocalName::from("x");
         let y = curios_wasm::LocalName::from("y");
         let ax = curios_wasm::LocalName::from("ax");
         let ay = curios_wasm::LocalName::from("ay");
         let t = curios_wasm::LocalName::from("t");
-        let f32_val = curios_wasm::ValType::Num(curios_wasm::NumType::F64);
+        let f64_val = curios_wasm::ValType::Num(curios_wasm::NumType::F64);
         fn label(name: &str) -> curios_wasm::LabelName {
             curios_wasm::LabelName::from(name)
         }
@@ -1534,9 +1534,9 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         self.add_helper(
             func_name,
-            vec![(x, f32_val.clone()), (y, f32_val.clone())],
-            f32_val.clone(),
-            vec![(ax, f32_val.clone()), (ay, f32_val.clone()), (t, f32_val)],
+            vec![(x, f64_val.clone()), (y, f64_val.clone())],
+            f64_val.clone(),
+            vec![(ax, f64_val.clone()), (ay, f64_val.clone()), (t, f64_val)],
             instrs,
         );
     }

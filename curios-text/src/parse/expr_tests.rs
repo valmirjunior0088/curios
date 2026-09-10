@@ -61,7 +61,7 @@ fn parse_intrinsic() {
     assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, Sign::Unmarked));
     assert_eq!(
         "1.5".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(1.5))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(1.5))))
     );
     assert_eq!(
         "false".parse::<Term>().unwrap(),

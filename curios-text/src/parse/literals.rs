@@ -130,7 +130,7 @@ pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
                 return fail("Expected float literal with dot and decimal");
             }
 
-            // Narrowed by the model rather than by the host's parser, so what a literal *means* is stated in this repository like every other `Flt` value. `str::parse::<f32>` is correctly rounded and gives the same bits on every input, so no program changes; what changes is that the answer no longer depends on the machine the compiler runs on.
+            // Narrowed by the model rather than by the host's parser, so what a literal *means* is stated in this repository like every other `Flt` value. `str::parse::<f64>` is correctly rounded and gives the same bits on every input, so no program changes; what changes is that the answer no longer depends on the machine the compiler runs on.
             match decimal_parts(digits) {
                 Some((value, scale)) => pure(Floating::of_decimal(sign == "-", &value, scale)),
                 None => fail("Expected float literal"),

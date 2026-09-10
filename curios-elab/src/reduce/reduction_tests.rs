@@ -440,8 +440,8 @@ fn int_eql_returns_true_or_false_bool() {
 fn flt_folds_through_the_model() {
     let mut context = context();
 
-    let flt = |value: f32| {
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(
+    let flt = |value: f64| {
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(
             value,
         ))))
     };
@@ -461,7 +461,7 @@ fn flt_folds_through_the_model() {
             &mut context,
             Term::intrinsic(Intrinsic::flt_div(flt(1.0), flt(0.0)))
         ),
-        Ok(flt(f32::INFINITY)),
+        Ok(flt(f64::INFINITY)),
     );
     assert_eq!(
         reduce(

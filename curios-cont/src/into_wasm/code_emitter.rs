@@ -1294,7 +1294,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsic::FltDiv => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Div)
             }
-            // WebAssembly has no `f32.rem`; the shared helper computes the exact `fmod` the folders compute (see `Table::flt_rem_func`).
+            // WebAssembly has no `f64.rem`; the shared helper computes the exact `fmod` the folders compute (see `Table::flt_rem_func`).
             CpsIntrinsic::FltRem => {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Flt));
@@ -1342,7 +1342,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsic::FltNearest => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Nearest)
             }
-            // One of the two operations whose non-NaN result would otherwise read a NaN's bits, and so one of the two the engine must be held to the model at. `Flt` has exactly one NaN, which has no sign; Wasm's `f32.copysign` reads the sign bit of whatever pattern the hardware produced, and x86's default NaN is negative where ARM's is positive. Substituting `+0.0` for a NaN sign operand answers `abs(x)`, which is what the model says and what every engine then computes.
+            // One of the two operations whose non-NaN result would otherwise read a NaN's bits, and so one of the two the engine must be held to the model at. `Flt` has exactly one NaN, which has no sign; Wasm's `f64.copysign` reads the sign bit of whatever pattern the hardware produced, and x86's default NaN is negative where ARM's is positive. Substituting `+0.0` for a NaN sign operand answers `abs(x)`, which is what the model says and what every engine then computes.
             CpsIntrinsic::FltCopysign => {
                 let sign_local = self.context.push_local(
                     "copysign_sign",
@@ -1420,7 +1420,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             CpsIntrinsic::FltToLeBytes => {
                 let operand = &args[0];
-                // Reinterpret the f64 as its IEEE-754 bit pattern and split it into the eight little-endian bytes. The `$bytes` payload is `i8`-packed, so `array.new_fixed` truncates each wrapped i32 to its low byte -- byte-for-byte `f64::to_le_bytes`, with no host round-trip. The pattern is sixty-four bits wide, so each byte is shifted out in i64 and wrapped, rather than shifted in i32 as binary32's was.
+                // Reinterpret the f64 as its IEEE-754 bit pattern and split it into the eight little-endian bytes. The `$bytes` payload is `i8`-packed, so `array.new_fixed` truncates each wrapped i32 to its low byte -- byte-for-byte `f64::to_le_bytes`, with no host round-trip. The pattern is sixty-four bits wide, so each byte is shifted out in i64 and wrapped, rather than shifted in i32 as binary64's was.
                 let bits_local = self.context.push_local(
                     "flt_bits",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I64),

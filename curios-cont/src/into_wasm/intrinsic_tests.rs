@@ -60,7 +60,7 @@ fn nat_and_is_bitwise_and_total() {
 #[test]
 fn nat_to_flt_converts_unsigned() {
     let wat = wat(&intrinsic_main(CpsIntrinsic::NatToFlt, vec![nat(7)]));
-    assert_contains(&wat, "f32.convert_i32_u");
+    assert_contains(&wat, "f64.convert_i32_u");
 }
 
 // --- Int ------------------------------------------------------------------
@@ -101,7 +101,7 @@ fn flt_add_boxes_into_the_flt_struct() {
         CpsIntrinsic::FltAdd,
         vec![flt(1.5), flt(2.5)],
     ));
-    assert_contains(&wat, "f32.add");
+    assert_contains(&wat, "f64.add");
     assert_contains(&wat, "struct.new $flt");
 }
 
@@ -112,14 +112,14 @@ fn flt_div_divides() {
             CpsIntrinsic::FltDiv,
             vec![flt(3.0), flt(2.0)],
         )),
-        "f32.div",
+        "f64.div",
     );
 }
 
 #[test]
-fn flt_to_le_bytes_packs_a_four_byte_leaf() {
+fn flt_to_le_bytes_packs_an_eight_byte_leaf() {
     let wat = wat(&intrinsic_main(CpsIntrinsic::FltToLeBytes, vec![flt(1.0)]));
-    assert_contains(&wat, "i32.reinterpret_f32");
+    assert_contains(&wat, "i64.reinterpret_f64");
     assert_contains(&wat, "array.new_fixed");
     assert_contains(&wat, "struct.new $rope/bin/leaf");
 }
@@ -127,6 +127,6 @@ fn flt_to_le_bytes_packs_a_four_byte_leaf() {
 #[test]
 fn flt_to_int_truncates_and_guards_the_range() {
     let wat = wat(&intrinsic_main(CpsIntrinsic::FltToInt, vec![flt(1.0)]));
-    assert_contains(&wat, "i32.trunc_f32_s");
+    assert_contains(&wat, "i32.trunc_f64_s");
     assert_traps(&wat);
 }

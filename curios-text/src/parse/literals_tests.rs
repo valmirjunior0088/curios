@@ -16,15 +16,15 @@ fn integer_literals_are_polymorphic_num_lits() {
     assert_eq!("-42".parse::<Term>().unwrap(), num_lit(42, Sign::Negative));
     assert_eq!(
         "42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(42.0))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(42.0))))
     );
     assert_eq!(
         "+42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(42.0))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(42.0))))
     );
     assert_eq!(
         "-42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(
             -42.0
         ))))
     );
@@ -51,30 +51,30 @@ fn rejects_a_float_literal_that_overflows_to_infinity() {
     assert!("-1.0e999".parse::<Term>().is_err());
     // An exponent too large to be a decimal exponent at all is refused before any narrowing, rather than overflowing the count it is read into.
     assert!("1.0e99999999999".parse::<Term>().is_err());
-    // The largest finite magnitudes still parse, and the pair below brackets the rounding threshold — `2^128 − 2^103`, which sits *above* the largest finite value. A numeral under it narrows to that value; one over it is an overflow. Both were taken from the model's own oracle table against `str::parse::<f32>`, not from arithmetic done in prose.
+    // The largest finite magnitudes still parse, and the pair below brackets the rounding threshold — `2^1024 − 2^970`, which sits *above* the largest finite value. A numeral under it narrows to that value; one over it is an overflow. Both were taken from the model's own oracle table against `str::parse::<f64>`, not from arithmetic done in prose.
     assert_eq!(
-        "3.4e38".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(
-            3.4e38
+        "1.7e308".parse::<Term>().unwrap(),
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(
+            1.7e308
         ))))
     );
     assert_eq!(
-        "3.4028235e38".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(
-            f32::MAX
+        "1.7976931348623157e308".parse::<Term>().unwrap(),
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(
+            f64::MAX
         ))))
     );
-    assert!("3.4028236e38".parse::<Term>().is_err());
-    // A subnormal narrows on the `2^-149` grid rather than flushing to zero, and one below half that grid step rounds away.
+    assert!("1.7976931348623159e308".parse::<Term>().is_err());
+    // A subnormal narrows on the `2^-1074` grid rather than flushing to zero, and one below half that grid step rounds away.
     assert_eq!(
-        "1.0e-45".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(
-            1.0e-45
+        "5.0e-324".parse::<Term>().unwrap(),
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(
+            5.0e-324
         ))))
     );
     assert_eq!(
-        "1.0e-50".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(0.0))))
+        "1.0e-324".parse::<Term>().unwrap(),
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f64(0.0))))
     );
 }
 

@@ -225,7 +225,7 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
             body: forwarding_body,
         },
     );
-    let nan = CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f32(f32::NAN)));
+    let nan = CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f64(f64::NAN)));
     let call = module.add_node(CpsNode::ApplyCont(CpsEdge {
         target: forwarding,
         args: vec![nan.clone()],
@@ -458,14 +458,14 @@ fn identity_folds_leave_traps_and_flt_untouched() {
             CpsIntrinsic::FltAdd,
             vec![
                 CpsAtom::Value(x),
-                CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f32(0.0))),
+                CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f64(0.0))),
             ],
         ),
         (
             CpsIntrinsic::FltMul,
             vec![
                 CpsAtom::Value(x),
-                CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f32(1.0))),
+                CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f64(1.0))),
             ],
         ),
     ];

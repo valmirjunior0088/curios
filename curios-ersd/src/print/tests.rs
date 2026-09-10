@@ -124,7 +124,7 @@ fn schemas_and_constants_print_deterministically() {
         vec![Field::opaque(Some("radius".into()))],
     );
     builder.open_block();
-    let negative_zero = builder.constant(Constant::Flt(Floating::from_f32(-0.0)));
+    let negative_zero = builder.constant(Constant::Flt(Floating::from_f64(-0.0)));
     let byte = builder.constant(Constant::Byte(7));
     let pair = builder.let_value(
         None,

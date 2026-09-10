@@ -668,7 +668,7 @@ impl<'a> Table<'a> {
         self.bytes_box.get().is_some()
     }
 
-    /// `$flt/rem (f32, f32) -> f32`: the exact `fmod` every constant folder computes, as a function because WebAssembly has no `f32.rem`. It used to be expanded inline as `x - trunc(x / y) * y`, which rounds at each step and disagrees with `fmod` on roughly half of all finite operand pairs — `1e8 % 3` came out `0` at runtime against the folded `1`.
+    /// `$flt/rem (f64, f64) -> f64`: the exact `fmod` every constant folder computes, as a function because WebAssembly has no `f64.rem`. It used to be expanded inline as `x - trunc(x / y) * y`, which rounds at each step and disagrees with `fmod` on roughly half of all finite operand pairs — `1e8 % 3` came out `0` at runtime against the folded `1`.
     pub(crate) fn flt_rem_func(&self) -> curios_wasm::FuncName {
         self.flt_rem
             .get_or_init(|| curios_wasm::FuncName::from("flt/rem"))

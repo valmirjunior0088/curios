@@ -14,7 +14,7 @@
 //!
 //! The host ABI is untouched by the rope: wire `Bytes` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are forced before the call, results are embedded into fresh leaves after it), so curios-runtime and the curios-js bridge only ever see flat arrays.
 
-/// `Flt` — a boxed `f32`: `struct (field $special (f32))`.
+/// `Flt` — a boxed `f64`: `struct (field $special (f64))`.
 pub fn flt_sub_type(special_field: curios_wasm::FieldName) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,

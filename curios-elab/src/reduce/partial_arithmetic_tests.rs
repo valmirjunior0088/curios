@@ -141,7 +141,7 @@ fn flt_to_int_answers_the_exact_integer() {
 
     // The narrowing answers the *exact* unbounded integer, past what any runtime carrier holds: `2^31` is out of `i32` range, and that refusal belongs to the erasure boundary rather than here, where `Int` pretends ℤ.
     let exact = Term::intrinsic(Intrinsic::FltToInt {
-        flt: Term::intrinsic(Intrinsic::Flt(Floating::from_f32(2147483648.0))),
+        flt: Term::intrinsic(Intrinsic::Flt(Floating::from_f64(2147483648.0))),
         finite: qed(),
     });
     assert_eq!(
@@ -151,7 +151,7 @@ fn flt_to_int_answers_the_exact_integer() {
 
     // Outside the domain `Finite` states there is no integer to answer, so the operation stays stuck rather than inventing one. A well-typed call cannot reach this — the bound excludes a NaN — and reduction does not rely on being handed only well-typed terms.
     let nan = Term::intrinsic(Intrinsic::FltToInt {
-        flt: Term::intrinsic(Intrinsic::Flt(Floating::from_f32(f32::NAN))),
+        flt: Term::intrinsic(Intrinsic::Flt(Floating::from_f64(f64::NAN))),
         finite: qed(),
     });
     assert_eq!(reduce(&mut context, nan.clone()), Ok(nan));

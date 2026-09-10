@@ -26,7 +26,7 @@ impl CpsFunId {
     }
 }
 
-/// A literal operand. `Flt` holds the bitwise [`Floating`] rather than an `f32` so that the derived equality is identity on the bit pattern: under IEEE equality a NaN literal is unequal to itself, and a pass comparing an edge it rebuilt against the edge it read would report a change on every round — `forward_continuations` did exactly that, and the fixpoint ran to its backstop on any module carrying a `NaN` through a jump.
+/// A literal operand. `Flt` holds the bitwise [`Floating`] rather than an `f64` so that the derived equality is identity on the bit pattern: under IEEE equality a NaN literal is unequal to itself, and a pass comparing an edge it rebuilt against the edge it read would report a change on every round — `forward_continuations` did exactly that, and the fixpoint ran to its backstop on any module carrying a `NaN` through a jump.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CpsLiteral {
     Nat(u32),
@@ -158,7 +158,7 @@ pub enum Repr {
     Nat,
     /// A raw signed 32-bit carrier.
     Int,
-    /// A raw binary32 carrier.
+    /// A raw binary64 carrier.
     Flt,
     /// A packed-binary reference at the given grain: a small-canonical immediate or a rope. The grain rides the carrier because the two immediate layouts share no runtime discrimination — only the static type keeps them apart, so the coercion tables must be unable to confuse them.
     Bin(Grain),
@@ -759,7 +759,7 @@ pub enum CpsSlot {
     Nat,
     /// A raw signed 32-bit payload.
     Int,
-    /// A raw binary32 payload — the one slot that deletes an allocation rather than a coercion, since the boxed `Flt` it replaces is a heap object of its own.
+    /// A raw binary64 payload — the one slot that deletes an allocation rather than a coercion, since the boxed `Flt` it replaces is a heap object of its own.
     Flt,
     /// A list rope. The base type is not final, so this is the slot that deletes an `is_subtype` libcall rather than an inline check.
     List,

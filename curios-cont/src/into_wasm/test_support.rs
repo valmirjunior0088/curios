@@ -60,8 +60,8 @@ pub(super) const fn int(value: i32) -> CpsAtom {
     CpsAtom::Literal(CpsLiteral::Int(value))
 }
 
-pub(super) fn flt(value: f32) -> CpsAtom {
-    CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f32(value)))
+pub(super) fn flt(value: f64) -> CpsAtom {
+    CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f64(value)))
 }
 
 /// A nullary `main` that binds one intrinsic over `args` and exits with the result — the CPS analogue of the deleted fixtures' "compute one thing, exit with it". `into_wasm` does not fold, so the op lowers verbatim.

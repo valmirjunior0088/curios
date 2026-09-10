@@ -324,7 +324,7 @@ pub enum TrapKind {
 }
 
 impl Semantics {
-    /// Constant-fold a scalar operation over its operands, under the numeric law: exact `u32`/`i32` — add, multiply, and left shift refuse a result past the carrier as a [`FoldOutcome::WouldTrap`], never wrapping it, while `Nat` subtraction is monus — and bit-preserving binary32. Comparisons yield a [`Constant::Bool`]; the `0`/`1` carrier is the lowering's decision. i31 appears nowhere here.
+    /// Constant-fold a scalar operation over its operands, under the numeric law: exact `u32`/`i32` — add, multiply, and left shift refuse a result past the carrier as a [`FoldOutcome::WouldTrap`], never wrapping it, while `Nat` subtraction is monus — and bit-preserving binary64. Comparisons yield a [`Constant::Bool`]; the `0`/`1` carrier is the lowering's decision. i31 appears nowhere here.
     pub fn fold_operation(operation: Operation, operands: &[Constant]) -> FoldOutcome {
         use Operation::*;
 

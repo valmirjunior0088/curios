@@ -877,7 +877,7 @@ pub(crate) enum LoadAs {
     List,
 }
 
-/// How a value in its register carrier is boxed back into a reference: an `i31ref` for the scalar carriers, the `Flt` struct for `f32`, and nothing at all for a representation that already names one.
+/// How a value in its register carrier is boxed back into a reference: an `i31ref` for the scalar carriers, the `Flt` struct for `f64`, and nothing at all for a representation that already names one.
 ///
 /// The dual of [`LoadAs::of`], and the reason this reads a [`Repr`] rather than a dedicated two-variant enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
 /// The zero of `carrier`, or the boxed zero when the destination holds a reference.
