@@ -1,4 +1,4 @@
-//! Canonical compiler-known names owned by the authored `/syn` source tree.
+//! Canonical compiler-known names, owned by the authored `/std` source tree that declares them.
 
 use curios_utilities::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax,
@@ -58,12 +58,12 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         flt_non_neg: name(&["sys", "Bound", "NonNeg"]),
     },
     test: TestSyntax {
-        test_type: name(&["syn", "Test", "Test"]),
-        main: name(&["syn", "Test", "main"]),
+        test_type: name(&["std", "Test", "Test"]),
+        main: name(&["std", "Test", "main"]),
     },
     spell: SpellSyntax {
-        spell: field(&["syn", "Spell", "Spell"], "spell"),
-        call: name(&["syn", "Spell", "call"]),
-        record: name(&["syn", "Spell", "record"]),
+        spell: field(&["std", "Spell", "Spell"], "spell"),
+        call: name(&["std", "Spell", "call"]),
+        record: name(&["std", "Spell", "record"]),
     },
 };

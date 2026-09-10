@@ -1,6 +1,6 @@
 //! Display-only folding of elaboration internals back into source-shaped spelling.
 //!
-//! An infix operator elaborates to a projection of its `/syn` concept witness applied to the operands (`a + b` ≙ `Add/add(a, b)` — see `elaborate_infix`), so a goal report would spell `0 + 0` as `(witness2).0(0, 0)`: an anonymous witness projection no reader should have to decode. The fold reverses exactly that rebuild, recognizing the three forms the call reaches a report in — a still-unsolved witness metavariable, whose `WitnessOrigin` carries the operator symbol; a solved-and-substituted witness global, resolved back to its operator through the witness table and the concept's field roster; and an *abstract* witness, a `use` binder standing for a witness the caller will supply, resolved through the concept its declared type names.
+//! An infix operator elaborates to a projection of its operator concept witness applied to the operands (`a + b` ≙ `Add/add(a, b)` — see `elaborate_infix`), so a goal report would spell `0 + 0` as `(witness2).0(0, 0)`: an anonymous witness projection no reader should have to decode. The fold reverses exactly that rebuild, recognizing the three forms the call reaches a report in — a still-unsolved witness metavariable, whose `WitnessOrigin` carries the operator symbol; a solved-and-substituted witness global, resolved back to its operator through the witness table and the concept's field roster; and an *abstract* witness, a `use` binder standing for a witness the caller will supply, resolved through the concept its declared type names.
 //!
 //! The abstract case is the one reduction cannot reach. Where the operand type is concrete the projection reduces to its intrinsic and prints infix without any of this, so the fold only earns its keep under a `use Add(A)` parameter — exactly where the reader has least else to go on.
 //!
@@ -24,9 +24,9 @@ use {
 /// The operator behind a witness projection, keyed both ways a report can arrive at one. Built once and shared across a batch's display calls; the metavariable-origin case needs no entry because the insertion provenance itself names the operator.
 #[derive(Debug, Default)]
 pub(crate) struct OperatorTable {
-    /// (witness name, projected field index) → operator, for every registered witness of a `/syn` operator concept.
+    /// (witness name, projected field index) → operator, for every registered witness of an operator concept.
     by_witness: BTreeMap<(Global, usize), InfixOp>,
-    /// (concept name, field index) → operator, for every `/syn` operator concept. Keyed on the concept rather than on any witness of it, because an abstract witness has none: the binder's type names the concept and the projection's index picks the method out of it.
+    /// (concept name, field index) → operator, for every operator concept. Keyed on the concept rather than on any witness of it, because an abstract witness has none: the binder's type names the concept and the projection's index picks the method out of it.
     by_concept: BTreeMap<(Global, usize), InfixOp>,
 }
 
@@ -38,7 +38,7 @@ pub(crate) type BinderTypes = Rc<BTreeMap<Free, Term>>;
 pub(crate) fn operator_table(context: &Context) -> Operators {
     let mut table = OperatorTable::default();
 
-    // The concept rows come first and carry the whole operator lookup: a witness of an operator concept answers for the same method at the same index, so the witness rows are a re-keying of these rather than a second scan of the `/syn` roster.
+    // The concept rows come first and carry the whole operator lookup: a witness of an operator concept answers for the same method at the same index, so the witness rows are a re-keying of these rather than a second scan of the operator roster.
     for (concept_name, concept) in context.concepts() {
         let Global::Authored(concept_path) = concept_name else {
             continue;

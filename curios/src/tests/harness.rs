@@ -126,7 +126,7 @@ fn a_declared_test_applied_to_a_table_is_one_test() {
 
 #[test]
 fn a_description_is_matched_only_by_its_own_module() {
-    // `Test`'s representation is private to `/syn/Test`: a consumer builds descriptions through the combinators and cannot eliminate one.
+    // `Test`'s representation is private to `/std/Test`: a consumer builds descriptions through the combinators and cannot eliminate one.
     let report = error(
         r#"
         use /std/{Io, Test};
@@ -256,7 +256,7 @@ fn a_test_declaration_compiles_beside_the_entry() {
 
 #[test]
 fn a_test_body_is_checked_against_the_description_type() {
-    // The declared type is `() -> /syn/Test` whatever the body: a `Nat` body is a type error at the declaration, not a value the runner later chokes on.
+    // The declared type is `() -> /std/Test` whatever the body: a `Nat` body is a type error at the declaration, not a value the runner later chokes on.
     let error = error(
         r#"
         use /std/{Nat, Str, Io, Test};

@@ -514,7 +514,7 @@ pub enum Subterm {
     /// An ordered guarded ladder (see [`Choose`]) — not a match, since it consumes no scrutinee.
     Choose(Choose),
     Let(Let),
-    /// A postfix bang `e!`: extracts the result of monadic action `e` inline. The operand is the action whose result is bound. The `into_core` pass hoists each bang to the top of its enclosing region (a value body, re-rooted at lambda bodies, match arms, and recursive-group members) and sequences it through `/syn/Monad/bind`, whose `use` binder resolves the `Monad` witness from the action's type. Exists only between parsing and `into_core`, which eliminates it before core elaboration; a bang in a type is rejected.
+    /// A postfix bang `e!`: extracts the result of monadic action `e` inline. The operand is the action whose result is bound. The `into_core` pass hoists each bang to the top of its enclosing region (a value body, re-rooted at lambda bodies, match arms, and recursive-group members) and sequences it through `/std/Monad/bind`, whose `use` binder resolves the `Monad` witness from the action's type. Exists only between parsing and `into_core`, which eliminates it before core elaboration; a bang in a type is rejected.
     Bang(Term),
     Name(Name),
     /// A silent inference hole: a placeholder elaborated to a fresh metavariable whose solution zonk splices in without comment. Desugar-only — the parser mints [`Subterm::Goal`] for a written `?`; `Hole` stands in where a desugar omits a term (an unannotated local `let`'s type). Carries no payload — its span rides on the wrapping [`Term`].
@@ -523,7 +523,7 @@ pub enum Subterm {
     Goal,
     /// The body of a body-less witness, `satisfy C(T);`: lowered to the `Derive` elaboration transient, which the concept's derivation expands or refuses. Desugar-only — minted by the witness lowering, never parsed — so that the declaration's telescope wraps it exactly as it wraps a written body. Carries no payload; its span rides on the wrapping [`Term`].
     Derive,
-    /// A literal whose value is synthesized from `/syn` rather than lowered to a core intrinsic (see [`Syn`]). The lowerer runs a meta-emitter on it instead of `intrinsic()`.
+    /// A literal whose value is synthesized from the registry rather than lowered to a core intrinsic (see [`Syn`]). The lowerer runs a meta-emitter on it instead of `intrinsic()`.
     Syn(Syn),
     /// An infix operator application `left <op> right` (see [`Infix`]).
     Infix(Infix),
@@ -531,7 +531,7 @@ pub enum Subterm {
     NumLit(NumLit),
 }
 
-/// The literals the lowerer desugars to a `/syn` construction: a character becomes a proof-carrying `/std/Char`, and a string becomes a proof-carrying `/std/Str`. Held as a dedicated [`Subterm`] variant (not an `Intrinsic`) because the result is a core term, never a core intrinsic.
+/// The literals the lowerer desugars to a proof-carrying construction: a character becomes a proof-carrying `/std/Char`, and a string becomes a proof-carrying `/std/Str`. Held as a dedicated [`Subterm`] variant (not an `Intrinsic`) because the result is a core term, never a core intrinsic.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Syn {
     Char(char),

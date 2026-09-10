@@ -227,7 +227,7 @@ pub struct TopWitness {
     pub body: Option<Vec<WitnessEntry>>,
 }
 
-/// A `test` declaration: `test name = body;` — a named description of type `/syn/Test`, taking no parameters. It is not function sugar, though it lowers to the same `() -> Test` thunk a nullary one used to: only the selected test's body is forced, and the parentheses that used to spell that are gone from the surface because they held a telescope that no longer has a meaning.
+/// A `test` declaration: `test name = body;` — a named description of type `/std/Test`, taking no parameters. It is not function sugar, though it lowers to the same `() -> Test` thunk a nullary one used to: only the selected test's body is forced, and the parentheses that used to spell that are gone from the surface because they held a telescope that no longer has a meaning.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopTest {
     pub label: Label,
@@ -282,7 +282,7 @@ impl Module {
         Ok((module, take_comments()))
     }
 
-    /// Read and parse a standalone module while retaining its source path for diagnostics. The prelude artifact builder uses this for `/syn` and `/std`; ordinary compilation reaches file-backed modules through [`RootSource`].
+    /// Read and parse a standalone module while retaining its source path for diagnostics. The prelude artifact builder uses this for `/std`; ordinary compilation reaches file-backed modules through [`RootSource`].
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
         Self::read(path.as_ref()).map(|(module, _)| module)
     }

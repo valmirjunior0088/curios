@@ -1,1 +1,30 @@
-pub use /syn/Spell/{Spell, spell, call, record};
+use /std/{Str, List};
+
+-- | How a value spells as text.
+-- |
+-- | A body-less `satisfy Spell(T);` asks the compiler to write the witness, spelling a value as its constructor applied to its payloads.
+pub concept Spell(A: Type): pub Type {
+    -- | The value, written the way a source would write it.
+    spell(A) -> Str,
+}
+
+pub use Spell/*;
+
+-- | How a constructor application spells: the head, then its arguments in parentheses.
+pub let call(head: Str, args: List(Str)) -> Str =
+    Str/concat(head, Str/concat("(", Str/concat(Str/join(", ", args), ")")));
+
+-- | How a record spells: the head, then its fields in braces.
+-- |
+-- | A field whose label is empty spells as its value alone, which is the positional field of a newtype-like structure.
+pub let record(head: Str, fields: List({Str, Str})) -> Str =
+    let entries =
+        List/map(fields, ((label, value)) =>
+            match Str/len(label)
+            | 0 => value
+            | _ => Str/concat(label, Str/concat(" = ", value))
+            end);
+    match entries
+    | [] => Str/concat(head, " {}")
+    | _ => Str/concat(head, Str/concat(" { ", Str/concat(Str/join(", ", entries), " }")))
+    end;

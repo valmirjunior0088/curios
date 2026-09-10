@@ -2,13 +2,13 @@
 //!
 //! Every enumeration below opens by destructuring the struct it enumerates: a pattern naming fewer fields than the struct has does not compile, so a slot added to a group is a compile error until it is enumerated — exactly as it is a compile error at every fill site until it is filled.
 //!
-//! The registry is *shape only*: it names slots, never spellings. `curios-prelude-archive` fills them, and the two stages that emit `/syn` names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. Why the shape lives below both consumers, and what the destructuring once caught, are `README.md`'s decisions.
+//! The registry is *shape only*: it names slots, never spellings. `curios-prelude-archive` fills them, and the two stages that emit those names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. Why the shape lives below both consumers, and what the destructuring once caught, are `README.md`'s decisions.
 
 use crate::{InfixOp, Qualifier};
 
-/// One compiler-known `/syn` name, stated as its module segments.
+/// One compiler-known name, stated as its module segments.
 ///
-/// Segments rather than a path string, because a consumer needs the *identity*, and building one from `"/syn/Monad/bind"` would mean splitting a spelling — the coupling this registry exists to remove. The registry is the site that knows the structure, so the registry states it.
+/// Segments rather than a path string, because a consumer needs the *identity*, and building one from `"/std/Monad/bind"` would mean splitting a spelling — the coupling this registry exists to remove. The registry is the site that knows the structure, so the registry states it.
 #[derive(Debug, Clone, Copy)]
 pub struct SyntaxName {
     segments: &'static [&'static str],
@@ -35,7 +35,7 @@ impl SyntaxName {
     }
 }
 
-/// One concept method the compiler dispatches through: the concept's `/syn` name, and the label of the field within it.
+/// One concept method the compiler dispatches through: the concept's name, and the label of the field within it.
 ///
 /// The label is deliberately not a [`SyntaxName`]. A concept field is a structure field resolved positionally against its declaration, not a global anything can name, so it travels beside the concept it belongs to instead of pretending to be a name of its own — and it is checked differently: presence in the declaration's field list rather than presence in the module's declared names.
 #[derive(Debug, Clone, Copy)]
@@ -44,7 +44,7 @@ pub struct ConceptField {
     pub field: &'static str,
 }
 
-/// The compiler-known `/syn` names, grouped by the surface feature that emits them.
+/// The compiler-known names, grouped by the surface feature that emits them.
 ///
 /// The crate that owns the corresponding source declarations fills the fields as an exhaustive named struct literal: a new slot is a compile error at every fill site until it is filled, and the fill names each slot — where a positional constructor once let two like-typed slots swap silently past every check. [`SyntaxRegistry::targets`] and [`SyntaxRegistry::concept_fields`] enumerate the whole obligation, which is what lets the prelude build check every slot against the sources rather than trusting them to agree.
 #[derive(Debug, Clone, Copy)]
@@ -60,7 +60,7 @@ pub struct SyntaxRegistry {
 }
 
 impl SyntaxRegistry {
-    /// Every registered name, for the prelude build's presence check. The operator concepts appear once per method that dispatches through them, so `/syn/Compare` recurs — a duplicate costs a redundant assertion and nothing else.
+    /// Every registered name, for the prelude build's presence check. The operator concepts appear once per method that dispatches through them, so `/std/Compare` recurs — a duplicate costs a redundant assertion and nothing else.
     ///
     /// Each group answers for its own slots instead of having them reached through from here, so that the exhaustive pattern sits in the same scope as the fields it has to keep up with.
     pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
@@ -108,7 +108,7 @@ impl SyntaxRegistry {
     }
 }
 
-/// The target postfix `!` sequences with: `/syn/Monad`'s `bind`, projected from the witness the operand's type resolves.
+/// The target postfix `!` sequences with: `/std/Monad`'s `bind`, projected from the witness the operand's type resolves.
 #[derive(Debug, Clone, Copy)]
 pub struct MonadSyntax {
     pub bind: SyntaxName,
@@ -122,7 +122,7 @@ impl MonadSyntax {
     }
 }
 
-/// The embedding concept auto-lift resolves at a postfix `!` whose action's monad differs from its region's: `/syn/Lift`'s `lift` method, projected from the witness keyed by the two monads. Consulted by `elaborate_bang` only — lowering never reads it.
+/// The embedding concept auto-lift resolves at a postfix `!` whose action's monad differs from its region's: `/std/Lift`'s `lift` method, projected from the witness keyed by the two monads. Consulted by `elaborate_bang` only — lowering never reads it.
 #[derive(Debug, Clone, Copy)]
 pub struct LiftSyntax {
     pub lift: ConceptField,
@@ -277,7 +277,7 @@ impl ProofSyntax {
     }
 }
 
-/// The names the `test` declaration form emits: `/syn/Test`, the declared output type of every lowered test, and `/syn/Test/main`, the scheduler the synthesized tail applies to the collected tests. Two slots, because the tail decides nothing — a test takes no parameters, so there is no discharge to choose and no description to compare a body against.
+/// The names the `test` declaration form emits: `/std/Test`, the declared output type of every lowered test, and `/std/Test/main`, the scheduler the synthesized tail applies to the collected tests. Two slots, because the tail decides nothing — a test takes no parameters, so there is no discharge to choose and no description to compare a body against.
 #[derive(Debug, Clone, Copy)]
 pub struct TestSyntax {
     pub test_type: SyntaxName,
@@ -292,7 +292,7 @@ impl TestSyntax {
     }
 }
 
-/// The names a derived `Spell` witness body is written with: the concept's `spell` method, applied to each payload and resolved like any written call, and the two renderers the body applies over the spelled pieces — `call` for a constructor over its explicit payloads, `record` for a struct over its labeled fields. The re-parse grammar is spelled once, in `/syn/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
+/// The names a derived `Spell` witness body is written with: the concept's `spell` method, applied to each payload and resolved like any written call, and the two renderers the body applies over the spelled pieces — `call` for a constructor over its explicit payloads, `record` for a struct over its labeled fields. The re-parse grammar is spelled once, in `/std/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
 #[derive(Debug, Clone, Copy)]
 pub struct SpellSyntax {
     pub spell: ConceptField,

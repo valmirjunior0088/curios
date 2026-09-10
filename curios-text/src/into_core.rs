@@ -560,7 +560,7 @@ fn process_items(
                     false => FlatItem::Let(items.pop().expect("a `let` item has a member")),
                 });
             }
-            // A test takes no parameters, so it is not function sugar — but it lowers to the same `() -> Test` a nullary one used to, because `Test/main` holds the whole schedule and must force only the one it selected. The output is emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on `/syn` being importable.
+            // A test takes no parameters, so it is not function sugar — but it lowers to the same `() -> Test` a nullary one used to, because `Test/main` holds the whole schedule and must force only the one it selected. The output is emitted as core directly off the registry slot, since a synthesized `Var` carries the resolved identity and nothing here depends on the declaration being importable.
             TopItem::Test(test) => {
                 context.record_import_scope(Some(&context.prefixed(&test.label)));
                 let lower = Lowerer::new(context);

@@ -1,4 +1,4 @@
-//! The authored prelude as a root source: `/sys` synthesized from the host table, `/syn` and `/std` parsed from this crate's two trees. Shared by the build script, which lowers it into the archive, and by the tests, which hold the same sources to what the archive cannot check — that they lint clean.
+//! The authored prelude as a root source: `/sys` synthesized from the host table, `/std` parsed from this crate's one tree. Shared by the build script, which lowers it into the archive, and by the tests, which hold the same sources to what the archive cannot check — that they lint clean.
 
 use {
     curios_abi::host_ops,
@@ -12,10 +12,9 @@ use {
 
 use crate::syntax::SYNTAX;
 
-/// Every prelude source under `manifest`, the two indexes first, the rest in path order.
+/// Every prelude source under `manifest`, the index first, the rest in path order.
 pub(crate) fn source_files(manifest: &Path) -> Vec<PathBuf> {
-    let mut files = vec![manifest.join("syn.crs"), manifest.join("std.crs")];
-    collect_crs(&manifest.join("syn"), &mut files);
+    let mut files = vec![manifest.join("std.crs")];
     collect_crs(&manifest.join("std"), &mut files);
     files.sort();
     files
@@ -62,24 +61,22 @@ fn source_qualifier(manifest: &Path, source: &Path) -> Qualifier {
     Qualifier::from(segments)
 }
 
-/// The three roots the fixed prelude is lowered from, with every authored module under `manifest` filed at its qualifier.
+/// The two roots the fixed prelude is lowered from, with every authored module under `manifest` filed at its qualifier.
+///
+/// `/sys` is supplied whole by `sys_module`; `/std` is this crate's authored tree. There is no third root: what `/syn` held is now declared where its consumers are, and the compiler reaches those names through the registry rather than through a root of its own.
 pub(crate) fn authored_prelude(manifest: &Path) -> RootSource {
     let mut modules = RootSource::supplied();
     modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops(), &SYNTAX));
-    modules.insert_root(
-        "syn",
-        RootKind::Internal,
-        parse_module(manifest.join("syn.crs")),
-    );
     modules.insert_root(
         "std",
         RootKind::Privileged,
         parse_module(manifest.join("std.crs")),
     );
 
-    for source in source_files(manifest).iter().filter(|path| {
-        path.starts_with(manifest.join("syn")) || path.starts_with(manifest.join("std"))
-    }) {
+    for source in source_files(manifest)
+        .iter()
+        .filter(|path| path.starts_with(manifest.join("std")))
+    {
         modules.insert_module(source_qualifier(manifest, source), parse_module(source));
     }
 

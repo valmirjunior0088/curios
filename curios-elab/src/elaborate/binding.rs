@@ -519,7 +519,7 @@ fn infix_method(
     }))
 }
 
-/// Desugar a postfix `!` sequencing site ([`Bang`]) into its `/syn/Monad/bind` application and elaborate the result. The region's monad is read from the expected type and never inferred from the action — the discipline Lean's do-elaborator enforces with `tryPostponeIfNoneOrMVar` and `extractBind`: a bang whose region type is still an unsolved metavariable parks as a whole checking problem and re-runs when it lands, and one in an inference position is refused, because sequencing has no monad until the region names one. The discipline is structural, not a matter of unification order: the wrapper is handed the region's monad as its `@M` (see [`region_monad`]), so every action is checked against `M(A)` with `M` the region's, and an action of another monad is reported at its own `!`. The rebuilt application takes the node's own span, so diagnostics keep anchoring at the written `!`.
+/// Desugar a postfix `!` sequencing site ([`Bang`]) into its `/std/Monad/bind` application and elaborate the result. The region's monad is read from the expected type and never inferred from the action — the discipline Lean's do-elaborator enforces with `tryPostponeIfNoneOrMVar` and `extractBind`: a bang whose region type is still an unsolved metavariable parks as a whole checking problem and re-runs when it lands, and one in an inference position is refused, because sequencing has no monad until the region names one. The discipline is structural, not a matter of unification order: the wrapper is handed the region's monad as its `@M` (see [`region_monad`]), so every action is checked against `M(A)` with `M` the region's, and an action of another monad is reported at its own `!`. The rebuilt application takes the node's own span, so diagnostics keep anchoring at the written `!`.
 pub(super) fn elaborate_bang(
     context: &mut Context,
     bang: &Bang,
@@ -536,7 +536,7 @@ pub(super) fn elaborate_bang(
         return park_checking(context, term, expected);
     }
 
-    // Auto-lift, decided before anything elaborates by reading declared shapes: both monads keyable and different means the action is wrapped in `/syn/Lift`'s `lift`, whose `use` slot resolves the declared embedding — or reports the missing edge. An unreadable action stays unwrapped and keeps the ordinary mismatch; the explicit `lift(action)` spelling always remains.
+    // Auto-lift, decided before anything elaborates by reading declared shapes: both monads keyable and different means the action is wrapped in `/std/Lift`'s `lift`, whose `use` slot resolves the declared embedding — or reports the missing edge. An unreadable action stays unwrapped and keeps the ordinary mismatch; the explicit `lift(action)` spelling always remains.
     let action = match (
         monad_shape(context, &region),
         action_result_shape(context, &bang.action),
@@ -614,7 +614,7 @@ fn abstracted_monad(context: &mut Context, region: &Term, sort: &Term) -> Option
     ))
 }
 
-/// `action` wrapped in `/syn/Lift`'s `lift`, whose `use` slot resolves the declared embedding into the region or reports the missing edge; the wrapper takes the action's own span, or `fallback`, so the report anchors where the action was written.
+/// `action` wrapped in `/std/Lift`'s `lift`, whose `use` slot resolves the declared embedding into the region or reports the missing edge; the wrapper takes the action's own span, or `fallback`, so the report anchors where the action was written.
 fn lift_wrapped(context: &Context, action: &Term, fallback: Option<Span>) -> Term {
     let field = context.syntax().lift.lift;
     let wrapper = Term::free_var(&Free::global(field.concept.qualifier().with(field.field)));

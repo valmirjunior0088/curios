@@ -64,18 +64,17 @@ fn build() {
     println!("cargo:rerun-if-changed=src/syntax.rs");
 
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
-    // The two directories rather than each discovered file: Cargo scans a watched directory recursively, so a *newly added* source triggers the rerun a per-file directive cannot — it matches no directive from the run that predates it. The two indexes sit beside the directories, not inside them, so they are named on their own.
-    for watched in ["syn.crs", "std.crs", "syn", "std"] {
+    // The directory rather than each discovered file: Cargo scans a watched directory recursively, so a *newly added* source triggers the rerun a per-file directive cannot — it matches no directive from the run that predates it. The index sits beside the directory, not inside it, so it is named on its own.
+    for watched in ["std.crs", "std"] {
         println!(
             "cargo:rerun-if-changed={}",
             manifest.join(watched).display()
         );
     }
-    // The standard library is the one prelude mount a program reaches for by name, so it is the one the image documents; `/syn` is the syntax forms' concepts and `/sys` the host's rows, neither an interface anybody reads for.
+    // The standard library is the one prelude mount a program reaches for by name, so it is the one the image documents; `/sys` is the host's rows and the intrinsic carriers, which no consumer reads for.
     let modules = authored_prelude(&manifest)
         .documented("std", Some(STD_DESCRIPTION))
-        .adopting("sys", "intrinsic")
-        .adopting("syn", "syntax form");
+        .adopting("sys", "intrinsic");
 
     let prepared = prepare_prelude(&modules, &SYNTAX)
         .unwrap_or_else(|error| panic!("fixed prelude failed to lower: {}", error.format()));

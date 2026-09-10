@@ -640,7 +640,7 @@ impl Reader<'_> {
             };
             let referent = self.public_name(&referent);
 
-            // **A declaration may spell a name no consumer may write.** `/sys`'s rows state their preconditions as absolute `/syn` paths, because the module is generated and resolves against the compilation root — so the page shows the name that reaches the same declaration through the standard library instead of the one the compiler emitted. Only an absolute spelling into a root this unit keeps to itself is rewritten; everything an author wrote is shown as written.
+            // **A declaration may spell a name no consumer may write.** `/sys`'s rows state their preconditions as absolute `/sys` paths, because the module is generated and resolves against the compilation root — so the page shows the name that reaches the same declaration through the standard library instead of the one the compiler emitted. Only an absolute spelling into a root this unit keeps to itself is rewritten; everything an author wrote is shown as written.
             let start = text.len();
             match annotation.name.starts_with('/')
                 && self.adopted.iter().any(|(root, _)| {

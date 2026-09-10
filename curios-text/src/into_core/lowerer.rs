@@ -24,7 +24,7 @@ pub(super) type Binder = (String, curios_core::Free);
 
 /// One `!` hoisted out of a region: the binder its result lands in, the action to sequence, and the span of the `!` itself.
 ///
-/// The span is what [`Lowerer::wrap`] stamps onto the synthesized `/syn/Monad/bind` application. Without it the sequencing is the one node in a lowered value body that no source location reaches, so a `!` the region cannot accept — an annotated top-level `let`, a non-monadic helper — reports its type error with no `-->` line at all.
+/// The span is what [`Lowerer::wrap`] stamps onto the synthesized `/std/Monad/bind` application. Without it the sequencing is the one node in a lowered value body that no source location reaches, so a `!` the region cannot accept — an annotated top-level `let`, a non-monadic helper — reports its type error with no `-->` line at all.
 pub(super) struct Hoisted {
     pub(super) binder: curios_core::Free,
     pub(super) action: curios_core::Term,
@@ -185,7 +185,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         result
     }
 
-    /// Lowers a *value* body — a top-level `let` body, a witness field, or the entrypoint tail. Every value body is a region root: each `!` in it hoists here (never past a boundary — a lambda body, match arm, or recursive-group member re-roots) and is rewired through `/syn/Monad/bind`, whose `use` binder resolves the `Monad` witness per site. Types go through [`Self::term`], where `!` is rejected.
+    /// Lowers a *value* body — a top-level `let` body, a witness field, or the entrypoint tail. Every value body is a region root: each `!` in it hoists here (never past a boundary — a lambda body, match arm, or recursive-group member re-roots) and is rewired through `/std/Monad/bind`, whose `use` binder resolves the `Monad` witness per site. Types go through [`Self::term`], where `!` is rejected.
     pub(super) fn value(&self, term: &Term) -> Result<curios_core::Term, Error> {
         self.region(term)
     }
@@ -210,7 +210,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .with_universe_role(curios_core::UniverseRole::Generalizable, || self.term(term))
     }
 
-    /// A dependent Π-type over `params`: each parameter type sees the *preceding* parameters' binders and the output sees them all, so they lower under a progressively-extended scope. The output is produced by the caller under those binders rather than lowered from a written term, so a declaration whose result the compiler fixes — a `test`'s `/syn/Test` — closes an already-resolved core term under the written telescope instead of spelling a surface name it may not be able to import.
+    /// A dependent Π-type over `params`: each parameter type sees the *preceding* parameters' binders and the output sees them all, so they lower under a progressively-extended scope. The output is produced by the caller under those binders rather than lowered from a written term, so a declaration whose result the compiler fixes — a `test`'s `/std/Test` — closes an already-resolved core term under the written telescope instead of spelling a surface name it may not be able to import.
     pub(super) fn func_type_under(
         &self,
         params: &[FuncTypeParam],
@@ -289,7 +289,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         curios_elab::str_literal(&self.context.syntax().string, bytes)
     }
 
-    // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, x[])` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter rather than lowered to a core intrinsic.
+    // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, x[])` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A registry-synthesized literal — its value is synthesized from the registry by the meta-emitter rather than lowered to a core intrinsic.
     pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
         match syn {
             // A character literal is a polymorphic literal like a numeral: elaboration realizes it — `/std/Char` by default, a numeric carrier where one is expected — so the certified value is built there, not here.
@@ -313,7 +313,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 curios_core::Term::goal(self.context.fresh_metavar())
             }
             Subterm::Derive => curios_core::Term::derive(),
-            // A `/syn` literal (string or list) desugars via the meta-emitter to a `/syn` construction (see `syn_literal`), never a core intrinsic.
+            // A registry-synthesized literal (string or list) desugars via the meta-emitter to a proof-carrying construction (see `syn_literal`), never a core intrinsic.
             Subterm::Syn(syn) => self.syn_literal(syn)?,
             Subterm::Intrinsic(intrinsic) => {
                 curios_core::Term::intrinsic(self.intrinsic(intrinsic)?)
@@ -454,7 +454,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// Desugars `term` as a single **region**. A region is a stretch of a value body that shares one continuation; each `!` in it hoists to the top of the region, never past a boundary (lambda body, match arm, recursive-group member). Boundaries re-root a region. Every hoisted action is sequenced through `/syn/Monad/bind` — see `wrap`.
+    /// Desugars `term` as a single **region**. A region is a stretch of a value body that shares one continuation; each `!` in it hoists to the top of the region, never past a boundary (lambda body, match arm, recursive-group member). Boundaries re-root a region. Every hoisted action is sequenced through `/std/Monad/bind` — see `wrap`.
     ///
     /// Span stamping happens here for the reason [`Self::collect`] states, and for the arms that are not spines: `Let`, `Match`, `Choose` and `Func` each *rebuild* their node below, so a value body rooted at a whole-term form reached elaboration with no span — its errors unlocated, and the `test` declaration's recorded body empty, since the runner slices that body from this very span. `with_span` is innermost-wins, so the spine arm keeps the one [`Self::collect`] already stamped.
     pub(super) fn region(&self, term: &Term) -> Result<curios_core::Term, Error> {
@@ -929,7 +929,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// Wraps `body` in one [`curios_core::Bang`] transient per collected bang. The first-collected bang (`binds[0]`) becomes the outermost node, preserving left-to-right evaluation order. Continuation lambdas are built with `curios_core::Term::func` over the gensym'd free name, whose `capture` closes it robustly under nesting; the domain is a fresh hole, inference-solved. `elaborate_bang` later replaces each node with its `/syn/Monad/bind` application, handing the wrapper the region's monad as its `@M` (read off the region's type by the flex-apply imitation rule) and inserting fresh implicits and a fresh `use` witness slot per `!` site: the region pins the constructor, which resolves the `Monad` witness, and every action is checked against it — so a region can sequence actions of differing result types, and different regions can use different monads.
+    /// Wraps `body` in one [`curios_core::Bang`] transient per collected bang. The first-collected bang (`binds[0]`) becomes the outermost node, preserving left-to-right evaluation order. Continuation lambdas are built with `curios_core::Term::func` over the gensym'd free name, whose `capture` closes it robustly under nesting; the domain is a fresh hole, inference-solved. `elaborate_bang` later replaces each node with its `/std/Monad/bind` application, handing the wrapper the region's monad as its `@M` (read off the region's type by the flex-apply imitation rule) and inserting fresh implicits and a fresh `use` witness slot per `!` site: the region pins the constructor, which resolves the `Monad` witness, and every action is checked against it — so a region can sequence actions of differing result types, and different regions can use different monads.
     ///
     /// Each node carries the span of the `!` that produced it (see [`Hoisted`]), so a region that cannot accept the sequencing reports against the written `!` rather than against nothing.
     pub(super) fn wrap(

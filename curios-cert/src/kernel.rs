@@ -403,7 +403,7 @@ pub struct Kernel {
     positions: Positions,
     /// Top-level definitions and the nominal registry.
     globals: Globals,
-    /// The `/syn` spellings this walk may need to *state* a type — today the propositions the guarded operations take as bounds, read through `Intrinsic::signature`.
+    /// The registered spellings this walk may need to *state* a type — today the propositions the guarded operations take as bounds, read through `Intrinsic::signature`.
     ///
     /// Handed in rather than defaulted, and deliberately not optional. An absent registry could only mean skipping the bound check, and a check that silently does not run is worse than one that is missing outright: the kernel would report a verdict it had not reached.
     syntax: SyntaxRegistry,
@@ -431,7 +431,7 @@ impl Kernel {
         }
     }
 
-    /// The `/syn` spellings this walk states types through.
+    /// The registered spellings this walk states types through.
     pub(crate) fn syntax(&self) -> SyntaxRegistry {
         self.syntax
     }

@@ -12,7 +12,7 @@ use {
     curios_utilities::{Grain, InfixOp, PackedBin, Sign, Span, StringSyntax, SyntaxName},
 };
 
-/// A `/syn` function or constructor `Var`, applied — the absolute core identity a registry slot denotes, so privacy is no obstacle: these are already-resolved core references, not surface names.
+/// A registered function or constructor `Var`, applied — the absolute core identity a registry slot denotes, so privacy is no obstacle: these are already-resolved core references, not surface names.
 pub(crate) fn syn_call(name: SyntaxName, args: impl IntoIterator<Item = Term>) -> Term {
     Term::apply(
         Term::var(Var::free(Free::global(name.qualifier()))),

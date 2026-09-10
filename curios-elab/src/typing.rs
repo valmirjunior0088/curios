@@ -103,7 +103,7 @@ pub(crate) fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
     super::denoise_for_display(&operators, &binders, &resolved)
 }
 
-/// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]) — unless `term`, the node the conversion was about, is the `/syn/Monad/bind` application a postfix `!` desugars to and the region it hoisted to has nothing to sequence in.
+/// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]) — unless `term`, the node the conversion was about, is the `/std/Monad/bind` application a postfix `!` desugars to and the region it hoisted to has nothing to sequence in.
 ///
 /// `bind` produces `M(B)`, so the generic report names a type the author never wrote, mentions neither the `!` nor the region that rejected it, and leaks the still-unsolved `B`. The specialized report names the monad the region would have to be and the type it actually has.
 pub(crate) fn display_mismatch(
@@ -138,7 +138,7 @@ fn unembedded_action(context: &mut Context, this: &Term, that: &Term) -> Option<
     differ.then(|| Error::unembedded_action(this.clone(), that.clone()))
 }
 
-/// Whether `term` is a `/syn/Monad/bind` application — what every `!` lowers to, and the only shape whose result type is an `M(B)` a stranded sequencing can clash on.
+/// Whether `term` is a `/std/Monad/bind` application — what every `!` lowers to, and the only shape whose result type is an `M(B)` a stranded sequencing can clash on.
 fn is_sequencing(context: &Context, term: &Term) -> bool {
     let Subterm::Apply(Apply { head, .. }) = &**term else {
         return false;

@@ -6,13 +6,13 @@ use {
     std::{fs, path::PathBuf},
 };
 
-/// Every `.crs` file this crate authors, in the two trees it owns.
+/// Every `.crs` file this crate authors, in the one tree it owns.
 ///
 /// Walked rather than listed, for the reason the build script discovers its inputs rather than naming them: a module added without being registered is a mistake the Curios index catches, and one added without being formatted should not need a second list to catch it.
 fn authored() -> Vec<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut sources = Vec::new();
-    let mut pending = Vec::from([root.join("std"), root.join("syn")]);
+    let mut pending = Vec::from([root.join("std")]);
 
     while let Some(directory) = pending.pop() {
         for entry in fs::read_dir(&directory).expect("a directory this crate owns") {
@@ -30,7 +30,7 @@ fn authored() -> Vec<PathBuf> {
     sources
 }
 
-/// **The standard and syntax libraries are written in the canonical form `curios format` produces.**
+/// **The standard library is written in the canonical form `curios format` produces.**
 ///
 /// The formatter is only worth having if it can be run on the corpus that motivated it, and `curios format --check` is only a guarantee where something checks it. Nothing did: 23 of these files drifted from canonical form, so anyone running the formatter over the tree got a diff of a few hundred lines and learned nothing about their own change. That is also how a formatter defect survives — the one that placed a comment on the wrong arm went unnoticed because nobody could format the corpus to see it.
 ///
@@ -55,7 +55,7 @@ fn every_authored_source_is_canonically_formatted() {
     );
 }
 
-/// **The standard and syntax libraries lint clean.**
+/// **The standard library lints clean.**
 ///
 /// The lints are exact and always on, so the honest test of them is the largest corpus in the tree: an import nothing resolves through, a binder nothing reads or a private declaration nothing reaches in `/std` is a finding to fix there, not a rule to relax. Lowering is the whole cost — the same lowering the build script pays — so this belongs in the ordinary suite. A failure renders each lint as `curios lint` would.
 #[test]

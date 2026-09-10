@@ -22,7 +22,7 @@ fn distinct_goals_get_distinct_ids() {
 
 #[test]
 fn bang_lowers_to_the_bang_transient() {
-    // Every value body is a region root: `x!` hoists to it as a `Bang` transient holding the action and the continuation over a gensym'd binder. `elaborate_bang` later replaces the node with the `/syn/Monad/bind` application, inserting the witness slot and implicits during core elaboration.
+    // Every value body is a region root: `x!` hoists to it as a `Bang` transient holding the action and the continuation over a gensym'd binder. `elaborate_bang` later replaces the node with the `/std/Monad/bind` application, inserting the witness slot and implicits during core elaboration.
     let expected = curios_core::Term::bang(
         // `x` resolves to nothing, so it lowers to a binder identity that core will report as unbound — never to a global that a same-named root-level definition could satisfy.
         curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(

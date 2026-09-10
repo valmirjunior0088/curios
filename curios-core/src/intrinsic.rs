@@ -255,7 +255,7 @@ pub enum Intrinsic {
     },
     // (@A, @B, m : Io(A), f : (A) -> Io(B)) -> Io(B): the description that performs `m`, then the description `f` computes from its result.
     //
-    // Non-dependent in `B`, matching the `/syn/Monad` field it satisfies. Inert like the other two: no monad law holds definitionally, since nothing can be proven about an `Io` for a law to be useful about.
+    // Non-dependent in `B`, matching the `/std/Monad` field it satisfies. Inert like the other two: no monad law holds definitionally, since nothing can be proven about an `Io` for a law to be useful about.
     IoBind {
         from: Term,
         to: Term,

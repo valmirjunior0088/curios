@@ -119,7 +119,7 @@ impl RootSource {
         self.documented.clone()
     }
 
-    /// This source with `chip` as the word a page shows on every declaration it adopts out of `prefix` — `intrinsic` for `/sys`'s carriers, `syntax form` for `/syn`'s. The prefix must be an internal mount this source claims.
+    /// This source with `chip` as the word a page shows on every declaration it adopts out of `prefix` — `intrinsic` for `/sys`'s carriers. The prefix must be an internal mount this source claims.
     pub fn adopting(mut self, prefix: &str, chip: &str) -> Self {
         let prefix = Qualifier::from([prefix]);
         assert!(

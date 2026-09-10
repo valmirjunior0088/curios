@@ -136,7 +136,7 @@ pub enum Error {
         inferred: Box<Term>,
         expected: Box<Term>,
     },
-    /// The `/syn/Monad/bind` application a postfix `!` desugars to, checked against a region that has nothing to sequence in: `bind` produces `M(B)` and the region's type stands over no result at all.
+    /// The `/std/Monad/bind` application a postfix `!` desugars to, checked against a region that has nothing to sequence in: `bind` produces `M(B)` and the region's type stands over no result at all.
     ///
     /// `sequenced` is that `M(B)` with its unsolved holes blanked, so the message names the monad the region would have to be without naming the result a region that cannot sequence never reaches. It is `None` when `M` is itself one of those holes: nothing pinned the monad, and a spelling made only of placeholders would name nothing.
     StrandedSequencing {
@@ -375,7 +375,7 @@ pub enum Error {
     BangRegionUndetermined,
     /// A postfix `!` in a region whose type is *known* and is no monad — the rigid twin of [`Error::BangRegionUndetermined`], and the case `documentation/syntax.md` states as "a `(Str, Bool) -> Bool` has nowhere to sequence one".
     ///
-    /// Raised where `elaborate_bang` finds the region rigid and still cannot read a monad from it, which means its head applies to nothing: the `?M(?B)` imitation can never solve, so leaving it to `/syn/Monad/bind`'s own inference reported `no witness of Monad(?) found` against a premise of a call the author never wrote, with a hole where the answer was already in hand. Acceptance is unchanged — that path always failed — and `region` is the type the reader must look at.
+    /// Raised where `elaborate_bang` finds the region rigid and still cannot read a monad from it, which means its head applies to nothing: the `?M(?B)` imitation can never solve, so leaving it to `/std/Monad/bind`'s own inference reported `no witness of Monad(?) found` against a premise of a call the author never wrote, with a hole where the answer was already in hand. Acceptance is unchanged — that path always failed — and `region` is the type the reader must look at.
     BangRegionNotAMonad {
         region: Box<Term>,
     },

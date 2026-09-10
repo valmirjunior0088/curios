@@ -75,10 +75,10 @@ fn string_literal_machinery_is_monomorphic() {
                 "{target} is universe-polymorphic; every literal byte will mint levels"
             );
         }
-        // Without this the test passes vacuously if `/syn` is renamed.
+        // Without this the test passes vacuously if a registered name is renamed.
         assert!(
             checked == pinned.len(),
-            "found only {checked} of the pinned `/syn` names; \
+            "found only {checked} of the pinned registered names; \
              the names this pins have moved"
         );
     });

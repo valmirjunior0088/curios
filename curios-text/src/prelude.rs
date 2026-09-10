@@ -16,7 +16,7 @@ use {
 #[cfg(test)]
 mod tests;
 
-// The `sys` module is the home of every intrinsic type and operation. Its roster is built directly as `text` AST and prepended to every parsed `Entrypoint`, so intrinsics participate in the module system like any other binding. Bodies bake the `text::Intrinsic::*` nodes in directly, so the roster needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/syn` names this module cannot spell and takes from the registry instead.
+// The `sys` module is the home of every intrinsic type and operation. Its roster is built directly as `text` AST and prepended to every parsed `Entrypoint`, so intrinsics participate in the module system like any other binding. Bodies bake the `text::Intrinsic::*` nodes in directly, so the roster needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/sys`'s own and are named absolutely so a declaration resolves wherever the roster puts it.
 //
 // `/sys/Bound` is the one part written rather than built, and so the one part parsed — see `bound` below. What separates the two is whether a surface spelling exists: an intrinsic has none and must be constructed, while a proposition over intrinsics is ordinary Curios.
 

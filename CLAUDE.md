@@ -61,7 +61,7 @@ The obligations below are the ones a search does not reveal.
 | A shared analysis (`curios-analysis`) | Both drivers — `curios-cert`'s `Kernel` and `curios-elab`'s `Context` — and `curios-analysis/tests/driven.rs` |
 | A numeric carrier or its arithmetic | Every constant folder sharing `scalar` (`curios-core`, `curios-ersd`, `curios-cont`), and `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md` |
 | Concepts or witness resolution | Surface declarations, standard-library witnesses, syntax documentation |
-| A derivation (`curios-elab/src/derive.rs`) | The `SpellSyntax` slots, `/syn/Spell`'s renderers, the derived-vocabulary edges in `curios-text/src/into_core/order.rs`, `curios/src/tests/derive.rs` |
+| A derivation (`curios-elab/src/derive.rs`) | The `SpellSyntax` slots, `/std/Spell`'s renderers, the derived-vocabulary edges in `curios-text/src/into_core/order.rs`, `curios/src/tests/derive.rs` |
 | Host operations or foreign calls | `curios-abi`'s row, compiler use, native runtime implementation, JavaScript implementation |
 | What a unit hands its successors | Every stage whose artifact `Unit` holds, `curios-pipeline`'s fold, the store's stored-unit format |
 | A `wonder` query, a record, or what a diagnostic carries | `curios-utilities`'s `Report`, every stage's `report`/`reports_with_hints`, `CompileError` and `check_with_units`, both transports (`curios-wonder/src/ask.rs`, `server.rs`), `curios-package`'s `Membership` |
@@ -83,9 +83,9 @@ The obligations below are the ones a search does not reveal.
 - Crate boundaries, not Cargo features, separate the compiler, runtime and browser products.
 - `curios-abi` is the source of truth for the host/guest wire contract. A host operation is complete only when its ABI row, compiler use, native runtime implementation and JavaScript implementation agree.
 - `Intrinsic::signature` is the source of truth for what an intrinsic demands and produces; both checkers walk it rather than restate it. `/sys`'s declarations state the same types a second time, deliberately, and the prelude build checks them against the table. A new operation is typed by adding a row.
-- `/std` and `/syn` are owned by `curios-prelude-archive` and compiled into an rkyv image of a `Unit`, filed at `curios-prelude-archive/.artifacts/archive.rkyv` where `curios document` can name it. Every source module is registered in its Curios index.
+- `/std` is owned by `curios-prelude-archive` and compiled into an rkyv image of a `Unit`, filed at `curios-prelude-archive/.artifacts/archive.rkyv` where `curios document` can name it. Every source module is registered in its Curios index.
 - Production compilation has no fixed-prelude source fallback or cache-miss branch. Archive construction or restoration failure is a compiler invariant and fails loudly.
-- No crate below `curios-prelude-archive` may spell a `/syn` name. The one exception is `curios-analysis`'s `fixture`, gated on `test-support`, which is what keeps those names out of every build that ships.
+- Every name the compiler emits is declared in `/std` and reached through the `SyntaxRegistry`, never spelled by a stage. A root of the compiler's own for those names is what `/syn` was, and it is gone: nothing below `curios-prelude-archive` names a prelude declaration except through a filled registry slot.
 - Binaryen is built from a verified pinned source release, shared through the locked cache under `curios-binaryen/.artifacts/<triple>`, never a fingerprint-specific `OUT_DIR`.
 - Recursive lowering and packed-value interpretation must work on the default test-thread stack. Never use `RUST_MIN_STACK` to hide a regression.
 - Generated `.wasm` files and other build products are not source and are not committed. `Cargo.lock` is source. `editors/grammar/src/` is the one committed generated artifact, because git is Zed's distribution channel for it: it is committed with the `grammar.js` it was generated from, and `editors/grammar`'s `npm test` refuses any drift between them.
@@ -101,7 +101,7 @@ The build recipes are `cargo x <recipe>`, reached through the alias in `.cargo/c
 - Keep the feature set constant within a work session: `--all-features` enables `profile` and a plain `cargo build` does not, and alternating maintains two prelude archives that evict each other.
 - The full suite can take more than five minutes. Run it in the background with output redirected to a file, and read the file after completion.
 
-`cargo clippy --workspace` already elaborates every `/std` and `/syn` module, erases them through `erase_unit`, and certifies the whole module with the kernel. A change on the Text, Core, Ersd or certification path is therefore exercised over the entire standard library by a step already in the gate, and needs only its own crate's tests beside it. Nothing below Ersd is reached, so `curios-cont` and `curios-wasm` are detected only by the cross-stage corpus in `curios`.
+`cargo clippy --workspace` already elaborates every `/std` module, erases them through `erase_unit`, and certifies the whole module with the kernel. A change on the Text, Core, Ersd or certification path is therefore exercised over the entire standard library by a step already in the gate, and needs only its own crate's tests beside it. Nothing below Ersd is reached, so `curios-cont` and `curios-wasm` are detected only by the cross-stage corpus in `curios`.
 
 ### Before handing off code changes
 

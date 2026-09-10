@@ -167,7 +167,7 @@ fn a_recursive_local_action_binding_is_refused() {
 
 #[test]
 fn a_test_declaration_registers_by_kind_in_declaration_order() {
-    // `Module::tests` keeps declaration order across module nesting — the order the synthesized tail will schedule — while the definition itself is an ordinary item of kind `Test`, pinned through the registry-built `() -> /syn/Test`.
+    // `Module::tests` keeps declaration order across module nesting — the order the synthesized tail will schedule — while the definition itself is an ordinary item of kind `Test`, pinned through the registry-built `() -> /std/Test`.
     let module = lowered_module("mod Inner\ntest inner_holds = x;\nend\ntest outer_holds = y;\n()");
     assert_eq!(
         module.tests,

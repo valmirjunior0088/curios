@@ -25,7 +25,7 @@ pub enum NumLit {
     Character(char),
 }
 
-/// A postfix `!` sequencing site, already hoisted by lowering: `action` is the sequenced description, `continuation` the rest of its region as an ordinary one-parameter function (domain a lowering-minted hole). Consumed by `elaborate_bang`, which replaces it with the `/syn/Monad/bind` application the lowerer once spelled directly — the construction moved behind elaboration so the sequencing survives to the stage that can make type-directed decisions about it.
+/// A postfix `!` sequencing site, already hoisted by lowering: `action` is the sequenced description, `continuation` the rest of its region as an ordinary one-parameter function (domain a lowering-minted hole). Consumed by `elaborate_bang`, which replaces it with the `/std/Monad/bind` application the lowerer once spelled directly — the construction moved behind elaboration so the sequencing survives to the stage that can make type-directed decisions about it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Bang {

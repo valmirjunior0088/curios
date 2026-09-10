@@ -14,67 +14,67 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub(super) const fn syn_name(segments: &'static [&'static str]) -> SyntaxName {
+pub(super) const fn registry_name(segments: &'static [&'static str]) -> SyntaxName {
     SyntaxName::new(segments)
 }
 
-pub(super) const fn syn_field(
+pub(super) const fn registry_field(
     segments: &'static [&'static str],
     label: &'static str,
 ) -> ConceptField {
     ConceptField {
-        concept: syn_name(segments),
+        concept: registry_name(segments),
         field: label,
     }
 }
 
 pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     monad: MonadSyntax {
-        bind: syn_name(&["syn", "Monad", "bind"]),
+        bind: registry_name(&["std", "Monad", "bind"]),
     },
     lift: LiftSyntax {
-        lift: syn_field(&["syn", "Lift"], "lift"),
+        lift: registry_field(&["std", "Lift"], "lift"),
     },
     operator: OperatorSyntax {
-        add: syn_field(&["syn", "Add"], "add"),
-        sub: syn_field(&["syn", "Subtract"], "sub"),
-        mul: syn_field(&["syn", "Multiply"], "mul"),
-        div: syn_field(&["syn", "Divide"], "div"),
-        rem: syn_field(&["syn", "Remainder"], "rem"),
-        eql: syn_field(&["syn", "Equal", "Equal"], "eql"),
-        neq: syn_field(&["syn", "Equal", "Equal"], "neq"),
-        lt: syn_field(&["syn", "Compare"], "lt"),
-        gt: syn_field(&["syn", "Compare"], "gt"),
-        le: syn_field(&["syn", "Compare"], "le"),
-        ge: syn_field(&["syn", "Compare"], "ge"),
-        and: syn_field(&["syn", "And"], "and"),
-        or: syn_field(&["syn", "Or"], "or"),
+        add: registry_field(&["std", "Add"], "add"),
+        sub: registry_field(&["std", "Subtract"], "sub"),
+        mul: registry_field(&["std", "Multiply"], "mul"),
+        div: registry_field(&["std", "Divide"], "div"),
+        rem: registry_field(&["std", "Remainder"], "rem"),
+        eql: registry_field(&["std", "Equal", "Equal"], "eql"),
+        neq: registry_field(&["std", "Equal", "Equal"], "neq"),
+        lt: registry_field(&["std", "Compare"], "lt"),
+        gt: registry_field(&["std", "Compare"], "gt"),
+        le: registry_field(&["std", "Compare"], "le"),
+        ge: registry_field(&["std", "Compare"], "ge"),
+        and: registry_field(&["std", "And"], "and"),
+        or: registry_field(&["std", "Or"], "or"),
     },
     character: CharacterSyntax {
-        character: syn_name(&["syn", "Char", "Char"]),
-        scalar_below: syn_name(&["syn", "Char", "Scalar", "below"]),
-        scalar_above: syn_name(&["syn", "Char", "Scalar", "above"]),
+        character: registry_name(&["std", "Char", "Char"]),
+        scalar_below: registry_name(&["std", "Char", "Scalar", "below"]),
+        scalar_above: registry_name(&["std", "Char", "Scalar", "above"]),
     },
     string: StringSyntax {
-        string: syn_name(&["syn", "Str", "Str"]),
-        of_scan_eq: syn_name(&["syn", "Str", "of_scan_eq"]),
-        refl_scan: syn_name(&["syn", "Str", "refl_scan"]),
+        string: registry_name(&["std", "Str", "Str"]),
+        of_scan_eq: registry_name(&["std", "Str", "of_scan_eq"]),
+        refl_scan: registry_name(&["std", "Str", "refl_scan"]),
     },
     proof: ProofSyntax {
-        true_qed: syn_name(&["syn", "True", "True", "qed"]),
-        true_type: syn_name(&["syn", "True", "True"]),
-        holds: syn_name(&["syn", "Bool", "Holds"]),
-        flt_finite: syn_name(&["syn", "Flt", "Finite"]),
-        flt_non_neg: syn_name(&["syn", "Flt", "NonNeg"]),
+        true_qed: registry_name(&["std", "True", "True", "qed"]),
+        true_type: registry_name(&["std", "True", "True"]),
+        holds: registry_name(&["std", "Bool", "Holds"]),
+        flt_finite: registry_name(&["std", "Flt", "Finite"]),
+        flt_non_neg: registry_name(&["std", "Flt", "NonNeg"]),
     },
     test: TestSyntax {
-        test_type: syn_name(&["syn", "Test", "Test"]),
-        main: syn_name(&["syn", "Test", "main"]),
+        test_type: registry_name(&["std", "Test", "Test"]),
+        main: registry_name(&["std", "Test", "main"]),
     },
     spell: SpellSyntax {
-        spell: syn_field(&["syn", "Spell", "Spell"], "spell"),
-        call: syn_name(&["syn", "Spell", "call"]),
-        record: syn_name(&["syn", "Spell", "record"]),
+        spell: registry_field(&["std", "Spell", "Spell"], "spell"),
+        call: registry_name(&["std", "Spell", "call"]),
+        record: registry_name(&["std", "Spell", "record"]),
     },
 };
 
@@ -240,18 +240,6 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
             pub mod Nat
                 pub let Nat : Type = Type;
                 pub let add : Type = Type;
-                pub use /syn/Nat/{Lt, Proof};
-            end
-        "#
-        .parse()
-        .unwrap(),
-    );
-    // `/sys` states its preconditions in `/syn`'s propositions, so the roster this fixture builds now carries references out of its own root and the scope has to hold their targets. Stubs, not definitions: these tests lower and never elaborate, so a name that resolves is the whole requirement — the same reason `/std` above is two modules of `Type`. Internal like `/sys` and for the same reason, which is what makes the fixture model the tier the real prelude mounts it at; `/std/Nat` re-exports one of its names so the facade a consumer actually goes through is exercised too.
-    modules.insert_root(
-        "syn",
-        RootKind::Internal,
-        r#"
-            pub mod Nat
                 pub let Lt : Type = Type;
                 pub let Le : Type = Type;
                 pub induct Proof: pub Type
@@ -274,6 +262,7 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
         .parse()
         .unwrap(),
     );
+    // `/sys` states each decided precondition as `Holds` over one of its own comparisons, and names `Holds` and the two `Flt` bounds through the registry — so the scope has to hold whatever this fixture's registry points those at. Stubs, not definitions: these tests lower and never elaborate, so a name that resolves is the whole requirement.
     let prepared = super::prepare_prelude(&modules, syntax()).map_err(|error| error.to_string())?;
     super::into_core_with_prelude(
         &src.parse::<Entrypoint>().unwrap(),

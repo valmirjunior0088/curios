@@ -1,6 +1,6 @@
 //! The `/std` effect vocabularies and how a `!` region sequences each: `Io` descriptions, `State` threading, `Result`'s early return, and the `Lift` edges between them.
 //!
-//! What each vocabulary *is* stays with its own section below. What they share is the shape these tests pin: a region's monad is read from its expected type, never inferred from the action, and an embedding across monads exists only where a `/syn/Lift` witness declares one.
+//! What each vocabulary *is* stays with its own section below. What they share is the shape these tests pin: a region's monad is read from its expected type, never inferred from the action, and an embedding across monads exists only where a `/std/Lift` witness declares one.
 
 use super::{error, run, typecheck};
 
@@ -18,7 +18,7 @@ fn pure_and_bind_sequence_a_description() {
     assert_eq!(run(source), b"ab");
 }
 
-/// Postfix `!` is `/syn/Monad/bind`, and the `Monad(Io)` witness is what makes it reach `Io`. The explicit chain above is the control.
+/// Postfix `!` is `/std/Monad/bind`, and the `Monad(Io)` witness is what makes it reach `Io`. The explicit chain above is the control.
 #[test]
 fn bang_sequences_a_description_like_an_explicit_bind() {
     let source = r#"
@@ -98,7 +98,7 @@ fn an_io_scrutinee_is_refused() {
     );
 }
 
-/// `Monad(Io)` is occupied by `/std/Io` and cannot be occupied twice. A user program is refused on either of two independent grounds — the orphan rule, since it owns neither `/syn`'s concept nor `/sys`'s type head, and one-witness-per-key — and the operative fact is the same: the program's `!` always means the prelude's witness.
+/// `Monad(Io)` is occupied by `/std/Io` and cannot be occupied twice. A user program is refused on either of two independent grounds — the orphan rule, since it owns neither the concept nor `/sys`'s type head, and one-witness-per-key — and the operative fact is the same: the program's `!` always means the prelude's witness.
 #[test]
 fn a_program_cannot_register_a_second_monad_witness_for_io() {
     let error = typecheck(
@@ -417,7 +417,7 @@ fn a_tail_with_no_edge_reports_the_lift_witness() {
     );
 }
 
-/// The explicit spelling stays available and means the same embedding: `lift` is `/syn/Lift`'s method, its target inferred from the region.
+/// The explicit spelling stays available and means the same embedding: `lift` is `/std/Lift`'s method, its target inferred from the region.
 #[test]
 fn an_explicit_lift_spells_the_same_embedding() {
     let source = r#"
@@ -596,7 +596,7 @@ fn a_bang_in_an_inference_position_region_is_refused() {
 
 /// A region whose type is known and is no monad names that type, rather than reporting the wrapper's unsolved hole.
 ///
-/// The rigid twin of the refusal above. `elaborate_bang` reads the monad from the region, and when a *rigid* region yields none its head applies to nothing, so `?M(?B)` can never meet it — the wrapper's own inference then reported `no witness of Monad(?) found`, blaming a premise of `/syn/Monad/bind`, a call the author never wrote, and printing a hole where the region's type was already in hand. `documentation/syntax.md` writes the first of these programs out with the intended reading beside it.
+/// The rigid twin of the refusal above. `elaborate_bang` reads the monad from the region, and when a *rigid* region yields none its head applies to nothing, so `?M(?B)` can never meet it — the wrapper's own inference then reported `no witness of Monad(?) found`, blaming a premise of `/std/Monad/bind`, a call the author never wrote, and printing a hole where the region's type was already in hand. `documentation/syntax.md` writes the first of these programs out with the intended reading beside it.
 #[test]
 fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
     for (source, region) in [

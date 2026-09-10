@@ -22,10 +22,10 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Implicit arguments (`@`-marked binders)
   - [x] Plicity as part of function-type identity, with lambda-binder insertion
 - [x] Instance arguments (`concept` and `satisfy` declarations, deterministic resolution)
-  - [x] The concept roster (`Add`, `Subtract`, `Multiply`, `Divide`, `Remainder`, `And`, `Or`, `Compare`, `Equal`, `Monad` and `Lift` in `/syn`, `Spell` beside them, and `Show`, `Ordered` and `/std/Map`'s `Key` in `/std`)
+  - [x] The concept roster (`Add`, `Subtract`, `Multiply`, `Divide`, `Remainder`, `And`, `Or`, `Compare`, `Equal`, `Monad`, `Lift` and `Spell`, beside `Show`, `Ordered` and `/std/Map`'s `Key`, all in `/std`)
   - [x] Higher-kinded concepts (`Monad(M : (Type) -> Type)`, via flex-apply imitation)
   - [x] Multi-parameter keying (tuple of every parameter head)
-  - [x] `Lift` embeddings (`/syn/Lift(M, N)`; one witness per ordered pair, never chained)
+  - [x] `Lift` embeddings (`/std/Lift(M, N)`; one witness per ordered pair, never chained)
   - [x] Orphan rule (a witness is declared where its concept, or a type in its key, is)
   - [x] Witness groups (`satisfy C(A) { … } and D(B) { … }`, members resolving through one another)
   - [x] Structure and concept groups (`struct A … and B …`, `concept A … and B …`, members naming one another)
@@ -73,7 +73,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 ## Syntax Sugar
 
 - [x] Multi-parameter function syntax sugar
-- [x] Monadic sequencing syntax (postfix `!`, dispatched through the `/syn/Monad` concept)
+- [x] Monadic sequencing syntax (postfix `!`, dispatched through the `/std/Monad` concept)
 - [x] Field projection sugar (`.0`/`.label`)
 - [x] Function-field sugar in every field list, and trailing commas in every list
 - [x] Struct spread/update syntax (`T { ..base, f = x }` — one leading spread, no tuple spread)

@@ -1,6 +1,6 @@
 //! Where a compilation's names come from: the prefixes units mount, and what each prefix may reach.
 //!
-//! A compilation is a set of units, and each unit claims one or more *prefixes*. The fixed prelude claims three — `/sys`, `/syn` and `/std`, which cannot be three units because `/syn` and `/std` reference each other — a package claims one, and the entry program claims the empty prefix, which is what makes it the entry. [`Mount`] pairs a prefix with the privilege tier that prefix carries.
+//! A compilation is a set of units, and each unit claims one or more *prefixes*. The fixed prelude claims two — `/sys` and `/std` — a package claims one, and the entry program claims the empty prefix, which is what makes it the entry. [`Mount`] pairs a prefix with the privilege tier that prefix carries.
 //!
 //! The name *is* the identity: which mount owns a declaration is [`Mount::owning`] over the name against the table of what is mounted, and the only thing carried is the mount list itself, one per module rather than one per declaration. Why a prefix and not an identity beside it is `README.md`'s decision.
 
@@ -27,7 +27,7 @@ impl Mount {
     ///
     /// *Most specific* is load-bearing rather than a tie-break. The entry program mounts the empty prefix and every qualifier lies within that, so a `/std/Option` answered by the first match would come back ordinary. Mounts are pairwise disjoint, so no two of equal depth can both contain one name and there is no tie left to break.
     ///
-    /// `None` is a real answer, not a missing one: while the fixed prelude is prepared, only `/sys`, `/syn` and `/std` are mounted and the empty qualifier is the synthetic compilation root, owned by no unit.
+    /// `None` is a real answer, not a missing one: while the fixed prelude is prepared, only `/sys` and `/std` are mounted and the empty qualifier is the synthetic compilation root, owned by no unit.
     pub fn owning<'a>(mounts: &'a [Mount], name: &Qualifier) -> Option<&'a Mount> {
         mounts
             .iter()
@@ -45,13 +45,13 @@ impl Mount {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum RootKind {
-    /// Reachable only from a privileged root — `sys` and `syn` today. Discoverable (so the standard library can resolve it by absolute path) but rejected when referenced from an ordinary consumer.
+    /// Reachable only from a privileged root — `sys` alone today. Discoverable (so the standard library can resolve it by absolute path) but rejected when referenced from an ordinary consumer.
     ///
-    /// **The reason is interface stability, not safety.** Both roots are the compiler's own vocabulary rather than anybody's interface. `/sys` is generated from `curios-abi`'s foreign store: its roster, its argument order, and the shape of every host row move when the ABI moves. `/syn` is what the surface forms desugar into — the concept `+` dispatches through, the `Monad` a `!` sequences in, the proposition `/` demands — and it is reached without being named: every `/syn` reference a program contains is one the compiler wrote as an already-resolved identity, which never passes this gate, so closing the root to authors costs the desugaring nothing. A consumer that reached past the `/std` facade to either would be pinned to a surface with no compatibility promise. That is the whole of what this tier buys, and it is worth buying.
+    /// **The reason is interface stability, not safety.** `/sys` is the compiler's own vocabulary rather than anybody's interface: it is generated from `curios-abi`'s foreign store, so its roster, its argument order, and the shape of every host row move when the ABI moves, and the intrinsic carriers beside them move with `Intrinsic::signature`. A consumer that reached past the `/std` facade would be pinned to a surface with no compatibility promise. What the surface forms desugar *into* is no longer behind this gate: those concepts are ordinary `/std` declarations the compiler reaches through the registry as already-resolved identities, which never pass it. That is the whole of what this tier buys, and it is worth buying.
     ///
     /// It is worth stating because the tier was long assumed to be a soundness mechanism, and it never was one. It grants trust to whole *roots*, so `/std/Map` and `/std/Bytes` are indistinguishable to it — which is why the bypasses that motivated giving `/sys`'s operations their preconditions were all *inside* the roots this tier authorizes, one of them inside the very module any conceivable reach rule would have allowed. Nothing behind the gate is a hazard now that those operations carry their domains in their types, and nothing behind it was a hazard the gate itself was catching. It does not constrain what `/sys` *exports* either, so the one premise that does depend on `/sys`'s surface — that `/sys/Io` offers no eliminator — is asserted where that roster is built and not here.
     Internal,
-    /// May reference an internal root — `std` today. An internal root is privileged over another by [`RootKind::is_privileged`], so `sys` and `syn` need no entry here to reach one another.
+    /// May reference an internal root — `std` today. An internal root is privileged over another by [`RootKind::is_privileged`], which is what would let two internal roots reach one another were there ever a second.
     Privileged,
     /// No special reach — the entry program, and every package.
     Ordinary,

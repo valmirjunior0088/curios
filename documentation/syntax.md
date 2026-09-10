@@ -2,7 +2,7 @@
 
 This document defines the surface language accepted in `.crs` files. It is a reference for writing and reading Curios programs, not a description of compiler internals. An implementation disagreement is a language conformance bug: either the implementation or this document must be corrected.
 
-Examples use declarations from `/std`, the standard library every program may name. The authored libraries under `curios-prelude-archive/std/` and `curios-prelude-archive/syn/` are the main corpus of complete programs.
+Examples use declarations from `/std`, the standard library every program may name. The authored library under `curios-prelude-archive/std/` is the main corpus of complete programs.
 
 - [Lexical structure](#lexical-structure)
 - [Literals](#literals)
@@ -70,7 +70,7 @@ Option/some         -- member of Option
 /std/Nat/Lt         -- absolute name through a nested module
 ```
 
-The roots `/sys` and `/syn` are the compiler's own and a program may name neither: `/sys` holds the intrinsic types and the host's operations, `/syn` the concepts the surface forms desugar into. Naming either is refused, pointing at the `/std` module that stands in front of it — `Nat`, `Add` and `Test` are reached as `/std/Nat`, `/std/Add` and `/std/Test`. Both are named in this document only where the mechanism behind a form is the point.
+The root `/sys` is the compiler's own and a program may not name it: it holds the intrinsic types, the host's operations, and the propositions a decided bound is stated in. Naming it is refused, pointing at the `/std` module that stands in front of it — `Nat` is reached as `/std/Nat`. It is named in this document only where the mechanism behind a form is the point. The concepts the surface forms desugar into are ordinary `/std` declarations: `+` dispatches through `/std/Add`, a `!` through `/std/Monad`, and a `test` through `/std/Test`.
 
 A path is whitespace-free: every separator touches both of its neighbors. Infix operators are the opposite — they require whitespace on both sides (see [Operators](#operators)) — so `a/b` is only ever the path and `a / b` only ever the division, and the asymmetric spellings `a/ b` and `a /b` satisfy neither grammar. A packed `Bits` or `Bytes` literal glues its grain letter to the opening bracket and admits whitespace freely thereafter; see [Packed literals](#packed-literals).
 
@@ -1046,7 +1046,7 @@ A witness may be declared only by the compilation root that owns its concept or 
 
 A tuple shape is owned by no root, as an intrinsic type former is. A tuple-keyed witness is therefore declared where its concept is declared, or by a privileged root: a program writes tuple witnesses for its own concepts, and cannot add one for a `/std` concept at a shape `/std` did not write.
 
-The coordinated `/sys`, `/syn`, and `/std` roots are exempt from the restriction against one another.
+The coordinated `/sys` and `/std` roots are exempt from the restriction against one another.
 
 ### Superclass fields in literals
 

@@ -232,12 +232,12 @@ fn a_concept_with_two_superclasses_lowers() {
 #[test]
 fn an_operator_in_a_dependent_type_orders_after_its_witness_row() {
     elaborate_source(
-        "mod syn
+        "mod std
              pub concept Add(A : Type) : pub Type {
                  add(A, A) -> A,
              }
          end
-         use /syn/{Add};
+         use /std/{Add};
          pub induct One : pub Type
          | point()
          end

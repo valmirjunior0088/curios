@@ -186,7 +186,7 @@ fn the_standard_library_documents_from_the_archive() {
     );
 }
 
-/// **No page names a root a consumer may not write.** `/sys` and `/syn` are adopted rather than linked: their declarations appear under the `/std` module that exposes them, and their own paths appear nowhere a reader can see — not in a signature, a card header, a search row or a crumb.
+/// **No page names a root a consumer may not write.** `/sys` is adopted rather than linked: its declarations appear under the `/std` module that exposes them, and their own paths appear nowhere a reader can see — not in a signature, a card header, a search row or a crumb.
 ///
 /// Rendered and read back rather than checked against the record, because the record is only half the claim. A path can reach a reader through a template as easily as through a field, and the file is the thing a reader opens.
 #[test]
@@ -232,7 +232,7 @@ fn no_internal_root_reaches_a_rendered_page() {
             };
 
             for (line, text) in text.lines().enumerate() {
-                if text.contains("/sys/") || text.contains("/syn/") {
+                if text.contains("/sys/") {
                     let name = entry.strip_prefix(&directory).unwrap_or(&entry);
                     offenders.push(format!("{}:{}: {}", name.display(), line + 1, text.trim()));
                 }

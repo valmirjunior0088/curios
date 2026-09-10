@@ -1,6 +1,6 @@
 # curios-utilities
 
-Foundational utilities shared across every pipeline stage: source spans and reports, the `Entropy`/`Mint` fresh-name supply, the `name!` and `id!` newtype macros, the typed identity-addressed `Arena`, the resolved-module-path `Qualifier`, the mount table, the packed binary carrier, the shape of the compiler's `/syn` vocabulary, and the native-stack bracket every recursive walk over user data runs inside. Each module's contract belongs to the crate rustdoc. The numeric half of what this crate once held is `curios-num`; the two combinator DSLs are `curios-parse` and `curios-print`.
+Foundational utilities shared across every pipeline stage: source spans and reports, the `Entropy`/`Mint` fresh-name supply, the `name!` and `id!` newtype macros, the typed identity-addressed `Arena`, the resolved-module-path `Qualifier`, the mount table, the packed binary carrier, the shape of the compiler's emitted vocabulary, and the native-stack bracket every recursive walk over user data runs inside. Each module's contract belongs to the crate rustdoc. The numeric half of what this crate once held is `curios-num`; the two combinator DSLs are `curios-parse` and `curios-print`.
 
 ## Design
 
@@ -34,9 +34,9 @@ Foundational utilities shared across every pipeline stage: source spans and repo
 
 **Rationale.** A declaration used to carry a `RootId` stamp naming its root, cached beside the name whose leading segment already determined it; archived, the stamp meant something only in the compilation that wrote it — the shape rustc pays a `cnum_map` to translate. There is deliberately no answer derivable from a name alone: a leading segment identifies a mount only against the table of what is mounted, because a package's prefix and a module the entry declares are the same shape.
 
-### The `/syn` registry states slots, never spellings
+### The syntax registry states slots, never spellings
 
-**Decision.** `SyntaxRegistry` names every compiler-known `/syn` slot as a typed field; `curios-prelude-archive` fills it, and the two stages that emit `/syn` names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry. Every enumeration over it opens by destructuring the struct it enumerates.
+**Decision.** `SyntaxRegistry` names every compiler-known slot as a typed field; `curios-prelude-archive` fills it, and the two stages that emit those names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry. Every enumeration over it opens by destructuring the struct it enumerates.
 
 **Rationale.** The consumers sit below the crate that holds the authored declarations, so the shape must live below both — a consumer must see the type, and the prelude sits above every consumer in the crate graph. The destructuring is not stylistic: a pattern naming fewer fields than the struct has does not compile, so a slot added to a group is a compile error until it is enumerated. The lists were written out by hand before, and one slot sat unenumerated, and so unchecked, from the commit that added it.
 

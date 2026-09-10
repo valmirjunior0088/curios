@@ -134,7 +134,7 @@ pub struct Context {
     checked: Vec<(Term, Term, Rc<str>)>,
     // The definition whose body is currently elaborating, for those sites.
     checked_site: Rc<str>,
-    // The `/syn` names the type-directed features synthesize — infix dispatch and row subsumption. Supplied rather than spelled: the elaborator knows *which* declaration it needs, and `curios-prelude` knows what that declaration is called. See [`Context::syntax`].
+    // The names the type-directed features synthesize — infix dispatch and row subsumption. Supplied rather than spelled: the elaborator knows *which* declaration it needs, and `curios-prelude` knows what that declaration is called. See [`Context::syntax`].
     syntax: SyntaxRegistry,
     // Conversions the item drain gave up on because written goals alone held them up — what each such `?` must make true, carried to the goal batch rather than reported as an error. See `Context::note_goal_obligation`.
     goal_obligations: Vec<GoalObligation>,
@@ -166,7 +166,7 @@ impl Context {
         Self::new(DEFAULT_STEP_BUDGET, syntax)
     }
 
-    /// A fresh, empty context in which each declaration may spend `budget` reduction steps, synthesizing the `/syn` names `syntax` registers. Declarations, definitions, and the metavariable floor arrive later, seeded by `elaborate_module_suffix` as it walks the lowered module.
+    /// A fresh, empty context in which each declaration may spend `budget` reduction steps, synthesizing the names `syntax` registers. Declarations, definitions, and the metavariable floor arrive later, seeded by `elaborate_module_suffix` as it walks the lowered module.
     ///
     /// The budget is *per declaration*, not per compilation: `elaborate_module_suffix` calls `Context::restore_budget` at every item boundary. A cumulative budget would make whether one declaration typechecks depend on how much the declarations before it had already spent, which is not a property of the declaration. Counting steps rather than elapsed time is what makes the answer a fact about the program instead of about the machine that ran it, so acceptance is reproducible across hosts, loads, and runs.
     ///
@@ -239,7 +239,7 @@ impl Context {
         &self.goal_obligations
     }
 
-    /// The `/syn` names this elaboration may synthesize.
+    /// The names this elaboration may synthesize.
     pub(crate) fn syntax(&self) -> SyntaxRegistry {
         self.syntax
     }

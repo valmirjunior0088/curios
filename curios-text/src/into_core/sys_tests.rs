@@ -1,4 +1,4 @@
-//! The internal roots — `/sys` and `/syn` — are reachable only through the standard library, and a user module may not collide with the prelude's.
+//! The internal root `/sys` is reachable only through the standard library, and a user module may not collide with the prelude's.
 
 use crate::{Intrinsic, LetSignature, Subterm, Term, TopItem, sys_module};
 use curios_abi::host_ops;
@@ -65,7 +65,7 @@ fn rejects_sys_pub_use_reexport_from_user_code() {
 // `syn` is closed for the same reason `sys` is: it is the vocabulary the surface forms desugar into rather than anybody's interface, and `/std` re-exports every name of it a program may write.
 #[test]
 fn rejects_syn_use_from_user_code() {
-    let error = lower_with_prelude("use /syn/Nat/{Lt}; Type").unwrap_err();
+    let error = lower_with_prelude("use /std/Nat/{Lt}; Type").unwrap_err();
     assert!(
         error.contains("internal to the standard library"),
         "unexpected error: {error}"
@@ -74,7 +74,7 @@ fn rejects_syn_use_from_user_code() {
 
 #[test]
 fn rejects_syn_reference_in_term_from_user_code() {
-    let error = lower_with_prelude("/syn/Nat/Lt").unwrap_err();
+    let error = lower_with_prelude("/std/Nat/Lt").unwrap_err();
     assert!(
         error.contains("internal to the standard library"),
         "unexpected error: {error}"
@@ -94,26 +94,26 @@ fn rejects_relative_syn_reference_in_term() {
 #[test]
 fn rejects_syn_pub_use_reexport_from_user_code() {
     let error =
-        lower_with_prelude("pub mod Foo\n    pub use /syn/Nat/{Lt};\nend\nType").unwrap_err();
+        lower_with_prelude("pub mod Foo\n    pub use /std/Nat/{Lt};\nend\nType").unwrap_err();
     assert!(
         error.contains("internal to the standard library"),
         "unexpected error: {error}"
     );
 }
 
-// **A report never spells a route it would refuse.** `/std/Nat` and `/syn/Nat` both carry the name at the same depth, so a candidate list keyed on depth alone offers the closed one beside the open one — and the reader who takes it meets the refusal above, carrying the `/std` redirect that belonged in the first message.
+// **A report never spells a route it would refuse.** `/std/Nat` and `/std/Nat` both carry the name at the same depth, so a candidate list keyed on depth alone offers the closed one beside the open one — and the reader who takes it meets the refusal above, carrying the `/std` redirect that belonged in the first message.
 #[test]
 fn does_not_offer_a_closed_root_as_a_way_out_of_an_unresolved_name() {
     let error = lower_with_prelude("Nat/add(1, 2)").unwrap_err();
     assert!(
         error.contains("unresolved qualifier: Nat")
             && error.contains("`Nat` is `/std/Nat`")
-            && !error.contains("/syn/Nat"),
+            && !error.contains("/std/Nat"),
         "unexpected error: {error}"
     );
 }
 
-// **A type re-exported out of a closed root carries its constructors with it.** The `use` naming it was vetted against the facade where it was written, so walking into what it holds is reaching through that facade rather than past it: the guard answers for the reach an author spelled, not for where the library keeps the declaration. Closing `/syn` without this left `Scalar/below` and `Verdict/passed` unwritable by any spelling at all.
+// **A type re-exported out of a closed root carries its constructors with it.** The `use` naming it was vetted against the facade where it was written, so walking into what it holds is reaching through that facade rather than past it: the guard answers for the reach an author spelled, not for where the library keeps the declaration. Closing `/sys` without this left `Scalar/below` and `Verdict/passed` unwritable by any spelling at all.
 #[test]
 fn allows_a_constructor_of_a_type_re_exported_out_of_a_closed_root() {
     assert!(lower_with_prelude("use /std/Nat/{Proof}; Proof/qed()").is_ok());
@@ -125,7 +125,7 @@ fn allows_a_syn_declaration_through_its_std_facade() {
     assert!(lower_with_prelude("use /std/Nat/{Lt}; Type").is_ok());
 }
 
-// **The desugaring never spells the root it reaches.** An operator lowers to a witness projection built from an already-resolved identity, so closing `/syn` to authors costs it nothing — the property that makes this tier affordable, checked here rather than argued.
+// **The desugaring never spells the root it reaches.** An operator lowers to a witness projection built from an already-resolved identity, so closing `/sys` to authors costs it nothing — the property that makes this tier affordable, checked here rather than argued.
 #[test]
 fn allows_an_operator_whose_concept_lives_in_the_closed_root() {
     assert!(lower_with_prelude("use /std/{Nat}; let n: Nat = 1 + 1; Type").is_ok());
@@ -152,7 +152,7 @@ fn rejects_user_private_mod_std_colliding_with_prelude_std() {
     assert!(error.contains("std"), "unexpected error: {error}");
 }
 
-// Without a prelude attached, `has_embedded_roots()` is false, so the fixed sys/syn/std machinery never runs at all — the user's own `mod std` is just an ordinary, unreserved entry-rooted module, not a collision.
+// Without a prelude attached, `has_embedded_roots()` is false, so the fixed sys/std/std machinery never runs at all — the user's own `mod std` is just an ordinary, unreserved entry-rooted module, not a collision.
 #[test]
 fn user_own_mod_std_without_prelude_is_not_a_collision() {
     run("mod std\n    pub let x : Type = Type;\nend\nuse std/{x};\nx");

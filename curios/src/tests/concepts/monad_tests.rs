@@ -15,7 +15,7 @@ fn prelude_monad_arr_binds() {
     assert_eq!(run(source), b"4");
 }
 
-// The monadic sugar: each `e!` desugars to `/syn/Monad/bind(e, cont)`, whose `use` binder resolves the `Monad` witness from the action's type — no header, no imports needed for the dispatch itself.
+// The monadic sugar: each `e!` desugars to `/std/Monad/bind(e, cont)`, whose `use` binder resolves the `Monad` witness from the action's type — no header, no imports needed for the dispatch itself.
 #[test]
 fn monadic_sugar_binds_through_the_concept() {
     let source = r#"

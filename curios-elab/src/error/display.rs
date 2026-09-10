@@ -132,7 +132,7 @@ impl fmt::Display for Displayed<'_> {
                 }
                 Ok(())
             }
-            // "this sequencing", not "this '!'": a hand-written '/syn/Monad/bind' call reaches the same report, and nothing on the term records which spelling produced it.
+            // "this sequencing", not "this '!'": a hand-written '/std/Monad/bind' call reaches the same report, and nothing on the term records which spelling produced it.
             Error::StrandedSequencing { sequenced, region } => {
                 let region = region.spelled(spelling);
                 let needed = match sequenced {
