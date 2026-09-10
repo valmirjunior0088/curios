@@ -87,7 +87,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `Nat`
   - [x] `Byte` (i31 scalar; contextual literals `0..=255`; `Byte/to_nat` and `Nat/to_byte`)
   - [x] `Int`
-  - [x] `Flt` (bit-preserving binary32 identity, with the full arithmetic and comparison family)
+  - [x] `Flt` (bit-preserving binary64 identity, with the full arithmetic and comparison family)
   - [x] Packed `Bits` and `Bytes` (shared immutable windows; O(1) slices and tails)
   - [x] `Flt` specified by a hardware-independent model, stated in this repository
   - [x] `List`
@@ -229,8 +229,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Parser-combinator library (`std/Parse`)
 - [x] Typed format strings (`std/Fmt`)
 - [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int` and `Flt`; they round-trip)
-- [x] JSON codec (`std/Json`; numbers are binary32 `Flt`, so large integers do not round-trip)
-- [x] TOML 1.0.0 codec over native `Int` and binary32 `Flt` (`std/Toml`; not fully conforming)
+- [x] JSON codec (`std/Json`; numbers are binary64 `Flt`, which is RFC 8259's interoperability recommendation, so only integers past 2⁵³ fail to round-trip)
+- [x] TOML 1.0.0 codec over native `Int` and binary64 `Flt` (`std/Toml`; conforming on floats, not on 64-bit integers)
 - [x] Structured concurrency in `/std/Async`
   - [x] `map`, and `sleep`/`timeout`
   - [x] Concurrent `race`/`first` over spawned tasks, `select` over offers, and `join_all` over a list of tasks
@@ -258,17 +258,17 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/BigPos`)
 - [ ] Dyadic `BigFlt` sequence
   - [ ] [Canonical representation, exact operations, comparison, and witnesses](roadmap/big-flt-dyadic/01-core-spec.md)
-  - [ ] [Exact binary32 conversion and correctly rounded output](roadmap/big-flt-dyadic/02-binary32-spec.md)
+  - [ ] [Exact binary64 conversion and correctly rounded output](roadmap/big-flt-dyadic/02-binary64-spec.md)
   - [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big-flt-dyadic/03-big-int-laws-spec.md)
   - [ ] [Algebra and order theorem corpus](roadmap/big-flt-dyadic/04-laws-spec.md)
-  - [ ] [Correctly rounded exact quotient conversion to binary32](roadmap/big-flt-dyadic/05-ratio-narrowing-spec.md)
-  - [ ] [Binary32 round-trip and correct-rounding proofs](roadmap/big-flt-dyadic/06-boundary-proofs-spec.md)
+  - [ ] [Correctly rounded exact quotient conversion to binary64](roadmap/big-flt-dyadic/05-ratio-narrowing-spec.md)
+  - [ ] [Binary64 round-trip and correct-rounding proofs](roadmap/big-flt-dyadic/06-boundary-proofs-spec.md)
 - [ ] General rational `BigFlt` sequence _(after `curios wonder`)_
   - [ ] [`BigNat` certified Euclidean division, GCD, divisibility, and coprimality](roadmap/big-flt-general/01-big-nat-euclidean-spec.md)
   - [ ] [General `BigFlt` reduced rational representation and exact operations](roadmap/big-flt-general/02-core-spec.md)
   - [ ] [General canonical uniqueness, ring, and order laws](roadmap/big-flt-general/03-laws-spec.md)
   - [ ] [General division and field laws](roadmap/big-flt-general/04-field-laws-spec.md)
-  - [ ] [General rational binary32 boundaries](roadmap/big-flt-general/05-binary32-spec.md)
+  - [ ] [General rational binary64 boundaries](roadmap/big-flt-general/05-binary64-spec.md)
   - [ ] [Exact decimal parsing and presentation](roadmap/big-flt-general/06-decimal-spec.md)
 - [x] The standard library's indispensable tier — what every one of nine surveyed peers ships
   - [ ] The certified sort, `Key(Nat)` and the reducer law it waits on, and the `Ord`-keyed tree, each deferred to a consumer

@@ -457,9 +457,9 @@ fn a_num_lit_that_overflows_flt_is_refused() {
     let mut context = context();
     let flt = || Term::intrinsic(Intrinsic::FltType);
 
-    // 2^512 rounds to infinity in the model, a value no literal spells — refused like an out-of-range Byte.
+    // 2^2048 rounds to infinity in the model, a value no literal spells — refused like an out-of-range Byte.
     let huge = Term::num_lit(
-        Natural::from(2u32).pow(512),
+        Natural::from(2u32).pow(2048),
         curios_utilities::Sign::Unmarked,
     );
     assert!(matches!(

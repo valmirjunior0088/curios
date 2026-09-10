@@ -1,18 +1,20 @@
-# General `BigFlt` binary32 boundaries
+# General `BigFlt` binary64 boundaries
 
-Post-program-analysis implementation specification for extending the established binary32 conversion API and proofs from dyadic inputs to every canonical rational `BigFlt`.
+> **Restated for binary64.** `Flt` was binary32 when this specification was written. Every occurrence of the format name below has been updated, but the *magnitudes* it derives — significand width, exponent range, guard-bit counts and the decimal clamps — were computed for binary32 and must be re-derived against `curios-num`'s constants before this is implemented.
+
+Post-program-analysis implementation specification for extending the established binary64 conversion API and proofs from dyadic inputs to every canonical rational `BigFlt`.
 
 ## Objective
 
-Preserve `of_flt_bytes`, `to_flt_bytes`, `of_flt`, and `to_flt` while changing conversion to binary32 into a correctly rounded exact-ratio operation. Preserve `ratio_to_flt_bytes` as an allocation-avoiding quotient boundary over already-general operands.
+Preserve `of_flt_bytes`, `to_flt_bytes`, `of_flt`, and `to_flt` while changing conversion to binary64 into a correctly rounded exact-ratio operation. Preserve `ratio_to_flt_bytes` as an allocation-avoiding quotient boundary over already-general operands.
 
-## Conversion from binary32
+## Conversion from binary64
 
-`of_flt_bytes` is unchanged semantically. Every finite binary32 value is dyadic, so it constructs denominator one through `of_dyadic`. Signed zero still collapses to canonical mathematical zero; infinity and NaN still return `none`.
+`of_flt_bytes` is unchanged semantically. Every finite binary64 value is dyadic, so it constructs denominator one through `of_dyadic`. Signed zero still collapses to canonical mathematical zero; infinity and NaN still return `none`.
 
 The existing byte round-trip theorem remains valid with its documented negative-zero exception.
 
-## Conversion to binary32
+## Conversion to binary64
 
 `to_flt_bytes` interprets a value as:
 
@@ -20,7 +22,7 @@ The existing byte round-trip theorem remains valid with its documented negative-
 numerator · 2^exponent / odd_denominator
 ```
 
-and rounds the exact quotient once to binary32 using round-to-nearest-even. Reuse the landed compare-subtract-double digit engine behind `ratio_to_flt_bytes`, generalized to consume the stored denominator directly.
+and rounds the exact quotient once to binary64 using round-to-nearest-even. Reuse the landed compare-subtract-double digit engine behind `ratio_to_flt_bytes`, generalized to consume the stored denominator directly.
 
 The algorithm computes only the leading significand, guard bit, sticky information, exponent, and carry required for one rounding decision. It must not first approximate the rational through native `Flt` or allocate an unbounded binary expansion.
 
@@ -39,7 +41,7 @@ Handle sign and zero before magnitude scheduling. The implementation may avoid c
 
 Generalize the landed dyadic nearest-value theorem:
 
-- the emitted finite value minimizes exact absolute error among binary32 values;
+- the emitted finite value minimizes exact absolute error among binary64 values;
 - exact ties choose an even significand;
 - normal, subnormal, overflow, underflow, carry, and signed-zero boundaries follow one policy;
 - quotient correctness is stated through denominator-cleared error comparisons;
@@ -64,7 +66,7 @@ Generalize the landed dyadic nearest-value theorem:
 
 ## Completion criteria
 
-- Existing binary32 API names and dyadic behavior are preserved.
+- Existing binary64 API names and dyadic behavior are preserved.
 - Every general rational converts with one correctly proved rounding decision.
 - Direct quotient conversion agrees with exact division followed by conversion when division succeeds.
 - No native floating arithmetic participates in exact conversion logic or proofs.

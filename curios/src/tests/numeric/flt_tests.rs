@@ -15,9 +15,11 @@ fn codec_round_trips_on_runtime_values() {
             | false => Str/concat(Flt/to_str(x), Str/concat(" -> ", Flt/to_str(back)))
             end;
         let values = [
-            +3.4028235e38, +1.1754944e-38, +1.0e-45, +2.137381e-39, +0.1, +123456.79,
-            +1.2345679e-5, +9.999999e9, +16777216.0, +0.30000001, +7.1551326e37,
-            +7.141006e-33, +7.734096e-28, +1.7387574e-25, +2.7182817, -0.0, +0.0, -1.5e-40,
+            +1.7976931348623157e308, +2.2250738585072014e-308, +5.0e-324, +1.0e-320, +0.1,
+            +123456.789012345, +1.2345678901234567e-5, +9.999999999999998e9,
+            +9007199254740992.0, +0.30000000000000004, +7.1551326123456785e37,
+            +7.141006123456789e-33, +7.734096123456789e-28, +1.7387574123456789e-25,
+            +2.718281828459045, -0.0, +0.0, -1.5e-310,
         ];
         /std/print(Str/join("|", List/map(values, (x) => check(x * one))))
         "#;
@@ -32,16 +34,16 @@ fn flt_to_le_bytes_prints_raw_bytes() {
         /std/Io/pure(())
         "#;
 
-    assert_eq!(run(source), 1.5f32.to_le_bytes());
+    assert_eq!(run(source), 1.5f64.to_le_bytes());
 }
 
 #[test]
 fn flt_of_le_bytes_roundtrips_raw_bytes() {
-    // Full-pipeline inverse of `to_le_bytes`: assemble the float back from its four little-endian bytes, then re-serialize. The program is closed, so this also exercises the type-level and optimizer folds of `of_le_bytes`.
+    // Full-pipeline inverse of `to_le_bytes`: assemble the float back from its eight little-endian bytes, then re-serialize. The program is closed, so this also exercises the type-level and optimizer folds of `of_le_bytes`.
     let source = r#"
         let _ = std/Io/write(std/Io/stdout, std/Flt/to_le_bytes(std/Flt/of_le_bytes(std/Flt/to_le_bytes(+1.5))))!;
         /std/Io/pure(())
         "#;
 
-    assert_eq!(run(source), 1.5f32.to_le_bytes());
+    assert_eq!(run(source), 1.5f64.to_le_bytes());
 }

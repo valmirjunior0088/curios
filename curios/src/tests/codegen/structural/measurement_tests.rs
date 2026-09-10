@@ -75,7 +75,7 @@ use super::test_support::*;
 ///
 /// # Typed slots, 2026-08-20
 ///
-/// Each family slot is now declared at the carrier its recorded shape names rather than uniformly `anyref` — the tag as a packed `i8` read through `struct.get_u`, unsigned and signed immediates as raw `i32`, an `Flt` inline as `f32`, a list at its rope base, a product at its arity's type. Slots are grouped by carrier rather than by field position, so constructors agreeing on a carrier share its slots and only a disagreement costs width; `shapes.rs`'s `slot_layout_probe` is that choice's figure. Same method as family keying above — interleaved run-by-run, min of 7, two passes, load 0.82 at the start and 1.15 at the end — outputs identical across arms and every harness anchor reproduced:
+/// Each family slot is now declared at the carrier its recorded shape names rather than uniformly `anyref` — the tag as a packed `i8` read through `struct.get_u`, unsigned and signed immediates as raw `i32`, an `Flt` inline as `f64`, a list at its rope base, a product at its arity's type. Slots are grouped by carrier rather than by field position, so constructors agreeing on a carrier share its slots and only a disagreement costs width; `shapes.rs`'s `slot_layout_probe` is that choice's figure. Same method as family keying above — interleaved run-by-run, min of 7, two passes, load 0.82 at the start and 1.15 at the end — outputs identical across arms and every harness anchor reproduced:
 ///
 /// | Program | before | after | pass 1 | pass 2 |
 /// | --- | ---: | ---: | ---: | ---: |

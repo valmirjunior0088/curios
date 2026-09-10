@@ -1,12 +1,14 @@
 # Dyadic `BigFlt` algebra and order laws
 
+> **Restated for binary64.** `Flt` was binary32 when this specification was written. Every occurrence of the format name below has been updated, but the *magnitudes* it derives — significand width, exponent range, guard-bit counts and the decimal clamps — were computed for binary32 and must be re-derived against `curios-num`'s constants before this is implemented.
+
 Post-bootstrap implementation specification for the abstract theorem corpus over the landed canonical dyadic `BigFlt` type.
 
 The proofs consume the exported `/std/BigInt` law layer and the `BigFlt` canonicity kernel. They do not reason about native `Flt` instructions or byte encodings.
 
 ## Objective
 
-Provide exactly the algebraic and order facts needed by ordinary exact clients and by the binary32 boundary proofs, without attempting a field theory for a type that deliberately lacks interior division.
+Provide exactly the algebraic and order facts needed by ordinary exact clients and by the binary64 boundary proofs, without attempting a field theory for a type that deliberately lacks interior division.
 
 ## Algebraic laws
 
@@ -58,7 +60,7 @@ Every proof uses checked structural elimination, checked inductive case analysis
 ## Non-goals
 
 - Exact division, inverses, or field laws.
-- Binary32 encoding or correct-rounding proofs.
+- Binary64 encoding or correct-rounding proofs.
 - General rational normalization.
 - Laws about native `/sys/Flt` arithmetic.
 

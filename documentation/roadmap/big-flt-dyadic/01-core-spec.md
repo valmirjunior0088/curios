@@ -1,8 +1,10 @@
 # Dyadic `BigFlt` core representation and operations
 
+> **Restated for binary64.** `Flt` was binary32 when this specification was written. Every occurrence of the format name below has been updated, but the *magnitudes* it derives — significand width, exponent range, guard-bit counts and the decimal clamps — were computed for binary32 and must be re-derived against `curios-num`'s constants before this is implemented.
+
 Entry-point implementation specification for the first `BigFlt` phase: a certified, representation-private canonical dyadic rational with exact arithmetic and executable comparison. In the chosen project order this work follows the independent native-width `Toml` codec; the complete standalone `BigInt` law project is deliberately deferred until immediately after bootstrap.
 
-This specification and executable binary32 conversion complete the `BigFlt` representation work required before bootstrap. The larger theorem and quotient-boundary projects are deliberately deferred until afterward.
+This specification and executable binary64 conversion complete the `BigFlt` representation work required before bootstrap. The larger theorem and quotient-boundary projects are deliberately deferred until afterward.
 
 ## Objective
 

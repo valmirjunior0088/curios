@@ -1,5 +1,7 @@
 # General `BigFlt` core representation and operations
 
+> **Restated for binary64.** `Flt` was binary32 when this specification was written. Every occurrence of the format name below has been updated, but the *magnitudes* it derives — significand width, exponent range, guard-bit counts and the decimal clamps — were computed for binary32 and must be re-derived against `curios-num`'s constants before this is implemented.
+
 Post-program-analysis implementation specification for extending private dyadic `BigFlt` into a canonical reduced rational type. This work consumes the landed `/std/BigNat` Euclidean arithmetic layer and preserves the existing abstract API established by the dyadic core.
 
 ## Objective
@@ -111,7 +113,7 @@ Zero produces `none`. Nonzero inputs swap signed numerator magnitude with the po
 
 - Infinities, NaNs, signed zero, irrational values, exact roots, or transcendental functions inside `BigFlt`.
 - Decimal parsing or formatting, which belongs to the later exact decimal interop effort.
-- Binary32 conversion changes, which belong to the later general binary32 boundary effort.
+- Binary64 conversion changes, which belong to the later general binary64 boundary effort.
 - Full field and order theorem publication, staged in the following law specifications.
 - Exposing numerator, exponent, or denominator as a stable public representation contract.
 

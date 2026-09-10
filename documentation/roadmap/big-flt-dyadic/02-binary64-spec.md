@@ -1,14 +1,16 @@
-# Dyadic `BigFlt` and binary32 conversion
+# Dyadic `BigFlt` and binary64 conversion
 
-Working implementation specification for native byte reinterpretation, exact conversion from binary32, correctly rounded conversion to binary32, and behavioral validation after the dyadic `BigFlt` core has landed.
+> **Restated for binary64.** `Flt` was binary32 when this specification was written. Every occurrence of the format name below has been updated, but the *magnitudes* it derives — significand width, exponent range, guard-bit counts and the decimal clamps — were computed for binary32 and must be re-derived against `curios-num`'s constants before this is implemented.
+
+Working implementation specification for native byte reinterpretation, exact conversion from binary64, correctly rounded conversion to binary64, and behavioral validation after the dyadic `BigFlt` core has landed.
 
 This pre-bootstrap document specifies executable conversion behavior. Formal round-trip and optimality theorems belong to the post-bootstrap boundary-proof effort.
 
 ## Boundary architecture
 
-Native `Flt` is IEEE 754-2019 binary32 with exactly one NaN, computed exactly over unbounded integers by `curios-num`'s `Floating` and rounded once. Term identity is bitwise, which with one NaN is value identity: `+0.0` differs from `-0.0`, and a NaN is one term.
+Native `Flt` is IEEE 754-2019 binary64 with exactly one NaN, computed exactly over unbounded integers by `curios-num`'s `Floating` and rounded once. Term identity is bitwise, which with one NaN is value identity: `+0.0` differs from `-0.0`, and a NaN is one term.
 
-Every `Flt` operation folds on literal operands by calling that model, so `Flt/to_le_bytes` and `Flt/of_le_bytes` are no longer a trust boundary and their round-trip laws are theorems rather than postulates. What is trusted is the model itself, held to the host at all 2³² unary inputs and to the engine differentially — see [The binary32 model and its two canonicalizing sites](../../soundness/per-term-rules/the-binary32-model-and-its-two-canonicalizing-sites.md). Inspectable conversion logic still operates on `Bytes`, because that is what `BigFlt` is being built out of.
+Every `Flt` operation folds on literal operands by calling that model, so `Flt/to_le_bytes` and `Flt/of_le_bytes` are no longer a trust boundary and their round-trip laws are theorems rather than postulates. What is trusted is the model itself, held to the host at every exponent field and exhaustively over the low mantissa bits at each and to the engine differentially — see [The binary64 model and its two canonicalizing sites](../../soundness/per-term-rules/the-binary64-model-and-its-two-canonicalizing-sites.md). Inspectable conversion logic still operates on `Bytes`, because that is what `BigFlt` is being built out of.
 
 Do not add a conversion rule asserting `of_le_bytes(to_le_bytes(x)) ≡ x`; that would be a postulate disguised as reduction.
 
@@ -24,13 +26,13 @@ The intrinsic uses `Byte/to_nat` internally; no user-visible Nat-byte convention
 
 Its compiler footprint includes the intrinsic models and printers across Core, Ersd, Cont, Wasm lowering, text lowering, standard-library exposure, optimization walkers, scalar evaluation, and codegen tests. Preserve round-trip fixtures for positive and negative zero, normal values, subnormals, payloaded NaNs, and both infinities. Cmp bytes, never native `Flt` equality.
 
-## Exact conversion from binary32
+## Exact conversion from binary64
 
 ```crs
 BigFlt/of_flt_bytes : Bytes -> Option(BigFlt)
 ```
 
-Return `none` unless the input length is exactly four. Decode the binary32 fields as follows:
+Return `none` unless the input length is exactly four. Decode the binary64 fields as follows:
 
 - exponent `1..254`: `of_dyadic(±(mantissa_field + 0x800000), exponent_field - 150)`;
 - exponent `0` with a nonzero mantissa: `of_dyadic(±mantissa_field, -149)`;
@@ -47,7 +49,7 @@ of_flt(f) = of_flt_bytes(Flt/to_le_bytes(f))
 
 Collapsing negative zero to canonical mathematical zero is deliberate.
 
-## Correctly rounded conversion to binary32
+## Correctly rounded conversion to binary64
 
 ```crs
 BigFlt/to_flt_bytes : BigFlt -> Bytes
@@ -76,8 +78,8 @@ Every helper used by a proof needs a structural specification connecting it to e
 
 ## Behavioral verification
 
-- Test conversion from binary32 for normals, subnormals, both zeros, infinities, and multiple NaN payloads.
-- Test conversion to binary32 at normal/subnormal boundaries, the binary32 overflow boundary, underflow, exact halfway cases, and significand carry.
+- Test conversion from binary64 for normals, subnormals, both zeros, infinities, and multiple NaN payloads.
+- Test conversion to binary64 at normal/subnormal boundaries, the binary64 overflow boundary, underflow, exact halfway cases, and significand carry.
 - Cmp emitted bytes with a trusted correctly rounded IEEE-754 reference over a broad generated corpus.
 - Test `to_flt_bytes(of_flt_bytes(bytes))` behavior separately from the formal theorem suite.
 - Benchmark the boundary loops and record pathological exponent or magnitude behavior.
@@ -91,8 +93,8 @@ Every helper used by a proof needs a structural specification connecting it to e
 
 ## Completion criteria
 
-- Every finite binary32 pattern converts to its exact mathematical value.
-- Every `BigFlt` value converts to binary32 according to the specified round-to-nearest-even behavior.
+- Every finite binary64 pattern converts to its exact mathematical value.
+- Every `BigFlt` value converts to binary64 according to the specified round-to-nearest-even behavior.
 - Behavioral reference tests cover all format boundaries and special byte patterns.
 - The executable algorithm exposes the structural facts required by the boundary proof layer.
 - Before this specification is deleted, the byte reinterpretation trust boundary, exact decode contract, rounding policy, and structural helper obligations are recorded in the owning `/std/Flt`, `/std/BigFlt`, and applicable compiler documentation and tests; remaining plans refer to landed functions and lemmas rather than this file; the roadmap entry is a checked unlinked summary; and no reference to this filename remains.

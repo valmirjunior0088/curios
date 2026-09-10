@@ -266,7 +266,7 @@ fn a_flt_narrowing_bound_refuses_what_is_not_a_number() {
 ///
 /// The `refl` laws beside it are the same fold read as an equation, and each holds *here* rather than being a property of whatever machine compiled the program.
 ///
-/// `0.1 + 0.2 == 0.3` is the row worth reading twice. It is **true** in binary32 and false in binary64, so the famous example is the other format's — and this fixture is where the difference is pinned rather than assumed. Its first spelling here asserted the binary64 folklore and the fold refused it, which is the mechanism working: a claim about floats is now something the compiler checks instead of something a comment asserts.
+/// `0.1 + 0.2 == 0.3` is the row worth reading twice. It is **false** in binary64 and true in binary32, so at this format the famous example is ours — and this fixture is where the difference is pinned rather than assumed. It asserted the opposite while `Flt` was binary32, and the fold is what decided the flip: a claim about floats is something the compiler checks rather than something a comment asserts.
 #[test]
 fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
     assert_eq!(
@@ -275,9 +275,9 @@ fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
         let two: Nat = Flt/to_nat(2.5);
         let minus_two: Int = Flt/to_int(-2.5);
         let sum: Eq(Flt/add(1.0, 1.0), 2.0) = Eq/refl();
-        let binary32_is_not_binary64: Eq(Flt/eql(Flt/add(0.1, 0.2), 0.3), true) = Eq/refl();
+        let binary64_is_not_binary32: Eq(Flt/eql(Flt/add(0.1, 0.2), 0.3), false) = Eq/refl();
         let tie: Eq(Flt/nearest(2.5), 2.0) = Eq/refl();
-        let subnormal_tie: Eq(Flt/div(1.0e-45, 2.0), +0.0) = Eq/refl();
+        let subnormal_tie: Eq(Flt/div(5.0e-324, 2.0), +0.0) = Eq/refl();
         let signed_zero: Eq(Flt/add(-0.0, +0.0), +0.0) = Eq/refl();
         let round_trip: Eq(Flt/of_le_bytes(Flt/to_le_bytes(2.5)), 2.5) = Eq/refl();
         let widen: Eq(Flt/to_nat(Nat/to_flt(16777215)), 16777215) = Eq/refl();

@@ -107,14 +107,14 @@ fn a_returned_constructor_is_delivered_as_its_fields() {
 ///
 /// `fields.rs` justified the filler by unreadness — "a read at that index is reachable only where the discriminant says a wider constructor travelled" — and that was false of the emitted code, because `Context::jump_instrs` coerces *every* edge argument to the destination parameter's carrier before the tag is examined. A literal `Nat(0)` standing in a raw `Flt` slot therefore reached a `ref.cast (ref $flt)` over an `i31` and trapped, on the `none` edge, for a value nothing would have read.
 ///
-/// The premise is asserted before the claim, and it is the half that decays: a pass that stopped raising this parameter to a register, or stopped splitting the variant at all, would leave a fixture that passes while measuring nothing. `f32.const 0` in the loop is the filler — the fixture's own float constants are `0.25`, `1.5` and `2`, none of them zero — so its presence says both that the split fired and that the slot is raw.
+/// The premise is asserted before the claim, and it is the half that decays: a pass that stopped raising this parameter to a register, or stopped splitting the variant at all, would leave a fixture that passes while measuring nothing. `f64.const 0` in the loop is the filler — the fixture's own float constants are `0.25`, `1.5` and `2`, none of them zero — so its presence says both that the split fired and that the slot is raw.
 ///
 /// **Positive control, run 2026-08-18.** Restoring `CpsAtom::Literal(CpsLiteral::Nat(0))` at the `split_parameters` filler site and rebuilding makes this fixture fail as `execution failed: error while executing at wasm backtrace: 0: 0x70b - <wasm function 4>`. Reproduce by reverting that one line.
 #[test]
 fn a_variant_filler_is_built_at_its_destination_carrier() {
     let wat = wat(VARIANT_FILLER);
     assert!(
-        wat.contains("f32.const 0\n"),
+        wat.contains("f64.const 0\n"),
         "the premise: a filler must reach a register-held `Flt` slot, or this fixture measures nothing",
     );
 

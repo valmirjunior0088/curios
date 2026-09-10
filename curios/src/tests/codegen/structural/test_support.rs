@@ -201,7 +201,7 @@ pub(super) const LOOPED_PICK: &str = r#"
 
 /// A variant carried round a loop whose payload the analysis holds in a register — the shape that puts a variant-width filler in a *raw* slot.
 ///
-/// [`SPLIT_RETURN`] exercises the filler too, but only through the return protocol, whose slots are boxed by construction; that is why it never caught this. Here the variant reaches a continuation parameter instead, and the parameter's uses demand an unboxed `Flt`, so the edges carry `f32` and the `none` edge has no value to carry. The payload must be a `Flt` rather than a `Nat`: a `Nat` filler and its slot share the `i31` carrier, so the wrong-carrier constant is indistinguishable from a right one.
+/// [`SPLIT_RETURN`] exercises the filler too, but only through the return protocol, whose slots are boxed by construction; that is why it never caught this. Here the variant reaches a continuation parameter instead, and the parameter's uses demand an unboxed `Flt`, so the edges carry `f64` and the `none` edge has no value to carry. The payload must be a `Flt` rather than a `Nat`: a `Nat` filler and its slot share the `i31` carrier, so the wrong-carrier constant is indistinguishable from a right one.
 ///
 /// **The `none` edge has to be taken, and taken while other iterations take `some`.** A loop is what buys that: `o` is genuinely joined from both constructors, and the payload is read only under the tag. `p % 3` alternates the two so neither edge is dead, and the final iteration lands on `some`, so a run that reads the filler is reading something the program never stored.
 pub(super) const VARIANT_FILLER: &str = r#"

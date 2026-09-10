@@ -1,6 +1,8 @@
 # General `BigFlt` exact decimal interop
 
-Post-program-analysis implementation specification for exact decimal parsing and explicit decimal presentation over canonical rational `BigFlt`. This is the final planned general-number layer and follows the general core, laws, field laws, and binary32 boundaries.
+> **Restated for binary64.** `Flt` was binary32 when this specification was written. Every occurrence of the format name below has been updated, but the *magnitudes* it derives — significand width, exponent range, guard-bit counts and the decimal clamps — were computed for binary32 and must be re-derived against `curios-num`'s constants before this is implemented.
+
+Post-program-analysis implementation specification for exact decimal parsing and explicit decimal presentation over canonical rational `BigFlt`. This is the final planned general-number layer and follows the general core, laws, field laws, and binary64 boundaries.
 
 ## Objective
 
@@ -66,7 +68,7 @@ Do not silently change `Toml/int` or `Toml/flt` as part of this specification; t
 
 - Infinities, NaNs, signed zero, hexadecimal floats, or locale-sensitive formatting.
 - Implicit rounding of nonterminating decimals.
-- A shortest rounded decimal algorithm for binary32 or binary64.
+- A shortest rounded decimal algorithm for binary64 or binary64.
 - Automatic migration of JSON, TOML, format strings, or native `Flt` APIs.
 
 ## Completion criteria

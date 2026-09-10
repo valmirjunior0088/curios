@@ -1,5 +1,7 @@
 # General `BigFlt` canonical, ring, and order laws
 
+> **Restated for binary64.** `Flt` was binary32 when this specification was written. Every occurrence of the format name below has been updated, but the *magnitudes* it derives — significand width, exponent range, guard-bit counts and the decimal clamps — were computed for binary32 and must be re-derived against `curios-num`'s constants before this is implemented.
+
 Post-program-analysis implementation specification for lifting the dyadic theorem corpus across the landed reduced rational `BigFlt` representation.
 
 ## Objective
@@ -61,7 +63,7 @@ If a theorem truly exposed a dyadic-only premise, replace it with an abstract st
 ## Non-goals
 
 - Reciprocal, division, inverse, or field laws, which belong to the following field-law effort.
-- Binary32 encodings or correct-rounding proofs.
+- Binary64 encodings or correct-rounding proofs.
 - Decimal parsing or presentation.
 - Public representation projections or a rational eliminator.
 

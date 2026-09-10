@@ -1,4 +1,6 @@
-# Dyadic `BigFlt` binary32 boundary proofs
+# Dyadic `BigFlt` binary64 boundary proofs
+
+> **Restated for binary64.** `Flt` was binary32 when this specification was written. Every occurrence of the format name below has been updated, but the *magnitudes* it derives — significand width, exponent range, guard-bit counts and the decimal clamps — were computed for binary32 and must be re-derived against `curios-num`'s constants before this is implemented.
 
 Post-bootstrap implementation specification for the formal round-trip and correct-rounding results over the landed `of_flt_bytes`, `to_flt_bytes`, and `ratio_to_flt_bytes` boundaries.
 
@@ -6,7 +8,7 @@ This is the final dyadic `BigFlt` layer. It depends on the exported abstract alg
 
 ## Boundary discipline
 
-All quantified theorems are stated over `Bytes` and `BigFlt`. Native `Flt` reinterpretation is no longer opaque — it folds through the binary32 model like every other `Flt` operation — but it remains *unproved* here, since the model is trusted code rather than a Curios proof; that is the boundary these theorems stop at.
+All quantified theorems are stated over `Bytes` and `BigFlt`. Native `Flt` reinterpretation is no longer opaque — it folds through the binary64 model like every other `Flt` operation — but it remains *unproved* here, since the model is trusted code rather than a Curios proof; that is the boundary these theorems stop at.
 
 Statements avoid postfix `!` in types by carrying successful decode hypotheses as equations.
 
@@ -32,7 +34,7 @@ For `x` whose narrowed output is finite, let `r` be that output widened back. Fo
 abs(r - x) <= abs(y - x)
 ```
 
-The range premise must account for the binary32 overflow rounding boundary `2^128 - 2^103`, not merely the largest finite decoded value. Overflow after rounding must be excluded when `r` is required to widen successfully.
+The range premise must account for the binary64 overflow rounding boundary `2^128 - 2^103`, not merely the largest finite decoded value. Overflow after rounding must be excluded when `r` is required to widen successfully.
 
 Refine the nearest-value result with:
 
@@ -53,7 +55,7 @@ Prove that the digit loop's leading, guard, sticky, remainder, and exponent inva
 
 The proof library should isolate:
 
-- exact interpretation of binary32 normal and subnormal fields;
+- exact interpretation of binary64 normal and subnormal fields;
 - power-of-two grid spacing and adjacent representable values;
 - guard/sticky characterization of below-half, exact-half, and above-half remainders;
 - carry and exponent-boundary behavior;

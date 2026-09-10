@@ -53,7 +53,7 @@ pub use Byte/{let Byte};
 pub mod Int;
 pub use Int/{let Int};
 
--- | IEEE binary32 floating point.
+-- | IEEE binary64 floating point.
 -- |
 -- | Every comparison is IEEE's, so a NaN fails them all. Division is total. The narrowings to `Int` and `Nat` carry the decided bounds `Finite` and `NonNeg`, and the decimal conversions are exact in both directions.
 pub mod Flt;
@@ -188,11 +188,11 @@ pub mod Tuple;
 pub mod Parse;
 pub use Parse/{let Parse};
 
--- | JSON, decoded and encoded through `Parse`. Numbers are binary32 `Flt`: an integer above `2^24` decodes inexactly, and a non-finite value encodes as `null`.
+-- | JSON, decoded and encoded through `Parse`. Numbers are binary64 `Flt`: an integer above `2^24` decodes inexactly, and a non-finite value encodes as `null`.
 pub mod Json;
 pub use Json/{let Json};
 
--- | A TOML 1.0.0 codec over native `Int` and binary32 `Flt`.
+-- | A TOML 1.0.0 codec over native `Int` and binary64 `Flt`.
 -- |
 -- | `decode` reads one whole document under the table-construction rules; `encode` writes one deterministic document, which decodes back to the same value.
 pub mod Toml;

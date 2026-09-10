@@ -207,79 +207,79 @@ const INTEGERS: &[Row] = &[
     },
 ];
 
-/// Float lexemes pinned to their binary32 bit patterns, little-endian hex: the zeros, the specials, overflow and underflow, and the nine-digit boundary.
+/// Float lexemes pinned to their binary64 bit patterns, little-endian hex: the zeros, the specials, overflow and underflow, and the seventeen-digit boundary where three consecutive integers share one value.
 const FLOAT_BITS: &[Row] = &[
     Row {
         expr: r##"fbits("f = 0.0")"##,
-        expected: "00000000",
+        expected: "0000000000000000",
     },
     Row {
         expr: r##"fbits("f = -0.0")"##,
-        expected: "00000080",
+        expected: "0000000000000080",
     },
     Row {
         expr: r##"fbits("f = 1.0")"##,
-        expected: "0000803f",
+        expected: "000000000000f03f",
     },
     Row {
         expr: r##"fbits("f = 1.5")"##,
-        expected: "0000c03f",
+        expected: "000000000000f83f",
     },
     Row {
         expr: r##"fbits("f = 3.5")"##,
-        expected: "00006040",
+        expected: "0000000000000c40",
     },
     Row {
         expr: r##"fbits("f = -1.5")"##,
-        expected: "0000c0bf",
+        expected: "000000000000f8bf",
     },
     Row {
         expr: r##"fbits("f = 0.25")"##,
-        expected: "0000803e",
+        expected: "000000000000d03f",
     },
     Row {
         expr: r##"fbits("f = inf")"##,
-        expected: "0000807f",
+        expected: "000000000000f07f",
     },
     Row {
         expr: r##"fbits("f = -inf")"##,
-        expected: "000080ff",
+        expected: "000000000000f0ff",
     },
     Row {
         expr: r##"fbits("f = nan")"##,
-        expected: "0000c07f",
+        expected: "000000000000f87f",
     },
     Row {
         expr: r##"fbits("f = -nan")"##,
-        expected: "0000c07f",
+        expected: "000000000000f87f",
     },
     Row {
-        expr: r##"fbits("f = 1e39")"##,
-        expected: "0000807f",
+        expr: r##"fbits("f = 1e309")"##,
+        expected: "000000000000f07f",
     },
     Row {
-        expr: r##"fbits("f = -1e39")"##,
-        expected: "000080ff",
+        expr: r##"fbits("f = -1e309")"##,
+        expected: "000000000000f0ff",
     },
     Row {
-        expr: r##"fbits("f = 1e-50")"##,
-        expected: "00000000",
+        expr: r##"fbits("f = 1e-330")"##,
+        expected: "0000000000000000",
     },
     Row {
-        expr: r##"fbits("f = 123456789.0")"##,
-        expected: "a379eb4c",
+        expr: r##"fbits("f = 12345678901234567.0")"##,
+        expected: "c4a5b52e2aee4543",
     },
     Row {
-        expr: r##"fbits("f = 1234567890.0")"##,
-        expected: "062c934e",
+        expr: r##"fbits("f = 12345678901234568.0")"##,
+        expected: "c4a5b52e2aee4543",
     },
     Row {
-        expr: r##"fbits("f = 1234567891.0")"##,
-        expected: "062c934e",
+        expr: r##"fbits("f = 12345678901234569.0")"##,
+        expected: "c4a5b52e2aee4543",
     },
     Row {
         expr: r##"fbits("f = 1_2.5e1_0")"##,
-        expected: "a5d4e851",
+        expected: "000000a2941a3d42",
     },
 ];
 
@@ -485,20 +485,20 @@ const NESTING: &[Row] = &[
 
 /// The float lexemes the old nine-digit significand scaled by repeated `pow10` multiplication got wrong — a mantissa past nine digits, exponents past `10^10`, subnormals, and the overflow boundary, where `3.4028236e38` is above the largest finite value yet rounds down to it — each pinned to the bit pattern Rust's correctly rounded parser gives. These rows' expectations are computed rather than written, so they are not a `Row` table.
 const ROUNDED_FLOATS: &[&str] = &[
-    "1.2345679e-5",
-    "123456.79",
-    "7.1551326e37",
-    "3.4028235e38",
-    "3.4028236e38",
-    "3.4028237e38",
-    "2.137381e-39",
-    "1.0e-45",
-    "1.1754942e-38",
+    "1.2345678901234567e-5",
+    "123456.789012345",
+    "7.1551326123456785e37",
+    "1.7976931348623157e308",
+    "1.7976931348623159e308",
+    "1.797693134862316e308",
+    "1.0e-310",
+    "5.0e-324",
+    "2.225073858507201e-308",
     "0.1000000000000000055511151231257827",
-    "1234567891.0",
-    "9.999999999e9",
-    "1.00000006",
-    "-1.5e-40",
+    "12345678901234569.0",
+    "9.999999999999998e9",
+    "1.0000000000000002",
+    "-1.5e-310",
     "1_2.5e1_0",
 ];
 
@@ -523,7 +523,7 @@ fn rounded_float_rows() -> Vec<(String, String)> {
         .map(|input| {
             let value = input
                 .replace('_', "")
-                .parse::<f32>()
+                .parse::<f64>()
                 .expect("a float the oracle parses");
             let hex = value
                 .to_le_bytes()
@@ -644,7 +644,7 @@ fn run_row(index: usize) -> String {
 
 /// Every row of every table, then the rounded floats, in the program's order: what each prints against what its table expects.
 ///
-/// The tables — scalar documents round-tripping deterministically, string forms and escapes, the RFC 3339 subset of date-times, integer boundaries in every radix, binary32 bit patterns and correctly rounded floats, the rejections of malformed numbers and escapes and of table-construction conflicts, nested arrays and inline tables reaching a fixpoint, comments and line endings and trailing input — were one test each until the compile they share made that a cost; see the module header. A mismatch names its row, and every mismatch is reported at once.
+/// The tables — scalar documents round-tripping deterministically, string forms and escapes, the RFC 3339 subset of date-times, integer boundaries in every radix, binary64 bit patterns and correctly rounded floats, the rejections of malformed numbers and escapes and of table-construction conflicts, nested arrays and inline tables reaching a fixpoint, comments and line endings and trailing input — were one test each until the compile they share made that a cost; see the module header. A mismatch names its row, and every mismatch is reported at once.
 #[test]
 fn every_document_prints_what_its_table_expects() {
     let expectations = TABLES

@@ -1,8 +1,10 @@
 # Correctly rounded dyadic `BigFlt` ratio narrowing
 
-Post-bootstrap implementation specification for rounding an exact quotient of two `BigFlt` values directly to binary32 without adding exact interior division to the `BigFlt` API.
+> **Restated for binary64.** `Flt` was binary32 when this specification was written. Every occurrence of the format name below has been updated, but the *magnitudes* it derives — significand width, exponent range, guard-bit counts and the decimal clamps — were computed for binary32 and must be re-derived against `curios-num`'s constants before this is implemented.
 
-This work depends on the landed dyadic `BigFlt` API, shares the binary32 packing rules used by `BigFlt/to_flt_bytes`, and supplies the executable basis for the ratio-correctness theorem.
+Post-bootstrap implementation specification for rounding an exact quotient of two `BigFlt` values directly to binary64 without adding exact interior division to the `BigFlt` API.
+
+This work depends on the landed dyadic `BigFlt` API, shares the binary64 packing rules used by `BigFlt/to_flt_bytes`, and supplies the executable basis for the ratio-correctness theorem.
 
 ## Objective
 
@@ -12,7 +14,7 @@ Provide the only division-shaped operation in stage 1:
 BigFlt/ratio_to_flt_bytes : BigFlt -> BigFlt -> Bytes
 ```
 
-The function rounds the exact mathematical quotient once, directly to a binary32 byte pattern using round-to-nearest-even. It does not construct an interior rational value and does not justify a `Div(BigFlt)` witness.
+The function rounds the exact mathematical quotient once, directly to a binary64 byte pattern using round-to-nearest-even. It does not construct an interior rational value and does not justify a `Div(BigFlt)` witness.
 
 ## Algorithm
 
@@ -21,7 +23,7 @@ Normalize numerator and denominator signs and magnitudes, account for their exac
 - the leading significand bits required by the target range;
 - a guard bit;
 - sticky information for every unconsumed remainder bit;
-- the exponent and carry information required by the shared binary32 packer.
+- the exponent and carry information required by the shared binary64 packer.
 
 The loop must compute only the precision needed for one final rounding decision. It must not materialize an unbounded quotient or route through native floating arithmetic.
 
@@ -35,7 +37,7 @@ Specify and test one explicit sign and zero table before implementing the loop:
 - nonzero divided by zero produces signed infinity;
 - zero divided by a finite nonzero value produces signed zero according to the sign rule;
 - finite nonzero operands use round-to-nearest-even;
-- overflow, subnormal results, underflow, halfway cases, and carry use the same binary32 policy as `to_flt_bytes`.
+- overflow, subnormal results, underflow, halfway cases, and carry use the same binary64 policy as `to_flt_bytes`.
 
 The native wrapper is:
 
@@ -73,5 +75,5 @@ These obligations expose facts for the later formal proof; they do not by themse
 - `ratio_to_flt_bytes` has fully specified behavior for every numerator and denominator pair.
 - Generated reference tests agree with exact rational rounding.
 - The algorithm exports or proves the structural invariants required by the formal ratio-correctness proof.
-- Its binary32 packing behavior is shared with or demonstrably identical to `to_flt_bytes`.
+- Its binary64 packing behavior is shared with or demonstrably identical to `to_flt_bytes`.
 - Before this specification is deleted, the zero and sign table, digit-loop contract, rounding policy, and structural invariants are recorded in the owning `/std/BigFlt` documentation and tests; remaining plans refer to `ratio_to_flt_bytes` and its landed lemmas rather than this file; the roadmap subitem is a checked unlinked summary; and no reference to this filename remains.
