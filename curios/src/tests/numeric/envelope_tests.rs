@@ -1,6 +1,6 @@
-//! Every folder computes in exact `u32`/`i32`, and the backend boundary appears only as a trap.
+//! Every folder computes what Core computes, and the backend boundary appears only as a trap.
 
-//! The numeric envelope gates: every constant folder computes in exact `u32`/`i32` (the numeric law), and the i31 backend boundary appears only as a trap in emitted Wasm — an overflowing computation traps, and a folded literal the carrier cannot box traps at its materialization point. The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics.
+//! The numeric envelope gates: every constant folder computes over the same unbounded carriers Core does (the numeric law), and the i31 backend boundary appears only as a trap in emitted Wasm — an overflowing computation traps, and a folded literal the carrier cannot box traps at its materialization point. The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics.
 
 use {
     crate::tests::{compile, run, run_text, typecheck, typecheck_within},
@@ -180,17 +180,25 @@ fn out_of_domain_computations_are_refused_where_they_are_written() {
 
 #[test]
 fn folded_literal_outside_the_envelope_traps_at_materialization() {
-    // `2^30 + 2^30` folds to the u32 constant `2^31` at compile time; adding the runtime zero keeps the literal alive to emission, where the i31 carrier cannot box it. Materialization is the backend boundary, so the program traps at runtime — it must not crash the compiler.
+    // `2^30 + 2^30` folds to `2^31` at compile time, exactly as Core computes it; adding the runtime zero keeps the literal alive to emission, where the envelope cannot box it. Materialization is the one boundary, so the program traps at runtime — it must not crash the compiler.
     runtime_traps(&["Nat/to_str(1073741824 + 1073741824 + n)"]);
 }
 
 #[test]
-fn closed_computation_through_the_envelope_folds_in_u32() {
-    // Fully constant programs are complete under the numeric law: partial evaluation carries the u32 value straight through `to_str`, so no out-of-envelope literal ever reaches the backend.
+fn a_closed_computation_folds_at_the_theory_s_width() {
+    // The erased carriers are unbounded, so a fold answers what Core answers and a value that never needs a runtime representation is not subject to the runtime's width. This once demonstrated a `u32` band between the folders and the envelope; there is no band now, and what it demonstrates is that the fold and the theory agree.
     assert_eq!(
         run("use /std/{Nat, Io}; /std/print(Nat/to_str(1073741824 + 1073741824))"),
         b"2147483648"
     );
+}
+
+/// A growing fold declines rather than building a numeral no machine holds, and the program it leaves standing traps at the envelope instead.
+///
+/// **The bounded carrier was closing this for free and nothing upstream closes it.** `curios-core` charges every reduction step against a budget, but nothing demands the value of a `Nat/shl` in a term position, so the shift reaches erasure unreduced — `wonder diagnostics` reports only lints on the program below, and `wonder stage ersd` shows the call arriving with both operands literal. With `u32` carriers the fold refused past the width and cost nothing; unbounded, it would be asked for a forty-million-bit numeral. The allowance is what declines instead, and a decline is invisible: the operation stays, and the envelope traps on it at its execution point.
+#[test]
+fn a_growing_fold_declines_rather_than_building_what_cannot_materialize() {
+    runtime_traps(&["Nat/to_str(Nat/shl(1 + n, 40000000))"]);
 }
 
 #[test]
