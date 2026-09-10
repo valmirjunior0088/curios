@@ -62,41 +62,19 @@ pub use Field/{let Field};
 -- | A window onto a larger frame.
 pub mod Viewport;
 
--- | What an `update` asks the loop to do beside the new model: nothing, stop, run an `Async` and hand its answer back as `Event/custom`, or several of those.
-pub induct Cmd(E: Type): pub Type
--- | Nothing beside the new model.
-| none()
--- | Stop the loop.
-| quit()
--- | Run this, and hand its answer back as `Event/custom`.
-| perform(Async(E))
--- | Several of these, in order.
-| batch(List(Cmd(E)))
-end
+-- | What an `update` asks the loop to do beside the new model.
+pub mod Directive;
+pub use Directive/{let Directive};
 
--- | A program: its first model and command, how an event changes the model, what the model looks like at a size, and where the cursor goes.
+-- | A program: its first model and directive, how an event changes the model, what the model looks like at a size, and where the cursor goes.
 pub struct Tui(M: Type, E: Type): pub Type {
-    init: {M, Cmd(E)},
-    update: (model: M, event: Event(E)) -> {M, Cmd(E)},
+    init: {M, Directive(E)},
+    update: (model: M, event: Event(E)) -> {M, Directive(E)},
     -- | Typed at the size it is given, so a frame that does not fill the terminal is refused where it is written.
     view: (model: M, w: Nat, h: Nat) -> Frame(w, h),
     -- | Where the terminal's cursor goes, or hidden.
     cursor: (model: M, w: Nat, h: Nat) -> Option({x: Nat, y: Nat}),
 }
-
-let flatten(@E: Type, c: Cmd(E)) -> {quit: Bool, pending: List(Async(E))} =
-    match c
-    | none() => (quit = false, pending = [])
-    | quit() => (quit = true, pending = [])
-    | perform(a) => (quit = false, pending = [a])
-    | batch(cs) =>
-        List/fold(
-            cs,
-            (quit = false, pending = []),
-            (inner, acc) =>
-                let f = flatten(inner);
-                (quit = acc.quit || f.quit, pending = [..acc.pending, ..f.pending]))
-    end;
 
 -- | The program's fold with no terminal: `events` through `update` from the initial model, stopping at the first `quit`. Answers the model, whether it quit, the frame at `w` by `h`, and every `perform` it asked for, unrun.
 pub let drive(
@@ -107,18 +85,18 @@ pub let drive(
     h: Nat,
     events: List(Event(E)),
 ) -> {model: M, quit: Bool, frame: Frame(w, h), pending: List(Async(E))} =
-    let start = flatten(app.init.1);
+    let start = app.init.1;
     let state =
         List/fold(
             events,
-            (model = app.init.0, quit = start.quit, pending = start.pending),
+            (model = app.init.0, quit = start.stop, pending = start.run),
             (e, acc) =>
                 match acc.quit
                 | true => acc
                 | false =>
                     let next = app.update(acc.model, e);
-                    let f = flatten(next.1);
-                    (model = next.0, quit = f.quit, pending = [..acc.pending, ..f.pending])
+                    let d = next.1;
+                    (model = next.0, quit = d.stop, pending = [..acc.pending, ..d.run])
                 end);
     (
         model = state.model,
@@ -126,7 +104,7 @@ pub let drive(
         frame = app.view(state.model, w, h),
         pending = state.pending);
 
--- | Run the program in a session until it quits, answering its last model. Keys, resizes and the answers of the program's own commands feed one queue, and the screen is drawn once per burst.
+-- | Run the program in a session until it quits, answering its last model. Keys, resizes and the answers of the program's own directives feed one queue, and the screen is drawn once per burst.
 pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
     Session/with((s) =>
         let queue: {Channel/Sender(Event(E)), Channel/Receiver(Event(E))} = Channel/new(256)!;
@@ -158,10 +136,9 @@ pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Async, Io/Error, M) =
         let answer(a: Async(E)) -> Async({}) =
             let e = a!;
             push(Event/custom(e));
-        let issue(c: Cmd(E)) -> Async(Bool) =
-            let f = flatten(c);
-            let _ = List/each(f.pending, (a) => Async/go(answer(a)))!;
-            Async/pure(f.quit);
+        let issue(c: Directive(E)) -> Async(Bool) =
+            let _ = List/each(c.run, (a) => Async/go(answer(a)))!;
+            Async/pure(c.stop);
         let draw(m: M) -> Async({}) =
             let sz = Session/last_size(s)!;
             Session/draw(s, app.view(m, sz.cols, sz.rows), app.cursor(m, sz.cols, sz.rows));

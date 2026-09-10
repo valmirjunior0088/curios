@@ -1027,7 +1027,7 @@ fn a_window_region_with_a_hostile_use_declines() {
 fn row_consumer(slots: Vec<CpsSlot>, pad_second: bool) -> (CpsModule, CpsFunId) {
     let mut module = CpsModule::default();
     let row = module.add_row(CpsRow {
-        debug_name: Some("Cmd".into()),
+        debug_name: Some("Thing".into()),
         slots,
     });
     let param = module.add_value(Some("c".into()));
@@ -1136,7 +1136,7 @@ fn row_consumer(slots: Vec<CpsSlot>, pad_second: bool) -> (CpsModule, CpsFunId) 
 
 /// A family's parameter is taken apart at its callers exactly as a product's is: a padded slot crosses the function boundary as the null every parameter admits, so a narrower constructor at the call site is no obstacle.
 ///
-/// **A regression fixture with a runtime failure behind it.** `/std/Tui`'s `issue(c: Cmd)` was split into a worker over `Cmd`'s three slots once its callers' arguments became visible constructions, and the call site projected every slot of a `Cmd/none` — two of them the fillers the door pads a nullary constructor with — into what were then non-null parameters: `null reference` in `drain`, before `issue` could dispatch on the tag. The split was declined for families until every parameter became nullable; this pins that it is admitted again.
+/// **A regression fixture with a runtime failure behind it.** `/std/Tui`'s command type was an inductive whose `issue` was split into a worker over its three slots once its callers' arguments became visible constructions, and the call site projected every slot of a nullary constructor — two of them the fillers the door pads one with — into what were then non-null parameters: `null reference` in `drain`, before `issue` could dispatch on the tag. The split was declined for families until every parameter became nullable; this pins that it is admitted again. That type is a struct now and pads nothing, so the end-to-end half of this pin is `a_padded_variant_survives_a_split_join_at_run_time`, which writes its own family rather than borrowing a library's.
 #[test]
 fn a_family_parameter_is_split_into_a_worker() {
     let (mut module, consume) = row_consumer(vec![CpsSlot::Tag, CpsSlot::Opaque], true);

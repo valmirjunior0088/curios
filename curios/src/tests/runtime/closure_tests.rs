@@ -1,9 +1,10 @@
 //! Closures and local recursion surviving erasure and codegen, including the shapes a knot builds.
 
 use {
-    crate::tests::run,
+    crate::tests::{run, run_text},
     curios_pipeline::Stage,
     curios_pipeline::compile_with_prelude,
+    curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -219,4 +220,66 @@ fn recursive_group_signature_reduces_concrete_type_family() {
         "#),
         b"3"
     );
+}
+
+// A padded nullary constructor beside a closure-carrying one, through a join the optimizer split into fields, with nothing the compile-time evaluator can fold. The two constructors share a row whose closure slot `nothing` leaves padded; the continuation split carried that padding as a filler, and the join's head rebuilt the row from its field parameters through the slot's cast — which the boxed zero a filler used to materialise as failed, and the null it travels as passes. The tags depend on the process arguments so the fold runs at run time, which is the only place the trap was.
+//
+// **A regression fixture with a runtime failure behind it.** It was found in `/std/Tui`'s command type, whose `issue` was split into a worker over its slots; that type is a struct now and pads nothing. The family here is written for the shape rather than borrowed from a library, so no later redesign can retire the fixture by making its vehicle flat.
+#[test]
+fn a_padded_variant_survives_a_split_join_at_run_time() {
+    let (system, io) = MockHost::builder().args([b"program".as_slice()]).build();
+    run_text(
+        r#"
+        use /std/{Nat, Bool, Str, List, Async, proc};
+
+        induct Thing(E: Type): pub Type
+        | nothing()
+        | stop()
+        | doing(Async(E))
+        | many(List(Thing(E)))
+        end
+
+        let flatten(@E: Type, c: Thing(E)) -> {quit: Bool, pending: List(Async(E))} =
+            match c
+            | nothing() => (quit = false, pending = [])
+            | stop() => (quit = true, pending = [])
+            | doing(a) => (quit = false, pending = [a])
+            | many(cs) =>
+                List/fold(
+                    cs,
+                    (quit = false, pending = []),
+                    (inner, acc) =>
+                        let f = flatten(inner);
+                        (quit = acc.quit || f.quit, pending = [..acc.pending, ..f.pending]))
+            end;
+
+        let step(model: Nat, tag: Nat) -> {Nat, Thing(Nat)} =
+            choose
+            | tag == 1 => (model + 1, Thing/nothing())
+            | tag == 2 => (model, Thing/stop())
+            | tag == 3 => (model, Thing/doing(Async/pure(model * 2)))
+            | _ => (model, Thing/nothing())
+            end;
+
+        let drive(start: Nat, tags: List(Nat)) -> {model: Nat, quit: Bool, pending: List(Async(Nat))} =
+            List/fold(
+                tags,
+                (model = start, quit = false, pending = []),
+                (t, acc) =>
+                    match acc.quit
+                    | true => acc
+                    | false =>
+                        let next = step(acc.model, t);
+                        let f = flatten(next.1);
+                        (model = next.0, quit = f.quit, pending = [..acc.pending, ..f.pending])
+                    end);
+
+        let n = List/len(proc/args!);
+        let d = drive(n + 6, [1, 3]);
+        /std/print(Str/flatten([Nat/to_str(d.model), ":", Nat/to_str(List/len(d.pending))]))
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output(), b"8:1");
 }

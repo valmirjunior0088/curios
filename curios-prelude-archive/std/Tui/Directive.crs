@@ -1,0 +1,30 @@
+use /std/{Bool, List, Async};
+
+-- | What an `update` asks the loop to do beside the new model: whether to stop, and what to run.
+-- |
+-- | Both hold at once. A directive that stops and carries work runs the work and then stops, so the answers of that work never reach `update`.
+pub struct Directive(E: Type): pub Type {
+    -- | Stop the loop.
+    stop: Bool,
+    -- | Run each of these, and hand every answer back as `Event/custom`.
+    run: List(Async(E)),
+}
+
+-- | Nothing beside the new model.
+pub let none(@E: Type) -> Directive(E) =
+    Directive { stop = false, run = [] };
+
+-- | Stop the loop.
+pub let quit(@E: Type) -> Directive(E) =
+    Directive { stop = true, run = [] };
+
+-- | Run this, and hand its answer back as `Event/custom`.
+pub let perform(@E: Type, a: Async(E)) -> Directive(E) =
+    Directive { stop = false, run = [a] };
+
+-- | Every one of these, in order: their work concatenated, stopping if any of them stops.
+pub let batch(@E: Type, ds: List(Directive(E))) -> Directive(E) =
+    List/fold(
+        ds,
+        Directive { stop = false, run = [] },
+        (d, acc) => Directive { stop = acc.stop || d.stop, run = [..acc.run, ..d.run] });

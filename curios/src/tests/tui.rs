@@ -87,18 +87,18 @@ fn a_program_runs_against_scripted_keystrokes_and_answers_its_model() {
     run_text(
         r#"
         use /std/{Nat, Str, Bool, List, Option, Try, Async, Io, Show, Tui};
-        use /std/Tui/{Style, Frame, Key, Event, Cmd, Listing, Border};
+        use /std/Tui/{Style, Frame, Key, Event, Directive, Listing, Border};
         let app: Tui(Listing, Nat) =
             Tui {
-                init = (Listing/new(["one", "two", "three"]), Cmd/none()),
+                init = (Listing/new(["one", "two", "three"]), Directive/none()),
                 update(model, event) =
                     match event
                     | key(k) =>
                         match k.code
-                        | char(c) => match c == 'q' | true => (model, Cmd/quit()) | false => (model, Cmd/none()) end
-                        | _ => (Listing/move(model, k.code), Cmd/none())
+                        | char(c) => match c == 'q' | true => (model, Directive/quit()) | false => (model, Directive/none()) end
+                        | _ => (Listing/move(model, k.code), Directive/none())
                         end
-                    | _ => (model, Cmd/none())
+                    | _ => (model, Directive/none())
                     end,
                 view(model, w, h) =
                     let boxed(iw: Nat, ih: Nat) -> Frame(iw + 2, ih + 2) =
@@ -140,46 +140,4 @@ fn a_program_runs_against_scripted_keystrokes_and_answers_its_model() {
     assert_eq!(output.matches("\x1b[?2026h").count(), 2, "{output:?}");
     assert!(output.contains("┌pick"), "{output:?}");
     assert_eq!(io.raw_modes(), vec![true, false]);
-}
-
-// A `Cmd/none` beside a `Cmd/perform` through a join the optimizer split into fields, with nothing the compile-time evaluator can fold. The two constructors share a row whose closure slot `none` leaves padded; the continuation split carried that padding as a filler, and the join's head rebuilt the row from its field parameters through the slot's cast — which the boxed zero a filler used to materialise as failed, and the null it travels as passes. The events depend on the process arguments so the fold runs at run time, which is the only place the trap was.
-#[test]
-fn a_padded_variant_survives_a_split_join_at_run_time() {
-    let (system, io) = MockHost::builder().args([b"program".as_slice()]).build();
-    run_text(
-        r#"
-        use /std/{Nat, Bool, Str, Char, List, Option, Async, Tui, proc};
-        use /std/Tui/{Style, Frame, Key, Event, Cmd};
-        use /std/Tui/Key/{Code};
-        let counter: Tui(Nat, Nat) =
-            Tui {
-                init = (0, Cmd/none()),
-                update(model, event) =
-                    match event
-                    | key(k) =>
-                        match k.code
-                        | char(c) =>
-                            choose
-                            | c == '+' => (model + 1, Cmd/none())
-                            | c == 'q' => (model, Cmd/quit())
-                            | c == '!' => (model, Cmd/perform(Async/pure(model * 2)))
-                            | _ => (model, Cmd/none())
-                            end
-                        | _ => (model, Cmd/none())
-                        end
-                    | custom(n) => (n, Cmd/none())
-                    | _ => (model, Cmd/none())
-                    end,
-                view(model, w, h) = Frame/of_lines(Style/plain, [Nat/to_str(model)], w, h),
-                cursor(model, w, h) = Option/none(),
-            };
-        let n = List/len(proc/args!);
-        let press(c: Char) -> Event(Nat) = Event/key(Key/plain(Code/char(c)));
-        let d = Tui/drive(counter, 3, 1, [Event/custom(n + 6), press('+'), press('!')]);
-        /std/print(Str/flatten([Nat/to_str(d.model), ":", Nat/to_str(List/len(d.pending))]))
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"8:1");
 }

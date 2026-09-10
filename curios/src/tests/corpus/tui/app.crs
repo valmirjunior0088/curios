@@ -1,28 +1,28 @@
--- A whole program through `drive`: the fold from `init` through `update`, the frame `view` gives, and what a command asks for.
+-- A whole program through `drive`: the fold from `init` through `update`, the frame `view` gives, and what a directive asks for.
 use /std/{Nat, Char, List, Option, Async, Test, Tui};
-use /std/Tui/{Style, Frame, Key, Event, Cmd};
+use /std/Tui/{Style, Frame, Key, Event, Directive};
 use /std/Tui/Key/{Code};
 
 -- A counter: `+` and `-` change it, `q` quits, `!` asks for an `Async` that answers the count doubled.
 let counter: Tui(Nat, Nat) =
     Tui {
-        init = (0, Cmd/none()),
+        init = (0, Directive/none()),
         update(model, event) =
             match event
             | key(k) =>
                 match k.code
                 | char(c) =>
                     choose
-                    | c == '+' => (model + 1, Cmd/none())
-                    | c == '-' => (model - 1, Cmd/none())
-                    | c == 'q' => (model, Cmd/quit())
-                    | c == '!' => (model, Cmd/perform(Async/pure(model * 2)))
-                    | _ => (model, Cmd/none())
+                    | c == '+' => (model + 1, Directive/none())
+                    | c == '-' => (model - 1, Directive/none())
+                    | c == 'q' => (model, Directive/quit())
+                    | c == '!' => (model, Directive/perform(Async/pure(model * 2)))
+                    | _ => (model, Directive/none())
                     end
-                | _ => (model, Cmd/none())
+                | _ => (model, Directive/none())
                 end
-            | custom(n) => (n, Cmd/none())
-            | _ => (model, Cmd/none())
+            | custom(n) => (n, Directive/none())
+            | _ => (model, Directive/none())
             end,
         view(model, w, h) = Frame/of_lines(Style/plain, [Nat/to_str(model)], w, h),
         cursor(_model, _w, _h) = Option/none(),

@@ -1,7 +1,7 @@
 use /std/{Nat, Str, Equal, Spell};
 use /std/Tui/{Key};
 
--- | A key, the terminal's new size, a pasted text, or a value of the program's own `E`: the answer a `Cmd/perform` came back with.
+-- | A key, the terminal's new size, a pasted text, or a value of the program's own `E`: the answer a `Directive/perform` came back with.
 pub induct Event(E: Type): pub Type
 -- | A key was pressed.
 | key(Key)
@@ -9,7 +9,7 @@ pub induct Event(E: Type): pub Type
 | resize(cols: Nat, rows: Nat)
 -- | Text was pasted in one go.
 | paste(Str)
--- | What a `Cmd/perform` came back with.
+-- | What a `Directive/perform` came back with.
 | custom(E)
 end
 
