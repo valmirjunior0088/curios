@@ -6,7 +6,7 @@
 //!
 //! **These declarations are a second statement of `Intrinsic::signature`, not a projection of it.** The table is `curios-core`'s; this roster is what a caller actually names, and elaborating a body here checks its operands against that table and unifies its result with the declared one. A declaration disagreeing with the operation its body constructs does not compile, and the prelude build is where that is enforced — so deriving either from the other would make the check compare the roster with itself.
 //!
-//! This file holds the roster alone. How a declaration is built is `constructors.rs`, how a term is built is `helpers.rs`.
+//! This file holds the roster alone. How a declaration is built is `constructors.rs`, how a term is built is `helpers.rs`, and how a host store's wire row becomes one is `host_rows.rs`.
 
 mod constructors;
 use constructors::*;
