@@ -846,7 +846,7 @@ pub(crate) fn register_witness(
 
     // The orphan rule: a witness may be declared only where the concept it witnesses, or at least one rigid type in its key, is already declared — never by a third root unrelated to both. Without this, two unrelated roots could each legally `satisfy` the same `(concept, key)` pair, a collision that is unfixable once both are linked into one program (see `documentation/roadmap.md`'s Type System section). Checked before the duplicate-key insert below: "not allowed to register this at all" is the more fundamental violation than "and it also collides."
     //
-    // A privileged root (`sys`/`std`) is exempt: the two are one coordinated standard library, not independent unrelated packages, so a `/std`-declared witness keyed on a `/sys`-homed carrier — `Equal(Nat)`, `Show(Flt)` — is exactly the sanctioned pattern rather than an orphan instance. Since every concept `/std` witnesses is now `/std`'s own, the exemption no longer decides any prelude witness: clause two admits them all. The check only bites an ordinary root — the entry program today, an untrusted external package once one exists.
+    // **No root is exempt.** `/std` used to be, on the grounds that it and `/sys` are one coordinated standard library rather than independent packages — but every concept `/std` witnesses is `/std`'s own, so clause one admits all 185 of its witnesses on its own terms, including the tuple-keyed ones and the ones keyed on a `/sys`-homed carrier whose head owns nothing. An exemption that decides nothing is a rule nobody can check, and the one root it covered was the one corpus large enough to have proved it unnecessary.
     //
     // Ownership is compared by *mount prefix*, which is what makes the rule bite between two ordinary units at all. It used to compare `RootId`s, and every ordinary root was the one value `RootId::Entry` — so two packages compared equal and the rule went inert exactly where two independent authors could collide.
     //
@@ -856,8 +856,7 @@ pub(crate) fn register_witness(
         (Some(here), Some(there)) => here.prefix == there.prefix,
         _ => false,
     };
-    if !declaring.is_some_and(|mount| mount.kind.is_privileged())
-        && !owns(context.mount_of(concept_name))
+    if !owns(context.mount_of(concept_name))
         && !key.0.iter().any(|head| owns(context.mount_of_head(head)))
     {
         return Err(Error::orphan_witness(
