@@ -336,7 +336,7 @@ pub enum Cases {
     Bool { false_case: Term, true_case: Term },
     /// Sparse dispatch on specific `Nat` values with a default arm.
     ///
-    /// **Keyed by [`Natural`], not by the erased carrier's `u32`.** `Nat` is unbounded here and narrows at the erase boundary, which *refuses* a key it cannot represent rather than wrapping it — see [Numeric carriers narrow by refusing, never by changing a value](../../../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md). A `u32` here wrote `curios-ersd`'s width into the representation a proof is stated over, three stages above the boundary that owns it.
+    /// **Keyed by [`Natural`], not by the erased carrier's `u32`.** `Nat` is unbounded here and a dispatch *key* narrows at the erase boundary, which *refuses* one no branch table indexes rather than wrapping it — see [Numeric carriers narrow by refusing, never by changing a value](../../../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md). A `u32` here wrote `curios-ersd`'s width into the representation a proof is stated over, three stages above the boundary that owns it.
     ///
     /// A sequence rather than a `BTreeMap`, for the reason [`Cases::Induct`]'s arms are one: this enum is archived, and `Natural`'s archived form is its little-endian bytes, whose collation is not its numeric order. Rather than teach the archived form an ordering it does not have, the keys are held **strictly ascending** — the invariant every constructor establishes and every rebuild preserves, and the one that makes term identity independent of the order arms were written in.
     Switch {

@@ -132,18 +132,18 @@ fn a_refused_type_is_one_error_at_the_term_refused() {
 
 /// A refusal from *below* the kernel is still a diagnostic: this query answers what `run` would say, and erasure is the last stage that says anything.
 ///
-/// The check path used to stop at the kernel, on the claim that the stages under it only build the program. Erasure does more than build: it narrows every numeral into the erased carriers, refusing one that does not fit, and it hands the module to the erased verifier, which rejects the recursion classes the language does not admit. Both programs below were reported clean here and refused by `run`.
+/// The check path used to stop at the kernel, on the claim that the stages under it only build the program. Erasure does more than build: it narrows a dispatch key into the branch table `curios-ersd` carries, refusing one that does not fit, and it hands the module to the erased verifier, which rejects the recursion classes the language does not admit. Both programs below were reported clean here and refused by `run`.
 #[test]
 fn a_refusal_below_the_kernel_is_still_reported() {
-    let overflowing = of("let _f(n : /std/Nat) -> /std/Bool = n == 4294967296;\n/std/print(\"\")");
+    let overflowing = of(
+        "let _f(n : /std/Nat) -> /std/Nat = match n | 0 => 1 | 4294967296 => 2 | _ => 0 end;\n/std/print(\"\")",
+    );
     let [report] = overflowing.as_slice() else {
         panic!("one diagnostic, got {overflowing:?}");
     };
     assert_eq!(report.severity, Severity::Error);
     assert!(
-        report
-            .render()
-            .contains("overflows u32 at the erase boundary"),
+        report.render().contains("does not fit a branch table"),
         "{}",
         report.render()
     );

@@ -1,6 +1,6 @@
 //! Type-level partial arithmetic: a literal zero divisor reports through a `ReduceError`, never a panic.
 //!
-//! Runtime *range* limits, by contrast, never error here: `Nat`/`Int` are unbounded at the type level, folds compute exactly, and the 31-bit narrowing is enforced downstream (`ersd`'s carriers at the erase boundary, the i31 traps in `cont` → wasm).
+//! Runtime *range* limits, by contrast, never error here: `Nat`/`Int` are unbounded at the type level, folds compute exactly, and the 31-bit envelope is enforced downstream, where `cont` materializes a value into an `i31ref`.
 
 use super::test_support::{context, qed};
 use curios_core::*;

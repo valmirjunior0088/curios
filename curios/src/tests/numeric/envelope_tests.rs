@@ -110,27 +110,44 @@ fn overflowing_computations_trap_at_the_backend_boundary() {
     ]);
 }
 
-/// A shift whose product leaves the *widened* intermediate as well, compiled both ways.
+/// A shift far past the envelope, compiled both ways: the fold answers the arithmetic and the runtime refuses.
 ///
-/// **The two axes above are each covered alone, and this is their product.** `2^30 << 15` is a large value with a small count and `1 << 40` a small value with a large count; widening the fold to `u64` answers both, and with a value of `1` no count can defeat it. Together they defeat it: `2^30 << 40` is `2^70`, whose low sixty-four bits are zero, so the truncated intermediate read back as a representable `0`. The folded half printed `0` while the executed half trapped — the same expression, two answers.
+/// **This used to have to trap on both sides, and the reason is gone.** With `u32` carriers a fold had a width of its own, and `2^30 << 40` — `2^70`, whose low sixty-four bits are zero — read back through a widened `u64` intermediate as a representable `0`, so the folded half printed `0` while the executed half trapped. The carriers are unbounded now: the fold computes `2^70` because that is what Core computes, and the two halves no longer *can* disagree about a value. What differs between them is only whether the value is materialized, which is the one boundary left.
 ///
-/// **It sits apart from the trap list because that list cannot see it.** [`runtime_traps`] compiles the tainted table only, so a row there exercises the backend and never the folder; the disagreement here is between the two. Both tables are therefore compiled, and both must trap. The fold's count is now clamped at the carrier's width, which is `curios-cont`'s `emit_clamped_shift` argument made one layer up: a nonzero value shifted that far has already left, so one count decides every larger one.
+/// **It sits apart from the trap list because that list cannot see it.** [`runtime_traps`] compiles the tainted table only, so a row there exercises the backend and never the folder; what is checked here is that the two agree — one by computing, one by refusing.
 #[test]
-fn a_shift_past_the_widened_intermediate_traps_folded_and_executed() {
+fn a_shift_past_the_envelope_folds_exactly_and_traps_when_executed() {
     let rows = [
-        "Nat/to_str(Nat/shl(1073741824 + n, 40))",
-        "Int/to_str(Int/shl(Int/add(+536870912, i), 35))",
+        (
+            "Nat/to_str(Nat/shl(1073741824 + n, 40))",
+            "1180591620717411303424",
+        ),
+        (
+            "Int/to_str(Int/shl(Int/add(+536870912, i), 35))",
+            "+18446744073709551616",
+        ),
     ];
+    let sources = rows.iter().map(|(row, _)| *row).collect::<Vec<_>>();
 
-    for tainted in [false, true] {
-        let compiled = compile(&table(&rows, tainted)).expect("the table compiles");
-        for (index, row) in rows.iter().enumerate() {
-            let error = run_row(&compiled, index).expect_err("the expression should trap");
-            assert!(
-                error.contains(carrier_refusal(row)),
-                "expected a trap for {row} (tainted: {tainted}), got: {error}"
-            );
-        }
+    // Untainted, every operand is a literal, so the fold answers — at the theory's width, not a carrier's.
+    let folded = compile(&table(&sources, false)).expect("the folded table compiles");
+    for (index, (row, expected)) in rows.iter().enumerate() {
+        let output = run_row(&folded, index).expect("a folded row answers");
+        assert_eq!(
+            String::from_utf8_lossy(&output).trim(),
+            *expected,
+            "expected the exact arithmetic for {row}"
+        );
+    }
+
+    // Tainted, the value must reach an `i31ref`, which is where it is refused.
+    let executed = compile(&table(&sources, true)).expect("the tainted table compiles");
+    for (index, (row, _)) in rows.iter().enumerate() {
+        let error = run_row(&executed, index).expect_err("the expression should trap");
+        assert!(
+            error.contains(carrier_refusal(row)),
+            "expected a trap for {row}, got: {error}"
+        );
     }
 }
 
@@ -195,10 +212,12 @@ fn a_closed_computation_folds_at_the_theory_s_width() {
 
 /// A growing fold declines rather than building a numeral no machine holds, and the program it leaves standing traps at the envelope instead.
 ///
-/// **The bounded carrier was closing this for free and nothing upstream closes it.** `curios-core` charges every reduction step against a budget, but nothing demands the value of a `Nat/shl` in a term position, so the shift reaches erasure unreduced — `wonder diagnostics` reports only lints on the program below, and `wonder stage ersd` shows the call arriving with both operands literal. With `u32` carriers the fold refused past the width and cost nothing; unbounded, it would be asked for a forty-million-bit numeral. The allowance is what declines instead, and a decline is invisible: the operation stays, and the envelope traps on it at its execution point.
+/// **The bounded carrier was closing this for free and nothing upstream closes it.** `curios-core` charges every reduction step against a budget, but nothing demands the value of a `Nat/shl` in a term position, so the shift reaches erasure unreduced — `wonder diagnostics` reports only lints on this program, and `wonder stage ersd` shows the call arriving with both operands literal. With `u32` carriers the fold refused past the width and cost nothing; unbounded, it would be asked for a forty-million-bit numeral. The allowance is what declines instead, and a decline is invisible: the operation stays, and the envelope traps on it at its execution point.
+///
+/// The shift is closed and the taint is added *after* it, which is what makes this the decline's fixture rather than the emitter's: with `n` inside the shift there would be no constant pair to fold and nothing would be declined.
 #[test]
 fn a_growing_fold_declines_rather_than_building_what_cannot_materialize() {
-    runtime_traps(&["Nat/to_str(Nat/shl(1 + n, 40000000))"]);
+    runtime_traps(&["Nat/to_str(Nat/shl(1, 40000000) + n)"]);
 }
 
 #[test]
@@ -304,27 +323,30 @@ fn the_two_zeros_stay_distinct_terms_while_comparing_equal() {
     );
 }
 
-/// The first of the three boundaries: a written numeral narrows into the erased carriers at *erasure*, and refuses what it cannot represent.
+/// A dispatch *key* narrows at erasure; a dispatch *value* no longer does.
 ///
-/// A `Nat` literal in a term already did. A **dispatch case** did not, because `curios-text` narrowed the key to `u32` in the parser — four stages above this boundary — and, worse, the failure backtracked: a digit run is an identifier, so an oversized case fell past every `Nat` leaf to a plain `Binder`. `match n | 4294967296 => 7 end` compiled to `let 4294967296 = n; 7`, a match that dispatches on nothing and takes its one arm for every input, and printed `7` for `f(0)`. Core now keys the switch by its unbounded value and the width is chosen here alone — see [Numeric carriers narrow by refusing, never by changing a value](../../../../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md).
+/// **These were one boundary and are now two different things.** A written numeral used to narrow into the erased carriers at erasure and refuse what a `u32` could not hold. The carriers are unbounded now, so a literal crosses whole and only materialization refuses it — but a **case key** is not a value: it selects an arm of a branch table, which is a slot. That narrowing stays, and it is the last one at this boundary.
+///
+/// The dispatch half also guards a defect worth keeping named: `curios-text` once narrowed the key in the parser, four stages above this, and the failure backtracked — a digit run is an identifier, so an oversized case fell past every `Nat` leaf to a plain `Binder`. `match n | 4294967296 => 7 end` compiled to `let 4294967296 = n; 7`, a match that dispatches on nothing and takes its one arm for every input, and printed `7` for `f(0)`. Core keys the switch by its unbounded value and the width is chosen here alone — see [Numeric carriers narrow by refusing, never by changing a value](../../../../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md).
 #[test]
-fn a_numeral_past_the_erased_carrier_refuses_at_the_erase_boundary() {
+fn a_dispatch_key_past_a_branch_table_refuses_where_a_value_does_not() {
     let refusal = |source: &str| {
         typecheck(source)
             .expect_err("a numeral past the erased carrier is refused")
             .to_string()
     };
 
-    // A literal in an ordinary term: the boundary that already held.
+    // A literal in an ordinary term is a *value*, and no longer narrows anywhere: it typechecks, and the envelope refuses it only if it has to be boxed.
     assert!(
-        refusal(
+        typecheck(
             r#"
         use /std/{Nat, Bool};
         let f(n : Nat) -> Bool = n == 4294967296;
         /std/print("unreachable")
         "#
         )
-        .contains("overflows u32 at the erase boundary")
+        .is_ok(),
+        "a numeral past the envelope is a value, not an error"
     );
 
     // The same numeral as a dispatch case, which used to become a binder instead.
@@ -336,7 +358,7 @@ fn a_numeral_past_the_erased_carrier_refuses_at_the_erase_boundary() {
         /std/print(Nat/to_str(f(0)))
         "#
         )
-        .contains("overflows u32 at the erase boundary")
+        .contains("does not fit a branch table")
     );
 
     // A dispatch at the very top of the carrier still compiles and answers.
