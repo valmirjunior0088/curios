@@ -208,14 +208,6 @@ pub(crate) struct Cli {
     )]
     pub(crate) budget: u64,
 
-    /// The order these arrive in *is* the dependency order — nothing here resolves or sorts, which is what keeps this a hand-written stand-in for the manifest rather than a small one. What the flag deliberately does *not* take is a prefix: the directory holds the package's own `curios.toml`, and a package's name is declared there and nowhere else.
-    #[arg(
-        long = "unit",
-        value_name = "DIR",
-        help = "Mount the package in DIR before the entry program; repeat for more, in dependency order"
-    )]
-    pub(crate) units: Vec<PathBuf>,
-
     /// The explicit override for scripting. It reaches only the governing package's manifest, never the umbrella question — see `documentation/usage.md`'s Which manifest governs.
     #[arg(
         long = "manifest",

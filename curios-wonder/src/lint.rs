@@ -7,10 +7,7 @@ use {
     curios_package::{Form, Governing},
     curios_text::Overlay,
     curios_utilities::{Qualifier, Report},
-    std::{
-        collections::BTreeSet,
-        path::{Path, PathBuf},
-    },
+    std::{collections::BTreeSet, path::Path},
 };
 
 /// What `curios lint` found, in the order its exit code ranks them.
@@ -25,19 +22,14 @@ pub enum Linted {
 }
 
 /// `curios lint [TARGET]`: every diagnostic, goal and lint of the target rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached.
-pub fn lint(
-    budget: u64,
-    mounted: &[PathBuf],
-    manifest: Option<&Path>,
-    target: Option<&str>,
-) -> Result<Linted, String> {
+pub fn lint(budget: u64, manifest: Option<&Path>, target: Option<&str>) -> Result<Linted, String> {
     let overlay = Overlay::default();
     let package_entire = matches!(Form::of(target), Form::Named(None));
 
     let mut seen = Renderings::default();
     let mut reached = BTreeSet::new();
     let mut linted = Linted::Clean;
-    for asked in resolve(mounted, manifest, target)? {
+    for asked in resolve(manifest, target)? {
         let Diagnosed {
             diagnostics,
             reached: unit_reached,

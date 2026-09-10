@@ -36,7 +36,7 @@ use {
 };
 
 /// Serve until the editor says shutdown.
-pub fn serve(budget: u64, mounted: &[PathBuf], manifest: Option<&Path>) -> Result<(), String> {
+pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
     let (connection, io) = Connection::stdio();
 
     let capabilities = ServerCapabilities {
@@ -54,7 +54,6 @@ pub fn serve(budget: u64, mounted: &[PathBuf], manifest: Option<&Path>) -> Resul
     let analyst = {
         let mut analyst = Analyst {
             budget,
-            mounted: mounted.to_vec(),
             manifest: manifest.map(Path::to_path_buf),
             published: BTreeMap::new(),
             // A closure rather than the channel's own type, so this file names no channel crate: `lsp-server` re-exports none, and what the analyst needs is only a way to send.
@@ -248,7 +247,6 @@ impl Server {
 /// The analysis thread's state: the compiler's inputs, what it last published, and the way back to the editor.
 struct Analyst {
     budget: u64,
-    mounted: Vec<PathBuf>,
     manifest: Option<PathBuf>,
     /// For each document checked, every path it last published diagnostics to — so a diagnostic that moved or vanished is cleared where it was.
     published: BTreeMap<PathBuf, BTreeSet<PathBuf>>,
@@ -278,7 +276,7 @@ impl Analyst {
 
     /// Check `document` from `overlay`, and publish what it reported.
     fn check(&mut self, document: &Path, overlay: &Overlay) -> Result<(), String> {
-        let records = match Asked::about_file(document, &self.mounted, self.manifest.as_deref()) {
+        let records = match Asked::about_file(document, self.manifest.as_deref()) {
             Ok(asked) => asked.diagnostics(self.budget, overlay),
             // A scope that cannot be assembled is an answer about the document, not a server failure: the manifest is what is wrong, and the document is where the editor is looking.
             Err(message) => vec![Record {

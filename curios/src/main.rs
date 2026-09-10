@@ -108,7 +108,6 @@ fn dispatch() -> Result<(), Failure> {
 
     let Cli {
         budget,
-        units,
         manifest,
         mode,
         ..
@@ -123,7 +122,7 @@ fn dispatch() -> Result<(), Failure> {
                 |path| path.as_os_str().as_encoded_bytes().to_vec(),
             );
             let subject = subject_of(&target);
-            let cwasm = payload_of(budget, &units, target)?;
+            let cwasm = payload_of(budget, target)?;
 
             step(Heading::Running, &subject);
 
@@ -146,18 +145,16 @@ fn dispatch() -> Result<(), Failure> {
         }
         // Exit 1 on any failing, trapping or exiting test, exactly as a failing compile exits 1 and a goal batch exits 2 — 0 means every selected test passed or proved.
         Mode::Test { filter } => {
-            if !run_tests(budget, &units, manifest.as_deref(), filter.as_deref())? {
+            if !run_tests(budget, manifest.as_deref(), filter.as_deref())? {
                 process::exit(1);
             }
         }
         // The tri-state `run` exits with, read off what was reported: a lint is as much a finding as an error, and a goal batch alone is the incomplete state it is everywhere else.
-        Mode::Lint { target } => {
-            match lint(budget, &units, manifest.as_deref(), target.as_deref())? {
-                Linted::Clean => {}
-                Linted::Goals => process::exit(2),
-                Linted::Findings => process::exit(1),
-            }
-        }
+        Mode::Lint { target } => match lint(budget, manifest.as_deref(), target.as_deref())? {
+            Linted::Clean => {}
+            Linted::Goals => process::exit(2),
+            Linted::Findings => process::exit(1),
+        },
         Mode::Compile {
             target,
             output_path,
@@ -189,7 +186,7 @@ fn dispatch() -> Result<(), Failure> {
             }
 
             let started = Instant::now();
-            let cwasm = payload_of(budget, &units, target)?;
+            let cwasm = payload_of(budget, target)?;
 
             emit_exe(&cwasm, &output)?;
 
@@ -222,9 +219,8 @@ fn dispatch() -> Result<(), Failure> {
                         )));
                     }
 
-                    // The same scope `test` and `wonder` assemble: the `--unit` mounts in front, then the dependency graph with the governing package's own library last.
-                    let mut scope = load_units(&units)?;
-                    scope.extend(order(&governing)?);
+                    // The same scope `test` and `wonder` assemble: the dependency graph, with the governing package's own library last.
+                    let scope = order(&governing)?;
                     let store = Verdicts::at(governing.root.clone());
                     let record = documentation(budget, scope, &Overlay::default(), Some(&store))?;
                     let directory = output_path.unwrap_or_else(|| {
@@ -281,24 +277,21 @@ fn dispatch() -> Result<(), Failure> {
         }
         Mode::Wonder { query } => match query {
             Query::Diagnostics { target } => {
-                wonder_diagnostics(budget, &units, manifest.as_deref(), target.as_deref())?
+                wonder_diagnostics(budget, manifest.as_deref(), target.as_deref())?
             }
             Query::Tests { target } => {
-                wonder_tests(budget, &units, manifest.as_deref(), target.as_deref())?
+                wonder_tests(budget, manifest.as_deref(), target.as_deref())?
             }
-            Query::Cost { target } => {
-                wonder_cost(budget, &units, manifest.as_deref(), target.as_deref())?
-            }
+            Query::Cost { target } => wonder_cost(budget, manifest.as_deref(), target.as_deref())?,
             // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
             Query::Stage { name, target } => wonder_stage(
                 budget,
-                &units,
                 manifest.as_deref(),
                 &name,
                 target.as_deref(),
                 |module| wasm_optm(&module, |stage| println!("{stage}")),
             )?,
-            Query::Server => serve(budget, &units, manifest.as_deref())?,
+            Query::Server => serve(budget, manifest.as_deref())?,
         },
     }
 

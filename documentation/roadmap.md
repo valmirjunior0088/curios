@@ -113,7 +113,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Crate-boundary split isolating the Cranelift/Binaryen-free launcher (`curios-runtime`)
 - [x] Pure pipeline driver crate (`curios-pipeline`), decoupled from runtime, Binaryen and CLI
 - [x] Build-scoped archived prelude and replay (`curios-prelude-archive`, certified by `curios-prelude`)
-- [x] [A compilation is units folded over a dependency order](design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md), with `--unit <DIR>`
+- [x] [A compilation is units folded over a dependency order](design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md), every edge declared in a manifest
 - [x] Configurable type-checker reduction budget (the CLI's `--budget`, restored per declaration)
 - [x] Elaboration and per-node memoization bounded by written binder nesting, never data length
 - [x] Elaboration transients grouped under one core variant (`Transient`), refused at the kernel

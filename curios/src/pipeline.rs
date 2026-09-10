@@ -12,22 +12,14 @@ use {
     curios_verdicts::{Program, Verdicts},
     curios_wasm::Module,
     curios_wonder::STDIN_LABEL,
-    std::{
-        io,
-        path::{Path, PathBuf},
-        rc::Rc,
-    },
+    std::{io, path::Path, rc::Rc},
 };
 
 /// The precompiled payload for `target`, taken from the store when nothing it was made from has changed and compiled otherwise.
 ///
-/// A `--unit` package is the already-resolved form of a manifest entry, so it goes in front of the graph's own order: the order arguments arrive in *is* dependency order. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
-pub(crate) fn payload_of(
-    budget: u64,
-    units: &[PathBuf],
-    target: Target,
-) -> Result<Vec<u8>, CompileError> {
-    let mut scope = load_units(units)?;
+/// The scope is the target's own dependency graph and nothing else: a manifest is the only thing that says what a unit is compiled against. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
+pub(crate) fn payload_of(budget: u64, target: Target) -> Result<Vec<u8>, CompileError> {
+    let mut scope = Vec::new();
     let subject = subject_of(&target);
 
     // Neither standalone form has a project, so neither has a store to consult: what a compilation may reuse is a fact about the project it is in, and these are in none.
@@ -204,9 +196,4 @@ pub(crate) fn report(
             }
         }
     }
-}
-
-/// Read every `--unit DIR`'s manifest in the order written, which is the order they are compiled in.
-pub(crate) fn load_units(units: &[PathBuf]) -> Result<Vec<RootSource>, CompileError> {
-    curios_package::mounted(units).map_err(CompileError::failure)
 }

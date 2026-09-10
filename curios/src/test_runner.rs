@@ -3,14 +3,14 @@
 //! The store is consulted exactly as `run` consults it: one payload per target, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records beside the machine code so a warm run recompiles nothing and still reports everything.
 
 use {
-    crate::{Heading, Line, Subject, fact, load_units, report, step},
+    crate::{Heading, Line, Subject, fact, report, step},
     curios::{engine, to_cwasm},
     curios_package::{Governing, LIBRARY, order},
     curios_pipeline::{Cache, CompileError, EntryTail, TestRecord, compile_tests_with_units},
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::{Entrypoint, RootSource, UnitSource},
     curios_verdicts::{Program, Verdicts},
-    std::path::{Path, PathBuf},
+    std::path::Path,
 };
 
 /// What stands in for a library's entry text when the payload is keyed. A library is compiled through [`Entrypoint::trivial`], which is built rather than parsed and so has no text of its own; the key has to be *something* constant, and naming it here says which constant and why. The library's own content reaches the address through the unit chain, so nothing depends on this being the program.
@@ -56,15 +56,13 @@ impl Totals {
 /// Run the governing package's tests, optionally narrowed to paths starting with `filter`. `Ok(true)` when every selected test passed or proved.
 pub(crate) fn run_tests(
     budget: u64,
-    mounted_dirs: &[PathBuf],
     manifest: Option<&Path>,
     filter: Option<&str>,
 ) -> Result<bool, CompileError> {
     let governing = Governing::here(manifest).map_err(CompileError::failure)?;
 
-    // The same scope for every target: the `--unit` mounts in front, then the dependency graph with the governing package's own library last — the order `wonder` walks and `run` compiles.
-    let mut units = load_units(mounted_dirs)?;
-    units.extend(order(&governing).map_err(CompileError::failure)?);
+    // The same scope for every target: the dependency graph, with the governing package's own library last — the order `wonder` walks and `run` compiles.
+    let units = order(&governing).map_err(CompileError::failure)?;
 
     let mut totals = Totals::default();
     let mut matched_any = false;

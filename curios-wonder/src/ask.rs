@@ -10,8 +10,8 @@ use {
         declared_tests, diagnosed, diagnostics, stage,
     },
     curios_cont::Outcome,
-    curios_package::{Form, Governing, LIBRARY, Membership, Target, mounted, order},
-    curios_text::{LoadError, Overlay, RootSource},
+    curios_package::{Form, Governing, LIBRARY, Membership, Target, order},
+    curios_text::{LoadError, Overlay},
     curios_verdicts::Verdicts,
     std::{
         collections::BTreeSet,
@@ -27,64 +27,40 @@ pub struct Asked {
 }
 
 impl Asked {
-    /// What `file` is part of, placed by [`Membership`], with the `--unit` scope in front.
-    pub fn about_file(
-        file: &Path,
-        mounted: &[PathBuf],
-        manifest: Option<&Path>,
-    ) -> Result<Self, String> {
-        let mut units = mounted_units(mounted)?;
-
+    /// What `file` is part of, placed by [`Membership`] — which is the whole answer, where it used to be the half a hand-mounted scope was prepended to.
+    pub fn about_file(file: &Path, manifest: Option<&Path>) -> Result<Self, String> {
         Ok(match Membership::of(file, manifest)? {
             Membership::Standalone => Self {
                 subject: Subject::Entry {
-                    units,
+                    units: Vec::new(),
                     origin: Origin::File(file.to_path_buf()),
                 },
                 store: None,
             },
-            Membership::Library { root, units: scope } => {
-                units.extend(scope);
-                Self {
-                    subject: Subject::Unit { units },
-                    store: Some(Verdicts::at(root)),
-                }
-            }
+            Membership::Library { root, units } => Self {
+                subject: Subject::Unit { units },
+                store: Some(Verdicts::at(root)),
+            },
             Membership::Executable {
-                entry,
-                root,
-                units: scope,
-                ..
-            } => {
-                units.extend(scope);
-                Self {
-                    subject: Subject::Entry {
-                        units,
-                        origin: Origin::File(entry),
-                    },
-                    store: Some(Verdicts::at(root)),
-                }
-            }
+                entry, root, units, ..
+            } => Self {
+                subject: Subject::Entry {
+                    units,
+                    origin: Origin::File(entry),
+                },
+                store: Some(Verdicts::at(root)),
+            },
         })
     }
 
     /// The declared executable `target` names, or the sole one.
-    fn about_executable(
-        target: Option<&str>,
-        mounted: &[PathBuf],
-        manifest: Option<&Path>,
-    ) -> Result<Self, String> {
-        let mut units = mounted_units(mounted)?;
+    fn about_executable(target: Option<&str>, manifest: Option<&Path>) -> Result<Self, String> {
         let Target::Executable {
-            entry,
-            root,
-            units: scope,
-            ..
+            entry, root, units, ..
         } = Target::here(target, manifest)?
         else {
             unreachable!("neither `-` nor a path reaches here");
         };
-        units.extend(scope);
 
         Ok(Self {
             subject: Subject::Entry {
@@ -96,10 +72,10 @@ impl Asked {
     }
 
     /// The program on standard input, drained.
-    fn about_stdin(mounted: &[PathBuf], text: String) -> Result<Self, String> {
+    fn about_stdin(text: String) -> Result<Self, String> {
         Ok(Self {
             subject: Subject::Entry {
-                units: mounted_units(mounted)?,
+                units: Vec::new(),
                 origin: Origin::Text {
                     label: STDIN_LABEL.to_string(),
                     text,
@@ -123,13 +99,12 @@ impl Asked {
 /// `wonder diagnostics [TARGET]`: render every diagnostic to stdout, a blank line between each.
 pub fn wonder_diagnostics(
     budget: u64,
-    mounted: &[PathBuf],
     manifest: Option<&Path>,
     target: Option<&str>,
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    let answers = resolve(mounted, manifest, target)?;
+    let answers = resolve(manifest, target)?;
 
     let reports = rendered(answers, budget, &overlay);
     if !reports.is_empty() {
@@ -140,34 +115,26 @@ pub fn wonder_diagnostics(
 }
 
 /// The subjects `target` names, resolved the way `diagnostics`, `tests` and `curios lint` share it: one for a file, an executable or standard input, and the governing package entire — its library, then every executable it declares, each a subject of its own — for none.
-pub(crate) fn resolve(
-    mounted: &[PathBuf],
-    manifest: Option<&Path>,
-    target: Option<&str>,
-) -> Result<Vec<Asked>, String> {
+pub(crate) fn resolve(manifest: Option<&Path>, target: Option<&str>) -> Result<Vec<Asked>, String> {
     Ok(match Form::of(target) {
-        Form::Stdin => vec![Asked::about_stdin(mounted, read_stdin()?)?],
-        Form::File(path) => vec![Asked::about_file(&file_target(path)?, mounted, manifest)?],
+        Form::Stdin => vec![Asked::about_stdin(read_stdin()?)?],
+        Form::File(path) => vec![Asked::about_file(&file_target(path)?, manifest)?],
         Form::Named(Some(name)) => {
-            vec![Asked::about_executable(Some(&name), mounted, manifest)?]
+            vec![Asked::about_executable(Some(&name), manifest)?]
         }
         Form::Named(None) => {
             let governing = Governing::here(manifest)?;
             let mut asked = Vec::new();
             if governing.directory.join(LIBRARY).is_file() {
-                let mut units = mounted_units(mounted)?;
-                units.extend(order(&governing)?);
                 asked.push(Asked {
-                    subject: Subject::Unit { units },
+                    subject: Subject::Unit {
+                        units: order(&governing)?,
+                    },
                     store: Some(Verdicts::at(governing.root.clone())),
                 });
             }
             for executable in &governing.package.executables {
-                asked.push(Asked::about_executable(
-                    Some(&executable.name),
-                    mounted,
-                    manifest,
-                )?);
+                asked.push(Asked::about_executable(Some(&executable.name), manifest)?);
             }
             asked
         }
@@ -177,13 +144,12 @@ pub(crate) fn resolve(
 /// `wonder tests [TARGET]`: every test the target declares, one path per line, in declaration order — the library's, then each executable's, when the target is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0.
 pub fn wonder_tests(
     budget: u64,
-    mounted: &[PathBuf],
     manifest: Option<&Path>,
     target: Option<&str>,
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    for asked in resolve(mounted, manifest, target)? {
+    for asked in resolve(manifest, target)? {
         let records = declared_tests(budget, asked.subject, &overlay, asked.store.as_ref())
             .map_err(|error| error.to_string())?;
         for record in records {
@@ -215,7 +181,6 @@ pub(crate) fn rendered(answers: Vec<Asked>, budget: u64, overlay: &Overlay) -> V
 /// `finish` renders the one rung the driver cannot: `wasm-optm` is the module after Binaryen, which this crate does not link, so the engine hands the emitted module back and the product that owns Binaryen prints it. Every other rung is printed here, from the driver's own rendering.
 pub fn wonder_stage(
     budget: u64,
-    mounted: &[PathBuf],
     manifest: Option<&Path>,
     name: &str,
     target: Option<&str>,
@@ -224,9 +189,9 @@ pub fn wonder_stage(
     let overlay = Overlay::default();
 
     let asked = match Form::of(target) {
-        Form::Stdin => Asked::about_stdin(mounted, read_stdin()?)?,
-        Form::File(path) => Asked::about_file(&file_target(path)?, mounted, manifest)?,
-        Form::Named(name) => Asked::about_executable(name.as_deref(), mounted, manifest)?,
+        Form::Stdin => Asked::about_stdin(read_stdin()?)?,
+        Form::File(path) => Asked::about_file(&file_target(path)?, manifest)?,
+        Form::Named(name) => Asked::about_executable(name.as_deref(), manifest)?,
     };
 
     let Subject::Entry { units, origin } = asked.subject else {
@@ -268,16 +233,15 @@ pub fn wonder_stage(
 /// Two columns, because the analysis should not need this crate: `awk -F'\t' '$2 == "absorbed"'` is a whole question, and a diff of two runs is a diff of two files. The rows are ordered by name for the same reason — a report that reproduces is what makes a regression something to read rather than something to judge.
 pub fn wonder_cost(
     budget: u64,
-    mounted: &[PathBuf],
     manifest: Option<&Path>,
     target: Option<&str>,
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
     let asked = match Form::of(target) {
-        Form::Stdin => Asked::about_stdin(mounted, read_stdin()?)?,
-        Form::File(path) => Asked::about_file(&file_target(path)?, mounted, manifest)?,
-        Form::Named(name) => Asked::about_executable(name.as_deref(), mounted, manifest)?,
+        Form::Stdin => Asked::about_stdin(read_stdin()?)?,
+        Form::File(path) => Asked::about_file(&file_target(path)?, manifest)?,
+        Form::Named(name) => Asked::about_executable(name.as_deref(), manifest)?,
     };
 
     let Subject::Entry { units, origin } = asked.subject else {
@@ -324,11 +288,6 @@ pub(crate) fn file_target(path: PathBuf) -> Result<PathBuf, String> {
         Ok(()) => Ok(path),
         Err(error) => Err(LoadError::Read { path, error }.format()),
     }
-}
-
-/// Every `--unit DIR`'s library, in the order written — which is the order they are compiled in.
-fn mounted_units(directories: &[PathBuf]) -> Result<Vec<RootSource>, String> {
-    mounted(directories)
 }
 
 /// Standard input, drained to end.

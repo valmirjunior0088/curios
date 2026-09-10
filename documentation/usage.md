@@ -300,7 +300,6 @@ Payloads are native code for the machine that built them, so an entry is found o
 | Flag | Effect |
 | --- | --- |
 | `--manifest <PATH>` | use this `curios.toml` as the governing package's, instead of the working directory's |
-| `--unit <DIR>` | mount the package in `DIR` ahead of the entry program, with no manifest edge; repeat for more, in dependency order |
 | `--budget <UNITS>` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
 | `--version` | the build's version, so a bug report can say which compiler produced the output |
 | `--profile <PATH>` | write one record per span and event to `PATH`, rotating at 512 MiB — present only in a compiler built with the `profile` feature, and inert without it |
