@@ -90,8 +90,10 @@ impl<'a> Reach<'a> {
     ///
     /// `resolved` is the segments of the qualifier the reference resolved to — not the raw spelled path — so absolute and relative spellings are guarded identically. A target inside a visible prefix, or inside the reader's own, passes through.
     ///
-    /// **The prefix stays discoverable and the reference is refused**, rather than the prefix being hidden and the name reported unbound. A hidden prefix makes `use /sys/{Nat}` read as a typo; a refused one says which unit holds the name and that this one did not ask for it, which is the difference between a diagnostic and a riddle.
-    fn guard(&self, consumer: &Qualifier, resolved: &[String]) -> Result<(), Error> {
+    /// **Visibility is the whole rule, and the tier only chooses the wording.** `/sys` used to be closed by a privilege comparison between two roots; it is closed now because no unit but the standard library declares a dependency on it, and the standard library does. That is one rule where there were two, and the one that remains is the one a package's manifest already states. Whether the prefix is a closed root decides which refusal a reader gets — "use the `/std` module" rather than "declare it" — because telling a program to declare `/sys` would be advice it cannot take.
+    ///
+    /// **The prefix stays discoverable and the reference is refused**, rather than the prefix being hidden and the name reported unbound. A hidden prefix makes `use /sys/{Nat}` read as a typo; a refused one says which unit holds the name and why this one may not write it, which is the difference between a diagnostic and a riddle.
+    fn guard(&self, _consumer: &Qualifier, resolved: &[String]) -> Result<(), Error> {
         let Some(root) = resolved.first() else {
             return Ok(());
         };
@@ -102,16 +104,15 @@ impl<'a> Reach<'a> {
             return Ok(());
         }
 
-        // An internal root is reachable only from a privileged reader. An independent rule, and checked first because it is the older and the narrower: it says which *roots* are the compiler's, where the rule below says which prefixes this unit asked for.
-        if is_internal_root(self.mounts, root) && !Mount::privileged(self.mounts, consumer) {
-            return Err(Error::InternalRootModule {
-                segment: root.clone(),
-            });
+        // A prefix the unit declared, or its own — `visible` carries both, because a unit does not declare a dependency on itself.
+        if self.visible.iter().any(|mount| mount.prefix == prefix) {
+            return Ok(());
         }
 
-        // A prefix the unit declared, or its own — `visible` carries both, because a unit does not declare a dependency on itself.
-        match self.visible.iter().any(|mount| mount.prefix == prefix) {
-            true => Ok(()),
+        match is_internal_root(self.mounts, root) {
+            true => Err(Error::InternalRootModule {
+                segment: root.clone(),
+            }),
             false => Err(Error::UndeclaredPrefix {
                 prefix: root.clone(),
             }),
@@ -1303,7 +1304,7 @@ impl<'a> UnitSource<'a> {
         Self {
             entrypoint: Some(entrypoint),
             source,
-            visible: None,
+            visible: source.declared().map(<[Qualifier]>::to_vec),
         }
     }
 
@@ -1312,7 +1313,7 @@ impl<'a> UnitSource<'a> {
         Self {
             entrypoint: None,
             source,
-            visible: None,
+            visible: source.declared().map(<[Qualifier]>::to_vec),
         }
     }
 
@@ -1326,9 +1327,11 @@ impl<'a> UnitSource<'a> {
         }
     }
 
-    /// The mounts of `scope` this source may name, plus `own` — every one of them unless [`UnitSource::seeing`] narrowed it.
+    /// The mounts of `scope` this source may name, plus `own`.
     ///
     /// Filtered per *mount* rather than per unit: what a manifest declares is a prefix, and a unit claiming two prefixes would otherwise hand over the one nobody asked for along with the one somebody did. `own` is always included, since a unit does not declare a dependency on itself.
+    ///
+    /// **Declaring nothing means every open prefix, not every prefix.** A closed root — `/sys`, the compiler's own, which no manifest can name because it has no path — is in the fold of every compilation and in the default set of none. So the honest reading of "the caller did not decide" is "everything a program may name", and the standard library reaches `/sys` by being the one unit that declares it.
     ///
     /// Narrowing *resolution*, never allocation: the floors, the universe-seed table and the nominal audit read the whole of `scope`, because an identity minted against an unspellable predecessor still exists and a bound that ignored it would alias.
     fn visible_mounts(&self, scope: &[&PreparedText], own: &[Mount]) -> Vec<Mount> {
@@ -1337,7 +1340,7 @@ impl<'a> UnitSource<'a> {
             .flat_map(|unit| unit.mounts.iter())
             .filter(|mount| match &self.visible {
                 Some(visible) => visible.contains(&mount.prefix),
-                None => true,
+                None => mount.kind != RootKind::Internal,
             })
             .chain(own.iter())
             .cloned()

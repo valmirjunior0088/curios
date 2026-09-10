@@ -24,6 +24,8 @@ pub struct RootSource {
     bases: Vec<(Mount, Base)>,
     /// The mount whose interface the unit documents, with its description — a package's library with the manifest's sentence, the standard library with a constant. At most one, so a unit file carries one record; `None` for every other unit, since a program has no consumer and a prelude mount nobody names has no page. See [`RootSource::documented`].
     documented: Option<(Qualifier, Option<String>)>,
+    /// The prefixes this unit declared a dependency on, and so the only ones its names may resolve into — `None` when nothing declared any, which is every caller with no manifest to read one out of. See [`RootSource::declaring`].
+    declares: Option<Vec<Qualifier>>,
     /// Text consulted before the disk for every file this source would read. See [`Overlay`].
     overlay: Overlay,
     /// Every file this source has read, by the canonical path it was read from. See [`RootSource::reads`].
@@ -93,6 +95,7 @@ impl RootSource {
         Self {
             bases,
             documented: None,
+            declares: None,
             overlay: Overlay::default(),
             reads: RefCell::new(BTreeMap::new()),
         }
@@ -114,6 +117,23 @@ impl RootSource {
     /// The mount this source documents, with its description, when one was marked.
     pub(crate) fn documented_mount(&self) -> Option<(Qualifier, Option<String>)> {
         self.documented.clone()
+    }
+
+    /// This source with `prefixes` as the units it declared a dependency on — the only ones its names may resolve into.
+    ///
+    /// **Declaring is how a unit reaches a closed root.** `/sys` is mounted by every compilation and named by no manifest, so it is not in the default set; the standard library reaches it by declaring it here, and nothing else can, which is the whole of the old privilege tier expressed as a dependency.
+    ///
+    /// Left unset, a unit sees every prefix in scope but a closed root — the honest reading of "the caller did not decide", since a fold whose order is all its dependency information has nothing to narrow by.
+    pub fn declaring(self, prefixes: impl IntoIterator<Item = Qualifier>) -> Self {
+        Self {
+            declares: Some(prefixes.into_iter().collect()),
+            ..self
+        }
+    }
+
+    /// The prefixes this source declared a dependency on, when it declared any.
+    pub(crate) fn declared(&self) -> Option<&[Qualifier]> {
+        self.declares.as_deref()
     }
 
     /// This source with `overlay` consulted before the disk on every read.

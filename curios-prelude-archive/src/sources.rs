@@ -87,5 +87,6 @@ pub(crate) fn std_source(manifest: &Path) -> RootSource {
         modules.insert_module(source_qualifier(manifest, source), parse_module(source));
     }
 
-    modules
+    // The one declaration of `/sys` anywhere. A closed root is in no unit's default set — it has no path for a manifest to name — so this is what lets `/std` wrap the intrinsics, and its absence everywhere else is what keeps them wrapped.
+    modules.declaring([Qualifier::from(["sys"])])
 }
