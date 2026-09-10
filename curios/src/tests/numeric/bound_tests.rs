@@ -330,7 +330,7 @@ fn an_undischarged_bound_is_named_in_the_refusal() {
     .expect_err("nothing discharges the window bound");
 
     assert!(
-        error.contains("nothing discharged Nat/Le(2 + k, Bytes/len(b))"),
+        error.contains("nothing discharged Holds(Nat/le(2 + k, Bytes/len(b)))"),
         "expected the refusal to name the bound, got: {error}"
     );
 }
