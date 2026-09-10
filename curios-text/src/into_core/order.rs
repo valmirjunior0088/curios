@@ -39,31 +39,24 @@ fn derived_vocabulary(item: &FlatItem, syntax: &SyntaxRegistry) -> Vec<curios_co
         FlatItem::Let(let_) => std::slice::from_ref(let_),
         FlatItem::Rec(lets) => lets.as_slice(),
     };
-    let method = |field: curios_utilities::ConceptField| {
-        curios_core::Global::Authored(field.concept.qualifier().with(field.field))
-    };
-
     let mut vocabulary = Vec::new();
     for let_ in lets.iter().filter(|let_| let_.body.has_derive()) {
-        let Some(concept) = witness_concept(let_) else {
+        let Some(concept) = witness_concept(let_).and_then(|name| name.qualifier().cloned()) else {
             continue;
         };
-        let spell = syntax.spell.spell;
-        if concept.qualifier() == Some(&spell.concept.qualifier()) {
-            vocabulary.extend([
-                method(spell),
-                curios_core::Global::Authored(syntax.spell.call.qualifier()),
-                curios_core::Global::Authored(syntax.spell.record.qualifier()),
-                // Every rendered piece is built by `curios_elab::str_literal`, which names the scan certificate and *constructs* the carrier — three more names the transient hides, exactly as it hides the renderers. They reached the graph before only because `Spell/call`'s own body happens to carry string literals, which is a property of how that renderer is written rather than a dependency anything stated.
-                curios_core::Global::Authored(syntax.string.string.qualifier()),
-                curios_core::Global::Authored(syntax.string.of_scan_eq.qualifier()),
-                curios_core::Global::Authored(syntax.string.refl_scan.qualifier()),
-            ]);
-        }
-        let eql = syntax.operator.eql;
-        if concept.qualifier() == Some(&eql.concept.qualifier()) {
-            vocabulary.push(method(eql));
-        }
+        let Some(derivation) = syntax
+            .derivations
+            .rows()
+            .find(|derivation| derivation.concept_field().concept.qualifier() == concept)
+        else {
+            continue;
+        };
+        vocabulary.extend(
+            derivation
+                .vocabulary()
+                .into_iter()
+                .map(curios_core::Global::Authored),
+        );
     }
     vocabulary
 }

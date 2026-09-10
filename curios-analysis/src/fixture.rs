@@ -5,8 +5,9 @@
 //! **Behind `test-support`, not `#[cfg(test)]`.** That cfg is set only while *this* crate is its own test harness, so a `cfg(test)` item is invisible to another crate's tests — which is exactly the case here, and the same reason `curios-runtime`'s `test_support` is a feature. The gate also keeps this module out of every normal build, which matters more than convenience: it spells prelude names, and keeping them out of every build that ships is what the gate is for.
 
 use curios_utilities::{
-    CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax,
-    SpellSyntax, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, LiftSyntax, MonadSyntax,
+    OperatorSyntax, ProofSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
+    TestSyntax,
 };
 
 const fn name(segments: &'static [&'static str]) -> SyntaxName {
@@ -19,6 +20,13 @@ const fn field(segments: &'static [&'static str], label: &'static str) -> Concep
         field: label,
     }
 }
+
+/// Spelled once and used twice: the registry's own group, and the `Spell` derivation's row, which carries it because `str_literal` is what writes it into every rendered piece.
+const STRING: StringSyntax = StringSyntax {
+    string: name(&["std", "Str", "Str"]),
+    of_scan_eq: name(&["std", "Str", "of_scan_eq"]),
+    refl_scan: name(&["std", "Str", "refl_scan"]),
+};
 
 pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     monad: MonadSyntax {
@@ -47,11 +55,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         scalar_below: name(&["std", "Char", "Scalar", "below"]),
         scalar_above: name(&["std", "Char", "Scalar", "above"]),
     },
-    string: StringSyntax {
-        string: name(&["std", "Str", "Str"]),
-        of_scan_eq: name(&["std", "Str", "of_scan_eq"]),
-        refl_scan: name(&["std", "Str", "refl_scan"]),
-    },
+    string: STRING,
     proof: ProofSyntax {
         true_qed: name(&["std", "True", "True", "qed"]),
         true_type: name(&["std", "True", "True"]),
@@ -63,9 +67,15 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         test_type: name(&["std", "Test", "Test"]),
         main: name(&["std", "Test", "main"]),
     },
-    spell: SpellSyntax {
-        spell: field(&["std", "Spell", "Spell"], "spell"),
-        call: name(&["std", "Spell", "call"]),
-        record: name(&["std", "Spell", "record"]),
+    derivations: DerivationSyntax {
+        spell: SpellDerivation {
+            spell: field(&["std", "Spell", "Spell"], "spell"),
+            call: name(&["std", "Spell", "call"]),
+            record: name(&["std", "Spell", "record"]),
+            string: STRING,
+        },
+        eql: EqlDerivation {
+            eql: field(&["std", "Equal", "Equal"], "eql"),
+        },
     },
 };

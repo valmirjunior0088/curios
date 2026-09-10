@@ -5,8 +5,9 @@
 use crate::{Entrypoint, RootSource, sys_module};
 use curios_abi::host_ops;
 use curios_utilities::{
-    CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier,
-    RootKind, SpellSyntax, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, LiftSyntax, MonadSyntax,
+    OperatorSyntax, ProofSyntax, Qualifier, RootKind, SpellDerivation, StringSyntax, SyntaxName,
+    SyntaxRegistry, TestSyntax,
 };
 use std::{
     fs,
@@ -27,6 +28,13 @@ pub(super) const fn registry_field(
         field: label,
     }
 }
+
+/// Spelled once and used twice: the registry's own group, and the `Spell` derivation's row, which carries it because `str_literal` is what writes it into every rendered piece.
+const STRING: StringSyntax = StringSyntax {
+    string: registry_name(&["std", "Str", "Str"]),
+    of_scan_eq: registry_name(&["std", "Str", "of_scan_eq"]),
+    refl_scan: registry_name(&["std", "Str", "refl_scan"]),
+};
 
 pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     monad: MonadSyntax {
@@ -55,11 +63,7 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         scalar_below: registry_name(&["std", "Char", "Scalar", "below"]),
         scalar_above: registry_name(&["std", "Char", "Scalar", "above"]),
     },
-    string: StringSyntax {
-        string: registry_name(&["std", "Str", "Str"]),
-        of_scan_eq: registry_name(&["std", "Str", "of_scan_eq"]),
-        refl_scan: registry_name(&["std", "Str", "refl_scan"]),
-    },
+    string: STRING,
     proof: ProofSyntax {
         true_qed: registry_name(&["std", "True", "True", "qed"]),
         true_type: registry_name(&["std", "True", "True"]),
@@ -71,10 +75,17 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         test_type: registry_name(&["std", "Test", "Test"]),
         main: registry_name(&["std", "Test", "main"]),
     },
-    spell: SpellSyntax {
-        spell: registry_field(&["std", "Spell", "Spell"], "spell"),
-        call: registry_name(&["std", "Spell", "call"]),
-        record: registry_name(&["std", "Spell", "record"]),
+    // These spellings are load-bearing for `ordering_tests`, which declares them as source and asserts the edges that follow: a row whose concept does not match what the source declares yields no vocabulary at all, and that suite is what says so.
+    derivations: DerivationSyntax {
+        spell: SpellDerivation {
+            spell: registry_field(&["std", "Spell", "Spell"], "spell"),
+            call: registry_name(&["std", "Spell", "call"]),
+            record: registry_name(&["std", "Spell", "record"]),
+            string: STRING,
+        },
+        eql: EqlDerivation {
+            eql: registry_field(&["std", "Equal", "Equal"], "eql"),
+        },
     },
 };
 

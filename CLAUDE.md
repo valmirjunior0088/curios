@@ -61,7 +61,7 @@ The obligations below are the ones a search does not reveal.
 | A shared analysis (`curios-analysis`) | Both drivers — `curios-cert`'s `Kernel` and `curios-elab`'s `Context` — and `curios-analysis/tests/driven.rs` |
 | A numeric carrier or its arithmetic | Every constant folder sharing `scalar` (`curios-core`, `curios-ersd`, `curios-cont`), and `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md` |
 | Concepts or witness resolution | Surface declarations, standard-library witnesses, syntax documentation |
-| A derivation (`curios-elab/src/derive.rs`) | The `SpellSyntax` slots, `/std/Spell`'s renderers, the derived-vocabulary edges in `curios-text/src/into_core/order.rs`, `curios/src/tests/derive.rs` |
+| A derivation (`curios-elab/src/derive.rs`) | The `DerivationSyntax` roster in `curios-utilities` and its three fills, the concept's own `/std` vocabulary, `curios/src/tests/derive.rs`, `curios-text/src/into_core/ordering_tests.rs`. The scheduler's edges read the roster, so `order.rs` needs no edit of its own |
 | Host operations or foreign calls | `curios-abi`'s row, compiler use, native runtime implementation, JavaScript implementation |
 | What a unit hands its successors | Every stage whose artifact `Unit` holds, `curios-pipeline`'s fold, the store's stored-unit format |
 | A `wonder` query, a record, or what a diagnostic carries | `curios-utilities`'s `Report`, every stage's `report`/`reports_with_hints`, `CompileError` and `check_with_units`, both transports (`curios-wonder/src/ask.rs`, `server.rs`), `curios-package`'s `Membership` |

@@ -56,7 +56,7 @@ pub struct SyntaxRegistry {
     pub string: StringSyntax,
     pub proof: ProofSyntax,
     pub test: TestSyntax,
-    pub spell: SpellSyntax,
+    pub derivations: DerivationSyntax,
 }
 
 impl SyntaxRegistry {
@@ -72,7 +72,7 @@ impl SyntaxRegistry {
             string,
             proof,
             test,
-            spell,
+            derivations,
         } = self;
 
         monad
@@ -83,7 +83,7 @@ impl SyntaxRegistry {
             .chain(string.targets())
             .chain(proof.targets())
             .chain(test.targets())
-            .chain(spell.targets())
+            .chain(derivations.targets())
     }
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
@@ -98,13 +98,13 @@ impl SyntaxRegistry {
             string: _,
             proof: _,
             test: _,
-            spell,
+            derivations,
         } = self;
 
         operator
             .concept_fields()
-            .chain(std::iter::once(lift.lift))
-            .chain(std::iter::once(spell.spell))
+            .chain([lift.lift])
+            .chain(derivations.concept_fields())
     }
 }
 
@@ -292,22 +292,108 @@ impl TestSyntax {
     }
 }
 
-/// The names a derived `Spell` witness body is written with: the concept's `spell` method, applied to each payload and resolved like any written call, and the two renderers the body applies over the spelled pieces — `call` for a constructor over its explicit payloads, `record` for a struct over its labeled fields. The re-parse grammar is spelled once, in `/std/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
+/// The blessed set: the concepts the compiler writes a witness body for, each row carrying the names the body it writes applies.
+///
+/// A struct of rows rather than a list of them, for the reason this whole registry is one — a row is a named slot, so a derivation added here is a compile error at every fill site until it is filled, where a list would have let a missing row pass every check. That is the drift the roster exists to end, and a list would have relocated it rather than removed it.
+///
+/// The tag a body writer dispatches on and the vocabulary `curios-text`'s scheduler needs are the same value, so the two can no longer disagree: before this, the writer read one registry group and the scheduler restated its names in a parallel `if`-chain that nothing checked.
 #[derive(Debug, Clone, Copy)]
-pub struct SpellSyntax {
+pub struct DerivationSyntax {
+    pub spell: SpellDerivation,
+    pub eql: EqlDerivation,
+}
+
+impl DerivationSyntax {
+    /// Every row, for the concept lookup and the scheduler's edges. Destructures `Self`, so a row added and not yielded here does not compile.
+    pub fn rows(self) -> impl Iterator<Item = Derivation> {
+        let Self { spell, eql } = self;
+
+        [Derivation::Spell(spell), Derivation::Eql(eql)].into_iter()
+    }
+
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        self.rows().flat_map(Derivation::targets)
+    }
+
+    fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
+        self.rows().map(Derivation::concept_field)
+    }
+}
+
+/// The names a derived `Spell` witness body is written with: the concept's `spell` method, applied to each payload and resolved like any written call; the two renderers the body applies over the spelled pieces — `call` for a constructor over its explicit payloads, `record` for a struct over its labeled fields; and the string machinery every rendered piece is built out of. The re-parse grammar is spelled once, in `/std/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
+///
+/// The string machinery is carried by the row rather than reached out of the registry at the emitter, because it is part of what *this* body writes: `curios_elab::str_literal` names the scan certificate and constructs the carrier at every rendered piece. A row that emits a literal therefore cannot forget to order it, and one that emits none — as `Eql` does, building a `Bool` — does not carry it.
+#[derive(Debug, Clone, Copy)]
+pub struct SpellDerivation {
     pub spell: ConceptField,
     pub call: SyntaxName,
     pub record: SyntaxName,
+    /// The whole group rather than the names out of it, because `str_literal` takes it whole — so the body writer and the scheduler read one value, and a spelling cannot drift between what is emitted and what is ordered.
+    pub string: StringSyntax,
 }
 
-impl SpellSyntax {
-    fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        let Self {
-            spell,
-            call,
-            record,
-        } = self;
+/// The names a derived `Eql` witness body is written with: its own method, applied to each payload pair, and nothing else. What the body builds beside that is an intrinsic or an infix operator, and the elaborator resolves an operator to a projection off a witness — neither names a global for anything to order against.
+#[derive(Debug, Clone, Copy)]
+pub struct EqlDerivation {
+    pub eql: ConceptField,
+}
 
-        [spell.concept, call, record].into_iter()
+/// One row of the roster as the lookup yields it: the tag a body writer dispatches on, carrying the names that writer applies.
+#[derive(Debug, Clone, Copy)]
+pub enum Derivation {
+    Spell(SpellDerivation),
+    Eql(EqlDerivation),
+}
+
+impl Derivation {
+    /// The concept method a body-less `satisfy` of this derivation asks for — the key the lookup matches on, and the field the prelude build checks against the declaration.
+    pub const fn concept_field(self) -> ConceptField {
+        match self {
+            Derivation::Spell(row) => row.spell,
+            Derivation::Eql(row) => row.eql,
+        }
+    }
+
+    /// Every name a body written by this derivation references, as the identity a lowered `Var` carries — the hard edges `curios-text`'s scheduler cannot read off the `Derive` transient, since the body naming them does not exist yet.
+    ///
+    /// A [`Qualifier`] rather than a [`SyntaxName`]: a concept *method* is its concept's path extended by a field label, which is built rather than spelled, so no `&'static` segment list for it exists or could be made.
+    pub fn vocabulary(self) -> Vec<Qualifier> {
+        let field = self.concept_field();
+        let method = field.concept.qualifier().with(field.field);
+
+        match self {
+            Derivation::Spell(SpellDerivation {
+                spell: _,
+                call,
+                record,
+                string,
+            }) => [method]
+                .into_iter()
+                .chain(
+                    [call, record]
+                        .into_iter()
+                        .chain(string.targets())
+                        .map(SyntaxName::qualifier),
+                )
+                .collect(),
+            Derivation::Eql(EqlDerivation { eql: _ }) => vec![method],
+        }
+    }
+
+    /// The names among this row's fields, for the prelude build's presence check.
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        match self {
+            Derivation::Spell(SpellDerivation {
+                spell,
+                call,
+                record,
+                string,
+            }) => [spell.concept, call, record]
+                .into_iter()
+                .chain(string.targets())
+                .collect::<Vec<_>>(),
+            Derivation::Eql(EqlDerivation { eql }) => vec![eql.concept],
+        }
+        .into_iter()
     }
 }

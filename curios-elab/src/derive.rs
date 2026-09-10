@@ -1,6 +1,8 @@
 //! Derived witness bodies: the body a body-less `satisfy C(T);` asks the compiler to write.
 //!
-//! Lowering carries the declaration into Core as the same anonymous definition a written witness produces, with [`Transient::Derive`](curios_core::Transient) in body position, so the witness's telescope — its implicit binders and `use` premises — is in scope when the body is checked, and its signature registers in the witness table exactly as a written one does (orphan and duplicate-key refusals need no body). Checking the transient against the concept application is what writes the body: the derivation registered for the concept's registry slot produces the Core the lowerer would have produced for the equivalent written witness, and that Core is elaborated under the same expectation, so a derived body is typed, resolved, zonked and certified like any authored one — the kernel never sees the transient.
+//! Lowering carries the declaration into Core as the same anonymous definition a written witness produces, with [`Transient::Derive`](curios_core::Transient) in body position, so the witness's telescope — its implicit binders and `use` premises — is in scope when the body is checked, and its signature registers in the witness table exactly as a written one does (orphan and duplicate-key refusals need no body). Checking the transient against the concept application is what writes the body: the roster row for the concept produces the Core the lowerer would have produced for the equivalent written witness, and that Core is elaborated under the same expectation, so a derived body is typed, resolved, zonked and certified like any authored one — the kernel never sees the transient.
+//!
+//! **The blessed set is one value.** Which concepts derive, and the names each derived body applies, are one row of `curios_utilities::DerivationSyntax` — read here to pick the writer, and read by `curios-text`'s `order_flat_items` to supply the hard edges the transient hides. A writer therefore cannot apply a name the scheduler does not order, which is what the two used to be free to disagree about.
 //!
 //! **Eligibility.** A derivation writes from a declaration, and only from one: the key must reduce to a registered `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — that is representation-transparent at the declaring island and not `Prop`-sorted, its parameters and indices given by the key. Sealing is refused before any of that, with the rule a written literal meets, so that derivation is never a door through representation privacy; a concept with no derivation refuses by name, since derivability is registered per concept and never inferred from its shape. Every refusal is a hard error at the `satisfy` span.
 //!
@@ -19,25 +21,19 @@ use {
         Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many, MetavarOrigin, Scope,
         StructDecl, StructType, Subterm, Term, WitnessOrigin,
     },
-    curios_utilities::{ConceptField, InfixOp, Plicity, Qualifier, Span, SyntaxRegistry},
+    curios_utilities::{
+        ConceptField, Derivation, EqlDerivation, InfixOp, Plicity, Qualifier, Span,
+        SpellDerivation, SyntaxRegistry,
+    },
 };
 
-/// A concept the compiler can write a witness body for.
-enum Derivation {
-    Spell,
-    Eql,
-}
-
-/// The derivation registered for `concept`'s slot, if any.
+/// The roster row for `concept`, if it has one. A row carries the names its body writer applies, so that writer and `curios-text`'s scheduler read one value rather than two lists obliged to agree.
 fn derivation_for(syntax: &SyntaxRegistry, concept: &Global) -> Option<Derivation> {
-    let registered = [
-        (syntax.spell.spell.concept, Derivation::Spell),
-        (syntax.operator.eql.concept, Derivation::Eql),
-    ];
-    registered
-        .into_iter()
-        .find(|(name, _)| concept.qualifier() == Some(&name.qualifier()))
-        .map(|(_, derivation)| derivation)
+    let concept = concept.qualifier()?.clone();
+    syntax
+        .derivations
+        .rows()
+        .find(|derivation| derivation.concept_field().concept.qualifier() == concept)
 }
 
 /// Check a `Derive` transient against its expected type, writing the body the declaration asked for.
@@ -88,8 +84,8 @@ pub(crate) fn elaborate_derive(
     };
     let subject = subject(context, &site)?;
     let body = match derivation {
-        Derivation::Spell => spell_body(context, &site, &subject)?,
-        Derivation::Eql => eql_body(context, &site, &subject)?,
+        Derivation::Spell(row) => spell_body(context, &site, &subject, row)?,
+        Derivation::Eql(row) => eql_body(context, &site, &subject, row)?,
     };
     elaborate(context, &body, mode)
 }
@@ -461,18 +457,22 @@ fn witness_call(
 }
 
 /// The `Spell` witness record: `spell` as a one-parameter function over the derived rendering.
-fn spell_body(context: &mut Context, site: &Site<'_>, subject: &Subject) -> Result<Term, Error> {
-    let syntax = context.syntax();
+fn spell_body(
+    context: &mut Context,
+    site: &Site<'_>,
+    subject: &Subject,
+    row: SpellDerivation,
+) -> Result<Term, Error> {
     let value = context.fresh(Some("value"));
 
     // The spelling of one classified payload read through `read`.
     let spell = |context: &mut Context, classified: &Classified, read: Term| match &classified.part
     {
-        Part::Proof => str_literal(&syntax.string, b"?"),
+        Part::Proof => str_literal(&row.string, b"?"),
         Part::Value { premise } => witness_call(
             context,
             site,
-            syntax.spell.spell,
+            row.spell,
             classified,
             premise.as_deref(),
             vec![read],
@@ -487,14 +487,14 @@ fn spell_body(context: &mut Context, site: &Site<'_>, subject: &Subject) -> Resu
                 .map(|classified| {
                     let read = Term::proj(Term::free_var(&value), classified.position);
                     Term::tuple([
-                        str_literal(&syntax.string, classified.payload.label.as_bytes()),
+                        str_literal(&row.string, classified.payload.label.as_bytes()),
                         spell(context, classified, read),
                     ])
                 })
                 .collect::<Vec<_>>();
             let items = list(context, entries);
-            let head = str_literal(&syntax.string, path(name, None).as_bytes());
-            site.at(syn_call(syntax.spell.record, [head, items]))
+            let head = str_literal(&row.string, path(name, None).as_bytes());
+            site.at(syn_call(row.record, [head, items]))
         }
         Subject::Induct { name, decl, params } => {
             let mut arms = Vec::new();
@@ -516,8 +516,8 @@ fn spell_body(context: &mut Context, site: &Site<'_>, subject: &Subject) -> Resu
                     })
                     .collect::<Vec<_>>();
                 let items = list(context, pieces);
-                let head = str_literal(&syntax.string, path(name, Some(tag.as_str())).as_bytes());
-                let body = site.at(syn_call(syntax.spell.call, [head, items]));
+                let head = str_literal(&row.string, path(name, Some(tag.as_str())).as_bytes());
+                let body = site.at(syn_call(row.call, [head, items]));
                 arms.push((
                     tag.clone(),
                     constructor
@@ -548,11 +548,16 @@ fn spell_body(context: &mut Context, site: &Site<'_>, subject: &Subject) -> Resu
 }
 
 /// The `Eql` witness record: `eql` over the derived comparison, `neq` over its negation.
-fn eql_body(context: &mut Context, site: &Site<'_>, subject: &Subject) -> Result<Term, Error> {
+fn eql_body(
+    context: &mut Context,
+    site: &Site<'_>,
+    subject: &Subject,
+    row: EqlDerivation,
+) -> Result<Term, Error> {
     let method = |context: &mut Context, negated: bool| -> Result<Term, Error> {
         let left = context.fresh(Some("left"));
         let right = context.fresh(Some("right"));
-        let compared = compare(context, site, subject, &left, &right)?;
+        let compared = compare(context, site, subject, row.eql, &left, &right)?;
         let body = match negated {
             false => compared,
             true => site.at(Term::bool_match_scoped(
@@ -585,11 +590,10 @@ fn compare(
     context: &mut Context,
     site: &Site<'_>,
     subject: &Subject,
+    field: ConceptField,
     left: &Free,
     right: &Free,
 ) -> Result<Term, Error> {
-    let field = context.syntax().operator.eql;
-
     // The comparisons of the classified payloads read through `reads`, joined under `&&`; a proof takes no part.
     let conjunction =
         |context: &mut Context, parts: &[Classified], reads: &dyn Fn(usize) -> (Term, Term)| {

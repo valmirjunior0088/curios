@@ -1,8 +1,9 @@
 //! Canonical compiler-known names, owned by the authored `/std` source tree that declares them.
 
 use curios_utilities::{
-    CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax,
-    SpellSyntax, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, LiftSyntax, MonadSyntax,
+    OperatorSyntax, ProofSyntax, SpellDerivation, StringSyntax, SyntaxName, SyntaxRegistry,
+    TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -17,6 +18,13 @@ const fn field(segments: &'static [&'static str], label: &'static str) -> Concep
         field: label,
     }
 }
+
+/// Spelled once and used twice: the registry's own group, and the `Spell` derivation's row, which carries it because `str_literal` is what writes it into every rendered piece.
+const STRING: StringSyntax = StringSyntax {
+    string: name(&["std", "Str", "Str"]),
+    of_scan_eq: name(&["std", "Str", "of_scan_eq"]),
+    refl_scan: name(&["std", "Str", "refl_scan"]),
+};
 
 pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     monad: MonadSyntax {
@@ -45,11 +53,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         scalar_below: name(&["std", "Char", "Scalar", "below"]),
         scalar_above: name(&["std", "Char", "Scalar", "above"]),
     },
-    string: StringSyntax {
-        string: name(&["std", "Str", "Str"]),
-        of_scan_eq: name(&["std", "Str", "of_scan_eq"]),
-        refl_scan: name(&["std", "Str", "refl_scan"]),
-    },
+    string: STRING,
     proof: ProofSyntax {
         true_qed: name(&["sys", "True", "qed"]),
         true_type: name(&["sys", "True"]),
@@ -61,9 +65,16 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         test_type: name(&["std", "Test", "Test"]),
         main: name(&["std", "Test", "main"]),
     },
-    spell: SpellSyntax {
-        spell: field(&["std", "Spell", "Spell"], "spell"),
-        call: name(&["std", "Spell", "call"]),
-        record: name(&["std", "Spell", "record"]),
+    derivations: DerivationSyntax {
+        spell: SpellDerivation {
+            spell: field(&["std", "Spell", "Spell"], "spell"),
+            call: name(&["std", "Spell", "call"]),
+            record: name(&["std", "Spell", "record"]),
+            string: STRING,
+        },
+        // `Eql`'s method is named here as well as in `OperatorSyntax`, deliberately: `==` dispatches through it and this derivation applies it, and the two are free to move apart. Sharing one slot made them agree by coincidence rather than by decision.
+        eql: EqlDerivation {
+            eql: field(&["std", "ops", "Eql", "Eql"], "eql"),
+        },
     },
 };
