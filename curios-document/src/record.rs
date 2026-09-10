@@ -64,7 +64,7 @@ pub struct Declaration {
     pub chip: Option<String>,
 }
 
-/// One constructor, field or concept method — or a concept's superclass edge, `use Equal(A),`, which the language declares as an anonymous field and which stays a member so the block prints it where it was written.
+/// One constructor, field or concept method — or a concept's superclass edge, `use Eql(A),`, which the language declares as an anonymous field and which stays a member so the block prints it where it was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Member {

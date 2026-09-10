@@ -119,7 +119,7 @@ test bigint_neg_abs_and_parity =
         Test/assert(Bool/not(BigInt/is_even(n))),
         Test/assert(BigInt/is_even(BigInt/div2(n)))]);
 
--- The `/std` facades carry `Add`, `Subtract`, `Multiply`, `Equal` and `Compare` witnesses for `BigInt`, so the operator syntax resolves on it like on any native numeric type.
+-- The `/std` facades carry `Add`, `Sub`, `Mul`, `Eql` and `Cmp` witnesses for `BigInt`, so the operator syntax resolves on it like on any native numeric type.
 test bigint_operators_dispatch_through_concepts =
     let a = BigInt/of_int(-6);
     let b = BigInt/of_int(+2);

@@ -62,7 +62,7 @@ fn explicit_use_argument_overrides() {
     assert_eq!(run(source), b"(7)");
 }
 
-// A superclass edge resolved by projection: inside `same`, the goal `Equal(A)` has a bound-variable head (no table entry), so it is solved by projecting the local `use Ordered(A)` binder's (anonymous) superclass field, keyed by index. The `use Ordered(A)` slot itself resolves through the table to `ord_nat`, whose own omitted superclass field resolves to `eql_nat` — no field names a witness anywhere.
+// A superclass edge resolved by projection: inside `same`, the goal `Eql(A)` has a bound-variable head (no table entry), so it is solved by projecting the local `use Ordered(A)` binder's (anonymous) superclass field, keyed by index. The `use Ordered(A)` slot itself resolves through the table to `ord_nat`, whose own omitted superclass field resolves to `eql_nat` — no field names a witness anywhere.
 #[test]
 fn superclass_projection_resolves() {
     let source = r#"
@@ -118,7 +118,7 @@ fn prelude_show_resolves() {
     assert_eq!(run(source), b"42");
 }
 
-// The prelude `Equal` concept resolves through the value-level witnesses.
+// The prelude `Eql` concept resolves through the value-level witnesses.
 #[test]
 fn prelude_eql_resolves() {
     let source = r#"
@@ -132,7 +132,7 @@ fn prelude_eql_resolves() {
     assert_eq!(run(source), b"true");
 }
 
-// The prelude `Ord` concept resolves, and its `Equal` superclass is reachable by projection from an `Ord` in scope.
+// The prelude `Ord` concept resolves, and its `Eql` superclass is reachable by projection from an `Ord` in scope.
 #[test]
 fn prelude_ord_superclass_projects() {
     let source = r#"
@@ -319,7 +319,7 @@ fn syn_add_concept_resolves_everywhere() {
     assert_eq!(run(source), b"27");
 }
 
-// `Equal` and `Compare` resolve across intrinsics with the witnesses now homed beside each type — `Equal(Nat)`/`Compare(Nat)` in `/std/Nat`, `Equal(Str)` in `/std/Str`, `Compare(Flt)` in `/std/Flt` — rather than in the operator-concept facades, which keep only the concept re-exports.
+// `Eql` and `Cmp` resolve across intrinsics with the witnesses now homed beside each type — `Eql(Nat)`/`Cmp(Nat)` in `/std/Nat`, `Eql(Str)` in `/std/Str`, `Cmp(Flt)` in `/std/Flt` — rather than in the operator-concept facades, which keep only the concept re-exports.
 #[test]
 fn eql_and_cmp_resolve_across_intrinsics() {
     let source = r#"
@@ -335,7 +335,7 @@ fn eql_and_cmp_resolve_across_intrinsics() {
     assert_eq!(run(source), b"true");
 }
 
-// A witness declared *after* a value that uses it still resolves: the use-site goal defers on the missing table entry, the later `satisfy` registers it, and the end-of-module sweep discharges the deferred goal. This ordering freedom is what lets a `/std` witness live beside its type — a type module's own value functions may call an operator before the module's trailing witness block, the way `/std/Nat`'s `min`/`cmp` use `<`/`==` ahead of `Compare(Nat)`.
+// A witness declared *after* a value that uses it still resolves: the use-site goal defers on the missing table entry, the later `satisfy` registers it, and the end-of-module sweep discharges the deferred goal. This ordering freedom is what lets a `/std` witness live beside its type — a type module's own value functions may call an operator before the module's trailing witness block, the way `/std/Nat`'s `min`/`cmp` use `<`/`==` ahead of `Cmp(Nat)`.
 #[test]
 fn forward_declared_witness_resolves() {
     let source = r#"

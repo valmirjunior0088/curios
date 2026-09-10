@@ -55,7 +55,7 @@ Do not silently change `Toml/int` or `Toml/flt` as part of this specification; t
 
 ## Verification
 
-- Compare parsing with an arbitrary-precision rational reference over generated coefficients, scales, signs, and exponents.
+- Cmp parsing with an arbitrary-precision rational reference over generated coefficients, scales, signs, and exponents.
 - Pin `0.1`, terminating dyadics, shared powers of two and five, very large exponents, zero spellings, and malformed input.
 - Generate terminating rationals and test exact decimal round-trip.
 - Generate nonterminating rationals and confirm `to_decimal` returns `none`.

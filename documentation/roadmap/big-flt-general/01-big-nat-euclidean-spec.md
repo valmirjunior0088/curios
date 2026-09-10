@@ -79,7 +79,7 @@ Do not expose implementation-specific quotient-digit state in public theorem sta
 
 ## Verification
 
-- Compare `divmod` and `gcd` against an arbitrary-precision reference over generated packed values.
+- Cmp `divmod` and `gcd` against an arbitrary-precision reference over generated packed values.
 - Pin zero dividends, divisor one, dividend smaller than divisor, equality, exact multiples, one-less and one-more boundaries, and long sparse bit strings.
 - Exercise every public theorem over symbolic inputs.
 - Benchmark highly unequal operand sizes and adversarial quotient patterns.

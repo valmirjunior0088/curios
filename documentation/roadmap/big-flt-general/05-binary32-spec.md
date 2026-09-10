@@ -47,7 +47,7 @@ Generalize the landed dyadic nearest-value theorem:
 
 ## Verification
 
-- Compare generated rational conversions against a trusted exact IEEE-754 reference.
+- Cmp generated rational conversions against a trusted exact IEEE-754 reference.
 - Pin odd denominators around every normal/subnormal and halfway boundary.
 - Exercise huge numerator/denominator and exponent disparities.
 - Re-run every dyadic conversion and proof fixture unchanged.

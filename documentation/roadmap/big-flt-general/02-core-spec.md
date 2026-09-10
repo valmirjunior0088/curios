@@ -100,7 +100,7 @@ Zero produces `none`. Nonzero inputs swap signed numerator magnitude with the po
 ## Verification
 
 - Normalize equivalent raw fractions, signed values, powers of two in either side, shared odd factors, denominator one, and zero.
-- Compare arithmetic and comparison with an arbitrary-precision rational reference.
+- Cmp arithmetic and comparison with an arbitrary-precision rational reference.
 - Run the complete dyadic behavioral corpus unchanged.
 - Confirm `of_dyadic(m, e) = of_scaled_ratio(m, e, one)` extensionally and structurally.
 - Confirm proof erasure and the intended three-field runtime representation.

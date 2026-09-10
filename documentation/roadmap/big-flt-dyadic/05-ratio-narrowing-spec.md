@@ -12,7 +12,7 @@ Provide the only division-shaped operation in stage 1:
 BigFlt/ratio_to_flt_bytes : BigFlt -> BigFlt -> Bytes
 ```
 
-The function rounds the exact mathematical quotient once, directly to a binary32 byte pattern using round-to-nearest-even. It does not construct an interior rational value and does not justify a `Divide(BigFlt)` witness.
+The function rounds the exact mathematical quotient once, directly to a binary32 byte pattern using round-to-nearest-even. It does not construct an interior rational value and does not justify a `Div(BigFlt)` witness.
 
 ## Algorithm
 
@@ -46,7 +46,7 @@ ratio_to_flt = Flt/of_le_bytes ∘ ratio_to_flt_bytes
 ## Structural obligations
 
 - Each loop step preserves the exact numerator/denominator relationship.
-- Compare-subtract updates keep the remainder bounded by the active denominator scale.
+- Cmp-subtract updates keep the remainder bounded by the active denominator scale.
 - Guard and sticky results summarize all discarded quotient information needed by the rounding decision.
 - The loop has an evident structural or bounded termination argument compatible with future checking.
 - Sign handling is separated from magnitude extraction so proof cases do not multiply unnecessarily.
@@ -55,7 +55,7 @@ These obligations expose facts for the later formal proof; they do not by themse
 
 ## Verification
 
-- Compare results against an exact rational reference over generated numerator, denominator, exponent, and sign combinations.
+- Cmp results against an exact rational reference over generated numerator, denominator, exponent, and sign combinations.
 - Pin zero, infinity, signed-zero, normal/subnormal boundary, overflow, underflow, exact halfway, and significand-carry cases.
 - Exercise very unequal exponents and large packed magnitudes.
 - Confirm no exact rational allocation or native division appears in the implementation.
@@ -65,7 +65,7 @@ These obligations expose facts for the later formal proof; they do not by themse
 
 - Exact interior division or a quotient-valued result.
 - General BigNat `divmod`, `gcd`, or rational reduction.
-- A `Divide(BigFlt)` witness.
+- A `Div(BigFlt)` witness.
 - The formal denominator-cleared nearest-value theorem, which belongs to the boundary proof specification.
 
 ## Completion criteria

@@ -230,7 +230,7 @@ fn structural_values_spell_as_type_qualified_constructor_paths() {
 
 #[test]
 fn a_structural_fixture_compares_and_spells() {
-    // The `/std` gap closed: `Option`, `Result` and `Ordering` carry `Equal` and `Spell`, so `Test/equal` works on them out of the box.
+    // The `/std` gap closed: `Option`, `Result` and `Ordering` carry `Eql` and `Spell`, so `Test/equal` works on them out of the box.
     assert_eq!(
         run(r#"
         use /std/{Nat, Io, Option, Test};

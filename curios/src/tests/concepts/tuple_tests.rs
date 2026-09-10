@@ -1,4 +1,4 @@
-//! The standard library's witnesses on the tuple shapes, end to end: `/std/Tuple`'s `Show`, `Equal` and `Ord`.
+//! The standard library's witnesses on the tuple shapes, end to end: `/std/Tuple`'s `Show`, `Eql` and `Ord`.
 
 use crate::tests::run;
 
@@ -67,7 +67,7 @@ fn equality_is_componentwise() {
     assert_eq!(run(source), b"true false true true");
 }
 
-// Lexicographic: the first component that is not `eq` decides, and a tie falls through to the next. `Ord`'s `Equal` superclass slot is left to resolution and lands on the tuple `Equal` witness, whose own premises come from projecting the `Ord` premises — the ordinary machinery, composing.
+// Lexicographic: the first component that is not `eq` decides, and a tie falls through to the next. `Ord`'s `Eql` superclass slot is left to resolution and lands on the tuple `Eql` witness, whose own premises come from projecting the `Ord` premises — the ordinary machinery, composing.
 #[test]
 fn ordering_is_lexicographic() {
     let source = r#"

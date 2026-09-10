@@ -163,7 +163,7 @@ fn the_stages_show_the_transient_and_its_expansion() {
     assert!(elaborated.contains("Spell/call"), "{elaborated}");
 }
 
-// --- The `Equal` derivation: structural equality, constructor by constructor and payload by payload, through each payload's own witness. ---
+// --- The `Eql` derivation: structural equality, constructor by constructor and payload by payload, through each payload's own witness. ---
 
 #[test]
 fn derived_equality_is_structural() {

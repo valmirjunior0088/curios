@@ -22,7 +22,7 @@ The intrinsic requires exactly four little-endian bytes, assembles their reflect
 
 The intrinsic uses `Byte/to_nat` internally; no user-visible Nat-byte convention remains.
 
-Its compiler footprint includes the intrinsic models and printers across Core, Ersd, Cont, Wasm lowering, text lowering, standard-library exposure, optimization walkers, scalar evaluation, and codegen tests. Preserve round-trip fixtures for positive and negative zero, normal values, subnormals, payloaded NaNs, and both infinities. Compare bytes, never native `Flt` equality.
+Its compiler footprint includes the intrinsic models and printers across Core, Ersd, Cont, Wasm lowering, text lowering, standard-library exposure, optimization walkers, scalar evaluation, and codegen tests. Preserve round-trip fixtures for positive and negative zero, normal values, subnormals, payloaded NaNs, and both infinities. Cmp bytes, never native `Flt` equality.
 
 ## Exact conversion from binary32
 
@@ -78,7 +78,7 @@ Every helper used by a proof needs a structural specification connecting it to e
 
 - Test conversion from binary32 for normals, subnormals, both zeros, infinities, and multiple NaN payloads.
 - Test conversion to binary32 at normal/subnormal boundaries, the binary32 overflow boundary, underflow, exact halfway cases, and significand carry.
-- Compare emitted bytes with a trusted correctly rounded IEEE-754 reference over a broad generated corpus.
+- Cmp emitted bytes with a trusted correctly rounded IEEE-754 reference over a broad generated corpus.
 - Test `to_flt_bytes(of_flt_bytes(bytes))` behavior separately from the formal theorem suite.
 - Benchmark the boundary loops and record pathological exponent or magnitude behavior.
 
