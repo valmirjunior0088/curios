@@ -1625,13 +1625,20 @@ fn into_core_unit_within(
 
     // Read last, when the export view is final and every definition's import scope has been recorded, and before the tables below are taken out of their scoped views.
     let documentation = source.documented().map(|(prefix, description)| {
+        // The scope's own records, for the declarations this unit adopts out of a root a consumer cannot name. A unit keeps no surface tree, so the record it carried away is the only place its declarations survive — see `document`'s `records`.
+        let records = scope
+            .iter()
+            .filter_map(|unit| unit.documentation())
+            .collect::<Vec<_>>();
+
         document(
             &modules,
             &table,
             &public,
             &imports.borrow(),
             &prefix,
-            &mounts,
+            &visible_mounts,
+            &records,
             description,
         )
     });

@@ -29,7 +29,9 @@ const INDENT: usize = 4;
 ///
 /// The mounts whose declarations reach a consumer only through the documented one, each with the word a page chips onto them.
 ///
-/// **Decided here, from the compilation's mount table.** A root is adopted because a consumer cannot name it and it is not the one being documented — a fact about what this compilation mounts, not about the source the documented unit was read from. That distinction is what the prelude's split forces: the adopted root is a *different unit's* mount, so no source could claim it and no assertion against its own bases could hold.
+/// **Decided here, from the prefixes this unit may name.** A root is adopted because a consumer cannot name it, this unit can, and it is not the one being documented — a fact about what this compilation mounts, not about the source the documented unit was read from. That distinction is what the prelude's split forces: the adopted root is a *different unit's* mount, so no source could claim it and no assertion against its own bases could hold.
+///
+/// **`mounts` is what this unit declared, not the whole compilation.** Every unit in a fold has `/sys` mounted, so the internal-root test alone makes every package adopt it — and a package that merely depends on `/std` would then show the intrinsics on its own pages as if it wrapped them. Adoption belongs to the facade in front of a closed root, and the facade is the one unit that declared a dependency on it.
 fn adopted_mounts(mounts: &[Mount], documented: &Qualifier) -> Vec<(Qualifier, Option<String>)> {
     mounts
         .iter()
@@ -42,9 +44,10 @@ fn adopted_mounts(mounts: &[Mount], documented: &Qualifier) -> Vec<(Qualifier, O
 ///
 /// Spelled here because `/sys` is this crate's own root — `sys_module` builds it — so the word for what it holds is this crate's to know. A root with no entry is still adopted and merely says nothing about itself.
 fn chip(prefix: &Qualifier) -> Option<String> {
-    match prefix.join().as_str() {
-        "sys" => Some("intrinsic".to_string()),
-        _ => None,
+    // Compared as a qualifier, not as text: `join` writes a canonical identity, which is absolute, so `"sys"` matched nothing it was ever handed.
+    match *prefix == Qualifier::from(["sys"]) {
+        true => Some("intrinsic".to_string()),
+        false => None,
     }
 }
 
@@ -56,6 +59,7 @@ pub(super) fn document(
     imports: &Imports,
     prefix: &Qualifier,
     mounts: &[Mount],
+    records: &[&Documentation],
     description: Option<String>,
 ) -> Documentation {
     let adopted = adopted_mounts(mounts, prefix);
@@ -66,6 +70,7 @@ pub(super) fn document(
         imports,
         prefix,
         adopted: &adopted,
+        records,
         public_names: HashMap::new(),
     };
     // Read before the walk, because a signature anywhere in the unit may name an adopted declaration, and taken through the reader because knowing which modules have pages is its own rule.
@@ -90,6 +95,10 @@ struct Reader<'a> {
     prefix: &'a Qualifier,
     /// The unit's own roots that no consumer may name — its internal mounts. Their declarations reach a consumer only through a `pub use` in the documented mount, so a page shows them and no page names where they were written.
     adopted: &'a [(Qualifier, Option<String>)],
+    /// The records the units already compiled carry, which is where an adopted declaration is read from.
+    ///
+    /// **An adopted root is a different unit, and a unit keeps no surface tree.** Its declarations were rendered while it was being lowered and its items were in hand; by the time this unit is lowered they exist only in the record it carried away. So a `pub use` into an adopted root is answered out of that record rather than re-derived from items nothing here can reach — which is what stopped working the day the prelude became two units, silently, because every check of the adopted half asserts the absence of a path rather than the presence of a card.
+    records: &'a [&'a Documentation],
     /// What a consumer calls each declaration that no page of its own shows: its declaration site, to the path of the page that exposes it. One entry per declaration a private child or an adopted root holds and a page re-exports.
     public_names: HashMap<Qualifier, Qualifier>,
 }
@@ -113,7 +122,7 @@ impl Reader<'_> {
 
             for (label, entry) in bindings {
                 let declaring = entry.target.without_last();
-                if !self.has_page(&declaring) && self.items_of(&declaring).is_some() {
+                if !self.has_page(&declaring) && self.has_declarations(&declaring) {
                     names
                         .entry(entry.target.clone())
                         .or_insert_with(|| module.with(label));
@@ -144,8 +153,8 @@ impl Reader<'_> {
             return owner.with(referent.last());
         }
 
-        // A member of a declaration that never moved is already addressed under it, and a name outside every module this unit holds is nobody here's to rename.
-        if self.items_of(&declaring).is_none() {
+        // A member of a declaration that never moved is already addressed under it, and a name outside every module this unit shows is nobody here's to rename.
+        if !self.has_declarations(&declaring) {
             return referent.clone();
         }
 
@@ -154,6 +163,106 @@ impl Reader<'_> {
             referent.join(),
             self.prefix.join()
         )
+    }
+
+    /// Whether this bundle can render the declarations of `module`: its own, out of the items discovery parsed, or an adopted unit's, out of the record it carried.
+    fn has_declarations(&self, module: &Qualifier) -> bool {
+        self.items_of(module).is_some() || self.adopted_page(module).is_some()
+    }
+
+    /// The page `module` has in the record of a unit this one adopts from.
+    ///
+    /// Gated on adoption rather than open to every record in scope: a visible unit documents itself, and its declarations belong to its own bundle under its own paths. Only a root a consumer cannot name has to be shown here instead.
+    fn adopted_page(&self, module: &Qualifier) -> Option<&ModuleDocumentation> {
+        self.adopted_root(module)?;
+        self.records
+            .iter()
+            .find_map(|record| record.modules.iter().find(|page| page.path == *module))
+    }
+
+    /// The declaration `target` names in an adopted unit's record.
+    fn adopted_declaration(&self, target: &Qualifier) -> Option<Declaration> {
+        let label = target.last();
+        let found = self
+            .adopted_page(&target.without_last())?
+            .declarations
+            .iter()
+            .find(|declaration| declaration.name == label)?;
+
+        Some(self.adopt(found))
+    }
+
+    /// The member `target` names beside its owner in an adopted unit's record — a constructor or a concept method, which a page shows in its owner's block rather than as a declaration of its own.
+    fn adopted_member(&self, target: &Qualifier) -> Option<Declaration> {
+        let owner = target.without_last();
+        let label = target.last();
+        let holder = self
+            .adopted_page(&owner.without_last())?
+            .declarations
+            .iter()
+            .find(|declaration| declaration.name == owner.last())?;
+        let member = holder.members.iter().find(|member| member.name == label)?;
+
+        Some(Declaration {
+            name: label.to_string(),
+            home: owner.without_last(),
+            kind: Kind::Definition,
+            signature: self.adopt_signature(&member.signature),
+            prose: member.prose.clone(),
+            members: Vec::new(),
+            opaque: false,
+            derived: false,
+            source: None,
+            chip: None,
+        })
+    }
+
+    /// One declaration of an adopted unit, with every name in it put through this unit's spellings.
+    fn adopt(&self, declaration: &Declaration) -> Declaration {
+        Declaration {
+            signature: self.adopt_signature(&declaration.signature),
+            members: declaration
+                .members
+                .iter()
+                .map(|member| Member {
+                    signature: self.adopt_signature(&member.signature),
+                    ..member.clone()
+                })
+                .collect(),
+            ..declaration.clone()
+        }
+    }
+
+    /// `signature` as this unit shows it: every referent under the name a consumer writes here, and every absolute spelling into an adopted root replaced by it.
+    ///
+    /// **A record is rendered text, so this rewrites over marks where the walk rewrites over annotations.** A mark carries the byte range its name occupies and the declaration it names, which is the same pair an annotation carries — so mapping each referent through [`Reader::public_name`] and splicing its range states exactly the rule the walk states: only an absolute spelling into a root this unit keeps to itself is rewritten, and everything an author wrote is shown as written.
+    fn adopt_signature(&self, signature: &Signature) -> Signature {
+        let mut text = String::new();
+        let mut marks = Vec::new();
+        let mut at = 0;
+
+        for mark in &signature.marks {
+            text.push_str(&signature.text[at..mark.start]);
+            at = mark.end;
+
+            let spelling = &signature.text[mark.start..mark.end];
+            let referent = self.public_name(&mark.referent);
+            let start = text.len();
+            match spelling.starts_with('/') && self.adopted_root(&mark.referent).is_some() {
+                true => text.push_str(&referent.join()),
+                false => text.push_str(spelling),
+            }
+
+            marks.push(Mark {
+                start,
+                end: text.len(),
+                within: referent.is_within(self.prefix),
+                referent,
+            });
+        }
+        text.push_str(&signature.text[at..]);
+
+        Signature { text, marks }
     }
 
     /// The adopted root `name` lies within, when it lies within one.
@@ -289,7 +398,19 @@ impl Reader<'_> {
             None => match self.member_at(&entry.target) {
                 // The owner under the name a consumer writes, which is what the card points at: a member is shown in its owner's block, and its own path is this very card.
                 Some(found) => (found, Some(self.public_name(&declaring)), None),
-                None => return,
+                // A declaration of a unit this one adopts, read from that unit's record: it has no page here and no path a consumer may write, so it is chipped with what its root holds exactly as a page-less module of this unit's own is.
+                None => match self.adopted_declaration(&entry.target) {
+                    Some(found) => (
+                        found,
+                        None,
+                        self.adopted_root(&entry.target)
+                            .and_then(|(_, chip)| chip.clone()),
+                    ),
+                    None => match self.adopted_member(&entry.target) {
+                        Some(found) => (found, Some(self.public_name(&declaring)), None),
+                        None => return,
+                    },
+                },
             },
         };
 
