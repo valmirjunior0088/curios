@@ -194,6 +194,62 @@ fn the_standard_library_documents_from_the_archive() {
     );
 }
 
+/// **The adopted half of that claim: the declarations are there.** Hiding `/sys` is half a property, and the sibling below pins only the half that is an absence — which a bundle satisfies perfectly by dropping every adopted declaration on the floor. That is exactly what splitting the prelude into two units did: the surface tree a declaration was rendered from left with the unit, and 112 names across 23 re-exports vanished from the record without a single check going red.
+///
+/// Read off the record rather than the rendered pages, because what is at issue is whether the declaration exists at all — and asserted per carrier, since one surviving name would satisfy any count.
+#[test]
+fn every_intrinsic_carrier_reaches_a_page_through_its_std_module() {
+    let documentation = standard_library();
+
+    // One carrier per `/sys` type former the standard library re-exports, at the module a program reaches it through.
+    let carriers = [
+        ("std/Nat", "Nat"),
+        ("std/Byte", "Byte"),
+        ("std/Int", "Int"),
+        ("std/Flt", "Flt"),
+        ("std/Bool", "Bool"),
+        ("std/Handle", "Handle"),
+        ("std/List", "List"),
+        ("std/Cell", "Cell"),
+        ("std/Io", "Io"),
+    ];
+
+    let mut missing = Vec::new();
+    for (module, label) in carriers {
+        let path = Qualifier::from(module.split('/'));
+        let found = documentation
+            .modules
+            .iter()
+            .find(|page| page.path == path)
+            .and_then(|page| {
+                page.declarations
+                    .iter()
+                    .find(|declaration| declaration.name == label)
+            });
+
+        match found {
+            // Adopted out of a root with no page here, so the card says what that root holds and names no path.
+            Some(declaration) => {
+                if declaration.chip.as_deref() != Some("intrinsic") {
+                    missing.push(format!(
+                        "/{module}/{label} is shown but chipped {:?}, not \"intrinsic\"",
+                        declaration.chip
+                    ));
+                }
+            }
+            None => missing.push(format!("/{module}/{label} reaches no page at all")),
+        }
+    }
+
+    assert!(
+        missing.is_empty(),
+        "{} of {} intrinsic carriers do not reach a page:\n{}",
+        missing.len(),
+        carriers.len(),
+        missing.join("\n")
+    );
+}
+
 /// **No page names a root a consumer may not write.** `/sys` is adopted rather than linked: its declarations appear under the `/std` module that exposes them, and their own paths appear nowhere a reader can see — not in a signature, a card header, a search row or a crumb.
 ///
 /// Rendered and read back rather than checked against the record, because the record is only half the claim. A path can reach a reader through a template as easily as through a field, and the file is the thing a reader opens.
