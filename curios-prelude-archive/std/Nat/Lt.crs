@@ -58,7 +58,11 @@ pub let le_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Nat/Le(i + 1, n) =
 -- | The decided pair is total, so refuting one settles the other — but only a proof can say so, because reduction reads terms and a guard's `false` arm is a fact about the scope. This is the bridge out of such an arm, where `True/qed()` inhabits the hypothesis and the conclusion is what the arm actually needed.
 pub let le_of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Nat/Le(b, a) =
     match a
-    | 0 => match b | 0 => True/qed() | _ + 1 => match p end end
+    | 0 =>
+        match b
+        | 0 => True/qed()
+        | _ + 1 => match p end
+        end
     | ap + 1 => match b | 0 => True/qed() | bp + 1 => le_of_not_lt(ap, bp, p) end
     end;
 
@@ -69,7 +73,14 @@ pub let lt_of_lt_le(a: Nat, b: Nat, c: Nat, p: Lt(a, b), q: Nat/Le(b, c)) -> Lt(
 -- | Two bounded digits in adjacent places stay under the product of their radices: `a < m` and `b < n` give `a * n + b < m * n`.
 -- |
 -- | The bound every positional encoding wants, and the one shape reduction cannot reach on its own — `a` and `b` arrive as binders carrying their bounds in proofs, where the oracle reads terms and finds nothing. `a * n + b < a * n + n` *is* `b < n` after cancellation, so the hypothesis inhabits the first step unchanged; what the second step needs is that `a + 1 <= m` scales, which is [`Ind/mul_mono_r`].
-pub let add_mul_lt(a: Nat, b: Nat, m: Nat, n: Nat, pa: Lt(a, m), pb: Lt(b, n)) -> Lt(a * n + b, m * n) =
+pub let add_mul_lt(
+    a: Nat,
+    b: Nat,
+    m: Nat,
+    n: Nat,
+    pa: Lt(a, m),
+    pb: Lt(b, n),
+) -> Lt(a * n + b, m * n) =
     lt_of_lt_le(
         a * n + b,
         a * n + n,

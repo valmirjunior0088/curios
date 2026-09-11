@@ -42,7 +42,11 @@ pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
 -- | Two bounds facing each other pin one value.
 pub let antisym(a: Nat, b: Nat, p: Le(a, b), q: Le(b, a)) -> Eq(a, b) =
     match a
-    | 0 => match b | 0 => Eq/refl() | _ + 1 => match q end end
+    | 0 =>
+        match b
+        | 0 => Eq/refl()
+        | _ + 1 => match q end
+        end
     | ap + 1 =>
         match b
         | 0 => match p end

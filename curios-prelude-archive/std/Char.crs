@@ -134,7 +134,10 @@ pub let of_ascii(byte: Byte) -> Option(Char) =
 
 -- | The byte a character below 128 encodes, or `none`.
 pub let to_ascii(c: Char) -> Option(Byte) =
-    match c.code < 0x80 | true => Option/some(Nat/to_byte(c.code % 0x80)) | false => Option/none() end;
+    match c.code < 0x80
+    | true => Option/some(Nat/to_byte(c.code % 0x80))
+    | false => Option/none()
+    end;
 
 let emit_continuations(acc: Bytes, codepoint: Nat, shift: Nat) -> Bytes =
     match 0 < shift
@@ -151,7 +154,8 @@ pub let to_utf8(c: Char) -> Bytes =
     let codepoint = c.code;
     choose
     | codepoint < 0x80 => x[Nat/to_byte(codepoint % 0x80)]
-    | codepoint < 0x800 => emit_continuations(x[Nat/to_byte(0xC0 + codepoint / 0x40 % 0x20)], codepoint, 1)
+    | codepoint < 0x800 =>
+        emit_continuations(x[Nat/to_byte(0xC0 + codepoint / 0x40 % 0x20)], codepoint, 1)
     | codepoint < 0x10000 =>
         emit_continuations(x[Nat/to_byte(0xE0 + codepoint / 0x1000 % 0x10)], codepoint, 0x40)
     | _ => emit_continuations(x[Nat/to_byte(0xF0 + codepoint / 0x40000 % 0x08)], codepoint, 0x1000)

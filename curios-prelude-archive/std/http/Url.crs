@@ -194,7 +194,8 @@ let decode_at(b: Bytes, i: Nat, acc: Bytes, fuel: Nat) -> Option(Bytes) =
                     decode_at(
                         b,
                         i + 3,
-                        x[..acc,
+                        x[
+                            ..acc,
                             Nat/to_byte(
                                 hi.v * 16 + lo.v,
                                 @Nat/Lt/add_mul_lt(hi.v, lo.v, 16, 16, hi.ok, lo.ok))],
