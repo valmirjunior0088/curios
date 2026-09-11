@@ -27,7 +27,7 @@ Without that rule the book becomes exactly the parallel explanation the document
 
 - **Where the programs live, and how they are checked.** An example that is not compiled and run by a test drifts. Whether they extend `programs/`'s sample category or take a directory of their own, and whether the test asserts each program's output or only that it compiles.
 - **The chapter sequence**, and how early the proof half arrives — late enough that the reader can already write a program, early enough that it does not read as an appendix.
-- **What the book teaches that the reference only states.** The i31 envelope, so that overflow is a boundary a reader knows about rather than a surprise; and `/std/Map`'s missing `Key(Nat)`, which today is explained only in a benchmark's methodology notes.
+- **What the book teaches that the reference only states.** The i31 envelope, so that overflow is a boundary a reader knows about rather than a surprise; and `/std/Map`'s deliberate lack of a `Key(Nat)`, which today is explained only in a benchmark's methodology notes.
 - **Where it sits.** `documentation/book/` with its own index, a row in the documentation ownership table saying what it owns and what it must not, a row in `README.md`'s "Go deeper", and whether it becomes the landing page for the site that today opens the playground.
 - **Whether chapters ship independently**, which is what would make this the one 1.0 item that can land in pieces rather than whole.
 

@@ -40,7 +40,7 @@ test entries_agree_across_insertion_orders =
     let m2: Map(Nat) = Map/remove(Map/of([("z", 3), ("w", 0), ("y", 2), ("x", 1)]), "w");
     Test/equal(m1, m2);
 
--- 300 sequential keys rendered as decimal share long prefixes — "1" against "10" against "100" — exercising deep shared paths and the presence markers that separate a key from its own extensions; deleting the even half exercises collapse at scale. Keys are `Str` because there is no `Key(Nat)` yet: the law its injectivity rests on is `documentation/soundness/per-term-rules/euclid-s-identity-in-the-sum-normal-form.md`, and the `/std` proof over it is unwritten.
+-- 300 sequential keys rendered as decimal share long prefixes — "1" against "10" against "100" — exercising deep shared paths and the presence markers that separate a key from its own extensions; deleting the even half exercises collapse at scale. Keys are `Str` because there is no `Key(Nat)`: `/std/Map` records why a base-256 encoding of an intrinsic `Nat` cannot discharge `Key/injective`.
 test holds_many_keys_with_shared_prefixes =
     let build(i: Nat, acc: Map(Str)) -> Map(Str) =
         match i | 0 => acc | _ => build(i - 1, Map/insert(acc, Nat/to_str(i), Nat/to_str(i))) end;
