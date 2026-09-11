@@ -5,7 +5,7 @@
 use {
     super::*,
     crate::{Intrinsic, Nat, Piece, ReduceError, Reducer, Subterm, Term},
-    curios_utilities::Grain,
+    curios_utilities::{Grain, PackedBin},
 };
 
 /// The free-monoid product structure of a reduced carrier value, the view a monoid homomorphism (`len`/`map`) distributes over: a literal run of generators `L` (bytes for `Bin`, elements for `List`), an n-ary `Concat` of operands to recurse on, an `Append` of a base and one appended generator, or an `Opaque` node (a variable / slice) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
@@ -142,6 +142,97 @@ pub(super) fn bin_element(grain: Grain, operand: &Term, local: usize) -> Option<
         Grain::B => run
             .bit(local)
             .map(|bit| Subterm::Intrinsic(Intrinsic::Bool(bit))),
+    }
+}
+
+/// A value read as a concatenation's operands: a concatenation's own, or an append's base beside the one-generator run it adds. `None` for anything that is neither.
+///
+/// **An append *is* a concatenation, and only the locator disagreed.** `append(b, k) = b ++ append(x[], k)` is the peel's own law, conversion's spine flattens both spellings to one atom list, and `x[..p, k]` and `x[..p, ..x[k]]` are definitionally equal terms. A locator gated on the concatenation node alone therefore declined a window it had already decided for the other spelling of the same value — incompleteness with nothing on the refusing side to justify it, and the shape `Bytes/of_nat` builds with, so every base-256 encoding was outside what a window could locate.
+pub(super) fn concatenated(grain: Grain, value: &Term) -> Option<Vec<Term>> {
+    fn flatten(grain: Grain, value: &Term, into: &mut Vec<Term>) {
+        match &**value {
+            Subterm::Intrinsic(Intrinsic::BinConcat {
+                grain: found,
+                operands,
+            }) if *found == grain => {
+                for operand in operands {
+                    flatten(grain, operand, into);
+                }
+            }
+            Subterm::Intrinsic(Intrinsic::BinAppend {
+                grain: found,
+                bin,
+                element,
+            }) if *found == grain => {
+                flatten(grain, bin, into);
+                into.push(Term::intrinsic(Intrinsic::bin_append(
+                    grain,
+                    Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
+                    element.clone(),
+                )));
+            }
+            _ => into.push(value.clone()),
+        }
+    }
+
+    let nested = matches!(
+        &**value,
+        Subterm::Intrinsic(Intrinsic::BinConcat { grain: found, .. } | Intrinsic::BinAppend { grain: found, .. })
+            if *found == grain
+    );
+    nested.then(|| {
+        let mut operands = Vec::new();
+        flatten(grain, value, &mut operands);
+        operands
+    })
+}
+
+/// [`concatenated`] over the `List` carrier, whose append names its parts differently and carries an element type.
+pub(super) fn list_concatenated(value: &Term) -> Option<Vec<Term>> {
+    match &**value {
+        Subterm::Intrinsic(Intrinsic::ListConcat { operands, .. }) => Some(operands.clone()),
+        Subterm::Intrinsic(Intrinsic::ListAppend {
+            element,
+            list,
+            item,
+        }) => Some(vec![
+            list.clone(),
+            Term::intrinsic(Intrinsic::list_append(
+                element.clone(),
+                Term::intrinsic(Intrinsic::List {
+                    element: element.clone(),
+                    items: Vec::new(),
+                }),
+                item.clone(),
+            )),
+        ]),
+        _ => None,
+    }
+}
+
+/// The single generator of a value whose measure is exactly one, or `None` for anything else.
+///
+/// **Why this rather than an inner `get`.** A located one-operand window gives `get(v, i) = get(w, 0)`, and rebuilding that inner read would need a proof that `0 < len(w)` — a proposition the caller's own bound does not state, and one a reducer may not construct: [`crate::Intrinsic::signature`]'s module documentation records that a reducer emitting proofs is the defect the bound fields exist to remove. Reading the generator out of the two shapes a one-element value takes needs no proof at all, and declining every other shape costs reductions and never an answer.
+pub(super) fn single_generator(grain: Grain, operand: &Term) -> Option<Term> {
+    match &**operand {
+        Subterm::Intrinsic(Intrinsic::Bin(found, run))
+            if *found == grain && run.len(grain) == 1 =>
+        {
+            bin_element(grain, operand, 0).map(Term::from)
+        }
+        Subterm::Intrinsic(Intrinsic::BinAppend {
+            grain: found,
+            bin: base,
+            element,
+        }) if *found == grain => match &**base {
+            Subterm::Intrinsic(Intrinsic::Bin(empty, run))
+                if *empty == grain && run.len(grain) == 0 =>
+            {
+                Some(element.clone())
+            }
+            _ => None,
+        },
+        _ => None,
     }
 }
 

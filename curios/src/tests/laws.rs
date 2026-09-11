@@ -243,9 +243,13 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bytes/slice(x[..bs, ..cs], 0, Bytes/len(bs)), bs)",
             "Eq(Bytes/slice(x[..bs, ..cs], Bytes/len(bs), Bytes/len(cs)), cs)",
             "Eq(Bytes/slice(x[..bs, ..cs, ..ds], Bytes/len(bs), Bytes/len(cs)), cs)",
+            // An index at a symbolic seam, which the same walk finds as a window of one. The operand beginning there carries a single generator, read out of it directly rather than through an inner `get` that would need a bound nothing states.
+            "Eq(Bytes/get(x[..bs, k, ..cs], Bytes/len(bs)), k)",
+            "Eq(Bytes/get(x[..bs, k], Bytes/len(bs)), k)",
+            // An append is the concatenation the peel's own law says it is, so a window at its seam locates like any other.
+            "Eq(Bytes/slice(x[..bs, k], 0, Bytes/len(bs)), bs)",
         ],
-        // The locator asymmetry: a window at a symbolic seam is found — the three `slice` rows above say so — and an index at the same seam is not, because the index locator reads literal runs only and declines anything it cannot address by a `usize`. One segment decomposition shared with conversion is what would move this row, and that is surveyed on its own evidence rather than taken here.
-        refused: &["Eq(Bytes/get(x[..bs, k, ..cs], Bytes/len(bs)), k)"],
+        refused: &[],
     },
     Carrier {
         name: "Bits, the free monoid",

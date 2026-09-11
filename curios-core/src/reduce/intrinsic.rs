@@ -716,6 +716,20 @@ pub fn reduce_intrinsic(
                     None => {}
                 }
             }
+            // An index at a seam of a concatenation, where the operand starting there holds exactly one generator: `get([..p, k], len(p)) = k`. It is the walk `seam_window` already performs, asked for a window of one — so what located a symbolic *position* now also locates a symbolic *index*, which the locator above cannot because it reads a `usize`. This closes the asymmetry `curios`'s `tests::laws` recorded: a window at a seam was found and an index at the same seam was not.
+            if let Some(operands) = concatenated(Grain::X, &bin)
+                && let Some(run) = seam_window(
+                    reducer,
+                    &operands,
+                    &index_reduced,
+                    &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+                    |operand| Intrinsic::bin_len(Grain::X, operand.clone()),
+                )?
+                && let [only] = run.as_slice()
+                && let Some(generator) = single_generator(Grain::X, only)
+            {
+                return reducer.reduce(generator).map(Term::unwrap_or_clone);
+            }
             if let Some((head, tail)) = peel_first_atom(Grain::X, &bin) {
                 match &*index_reduced {
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
@@ -819,14 +833,11 @@ pub fn reduce_intrinsic(
                     None => {}
                 }
             }
-            // A window on the seams of a symbolic concatenation — see `seam_window`.
-            if let Subterm::Intrinsic(Intrinsic::BinConcat {
-                grain: Grain::X,
-                operands,
-            }) = &*bin
+            // A window on the seams of a symbolic concatenation — see `seam_window`. An append is one of those, which `concatenated` is what says.
+            if let Some(operands) = concatenated(Grain::X, &bin)
                 && let Some(run) = seam_window(
                     reducer,
-                    operands,
+                    &operands,
                     &start_reduced,
                     &length_reduced,
                     |operand| Intrinsic::bin_len(Grain::X, operand.clone()),
@@ -1043,6 +1054,20 @@ pub fn reduce_intrinsic(
                     None => {}
                 }
             }
+            // An index at a seam of a concatenation, where the operand starting there holds exactly one generator: `get([..p, k], len(p)) = k`. It is the walk `seam_window` already performs, asked for a window of one — so what located a symbolic *position* now also locates a symbolic *index*, which the locator above cannot because it reads a `usize`. This closes the asymmetry `curios`'s `tests::laws` recorded: a window at a seam was found and an index at the same seam was not.
+            if let Some(operands) = concatenated(Grain::B, &bin)
+                && let Some(run) = seam_window(
+                    reducer,
+                    &operands,
+                    &index_reduced,
+                    &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+                    |operand| Intrinsic::bin_len(Grain::B, operand.clone()),
+                )?
+                && let [only] = run.as_slice()
+                && let Some(generator) = single_generator(Grain::B, only)
+            {
+                return reducer.reduce(generator).map(Term::unwrap_or_clone);
+            }
             if let Some((head, tail)) = peel_first_atom(Grain::B, &bin) {
                 match &*index_reduced {
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
@@ -1142,14 +1167,11 @@ pub fn reduce_intrinsic(
                     None => {}
                 }
             }
-            // A window on the seams of a symbolic concatenation — see `seam_window`.
-            if let Subterm::Intrinsic(Intrinsic::BinConcat {
-                grain: Grain::B,
-                operands,
-            }) = &*bin
+            // A window on the seams of a symbolic concatenation — see `seam_window`. An append is one of those, which `concatenated` is what says.
+            if let Some(operands) = concatenated(Grain::B, &bin)
                 && let Some(run) = seam_window(
                     reducer,
-                    operands,
+                    &operands,
                     &start_reduced,
                     &length_reduced,
                     |operand| Intrinsic::bin_len(Grain::B, operand.clone()),
@@ -1449,11 +1471,11 @@ pub fn reduce_intrinsic(
                     None => {}
                 }
             }
-            // A window on the seams of a symbolic concatenation — see `seam_window`.
-            if let Subterm::Intrinsic(Intrinsic::ListConcat { operands, .. }) = &*list
+            // A window on the seams of a symbolic concatenation — see `seam_window`. An append is one of those, which `list_concatenated` is what says.
+            if let Some(operands) = list_concatenated(&list)
                 && let Some(run) = seam_window(
                     reducer,
-                    operands,
+                    &operands,
                     &start_reduced,
                     &length_reduced,
                     |operand| Intrinsic::list_len(type_.clone(), operand.clone()),
