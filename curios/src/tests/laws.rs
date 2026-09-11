@@ -126,6 +126,26 @@ const CARRIERS: &[Carrier] = &[
         refused: &["Eq(Nat/shl(x, 1), x * 2)"],
     },
     Carrier {
+        // Every subject here is bounded below 256 where a `Byte` is built from a `Nat`, never a bare binder: the narrowing states that domain, so an unbounded subject would stop the row elaborating rather than move it between the halves.
+        name: "Byte against Nat",
+        binders: "b: Byte, q: Nat, x: Nat",
+        held: &[
+            // The carrier's own bound, which is what the oracle answers for a `Byte` however the value was produced.
+            "Eq(Byte/to_nat(b) < 256, true)",
+            "Eq(Nat/to_byte(Byte/to_nat(b)), b)",
+            // Euclid's seam, which is what `Key(Nat)`'s recombination rests on: a residual carried in a `Byte` divides out of a scaled symbol, and the remainder twin recovers it.
+            "Eq((256 * q + Byte/to_nat(b)) / 256, q)",
+            "Eq((256 * q + Byte/to_nat(b)) % 256, Byte/to_nat(b))",
+            // The control for the pair below: the same split over a bound the oracle reads off the term directly.
+            "Eq((16 * q + Nat/and(x, 15)) / 16, q)",
+        ],
+        // The transparency pair, and the one asymmetry this grid exists to record. Both rows are true of every value — each subject is masked below the carrier, so neither asks anything about a `Nat` too large to be a `Byte` — and both are refused for one reason: nothing inverts the constructor, so a bound established in `Nat` does not survive the trip through `Byte`. The second states that against its own control above, where the arithmetic is identical and the `Byte` is the only difference.
+        refused: &[
+            "Eq(Byte/to_nat(Nat/to_byte(Nat/and(x, 255))), Nat/and(x, 255))",
+            "Eq((16 * q + Byte/to_nat(Nat/to_byte(Nat/and(x, 15)))) / 16, q)",
+        ],
+    },
+    Carrier {
         name: "Int",
         binders: "i: Int, j: Int",
         held: &[
@@ -225,7 +245,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bytes/slice(x[..bs, ..cs], Bytes/len(bs), Bytes/len(cs)), cs)",
             "Eq(Bytes/slice(x[..bs, ..cs, ..ds], Bytes/len(bs), Bytes/len(cs)), cs)",
         ],
-        refused: &[],
+        // The locator asymmetry: a window at a symbolic seam is found — the three `slice` rows above say so — and an index at the same seam is not, because the index locator reads literal runs only and declines anything it cannot address by a `usize`. One segment decomposition shared with conversion is what would move this row, and that is surveyed on its own evidence rather than taken here.
+        refused: &["Eq(Bytes/get(x[..bs, k, ..cs], Bytes/len(bs)), k)"],
     },
     Carrier {
         name: "Bits, the free monoid",
