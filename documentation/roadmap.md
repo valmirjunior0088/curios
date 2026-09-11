@@ -94,6 +94,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `Cell` (a mutable reference cell over any carrier, with `set` and `get`)
 - [x] [Total `/sys` primitives](design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md) — an operation whose reduction could fail states its precondition
   - [x] The bound reaches Core and the kernel re-checks it, for every one of the twelve
+- [ ] [`Byte` is a `Nat` below 256](roadmap/byte-refinement-spec.md) (probed, not designed)
 
 ## Module System
 
