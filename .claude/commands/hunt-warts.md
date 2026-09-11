@@ -37,7 +37,7 @@ The opposite discovery — a program accepted that should be refused — is not 
 
 1. Find one thing. When more than one is pending, take them by consequence, not by the order found.
 2. Present it: what and where (`file:line`), why it's wrong, the fix, and a real alternative only if one exists. Then stop and wait.
-3. On approval: make exactly that change, nothing beside it. Between fixes the check is `cargo fmt --all` and `cargo clippy --workspace --all-targets --all-features -- -Dwarnings`, plus one fast crate-local test run only to prove a test you added passes. A change touching only prose (`//!`, `///`, comments, Markdown) commits as soon as it is written and waits on no check. Below Ersd, clippy proves nothing about behavior, so a fix there is unverified until the gate runs — say so in the report. Commit the named files only: one-line imperative subject, no body, no trailers.
+3. On approval: make exactly that change, nothing beside it. Between fixes the check is `cargo x fmt` and `cargo x clippy`, plus one fast crate-local test run only to prove a test you added passes. A change touching only prose (`//!`, `///`, comments, Markdown) commits as soon as it is written and waits on no check. Below Ersd, clippy proves nothing about behavior, so a fix there is unverified until the gate runs — say so in the report. Commit the named files only: one-line imperative subject, no body, no trailers.
 4. On skip: record it for the final report and move on.
 5. Repeat. Anything noticed mid-fix queues for a later round, never bundles in.
 

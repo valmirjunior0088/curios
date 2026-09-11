@@ -43,9 +43,20 @@ pub(crate) fn inputs(crate_dir: &str, target: &str) -> PathBuf {
         .join(format!("{target}.inputs"))
 }
 
-/// The cargo that launched this tool, so a recipe builds with the toolchain the alias resolved to.
-pub(crate) fn cargo() -> Command {
-    Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+/// cargo at the workspace root, under the toolchain the alias resolved to.
+pub(crate) fn cargo(arguments: &[&str]) -> Result<(), String> {
+    cargo_in(root(), arguments)
+}
+
+/// [`cargo`] in `directory` instead of the workspace root — the Zed extension, whose tree is its own workspace.
+///
+/// The cargo that launched this tool is the one every recipe runs: `cargo x` is `cargo run`, and cargo sets `CARGO` to the binary performing the build — the toolchain's own, the rustup shim already out of the picture — so a recipe cannot resolve a second time and land somewhere else. The fallback is for the other way in, running the built binary directly.
+pub(crate) fn cargo_in(directory: &Path, arguments: &[&str]) -> Result<(), String> {
+    run_in(
+        directory,
+        Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into())),
+        arguments,
+    )
 }
 
 /// Run one command from the workspace root, echoing it first as a recipe would, and fail with its status.

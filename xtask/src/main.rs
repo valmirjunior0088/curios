@@ -1,6 +1,8 @@
 //! The workspace's build recipes, as `cargo x <recipe>`.
 //!
-//! **A recipe is cargo with flags, then one step cargo does not do.** Every recipe here spawns `cargo` as a separate process and then copies a file, generates the browser bindings, or runs a container. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
+//! **A recipe is cargo with flags, and whatever step cargo does not do.** Every recipe here spawns `cargo` — or npm, in an editor tree — as a separate process, and then copies a file, generates the browser bindings or runs a container, where there is such a step to take. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
+//!
+//! **A recipe takes no arguments it passes on.** A recipe may take a parameter it places itself — a release's version, a program to profile, a package to narrow a check to — but never a tail it hands to the tool unread. Every recipe's command line is written here, so the gate in `CLAUDE.md`, the check workflow and a contributor run one spelling of each step and no two of them can drift. A recipe names a tool and a tree: `cargo` at the workspace root, `grammar` and `vscode` for their npm packages, `zed` for the extension's own workspace. Anything else in a tree is run from inside it, where that tree's README sends the reader.
 //!
 //! **The launcher's isolation is the spawn.** `runtime` builds `curios-runtime` in its own `cargo` invocation, exactly as the recipe it replaced did, so workspace feature unification cannot reach it — `curios` enables `curios-runtime/cranelift`, and a launcher built beside it would carry a compiler. `curios/build.rs` embeds what this recipe copies to `curios/.artifacts/<triple>` and refuses to build without it.
 //!
@@ -66,6 +68,41 @@ enum Recipe {
     #[command(about = "Build the launcher, then the compiler that embeds it")]
     Build,
 
+    #[command(about = "Format the workspace")]
+    Fmt,
+
+    #[command(about = "Check the workspace's formatting without writing")]
+    FmtCheck,
+
+    #[command(about = "Lint the workspace over every target and feature, warnings denied")]
+    Clippy {
+        #[arg(
+            value_name = "PACKAGE",
+            help = "The package to lint; the whole workspace when omitted"
+        )]
+        package: Option<String>,
+    },
+
+    #[command(about = "Run the workspace's tests over every target and feature")]
+    Test {
+        #[arg(
+            value_name = "PACKAGE",
+            help = "The package whose tests to run; the whole workspace when omitted"
+        )]
+        package: Option<String>,
+    },
+
+    #[command(
+        about = "Run the workspace's documentation examples, which testing every target leaves out"
+    )]
+    Doctest {
+        #[arg(
+            value_name = "PACKAGE",
+            help = "The package whose documentation examples to run; the whole workspace when omitted"
+        )]
+        package: Option<String>,
+    },
+
     #[command(
         about = "Build curios-js for wasm32-unknown-unknown and generate the browser bindings under curios-js/.artifacts/<triple>"
     )]
@@ -113,38 +150,39 @@ enum Recipe {
         tag: String,
     },
 
-    #[command(about = "Run npm in editors/grammar")]
-    Grammar {
-        #[arg(
-            trailing_var_arg = true,
-            allow_hyphen_values = true,
-            value_name = "ARGS",
-            help = "Arguments passed to npm, such as `ci` or `test`"
-        )]
-        arguments: Vec<String>,
-    },
+    #[command(about = "Install editors/grammar's dependencies from its lock file")]
+    GrammarInstall,
 
-    #[command(about = "Run npm in editors/vscode")]
-    Vscode {
-        #[arg(
-            trailing_var_arg = true,
-            allow_hyphen_values = true,
-            value_name = "ARGS",
-            help = "Arguments passed to npm, such as `ci`, `test` or `run package`"
-        )]
-        arguments: Vec<String>,
-    },
+    #[command(about = "Run the grammar's tests: regeneration drift, corpus and highlight queries")]
+    GrammarTest,
 
-    #[command(about = "Run cargo in editors/zed, the extension's own workspace")]
-    Zed {
-        #[arg(
-            trailing_var_arg = true,
-            allow_hyphen_values = true,
-            value_name = "ARGS",
-            help = "Arguments passed to cargo, such as `build --release --target wasm32-wasip2`"
-        )]
-        arguments: Vec<String>,
-    },
+    #[command(about = "Install editors/vscode's dependencies from its lock file")]
+    VscodeInstall,
+
+    #[command(about = "Run the VS Code extension's TextMate grammar snapshots")]
+    VscodeTest,
+
+    #[command(
+        about = "Bundle the VS Code extension and write its .vsix under editors/vscode/.artifacts"
+    )]
+    VscodePackage,
+
+    #[command(about = "Format the Zed extension")]
+    ZedFmt,
+
+    #[command(about = "Check the Zed extension's formatting without writing")]
+    ZedFmtCheck,
+
+    #[command(about = "Lint the Zed extension for wasm32-wasip2, warnings denied")]
+    ZedClippy,
+
+    #[command(about = "Build the Zed extension for wasm32-wasip2 in release")]
+    ZedBuild,
+
+    #[command(
+        about = "Check that the grammar rev in editors/zed/extension.toml publishes this tree's grammar"
+    )]
+    ZedTest,
 
     #[command(about = "Remove everything git does not track, including the build products")]
     Clean,
@@ -154,15 +192,37 @@ fn main() -> ExitCode {
     let outcome = match Cli::parse().recipe {
         Recipe::Runtime => runtime(),
         Recipe::Build => build(),
+        Recipe::Fmt => cargo(&["fmt", "--all"]),
+        Recipe::FmtCheck => cargo(&["fmt", "--all", "--", "--check"]),
+        Recipe::Clippy { package } => scoped(
+            package.as_deref(),
+            &["clippy"],
+            &["--all-targets", "--all-features", "--", "-Dwarnings"],
+        ),
+        Recipe::Test { package } => scoped(
+            package.as_deref(),
+            &["test"],
+            &["--all-targets", "--all-features"],
+        ),
+        Recipe::Doctest { package } => {
+            scoped(package.as_deref(), &["test"], &["--doc", "--all-features"])
+        }
         Recipe::Js => js(),
         Recipe::RustDocs => rust_docs(),
         Recipe::StdDocs => std_docs(),
         Recipe::Installer { version } => installer(&version),
         Recipe::Profile { source } => profile(&source),
         Recipe::Benchmarks { tag } => benchmarks(&tag),
-        Recipe::Grammar { arguments } => bridge("grammar", Command::new("npm"), &arguments),
-        Recipe::Vscode { arguments } => bridge("vscode", Command::new("npm"), &arguments),
-        Recipe::Zed { arguments } => bridge("zed", cargo(), &arguments),
+        Recipe::GrammarInstall => grammar(&["clean-install"]),
+        Recipe::GrammarTest => grammar(&["test"]),
+        Recipe::VscodeInstall => vscode(&["clean-install"]),
+        Recipe::VscodeTest => vscode(&["test"]),
+        Recipe::VscodePackage => vscode(&["run", "package"]),
+        Recipe::ZedFmt => zed(&["fmt", "--all"]),
+        Recipe::ZedFmtCheck => zed(&["fmt", "--all", "--", "--check"]),
+        Recipe::ZedClippy => zed(&["clippy", "--target", "wasm32-wasip2", "--", "-Dwarnings"]),
+        Recipe::ZedBuild => zed(&["build", "--release", "--target", "wasm32-wasip2"]),
+        Recipe::ZedTest => zed(&["test"]),
         Recipe::Clean => clean(),
     };
 
@@ -177,17 +237,14 @@ fn main() -> ExitCode {
 }
 
 fn runtime() -> Result<(), String> {
-    run(
-        cargo(),
-        &[
-            "build",
-            "--release",
-            "--package",
-            "curios-runtime",
-            "--target",
-            HOST_TRIPLE,
-        ],
-    )?;
+    cargo(&[
+        "build",
+        "--release",
+        "--package",
+        "curios-runtime",
+        "--target",
+        HOST_TRIPLE,
+    ])?;
 
     file_with_inputs(
         &built(HOST_TRIPLE, "curios-runtime"),
@@ -198,26 +255,35 @@ fn runtime() -> Result<(), String> {
     Ok(())
 }
 
+/// One cargo check over the whole workspace, or over the one package it was given, with `before` naming the subcommand and `after` what follows the scope.
+///
+/// Which packages exist is cargo's question and not a list kept here. A name the workspace does not hold is refused before anything is built, though not by name: `--all-features` is what cargo notices first, so it reports a feature selection outside the workspace.
+fn scoped(package: Option<&str>, before: &[&str], after: &[&str]) -> Result<(), String> {
+    let scope = match package {
+        Some(package) => vec!["--package", package],
+        None => vec!["--workspace"],
+    };
+
+    cargo(&[before, scope.as_slice(), after].concat())
+}
+
 fn build() -> Result<(), String> {
     runtime()?;
 
-    run(cargo(), &["build", "--release", "--package", "curios"])?;
+    cargo(&["build", "--release", "--package", "curios"])?;
 
     Ok(())
 }
 
 fn js() -> Result<(), String> {
-    run(
-        cargo(),
-        &[
-            "build",
-            "--release",
-            "--package",
-            "curios-js",
-            "--target",
-            BROWSER_TRIPLE,
-        ],
-    )?;
+    cargo(&[
+        "build",
+        "--release",
+        "--package",
+        "curios-js",
+        "--target",
+        BROWSER_TRIPLE,
+    ])?;
 
     bindgen_web(
         &built(BROWSER_TRIPLE, "curios_js.wasm"),
@@ -231,15 +297,12 @@ fn js() -> Result<(), String> {
 fn rust_docs() -> Result<(), String> {
     runtime()?;
 
-    run(
-        cargo(),
-        &[
-            "doc",
-            "--workspace",
-            "--no-deps",
-            "--document-private-items",
-        ],
-    )?;
+    cargo(&[
+        "doc",
+        "--workspace",
+        "--no-deps",
+        "--document-private-items",
+    ])?;
 
     let landing = target_directory().join("doc").join("index.html");
     fs::write(
@@ -296,22 +359,19 @@ fn profile(source: &Path) -> Result<(), String> {
     // The one place the stream's location is spelled. The compiler takes it as an argument and keeps no default, so what is written and what is read back cannot drift — and it is derived here the way every other path in this crate is.
     let stream = root().join("curios/.artifacts/profile.tsv");
 
-    run(
-        cargo(),
-        &[
-            "run",
-            "--release",
-            "--package",
-            "curios",
-            "--features",
-            "profile",
-            "--",
-            "--profile",
-            &stream.to_string_lossy(),
-            "run",
-            &source.to_string_lossy(),
-        ],
-    )?;
+    cargo(&[
+        "run",
+        "--release",
+        "--package",
+        "curios",
+        "--features",
+        "profile",
+        "--",
+        "--profile",
+        &stream.to_string_lossy(),
+        "run",
+        &source.to_string_lossy(),
+    ])?;
 
     print!("{}", summarize(&stream)?.render());
     println!("\nstream: {}", stream.display());
@@ -361,14 +421,27 @@ fn benchmarks(tag: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn bridge(tree: &str, command: Command, arguments: &[String]) -> Result<(), String> {
+/// npm in `editors/grammar`, the tree-sitter grammar's own package.
+fn grammar(arguments: &[&str]) -> Result<(), String> {
     run_in(
-        &root().join("editors").join(tree),
-        command,
-        &arguments.iter().map(String::as_str).collect::<Vec<_>>(),
-    )?;
+        &root().join("editors").join("grammar"),
+        Command::new("npm"),
+        arguments,
+    )
+}
 
-    Ok(())
+/// npm in `editors/vscode`, the VS Code extension's own package.
+fn vscode(arguments: &[&str]) -> Result<(), String> {
+    run_in(
+        &root().join("editors").join("vscode"),
+        Command::new("npm"),
+        arguments,
+    )
+}
+
+/// cargo in `editors/zed`, the extension's own workspace.
+fn zed(arguments: &[&str]) -> Result<(), String> {
+    cargo_in(&root().join("editors").join("zed"), arguments)
 }
 
 fn clean() -> Result<(), String> {

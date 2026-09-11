@@ -43,7 +43,7 @@ This is the one setting that does not depend on the environment, and the one to 
 ## Building it from this repository
 
 ```sh
-cargo x zed build --release --target wasm32-wasip2
+cargo x zed-build
 ```
 
 Install it with **zed: install dev extension** from the command palette, pointing at this directory. Zed builds the extension and its grammar itself, so `extension.wasm` and `grammars/` appear here as build products and are not committed.

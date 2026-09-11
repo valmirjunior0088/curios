@@ -97,11 +97,11 @@ The build recipes are `cargo x <recipe>`, reached through the alias in `.cargo/c
 ### While iterating
 
 - Run the smallest check or test that exercises the changed behavior, and prefer stage-local crate checks.
-- **In a multi-step task, run the full gate once, after the last step.** Between steps, `cargo clippy --workspace --all-targets --all-features -- -Dwarnings` plus `cargo fmt --all` is the check, even when each step is its own commit. Do not add `cargo check` beside it.
+- **In a multi-step task, run the full gate once, after the last step.** Between steps, `cargo x clippy` plus `cargo x fmt` is the check, even when each step is its own commit. Do not add `cargo check` beside it.
 - Keep the feature set constant within a work session: `--all-features` enables `profile` and a plain `cargo build` does not, and alternating maintains two prelude archives that evict each other.
 - The full suite can take more than five minutes. Run it in the background with output redirected to a file, and read the file after completion.
 
-`cargo clippy --workspace` already elaborates every `/std` module, erases them through `erase_unit`, and certifies the whole module with the kernel. A change on the Text, Core, Ersd or certification path is therefore exercised over the entire standard library by a step already in the gate, and needs only its own crate's tests beside it. Nothing below Ersd is reached, so `curios-cont` and `curios-wasm` are detected only by the cross-stage corpus in `curios`.
+`cargo x clippy` already elaborates every `/std` module, erases them through `erase_unit`, and certifies the whole module with the kernel. A change on the Text, Core, Ersd or certification path is therefore exercised over the entire standard library by a step already in the gate, and needs only its own crate's tests beside it. Nothing below Ersd is reached, so `curios-cont` and `curios-wasm` are detected only by the cross-stage corpus in `curios`.
 
 ### Before handing off code changes
 
@@ -109,21 +109,22 @@ Run this gate, in order. All commands must pass; Clippy warnings are errors in C
 
 ```sh
 cargo x runtime
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -Dwarnings
-cargo test --workspace --all-targets --all-features
+cargo x fmt-check
+cargo x clippy
+cargo x test
+cargo x doctest
 cargo x rust-docs
 cargo x std-docs
 cargo x js
-cargo x grammar clean-install
-cargo x grammar test
-cargo x vscode clean-install
-cargo x vscode test
-cargo x vscode run package
-cargo x zed fmt --all -- --check
-cargo x zed clippy --target wasm32-wasip2 -- -Dwarnings
-cargo x zed build --release --target wasm32-wasip2
-cargo x zed test
+cargo x grammar-install
+cargo x grammar-test
+cargo x vscode-install
+cargo x vscode-test
+cargo x vscode-package
+cargo x zed-fmt-check
+cargo x zed-clippy
+cargo x zed-build
+cargo x zed-test
 ```
 
 Why the gate holds these steps and no others — what each is the sole check for, and what was left out — is [every gate step catches what no other step does](documentation/design/toolchain/every-gate-step-catches-what-no-other-step-does.md). The browser and editor steps need the `wasm32-unknown-unknown` and `wasm32-wasip2` targets installed and `npm` on `PATH`. Measure a step and name the step; never quote a whole-gate total.

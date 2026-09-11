@@ -26,8 +26,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: xtask
       - name: Run rustfmt
-        run: cargo fmt --all -- --check
+        run: cargo x fmt-check
 
   lints:
     name: Lints
@@ -46,7 +49,7 @@ jobs:
       - name: Build runtime launcher
         run: cargo x runtime
       - name: Run Clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -Dwarnings
+        run: cargo x clippy
 
   tests:
     name: Tests
@@ -63,9 +66,9 @@ jobs:
       - name: Build runtime launcher
         run: cargo x runtime
       - name: Run tests
-        run: cargo test --workspace --all-targets --all-features
+        run: cargo x test
       - name: Run doctests
-        run: cargo test --workspace --doc --all-features
+        run: cargo x doctest
 
   rust-docs:
     name: Rust documentation
@@ -128,9 +131,9 @@ jobs:
         with:
           key: xtask
       - name: Install dependencies
-        run: cargo x grammar clean-install
+        run: cargo x grammar-install
       - name: Run grammar tests
-        run: cargo x grammar test
+        run: cargo x grammar-test
 
   vscode:
     name: VS Code extension
@@ -148,11 +151,11 @@ jobs:
         with:
           key: xtask
       - name: Install dependencies
-        run: cargo x vscode clean-install
+        run: cargo x vscode-install
       - name: Run grammar snapshot tests
-        run: cargo x vscode test
+        run: cargo x vscode-test
       - name: Package the extension
-        run: cargo x vscode run package
+        run: cargo x vscode-package
 
   zed:
     name: Zed extension
@@ -168,10 +171,10 @@ jobs:
             .
             editors/zed
       - name: Run rustfmt
-        run: cargo x zed fmt --all -- --check
+        run: cargo x zed-fmt-check
       - name: Run Clippy
-        run: cargo x zed clippy --target wasm32-wasip2 -- -Dwarnings
+        run: cargo x zed-clippy
       - name: Build extension
-        run: cargo x zed build --release --target wasm32-wasip2
+        run: cargo x zed-build
       - name: Check the grammar rev publishes this grammar
-        run: cargo x zed test
+        run: cargo x zed-test

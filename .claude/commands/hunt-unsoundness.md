@@ -26,7 +26,7 @@ Hunt agreement on a wrong rule. Disagreement already fails the build, and a prog
 
 Write the test before the fix; its failure is the demonstration. It goes beside the entry's existing fixtures, in that file's own conventions, and three hold everywhere: assert the diagnostic that names the refusing rule, never bare failure; pair it with a control that still passes; carry in the comment, in the past tense, how the hole was verified while open. The entry's status updates in the same commit. A test is never committed ignored and never committed alone.
 
-A null is a result. Commit the probe and the status it moves. Its gate is `cargo x runtime`, `cargo fmt --all -- --check`, workspace clippy with `-Dwarnings`, and one targeted run of the probe as committed; a probe leaves every rule as it found it, so the suite has nothing to catch.
+A null is a result. Commit the probe and the status it moves. Its gate is `cargo x runtime`, `cargo x fmt-check`, `cargo x clippy`, and one targeted run of the probe as committed; a probe leaves every rule as it found it, so the suite has nothing to catch.
 
 A fix changes what the compiler decides, so it clears CLAUDE.md's full hand-off gate, suite output redirected to a file, plus two judgments the gate cannot make: the control passes, and the diff is additive or corrective only — no deleted assertion, loosened bound, `#[ignore]` or edited expectation. Do not run the ignored `kernel_disagreements`; it tallies and never fails.
 

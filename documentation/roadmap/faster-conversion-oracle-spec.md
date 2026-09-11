@@ -8,7 +8,7 @@ Not refined yet. The ceiling is measured and the space is unusually well mapped 
 
 A proposition proved by reduction is priced by the checker's evaluator, so the reach of proof-by-computation is set by an interpreter's constant factor rather than by the claim. [A bound is stated in a decided proposition and discharged by reduction](../design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md) already meets that ceiling in production — "a bound over a *computed* value runs that computation at elaboration time, and the step budget is what decides whether it finishes" — and [The soundness perimeter](../design/language/the-soundness-perimeter.md) states the consequence as a boundary: *well-typed* is budget-relative. Every proof this ceiling refuses is one an author must instead write as a lemma, which is often right and is sometimes only cheaper for the checker.
 
-What lifts the ceiling lifts it for a class, not a spelling: the same evaluator serves the bounds oracle, the decided propositions the elaborator fills, conversion at every goal, and the fixed prelude's own certification, which is the bulk of what `cargo clippy --workspace` spends.
+What lifts the ceiling lifts it for a class, not a spelling: the same evaluator serves the bounds oracle, the decided propositions the elaborator fills, conversion at every goal, and the fixed prelude's own certification, which is the bulk of what `cargo x clippy` spends.
 
 ## What was measured
 
