@@ -1,7 +1,28 @@
 pub use /sys/{Byte};
-pub use /sys/Byte/{to_nat, eql, lt, le, gt, ge};
+pub use /sys/Byte/{to_nat};
+
 use /std/{Ordering, Nat, Bool, Show, Spell, Ord};
 use /std/ops/{Eql, Cmp, And, Or};
+
+-- | Whether the two are equal.
+pub let eql(a: Byte, b: Byte) -> Bool =
+    Nat/eql(to_nat(a), to_nat(b));
+
+-- | Whether `a` is below `b`.
+pub let lt(a: Byte, b: Byte) -> Bool =
+    Nat/lt(to_nat(a), to_nat(b));
+
+-- | Whether `a` is below `b` or equal to it.
+pub let le(a: Byte, b: Byte) -> Bool =
+    Nat/le(to_nat(a), to_nat(b));
+
+-- | Whether `a` is above `b`.
+pub let gt(a: Byte, b: Byte) -> Bool =
+    Nat/gt(to_nat(a), to_nat(b));
+
+-- | Whether `a` is above `b` or equal to it.
+pub let ge(a: Byte, b: Byte) -> Bool =
+    Nat/ge(to_nat(a), to_nat(b));
 
 -- | The bitwise conjunction.
 pub let and(a: Byte, b: Byte) -> Byte =

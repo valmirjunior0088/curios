@@ -87,9 +87,6 @@ pub enum Intrinsic {
         nat: Term,
         below: Term,
     },
-    ByteEql(Term, Term),
-    ByteLt(Term, Term),
-    ByteLe(Term, Term),
     IntType,
     Int(Integer),
     IntEql(Term, Term),
@@ -606,10 +603,7 @@ impl Intrinsic {
             | Intrinsic::ListType(t)
             | Intrinsic::IoType(t) => visit(t),
 
-            Intrinsic::ByteEql(a, b)
-            | Intrinsic::ByteLt(a, b)
-            | Intrinsic::ByteLe(a, b)
-            | Intrinsic::NatEql(a, b)
+            Intrinsic::NatEql(a, b)
             | Intrinsic::NatNeq(a, b)
             | Intrinsic::NatAdd(a, b)
             | Intrinsic::NatSub(a, b)
@@ -915,9 +909,6 @@ impl Intrinsic {
                 nat: visit.visit_subterm(nat),
                 below: visit.visit_subterm(below),
             },
-            Intrinsic::ByteEql(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteEql),
-            Intrinsic::ByteLt(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteLt),
-            Intrinsic::ByteLe(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteLe),
             Intrinsic::BoolAnd(l, r) => traverse_binary(l, r, visit, Intrinsic::BoolAnd),
             Intrinsic::BoolOr(l, r) => traverse_binary(l, r, visit, Intrinsic::BoolOr),
             Intrinsic::BoolXor(l, r) => traverse_binary(l, r, visit, Intrinsic::BoolXor),

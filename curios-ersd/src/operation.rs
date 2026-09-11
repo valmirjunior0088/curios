@@ -27,9 +27,6 @@ pub enum Operation {
     NatShr,
     ByteToNat,
     NatToByte,
-    ByteEql,
-    ByteLt,
-    ByteLe,
     IntEql,
     IntNeq,
     IntAdd,
@@ -113,9 +110,6 @@ impl Operation {
             | Self::NatXor
             | Self::NatShl
             | Self::NatShr
-            | Self::ByteEql
-            | Self::ByteLt
-            | Self::ByteLe
             | Self::IntEql
             | Self::IntNeq
             | Self::IntAdd

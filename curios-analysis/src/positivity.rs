@@ -723,9 +723,6 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::Byte(_)
             | Intrinsic::ByteToNat(..)
             | Intrinsic::NatToByte { .. }
-            | Intrinsic::ByteEql(..)
-            | Intrinsic::ByteLt(..)
-            | Intrinsic::ByteLe(..)
             | Intrinsic::Int(_)
             | Intrinsic::IntEql(..)
             | Intrinsic::IntNeq(..)

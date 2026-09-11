@@ -48,7 +48,6 @@ fn bool_and_byte_collapse_onto_the_nat_carrier() {
             operands: vec![Atom::Constant(t), Atom::Constant(f)],
         },
     );
-    let byte = builder.constant(Constant::Byte(7));
     let masked = builder.let_value(
         None,
         Rhs::Operation {
@@ -56,22 +55,14 @@ fn bool_and_byte_collapse_onto_the_nat_carrier() {
             operands: vec![Atom::Value(both)],
         },
     );
-    let compared = builder.let_value(
-        None,
-        Rhs::Operation {
-            operation: Operation::ByteEql,
-            operands: vec![Atom::Value(masked), Atom::Constant(byte)],
-        },
-    );
-    let entry = builder.seal_block(Terminator::Return(Atom::Value(compared)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(masked)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
     let printed = lowered(&module);
-    // Bool ops ride Nat bit ops; NatToByte masks; Byte comparisons are Nat comparisons. No Bool- or Byte-shaped operation survives the door.
+    // Bool ops ride Nat bit ops and `NatToByte` masks, so no Bool- or Byte-shaped operation survives the door. The mask is what makes the narrowing total *here* — Core refuses an out-of-range operand and `NatToByte`'s own `below` field promises this can only ever be narrowing a value already in range, so the instruction is provably redundant rather than load-bearing, and it is emitted because the carrier is shared rather than because anything could be out of range.
     assert!(printed.contains("NatAnd"), "{printed}");
     assert!(printed.contains("255"), "{printed}");
-    assert!(printed.contains("NatEql"), "{printed}");
 }
 
 #[test]

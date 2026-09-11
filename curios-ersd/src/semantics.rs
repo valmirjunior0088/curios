@@ -238,12 +238,13 @@ impl Semantics {
             IntDiv | FltToNat | FltToInt | FltOfLeBytes => LocalBehavior::trap(),
             NatDiv | NatRem | IntRem | BoolAnd | BoolOr | BoolXor | BoolEql | BoolNeq | NatEql
             | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatLe | NatAnd | NatOr | NatXor
-            | NatShl | NatShr | ByteToNat | NatToByte | ByteEql | ByteLt | ByteLe | IntEql
-            | IntNeq | IntAdd | IntSub | IntMul | IntLt | IntLe | IntAnd | IntOr | IntXor
-            | IntShl | IntShr | FltAdd | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq
-            | FltLt | FltLe | FltMin | FltMax | FltCopysign | FltNeg | FltAbs | FltSqrt
-            | FltFloor | FltCeil | FltTrunc | FltNearest | NatToInt | NatToFlt | IntToNat
-            | IntToFlt | FltToLeBytes => LocalBehavior::pure(),
+            | NatShl | NatShr | ByteToNat | NatToByte | IntEql | IntNeq | IntAdd | IntSub
+            | IntMul | IntLt | IntLe | IntAnd | IntOr | IntXor | IntShl | IntShr | FltAdd
+            | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltLe | FltMin
+            | FltMax | FltCopysign | FltNeg | FltAbs | FltSqrt | FltFloor | FltCeil | FltTrunc
+            | FltNearest | NatToInt | NatToFlt | IntToNat | IntToFlt | FltToLeBytes => {
+                LocalBehavior::pure()
+            }
         }
     }
 
@@ -380,10 +381,6 @@ impl Semantics {
                 NatNeq => Constant::Bool(nat(0)? != nat(1)?),
                 NatLt => Constant::Bool(nat(0)? < nat(1)?),
                 NatLe => Constant::Bool(nat(0)? <= nat(1)?),
-
-                ByteEql => Constant::Bool(byte(0)? == byte(1)?),
-                ByteLt => Constant::Bool(byte(0)? < byte(1)?),
-                ByteLe => Constant::Bool(byte(0)? <= byte(1)?),
 
                 IntAdd => Constant::Int(int(0)?.clone() + int(1)?.clone()),
                 IntSub => Constant::Int(int(0)?.clone() - int(1)?.clone()),

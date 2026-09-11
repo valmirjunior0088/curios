@@ -768,15 +768,6 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::Byte(value) => pure(format!("0x{value:02X}")),
         Intrinsic::ByteToNat(operand) => print_intrinsic_call("Byte/to_nat", vec![], vec![operand]),
         Intrinsic::NatToByte { nat, .. } => print_intrinsic_call("Nat/to_byte", vec![], vec![nat]),
-        Intrinsic::ByteEql(left, right) => {
-            print_intrinsic_call("Byte/eql", vec![], vec![left, right])
-        }
-        Intrinsic::ByteLt(left, right) => {
-            print_intrinsic_call("Byte/lt", vec![], vec![left, right])
-        }
-        Intrinsic::ByteLe(left, right) => {
-            print_intrinsic_call("Byte/le", vec![], vec![left, right])
-        }
         Intrinsic::IntToNat { int: operand, .. } => {
             print_intrinsic_call("Int/to_nat", vec![], vec![operand])
         }

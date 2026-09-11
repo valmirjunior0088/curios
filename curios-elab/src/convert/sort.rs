@@ -124,9 +124,6 @@ impl Sort {
                 | Intrinsic::BoolOr(..)
                 | Intrinsic::BoolXor(..)
                 | Intrinsic::Byte(..)
-                | Intrinsic::ByteEql(..)
-                | Intrinsic::ByteLt(..)
-                | Intrinsic::ByteLe(..)
                 | Intrinsic::ByteToNat(..)
                 | Intrinsic::Cell { .. }
                 | Intrinsic::CellGet { .. }

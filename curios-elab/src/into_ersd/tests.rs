@@ -1,3 +1,4 @@
+use crate::reduce::test_support::qed;
 use curios_core::Zonked;
 use curios_core::*;
 use {
@@ -98,22 +99,23 @@ fn bool_and_byte_keep_their_shapes() {
             Term::intrinsic(Intrinsic::Bool(true)),
             Term::intrinsic(Intrinsic::Bool(false)),
         )),
-        Term::intrinsic(Intrinsic::ByteEql(
-            Term::intrinsic(Intrinsic::Byte(7)),
-            Term::intrinsic(Intrinsic::Byte(8)),
+        // Erasure drops the narrowing's bound, which is the half this asserts.
+        Term::intrinsic(Intrinsic::nat_to_byte(
+            Term::intrinsic(Intrinsic::Nat(Nat::new(7usize))),
+            qed(),
         )),
     );
     let erased = erase(
         &mut context,
         &module(Vec::new(), body),
-        Term::intrinsic(Intrinsic::BoolType),
+        Term::intrinsic(Intrinsic::ByteType),
     );
     assert_eq!(
         erased.to_string(),
         "\
 entry {
     ~v0$b = BoolAnd(true, false)
-    ~v1 = ByteEql(7:byte, 8:byte)
+    ~v1 = NatToByte(7:nat)
     return ~v1
 }
 "

@@ -285,10 +285,7 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
                 byte(),
                 decided(
                     syntax,
-                    applied(
-                        sys_op(&["sys", "Nat", "lt"]),
-                        vec![name("a"), nat_lit(256)],
-                    ),
+                    applied(sys_op(&["sys", "Nat", "lt"]), vec![name("a"), nat_lit(256)]),
                 ),
                 |nat, below| Intrinsic::NatToByte { nat, below },
             ),
@@ -297,32 +294,10 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
 }
 
 fn byte_ops() -> Vec<Decl> {
-    vec![
-        documented(
-            &["The same number as a `Nat`."],
-            unary("to_nat", byte(), nat(), Intrinsic::ByteToNat),
-        ),
-        documented(
-            &["Whether the two are equal."],
-            binary("eql", byte(), bool_(), Intrinsic::ByteEql),
-        ),
-        documented(
-            &["Whether `a` is below `b`."],
-            binary("lt", byte(), bool_(), Intrinsic::ByteLt),
-        ),
-        documented(
-            &["Whether `a` is below `b` or equal to it."],
-            binary("le", byte(), bool_(), Intrinsic::ByteLe),
-        ),
-        documented(
-            &["Whether `a` is above `b`."],
-            binary("gt", byte(), bool_(), |a, b| Intrinsic::ByteLt(b, a)),
-        ),
-        documented(
-            &["Whether `a` is above `b` or equal to it."],
-            binary("ge", byte(), bool_(), |a, b| Intrinsic::ByteLe(b, a)),
-        ),
-    ]
+    vec![documented(
+        &["The same number as a `Nat`."],
+        unary("to_nat", byte(), nat(), Intrinsic::ByteToNat),
+    )]
 }
 
 // `Bool` rides the same i31ref/u32 carrier as `Nat`, with `false`/`true` as `0`/`1`. `and`/`or`/`xor` are bitwise machine ops on those bits — exact boolean logic — and `eql` is the `Nat` equality op (`i32.eq`) on that single bit, so all four are intrinsics rather than `match` definitions. `not` has no machine instruction; `/std/Bool` defines it as `xor(b, true)`.

@@ -35,24 +35,6 @@ pub(super) fn reduce_bool_binary(
     }))
 }
 
-pub(super) fn reduce_byte_binary(
-    reducer: &mut impl Reducer,
-    left: &Term,
-    right: &Term,
-    fold: impl FnOnce(u8, u8) -> bool,
-    rebuild: impl FnOnce(Term, Term) -> Intrinsic,
-) -> Result<Subterm, ReduceError> {
-    let left = reducer.reduce_forced(left.clone())?;
-    let right = reducer.reduce_forced(right.clone())?;
-
-    Ok(Subterm::Intrinsic(match (&*left, &*right) {
-        (Subterm::Intrinsic(Intrinsic::Byte(left)), Subterm::Intrinsic(Intrinsic::Byte(right))) => {
-            Intrinsic::Bool(fold(*left, *right))
-        }
-        _ => rebuild(left, right),
-    }))
-}
-
 /// `Int/shl` and `Int/shr`: a signed value over a `Nat` count, the signed twins of [`reduce_nat_shl`] and its right shift. `cost` is what the fold may construct from the value's width and the count — [`shift_bound`] for a left shift, whose result grows by the count, and [`operand_bound`] for a right shift, whose result never does — and `fold` declines only a count too large to be a shift count at all.
 pub(super) fn reduce_int_shift(
     reducer: &mut impl Reducer,

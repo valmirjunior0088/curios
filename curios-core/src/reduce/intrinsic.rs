@@ -92,25 +92,17 @@ pub fn reduce_intrinsic(
 
             let span = nat.span();
             match nat.as_nat().map(|value| value.to_natural()) {
-                Some(Some(value)) => match value.to_u32().and_then(|value| u8::try_from(value).ok())
-                {
-                    Some(value) => Ok(Subterm::Intrinsic(Intrinsic::Byte(value))),
-                    None => Err(ReduceError::NatToByteAbove { value, span }),
-                },
+                Some(Some(value)) => {
+                    match value.to_u32().and_then(|value| u8::try_from(value).ok()) {
+                        Some(value) => Ok(Subterm::Intrinsic(Intrinsic::Byte(value))),
+                        None => Err(ReduceError::NatToByteAbove { value, span }),
+                    }
+                }
                 _ => Ok(Subterm::Intrinsic(Intrinsic::NatToByte {
                     nat,
                     below: below.clone(),
                 })),
             }
-        }
-        Intrinsic::ByteEql(l, r) => {
-            reduce_byte_binary(reducer, l, r, |l, r| l == r, Intrinsic::ByteEql)
-        }
-        Intrinsic::ByteLt(l, r) => {
-            reduce_byte_binary(reducer, l, r, |l, r| l < r, Intrinsic::ByteLt)
-        }
-        Intrinsic::ByteLe(l, r) => {
-            reduce_byte_binary(reducer, l, r, |l, r| l <= r, Intrinsic::ByteLe)
         }
         Intrinsic::NatEql(left, right) => reduce_nat_compare(
             reducer,

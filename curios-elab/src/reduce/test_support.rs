@@ -11,7 +11,7 @@ pub(super) fn nominal(path: &str) -> Global {
 }
 
 /// A stand-in for a discharged bound. Reduction never inspects one — proof irrelevance makes its value unobservable, and these tests are about the fold laws rather than the obligation.
-pub(super) fn qed() -> Term {
+pub(crate) fn qed() -> Term {
     Term::free_var(&Free::local(9_999, Some("qed")))
 }
 

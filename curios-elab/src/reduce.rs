@@ -7,7 +7,7 @@ mod partial_arithmetic_tests;
 #[cfg(test)]
 mod reduction_tests;
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 
 use {
     super::{Context, zonk_solved_term_metas},
