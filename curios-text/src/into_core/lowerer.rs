@@ -1161,7 +1161,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::ByteType => curios_core::Intrinsic::ByteType,
             Intrinsic::Byte(value) => curios_core::Intrinsic::Byte(*value),
             Intrinsic::ByteToNat(inner) => curios_core::Intrinsic::ByteToNat(self.term(inner)?),
-            Intrinsic::NatToByte(inner) => curios_core::Intrinsic::NatToByte(self.term(inner)?),
+            Intrinsic::NatToByte { nat, below } => {
+                curios_core::Intrinsic::nat_to_byte(self.term(nat)?, self.term(below)?)
+            }
             Intrinsic::ByteEql(left, right) => {
                 curios_core::Intrinsic::ByteEql(self.term(left)?, self.term(right)?)
             }

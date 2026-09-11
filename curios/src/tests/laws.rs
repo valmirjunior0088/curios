@@ -138,12 +138,11 @@ const CARRIERS: &[Carrier] = &[
             "Eq((256 * q + Byte/to_nat(b)) % 256, Byte/to_nat(b))",
             // The control for the pair below: the same split over a bound the oracle reads off the term directly.
             "Eq((16 * q + Nat/and(x, 15)) / 16, q)",
-        ],
-        // The transparency pair, and the one asymmetry this grid exists to record. Both rows are true of every value — each subject is masked below the carrier, so neither asks anything about a `Nat` too large to be a `Byte` — and both are refused for one reason: nothing inverts the constructor, so a bound established in `Nat` does not survive the trip through `Byte`. The second states that against its own control above, where the arithmetic is identical and the `Byte` is the only difference.
-        refused: &[
+            // The transparency pair, which moved here when the narrowing took its domain. `Nat/to_byte` states `nat < 256`, so the constructor is invertible and `Byte/to_nat` reduces back through it — which is what lets the second row hold: it is the control above with the operand sent through `Byte` and back, the arithmetic identical and the round trip no longer erasing what the oracle could read.
             "Eq(Byte/to_nat(Nat/to_byte(Nat/and(x, 255))), Nat/and(x, 255))",
             "Eq((16 * q + Byte/to_nat(Nat/to_byte(Nat/and(x, 15)))) / 16, q)",
         ],
+        refused: &[],
     },
     Carrier {
         name: "Int",

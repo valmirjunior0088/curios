@@ -80,7 +80,13 @@ pub enum Intrinsic {
     ByteType,
     Byte(u8),
     ByteToNat(Term),
-    NatToByte(Term),
+    /// `below` proves `nat < 256`, the domain the narrowing to `Byte` has. Carried for the reason [`Intrinsic::NatDiv`]'s bound is: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving the kernel a bare narrowing to admit.
+    ///
+    /// Before this field the operation *masked*, which made it total by changing a value — the one narrowing on a numeric carrier that did, and the thing `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md` forbids. Stating the domain is also what makes the constructor invertible, so `Byte/to_nat` can see back through it and a bound established in `Nat` survives the round trip.
+    NatToByte {
+        nat: Term,
+        below: Term,
+    },
     ByteEql(Term, Term),
     ByteLt(Term, Term),
     ByteLe(Term, Term),
@@ -588,7 +594,6 @@ impl Intrinsic {
             | Intrinsic::NatToFlt(t)
             | Intrinsic::IntToFlt(t)
             | Intrinsic::ByteToNat(t)
-            | Intrinsic::NatToByte(t)
             | Intrinsic::FltNeg(t)
             | Intrinsic::FltAbs(t)
             | Intrinsic::FltSqrt(t)
@@ -729,6 +734,7 @@ impl Intrinsic {
                 eight_bytes: p,
             }
             | Intrinsic::IntToNat { int: a, non_neg: p }
+            | Intrinsic::NatToByte { nat: a, below: p }
             | Intrinsic::FltToNat { flt: a, non_neg: p }
             | Intrinsic::FltToInt { flt: a, finite: p } => {
                 visit(a);
@@ -905,7 +911,10 @@ impl Intrinsic {
             Intrinsic::ByteType => Intrinsic::ByteType,
             Intrinsic::Byte(value) => Intrinsic::Byte(*value),
             Intrinsic::ByteToNat(inner) => Intrinsic::ByteToNat(visit.visit_subterm(inner)),
-            Intrinsic::NatToByte(inner) => Intrinsic::NatToByte(visit.visit_subterm(inner)),
+            Intrinsic::NatToByte { nat, below } => Intrinsic::NatToByte {
+                nat: visit.visit_subterm(nat),
+                below: visit.visit_subterm(below),
+            },
             Intrinsic::ByteEql(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteEql),
             Intrinsic::ByteLt(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteLt),
             Intrinsic::ByteLe(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteLe),

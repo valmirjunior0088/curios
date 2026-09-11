@@ -117,6 +117,9 @@ pub enum Error {
     IntToNatNegative {
         value: Box<Integer>,
     },
+    NatToByteAbove {
+        value: Box<Natural>,
+    },
     UniverseInconsistency {
         lower: Level,
         upper: Level,
@@ -539,6 +542,10 @@ impl Error {
                 Error::DivisionByZero { kind }.at_opt(span)
             }
             ReduceError::IntToNatNegative { value, span } => Error::IntToNatNegative {
+                value: Box::new(value),
+            }
+            .at_opt(span),
+            ReduceError::NatToByteAbove { value, span } => Error::NatToByteAbove {
                 value: Box::new(value),
             }
             .at_opt(span),

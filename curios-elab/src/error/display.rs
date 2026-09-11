@@ -900,6 +900,9 @@ impl fmt::Display for Displayed<'_> {
             Error::IntToNatNegative { value } => {
                 write!(f, "Int/to_nat of {value}, a value no Nat holds")
             }
+            Error::NatToByteAbove { value } => {
+                write!(f, "Nat/to_byte of {value}, a value no Byte holds")
+            }
             Error::ByteLiteralOutOfRange { value } => {
                 write!(f, "Byte literal {value} is out of range (expected 0..=255)")
             }

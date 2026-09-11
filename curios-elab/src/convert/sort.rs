@@ -197,7 +197,7 @@ impl Sort {
                 | Intrinsic::NatShl(..)
                 | Intrinsic::NatShr(..)
                 | Intrinsic::NatSub(..)
-                | Intrinsic::NatToByte(..)
+                | Intrinsic::NatToByte { .. }
                 | Intrinsic::NatToFlt(..)
                 | Intrinsic::NatToInt(..)
                 | Intrinsic::NatXor(..) => {

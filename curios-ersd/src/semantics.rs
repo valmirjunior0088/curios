@@ -431,7 +431,8 @@ impl Semantics {
                 FltToNat => return Some(scalar_result(flt_to_nat(flt(0)?), Constant::Nat)),
                 FltToInt => return Some(scalar_result(flt_to_int(flt(0)?), Constant::Int)),
                 ByteToNat => Constant::Nat(Natural::from(byte(0)?)),
-                NatToByte => Constant::Byte(nat(0)?.to_u32()? as u8),
+                // Declines past the carrier rather than masking, so this folder produces Core's value or none — never a third one. Core refuses the same operand, and the `below` field is what promises neither is reached; the two agree by construction now instead of by both truncating.
+                NatToByte => Constant::Byte(u8::try_from(nat(0)?.to_u32()?).ok()?),
                 FltToLeBytes => Constant::Bin(
                     Grain::X,
                     PackedBin::from_bytes(flt(0)?.to_bits().to_le_bytes().to_vec()),

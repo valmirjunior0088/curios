@@ -57,7 +57,10 @@ pub enum Intrinsic {
     ByteType,
     Byte(u8),
     ByteToNat(Term),
-    NatToByte(Term),
+    NatToByte {
+        nat: Term,
+        below: Term,
+    },
     ByteEql(Term, Term),
     ByteLt(Term, Term),
     ByteLe(Term, Term),

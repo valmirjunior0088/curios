@@ -8,7 +8,7 @@ pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
 
 -- | The minimal big-endian encoding of `n`: empty for zero, no leading zero otherwise, so distinct numbers encode distinctly.
 pub let of_nat(n: Nat) -> Bytes =
-    match n == 0 | true => x[] | false => x[..of_nat(n / 256), Byte/of_nat(n % 256)] end;
+    match n == 0 | true => x[] | false => x[..of_nat(n / 256), Nat/to_byte(n % 256)] end;
 
 -- | Everything from `k` on, under the evidence that `k` is within the length.
 pub let drop(b: Bytes, k: Nat, @ok: Nat/Le(k, len(b))) -> Bytes =

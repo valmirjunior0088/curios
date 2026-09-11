@@ -8,7 +8,9 @@
 //!
 //! Measured 2026-08-19 rather than argued: declaring `Nat/div`'s operands `Int` while its body still builds `NatDiv` fails the build with `while elaborating /sys/Nat/div: type mismatch, inferred: Int, expected: Nat`. Reproduce by changing the first `nat()` in `sys_module`'s `guarded_binary("div", …)` to `int()`.
 //!
-//! **All ten preconditions are here now, and each one that arrived late was late for a reason worth keeping.** `BinGet`, `BinSlice`, `ListGet` and `ListSlice` carried no bound field while `spine.rs`'s window fusion had to *compose* one — the fused window's `ordered : Le(s, e)` from its two halves, which is transitivity of `<=`, an implication no equality procedure supplies, so the reducer would have had to emit a proof at every fusion. A reducer that constructs proofs is the defect; deleting the degree of freedom removed the need for it. A window is a start and a *count*, so `ordered` has no proposition left to state, and the one bound that survives is carried from window₂ to the fused window unchanged: `spine`'s `push` moves a proof it was handed, and the reassociation that makes the two propositions one is `peel_nat_terms`'s to decide.
+//! **All eleven preconditions are here now, and each one that arrived late was late for a reason worth keeping.** `BinGet`, `BinSlice`, `ListGet` and `ListSlice` carried no bound field while `spine.rs`'s window fusion had to *compose* one — the fused window's `ordered : Le(s, e)` from its two halves, which is transitivity of `<=`, an implication no equality procedure supplies, so the reducer would have had to emit a proof at every fusion. A reducer that constructs proofs is the defect; deleting the degree of freedom removed the need for it. A window is a start and a *count*, so `ordered` has no proposition left to state, and the one bound that survives is carried from window₂ to the fused window unchanged: `spine`'s `push` moves a proof it was handed, and the reassociation that makes the two propositions one is `peel_nat_terms`'s to decide.
+//!
+//! `NatToByte` was later still, and for neither reason: it was not missing a bound so much as answering without one, masking its operand to eight bits and calling that total. A narrowing that changes a value is what `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md` forbids, and it was the only such row on a numeric carrier. Stating the domain removes the mask and buys the inverse besides — with the constructor's domain known, `ByteToNat` can reduce back through it, which is what lets a bound established in `Nat` survive a trip through `Byte`.
 //!
 //! `IntToNat` was late for the opposite reason — nothing stood in its way. It stated `NonNeg` on `/sys`'s declaration and then dropped the proof from its body, so the bound was re-checked wherever the wrapper application survived and nowhere else: unfolding left a bare narrowing that this table typed from an `Int` alone. That is the `Nat::Succ` shape the last paragraph refuses, one operation later. It has a single producer and no fusion path, so nothing had to compose a proof and carrying it cost a field.
 //!
@@ -176,7 +178,16 @@ impl Intrinsic {
 
             // Conversions preserve the number, never the bits — a bit view belongs to the explicit `Bin` casts below.
             ByteToNat(..) => un(byte_type(), nat_type()),
-            NatToByte(..) => un(nat_type(), byte_type()),
+            NatToByte { nat, .. } => sig(
+                vec![
+                    Operand::At(nat_type()),
+                    Operand::At(holds(NatLt(
+                        nat.clone(),
+                        Term::intrinsic(Nat(self::Nat::new(256u32))),
+                    ))),
+                ],
+                byte_type(),
+            ),
             NatToInt(..) => un(nat_type(), int_type()),
             NatToFlt(..) => un(nat_type(), flt_type()),
             IntToNat { int, .. } => sig(

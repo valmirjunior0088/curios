@@ -278,8 +278,20 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
             unary("to_flt", nat(), flt(), Intrinsic::NatToFlt),
         ),
         documented(
-            &["The same number as a `Byte`."],
-            unary("to_byte", nat(), byte(), Intrinsic::NatToByte),
+            &["The same number as a `Byte`, under the evidence that it is below `256`."],
+            guarded_unary(
+                "to_byte",
+                nat(),
+                byte(),
+                decided(
+                    syntax,
+                    applied(
+                        sys_op(&["sys", "Nat", "lt"]),
+                        vec![name("a"), nat_lit(256)],
+                    ),
+                ),
+                |nat, below| Intrinsic::NatToByte { nat, below },
+            ),
         ),
     ]
 }

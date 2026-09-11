@@ -255,6 +255,12 @@ pub trait IntrinsicBuilders {
         T: Into<Term>,
         P: Into<Term>;
 
+    /// A `NatToByte` conversion node from anything term-shaped, with the proof that its operand is below `256`.
+    fn nat_to_byte<T, P>(nat: T, below: P) -> Self
+    where
+        T: Into<Term>,
+        P: Into<Term>;
+
     /// An `IntToFlt` conversion node from anything term-shaped.
     fn int_to_flt<T>(inner: T) -> Self
     where
@@ -561,6 +567,17 @@ impl IntrinsicBuilders for Intrinsic {
         Self::IntToNat {
             int: int.into(),
             non_neg: non_neg.into(),
+        }
+    }
+
+    fn nat_to_byte<T, P>(nat: T, below: P) -> Self
+    where
+        T: Into<Term>,
+        P: Into<Term>,
+    {
+        Self::NatToByte {
+            nat: nat.into(),
+            below: below.into(),
         }
     }
 

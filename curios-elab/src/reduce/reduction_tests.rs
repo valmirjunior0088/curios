@@ -13,11 +13,20 @@ fn nat_to_byte_reflects_byte_to_nat() {
     let mut context = context();
     let byte_binder = context.fresh(Some("byte"));
     let byte = Term::free_var(&byte_binder);
-    let term = Term::intrinsic(Intrinsic::NatToByte(Term::intrinsic(Intrinsic::ByteToNat(
-        byte.clone(),
-    ))));
+    let term = Term::intrinsic(Intrinsic::nat_to_byte(
+        Term::intrinsic(Intrinsic::ByteToNat(byte.clone())),
+        qed(),
+    ));
 
-    assert_eq!(reduce(&mut context, term), Ok(byte));
+    assert_eq!(reduce(&mut context, term), Ok(byte.clone()));
+
+    // The other direction, which the narrowing's domain is what buys: a `Byte` read back out of a `Nat` it was built from is that `Nat` again, so a bound established before the trip survives it.
+    let number = Term::intrinsic(Intrinsic::Nat(Nat::new(7usize)));
+    let round_trip = Term::intrinsic(Intrinsic::ByteToNat(Term::intrinsic(
+        Intrinsic::nat_to_byte(number.clone(), qed()),
+    )));
+
+    assert_eq!(reduce(&mut context, round_trip), Ok(number));
 }
 
 #[test]

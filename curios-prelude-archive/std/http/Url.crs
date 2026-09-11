@@ -191,7 +191,14 @@ let decode_at(b: Bytes, i: Nat, acc: Bytes, fuel: Nat) -> Option(Bytes) =
                     Option/bind(Bytes/try_get(b, i + 1), hex_value),
                     Option/bind(Bytes/try_get(b, i + 2), hex_value))
                 | (some(hi), some(lo)) =>
-                    decode_at(b, i + 3, x[..acc, Nat/to_byte(hi.v * 16 + lo.v)], rest)
+                    decode_at(
+                        b,
+                        i + 3,
+                        x[..acc,
+                            Nat/to_byte(
+                                hi.v * 16 + lo.v,
+                                @Nat/Lt/add_mul_lt(hi.v, lo.v, 16, 16, hi.ok, lo.ok))],
+                        rest)
                 | (some(_), none()) => Option/none()
                 | (none(), _) => Option/none()
                 end

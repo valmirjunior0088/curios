@@ -4,7 +4,7 @@ pub use intrinsic::*;
 use {
     super::{Category, Cost, Subterm, Term, UniverseError},
     curios_abi::ForeignFunction,
-    curios_num::Integer,
+    curios_num::{Integer, Natural},
     curios_utilities::Span,
     std::sync::Arc,
 };
@@ -70,6 +70,11 @@ pub enum ReduceError {
     /// An `Int/to_nat` whose operand reduced to a negative literal — a value no natural holds, so it is reported like [`ReduceError::DivisionByZero`] rather than folded by bit reinterpretation.
     IntToNatNegative {
         value: Integer,
+        span: Option<Span>,
+    },
+    /// A `Nat/to_byte` whose operand reduced past the carrier — reported rather than masked, for the reason [`ReduceError::IntToNatNegative`] is reported rather than reinterpreted. The operation's `below` field states this cannot happen, so reaching here means a proof was admitted that should not have been.
+    NatToByteAbove {
+        value: Natural,
         span: Option<Span>,
     },
     Universe(UniverseError),

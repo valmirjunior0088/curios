@@ -722,7 +722,7 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::NatShr(..)
             | Intrinsic::Byte(_)
             | Intrinsic::ByteToNat(..)
-            | Intrinsic::NatToByte(..)
+            | Intrinsic::NatToByte { .. }
             | Intrinsic::ByteEql(..)
             | Intrinsic::ByteLt(..)
             | Intrinsic::ByteLe(..)

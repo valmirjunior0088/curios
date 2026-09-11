@@ -49,13 +49,13 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
         // The NaN is *assembled from bytes* rather than computed, and that is the whole design of these rows. A computed NaN — `0.0 / 0.0` — carries the hardware's default pattern, which on aarch64 is already `0x7ff8000000000000`, so a row built on one passes whether or not the canonicalization is emitted. Reinterpreting a byte pattern the program chose is bit-preserving on every engine, so a payload bit set here reaches the instruction on any architecture. The tainted byte is what keeps the executed side from folding; the folded side canonicalizes in `Floating::from_bits`, so the two disagree unless the emitter closes it.
         //
         // **Both halves of that were measured rather than argued**, 2026-08-24 on aarch64-apple-darwin, by neutering the two `select`s in `code_emitter` and re-running this test. On a computed NaN it still passed — the row proved nothing. On the assembled NaN below it failed, folded `:0:0:0:0:0:0:248:127` against executed `:1:0:0:0:0:0:248:127`, which is the payload surviving into a result the model says has none. Reproduce by deleting the two selects; that failure is what these rows are for.
-        "Bytes/fold(Flt/to_le_bytes(Flt/of_le_bytes(x[Nat/to_byte(n + 1), 0x00, 0x00, 0x00, 0x00, \
+        "Bytes/fold(Flt/to_le_bytes(Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, 0x00, \
             0x00, 0xf8, 0x7f])), \"\", (b, acc) => Str/concat(Str/concat(acc, \":\"), \
             Nat/to_str(Byte/to_nat(b))))",
         // The sign operand is a *negative* non-canonical NaN, so an engine reading its sign bit answers `-1.0` where the model says `abs(1.0)`.
-        "Flt/to_str(Flt/copysign(1.0, Flt/of_le_bytes(x[Nat/to_byte(n + 1), 0x00, 0x00, 0x00, \
+        "Flt/to_str(Flt/copysign(1.0, Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, \
             0x00, 0x00, 0xf8, 0xff])))",
-        "Flt/to_str(Flt/copysign(-1.0, Flt/of_le_bytes(x[Nat/to_byte(n + 1), 0x00, 0x00, 0x00, \
+        "Flt/to_str(Flt/copysign(-1.0, Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, \
             0x00, 0x00, 0xf8, 0xff])))",
     ]);
 }
@@ -241,13 +241,15 @@ fn a_literal_divisor_sees_through_a_symbolic_dividend() {
     );
 }
 
-/// `Byte/of_nat` is the computed inverse of `to_nat`: a closed argument discharges its bound by reduction, an open one by refining `n < 256` at the call site, and past the bound the refusal is a typecheck fact rather than a runtime one.
+/// `Nat/to_byte` is the computed inverse of `to_nat`: a closed argument discharges its bound by reduction, an open one by refining `n < 256` at the call site, and past the bound the refusal is a typecheck fact rather than a runtime one.
+///
+/// **The third case is what the domain bought.** The operation used to mask, so `Nat/to_byte(256)` compiled and answered `0` — a narrowing that changed a value, which is the one thing a narrowing may not do. It is now refused where it is written, and the two above say the refusal costs nothing a correct program was doing.
 #[test]
-fn byte_of_nat_inverts_to_nat_and_refuses_the_bound() {
+fn nat_to_byte_inverts_to_nat_and_refuses_the_bound() {
     // Closed: the comparison reduces, so the proof is written nowhere.
     let output = run(r#"
         use /std/{Byte, Nat, Str};
-        /std/print(Nat/to_str(Byte/to_nat(Byte/of_nat(72))))
+        /std/print(Nat/to_str(Byte/to_nat(Nat/to_byte(72))))
         "#);
     assert_eq!(output, b"72");
 
@@ -263,7 +265,7 @@ fn byte_of_nat_inverts_to_nat_and_refuses_the_bound() {
             end;
         let n = Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0));
         match n < 256
-        | true => /std/print(Nat/to_str(Byte/to_nat(Byte/of_nat(n))))
+        | true => /std/print(Nat/to_str(Byte/to_nat(Nat/to_byte(n))))
         | false => /std/print("out")
         end
         "#,
@@ -274,7 +276,7 @@ fn byte_of_nat_inverts_to_nat_and_refuses_the_bound() {
 
     // Past the bound the proof has no inhabitant, so the literal is refused where it is written.
     assert!(
-        typecheck_within(DEFAULT_STEP_BUDGET, "use /std/{Byte}; Byte/of_nat(256)").is_err(),
+        typecheck_within(DEFAULT_STEP_BUDGET, "use /std/{Nat}; Nat/to_byte(256)").is_err(),
         "an out-of-range conversion typechecks nowhere"
     );
 }

@@ -9,19 +9,19 @@ use super::test_support::folded_matches_runtime;
 fn every_byte_word_operation_answers_at_width_eight() {
     let rows = [
         (
-            "Nat/to_str(Byte/to_nat(Byte/and(Byte/of_nat(Nat/and(0xF0 + n, 255)), 0x3C)))",
+            "Nat/to_str(Byte/to_nat(Byte/and(Nat/to_byte(Nat/and(0xF0 + n, 255)), 0x3C)))",
             "48",
         ),
         (
-            "Nat/to_str(Byte/to_nat(Byte/or(Byte/of_nat(Nat/and(0xF0 + n, 255)), 0x0C)))",
+            "Nat/to_str(Byte/to_nat(Byte/or(Nat/to_byte(Nat/and(0xF0 + n, 255)), 0x0C)))",
             "252",
         ),
         (
-            "Nat/to_str(Byte/to_nat(Byte/xor(Byte/of_nat(Nat/and(0xFF + n, 255)), 0x0F)))",
+            "Nat/to_str(Byte/to_nat(Byte/xor(Nat/to_byte(Nat/and(0xFF + n, 255)), 0x0F)))",
             "240",
         ),
         (
-            "Nat/to_str(Byte/to_nat(Byte/not(Byte/of_nat(Nat/and(0x0F + n, 255)))))",
+            "Nat/to_str(Byte/to_nat(Byte/not(Nat/to_byte(Nat/and(0x0F + n, 255)))))",
             "240",
         ),
         ("Nat/to_str(Byte/to_nat(Byte/shl(0x81, 1 + n)))", "2"),
@@ -32,11 +32,11 @@ fn every_byte_word_operation_answers_at_width_eight() {
         ("Nat/to_str(Byte/to_nat(Byte/rotl(0xAB, 0 + n)))", "171"),
         ("Nat/to_str(Byte/to_nat(Byte/rotl(0xAB, 8 + n)))", "171"),
         (
-            "Nat/to_str(Byte/to_nat(Byte/of_nat(Nat/and(0xF0 + n, 255)) && 0x3C))",
+            "Nat/to_str(Byte/to_nat(Nat/to_byte(Nat/and(0xF0 + n, 255)) && 0x3C))",
             "48",
         ),
         (
-            "Nat/to_str(Byte/to_nat(Byte/of_nat(Nat/and(0xF0 + n, 255)) || 0x0C))",
+            "Nat/to_str(Byte/to_nat(Nat/to_byte(Nat/and(0xF0 + n, 255)) || 0x0C))",
             "252",
         ),
     ];

@@ -179,7 +179,9 @@ pub(super) fn erase_intrinsic(
 
         &Intrinsic::Byte(value) => Ok(lowering.constant(curios_ersd::Constant::Byte(value))),
         Intrinsic::ByteToNat(inner) => op!(curios_ersd::Operation::ByteToNat, byte_type, inner),
-        Intrinsic::NatToByte(inner) => op!(curios_ersd::Operation::NatToByte, nat_type, inner),
+        Intrinsic::NatToByte { nat: inner, .. } => {
+            op!(curios_ersd::Operation::NatToByte, nat_type, inner)
+        }
         Intrinsic::ByteEql(l, r) => op!(curios_ersd::Operation::ByteEql, byte_type, l, r),
         Intrinsic::ByteLt(l, r) => op!(curios_ersd::Operation::ByteLt, byte_type, l, r),
         Intrinsic::ByteLe(l, r) => op!(curios_ersd::Operation::ByteLe, byte_type, l, r),

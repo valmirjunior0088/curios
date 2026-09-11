@@ -70,30 +70,38 @@ pub fn reduce_intrinsic(
         }
         Intrinsic::ByteType => Ok(Subterm::Intrinsic(Intrinsic::ByteType)),
         Intrinsic::Byte(value) => Ok(Subterm::Intrinsic(Intrinsic::Byte(*value))),
+        // Inversion of the constructor, not an equation about arithmetic: `Nat/to_byte` states `nat < 256`, so the byte it builds *is* that number and reading it back is the number again. This is the half that makes `Byte` transparent to the bounds oracle — a bound established in `Nat` survives the round trip, where before the trip erased it.
         Intrinsic::ByteToNat(inner) => {
             let inner = reducer.reduce_forced(inner.clone())?;
             Ok(Subterm::Intrinsic(match &*inner {
                 Subterm::Intrinsic(Intrinsic::Byte(value)) => {
                     Intrinsic::Nat(Nat::new(usize::from(*value)))
                 }
+                Subterm::Intrinsic(Intrinsic::NatToByte { nat, .. }) => {
+                    return reducer.reduce(nat.clone()).map(Term::unwrap_or_clone);
+                }
                 _ => Intrinsic::ByteToNat(inner),
             }))
         }
-        Intrinsic::NatToByte(inner) => {
-            let inner = reducer.reduce_forced(inner.clone())?;
-            if let Subterm::Intrinsic(Intrinsic::ByteToNat(byte)) = &*inner {
+        // A closed operand past the carrier is *refused* rather than masked. Masking made this total by changing a value, which is the one thing a narrowing may not do, and it was the only such row on a numeric carrier; the `below` field is what replaces it, so a program that cannot prove its operand small no longer compiles rather than silently computing a different byte.
+        Intrinsic::NatToByte { nat, below } => {
+            let nat = reducer.reduce_forced(nat.clone())?;
+            if let Subterm::Intrinsic(Intrinsic::ByteToNat(byte)) = &*nat {
                 return reducer.reduce(byte.clone()).map(Term::unwrap_or_clone);
             }
 
-            Ok(Subterm::Intrinsic(
-                match inner.as_nat().and_then(|value| {
-                    let value = value.to_natural()?;
-                    Some((value.to_u32()? & 0xff) as u8)
-                }) {
-                    Some(value) => Intrinsic::Byte(value),
-                    None => Intrinsic::NatToByte(inner),
+            let span = nat.span();
+            match nat.as_nat().map(|value| value.to_natural()) {
+                Some(Some(value)) => match value.to_u32().and_then(|value| u8::try_from(value).ok())
+                {
+                    Some(value) => Ok(Subterm::Intrinsic(Intrinsic::Byte(value))),
+                    None => Err(ReduceError::NatToByteAbove { value, span }),
                 },
-            ))
+                _ => Ok(Subterm::Intrinsic(Intrinsic::NatToByte {
+                    nat,
+                    below: below.clone(),
+                })),
+            }
         }
         Intrinsic::ByteEql(l, r) => {
             reduce_byte_binary(reducer, l, r, |l, r| l == r, Intrinsic::ByteEql)

@@ -151,7 +151,7 @@ fn utf8_inductive_spike() {
         induct Utf8 : (s : Scan, b : Bytes) -> Type
         | stop() : (Scan/lead(), x[])
         | more(c : Nat, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
-            : (st, x[Nat/to_byte(c), ..t])
+            : (st, x[Nat/to_byte(c % 256), ..t])
         end
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Utf8(Scan/lead(), b))
@@ -174,7 +174,7 @@ fn utf8_construction_spike() {
 
         induct All : (b : Bytes) -> Type
         | empty() : (x[])
-        | snoc(c : Nat, t : Bytes, rest : All(t)) : (x[Nat/to_byte(c), ..t])
+        | snoc(c : Nat, t : Bytes, rest : All(t)) : (x[Nat/to_byte(c % 256), ..t])
         end
 
         let build(b : Bytes) -> All(b) =
@@ -329,7 +329,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
         induct Utf8 : (s : Scan, b : Bytes) -> Type
         | stop() : (Scan/lead(), x[])
         | more(c : Nat, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
-            : (st, x[Nat/to_byte(c), ..t])
+            : (st, x[Nat/to_byte(c % 256), ..t])
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
@@ -423,7 +423,7 @@ fn decimal_is_ascii_carries_its_proof() {
         induct Utf8 : (s : Scan, b : Bytes) -> Type
         | stop() : (Scan/lead(), x[])
         | more(c : Nat, st : Scan, t : Bytes, rest : Utf8(step(c, st), t))
-            : (st, x[Nat/to_byte(c), ..t])
+            : (st, x[Nat/to_byte(c % 256), ..t])
         end
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
@@ -440,7 +440,7 @@ fn decimal_is_ascii_carries_its_proof() {
             seq(va, vb);
 
         let single(c : Nat, ok : Eq(step(c, Scan/lead()), Scan/lead()))
-            -> Valid(x[Nat/to_byte(c)]) =
+            -> Valid(x[Nat/to_byte(c % 256)]) =
             let r : Utf8(step(c, Scan/lead()), x[]) =
                 Eq/subst((sc) => Utf8(sc, x[]), Eq/sym(ok), Utf8/stop());
             Utf8/more(c, Scan/lead(), x[], r);
@@ -461,7 +461,7 @@ fn decimal_is_ascii_carries_its_proof() {
 
         let single_digit(d : Nat) -> { b : Bytes, v : Valid(b) } =
             let g = digit(d);
-            (x[Nat/to_byte(g.c)], single(g.c, g.ok));
+            (x[Nat/to_byte(g.c % 256)], single(g.c, g.ok));
 
         let decimal(n : Nat) -> { b : Bytes, v : Valid(b) } =
             match Nat/lt(n, 10)
