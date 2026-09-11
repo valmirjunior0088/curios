@@ -194,7 +194,7 @@ fn main() -> ExitCode {
         Recipe::Test { package } => scoped(
             package.as_deref(),
             &["test"],
-            &["--all-targets", "--all-features"],
+            &["--all-targets", "--all-features", "--no-fail-fast"],
         ),
         Recipe::Doctest { package } => {
             scoped(package.as_deref(), &["test"], &["--doc", "--all-features"])
