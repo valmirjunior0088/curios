@@ -27,6 +27,8 @@ fn write(root: &Path, path: &str, contents: &str) {
 }
 
 /// The six-outcome package: every rung the report can print, declared in the library, beside an executable with no tests of its own.
+///
+/// **The trapping row needs a value the folder cannot see, and that is why it reads an unset environment variable.** It was `Test/assert(Nat/shl(1, 40) == 0)` while the erased carriers were `u32`: the fold refused past the width, so the shift survived to the backend and the i31 envelope trapped on it. Unbounded, the whole expression folds to `false` and the row reports *failed* — a passing suite that no longer exercises `trapped` at all. A closed computation never traps now (`numeric::envelope_tests::a_closed_computation_folds_at_the_theory_s_width`), so the row taints its operand the way `numeric::test_support::table` does, and keeps the shift closed with the taint added after it so the trap is the envelope's rather than a declined fold's. An unset variable rather than stdin because the harness inherits the test runner's stdin, and a read on a terminal would hang.
 fn project(name: &str) -> PathBuf {
     let root = temporary(name);
     write(
@@ -37,7 +39,7 @@ fn project(name: &str) -> PathBuf {
     write(
         &root,
         "lib.crs",
-        r#"use /std/{Nat, Str, Bool, Io, Eq, Test};
+        r#"use /std/{Nat, Str, Bool, Bytes, Option, Io, Eq, Test};
 
 pub let double(n: Nat) -> Nat = n * 2;
 
@@ -51,7 +53,7 @@ test equality_fails =
     Test/equal(double(2), 5);
 
 test overflow_traps =
-    Test/assert(Nat/shl(1, 40) == 0);
+    Test/perform(() => let v = /std/proc/env("CURIOS_UNSET_OVERFLOW")!; Io/pure(Test/assert(Nat/shl(1, 40) + Bytes/len(Option/unwrap_or(v, x[])) == 0)));
 
 test exits_seven =
     Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/assert(true)));
@@ -104,7 +106,7 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "/app/addition_passes: passed\n",
             "/app/equality_fails: failed\n  expected 5 but got 4\n    Test/equal(double(2), 5)\n",
             "/app/overflow_traps: trapped\n",
-            "    Test/assert(Nat/shl(1, 40) == 0)\n",
+            "    Test/perform(() => let v = /std/proc/env(\"CURIOS_UNSET_OVERFLOW\")!; Io/pure(Test/assert(Nat/shl(1, 40) + Bytes/len(Option/unwrap_or(v, x[])) == 0)))\n",
             "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n",
             "/app/effect_passes: passed\n",
             "3 passed, 1 failed, 1 trapped, 1 exited\n",

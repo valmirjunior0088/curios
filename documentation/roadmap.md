@@ -271,7 +271,9 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [General rational binary64 boundaries](roadmap/big-flt-general/05-binary64-spec.md)
   - [ ] [Exact decimal parsing and presentation](roadmap/big-flt-general/06-decimal-spec.md)
 - [x] The standard library's indispensable tier — what every one of nine surveyed peers ships
-  - [ ] The certified sort, `Key(Nat)` and its two laws, and the `Ord`-keyed tree
+  - [ ] The certified sort, deferred to a consumer
+  - [ ] `Key(Nat)`, blocked on Euclid's recombination and the `Nat`/`Byte` composite
+  - [ ] The `Ord`-keyed tree, deferred to a consumer
 
 ## Tooling & Ecosystem
 
