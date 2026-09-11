@@ -9,7 +9,7 @@ use {
 };
 
 /// A type-level integer. Unbounded — the type level pretends ℤ, the way [`Natural`] pretends ℕ; the runtime's 31-bit range is enforced only where a literal must materialize (`erase`'s narrowing) and by the runtime's own overflow traps.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub struct Integer {
     #[archived_with(crate::BigIntBytes)]
@@ -163,5 +163,12 @@ impl fmt::Display for Integer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Delegate so format flags pass through — the printer relies on `{:+}` for the surface `+`/`-` literal prefix.
         self.value.fmt(f)
+    }
+}
+
+/// The number, not the wrapper around the bignum holding it — [`Natural`]'s reason, at the signed carrier.
+impl fmt::Debug for Integer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
     }
 }
