@@ -2,6 +2,7 @@
 
 mod arithmetic_tests;
 mod bound_tests;
+mod byte_word_tests;
 mod envelope_tests;
 mod flt_tests;
 mod test_support;

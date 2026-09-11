@@ -2,7 +2,7 @@ pub use /sys/{Byte};
 pub use /sys/Byte/{to_nat, eql, lt, le, gt, ge};
 use /sys/Bytes/{let Bytes, get};
 use /std/{Ordering, Nat, Bool, Show, Spell, Ord};
-use /std/ops/{Eql, Cmp};
+use /std/ops/{Eql, Cmp, And, Or};
 
 let atoms: Bytes =
     x[0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 0x10, 0x11,
@@ -27,6 +27,51 @@ let atoms: Bytes =
 pub let of_nat(n: Nat, @ok: Nat/Lt(n, 256)) -> Byte =
     get(atoms, n, @ok);
 
+-- | The bitwise conjunction.
+pub let and(a: Byte, b: Byte) -> Byte =
+    of_nat(Nat/and(to_nat(a), to_nat(b)));
+
+-- | The bitwise disjunction.
+pub let or(a: Byte, b: Byte) -> Byte =
+    of_nat(Nat/or(to_nat(a), to_nat(b)));
+
+-- | The bitwise difference.
+pub let xor(a: Byte, b: Byte) -> Byte =
+    of_nat(Nat/xor(to_nat(a), to_nat(b)));
+
+-- | Every bit of the byte flipped.
+-- |
+-- | Spelled as a subtraction from the all-ones byte rather than as a complement, because `Nat` is unbounded and has no complement to take: what a width-8 `not` means is the distance to that width's largest value.
+pub let not(a: Byte) -> Byte =
+    of_nat(255 - to_nat(a));
+
+-- | The byte shifted left by `count`, the bits carried past the width discarded.
+-- |
+-- | `count` is guarded rather than masked. `Nat` is unbounded, so the shift builds its whole product before the conjunction narrows it, and a count of a few hundred would leave the runtime's `i31` envelope and refuse — on the way to an answer that is `0`. The guard computes that answer instead of the number no machine holds.
+pub let shl(a: Byte, count: Nat) -> Byte =
+    match count < 8
+    | true => of_nat(Nat/and(Nat/shl(to_nat(a), count), 0xFF))
+    | false => 0
+    end;
+
+-- | The byte shifted right by `count`, the bits carried past zero discarded.
+-- |
+-- | No guard and no mask: a right shift only ever discards bits, so the result is under the byte's own bound at every count, and the oracle reads that off the operand.
+pub let shr(a: Byte, count: Nat) -> Byte =
+    of_nat(Nat/shr(to_nat(a), count));
+
+-- | The byte rotated left by `count`, the bits carried past the width re-entering at the bottom.
+-- |
+-- | The count is taken modulo the width, which is what makes this total without a guard: the remainder carries its own bound in the term, so the shift below can never reach far enough to leave the envelope.
+pub let rotl(a: Byte, count: Nat) -> Byte =
+    let places = count % 8;
+    of_nat(Nat/and(Nat/or(Nat/shl(to_nat(a), places), Nat/shr(to_nat(a), 8 - places)), 0xFF));
+
+-- | The byte rotated right by `count`, the bits carried past zero re-entering at the top.
+pub let rotr(a: Byte, count: Nat) -> Byte =
+    let places = count % 8;
+    of_nat(Nat/and(Nat/or(Nat/shr(to_nat(a), places), Nat/shl(to_nat(a), 8 - places)), 0xFF));
+
 -- | The order of the two values.
 pub let cmp(a: Byte, b: Byte) -> Ordering =
     choose | lt(a, b) => Ordering/lt() | eql(a, b) => Ordering/eq() | _ => Ordering/gt() end;
@@ -34,6 +79,14 @@ pub let cmp(a: Byte, b: Byte) -> Ordering =
 satisfy Eql(Byte) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
+}
+
+satisfy And(Byte) {
+    and = and,
+}
+
+satisfy Or(Byte) {
+    or = or,
 }
 
 satisfy Cmp(Byte) {
