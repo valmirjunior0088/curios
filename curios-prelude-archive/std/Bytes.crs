@@ -1,5 +1,5 @@
 pub use /sys/Bytes/{let Bytes, get, len, eql, slice};
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Ordering, Ord, True};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Ordering, Ord, True, False};
 use /std/ops/{Eql, Cmp};
 
 -- | The byte at `i`, or `none` past the end.
@@ -9,6 +9,136 @@ pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
 -- | The minimal big-endian encoding of `n`: empty for zero, no leading zero otherwise, so distinct numbers encode distinctly.
 pub let of_nat(n: Nat) -> Bytes =
     match n == 0 | true => x[] | false => x[..of_nat(n / 256), Nat/to_byte(n % 256)] end;
+
+-- A number as a base-256 high part and a low digit, with the equation joining them.
+--
+-- The decomposition `of_nat` recurses on, carried as evidence rather than recomputed. `n / 256` and `n % 256` read off `joined` by the division split alone — the residual is a `Byte`, whose carrier bound is what lets the split fire — so Euclid's recombination below is one substitution and needs no law of its own.
+struct Split(n: Nat): Type {
+    high: Nat,
+    low: Byte,
+    joined: Eq(n, 256 * high + Byte/to_nat(low)),
+}
+
+-- Every number has one, by successor induction.
+--
+-- The step decides whether the digit has filled. The bump branch discharges its own bound by the arm's refinement, `Lt(d + 1, 256)` being `Lt(d, 255)` after cancellation; the carry branch is where the digit is known to be `255`, which takes both directions of the order — `le_of_not_lt` for the half the guard refuted and the carrier's own bound for the other.
+let split(n: Nat) -> Split(n) =
+    match n: (m) => Split(m)
+    | 0 => Split { high = 0, low = 0, joined = Eq/refl() }
+    | p + 1; prev =>
+        match Byte/to_nat(prev.low) < 255
+        | true =>
+            Split {
+                high = prev.high,
+                low = Nat/to_byte(Byte/to_nat(prev.low) + 1),
+                joined = Eq/cong((x) => x + 1, prev.joined),
+            }
+        | false =>
+            let filled: Eq(Byte/to_nat(prev.low), 255) =
+                Nat/Le/antisym(
+                    Byte/to_nat(prev.low),
+                    255,
+                    Nat/Le/of_ind(
+                        Nat/Lt/ind_succ_of_lt(Byte/to_nat(prev.low), 256, True/qed())),
+                    Nat/Lt/le_of_not_lt(Byte/to_nat(prev.low), 255, True/qed()));
+            Split {
+                high = prev.high + 1,
+                low = 0,
+                joined =
+                    Eq/cong(
+                        (x) => x + 1,
+                        Eq/subst((d) => Eq(p, 256 * prev.high + d), filled, prev.joined)),
+            }
+        end
+    end;
+
+-- Euclid's recombination at the encoding's radix.
+let euclid(n: Nat) -> Eq(256 * (n / 256) + n % 256, n) =
+    Eq/subst((m) => Eq(256 * (m / 256) + m % 256, m), Eq/sym(split(n).joined), Eq/refl());
+
+-- The recursion `of_nat` performs terminates, which is what lets injectivity recurse the same way.
+let high_below(n: Nat, positive: Nat/Lt(0, n)) -> Nat/Lt(n / 256, n) =
+    let s = split(n);
+    let p: Nat/Lt(0, 256 * s.high + Byte/to_nat(s.low)) =
+        Eq/subst((m) => Nat/Lt(0, m), s.joined, positive);
+    let inner: Nat/Lt(s.high, 256 * s.high + Byte/to_nat(s.low)) =
+        match s.high: (h) => Nat/Lt(h, 256 * h + Byte/to_nat(s.low))
+        | 0 => p
+        | _ + 1 => True/qed()
+        end;
+    Eq/subst((m) => Nat/Lt(m / 256, m), Eq/sym(s.joined), inner);
+
+-- The two halves of a snoc, as total functions so congruence can take one apart.
+--
+-- Both are guarded rather than bounded at the call: congruence needs one function of the whole value, and a bound stated over an arbitrary `Bytes` has nothing to discharge it. On the encoding's own shape the guard reduces and the window locates, which is all either is used at.
+let trunc(z: Bytes) -> Bytes =
+    match len(z) - 1 <= len(z)
+    | true => slice(z, 0, len(z) - 1)
+    | false => x[]
+    end;
+
+let last(z: Bytes) -> Byte =
+    Option/unwrap_or(try_get(z, len(z) - 1), 0);
+
+-- An empty encoding is no encoding of a positive number: the lengths differ, and a length of zero against a successor is refuted by the comparison that decides it.
+let no_empty(p: Bytes, k: Byte, e: Eq(x[], x[..p, k])) -> False =
+    Eq/subst((m) => Bool/Holds(Nat/eql(0, m)), Eq/cong(len, e), True/qed());
+
+-- | Distinct numbers encode distinctly, which is what makes the encoding a key.
+-- |
+-- | Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encoding apart at its last byte — the prefix by a window at the seam, the digit by an index at it — recovers the two numbers' high parts from the induction hypothesis and their low digits from the byte round trip, and rejoins both by Euclid's recombination.
+pub let of_nat_injective(a: Nat, b: Nat, same: Eq(of_nat(a), of_nat(b))) -> Eq(a, b) =
+    Nat/Lt/strong(
+        (m) => (d: Nat, e: Eq(of_nat(m), of_nat(d))) -> Eq(m, d),
+        (n, ih) => (d, e) =>
+            match n
+            | 0 =>
+                match d
+                | 0 => Eq/refl()
+                | dp + 1 =>
+                    match no_empty(
+                        of_nat((dp + 1) / 256),
+                        Nat/to_byte((dp + 1) % 256),
+                        e)
+                    end
+                end
+            | np + 1 =>
+                match d
+                | 0 =>
+                    match no_empty(
+                        of_nat((np + 1) / 256),
+                        Nat/to_byte((np + 1) % 256),
+                        Eq/sym(e))
+                    end
+                | dq + 1 =>
+                    let heads: Eq(of_nat((np + 1) / 256), of_nat((dq + 1) / 256)) =
+                        Eq/cong(trunc, e);
+                    let digits: Eq((np + 1) % 256, (dq + 1) % 256) =
+                        Eq/cong(Byte/to_nat, Eq/cong(last, e));
+                    let highs: Eq((np + 1) / 256, (dq + 1) / 256) =
+                        ih((np + 1) / 256, high_below(np + 1, True/qed()))(
+                            (dq + 1) / 256,
+                            heads);
+                    let rejoined: Eq(
+                        256 * ((np + 1) / 256) + (np + 1) % 256,
+                        256 * ((dq + 1) / 256) + (dq + 1) % 256) =
+                        Eq/subst(
+                            (y) =>
+                                Eq(
+                                    256 * ((np + 1) / 256) + (np + 1) % 256,
+                                    256 * ((dq + 1) / 256) + y),
+                            digits,
+                            Eq/subst(
+                                (x) =>
+                                    Eq(
+                                        256 * ((np + 1) / 256) + (np + 1) % 256,
+                                        256 * x + (np + 1) % 256),
+                                highs,
+                                Eq/refl()));
+                    Eq/trans(Eq/sym(euclid(np + 1)), Eq/trans(rejoined, euclid(dq + 1)))
+                end
+            end,
+        a)(b, same);
 
 -- | Everything from `k` on, under the evidence that `k` is within the length.
 pub let drop(b: Bytes, k: Nat, @ok: Nat/Le(k, len(b))) -> Bytes =

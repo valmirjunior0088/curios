@@ -34,6 +34,12 @@ satisfy Key(Str) {
     injective(a, b, same) = Str/eq_of_bytes(a, b, same),
 }
 
+-- | The minimal big-endian encoding, whose injectivity is `/std/Bytes`'s to prove.
+satisfy Key(Nat) {
+    to_bytes = Hash/hash,
+    injective = Bytes/of_nat_injective,
+}
+
 let bit(k: Bytes, j: Nat) -> Nat =
     let g = j / 9;
     let o = j % 9;
