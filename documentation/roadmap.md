@@ -117,6 +117,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] [A compilation is units folded over a dependency order](design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md), every edge declared in a manifest
 - [x] Configurable type-checker reduction budget (the CLI's `--budget`, restored per declaration)
 - [x] Elaboration and per-node memoization bounded by written binder nesting, never data length
+- [ ] A function type elaborates in its size, not its size times its binders (measured)
 - [x] Elaboration transients grouped under one core variant (`Transient`), refused at the kernel
 - [x] [Names as identity only](design/toolchain/one-naming-scheme-for-compiler-identities.md) — nothing branches on a name's spelling
 - [x] [Totality of everything erasure deletes](design/language/totality-of-the-erased-program.md), so nothing inhabits `/std/False`
