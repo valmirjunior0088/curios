@@ -1,17 +1,4 @@
--- spines: N LCG-keyed inserts into /std/Map, then fold the values — death-birth
--- churn on a persistent map's spine, under a live set that plateaus at the LCG's
--- key population (at most 65536 entries) while inserts keep rebuilding root-to-leaf
--- paths that die with the operation. Two confounds, recorded plainly: the table
--- compares map algorithms as much as memory management (a crit-bit trie here, hash
--- maps in the imperative contestants, balanced trees in the functional ones), and
--- /std/Map deliberately has no Key(Nat) — the injectivity a witness owes is
--- unprovable for a division-based encoding under unary elimination, see the module —
--- so keys enter through Bytes/of_nat at the boundary: minimal big-endian, a division
--- and a table index per byte, injective by construction under Key(Bytes)'s identity
--- witness. That shrinks the encoding confound to a few arithmetic operations no
--- int-keyed hash map quite mirrors. It orients rather than proves. N is read from
--- stdin; the seed derives from N so nothing is a closed term. Values are the step
--- index, so later writes to a returning key are observable in the printed sum.
+-- spines: N LCG-keyed inserts into /std/Map, then fold the values — death-birth churn on a persistent map's spine, under a live set that plateaus at the LCG's key population (at most 65536 entries) while inserts keep rebuilding root-to-leaf paths that die with the operation. Two confounds, recorded plainly: the table compares map algorithms as much as memory management (a crit-bit trie here, hash maps in the imperative contestants, balanced trees in the functional ones), and /std/Map has no Key(Nat) — proving Bytes/of_nat injective needs two definitional equations the normalizer does not take, Euclid's recombination over an opaque dividend and the Nat/Byte composite a table-lookup Byte/of_nat leaves stuck at a symbolic index — so keys enter through Bytes/of_nat at the boundary: minimal big-endian, a division and a table index per byte, injective by construction under Key(Bytes)'s identity witness. That shrinks the encoding confound to a few arithmetic operations no int-keyed hash map quite mirrors. It orients rather than proves. N is read from stdin; the seed derives from N so nothing is a closed term. Values are the step index, so later writes to a returning key are observable in the printed sum.
 use /std/{Str, Nat, Bytes, Map, Io};
 
 let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat)) -> Map(Nat) =
