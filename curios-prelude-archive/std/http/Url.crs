@@ -162,13 +162,19 @@ pub let encode(component: Str) -> Str =
                     | false => [Str/flatten(["%", hex_digit(n / 16), hex_digit(n % 16)]), ..acc]
                     end)));
 
-let hex_value(byte: Byte) -> Option(Nat) =
+-- The digit travels with the evidence that it is one, because the caller combines two of them into a byte and reduction cannot see a bound a guard established. Deciding the range once is what produces both: the ladder yields a value `16` for anything that is not a hex digit, and the single comparison below is at once the refusal and the proof. Masking the digit instead would state a width this encoding does not have — a hex digit is four bits because of what it is, not because of where it is stored.
+let hex_value(byte: Byte) -> Option({v: Nat, ok: Nat/Lt(v, 16)}) =
     let n = Byte/to_nat(byte);
-    choose
-    | Nat/in_range(n, '0', '9') => Option/some(n - '0')
-    | Nat/in_range(n, 'a', 'f') => Option/some(n - 'a' + 10)
-    | Nat/in_range(n, 'A', 'F') => Option/some(n - 'A' + 10)
-    | _ => Option/none()
+    let digit =
+        choose
+        | Nat/in_range(n, '0', '9') => n - '0'
+        | Nat/in_range(n, 'a', 'f') => n - 'a' + 10
+        | Nat/in_range(n, 'A', 'F') => n - 'A' + 10
+        | _ => 16
+        end;
+    match Nat/Lt/try(digit, 16)
+    | some(ok) => Option/some((v = digit, ok = ok))
+    | none() => Option/none()
     end;
 
 let decode_at(b: Bytes, i: Nat, acc: Bytes, fuel: Nat) -> Option(Bytes) =
@@ -185,7 +191,7 @@ let decode_at(b: Bytes, i: Nat, acc: Bytes, fuel: Nat) -> Option(Bytes) =
                     Option/bind(Bytes/try_get(b, i + 1), hex_value),
                     Option/bind(Bytes/try_get(b, i + 2), hex_value))
                 | (some(hi), some(lo)) =>
-                    decode_at(b, i + 3, x[..acc, Nat/to_byte(hi * 16 + lo)], rest)
+                    decode_at(b, i + 3, x[..acc, Nat/to_byte(hi.v * 16 + lo.v)], rest)
                 | (some(_), none()) => Option/none()
                 | (none(), _) => Option/none()
                 end

@@ -162,7 +162,7 @@ pub let eql(a: Str, b: Str) -> Bool =
 
 let lower_ascii_byte(byte: Byte) -> Byte =
     let n = Byte/to_nat(byte);
-    match Nat/in_range(n, 0x41, 0x5A) | true => Nat/to_byte(n + 0x20) | false => byte end;
+    match Nat/in_range(n, 0x41, 0x5A) | true => Nat/to_byte((n + 0x20) % 0x80) | false => byte end;
 
 let lower_ascii_bytes(b: Bytes) -> Bytes =
     Bytes/fold(b, x[], (byte, acc) => x[..acc, lower_ascii_byte(byte)]);
