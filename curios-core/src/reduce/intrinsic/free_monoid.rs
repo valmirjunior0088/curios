@@ -145,7 +145,11 @@ pub(super) fn bin_element(grain: Grain, operand: &Term, local: usize) -> Option<
     }
 }
 
-/// A window aligned to the seams of a concatenation is the run of operands between those seams: `slice([..xs, ..ys], 0, len(xs)) = xs` and `slice([..xs, ..ys], len(xs), len(ys)) = ys`, over *symbolic* operands — the case the literal-run locators above decline. The seams are found by measuring each operand the way `len` measures it and comparing the running sum with the window's start and end as reduced terms; a symbolic operand contributes its own `len`, and the comparison is structural, so two sums that are definitionally but not syntactically equal decline, which is the refusing direction. Sound for every value of the symbolic operands: a window whose start is exactly a prefix's length and whose end is exactly a longer prefix's length covers exactly the operands between, whatever those lengths are. `None` where no seam matches; the operands of the matched run otherwise, for the caller to concatenate.
+/// A window aligned to the seams of a concatenation is the run of operands between those seams: `slice([..xs, ..ys], 0, len(xs)) = xs` and `slice([..xs, ..ys], len(xs), len(ys)) = ys`, over *symbolic* operands — the case the literal-run locators above decline. Sound for every value of the symbolic operands: a window whose start is exactly a prefix's length and whose end is exactly a longer prefix's length covers exactly the operands between, whatever those lengths are. `None` where no seam matches; the operands of the matched run otherwise, for the caller to concatenate.
+///
+/// **The walk consumes a distance rather than growing a prefix.** Each operand's measure is *cancelled off* the distance still to cover by [`Nat::cancel_common`], which reads that operand's own summands rather than every summand before it. What the walk spends is one measure per operand and nothing else: the accumulation no longer re-enters the reducer, and the window's end — a sum of the start and the count — is never built at all. This is a charge against the budget rather than an asymptotic win, and the distinction is worth keeping because it was once claimed the other way: a window written over a long prefix sum spends the bulk of its time normalizing that sum where it is *written*, in `NatAdd`'s own fold, and only a small remainder here.
+///
+/// **What a surviving measure means.** [`consume`] hands back whatever neither side absorbed, and a measure carrying a summand the distance lacks is an overshoot: the seam is already behind, and since a prefix only ever grows no later operand can bring it back. Declining there is exact rather than conservative, which is why the walk can stop at the first one. What cancellation sees through that whole-term equality did not is a universe instance, [`Nat::cancel_common`] keying its summands through `project_erased_universes` — the admitting direction, on the licence the carrier already gives its other readers, recorded in `documentation/soundness/what-the-kernel-consults/the-refinement-key.md`. Two spellings of one length that cancellation does not pair still decline, which is the refusing direction and the incompleteness this rule keeps.
 pub(super) fn seam_window(
     reducer: &mut impl Reducer,
     operands: &[Term],
@@ -153,28 +157,38 @@ pub(super) fn seam_window(
     length: &Term,
     measure: impl Fn(&Term) -> Intrinsic,
 ) -> Result<Option<Vec<Term>>, ReduceError> {
-    let end = reducer.reduce_forced(Term::intrinsic(Intrinsic::nat_add(
-        start.clone(),
-        length.clone(),
-    )))?;
-    let mut prefix = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
+    let mut remaining = start.clone();
     let mut begin = None;
+
     for (index, operand) in operands.iter().enumerate() {
-        if begin.is_none() && prefix == *start {
+        if begin.is_none() && Nat::is_zero(&remaining) {
             begin = Some(index);
+            remaining = length.clone();
         }
         if let Some(begin) = begin
-            && prefix == end
+            && Nat::is_zero(&remaining)
         {
             return Ok(Some(operands[begin..index].to_vec()));
         }
         let measured = reducer.reduce_forced(Term::intrinsic(measure(operand)))?;
-        prefix = reducer.reduce_forced(Term::intrinsic(Intrinsic::nat_add(prefix, measured)))?;
+        match consume(&remaining, &measured) {
+            Some(rest) => remaining = rest,
+            None => return Ok(None),
+        }
     }
+
     Ok(match begin {
-        Some(begin) if prefix == end => Some(operands[begin..].to_vec()),
+        Some(begin) if Nat::is_zero(&remaining) => Some(operands[begin..].to_vec()),
         _ => None,
     })
+}
+
+/// `remaining` with `measured` taken off it, or `None` where `measured` carries a summand `remaining` does not — the overshoot [`seam_window`] declines on.
+///
+/// [`Nat::cancel_common`] is the whole of it because a distance and a measure are two `Nat`s in one cancellative monoid: what it leaves on the left is the distance still to cover, and what it leaves on the right is what the measure had and the distance did not. Clamping each shared coefficient with a minimum is what keeps the subtraction total — `Natural`'s own panics on underflow — so the overshoot arrives as a residual to read rather than as a difference to guard.
+fn consume(remaining: &Term, measured: &Term) -> Option<Term> {
+    let (rest, unmatched) = Nat::cancel_common(remaining, measured);
+    Nat::is_zero(&unmatched).then_some(rest)
 }
 
 /// [`bin_piece`] over the element carrier, restoring the element type every `List` value carries.

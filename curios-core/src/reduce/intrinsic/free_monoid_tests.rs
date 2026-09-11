@@ -171,3 +171,45 @@ fn a_list_length_window_and_index_do_not_depend_on_grouping() {
         }
     }
 }
+
+/// **A seam is found by consuming the distance, and a span that overshoots one declines at once.** The walk cancels each operand's measure off the distance still to cover rather than growing a prefix and comparing whole terms. Stopping at the first overshoot is exact rather than conservative because a prefix only grows: a seam already passed cannot come back, so there is nothing later to find. The control is the same window one byte wider — a span no seam matches, which must stay neutral rather than settle for the nearer seam, since locating a run it does not cover would be a false equation in the admitting direction.
+#[test]
+fn a_window_on_a_symbolic_seam_is_its_run_and_a_span_past_the_seam_declines() {
+    let left = symbol(0, "l");
+    let right = symbol(1, "r");
+    let spine = Term::intrinsic(Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: vec![left.clone(), right.clone()],
+    });
+    let measure = |bin: &Term| Term::intrinsic(Intrinsic::bin_len(Grain::X, bin.clone()));
+
+    let window = Intrinsic::bin_slice(
+        Grain::X,
+        spine.clone(),
+        measure(&left),
+        measure(&right),
+        qed(),
+    );
+    let located = reduce_intrinsic(&mut Folding, &window).expect("a seam window reduces");
+
+    assert_eq!(
+        Term::from(located),
+        right,
+        "the window from the first seam to the end is the second operand",
+    );
+
+    let past = Intrinsic::bin_slice(
+        Grain::X,
+        spine,
+        measure(&left),
+        plus(measure(&right), lit(1)),
+        qed(),
+    );
+    let declined = reduce_intrinsic(&mut Folding, &past).expect("an unmatched span reduces");
+
+    assert_ne!(
+        Term::from(declined),
+        right,
+        "a span reaching past the last seam locates no run",
+    );
+}
