@@ -48,9 +48,15 @@ impl Euclid {
 
 /// A statically known upper bound on every value a reduced term can take, or `None` where it has none.
 ///
-/// Every arm is unconditional, which is what lets the callers below turn a bound into a definitional equation. A `Byte` is `0..=255` by its carrier — `Nat/to_byte` wraps and `Byte` is not a wire type, so no embedder can supply one outside the range — and `x % n < n` holds by definition, a zero divisor having already been reported. The remaining arms are monotone in operands whose own bounds this establishes.
+/// Every arm is unconditional, which is what lets the callers below turn a bound into a definitional equation.
 ///
-/// A wrong bound here is a false definitional equation, not a wrong value: see `documentation/soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md`.
+/// **An arm exists where the result is bounded in every operand the value is not *antitone* in.** That is the criterion, and stating it is the point: what a bound was computed for used to be whatever somebody needed, which is not a property anything could check. It is strictly narrower than monotonicity — a product is monotone in each factor separately and still needs *both* bounded, since either one left free makes it unbounded — and it is what licenses the one-sided arms: a value that only shrinks as an operand grows needs no bound on that operand at all, which is why a subtrahend, a divisor and a shift amount are all read past.
+///
+/// A `Byte` is `0..=255` **by its carrier**, a fact about the type rather than about how the value was produced. Every producer establishes it, and no case analysis over them is performed or wanted: the operand under a stuck `ByteToNat` is normally a bare binder or a projection, which is exactly the seam this bound exists to serve. `Byte` is not a wire type either, so no embedder can supply one outside the range. `x % n < n` holds by definition, a zero divisor having already been reported.
+///
+/// **`NatShl` is deliberately absent, and the reason is resources rather than arithmetic.** A left shift is the one fold whose result size is not bounded by its operands' — `Nat/shl(1, 400000000)` is fifty megabytes of magnitude out of three lines of surface Curios — and this function takes no [`crate::Reducer`], so it cannot `spend` against the budget that exists to price exactly that. An arm would perform, uncharged, the allocation the reduction arm is careful to charge for.
+///
+/// An over-report only withholds the rule; an *under*-report is a false definitional equation, which is the direction `bound_upper_bounds_every_closed_instantiation` asserts. That gate is a hand-written block per shape rather than an enumeration, so an arm added here owes it one or it passes while checking nothing. A wrong bound is a false equation and not a wrong value: see `documentation/soundness/per-term-rules/the-bounds-oracle-and-the-division-family.md`.
 pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return None;
@@ -64,12 +70,38 @@ pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
             let divisor = divisor.as_nat()?.to_natural()?;
             (!divisor.is_zero()).then(|| divisor - Natural::one())
         }
+        // Truncation only shrinks, so the left bound carries alone: the difference is antitone in the subtrahend, whatever it is.
+        Intrinsic::NatSub(left, _) => nat_bound(left),
+        // Antitone in the divisor, which `non_zero` holds at one or more — so the quotient is at most the dividend however the divisor is spelled, and a literal one tightens that to the quotient of the bounds.
+        Intrinsic::NatDiv {
+            dividend, divisor, ..
+        } => {
+            let bound = nat_bound(dividend)?;
+            match divisor.as_nat().and_then(|divisor| divisor.to_natural()) {
+                Some(divisor) => bound.checked_div(divisor),
+                None => Some(bound),
+            }
+        }
+        // The division arm's shift twin, antitone for the same reason: a right shift discards bits and adds none.
+        Intrinsic::NatShr(operand, amount) => {
+            let bound = nat_bound(operand)?;
+            match amount.as_nat().and_then(|amount| amount.to_natural()) {
+                Some(amount) => bound.checked_shr(amount),
+                None => Some(bound),
+            }
+        }
         // Either bound alone is an upper bound, so one suffices; with both, the smaller wins.
         Intrinsic::NatAnd(left, right) => match (nat_bound(left), nat_bound(right)) {
             (Some(left), Some(right)) => Some(left.min(right)),
             (Some(bound), None) | (None, Some(bound)) => Some(bound),
             (None, None) => None,
         },
+        // A join or a difference of bits reaches no bit neither side can, so the bound is the widest value of that many bits — taken over the *bounds*' bit lengths, the operands themselves being symbolic. Both operands are needed, neither being antitone. This is at most twice the larger bound, so unlike a left shift it cannot outgrow what it was handed.
+        Intrinsic::NatOr(left, right) | Intrinsic::NatXor(left, right) => {
+            let width = nat_bound(left)?.bits().max(nat_bound(right)?.bits());
+            let width = u32::try_from(width).ok()?;
+            Some(Natural::from(2u32).pow(width) - Natural::one())
+        }
         Intrinsic::NatAdd(left, right) => Some(nat_bound(left)? + nat_bound(right)?),
         Intrinsic::NatMul(left, right) => Some(nat_bound(left)? * nat_bound(right)?),
         _ => None,

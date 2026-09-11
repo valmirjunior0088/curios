@@ -47,6 +47,89 @@ fn bound_upper_bounds_every_closed_instantiation() {
             assert!(value <= bound, "{dividend} % {divisor} exceeded its bound");
         }
     }
+
+    // The arms below state a shape once and then substitute every sample *into that shape*, rather than rebuilding a parallel closed term by hand: a block whose closed spelling could drift from the shape the bound was read off is checking two things rather than one. Each is the block its arm owes — the gate enumerates nothing, so an arm without one leaves it passing while checking nothing.
+    let x = Free::local(0, Some("x"));
+    let y = Free::local(1, Some("y"));
+    let byte = Free::local(2, Some("b"));
+    let digit = to_nat_of(Term::free_var(&byte));
+    let samples = [
+        (0u32, 0u32, 0u8),
+        (1, 1, 1),
+        (5, 3, 17),
+        (1000, 7, 128),
+        (100_000, 999, 254),
+        (7, 100_000, 255),
+    ];
+
+    let under = |shape: Term, name: &str| {
+        let bound = nat_bound(&shape).expect("the shape carries a bound");
+        for (left, right, sample) in samples {
+            let closed = at(shape.clone(), &x, lit(left));
+            let closed = at(closed, &y, lit(right));
+            let closed = fold(at(closed, &byte, Term::intrinsic(Intrinsic::Byte(sample))));
+            let value = closed
+                .as_nat()
+                .expect("closed")
+                .to_natural()
+                .expect("literal");
+            assert!(
+                value <= bound,
+                "{name} exceeded its bound at x = {left}, y = {right}, b = {sample}",
+            );
+        }
+    };
+
+    // Truncated subtraction reads the left bound alone, so it has to hold at every subtrahend — including the samples far larger than the minuend, where the difference truncates to zero.
+    under(
+        Term::intrinsic(Intrinsic::nat_sub(digit.clone(), Term::free_var(&x))),
+        "Byte/to_nat(b) - x",
+    );
+
+    // Division at a literal divisor tightens the bound; at a symbolic one only `non_zero` constrains it, and the dividend's own bound has to carry. `x + 1` is the symbolic divisor because every sample must instantiate it to something nonzero, which is what the proof field promises.
+    under(
+        Term::intrinsic(Intrinsic::NatDiv {
+            dividend: digit.clone(),
+            divisor: lit(16),
+            non_zero: qed(),
+        }),
+        "Byte/to_nat(b) / 16",
+    );
+    under(
+        Term::intrinsic(Intrinsic::NatDiv {
+            dividend: digit.clone(),
+            divisor: Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), lit(1))),
+            non_zero: qed(),
+        }),
+        "Byte/to_nat(b) / (x + 1)",
+    );
+
+    // The shift twin of both division cases, the symbolic amount included: a sample shifting past the operand's own width must still land under the unshifted bound.
+    under(
+        Term::intrinsic(Intrinsic::NatShr(digit.clone(), lit(3))),
+        "Nat/shr(Byte/to_nat(b), 3)",
+    );
+    under(
+        Term::intrinsic(Intrinsic::NatShr(digit.clone(), Term::free_var(&x))),
+        "Nat/shr(Byte/to_nat(b), x)",
+    );
+
+    // A join and a difference of bits, each needing *both* operands bounded. The two bounds have different bit lengths on purpose — four and three — so a block computing the width off the wrong side would report eight and this would catch it.
+    let low = |modulus: u32, binder: &Free| {
+        Term::intrinsic(Intrinsic::NatRem {
+            dividend: Term::free_var(binder),
+            divisor: lit(modulus),
+            non_zero: qed(),
+        })
+    };
+    under(
+        Term::intrinsic(Intrinsic::NatOr(low(16, &x), low(8, &y))),
+        "Nat/or(x % 16, y % 8)",
+    );
+    under(
+        Term::intrinsic(Intrinsic::NatXor(low(16, &x), low(8, &y))),
+        "Nat/xor(x % 16, y % 8)",
+    );
 }
 
 // Soundness gate: whatever the split returns must satisfy the Euclidean specification — `n·quotient + remainder` equals the dividend at every instantiation, and the remainder is provably below `n`. Those two together *are* the definition of division, so a split passing both cannot be a false equation whatever its symbolic parts take.
