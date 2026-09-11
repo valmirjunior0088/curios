@@ -35,3 +35,12 @@ pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Ind(a, b), q: Ind(b, c)) -> Ind(a, c
 -- | `a <= b` gives `n + a <= n + b`.
 pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Ind(a, b)) -> Ind(n + a, n + b) =
     match n: (m) => Ind(m + a, m + b) | 0 => p | _ + 1; ih => Ind/s(ih) end;
+
+-- | `a <= b` gives `a * k <= b * k`.
+-- |
+-- | Recursion is over the evidence rather than over `k`, so the step is one application of [`add_mono_l`]: `(a + 1) * k` is `k + a * k`, which is what the successor case has to produce.
+pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Ind(a, b)) -> Ind(a * k, b * k) =
+    match p: (x, y, _) => Ind(x * k, y * k)
+    | z(@_) => Ind/z()
+    | s(@_, @_, prev) => add_mono_l(k, mul_mono_r(k, prev))
+    end;
