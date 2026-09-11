@@ -115,7 +115,7 @@ fn bool_and_byte_keep_their_shapes() {
         "\
 entry {
     ~v0$b = BoolAnd(true, false)
-    ~v1 = NatToByte(7:nat)
+    ~v1 = NatToByte(7)
     return ~v1
 }
 "
