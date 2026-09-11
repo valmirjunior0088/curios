@@ -133,7 +133,7 @@ pub(super) fn bin_element(grain: Grain, operand: &Term, local: usize) -> Option<
     let Subterm::Intrinsic(Intrinsic::Bin(found, run)) = &**operand else {
         unreachable!("a located index lies in a literal run");
     };
-    debug_assert_eq!(*found, grain, "a located segment shares the value's grain");
+    assert_eq!(*found, grain, "a located segment shares the value's grain");
 
     match grain {
         Grain::X => run

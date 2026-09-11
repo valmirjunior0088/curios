@@ -81,8 +81,14 @@ impl PackedBin {
     pub fn is_empty(&self) -> bool {
         self.bit_length == 0
     }
+    /// The window's length in the grain's own generators.
+    ///
+    /// **Asserted rather than debug-asserted.** A byte-grain length over a window that is not byte-aligned is not a near miss but a wrong number, and `bit_length / 8` hands it back silently — into the reducer's cost accounting, into an out-of-range report, and through conversion into what the kernel compares. The alignment holds by construction, since [`PackedBin::window`] adds offsets and an X-grain [`PackedBin::slice`] multiplies both of its bounds by eight, so this never fires; what it buys is that a path which breaks the invariant says so where it breaks it rather than somewhere downstream of a wrong length.
     pub fn len(&self, grain: Grain) -> usize {
-        debug_assert!(grain == Grain::B || self.is_x_aligned());
+        assert!(
+            grain == Grain::B || self.is_x_aligned(),
+            "a byte-grain length needs a byte-aligned window"
+        );
         self.bit_length / grain.bits()
     }
     pub fn is_x_aligned(&self) -> bool {
