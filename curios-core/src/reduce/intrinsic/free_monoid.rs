@@ -135,6 +135,13 @@ pub(super) fn bin_element(grain: Grain, operand: &Term, local: usize) -> Option<
     };
     assert_eq!(*found, grain, "a located segment shares the value's grain");
 
+    element_of_run(grain, run, local)
+}
+
+/// The generator at an index of a literal run, as the value its grain reads it as.
+///
+/// **The one place the grain decides what a generator *is*.** `PackedBin` has a reader per grain and the two produce different carriers — a `Byte` at X, a `Bool` at B — so every path that reads one generator branches here and nowhere else, which is what lets the fold arms above take the grain as a parameter rather than as a case.
+pub(super) fn element_of_run(grain: Grain, run: &PackedBin, local: usize) -> Option<Subterm> {
     match grain {
         Grain::X => run
             .byte(local)
