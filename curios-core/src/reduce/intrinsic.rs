@@ -658,81 +658,84 @@ pub fn reduce_intrinsic(
             Ok(Subterm::Intrinsic(Intrinsic::BinEql(grain, left, right)))
         }
         Intrinsic::BinGet {
-            grain: Grain::X,
+            grain,
             bin,
             index,
             in_range,
         } => {
+            let grain = *grain;
+            let span = index.span();
             let bin = reducer.reduce_forced(bin.clone())?;
             let index_reduced = reducer.reduce_forced(index.clone())?;
             let i = as_index(&index_reduced);
             // A concrete index into a literal run.
-            if let (Subterm::Intrinsic(Intrinsic::Bin(Grain::X, bytes)), Some(i)) = (&*bin, i) {
-                return match bytes.byte(i) {
-                    Some(byte) => Ok(Subterm::Intrinsic(Intrinsic::Byte(byte))),
-                    None => Err(ReduceError::BinGetOutOfBounds {
-                        len: bytes.len(Grain::X),
-                        index: i,
-                        span: index.span(),
-                    }),
-                };
+            if let (Subterm::Intrinsic(Intrinsic::Bin(found, run)), Some(i)) = (&*bin, i)
+                && *found == grain
+            {
+                return element_of_run(grain, run, i).ok_or(ReduceError::BinGetOutOfBounds {
+                    len: run.len(grain),
+                    index: i,
+                    span,
+                });
             }
-            // The cons head's byte: `get(append(x[], byte), 0) = byte` — the base case of the cons-peel below, and the partner of `BinSlice`'s rules.
+            // The cons head's generator: `get(append(x[], k), 0) = k` — the base case of the cons-peel below, and the partner of `BinSlice`'s rules. Without it the peel's symbolic head chunk is this same `append(x[], k)`, so the `0`-index step would rebuild the redex it came from until the budget exhausted.
             if let Subterm::Intrinsic(Intrinsic::BinAppend {
-                grain: Grain::X,
+                grain: found,
                 bin: base,
-                element: byte,
+                element,
             }) = &*bin
-                && let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, b)) = &**base
+                && *found == grain
+                && let Subterm::Intrinsic(Intrinsic::Bin(empty, b)) = &**base
+                && *empty == grain
                 && b.is_empty()
                 && let Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) = &*index_reduced
             {
-                return reducer.reduce(byte.clone()).map(Term::unwrap_or_clone);
+                return reducer.reduce(element.clone()).map(Term::unwrap_or_clone);
             }
-            // A get over a cons spine peels one byte per `0`/`succ` index step: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
+            // A get over a cons spine peels one generator per `0`/`succ` index step: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
             // Locate the index by the operands' own lengths rather than peeling one generator at a time. A peel walks the whole spine to expose one generator and rebuilds the rest, so reading an index costs a pass per generator ahead of it; the measure reaches the operand holding it in one pass and indexes within that operand alone. `None` means some operand's length is not statically known, which is what the peel below is for.
             if let Some(i) = i {
-                match bin_locate(Grain::X, &bin, i) {
+                match bin_locate(grain, &bin, i) {
                     Some(Located::At(operand, local)) => {
-                        return bin_element(Grain::X, operand, local).ok_or_else(|| {
+                        return bin_element(grain, operand, local).ok_or(
                             ReduceError::BinGetOutOfBounds {
                                 len: local,
                                 index: i,
-                                span: index.span(),
-                            }
-                        });
+                                span,
+                            },
+                        );
                     }
                     Some(Located::Past(len)) => {
                         return Err(ReduceError::BinGetOutOfBounds {
                             len,
                             index: i,
-                            span: index.span(),
+                            span,
                         });
                     }
                     None => {}
                 }
             }
             // An index at a seam of a concatenation, where the operand starting there holds exactly one generator: `get([..p, k], len(p)) = k`. It is the walk `seam_window` already performs, asked for a window of one — so what located a symbolic *position* now also locates a symbolic *index*, which the locator above cannot because it reads a `usize`. This closes the asymmetry `curios`'s `tests::laws` recorded: a window at a seam was found and an index at the same seam was not.
-            if let Some(operands) = concatenated(Grain::X, &bin)
+            if let Some(operands) = concatenated(grain, &bin)
                 && let Some(run) = seam_window(
                     reducer,
                     &operands,
                     &index_reduced,
                     &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                    |operand| Intrinsic::bin_len(Grain::X, operand.clone()),
+                    |operand| Intrinsic::bin_len(grain, operand.clone()),
                 )?
                 && let [only] = run.as_slice()
-                && let Some(generator) = single_generator(Grain::X, only)
+                && let Some(generator) = single_generator(grain, only)
             {
                 return reducer.reduce(generator).map(Term::unwrap_or_clone);
             }
-            if let Some((head, tail)) = peel_first_atom(Grain::X, &bin) {
+            if let Some((head, tail)) = peel_first_atom(grain, &bin) {
                 match &*index_reduced {
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
                         let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
                         return reducer
                             .reduce(Term::intrinsic(Intrinsic::bin_get(
-                                Grain::X,
+                                grain,
                                 head,
                                 zero,
                                 in_range.clone(),
@@ -744,7 +747,7 @@ pub fn reduce_intrinsic(
                         let prev = Term::intrinsic(Intrinsic::nat_sub(index_reduced.clone(), one));
                         return reducer
                             .reduce(Term::intrinsic(Intrinsic::bin_get(
-                                Grain::X,
+                                grain,
                                 tail,
                                 prev,
                                 in_range.clone(),
@@ -755,7 +758,7 @@ pub fn reduce_intrinsic(
                 }
             }
             Ok(Subterm::Intrinsic(Intrinsic::bin_get(
-                Grain::X,
+                grain,
                 bin,
                 index_reduced,
                 in_range.clone(),
@@ -954,111 +957,6 @@ pub fn reduce_intrinsic(
                     })
                 },
             )
-        }
-        Intrinsic::BinGet {
-            grain: Grain::B,
-            bin,
-            index,
-            in_range,
-        } => {
-            let span = index.span();
-            let bin = reducer.reduce_forced(bin.clone())?;
-            let index_reduced = reducer.reduce_forced(index.clone())?;
-            if let (Subterm::Intrinsic(Intrinsic::Bin(Grain::B, bits)), Some(index)) =
-                (&*bin, as_index(&index_reduced))
-            {
-                return bits
-                    .bit(index)
-                    .map(|bit| Subterm::Intrinsic(Intrinsic::Bool(bit)))
-                    .ok_or_else(|| ReduceError::BinGetOutOfBounds {
-                        len: bits.bit_length(),
-                        index,
-                        span,
-                    });
-            }
-            // The cons head's bit: `get(append(b[], bit), 0) = bit` — the base case of the cons-peel below, and the partner of `BinSlice`'s rules. Without it the peel's symbolic head chunk is this same `append(b[], bit)`, so the `0`-index step would rebuild the redex it came from until the budget exhausted.
-            if let Subterm::Intrinsic(Intrinsic::BinAppend {
-                grain: Grain::B,
-                bin: base,
-                element: bit,
-            }) = &*bin
-                && let Subterm::Intrinsic(Intrinsic::Bin(Grain::B, b)) = &**base
-                && b.is_empty()
-                && let Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) = &*index_reduced
-            {
-                return reducer.reduce(bit.clone()).map(Term::unwrap_or_clone);
-            }
-            // Locate the index by the operands' own lengths rather than peeling one generator at a time. A peel walks the whole spine to expose one generator and rebuilds the rest, so reading an index costs a pass per generator ahead of it; the measure reaches the operand holding it in one pass and indexes within that operand alone. `None` means some operand's length is not statically known, which is what the peel below is for.
-            if let Some(i) = as_index(&index_reduced) {
-                match bin_locate(Grain::B, &bin, i) {
-                    Some(Located::At(operand, local)) => {
-                        return bin_element(Grain::B, operand, local).ok_or_else(|| {
-                            ReduceError::BinGetOutOfBounds {
-                                len: local,
-                                index: i,
-                                span: index.span(),
-                            }
-                        });
-                    }
-                    Some(Located::Past(len)) => {
-                        return Err(ReduceError::BinGetOutOfBounds {
-                            len,
-                            index: i,
-                            span,
-                        });
-                    }
-                    None => {}
-                }
-            }
-            // An index at a seam of a concatenation, where the operand starting there holds exactly one generator: `get([..p, k], len(p)) = k`. It is the walk `seam_window` already performs, asked for a window of one — so what located a symbolic *position* now also locates a symbolic *index*, which the locator above cannot because it reads a `usize`. This closes the asymmetry `curios`'s `tests::laws` recorded: a window at a seam was found and an index at the same seam was not.
-            if let Some(operands) = concatenated(Grain::B, &bin)
-                && let Some(run) = seam_window(
-                    reducer,
-                    &operands,
-                    &index_reduced,
-                    &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                    |operand| Intrinsic::bin_len(Grain::B, operand.clone()),
-                )?
-                && let [only] = run.as_slice()
-                && let Some(generator) = single_generator(Grain::B, only)
-            {
-                return reducer.reduce(generator).map(Term::unwrap_or_clone);
-            }
-            if let Some((head, tail)) = peel_first_atom(Grain::B, &bin) {
-                match &*index_reduced {
-                    Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
-                        return reducer
-                            .reduce(Term::intrinsic(Intrinsic::bin_get(
-                                Grain::B,
-                                head,
-                                Term::intrinsic(Intrinsic::Nat(Nat::Zero)),
-                                in_range.clone(),
-                            )))
-                            .map(Term::unwrap_or_clone);
-                    }
-                    Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))) => {
-                        let prev = Term::intrinsic(Intrinsic::nat_sub(
-                            index_reduced.clone(),
-                            Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                        ));
-                        return reducer
-                            .reduce(Term::intrinsic(Intrinsic::bin_get(
-                                Grain::B,
-                                tail,
-                                prev,
-                                in_range.clone(),
-                            )))
-                            .map(Term::unwrap_or_clone);
-                    }
-                    _ => {}
-                }
-            }
-            Ok(Subterm::Intrinsic(Intrinsic::BinGet {
-                grain: Grain::B,
-                bin,
-                index: index_reduced,
-                in_range: in_range.clone(),
-            }))
         }
         Intrinsic::BinSlice {
             grain: Grain::B,
