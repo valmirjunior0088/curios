@@ -107,7 +107,7 @@ pub(crate) struct Problem {
 
 #[derive(Debug)]
 pub(crate) struct Convert {
-    // Structural problems already seen, stored as `history_key` fingerprints. A recurring problem is assumed to hold — the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling problem first. The one disagreement no sibling surfaces is a universe level inside a `rec` group, so a recurrence whose sides agree modulo levels is a level question rather than a cycle: `level_recurrence` identifies, refuses, or parks it, and never assumes it.
+    // Structural problems already seen, stored as `history_key` fingerprints. A recurring problem is assumed to hold — the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling problem first. The one disagreement no sibling surfaces is a universe level inside a `rec` group, so a recurrence whose sides agree modulo levels is a level question rather than a cycle: `level_question` identifies, refuses, or parks it, and never assumes it — at the recurrence, and at the applied head before any unfolding can decide the pair past its levels.
     history: HashSet<Problem>,
     pending: VecDeque<Problem>,
     // Constraints postponed because a side is flexible but not yet solvable (flex–flex with distinct heads, or a candidate carrying an unsolved metavariable). Retried whenever a fresh solution lands.
@@ -1647,11 +1647,14 @@ impl Convert {
 
             let key = self.history_key(context, &problem);
             if self.in_history(&key) {
-                match level_recurrence(context, &problem)? {
-                    Recurrence::Identified | Recurrence::Cycle => continue,
-                    Recurrence::GroundUnequal => return Ok(false),
+                match level_question(context, &problem.this, &problem.that)? {
+                    // Identified, or a genuine cycle: assumed, as the coinductive rule reads it. A pair under a universe binder falls back to the cycle rule, since the ambient solver cannot constrain a bound parameter; no instantiated group carries one.
+                    LevelQuestion::Identified
+                    | LevelQuestion::UnderBinder
+                    | LevelQuestion::Distinct => continue,
+                    LevelQuestion::GroundUnequal => return Ok(false),
                     // Parked under the raw spelling, which is what names the metavariables a wake must watch; the reduced key leaves the history so the retry is compared rather than assumed.
-                    Recurrence::Blocked => {
+                    LevelQuestion::Blocked => {
                         self.history.remove(&key);
                         self.blocked.push(raw_problem(&problem.type_));
                         continue;
@@ -1708,12 +1711,12 @@ impl Convert {
                     let this_head = this_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
                     let that_head = that_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
 
-                    // Two projections of one group at two universe instances are one head exactly when their levels are identified: the kernel decides the same pair by its levels under the item's hypotheses, and an elaborator that assumed it would hand the kernel a pair it refuses. Identified, the spines decide by congruence; two unequal ground levels, or levels under a universe binder, are refused as the kernel refuses them; a pair the skeletons keep apart is two groups and takes the delta step below.
+                    // Two projections of one group at two universe instances are one head exactly when their levels are identified: the kernel decides the same pair by its levels under the item's hypotheses, and an elaborator that assumed it would hand the kernel a pair it refuses. Identified, the spines decide by congruence; two unequal ground levels, or levels under a universe binder, are refused as the kernel refuses them; a pair that only an unsolved metavariable keeps from being a level question takes the delta step below, which is what solves the metavariable, *and* puts the two heads to the walk as a problem of their own, so the level question is decided once the metavariable is — the delta step alone could decide the pair structurally (a literal count reduces both matches to their zero arms) and accept it with the levels untouched, which is the pair the kernel refuses once the metavariable is zonked away; a pair the skeletons keep apart is two groups and takes the delta step alone.
                     let instances = match (&this_head, &that_head) {
                         (Some((this_group, index)), Some((that_group, that_index)))
                             if index == that_index && this_group != that_group =>
                         {
-                            Some(identify_universe_levels(
+                            Some(level_question(
                                 context,
                                 &Term::rec_proj(this_group.clone(), *index),
                                 &Term::rec_proj(that_group.clone(), *index),
@@ -1721,16 +1724,27 @@ impl Convert {
                         }
                         _ => None,
                     };
+                    if instances == Some(LevelQuestion::Blocked) {
+                        let (this_group, index) = this_a
+                            .head
+                            .as_rec_proj()
+                            .expect("a level question names two projections");
+                        self.enqueue(
+                            this_group.member_type(index),
+                            this_a.head.clone(),
+                            that_a.head.clone(),
+                        );
+                    }
 
                     match (this_head, that_head) {
                         (Some(this), Some(that))
-                            if this == that || instances == Some(Identification::Identified) =>
+                            if this == that || instances == Some(LevelQuestion::Identified) =>
                         {
                             self.compare_same_rec_apply(context, this_a, that_a, type_.clone())?
                         }
                         _ if matches!(
                             instances,
-                            Some(Identification::GroundUnequal | Identification::UnderBinder)
+                            Some(LevelQuestion::GroundUnequal | LevelQuestion::UnderBinder)
                         ) =>
                         {
                             false
@@ -1814,6 +1828,21 @@ impl Convert {
                                 that.group.member_body(that_index),
                             );
                             true
+                        }
+                        // Two projections of one group at two universe instances are a level question before they are two groups: the member-wise comparison would commit the levels through the member types' sorts whatever the bodies then decide, an over-commitment the kernel's rule never makes, so the levels are identified only once nothing but levels keeps the sides apart, refused as the kernel refuses them, and parked while an unsolved metavariable is all that keeps the question open.
+                        (Some(_), Some(_)) => {
+                            let this_term: Term = Subterm::Rec(this.clone()).into();
+                            let that_term: Term = Subterm::Rec(that.clone()).into();
+                            match level_question(context, &this_term, &that_term)? {
+                                LevelQuestion::Identified => true,
+                                LevelQuestion::GroundUnequal | LevelQuestion::UnderBinder => false,
+                                LevelQuestion::Blocked => {
+                                    self.history.remove(&key);
+                                    self.blocked.push(raw_problem(&type_));
+                                    continue;
+                                }
+                                LevelQuestion::Distinct => self.compare_rec(context, this, that)?,
+                            }
                         }
                         _ => self.compare_rec(context, this, that)?,
                     }
@@ -1933,29 +1962,34 @@ impl Convert {
     }
 }
 
-/// What a recurring problem is, once the term metavariables already solved are materialized: a level question the identification decided, one the hypotheses refuse, one that could still become a level question once its remaining metavariables are solved, or a genuine cycle.
+/// What a pair of sides is as a level question, once the term metavariables already solved are materialized: [`Identification`]'s four verdicts, plus a pair that could still become a level question once its remaining metavariables are solved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Recurrence {
+enum LevelQuestion {
     Identified,
     GroundUnequal,
+    UnderBinder,
     Blocked,
-    Cycle,
+    Distinct,
 }
 
-/// Classify a problem the history already holds. The walk that produced the recurrence never compared the levels inside the two `rec` groups — no sibling problem surfaces them — so they are decided here: identified when the sides differ in nothing else, refused when two of them are unequal ground levels, parked when an unsolved metavariable is all that keeps the skeletons apart, and assumed only when the sides genuinely differ in structure, which is the cycle the coinductive rule is for. A pair under a universe binder falls back to the cycle rule, since the ambient solver cannot constrain a bound parameter; no instantiated group carries one.
-fn level_recurrence(context: &mut Context, problem: &Problem) -> Result<Recurrence, ReduceError> {
-    let this = crate::zonk_solved_term_metas(context, &problem.this);
-    let that = crate::zonk_solved_term_metas(context, &problem.that);
+/// Classify a pair whose levels no sibling problem will surface — two projections of one `rec` group at an applied head, or a problem the history already holds. The levels inside the two groups are decided here rather than by the walk: identified when the sides differ in nothing else, refused when two of them are unequal ground levels, parked when an unsolved metavariable is all that keeps the skeletons apart, and left to the caller only when the sides genuinely differ in structure — the cycle the coinductive rule is for, or two groups the delta step may still relate.
+fn level_question(
+    context: &mut Context,
+    this: &Term,
+    that: &Term,
+) -> Result<LevelQuestion, ReduceError> {
+    let this = crate::zonk_solved_term_metas(context, this);
+    let that = crate::zonk_solved_term_metas(context, that);
 
     match identify_universe_levels(context, &this, &that)? {
-        Identification::Identified => return Ok(Recurrence::Identified),
-        Identification::GroundUnequal => return Ok(Recurrence::GroundUnequal),
-        Identification::UnderBinder => return Ok(Recurrence::Cycle),
+        Identification::Identified => return Ok(LevelQuestion::Identified),
+        Identification::GroundUnequal => return Ok(LevelQuestion::GroundUnequal),
+        Identification::UnderBinder => return Ok(LevelQuestion::UnderBinder),
         Identification::Distinct => {}
     }
 
     if !this.any_metavar(&mut |_| true) && !that.any_metavar(&mut |_| true) {
-        return Ok(Recurrence::Cycle);
+        return Ok(LevelQuestion::Distinct);
     }
 
     // After zonking, every metavariable still standing is unsolved, so a skeleton match with those as wildcards is exactly "these could become one term modulo levels".
@@ -1964,7 +1998,7 @@ fn level_recurrence(context: &mut Context, problem: &Problem) -> Result<Recurren
     let wildcard = |term: &Term| matches!(&**term, Subterm::Metavar(_));
 
     Ok(match this_skeleton.equal_up_to(&that_skeleton, wildcard) {
-        true => Recurrence::Blocked,
-        false => Recurrence::Cycle,
+        true => LevelQuestion::Blocked,
+        false => LevelQuestion::Distinct,
     })
 }

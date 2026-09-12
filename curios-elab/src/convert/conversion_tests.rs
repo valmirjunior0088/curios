@@ -742,6 +742,63 @@ fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_un
     }
 }
 
+/// The same pair where the walk never recurs: a literal zero count lets the symmetric unfolding reduce both matches to their zero arms, so the hole is solved structurally before the recursive call is ever reached, and deciding the pair by that unfolding alone accepted it with the levels untouched — the pair the kernel refuses once it sees the hole zonked away. The two heads are put to the walk as a problem of their own, decided once the hole is: solvable, the pair converts with its levels identified; kept open by two distinct holes, the head problem parks without committing, and commits once both are solved.
+#[test]
+fn two_instances_kept_apart_only_by_a_metavariable_identify_their_levels_once_it_is_solved() {
+    {
+        let mut context = context();
+        context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+        let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+        let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+        let a = context.fresh(Some("a"));
+        let at_u0 = polymorphic_fold(&mut context, Level::meta(u0), Term::hole(0));
+        let at_u1 = polymorphic_fold(&mut context, Level::meta(u1), nat(0));
+        let this = Term::apply(at_u0, [nat_type(), Term::free_var(&a), nat(0)]);
+        let that = Term::apply(at_u1, [nat_type(), Term::free_var(&a), nat(0)]);
+        assert_eq!(conv(&mut context, &this, &that), Ok(true));
+        assert_eq!(
+            zonked(&context, u0),
+            zonked(&context, u1),
+            "the pair was decided by unfolding past its level question",
+        );
+    }
+
+    {
+        let mut context = context();
+        context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+        context.birth_metavar(MetavarId(1), Vec::new(), nat_type());
+        let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+        let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+        let a = context.fresh(Some("a"));
+        let at_u0 = polymorphic_fold(&mut context, Level::meta(u0), Term::hole(0));
+        let at_u1 = polymorphic_fold(&mut context, Level::meta(u1), Term::hole(1));
+        let this = Term::apply(at_u0, [nat_type(), Term::free_var(&a), nat(0)]);
+        let that = Term::apply(at_u1, [nat_type(), Term::free_var(&a), nat(0)]);
+        assert!(
+            matches!(
+                convert_outcome(&mut context, &nat_type(), &this, &that),
+                Ok(Outcome::Blocked(_))
+            ),
+            "a head problem kept open by two distinct holes was decided",
+        );
+        assert_ne!(
+            zonked(&context, u0),
+            zonked(&context, u1),
+            "the levels were identified before anything licensed it",
+        );
+        context.solve_metavar(MetavarId(0), nat(0));
+        context.solve_metavar(MetavarId(1), nat(0));
+        assert!(
+            matches!(
+                convert_outcome(&mut context, &nat_type(), &this, &that),
+                Ok(Outcome::Converts)
+            ),
+            "the parked head problem did not convert once its holes were solved",
+        );
+        assert_eq!(zonked(&context, u0), zonked(&context, u1));
+    }
+}
+
 /// A recurrence that only an unsolved metavariable keeps from being a level question parks rather than assumes, and commits the identification once the metavariable is solved: the two zero arms are distinct unsolved holes, so nothing in the walk solves them, and the outcome is undecided; solved by hand, the same comparison converts with the levels identified.
 #[test]
 fn a_recurrence_blocked_on_a_metavariable_parks_and_commits_once_it_is_solved() {
