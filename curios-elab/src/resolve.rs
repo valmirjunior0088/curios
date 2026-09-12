@@ -934,10 +934,16 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
     let concepts = context.concepts();
 
     for (name, concept) in concepts {
-        for (_, target) in &concept.supers {
+        for (position, target) in &concept.supers {
             if !concepts.contains_key(target) {
                 return Err(Error::unknown_superclass(name.symbol(), target.symbol()));
             }
+            // A superclass position indexes the concept's own field list, and nothing between the lowerer that mints it and the readers that index by it says so. Asserted here rather than at each reader because this is where the registries are seeded and where the rest of what a `supers` entry promises is already checked; a position no field answers to is a lowering defect, not a program's.
+            assert!(
+                *position < concept.fields.len(),
+                "a superclass position of '{}' lies within its field list",
+                name.symbol()
+            );
         }
     }
 
