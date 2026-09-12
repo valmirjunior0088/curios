@@ -895,28 +895,34 @@ pub fn reduce_intrinsic(
             )))
         }
         Intrinsic::BinAppend {
-            grain: Grain::X,
+            grain,
             bin,
-            element: byte,
+            element,
         } => {
+            let grain = *grain;
             let bin = reducer.reduce_forced(bin.clone())?;
-            let byte = reducer.reduce_forced(byte.clone())?;
-            // A concrete byte is taken mod 256 — its low 8 bits — matching the runtime's packed-`i8` store and the optimizer's `as u8`. A symbolic operand has no `as_nat`, so it stays stuck rather than truncating.
-            let n = match &*byte {
-                Subterm::Intrinsic(Intrinsic::Byte(byte)) => Some(*byte),
-                _ => None,
-            };
-            Ok(match (Term::unwrap_or_clone(bin), n) {
-                (Subterm::Intrinsic(Intrinsic::Bin(Grain::X, bytes)), Some(n)) => {
-                    // Twice the whole rebuilt value: `append_byte` copies the base out with `to_bytes` and then copies the extended run into a fresh buffer. Appending one byte therefore costs the length of everything appended so far, twice — which is the shape that makes a naive accumulation quadratic, and the reason it is charged rather than treated as an increment.
-                    reducer.spend(
-                        packed_bound(Grain::X, bytes.bit_length() as u64 + 8).saturating_mul(2),
-                    )?;
+            // A concrete generator is a literal of the grain: a `Byte` at X, taken as the runtime's packed-`i8` store and the optimizer's `as u8` take it, a `Bool` at B. A symbolic operand reads as no generator, so it stays stuck rather than truncating.
+            let element = reducer.reduce_forced(element.clone())?;
+            if let Subterm::Intrinsic(Intrinsic::Bin(found, run)) = &*bin
+                && *found == grain
+                && let Some(generator) = Generator::read(grain, &element)
+            {
+                // Twice the whole rebuilt value: an append copies the packed payload out and then copies the extended run into a fresh buffer. Appending one generator therefore costs the length of everything appended so far, twice — which is the shape that makes a naive accumulation quadratic, and the reason it is charged rather than treated as an increment. Charged before the copy, which is why the generator is read first.
+                reducer.spend(
+                    packed_bound(grain, run.bit_length() as u64 + grain.bits() as u64)
+                        .saturating_mul(2),
+                )?;
 
-                    Subterm::Intrinsic(Intrinsic::Bin(Grain::X, bytes.append_byte(n).unwrap()))
-                }
-                (bin, _) => Subterm::Intrinsic(Intrinsic::bin_append(Grain::X, bin, byte)),
-            })
+                let appended = generator
+                    .appended_to(run)
+                    .expect("a literal run of a grain takes that grain's generator");
+
+                return Ok(Subterm::Intrinsic(Intrinsic::Bin(grain, appended)));
+            }
+
+            Ok(Subterm::Intrinsic(Intrinsic::bin_append(
+                grain, bin, element,
+            )))
         }
         Intrinsic::BinConcat { grain, operands } => {
             let grain = *grain;
@@ -960,31 +966,6 @@ pub fn reduce_intrinsic(
                     })
                 },
             )
-        }
-        Intrinsic::BinAppend {
-            grain: Grain::B,
-            bin,
-            element: bit,
-        } => {
-            let bin = reducer.reduce_forced(bin.clone())?;
-            let bit = reducer.reduce_forced(bit.clone())?;
-            let appended = match (&*bin, bit.as_bool()) {
-                (Subterm::Intrinsic(Intrinsic::Bin(Grain::B, bits)), Some(bit)) => {
-                    // Twice the whole rebuilt value: `append_bit` copies the packed payload out and then copies the extended run into a fresh buffer. Appending one generator therefore costs the length of everything appended so far, twice — which is the shape that makes a naive accumulation quadratic, and the reason it is charged rather than treated as an increment.
-                    reducer.spend(
-                        packed_bound(Grain::B, bits.bit_length() as u64 + 1).saturating_mul(2),
-                    )?;
-
-                    Intrinsic::Bin(Grain::B, bits.append_bit(bit))
-                }
-                _ => Intrinsic::BinAppend {
-                    grain: Grain::B,
-                    bin,
-                    element: bit,
-                },
-            };
-
-            Ok(Subterm::Intrinsic(appended))
         }
         Intrinsic::ListType(elem) => {
             let elem = reducer.reduce(elem.clone())?;

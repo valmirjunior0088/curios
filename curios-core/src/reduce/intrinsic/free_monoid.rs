@@ -152,6 +152,35 @@ pub(super) fn element_of_run(grain: Grain, run: &PackedBin, local: usize) -> Opt
     }
 }
 
+/// One generator, read out of the term an element reduced to.
+///
+/// The other direction of [`element_of_run`]'s seam, and the rest of what the grain decides: reading a generator *into* a run takes both a carrier — a `Byte` at X, a `Bool` at B — and an append that can refuse, since a byte has to land on a byte boundary where a bit lands anywhere. Naming the generator separates the two steps the append arm needs kept apart, because the budget is charged between them: the read decides whether there is work to do, and the charge has to precede the copy that does it.
+pub(super) enum Generator {
+    Byte(u8),
+    Bit(bool),
+}
+
+impl Generator {
+    /// The generator a reduced element names at this grain, or `None` where it is not a literal of it.
+    pub(super) fn read(grain: Grain, element: &Subterm) -> Option<Self> {
+        match grain {
+            Grain::X => match element {
+                Subterm::Intrinsic(Intrinsic::Byte(byte)) => Some(Self::Byte(*byte)),
+                _ => None,
+            },
+            Grain::B => element.as_bool().map(Self::Bit),
+        }
+    }
+
+    /// The run with this generator appended — `None` at the byte grain alone, over a run that is not byte-aligned.
+    pub(super) fn appended_to(self, run: &PackedBin) -> Option<PackedBin> {
+        match self {
+            Self::Byte(byte) => run.append_byte(byte),
+            Self::Bit(bit) => Some(run.append_bit(bit)),
+        }
+    }
+}
+
 /// A value read as a concatenation's operands: a concatenation's own, or an append's base beside the one-generator run it adds. `None` for anything that is neither.
 ///
 /// **An append *is* a concatenation, and only the locator disagreed.** `append(b, k) = b ++ append(x[], k)` is the peel's own law, conversion's spine flattens both spellings to one atom list, and `x[..p, k]` and `x[..p, ..x[k]]` are definitionally equal terms. A locator gated on the concatenation node alone therefore declined a window it had already decided for the other spelling of the same value — incompleteness with nothing on the refusing side to justify it, and the shape `Bytes/of_nat` builds with, so every base-256 encoding was outside what a window could locate.
