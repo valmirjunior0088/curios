@@ -5,7 +5,11 @@ use crate::tests::{error, run};
 #[test]
 fn named_fields_run_end_to_end() {
     let source = r#"
-        use /std/{Vec, Nat};
+        use /std/{Nat};
+        induct Vec(T : Type) : (n : Nat) -> pub Type
+        | nil() : (0)
+        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        end
         let p : { n : Nat, v : Vec(Nat, n) } =
             (n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())));
         let total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =
@@ -62,7 +66,11 @@ fn struct_newtype_projects() {
 #[test]
 fn struct_dependent_fields_run_end_to_end() {
     let source = r#"
-        use /std/{Vec, Nat};
+        use /std/{Nat};
+        induct Vec(T : Type) : (n : Nat) -> pub Type
+        | nil() : (0)
+        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        end
         pub struct Sized : pub Type { n : Nat, v : Vec(Nat, n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         let total(@k : Nat, v : Vec(Nat, k), acc : Nat) -> Nat =

@@ -99,7 +99,7 @@ fn a_body_carried_level_is_minimized_rather_than_generalized() {
     );
 }
 
-// A `match` arm is checked at the motive opened on the constructor value the scrutinee is refined to, and that value is what a metavariable in the arm's expected type gets solved to — here `Eq/refl()`'s `@z`, against `Eq(len(xs), len(xs))` with `xs := L/cons(x, rest)`. The family is universe-polymorphic through its `A: Type`, so the occurrence needs its level instance; built without one, it zonked into the definition, where the elaborator's own arity check refused a program that is plainly well-typed. Both arms are `Eq/refl()` on purpose: no `rec`, no `Eq/cong`, nothing but the refinement itself.
+// A `match` arm is checked at the motive opened on the constructor value the scrutinee is refined to, and that value is what a metavariable in the arm's expected type gets solved to — here `Eq/refl()`'s `@z`, against `Eq(len(xs), len(xs))` with `xs := L/cons(x, rest)`. The family is universe-polymorphic through its `A: Type`, so the occurrence needs its level instance; built without one, it zonked into the definition, where the elaborator's own arity check refused a program that is plainly well-typed. Both arms are `Eq/refl()` on purpose: no `rec`, no `Eq/cong`, nothing but the refinement itself. A twin fixture over a *prelude* family stood beside this one, where the detector differs — the elaborator's arity check knows only the module's own inductives, so a level-less prelude constructor passed it and the kernel refused the definition instead. It was written over `/std/Vec` when `Vec` was an indexed inductive; `/std` now has no `Type`-valued universe-polymorphic indexed family to state it over, and the prelude rung is held by the build rather than by a fixture: `/std/Eq`'s own `sym`, `trans`, `cong` and `subst` each match on that universe-polymorphic family and answer with `Eq/refl()` in the arm, and `cargo x clippy` certifies every `/std` module with the kernel on each build.
 #[test]
 fn a_refined_scrutinee_carries_the_family_universe_levels() {
     let source = r#"
@@ -119,27 +119,6 @@ fn a_refined_scrutinee_carries_the_family_universe_levels() {
             | cons(x, rest) => Eq/refl()
             end;
         /std/print(Nat/to_str(len(L/cons(1, L/cons(2, L/nil())))))
-        "#;
-
-    assert_eq!(run(source), b"2");
-}
-
-// The same defect over a prelude family, where the detector differs: the elaborator's arity check knows only the arities of the module's own inductives, so the level-less `Vec/cons` passed it and the kernel refused the definition instead. Keeping both fixtures pins that the fix reaches the prelude's families and not only the module's.
-#[test]
-fn a_refined_prelude_scrutinee_carries_the_family_universe_levels() {
-    let source = r#"
-        use /std/{Nat, Eq, Vec};
-        let count(@A: Type, @n: Nat, xs: Vec(A, n)) -> Nat =
-            match xs
-            | nil() => 0
-            | cons(@m, _, rest) => count(rest) + 1
-            end;
-        let count_is_n(@A: Type, @n: Nat, xs: Vec(A, n)) -> Eq(count(xs), n) =
-            match xs
-            | nil() => Eq/refl()
-            | cons(@m, x, rest) => Eq/cong((k) => k + 1, count_is_n(rest))
-            end;
-        /std/print(Nat/to_str(count(Vec/cons(1, Vec/cons(2, Vec/nil())))))
         "#;
 
     assert_eq!(run(source), b"2");

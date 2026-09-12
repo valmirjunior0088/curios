@@ -1,71 +1,110 @@
-use /std/{Nat, List, Show, Spell};
+use /std/{Nat, List, Bool, Eq, Str, Show, Spell, True, False};
 use /std/ops/{Eql};
 
--- | A list of exactly `n` elements.
-pub induct Vec(T: Type): (Nat) -> pub Type
--- | No elements.
-| nil(): (0)
--- | One element in front of a vector one shorter.
-| cons(@m: Nat, x: T, xs: Vec(T, m)): (m + 1)
-end
+-- | That `l` holds exactly `n` elements.
+pub let Counted(@T: Type, l: List(T), n: Nat) -> Prop =
+    Eq(List/len(l), n);
 
-pub use Vec/*;
+-- | A list of exactly `n` elements.
+pub struct Vec(T: Type, n: Nat): pub Type {
+    -- | The elements themselves.
+    list: List(T),
+    -- | Why there are exactly `n` of them.
+    counted: Counted(list, n),
+}
+
+-- Zero is no successor, refuted by the comparison that decides it.
+let zero_not_succ(@n: Nat, e: Eq(0, n + 1)) -> False =
+    Eq/subst((m: Nat) => Bool/Holds(Nat/eql(0, m)), e, True/qed());
+
+-- A successor cancels off both sides, which is how a tail's length is read off the whole's.
+let succ_cancel(@a: Nat, @b: Nat, e: Eq(a + 1, b + 1)) -> Eq(a, b) =
+    Eq/cong((w: Nat) => w - 1, e);
 
 -- | The length, read off the type.
 pub let len(@T: Type, @n: Nat, _: Vec(T, n)) -> Nat =
     n;
 
--- | `v` then `w`.
-pub let append(@T: Type, @n: Nat, @m: Nat, v: Vec(T, n), w: Vec(T, m)) -> Vec(T, n + m) =
-    match v: (k, _) => Vec(T, k + m)
-    | nil() => w
-    | cons(@_, x, xs) => Vec/cons(x, append(xs, w))
-    end;
+-- | The elements as a list.
+pub let to_list(@T: Type, @n: Nat, v: Vec(T, n)) -> List(T) =
+    v.list;
 
--- | `f` on every element.
-pub let map(@A: Type, @B: Type, @n: Nat, f: (A) -> B, v: Vec(A, n)) -> Vec(B, n) =
-    match v: (k, _) => Vec(B, k)
-    | nil() => Vec/nil()
-    | cons(@_, x, xs) => Vec/cons(f(x), map(f, xs))
-    end;
+-- | The list as a vector, at the length it turns out to have.
+pub let of_list(@T: Type, l: List(T)) -> Vec(T, List/len(l)) =
+    Vec { list = l, counted = Eq/refl() };
 
--- | The first element of a nonempty vector.
-pub let first(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> T =
-    match v | cons(@_, x, _) => x end;
+-- | Equal elements are equal vectors, since the count is a proof and proofs do not differ.
+pub let eq_of_list(
+    @T: Type,
+    @n: Nat,
+    v: Vec(T, n),
+    w: Vec(T, n),
+    p: Eq(v.list, w.list),
+) -> Eq(v, w) =
+    Eq/subst(
+        (l: List(T)) => (counted: Counted(l, n)) -> Eq(v, Vec { list = l, counted = counted }),
+        p,
+        (_: Counted(v.list, n)) => Eq/refl())(w.counted);
 
--- | Everything after the first element.
-pub let rest(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> Vec(T, n) =
-    match v | cons(@_, _, xs) => xs end;
+-- | No elements.
+pub let nil(@T: Type) -> Vec(T, 0) =
+    Vec { list = [], counted = Eq/refl() };
+
+-- | `x` in front of a vector one shorter.
+pub let cons(@T: Type, @n: Nat, x: T, v: Vec(T, n)) -> Vec(T, n + 1) =
+    Vec { list = [x, ..v.list], counted = Eq/cong((w: Nat) => w + 1, v.counted) };
 
 -- | The element at `i`, under the evidence that `i < n`.
 pub let get(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, @ok: Nat/Lt(i, n)) -> T =
-    (match v: (k, _) => (j: Nat, Nat/Lt(j, k)) -> T
-    | nil() => (_, bad) => match bad end
-    | cons(@m, x, xs) => (j, lt) => match j | 0 => x | pred + 1 => get(@T, @m, xs, pred, @lt) end
-    end)(i, ok);
+    List/get(@T, v.list, i, @Eq/subst((x: Nat) => Nat/Lt(i, x), Eq/sym(v.counted), ok));
 
--- | The elements as a list.
-pub let to_list(@T: Type, @n: Nat, v: Vec(T, n)) -> List(T) =
-    match v: (_, _) => List(T) | nil() => [] | cons(@_, x, xs) => [x, ..to_list(xs)] end;
+-- | The first element of a nonempty vector.
+pub let first(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> T =
+    get(v, 0);
 
--- | The list as a vector, its length as the first component.
-pub let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T, n)} =
-    match l | [] => (0, Vec/nil()) | [x, .._]; (m, v) => (m + 1, Vec/cons(x, v)) end;
+-- | Everything after the first element.
+pub let rest(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> Vec(T, n) =
+    (match v.list: (l) => (Counted(l, n + 1)) -> Vec(T, n)
+    | [] => (c) => match zero_not_succ(c) end
+    | [_, ..t] => (c) => Vec { list = t, counted = succ_cancel(c) }
+    end)(v.counted);
+
+-- | `v` then `w`.
+pub let append(@T: Type, @n: Nat, @m: Nat, v: Vec(T, n), w: Vec(T, m)) -> Vec(T, n + m) =
+    Vec {
+        list = [..v.list, ..w.list],
+        counted =
+            Eq/subst(
+                (x: Nat) => Eq(x + List/len(w.list), n + m),
+                Eq/sym(v.counted),
+                Eq/subst((y: Nat) => Eq(n + y, n + m), Eq/sym(w.counted), Eq/refl())),
+    };
+
+-- | `f` on every element.
+pub let map(@A: Type, @B: Type, @n: Nat, f: (A) -> B, v: Vec(A, n)) -> Vec(B, n) =
+    Vec { list = List/map(v.list, f), counted = v.counted };
+
+-- A run of one value is as long as the count it was built from, which the fold's own shape gives.
+let replicate_len(@T: Type, n: Nat, x: T) -> Counted(List/replicate(n, x), n) =
+    match n: (k) => Counted(List/replicate(k, x), k)
+    | 0 => Eq/refl()
+    | _ + 1; ih => Eq/cong((w: Nat) => w + 1, ih)
+    end;
 
 -- | `n` copies of `x`.
 pub let replicate(@T: Type, n: Nat, x: T) -> Vec(T, n) =
-    match n: (k) => Vec(T, k) | 0 => Vec/nil() | _ + 1; v => Vec/cons(x, v) end;
+    Vec { list = List/replicate(n, x), counted = replicate_len(n, x) };
 
 -- | Pairs, position by position.
 pub let zip(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), w: Vec(B, n)) -> Vec({A, B}, n) =
-    (match v: (k, _) => (Vec(B, k)) -> Vec({A, B}, k)
-    | nil() => (_) => Vec/nil()
-    | cons(@_, x, xs) => (w) => Vec/cons((x, first(w)), zip(xs, rest(w)))
-    end)(w);
+    (match n: (k) => (Vec(A, k), Vec(B, k)) -> Vec({A, B}, k)
+    | 0 => (_, _) => nil()
+    | _ + 1; ih => (a, b) => cons((first(a), first(b)), ih(rest(a), rest(b)))
+    end)(v, w);
 
 -- | Left to right with `f(elem, acc)`.
 pub let fold(@T: Type, @A: Type, @n: Nat, v: Vec(T, n), init: A, f: (T, A) -> A) -> A =
-    match v: (_, _) => A | nil() => init | cons(@_, x, xs) => fold(xs, f(x, init), f) end;
+    List/fold(v.list, init, f);
 
 satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T, n)) {
     eql(v, w) = to_list(v) == to_list(w),
@@ -76,4 +115,6 @@ satisfy (@T: Type, @n: Nat, use Show(T)) => Show(Vec(T, n)) {
     show(v) = Show/show(to_list(v)),
 }
 
-satisfy (@T: Type, @n: Nat, use Spell(T)) => Spell(Vec(T, n));
+satisfy (@T: Type, @n: Nat, use Spell(T)) => Spell(Vec(T, n)) {
+    spell(v) = Str/flatten(["Vec/of_list(", Spell/spell(to_list(v)), ")"]),
+}

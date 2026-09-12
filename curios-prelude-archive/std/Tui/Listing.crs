@@ -59,4 +59,4 @@ pub let draw(l: Listing, style: Style, highlight: Style, w: Nat, h: Nat) -> Fram
     let row(entry: {Nat, Str}) -> Vec(Tile, w) =
         let s = match entry.0 == chosen | true => highlight | false => style end;
         Vec/first(Frame/fit(Frame/text(s, entry.1).frame, w, 1));
-    Frame/fit(Vec/of_list(List/map(shown, row)).1, w, h);
+    Frame/fit(Vec/of_list(List/map(shown, row)), w, h);

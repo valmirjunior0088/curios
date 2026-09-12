@@ -207,7 +207,11 @@ fn lambda_marked_binder_on_explicit_slot_is_rejected() {
 #[test]
 fn constructor_pattern_matches_an_implicit_payload() {
     let source = r#"
-        use /std/{Nat, Vec, Str};
+        use /std/{Nat, Str};
+        induct Vec(T : Type) : (n : Nat) -> pub Type
+        | nil() : (0)
+        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        end
         let head3(v : Vec(Nat, 3)) -> Nat =
             match v : (_, _) => Nat
             | cons(@m, x, xs) => x
@@ -221,7 +225,11 @@ fn constructor_pattern_matches_an_implicit_payload() {
 #[test]
 fn constructor_pattern_plain_on_implicit_payload_is_rejected() {
     let source = r#"
-        use /std/{Nat, Vec, Str};
+        use /std/{Nat, Str};
+        induct Vec(T : Type) : (n : Nat) -> pub Type
+        | nil() : (0)
+        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        end
         let head3(v : Vec(Nat, 3)) -> Nat =
             match v : (_, _) => Nat
             | cons(m, x, xs) => x
@@ -239,7 +247,11 @@ fn constructor_pattern_plain_on_implicit_payload_is_rejected() {
 #[test]
 fn constructor_pattern_mark_on_explicit_payload_is_rejected() {
     let source = r#"
-        use /std/{Nat, Vec, Str};
+        use /std/{Nat, Str};
+        induct Vec(T : Type) : (n : Nat) -> pub Type
+        | nil() : (0)
+        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        end
         let head3(v : Vec(Nat, 3)) -> Nat =
             match v : (_, _) => Nat
             | cons(@m, @x, xs) => x

@@ -133,7 +133,18 @@ fn a_spine_mismatch_falls_through_to_unfolding() {
 fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Str, Char, List, Vec};
+        use /std/{Nat, Str, Char, List};
+
+        induct Vec(T: Type): (n: Nat) -> pub Type
+        | nil(): (0)
+        | cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+        end
+
+        let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T, n)} =
+            match l | [] => (0, Vec/nil()) | [x, .._]; (m, v) => (m + 1, Vec/cons(x, v)) end;
+
+        let to_list(@T: Type, @n: Nat, v: Vec(T, n)) -> List(T) =
+            match v: (_, _) => List(T) | nil() => [] | cons(@_, x, xs) => [x, ..to_list(xs)] end;
 
         let resize(w: Nat, @w0: Nat, v: Vec(Char, w0)) -> Vec(Char, w) =
             (match w: (k) => (n: Nat, Vec(Char, n)) -> Vec(Char, k)
@@ -146,10 +157,10 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
             end)(w0, v);
 
         let padded(s: Str, w: Nat) -> Vec(Char, w) =
-            let t = Vec/of_list(Str/to_list(s));
+            let t = of_list(Str/to_list(s));
             resize(w, t.1);
 
-        /std/print(Str/flatten(List/map(Vec/to_list(padded("hi", 4)), Str/of_char)))
+        /std/print(Str/flatten(List/map(to_list(padded("hi", 4)), Str/of_char)))
         "#),
         b"hi.."
     );

@@ -27,7 +27,11 @@ fn a_motive_may_name_a_top_level_family() {
 #[test]
 fn a_constant_motive_on_an_indexed_family_binds_placeholders() {
     let source = r#"
-        use /std/{Nat, Vec};
+        use /std/{Nat};
+        induct Vec(T : Type) : (n : Nat) -> pub Type
+        | nil() : (0)
+        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        end
         let len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
             match v : (_, _) => Nat
             | nil() => 0
@@ -75,7 +79,11 @@ fn a_motive_binder_annotation_obeys_the_families_plicity() {
 #[test]
 fn a_default_arm_is_allowed_on_an_indexed_family() {
     let source = r#"
-        use /std/{Nat, Vec};
+        use /std/{Nat};
+        induct Vec(T : Type) : (n : Nat) -> pub Type
+        | nil() : (0)
+        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        end
         let head_or(@T : Type, @n : Nat, v : Vec(T, n), fallback : T) -> T =
             match v : (_, _) => T
             | cons(@m, x, xs) => x
@@ -92,7 +100,11 @@ fn a_default_arm_is_allowed_on_an_indexed_family() {
 #[test]
 fn an_under_bound_motive_reports_its_binder_count() {
     let source = r#"
-        use /std/{Nat, Vec};
+        use /std/{Nat};
+        induct Vec(T : Type) : (n : Nat) -> pub Type
+        | nil() : (0)
+        | cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+        end
         let len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
             match v : (_) => Nat
             | nil() => 0

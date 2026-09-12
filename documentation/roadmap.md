@@ -41,7 +41,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Inductive types (`induct` declarations)
   - [x] Independent nominal/representation visibility, with opaque construction
   - [x] Constructor registry & dependent eliminators
-  - [x] Indexed families (e.g. `Vec`)
+  - [x] Indexed families (e.g. `std/Tui/Layout/Sizes`)
   - [x] Variant arity checking
   - [x] Exhaustiveness/coverage checking (index inversion)
   - [x] Large-elimination guard (restricts `Prop` → `Type` elimination)
@@ -224,7 +224,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] The error channel over any monad (`std/Try`: `raise`, `rescue`, `attempt` and `run`)
 - [x] The host's failure vocabulary (`std/Io/Error`) and paths as host bytes (`std/Path`)
 - [x] The effect tier retyped: `Io` where a module suspends, `Try` where it can fail
-- [x] Core collections (`std/List` and its helpers, length-indexed `std/Vec`)
+- [x] Core collections (`std/List` and its helpers, and `std/Vec`, which counts a list in its type)
 - [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys)
 - [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`, over packed `Bytes`)
 - [x] Certified Unicode-scalar `Char` type and `Str` migration (`'…' : Char`, typed APIs)

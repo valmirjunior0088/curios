@@ -548,7 +548,7 @@ match p: discriminates_eq                      -- a named family
 match v                                        -- omitted; inferred
 ```
 
-The number of binders is fixed by the eliminated type: one per index, then one for the scrutinee. A non-indexed scrutinee — every intrinsic carrier, and any inductive declared without an index telescope — therefore takes exactly one binder, so a result that ignores the scrutinee is written `(_) => T`. `Vec(T)` has one index and takes two binders; `Eq` has two and takes three.
+The number of binders is fixed by the eliminated type: one per index, then one for the scrutinee. A non-indexed scrutinee — every intrinsic carrier, and any inductive declared without an index telescope — therefore takes exactly one binder, so a result that ignores the scrutinee is written `(_) => T`. The `Sized` declared under [Inductive declarations](#inductive-declarations) has one index and takes two binders; `Eq` has two and takes three.
 
 Parameters are never binders. They are uniform across constructors and fixed by the scrutinee's type, so the motive body refers to them through the ambient scope, exactly as the declaration side states only index expressions in a constructor's case target.
 
@@ -826,17 +826,17 @@ Parameters follow the name. A parameter marked `@` is implicit at the type const
 The required result annotation is either a sort or an index telescope followed by a sort:
 
 ```crs
-pub induct Vec(T: Type): (length: Nat) -> pub Type
-| nil(): (0)
-| cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+pub induct Sized(T: Type): (length: Nat) -> pub Type
+| empty(): (0)
+| push(@n: Nat, head: T, tail: Sized(T, n)): (n + 1)
 end
 ```
 
 Each index binder may be named or left bare — `(length: Nat)` and `(Nat)` are both well-formed — and an index never takes `@`. The name is never in scope in the constructor cases; it appears in the family's printed signature, and a later entry of the same telescope may depend on it. That dependency is what makes the annotation a telescope rather than a list of types:
 
 ```crs
-pub induct Tagged: (size: Nat, contents: Vec(Nat, size)) -> pub Type
-| tag(@size: Nat, @contents: Vec(Nat, size)): (size, contents)
+pub induct Tagged: (size: Nat, contents: Sized(Nat, size)) -> pub Type
+| tag(@size: Nat, @contents: Sized(Nat, size)): (size, contents)
 end
 ```
 
