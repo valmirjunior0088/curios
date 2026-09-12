@@ -24,7 +24,7 @@ let chose(argv: List(Str)) -> Str =
     match Cli/select(app, argv)
     | wanted_help() => "help"
     | wanted_version() => "version"
-    | refused(f) => Cli/report(app, f)
+    | refused(f) => Cli/report([], app, f)
     | chose(sub, rest) => Str/flatten([Cli/name(sub), "(", Str/join(",", rest), ")"])
     end;
 
@@ -52,6 +52,12 @@ test an_unknown_or_absent_subcommand_lists_the_ones_there_are =
 -- A parent's usage names `<COMMAND>` rather than options it does not have, and its help grows the section its children fill.
 test a_parents_help_lists_its_children =
     Test/all([
-        Test/equal(Cli/usage(app), "Usage: deps <COMMAND>"),
-        Test/assert(Str/contains(Cli/help(app), "Commands:\n  add     Add a dependency\n")),
-        Test/assert(Str/contains(Cli/help(app), "  remove  Remove a dependency\n"))]);
+        Test/equal(Cli/usage([], app), "Usage: deps <COMMAND>"),
+        Test/assert(Str/contains(Cli/help([], app), "Commands:\n  add     Add a dependency\n")),
+        Test/assert(Str/contains(Cli/help([], app), "  remove  Remove a dependency\n"))]);
+
+-- A subcommand's usage names the commands that lead to it, so the line it prints is the line that reaches it, and the command's own name comes from the command rather than from its caller.
+test a_subcommands_usage_names_the_path_that_reaches_it =
+    Test/all([
+        Test/equal(Cli/usage(["deps"], add), "Usage: deps add <NAME>"),
+        Test/assert(Str/contains(Cli/help(["deps"], add), "\n\nUsage: deps add <NAME>\n\n"))]);

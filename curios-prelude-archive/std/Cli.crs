@@ -519,13 +519,17 @@ let command_rows(subs: List(Cli)) -> List({Str, Str}) =
 let has_options(spec: List(Arg)) -> Bool =
     List/any(spec, (a) => Bool/not(is_positional(a.kind) || is_rest(a.kind)));
 
--- | The one-line usage.
-pub let usage(cli: Cli) -> Str =
+-- | The one-line usage, naming the command after the commands `within` that lead to it, outermost first.
+-- |
+-- | A command run directly is within nothing, so its usage is `usage([], cli)`.
+pub let usage(within: List(Str), cli: Cli) -> Str =
+    let invoked = [..within, name(cli)];
     match cli
-    | leaf(n, _, _, args, _) =>
-        let head = match has_options(args) | true => [n, "[OPTIONS]"] | false => [n] end;
+    | leaf(_, _, _, args, _) =>
+        let head =
+            match has_options(args) | true => [..invoked, "[OPTIONS]"] | false => invoked end;
         Str/flatten(["Usage: ", Str/join(" ", List/flatten([head, placeholders(args)]))])
-    | group(n, _, _, _) => Str/flatten(["Usage: ", n, " <COMMAND>"])
+    | group(_, _, _, _) => Str/flatten(["Usage: ", Str/join(" ", [..invoked, "<COMMAND>"])])
     end;
 
 let option_head(a: Arg) -> Str =
@@ -555,8 +559,8 @@ let builtin_rows(cli: Cli) -> List({Str, Str}) =
     | some(_) => [help_row, ("    --version", "Print version")]
     end;
 
--- | The help screen: usage, then the positionals and options a leaf declares, or the subcommands a group does, each with its help line.
-pub let help(cli: Cli) -> Str =
+-- | The help screen: usage, then the positionals and options a leaf declares, or the subcommands a group does, each with its help line. `within` is as `usage` takes it.
+pub let help(within: List(Str), cli: Cli) -> Str =
     let sections =
         match cli
         | leaf(_, _, _, args, _) =>
@@ -568,7 +572,7 @@ pub let help(cli: Cli) -> Str =
                 section("Options:", builtin_rows(cli)),
                 section("Commands:", command_rows(commands))])
         end;
-    Str/flatten(List/flatten([[about(cli), "\n\n", usage(cli), "\n\n"], sections]));
+    Str/flatten(List/flatten([[about(cli), "\n\n", usage(within, cli), "\n\n"], sections]));
 
 let complaint(f: Failure) -> Str =
     match f
@@ -583,13 +587,13 @@ let complaint(f: Failure) -> Str =
         Str/flatten(["a subcommand is required\n  available: ", Str/join(", ", known)])
     end;
 
--- | A refusal rendered for standard error, with the usage.
-pub let report(cli: Cli, f: Failure) -> Str =
+-- | A refusal rendered for standard error, with the usage of the command reached through `within`.
+pub let report(within: List(Str), cli: Cli, f: Failure) -> Str =
     Str/flatten([
         "error: ",
         complaint(f),
         "\n\n",
-        usage(cli),
+        usage(within, cli),
         "\n\nFor more information, try '--help'.\n"]);
 
 -- | What choosing a subcommand came to: the subcommand and its line, a request for help or the version, or a refusal.
@@ -657,22 +661,22 @@ let fail_with(text: Str) -> Io({}) =
     let _ = Io/write(Io/stderr, Str/to_bytes(text))!;
     /std/proc/exit(2);
 
--- One line against one command, descending while the command is a group. Each step consumes the token that named the subcommand, so the line strictly shortens and the descent ends whatever the declaration's depth.
-let drive(cli: Cli, argv: List(Str)) -> Io({}) =
+-- One line against the command reached through the commands `within`, descending while the command is a group. Each step consumes the token that named the subcommand, so the line strictly shortens and the descent ends whatever the declaration's depth.
+let drive(within: List(Str), cli: Cli, argv: List(Str)) -> Io({}) =
     match cli
     | leaf(_, _, v, args, run) =>
         match parse(args, argv, Option/is_some(v))
-        | help() => print(help(cli))
+        | help() => print(help(within, cli))
         | version() => print(Str/flatten([Option/unwrap_or(v, ""), "\n"]))
-        | failure(f) => fail_with(report(cli, f))
+        | failure(f) => fail_with(report(within, cli, f))
         | parsed(vals) => run(vals)
         end
     | group(_, _, v, _) =>
         match select(cli, argv)
-        | wanted_help() => print(help(cli))
+        | wanted_help() => print(help(within, cli))
         | wanted_version() => print(Str/flatten([Option/unwrap_or(v, ""), "\n"]))
-        | refused(f) => fail_with(report(cli, f))
-        | chose(sub, rest) => drive(sub, rest)
+        | refused(f) => fail_with(report(within, cli, f))
+        | chose(sub, rest) => drive([..within, name(cli)], sub, rest)
         end
     end;
 
@@ -687,7 +691,7 @@ pub let main(cli: Cli) -> Io({}) =
                 "error: argument ",
                 Nat/to_str(at + 1),
                 " is not valid UTF-8\n\n",
-                usage(cli),
+                usage([], cli),
                 "\n\nFor more information, try '--help'.\n"]))
-    | success(argv) => drive(cli, argv)
+    | success(argv) => drive([], cli, argv)
     end;

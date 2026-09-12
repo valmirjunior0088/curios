@@ -15,7 +15,7 @@ let serve: Cli =
 -- The layout the specification fixes, to the space: one description, a usage line naming the options bundle and every positional, then the sections, each padded to its own widest left column. `-h` and `--version` are rows because the entry answers them, not because the program declared them.
 test help_renders_the_layout_the_specification_fixes =
     Test/equal(
-        Cli/help(serve),
+        Cli/help([], serve),
         Str/flatten([
             "Serve a directory over HTTP\n\n",
             "Usage: serve [OPTIONS] <ROOT>\n\n",
@@ -30,7 +30,7 @@ test help_renders_the_layout_the_specification_fixes =
 -- A refusal names what went wrong, repeats the usage line, and points at `--help`; it never prints the whole help, which is what separates a mistake from a request.
 test a_refusal_names_the_offender_and_points_at_help =
     Test/equal(
-        Cli/report(serve, Cli/Failure/unknown_option("--prot")),
+        Cli/report([], serve, Cli/Failure/unknown_option("--prot")),
         Str/flatten([
             "error: unexpected argument '--prot'\n\n",
             "Usage: serve [OPTIONS] <ROOT>\n\n",
@@ -45,4 +45,4 @@ test the_usage_line_says_only_what_the_specification_declares =
             Option/none(),
             [Cli/rest("files", Cli/str, "The files")],
             (_) => /std/print("never"));
-    Test/equal(Cli/usage(bare), "Usage: cat [FILES]...");
+    Test/equal(Cli/usage([], bare), "Usage: cat [FILES]...");
