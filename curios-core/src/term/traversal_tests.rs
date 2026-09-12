@@ -266,3 +266,32 @@ fn reach_telescope_absorbs_arity() {
     }));
     assert_eq!(f2.reach(), 1); // two binders: (2 + 1) - 2
 }
+
+/// The skeleton `strip_universe_levels` leaves must record where the levels were. A universes-only traversal never visits a `Type 0`, so a zero sentinel would let `(Type 0, Type u)` and `(Type u, Type 0)` strip to one skeleton with one-entry vectors that align `u` with `u` across two different positions; the non-zero sentinel keeps the unvisited ground sort apart from the hole. Two terms that really differ only in levels still strip to one skeleton with aligned vectors.
+#[test]
+fn stripping_levels_keeps_an_unvisited_ground_sort_apart_from_a_stripped_one() {
+    let u = Term::type_at(Level::param(UniverseParam(0)));
+    let v = Term::type_at(Level::param(UniverseParam(1)));
+    let ground = Term::type_at(Level::zero());
+
+    let (ground_first, ground_first_levels) =
+        strip_universe_levels(&Term::tuple([ground.clone(), u.clone()]));
+    let (ground_second, ground_second_levels) =
+        strip_universe_levels(&Term::tuple([u.clone(), ground]));
+    assert_eq!(ground_first_levels, ground_second_levels);
+    assert_ne!(
+        ground_first, ground_second,
+        "an unvisited ground sort and a stripped level spelled alike, so the two vectors would align across different positions",
+    );
+
+    let (at_u, u_levels) =
+        strip_universe_levels(&Term::tuple([u, Term::intrinsic(Intrinsic::NatType)]));
+    let (at_v, v_levels) =
+        strip_universe_levels(&Term::tuple([v, Term::intrinsic(Intrinsic::NatType)]));
+    assert_eq!(
+        at_u, at_v,
+        "two terms differing only in levels stripped to different skeletons"
+    );
+    assert_eq!(u_levels, vec![(0, Level::param(UniverseParam(0)))]);
+    assert_eq!(v_levels, vec![(0, Level::param(UniverseParam(1)))]);
+}

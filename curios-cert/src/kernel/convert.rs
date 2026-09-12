@@ -16,7 +16,7 @@
 //!
 //! # Where this is incomplete, and why that is the safe direction
 //!
-//! Two concessions remain. A `rec` group is compared syntactically. And every child position without a typed context — an application spine's arguments, a stuck elimination's motive and arms under their opaque binders, and a struct type-former's parameters — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted. An inductive type-former's arguments left this list when the compile path put real programs through the kernel: they are compared at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P, p, q)` at a `Prop`-sorted `P` convert with `Eq(@P, p, p)`.
+//! One concession remains — a `rec` group used to be a second, compared syntactically, until two instances of one group at two universe levels showed a syntactic refusal turning into an unfolding that never returned; `rec_instances` now decides such a pair by its levels under the item's hypotheses, the equation `induct_type_args` and the instance arms already apply, and two different groups are refused as before. Every child position without a typed context — an application spine's arguments, a stuck elimination's motive and arms under their opaque binders, and a struct type-former's parameters — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted. An inductive type-former's arguments left this list when the compile path put real programs through the kernel: they are compared at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P, p, q)` at a `Prop`-sorted `P` convert with `Eq(@P, p, p)`.
 //!
 //! That direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. Every one of these can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
@@ -37,7 +37,7 @@ use {
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, FuncType, Global, InductType, Instance, Level, Many,
         Proj, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
-        TupleType, Two, instantiate_universe_levels_scoped,
+        TupleType, Two, instantiate_universe_levels_scoped, strip_universe_levels,
     },
     curios_utilities::recurse,
     std::collections::HashSet,
@@ -104,7 +104,7 @@ impl History {
 ///
 /// Every goal entered stays in `seen` until this call returns, because retry *N+1* is reached from inside retry *N* and both are in progress at once. The call stack is what records that, and unwinding it retires the innermost goal first.
 ///
-/// An unfolding retry recurses back into here, and what bounds that chain is the budget spent on entry rather than a count of how deep it has gone — a constant standing in for the call stack is what [`recurse`] makes unnecessary. Measured over the whole `curios` corpus — every test, the entire fixed prelude — the deepest chain real code reaches is three.
+/// An unfolding retry recurses back into here, and what bounds that chain is the budget spent on entry rather than a count of how deep it has gone — a constant standing in for the call stack is what [`recurse`] makes unnecessary. Measured over the whole `curios` corpus — every test, the entire fixed prelude — the deepest chain real code reaches is three. One chain the budget could not bound in practice is closed at its head instead: two instances of one recursive group at two universe instances reproduce themselves under every unfolding, and [`rec_instances`] makes such a pair a verdict before any retry is granted.
 fn compare(
     kernel: &mut Kernel,
     history: &mut History,
@@ -123,6 +123,11 @@ fn compare(
         // Proof irrelevance. Deliberately before reduction: the point is that neither side is examined, and reducing a proof in order to discover it equals another proof is work whose answer was already known.
         if Sort::of(kernel, type_)?.is_prop() {
             return Ok(true);
+        }
+
+        // Two projections of one recursive group at two universe instances are a verdict, not a comparison: unfolding either reproduces the pair one level down, so their levels decide here — before `reduce_forced` opens a function member into its lambda, and before the goal is entered, so nothing has to be left.
+        if let Some(verdict) = rec_instances(kernel, this, that) {
+            return Ok(verdict);
         }
 
         let Some(goal) = history.enter(kernel, type_, this, that) else {
@@ -272,13 +277,18 @@ fn structural(
             Subterm::Tuple(Tuple { fields: right, .. }),
         ) => compare_each(kernel, history, left.iter(), right.iter()),
 
-        // Spine against spine, and when that fails, one definitional unfolding each: two applications of the same fold can differ in an argument position the fold discards — `is_trimmed(h ++ rest)` against `is_trimmed(rest)` — so a spine mismatch is not yet a verdict when either head is a folded recursive call.
+        // Spine against spine, and when that fails, one definitional unfolding each: two applications of the same fold can differ in an argument position the fold discards — `is_trimmed(h ++ rest)` against `is_trimmed(rest)` — so a spine mismatch is not yet a verdict when either head is a folded recursive call. Two heads that are instances of one group are decided by their levels first: at unequal levels the pair is refused outright, because an unfolding reproduces the same two heads on the recursive call and would recurse until the host died; at equal levels the spines decide, and a mismatch there still earns the retry.
         (Subterm::Apply(left), Subterm::Apply(right)) => {
-            if left.plicities().eq(right.plicities())
-                && ground(kernel, history, &left.head, &right.head)?
-                && compare_each(kernel, history, left.params(), right.params())?
-            {
-                return Ok(true);
+            if left.plicities().eq(right.plicities()) {
+                let heads = match rec_instances(kernel, &left.head, &right.head) {
+                    Some(false) => return Ok(false),
+                    Some(true) => true,
+                    None => ground(kernel, history, &left.head, &right.head)?,
+                };
+
+                if heads && compare_each(kernel, history, left.params(), right.params())? {
+                    return Ok(true);
+                }
             }
 
             unfolded_retry(kernel, history, this, that)
@@ -387,11 +397,11 @@ fn structural(
                 && ground_cases(kernel, history, &left.cases, &right.cases)?)
         }
 
-        // A folded recursive call, and a `rec` that forcing declined to unfold. Both are compared syntactically: the interesting case — a cycle that unfolds without disagreeing — is handled by the recurrence rule above, not here. A `rec` whose tail computes something is *not* this case, and falls through to the delta step below.
+        // A folded recursive call, and a `rec` that forcing declined to unfold. Two projections of one group are compared up to their universe instance, the levels decided by entailment; two different groups are refused here without a retry, because the interesting case — a cycle that unfolds without disagreeing — is handled by the recurrence rule above, not here. A `rec` whose tail computes something is *not* this case, and falls through to the delta step below.
         (Subterm::Rec(_), Subterm::Rec(_))
             if this.as_rec_proj().is_some() && that.as_rec_proj().is_some() =>
         {
-            Ok(this.as_rec_proj() == that.as_rec_proj())
+            Ok(rec_instances(kernel, this, that) == Some(true))
         }
 
         // Two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.
@@ -492,24 +502,63 @@ fn struct_eta(
 
 /// The last chance before a structural refusal: grant each side the one definitional unfolding `force` withheld, and compare the results. A refusal when neither side has a folded recursive spelling to open.
 ///
-/// The unfoldings are compared untyped, through [`ground`]. Each retry opens a spelling whose spine may have *grown*, so its goals never recur into `seen` and the coinductive rule cannot close the chain; what stops an unproductive pair is [`compare`]'s budget, spent once per entry, rather than a count of how deep the retries have gone.
+/// The unfoldings are compared untyped, through [`ground`]. Each retry opens a spelling whose spine may have *grown*, so its goals never recur into `seen` and the coinductive rule cannot close the chain; what stops an unproductive pair is [`compare`]'s budget, spent once per entry, rather than a count of how deep the retries have gone. One pair the budget never reached is refused at the door: two instances of one group at unequal levels unfold to the same two instances, and every round added two opaque binders to a context the history key copies whole, so the walk grew until the host died with the budget barely spent. [`rec_instances`] answers that pair before and after the unfolding, and a retry is granted only to heads it does not decide.
 fn unfolded_retry(
     kernel: &mut Kernel,
     history: &mut History,
     this: &Term,
     that: &Term,
 ) -> Result<bool, KernelError> {
+    if rec_instances(kernel, applied_head(this), applied_head(that)) == Some(false) {
+        return Ok(false);
+    }
+
     let left = unfold_spelling(kernel, this)?;
     let right = unfold_spelling(kernel, that)?;
 
     match (left, right) {
         (None, None) => Ok(false),
-        (left, right) => ground(
-            kernel,
-            history,
-            &left.unwrap_or_else(|| this.clone()),
-            &right.unwrap_or_else(|| that.clone()),
-        ),
+        (left, right) => {
+            let left = left.unwrap_or_else(|| this.clone());
+            let right = right.unwrap_or_else(|| that.clone());
+
+            // A `rec` block whose tail applies one of its members reaches `Apply(rec_proj)` only once that tail is opened, which is the unfolding just taken, so the guard is asked again of what it produced.
+            if rec_instances(kernel, applied_head(&left), applied_head(&right)) == Some(false) {
+                return Ok(false);
+            }
+
+            ground(kernel, history, &left, &right)
+        }
+    }
+}
+
+/// `Some(verdict)` when `this` and `that` are projections of one recursive group at the same member, differing in nothing but universe levels — the verdict is whether those levels are equal under the item's hypotheses. `None` for any other pair, which the structural rules judge as before.
+///
+/// This is the equation the `InductType`, `StructType`, `Variant`, `Struct` and `Instance` arms already apply to their heads, reaching one more head kind. Equal skeletons mean the same positions carry a level on both sides — `strip_universe_levels`'s sentinel is what makes an unvisited `Type 0` and a stripped level distinguishable — so the two terms are one skeleton over two aligned level vectors, and a vector pair that is syntactically equal or, at depth zero, mutually entailed under the assumed constraints denotes one term in every instance satisfying them. Nothing is erased: `wrap(Type 1)` against `wrap(Type 2)` refuses on the levels, `wrap(Type 0)` against `wrap(Type 1)` on the skeletons. What it does not decide is refused, the safe direction: `Type 0` against a `Type u` the hypotheses force to zero has two skeletons.
+fn rec_instances(kernel: &Kernel, this: &Term, that: &Term) -> Option<bool> {
+    let (Some((_, left)), Some((_, right))) = (this.as_rec_proj(), that.as_rec_proj()) else {
+        return None;
+    };
+
+    if left != right {
+        return None;
+    }
+
+    if this == that {
+        return Some(true);
+    }
+
+    let (this_skeleton, this_levels) = strip_universe_levels(this);
+    let (that_skeleton, that_levels) = strip_universe_levels(that);
+
+    (this_skeleton == that_skeleton).then(|| kernel.level_pairs_eq(&this_levels, &that_levels))
+}
+
+/// The head of an application, or the term itself: what `rec_instances` is asked about when a folded recursive call arrives applied.
+fn applied_head(term: &Term) -> &Term {
+    match &**term {
+        Subterm::Apply(apply) => &apply.head,
+        _ => term,
     }
 }
 

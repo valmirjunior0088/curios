@@ -8,11 +8,41 @@
 
 use {
     super::run,
-    curios_core::Module,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, typecheck_with_prelude},
+    curios_cert::KernelError,
+    curios_core::{Module, Zonked},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::collections::BTreeMap,
 };
+
+/// A signature that instantiates `/std/List/zip` twice: the declared result type spells the global at the levels of `A` and `B`, while `zip_len`'s instantiated result — captured into `Eq/trans`'s solved middle term — carries an inlined copy of the same group at the levels of `a`'s and `b`'s `List` types, related to the former only by cumulativity. `same` is an identity whose universe instance is what pulls the two spellings apart; with `a` written in its place the program takes half a second.
+const TWO_INSTANCES_OF_ZIP: &str = r#"
+    use /std/{Nat, List, Eq, Io, Bool, True, False};
+    let same(@T: Type, l: List(T)) -> List(T) = l;
+    let zero_not_succ(@n: Nat, e: Eq(0, n + 1)) -> False =
+        Eq/subst((m: Nat) => Bool/Holds(Nat/eql(0, m)), e, True/qed());
+    let succ_cancel(@a: Nat, @b: Nat, e: Eq(a + 1, b + 1)) -> Eq(a, b) =
+        Eq/cong((w: Nat) => w - 1, e);
+    pub let zip_len(@A: Type, @B: Type, a: List(A), b: List(B), p: Eq(List/len(b), List/len(a)))
+        -> Eq(List/len(List/zip(a, b)), List/len(a)) =
+        (match a: (l) =>
+                (c: List(B), q: Eq(List/len(c), List/len(l))) -> Eq(List/len(List/zip(l, c)), List/len(l))
+        | [] => (_, _) => Eq/refl()
+        | [x, ..xs]; ih =>
+            (c, q) =>
+                (match c: (d) =>
+                        (Eq(List/len(d), List/len(xs) + 1))
+                            -> Eq(List/len(List/zip([x, ..xs], d)), List/len(xs) + 1)
+                | [] => (r) => match zero_not_succ(r) end
+                | [_, ..ys] => (r) => Eq/cong((y: Nat) => y + 1, ih(ys, succ_cancel(r)))
+                end)(q)
+        end)(b, p);
+    pub let use_call(@A: Type, @B: Type, n: Nat, a: List(A), b: List(B),
+                     ca: Eq(List/len(same(a)), n), cb: Eq(List/len(b), n))
+        -> Eq(List/len(List/zip(same(a), b)), n) =
+        Eq/trans(zip_len(same(a), b, Eq/trans(cb, Eq/sym(ca))), ca);
+    Io/pure(())
+    "#;
 
 /// Every definition's finalized universe parameter count, keyed by the name its item describes itself with.
 fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
@@ -122,6 +152,42 @@ fn a_refined_scrutinee_carries_the_family_universe_levels() {
         "#;
 
     assert_eq!(run(source), b"2");
+}
+
+// The kernel meets `use_call`'s two spellings of `zip` as two instances of one recursive group related only by `u ≤ x1`, `v ≤ z1`; it used to unfold them against each other forever, growing memory until the host died. Now it decides the pair by its levels and refuses it — the intermediate truth this fixture pins, with the parameter count that shows why: the elaborator accepted the pair by a coinductive assumption without ever committing `x1 = u`, so the two stayed separate parameters. The elaborator's half is the change that replaces this fixture with an accepting one. A regression here is the old hang, so this suite runs under a memory cap.
+#[test]
+fn two_instances_of_one_recursive_definition_the_elaborator_never_identified_are_refused_rather_than_unfolded()
+ {
+    let entrypoint = TWO_INSTANCES_OF_ZIP
+        .parse::<Entrypoint>()
+        .expect("the fixture parses");
+    let (module, _): (Module, _) =
+        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+            .expect("the elaborator accepts the program");
+    let zonked = Zonked::project(&module).expect("the checked module is zonked");
+
+    let verdicts = recheck_with_prelude(&zonked, DEFAULT_STEP_BUDGET);
+    let names = verdicts
+        .iter()
+        .map(|verdict| verdict.name.as_ref().map(|name| name.to_string()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        names,
+        vec![Some("/use_call".to_string())],
+        "the kernel's verdicts were not exactly one refusal of use_call",
+    );
+    assert!(
+        matches!(verdicts[0].error, KernelError::Mismatch { .. }),
+        "the refusal was not a mismatch between the two zip spellings: {}",
+        verdicts[0].error,
+    );
+
+    let parameters = universe_parameters(TWO_INSTANCES_OF_ZIP);
+    assert_eq!(
+        parameters.get("/use_call"),
+        Some(&22),
+        "the levels of the two spellings were identified, so the refusal above should have become an acceptance: {parameters:?}",
+    );
 }
 
 // A level that occurs only in a declaration's result sort is one no use site can choose, and `finalize_definition` minimizes it rather than minting a parameter for it. The group path generalizes the same signatures, so the same rule must hold there: a `rec` returning a type, and a `rec` proof whose family level sits only in its result, take no more parameters than the `let` beside them. Without this a definition's scheme depended on which path elaborated it — a fact no reader can see once a group is decided by whether a body names itself.

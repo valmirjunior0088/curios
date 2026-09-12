@@ -499,3 +499,20 @@ fn the_restored_prelude_pairs_every_mark_with_its_binder() {
         );
     });
 }
+
+/// Every prelude definition's finalized universe parameter count, printed rather than asserted: a change to how conversion identifies levels can merge two of a declaration's parameters into one, and the archive build reports only refusals, so a drop is invisible unless it is measured. Take it before and after such a change and diff the two.
+#[test]
+#[ignore = "inventory: measures the prelude's universe polymorphism rather than asserting it"]
+fn universe_parameter_census() {
+    with_prelude(|prelude| {
+        for item in items(prelude) {
+            let described = item.describe();
+            for definition in item.definitions() {
+                println!(
+                    "{described}\t{}",
+                    definition.universe_context.parameter_count
+                );
+            }
+        }
+    });
+}

@@ -3,8 +3,28 @@
 use super::test_support::*;
 use {
     crate::{Kernel, convert},
-    curios_core::{Free, Intrinsic, Term},
+    curios_core::{
+        Free, Intrinsic, Level, Term, UniverseConstraint, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseParam,
+    },
 };
+
+/// `lower ≤ upper` between two of the item's own universe parameters, as `assume_universes` takes it.
+fn between(lower: usize, upper: usize) -> UniverseConstraint {
+    UniverseConstraint {
+        lower: Level::param(UniverseParam(lower)),
+        upper: Level::param(UniverseParam(upper)),
+        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+    }
+}
+
+/// The fold at `Type⟨parameter⟩` applied to `Nat`, a discarded argument, and a symbolic count.
+fn call(parameter: usize, discarded: &Free, count: &Free) -> Term {
+    Term::apply(
+        polymorphic_fold(Level::param(UniverseParam(parameter))),
+        [nat_type(), Term::free_var(discarded), Term::free_var(count)],
+    )
+}
 
 /// Binder *identity* must not leak into conversion. Two `rec` groups written with different minted names are the same group: binder names are display hints, and the bodies are de Bruijn-indexed under their scopes.
 ///
@@ -176,6 +196,72 @@ fn a_recurring_goal_is_assumed_rather_than_unfolded_forever() {
         ),
         Ok(true),
         "two spellings of the equirecursive type `X = (X) -> Nat` did not converge",
+    );
+}
+
+/// Two instances of one recursive group are one term when the item's hypotheses force their levels equal: the group is decided by `rec_instances` — as an applied head, and bare at `Type` — with the equation every other level-bearing head already gets, rather than unfolded. The elaborator's twin of this proposition shares the name.
+#[test]
+fn two_instances_of_one_recursive_group_convert_when_their_levels_are_equal_under_the_hypotheses() {
+    let mut kernel = kernel();
+    kernel.assume_universes(&UniverseContext {
+        parameter_count: 2,
+        constraints: vec![between(0, 1), between(1, 0)],
+    });
+    let a = binder(80, "a");
+    let n = binder(81, "n");
+
+    assert_eq!(
+        convert(&mut kernel, &nat_type(), &call(0, &a, &n), &call(1, &a, &n)),
+        Ok(true),
+        "the same fold at two levels the hypotheses equate did not converge",
+    );
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &Term::type_ground(),
+            &polymorphic_fold(Level::param(UniverseParam(0))),
+            &polymorphic_fold(Level::param(UniverseParam(1))),
+        ),
+        Ok(true),
+        "the bare projections were not decided before reduction opened them",
+    );
+}
+
+/// Two instances of one recursive group whose levels the hypotheses do not force equal are refused at the head, without an unfolding: each unfolding reproduces the same two instances on the recursive call, so a retry could only recurse. With the guard removed from the `Apply` arm and from `unfolded_retry` this exhausts the small budget here, and at the compile budget it is the walk that grew until the host died. The elaborator's twin shares the name.
+#[test]
+fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_unfolding() {
+    let mut kernel = Kernel::new(10_000, crate::SYNTAX);
+    kernel.set_local_floor(1_000);
+    kernel.assume_universes(&UniverseContext {
+        parameter_count: 2,
+        constraints: vec![between(0, 1)],
+    });
+    let a = binder(80, "a");
+    let n = binder(81, "n");
+
+    assert_eq!(
+        convert(&mut kernel, &nat_type(), &call(0, &a, &n), &call(1, &a, &n)),
+        Ok(false),
+        "two instances related only by cumulativity were not refused outright",
+    );
+}
+
+/// The retry the head rule must not take away: two calls of one group at one level whose spines differ only in an argument the fold discards still converge, through the one unfolding that discards it.
+#[test]
+fn two_calls_of_one_recursive_group_with_different_spines_still_retry_through_an_unfolding() {
+    let mut kernel = kernel();
+    kernel.assume_universes(&UniverseContext {
+        parameter_count: 1,
+        constraints: Vec::new(),
+    });
+    let a = binder(80, "a");
+    let b = binder(82, "b");
+    let n = binder(81, "n");
+
+    assert_eq!(
+        convert(&mut kernel, &nat_type(), &call(0, &a, &n), &call(0, &b, &n)),
+        Ok(true),
+        "a spine difference the fold discards stopped being reconciled by unfolding",
     );
 }
 

@@ -4,7 +4,9 @@
 
 use {
     crate::Kernel,
-    curios_core::{Free, Global, InductDecl, Intrinsic, Nat, Telescope, Term, UniverseContext},
+    curios_core::{
+        Free, Global, InductDecl, Intrinsic, Level, Nat, Telescope, Term, UniverseContext,
+    },
     curios_utilities::Qualifier,
 };
 
@@ -56,6 +58,47 @@ pub(super) fn equirecursive(member: Free, param: Free, codomain: Term, padded: b
     }
 
     Term::rec(items, Term::free_var(&member))
+}
+
+/// `rec f : (t: Type⟨level⟩, x: Nat, y: Nat) -> Nat = (t, x, y) => match y | 0 => 0 | p + 1 => f(t, 0, p); f` — the projection of a one-member group whose only universe data is `level`, so two of them differ in nothing but their instance. The recursive call keeps the body restuck, so forcing returns the folded spelling, and it discards `x`, so two calls differing only there converge after one unfolding.
+pub(super) fn polymorphic_fold(level: Level) -> Term {
+    let f = binder(70, "f");
+    let t = binder(71, "t");
+    let x = binder(72, "x");
+    let y = binder(73, "y");
+    let motive = binder(74, "m");
+    let pred = binder(75, "pred");
+    let ih = binder(76, "ih");
+    let sort = Term::type_at(level);
+
+    let body = Term::func(
+        [
+            (t.clone(), sort.clone()),
+            (x.clone(), nat_type()),
+            (y.clone(), nat_type()),
+        ],
+        Term::nat_match(
+            Term::free_var(&y),
+            Some(&motive),
+            nat_type(),
+            nat(0),
+            &pred,
+            &ih,
+            Term::apply(
+                Term::free_var(&f),
+                [Term::free_var(&t), nat(0), Term::free_var(&pred)],
+            ),
+        ),
+    );
+
+    Term::rec(
+        [(
+            f.clone(),
+            Term::func_type([(t, sort), (x, nat_type()), (y, nat_type())], nat_type()),
+            body,
+        )],
+        Term::free_var(&f),
+    )
 }
 
 /// `induct Wit(P : <param_sort>) : (p : P)` — a family whose index type *is* its own parameter.

@@ -362,6 +362,23 @@ pub fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
         .into_inner()
 }
 
+/// Every universe level of `value` in traversal order, each with its universe-binder depth, beside the skeleton left when every one is replaced by a sentinel.
+///
+/// Two values with equal skeletons differ in nothing but levels, and their vectors are positionally aligned. The sentinel is `Level::constant(1)`, not zero: the universes-only traversal never visits a `Type 0`, which carries no universe data, so a zero sentinel would let an unvisited ground sort and a stripped level spell alike and align two vectors across different positions. A `RecGroup`'s own context is kept, so a generalized group and an instance of it have different skeletons; the groups conversion meets are instantiated, with empty contexts.
+pub fn strip_universe_levels<B: Bound>(value: &B) -> (B, Vec<(usize, Level)>) {
+    let levels = Rc::new(RefCell::new(Vec::new()));
+    let found = Rc::clone(&levels);
+    let skeleton = rewrite_universe_levels_scoped(value, move |depth, level: &Level| {
+        found.borrow_mut().push((depth, level.clone()));
+        Ok::<_, Infallible>(Level::constant(1))
+    })
+    .unwrap_or_else(|never| match never {});
+    let levels = Rc::try_unwrap(levels)
+        .expect("the level collector releases its traversal closure")
+        .into_inner();
+    (skeleton, levels)
+}
+
 /// How a declaration's own name reaches the value being stamped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelfReference {

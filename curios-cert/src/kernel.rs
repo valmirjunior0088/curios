@@ -550,6 +550,18 @@ impl Kernel {
                 .all(|(this, that)| self.level_eq(this, that))
     }
 
+    /// [`Kernel::level_eq`] over two collected level vectors, each level with its universe-binder depth. A pair under a universe binder names parameters the item's hypotheses do not govern, so only syntactic equality is accepted there.
+    pub(crate) fn level_pairs_eq(&self, left: &[(usize, Level)], right: &[(usize, Level)]) -> bool {
+        left.len() == right.len()
+            && left
+                .iter()
+                .zip(right)
+                .all(|((left_depth, left), (right_depth, right))| {
+                    left_depth == right_depth
+                        && (left == right || (*left_depth == 0 && self.level_eq(left, right)))
+                })
+    }
+
     /// Verify a stated instance satisfies its scheme's constraint set: each declared `lower ≤ upper`, instantiated at this occurrence's levels, must hold under the assumed constraints of the item being checked.
     ///
     /// A constraint level naming a parameter the instance does not supply is refused rather than kept: an unsubstituted scheme parameter would be misread as one of the ambient item's, which is the accepting direction.
