@@ -15,7 +15,7 @@ use {
         Telescope, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
     },
-    curios_utilities::{Qualifier, grown},
+    curios_utilities::{Plicity, Qualifier, grown},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -94,22 +94,35 @@ fn add_arity_sizing(
 }
 
 /// Walk a (params-first) telescope, checking each binder's type against `Type` under the earlier binders (fresh-gensym, assume), and return the rebuilt `(label, type)` entries alongside the telescope's terminal — opened under those binders. Runs in the caller's frame; the same gensym-then-relabel discipline as `elaborate_tuple_type`.
+///
+/// **`plicity` says what each position binds as, and every caller states it.** A `use` entry joins the witness scope as well as the ordinary one, so resolution in the *later* entries' types finds it — which is what a function telescope has always done for a `use` premise ([`super::binding`]'s `assume_slot`), and what a concept's superclass edge needs to be visible to the field types below it. A caller whose telescope has no witness entry says so by answering `Explicit` everywhere, rather than inheriting it from a default nobody restates.
 fn check_telescope_entries<B: Bound>(
     context: &mut Context,
     mut telescope: Telescope<B>,
+    plicity: impl Fn(usize) -> Plicity,
 ) -> Result<(Vec<(Free, Term)>, B), Error> {
     let mut entries = Vec::new();
+    let mut position = 0;
     loop {
         match telescope {
             Telescope::Done(body) => break Ok((entries, *body)),
             Telescope::Cons(ty, rest) => {
                 let rebuilt = crate::check_is_sort(context, &ty)?.0;
                 let label = context.fresh(rest.first_hint());
-                context.assume(&label, &rebuilt);
+                assume_entry(context, &label, &rebuilt, plicity(position));
                 telescope = rest.open(&[&Term::free_var(&label)]);
                 entries.push((label, rebuilt));
+                position += 1;
             }
         }
+    }
+}
+
+/// Assume one telescope entry, joining the witness scope when the entry is a `use` binder. The declaration-side twin of `super::binding`'s `assume_slot`.
+fn assume_entry(context: &mut Context, label: &Free, type_: &Term, plicity: Plicity) {
+    match plicity {
+        Plicity::Witness => context.assume_witness(label, type_),
+        _ => context.assume(label, type_),
     }
 }
 
@@ -119,16 +132,19 @@ fn check_telescope_entries<B: Bound>(
 fn assume_telescope_entries<B: Bound>(
     context: &mut Context,
     mut telescope: Telescope<B>,
+    plicity: impl Fn(usize) -> Plicity,
 ) -> (Vec<(Free, Term)>, B) {
     let mut entries = Vec::new();
+    let mut position = 0;
     loop {
         match telescope {
             Telescope::Done(body) => break (entries, *body),
             Telescope::Cons(ty, rest) => {
                 let label = context.fresh(rest.first_hint());
-                context.assume(&label, &ty);
+                assume_entry(context, &label, &ty, plicity(position));
                 telescope = rest.open(&[&Term::free_var(&label)]);
                 entries.push((label, ty));
+                position += 1;
             }
         }
     }
@@ -234,8 +250,9 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
 
     // Walk the parameters, then the index telescope they terminate in, checking each entry type against `Type` under the binders before it.
     let (param_entries, index_entries) = context.with_frame(|context| {
-        let (params, inner) = check_telescope_entries(context, induct_decl.arity.clone())?;
-        let (indices, ()) = check_telescope_entries(context, inner)?;
+        let (params, inner) =
+            check_telescope_entries(context, induct_decl.arity.clone(), |_| Plicity::Explicit)?;
+        let (indices, ()) = check_telescope_entries(context, inner, |_| Plicity::Explicit)?;
 
         Ok::<_, Error>((params, indices))
     })?;
@@ -280,7 +297,8 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
             .collect::<Vec<_>>();
 
         let (entries, targets) = context.with_frame(|context| {
-            let (entries, targets) = check_telescope_entries(context, signature.clone())?;
+            let (entries, targets) =
+                check_telescope_entries(context, signature.clone(), |_| Plicity::Explicit)?;
 
             // The targets are still checked by `elaborate_induct_type`, which is what compares them against the rebuilt index telescope — so the constructed type is rebuilt here from what the declaration fixes (this family, at the constructor's own parameter binders) and the targets the signature states, elaborated, and its indices taken back.
             let params = entries
@@ -367,12 +385,24 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
         Subterm::Prop
     );
 
+    // A concept's superclass edges, as one mark per field. Read before the frame below borrows the context mutably; a plain `struct` is not a concept and answers with no edges at all.
+    let field_plicities = context
+        .concept(name)
+        .map(ConceptDecl::field_plicities)
+        .unwrap_or_default();
+
     // Open the parameters, then check the field telescope they terminate in against `Type` under the binders before it.
     //
     // The parameters are opened rather than checked: `share_struct_params` elaborated them before the former's body was, and they are the terms that body was checked against. Elaborating them again would file a second set of universe instances beside the ones already in play.
     let (param_entries, field_entries) = context.with_frame(|context| -> Result<_, Error> {
-        let (params, inner) = assume_telescope_entries(context, struct_decl.arity.clone());
-        let (fields, ()) = check_telescope_entries(context, inner)?;
+        let (params, inner) =
+            assume_telescope_entries(context, struct_decl.arity.clone(), |_| Plicity::Explicit);
+        let (fields, ()) = check_telescope_entries(context, inner, |position| {
+            field_plicities
+                .get(position)
+                .copied()
+                .unwrap_or(Plicity::Explicit)
+        })?;
 
         // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when no field is informative, the singleton-elimination condition (`elaborate_match::singleton_eliminable`) checked here at declaration time rather than per projection. A struct carries no indices, so nothing is forced and the condition reduces to: every field type is itself a proposition. With this enforced, every projection lands in a `Prop`, so `elaborate_proj` needs no guard.
         if declared_prop {
