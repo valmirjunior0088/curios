@@ -95,7 +95,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] [Total `/sys` primitives](design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md) — an operation whose reduction could fail states its precondition
   - [x] The bound reaches Core and the kernel re-checks it, for every one of the thirteen
 - [x] A bound is read off the node that carries it, and the oracle closed on a criterion
-- [ ] [A fact is stated once, or the copies are checked](roadmap/stated-twice-spec.md) (not refined yet)
+- [x] A fact is stated once, or the copies are checked — the fold arms' grain twins, the decomposition's carriers and its two measures, and a key's encoding
 
 ## Module System
 

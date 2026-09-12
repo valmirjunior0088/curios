@@ -6,6 +6,8 @@
 //! 4. **Flex head** — any parameter still headed by a metavariable parks the goal, woken when a watched metavariable solves.
 //!
 //! A rigid, keyable head with no table entry *defers* rather than failing: items elaborate in order, and a later item may register the witness. The deferred store is retried after every item and drained — erroring — once the whole module has elaborated.
+//!
+//! **Rule 1 beating rule 3 is why a concept cannot state a law about the *registered* witness.** A field whose own telescope takes `use C(A)` states its law over an arbitrary `C` rather than the one the program registered, so no witness can discharge it — which rules out checking a copy of a resolved witness from inside the concept that copies it. Removing the copy is the move that remains: a superclass edge, whose slot resolution fills.
 
 use {
     super::{

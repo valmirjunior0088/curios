@@ -1,5 +1,7 @@
 //! What a packed or shifted result costs, charged before the value is built.
 //!
+//! **An asymmetry in what two spellings cost can be earned rather than drifted into.** `Bin/append` once charged a whole extra buffer at the bit grain and not at the byte grain, which reads as a copy that drifted and was not: `append_bit` rebuilt the value through `from_bits` and materialized a `bool` per bit, where `append_byte` copied the packed payload, so each formula was right for its own implementation. The fix was the implementation, and one formula priced both afterwards. Before unifying two prices, check whether the operations differ for a reason — where they do, the reason is the thing to remove, and unifying over it writes the accident into the budget permanently.
+//!
 //! Each bound is computed from operand *sizes* rather than from the result, so a fold that would allocate more than the budget allows is refused before `num-bigint` is asked for anything — the difference between a diagnostic and a process the allocator does not return from.
 
 use {crate::Cost, curios_utilities::Grain};

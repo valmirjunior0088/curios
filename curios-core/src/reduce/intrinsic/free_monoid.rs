@@ -111,7 +111,7 @@ pub(super) fn nat_sum(images: Vec<Term>) -> Term {
 
 /// One piece of a located `Bin` window, as a value.
 ///
-/// Every segment [`bin_segments`](crate::free_monoid) admits is a literal run, so a narrowed edge is narrowed *here* — `PackedBin::slice` is an O(1) window into the same payload — rather than rebuilt as a `BinSlice` node for the next pass to fold into exactly this. Same value, same operation, one round trip earlier, and the window arm then constructs no bounded node at all.
+/// Every segment the carrier's own spine walk admits is a literal run, so a narrowed edge is narrowed *here* — `PackedBin::slice` is an O(1) window into the same payload — rather than rebuilt as a `BinSlice` node for the next pass to fold into exactly this. Same value, same operation, one round trip earlier, and the window arm then constructs no bounded node at all.
 pub(super) fn bin_piece(grain: Grain, piece: Piece<'_>) -> Term {
     match piece {
         Piece::Whole(operand) => operand.clone(),
@@ -173,12 +173,6 @@ impl Generator {
     }
 }
 
-/// A value read as a concatenation's operands: a concatenation's own, or an append's base beside the one-generator run it adds. `None` for anything that is neither.
-///
-/// The single generator of a value whose measure is exactly one, or `None` for anything else.
-///
-/// [`single_generator`] over the element carrier: the one element of a value whose measure is exactly one.
-///
 impl FreeMonoid {
     /// The single generator of a value whose measure is exactly one, or `None` for anything else.
     ///

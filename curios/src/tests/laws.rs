@@ -2,6 +2,8 @@
 //!
 //! A held row is a law both checkers decide for every value, so it is stated as an `Eq/refl()` proof and compiled. A refused row is a law the normalizer does *not* take — kept here rather than in prose so the refused set is a record rather than a rumor, and so that taking one later is a row moving, not a test appearing. The refused half cannot be stated as a proof, so both halves are also stated as written goals and read back through the `? ≈ Eq/refl()` candidate line, which is the compiler's own answer to "does refl fit here": a held row must get the line and a refused row must not. The two directions check each other — if the candidate search stopped reporting, every held row would fail the goal test, so a refused row cannot pass it vacuously.
 //!
+//! **State a row at every carrier, and state it first.** A grid stating a law at one carrier and not another passes exactly as a complete one does, and what it hides is invisible from reading the two implementations side by side: the bit grain went without `eql` while its byte twin had it, and `List` went without both seam-index rows while `Bytes` and `Bits` held them. Each was a real incompleteness, and each was found by stating the row rather than by inspection. A row stated before an implementation moves turns the change that follows into a refactor with an oracle.
+//!
 //! Every refused row is a candidate law, not a bug: each needs a rule in `curios-core`'s `reduce::intrinsic`, which both checkers share, so taking one is an addition to the trusted base and is recorded in `documentation/soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md` beside the grid that probes it over values.
 
 use super::typecheck;
