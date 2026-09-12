@@ -19,9 +19,8 @@ use scalar::*;
 use {
     super::{ReduceError, Reducer},
     crate::{
-        Cost, FUSION_CAP, Intrinsic, Located, Nat, Peel, Subterm, Term, bin_locate, bin_measure,
-        bin_window, list_locate, list_measure, list_window, normalize_concat, peel_bin,
-        peel_first_atom, peel_first_elem, project_erased_universes,
+        Cost, FUSION_CAP, FreeMonoid, Intrinsic, Located, Nat, Peel, Subterm, Term,
+        normalize_concat, peel_bin, peel_first_atom, peel_first_elem, project_erased_universes,
     },
     curios_num::{Floating, Integer, Natural},
     curios_utilities::{Grain, PackedBin},
@@ -617,7 +616,7 @@ pub fn reduce_intrinsic(
             let grain = *grain;
             let bin = reducer.reduce_forced(bin.clone())?;
             // The measure answers a wholly-literal spine by folding it, without rebuilding a `Bin/len` per operand and handing each back to the reducer — which is what made a length over a deep concatenation cost a re-walk of every sub-spine. It agrees with the homomorphism below by construction on the shapes it accepts (a literal run's length, summed over a concatenation's operands) and declines everything else, so every other value reduces exactly as it did.
-            if let Some(total) = bin_measure(grain, &bin) {
+            if let Some(total) = FreeMonoid::Bin(grain).measure(&bin) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
             }
             let shape = bin_shape(reducer, grain, bin)?;
@@ -695,7 +694,7 @@ pub fn reduce_intrinsic(
             // A get over a cons spine peels one generator per `0`/`succ` index step: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
             // Locate the index by the operands' own lengths rather than peeling one generator at a time. A peel walks the whole spine to expose one generator and rebuilds the rest, so reading an index costs a pass per generator ahead of it; the measure reaches the operand holding it in one pass and indexes within that operand alone. `None` means some operand's length is not statically known, which is what the peel below is for.
             if let Some(i) = i {
-                match bin_locate(grain, &bin, i) {
+                match FreeMonoid::Bin(grain).locate(&bin, i) {
                     Some(Located::At(operand, local)) => {
                         return bin_element(grain, operand, local).ok_or(
                             ReduceError::BinGetOutOfBounds {
@@ -812,7 +811,7 @@ pub fn reduce_intrinsic(
             //
             // Every segment `bin_segments` admits is a literal run, so a narrowed edge is narrowed *here* rather than rebuilt as a `BinSlice` for the next pass to fold — `PackedBin::slice` is an O(1) window into the same payload, so this is the same value by the same operation, one round trip earlier. It also leaves this arm constructing no bounded node at all, which is what keeps a bound off the reducer once these accessors carry one.
             if let (Some(s), Some(n)) = (s, n) {
-                match bin_window(grain, &bin, s, n) {
+                match FreeMonoid::Bin(grain).window(&bin, s, n) {
                     Some(Ok(pieces)) => {
                         let parts = pieces
                             .into_iter()
@@ -992,7 +991,7 @@ pub fn reduce_intrinsic(
         } => {
             let type_ = reducer.reduce(type_.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
-            if let Some(total) = list_measure(&list) {
+            if let Some(total) = FreeMonoid::List.measure(&list) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
             }
             // `len(map(xs, f)) = len(xs)`: a map is elementwise, so the measure passes through it whatever `f` does.
@@ -1050,7 +1049,7 @@ pub fn reduce_intrinsic(
             }
             // The `List` twin of `BinGet`'s locator: reach the segment holding the index by the segments' own lengths, then index within it, rather than peeling one element at a time.
             if let Some(i) = i {
-                match list_locate(&list, i) {
+                match FreeMonoid::List.locate(&list, i) {
                     Some(Located::At(operand, local)) => {
                         let local = Term::intrinsic(Intrinsic::Nat(Nat::new(local)));
                         let operand = operand.clone();
@@ -1172,7 +1171,7 @@ pub fn reduce_intrinsic(
             }
             // The `List` twin of `BinSlice`'s locator: the window's segments, each already narrowed to its overlap, and — since every segment is a literal run — narrowed here rather than rebuilt as a `ListSlice` node for the next pass to fold.
             if let (Some(s), Some(n)) = (s, n) {
-                match list_window(&list, s, n) {
+                match FreeMonoid::List.window(&list, s, n) {
                     Some(Ok(pieces)) => {
                         let parts = pieces
                             .into_iter()

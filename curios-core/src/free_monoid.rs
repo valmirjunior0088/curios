@@ -384,60 +384,98 @@ fn is_empty_list(term: &Term) -> bool {
     matches!(&**term, Subterm::Intrinsic(Intrinsic::List { element: _, items: elems }) if elems.is_empty())
 }
 
-/// The operands of an already-reduced value, left to right, each with the number of generators it carries — `None` where any operand's length is not statically known.
-///
-/// **The free monoid's measure, and the one thing `len`, `get` and `slice` all actually want.** A length is a homomorphism into `(ℕ, +, 0)`, and over a value already in normal form it is a *fold over the spine*: no reduction, no rebuilding, no budget. That is what this is, and it replaces computing one by building `Bin/len(operand)` terms and handing them back to the reducer — which costs a full re-walk of each sub-spine, so a spine of depth n costs Σk = O(n²) where the answer is one linear pass.
-///
-/// **It takes no [`crate::Reducer`], and that is the enforcement rather than a comment.** A function that cannot reach the reducer cannot re-enter reduction, cannot spend budget, and cannot rebuild a term to ask about it. The audit is the signature.
-///
-/// **The notion is not new here — conversion has had it all along.** `crate::spine`'s `Atom::Window` is documented as a chunk whose contents are symbolic but whose length it carries outright; deciding equality has always been able to measure what it cannot read. Only reduction lacked the same view.
-///
-/// **Deliberately narrow: literal runs and their concatenations, nothing else.** An append, a window, a variable — anything whose length this cannot read off — answers `None`, and every caller then falls back to exactly the rule it uses today. That keeps this from asserting a single equation that is not already decided: measuring a window by the count it carries would be sound on `/sys`'s `s + l <= len(b)` precondition, but nothing decides `len(slice(b, s, l)) = l` today — conversion holds a window's very emptiness undecidable (`against_identity` answers `Stuck`) — so admitting it would be a *new* definitional equation on the perimeter's weakest row. It buys nothing here, since an accumulation's spine is literals, and it can be taken later on its own evidence.
-fn bin_segments(grain: Grain, value: &Term) -> Option<Vec<(&Term, usize)>> {
-    let mut segments = Vec::new();
-    let mut pending = vec![value];
-
-    while let Some(term) = pending.pop() {
-        match &**term {
-            Subterm::Intrinsic(Intrinsic::Bin(found, run)) if *found == grain => {
-                segments.push((term, run.len(grain)));
-            }
-            // Pushed in reverse so they come back off left to right: a segment list is ordered, unlike the sum taken over it.
-            Subterm::Intrinsic(Intrinsic::BinConcat {
-                grain: found,
-                operands,
-            }) if *found == grain => {
-                pending.extend(operands.iter().rev());
-            }
-            _ => return None,
-        }
-    }
-
-    Some(segments)
+/// One node of a measured spine: a literal run of that many generators, or a concatenation's operands to walk into.
+enum Spine<'a> {
+    Run(usize),
+    Operands(&'a [Term]),
 }
 
-/// [`bin_segments`] over the element carrier.
-fn list_segments(value: &Term) -> Option<Vec<(&Term, usize)>> {
-    let mut segments = Vec::new();
-    let mut pending = vec![value];
-
-    while let Some(term) = pending.pop() {
-        match &**term {
-            Subterm::Intrinsic(Intrinsic::List {
-                element: _,
-                items: elems,
-            }) => segments.push((term, elems.len())),
-            Subterm::Intrinsic(Intrinsic::ListConcat {
-                element: _,
-                operands,
-            }) => {
-                pending.extend(operands.iter().rev());
+impl FreeMonoid {
+    /// How this carrier reads one node of a measured spine — `None` for a value whose length it cannot read off, which is a variable, an append, a window, or a node of another carrier.
+    ///
+    /// **The one place a carrier says what a measured node is.** The walks below are one walk over this, as the structural eliminator is one recursion over [`FreeMonoid::uncons`]: a carrier that could be measured differently by `get` than by `slice` is the shape this removes. `Unary` answers `None` throughout — its spine carries the value rather than operands, and nothing indexes into it.
+    ///
+    /// **Deliberately narrow: literal runs and their concatenations, nothing else.** Anything whose length this cannot read off answers `None`, and every caller then falls back to exactly the rule it uses today. That keeps it from asserting an equation that is not already decided: measuring a window by the count it carries would be sound on `/sys`'s `s + l <= len(b)` precondition, but nothing decides `len(slice(b, s, l)) = l` today — conversion holds a window's very emptiness undecidable (`against_identity` answers `Stuck`) — so admitting it would be a *new* definitional equation on the perimeter's weakest row. It buys nothing here, since an accumulation's spine is literals, and it can be taken later on its own evidence.
+    fn spine<'a>(self, value: &'a Term) -> Option<Spine<'a>> {
+        match (self, &**value) {
+            (FreeMonoid::Bin(grain), Subterm::Intrinsic(Intrinsic::Bin(found, run)))
+                if *found == grain =>
+            {
+                Some(Spine::Run(run.len(grain)))
             }
-            _ => return None,
+            (
+                FreeMonoid::Bin(grain),
+                Subterm::Intrinsic(Intrinsic::BinConcat {
+                    grain: found,
+                    operands,
+                }),
+            ) if *found == grain => Some(Spine::Operands(operands)),
+            (
+                FreeMonoid::List,
+                Subterm::Intrinsic(Intrinsic::List {
+                    element: _,
+                    items: elems,
+                }),
+            ) => Some(Spine::Run(elems.len())),
+            (
+                FreeMonoid::List,
+                Subterm::Intrinsic(Intrinsic::ListConcat {
+                    element: _,
+                    operands,
+                }),
+            ) => Some(Spine::Operands(operands)),
+            _ => None,
         }
     }
 
-    Some(segments)
+    /// The operands of an already-reduced value, left to right, each with the number of generators it carries — `None` where any operand's length is not statically known.
+    ///
+    /// **The free monoid's measure, and the one thing `len`, `get` and `slice` all actually want.** A length is a homomorphism into `(ℕ, +, 0)`, and over a value already in normal form it is a *fold over the spine*: no reduction, no rebuilding, no budget. That is what this is, and it replaces computing one by building `Bin/len(operand)` terms and handing them back to the reducer — which costs a full re-walk of each sub-spine, so a spine of depth n costs Σk = O(n²) where the answer is one linear pass.
+    ///
+    /// **It takes no [`crate::Reducer`], and that is the enforcement rather than a comment.** A function that cannot reach the reducer cannot re-enter reduction, cannot spend budget, and cannot rebuild a term to ask about it. The audit is the signature.
+    ///
+    /// **The notion is not new here — conversion has had it all along.** `crate::spine`'s `Atom::Window` is documented as a chunk whose contents are symbolic but whose length it carries outright; deciding equality has always been able to measure what it cannot read. Only reduction lacked the same view.
+    fn segments(self, value: &Term) -> Option<Vec<(&Term, usize)>> {
+        let mut segments = Vec::new();
+        let mut pending = vec![value];
+
+        while let Some(term) = pending.pop() {
+            match self.spine(term)? {
+                Spine::Run(length) => segments.push((term, length)),
+                // Pushed in reverse so they come back off left to right: a segment list is ordered, unlike the sum taken over it.
+                Spine::Operands(operands) => pending.extend(operands.iter().rev()),
+            }
+        }
+
+        Some(segments)
+    }
+
+    /// How many generators an already-reduced value carries. `None` where it is not wholly measurable, or where the total does not fit a `usize`.
+    ///
+    /// **`Bin`'s answer is deliberately a superset of its segments**, which is why this dispatches rather than folding [`FreeMonoid::segments`] for every carrier — see [`bin_measure`].
+    pub(crate) fn measure(self, value: &Term) -> Option<usize> {
+        match self {
+            FreeMonoid::Bin(grain) => bin_measure(grain, value),
+            _ => measure(&self.segments(value)?),
+        }
+    }
+
+    /// Where an index lands: the operand holding it, and the index *within* that operand. `None` when the value is not wholly measurable, or when the index is past its end — which the caller reports as the out-of-bounds it is.
+    pub(crate) fn locate<'a>(self, value: &'a Term, index: usize) -> Option<Located<'a>> {
+        locate(self.segments(value)?, index)
+    }
+
+    /// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end, which the caller reports.
+    ///
+    /// The point of returning pieces rather than a value: an operand the window covers whole is handed back untouched and shares its payload, and only the two at the edges are narrowed. A window over a spine therefore costs one pass and two slices, where peeling one generator at a time costs a walk of the whole spine per generator read.
+    pub(crate) fn window<'a>(
+        self,
+        value: &'a Term,
+        start: usize,
+        count: usize,
+    ) -> Option<Result<Vec<Piece<'a>>, usize>> {
+        window(self.segments(value)?, start, count)
+    }
 }
 
 /// How many generators an already-reduced `Bin` value carries. `None` where the value is not wholly measurable, or where the total does not fit a `usize`.
@@ -447,7 +485,7 @@ fn list_segments(value: &Term) -> Option<Vec<(&Term, usize)>> {
 /// Crediting it as a segment instead would be wrong twice over: `bin_locate` would hand the node back to `Bin/get` as the operand holding the index, which re-enters this same node and never terminates, and `bin_window` would try to narrow a value it cannot read.
 ///
 /// The length is the one thing about such a node knowable without observing the float, and that is what this reads. `Flt` folds through the binary64 model now, so a *literal* operand is answered by `reduce::intrinsic` before it ever reaches here; what survives is the case this was written for — a **symbolic** operand, where `Bin/len(Flt/to_le_bytes(x))` is still `8` because it is the arity of the result rather than anything about the float. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
-pub(crate) fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
+fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
     let mut total = 0usize;
     let mut pending = vec![value];
 
@@ -471,25 +509,10 @@ pub(crate) fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
     Some(total)
 }
 
-/// [`bin_measure`] over the element carrier.
-pub(crate) fn list_measure(value: &Term) -> Option<usize> {
-    measure(&list_segments(value)?)
-}
-
 fn measure(segments: &[(&Term, usize)]) -> Option<usize> {
     segments
         .iter()
         .try_fold(0usize, |total, (_, length)| total.checked_add(*length))
-}
-
-/// Where an index lands: the operand holding it, and the index *within* that operand. `None` when the value is not wholly measurable, or when the index is past its end — which the caller reports as the out-of-bounds it is.
-pub(crate) fn bin_locate(grain: Grain, value: &Term, index: usize) -> Option<Located<'_>> {
-    locate(bin_segments(grain, value)?, index)
-}
-
-/// [`bin_locate`] over the element carrier.
-pub(crate) fn list_locate(value: &Term, index: usize) -> Option<Located<'_>> {
-    locate(list_segments(value)?, index)
 }
 
 /// The outcome of locating an index in a measured value.
@@ -515,25 +538,6 @@ fn locate(segments: Vec<(&Term, usize)>, index: usize) -> Option<Located<'_>> {
 
 /// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end, which the caller reports.
 ///
-/// The point of returning pieces rather than a value: an operand the window covers whole is handed back untouched and shares its payload, and only the two at the edges are narrowed. A window over a spine therefore costs one pass and two slices, where peeling one generator at a time costs a walk of the whole spine per generator read.
-pub(crate) fn bin_window(
-    grain: Grain,
-    value: &Term,
-    start: usize,
-    count: usize,
-) -> Option<Result<Vec<Piece<'_>>, usize>> {
-    window(bin_segments(grain, value)?, start, count)
-}
-
-/// [`bin_window`] over the element carrier.
-pub(crate) fn list_window(
-    value: &Term,
-    start: usize,
-    count: usize,
-) -> Option<Result<Vec<Piece<'_>>, usize>> {
-    window(list_segments(value)?, start, count)
-}
-
 /// One operand a window spans: whole, or narrowed to the half-open range within it.
 pub(crate) enum Piece<'a> {
     Whole(&'a Term),
