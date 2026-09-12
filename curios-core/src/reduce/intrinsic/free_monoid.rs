@@ -1,6 +1,8 @@
 //! Folding an operation that distributes over a free-monoid spine.
 //!
 //! A `Bin`, a `List` and a `Nat` are all a concatenation of pieces, and an operation that is a homomorphism over that concatenation reduces piecewise — so a symbolic tail does not block the literal pieces around it. [`Shape`] is the peeled spine, and [`reduce_homomorphism`] is the fold over it that every such operation shares.
+//!
+//! **Two readers here stay one per carrier, for reasons that are not drift.** [`bin_shape`] and [`list_shape`] answer different types — `Shape<u8>` against `Shape<Term>` — and only the first is fallible, because only it materializes a run to charge for. [`bin_piece`] and [`list_piece`] differ in what they need from outside the value: a grain is a `Copy` tag [`FreeMonoid`] already carries, while a `List`'s element type is a *term* it does not, and every narrowed piece has to restate it. The readers that did fold into the carrier — the spine walk, the joined walk, the one-generator read — needed nothing from outside that the carrier did not already hold, which is the line between the two groups.
 
 use {
     super::*,
@@ -183,134 +185,64 @@ impl Generator {
 
 /// A value read as a concatenation's operands: a concatenation's own, or an append's base beside the one-generator run it adds. `None` for anything that is neither.
 ///
-/// **An append *is* a concatenation, and only the locator disagreed.** `append(b, k) = b ++ append(x[], k)` is the peel's own law, conversion's spine flattens both spellings to one atom list, and `x[..p, k]` and `x[..p, ..x[k]]` are definitionally equal terms. A locator gated on the concatenation node alone therefore declined a window it had already decided for the other spelling of the same value — incompleteness with nothing on the refusing side to justify it, and the shape `Bytes/of_nat` builds with, so every base-256 encoding was outside what a window could locate.
-pub(super) fn concatenated(grain: Grain, value: &Term) -> Option<Vec<Term>> {
-    fn flatten(grain: Grain, value: &Term, into: &mut Vec<Term>) {
-        match &**value {
-            Subterm::Intrinsic(Intrinsic::BinConcat {
-                grain: found,
-                operands,
-            }) if *found == grain => {
-                for operand in operands {
-                    flatten(grain, operand, into);
-                }
-            }
-            Subterm::Intrinsic(Intrinsic::BinAppend {
-                grain: found,
-                bin,
-                element,
-            }) if *found == grain => {
-                flatten(grain, bin, into);
-                into.push(Term::intrinsic(Intrinsic::bin_append(
-                    grain,
-                    Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
-                    element.clone(),
-                )));
-            }
-            _ => into.push(value.clone()),
-        }
-    }
-
-    let nested = matches!(
-        &**value,
-        Subterm::Intrinsic(Intrinsic::BinConcat { grain: found, .. } | Intrinsic::BinAppend { grain: found, .. })
-            if *found == grain
-    );
-    nested.then(|| {
-        let mut operands = Vec::new();
-        flatten(grain, value, &mut operands);
-        operands
-    })
-}
-
-/// [`concatenated`] over the `List` carrier, whose append names its parts differently and carries an element type.
-pub(super) fn list_concatenated(value: &Term) -> Option<Vec<Term>> {
-    fn flatten(value: &Term, into: &mut Vec<Term>) {
-        match &**value {
-            Subterm::Intrinsic(Intrinsic::ListConcat {
-                element: _,
-                operands,
-            }) => {
-                for operand in operands {
-                    flatten(operand, into);
-                }
-            }
-            Subterm::Intrinsic(Intrinsic::ListAppend {
-                element,
-                list,
-                item,
-            }) => {
-                flatten(list, into);
-                into.push(Term::intrinsic(Intrinsic::list_append(
-                    element.clone(),
-                    Term::intrinsic(Intrinsic::List {
-                        element: element.clone(),
-                        items: Vec::new(),
-                    }),
-                    item.clone(),
-                )));
-            }
-            _ => into.push(value.clone()),
-        }
-    }
-
-    let nested = matches!(
-        &**value,
-        Subterm::Intrinsic(Intrinsic::ListConcat { .. } | Intrinsic::ListAppend { .. })
-    );
-    nested.then(|| {
-        let mut operands = Vec::new();
-        flatten(value, &mut operands);
-        operands
-    })
-}
-
 /// The single generator of a value whose measure is exactly one, or `None` for anything else.
 ///
-/// **Why this rather than an inner `get`.** A located one-operand window gives `get(v, i) = get(w, 0)`, and rebuilding that inner read would need a proof that `0 < len(w)` — a proposition the caller's own bound does not state, and one a reducer may not construct: [`crate::Intrinsic::signature`]'s module documentation records that a reducer emitting proofs is the defect the bound fields exist to remove. Reading the generator out of the two shapes a one-element value takes needs no proof at all, and declining every other shape costs reductions and never an answer.
-pub(super) fn single_generator(grain: Grain, operand: &Term) -> Option<Term> {
-    match &**operand {
-        Subterm::Intrinsic(Intrinsic::Bin(found, run))
-            if *found == grain && run.len(grain) == 1 =>
-        {
-            bin_element(grain, operand, 0).map(Term::from)
-        }
-        Subterm::Intrinsic(Intrinsic::BinAppend {
-            grain: found,
-            bin: base,
-            element,
-        }) if *found == grain => match &**base {
-            Subterm::Intrinsic(Intrinsic::Bin(empty, run))
-                if *empty == grain && run.len(grain) == 0 =>
-            {
-                Some(element.clone())
-            }
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
 /// [`single_generator`] over the element carrier: the one element of a value whose measure is exactly one.
 ///
-/// The same two shapes, named the way `List` names them — a one-item literal, or an append onto the empty list, which is what [`list_concatenated`] leaves at a seam.
-pub(super) fn list_single_generator(operand: &Term) -> Option<Term> {
-    match &**operand {
-        Subterm::Intrinsic(Intrinsic::List { element: _, items }) => match items.as_slice() {
-            [only] => Some(only.clone()),
-            _ => None,
-        },
-        Subterm::Intrinsic(Intrinsic::ListAppend {
-            element: _,
-            list: base,
-            item,
-        }) => match &**base {
-            Subterm::Intrinsic(Intrinsic::List { element: _, items }) if items.is_empty() => {
-                Some(item.clone())
+impl FreeMonoid {
+    /// The single generator of a value whose measure is exactly one, or `None` for anything else.
+    ///
+    /// **Why this rather than an inner `get`.** A located one-operand window gives `get(v, i) = get(w, 0)`, and rebuilding that inner read would need a proof that `0 < len(w)` — a proposition the caller's own bound does not state, and one a reducer may not construct: [`crate::Intrinsic::signature`]'s module documentation records that a reducer emitting proofs is the defect the bound fields exist to remove. Reading the generator out of the two shapes a one-element value takes needs no proof at all, and declining every other shape costs reductions and never an answer.
+    ///
+    /// Lives here rather than beside the carrier's other readers because reading a generator *out* is the grain's own seam ([`element_of_run`]), which is reduction's rather than the term representation's.
+    pub(super) fn single_generator(self, operand: &Term) -> Option<Term> {
+        match (self, &**operand) {
+            (FreeMonoid::Bin(grain), Subterm::Intrinsic(Intrinsic::Bin(found, run)))
+                if *found == grain && run.len(grain) == 1 =>
+            {
+                element_of_run(grain, run, 0).map(Term::from)
             }
+            (
+                FreeMonoid::Bin(grain),
+                Subterm::Intrinsic(Intrinsic::BinAppend {
+                    grain: found,
+                    bin: base,
+                    element,
+                }),
+            ) if *found == grain => match &**base {
+                Subterm::Intrinsic(Intrinsic::Bin(empty, run))
+                    if *empty == grain && run.len(grain) == 0 =>
+                {
+                    Some(element.clone())
+                }
+                _ => None,
+            },
+            (
+                FreeMonoid::List,
+                Subterm::Intrinsic(Intrinsic::List {
+                    element: _,
+                    items: elems,
+                }),
+            ) => match elems.as_slice() {
+                [only] => Some(only.clone()),
+                _ => None,
+            },
+            (
+                FreeMonoid::List,
+                Subterm::Intrinsic(Intrinsic::ListAppend {
+                    element: _,
+                    list: base,
+                    item,
+                }),
+            ) => match &**base {
+                Subterm::Intrinsic(Intrinsic::List {
+                    element: _,
+                    items: elems,
+                }) if elems.is_empty() => Some(item.clone()),
+                _ => None,
+            },
             _ => None,
-        },
-        _ => None,
+        }
     }
 }
 

@@ -715,7 +715,7 @@ pub fn reduce_intrinsic(
                 }
             }
             // An index at a seam of a concatenation, where the operand starting there holds exactly one generator: `get([..p, k], len(p)) = k`. It is the walk `seam_window` already performs, asked for a window of one — so what located a symbolic *position* now also locates a symbolic *index*, which the locator above cannot because it reads a `usize`. This closes the asymmetry `curios`'s `tests::laws` recorded: a window at a seam was found and an index at the same seam was not.
-            if let Some(operands) = concatenated(grain, &bin)
+            if let Some(operands) = FreeMonoid::Bin(grain).concatenated(&bin)
                 && let Some(run) = seam_window(
                     reducer,
                     &operands,
@@ -724,7 +724,7 @@ pub fn reduce_intrinsic(
                     |operand| Intrinsic::bin_len(grain, operand.clone()),
                 )?
                 && let [only] = run.as_slice()
-                && let Some(generator) = single_generator(grain, only)
+                && let Some(generator) = FreeMonoid::Bin(grain).single_generator(only)
             {
                 return reducer.reduce(generator).map(Term::unwrap_or_clone);
             }
@@ -835,7 +835,7 @@ pub fn reduce_intrinsic(
                 }
             }
             // A window on the seams of a symbolic concatenation — see `seam_window`. An append is one of those, which `concatenated` is what says.
-            if let Some(operands) = concatenated(grain, &bin)
+            if let Some(operands) = FreeMonoid::Bin(grain).concatenated(&bin)
                 && let Some(run) = seam_window(
                     reducer,
                     &operands,
@@ -1073,7 +1073,7 @@ pub fn reduce_intrinsic(
                 }
             }
             // An index at a seam of a concatenation, where the operand starting there holds exactly one element: `get([..p, k], len(p)) = k`. The `List` twin of `BinGet`'s seam rule, and it closes the asymmetry *within* this carrier: `ListSlice` already walks the seams, so a window at one was located where an index at the same seam was not, though the walk reaching each is the same one.
-            if let Some(operands) = list_concatenated(&list)
+            if let Some(operands) = FreeMonoid::List.concatenated(&list)
                 && let Some(run) = seam_window(
                     reducer,
                     &operands,
@@ -1082,7 +1082,7 @@ pub fn reduce_intrinsic(
                     |operand| Intrinsic::list_len(type_.clone(), operand.clone()),
                 )?
                 && let [only] = run.as_slice()
-                && let Some(generator) = list_single_generator(only)
+                && let Some(generator) = FreeMonoid::List.single_generator(only)
             {
                 return reducer.reduce(generator).map(Term::unwrap_or_clone);
             }
@@ -1195,7 +1195,7 @@ pub fn reduce_intrinsic(
                 }
             }
             // A window on the seams of a symbolic concatenation — see `seam_window`. An append is one of those, which `list_concatenated` is what says.
-            if let Some(operands) = list_concatenated(&list)
+            if let Some(operands) = FreeMonoid::List.concatenated(&list)
                 && let Some(run) = seam_window(
                     reducer,
                     &operands,

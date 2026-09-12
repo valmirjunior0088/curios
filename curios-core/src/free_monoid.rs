@@ -390,6 +390,12 @@ enum Spine<'a> {
     Operands(&'a [Term]),
 }
 
+/// One node of a juxtaposition: a concatenation's operands, or an append's base beside the one-generator value it adds, already built.
+enum Joined<'a> {
+    Operands(&'a [Term]),
+    Append { base: &'a Term, singleton: Term },
+}
+
 impl FreeMonoid {
     /// How this carrier reads one node of a measured spine — `None` for a value whose length it cannot read off, which is a variable, an append, a window, or a node of another carrier.
     ///
@@ -426,6 +432,90 @@ impl FreeMonoid {
             ) => Some(Spine::Operands(operands)),
             _ => None,
         }
+    }
+
+    /// How this carrier reads one *joined* node — a concatenation's operands, or an append's base beside the one-generator value it adds. `None` for anything that is neither.
+    ///
+    /// The seam [`FreeMonoid::concatenated`] walks, beside the one [`FreeMonoid::spine`] walks. They differ in what they admit rather than in how they recurse: a spine node must be *measurable*, so an append is not one, while a joined node need only be a juxtaposition, which an append is by the peel's own law.
+    fn joined<'a>(self, value: &'a Term) -> Option<Joined<'a>> {
+        match (self, &**value) {
+            (
+                FreeMonoid::Bin(grain),
+                Subterm::Intrinsic(Intrinsic::BinConcat {
+                    grain: found,
+                    operands,
+                }),
+            ) if *found == grain => Some(Joined::Operands(operands)),
+            (
+                FreeMonoid::Bin(grain),
+                Subterm::Intrinsic(Intrinsic::BinAppend {
+                    grain: found,
+                    bin: base,
+                    element,
+                }),
+            ) if *found == grain => Some(Joined::Append {
+                base,
+                singleton: Term::intrinsic(Intrinsic::bin_append(
+                    grain,
+                    Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
+                    element.clone(),
+                )),
+            }),
+            (
+                FreeMonoid::List,
+                Subterm::Intrinsic(Intrinsic::ListConcat {
+                    element: _,
+                    operands,
+                }),
+            ) => Some(Joined::Operands(operands)),
+            (
+                FreeMonoid::List,
+                Subterm::Intrinsic(Intrinsic::ListAppend {
+                    element,
+                    list: base,
+                    item,
+                }),
+            ) => Some(Joined::Append {
+                base,
+                singleton: Term::intrinsic(Intrinsic::list_append(
+                    element.clone(),
+                    Term::intrinsic(Intrinsic::List {
+                        element: element.clone(),
+                        items: Vec::new(),
+                    }),
+                    item.clone(),
+                )),
+            }),
+            _ => None,
+        }
+    }
+
+    /// A value read as a concatenation's operands, flattened: a concatenation's own, and an append's base beside the one-generator run it adds. `None` for anything that is neither.
+    ///
+    /// **An append *is* a concatenation, and only the locator disagreed.** `append(b, k) = b ++ append(x[], k)` is the peel's own law, conversion's spine flattens both spellings to one atom list, and `x[..p, k]` and `x[..p, ..x[k]]` are definitionally equal terms. A locator gated on the concatenation node alone therefore declined a window it had already decided for the other spelling of the same value — incompleteness with nothing on the refusing side to justify it, and the shape `Bytes/of_nat` builds with, so every base-256 encoding was outside what a window could locate.
+    ///
+    /// **The reading flattens, so a seam is a seam however it is nested.** A carrier that flattened only its outermost node would present an inner seam as an operand's interior, which is a window it can already decide declined for the way it happens to be spelled.
+    pub(crate) fn concatenated(self, value: &Term) -> Option<Vec<Term>> {
+        fn flatten(carrier: FreeMonoid, value: &Term, into: &mut Vec<Term>) {
+            match carrier.joined(value) {
+                Some(Joined::Operands(operands)) => {
+                    for operand in operands {
+                        flatten(carrier, operand, into);
+                    }
+                }
+                Some(Joined::Append { base, singleton }) => {
+                    flatten(carrier, base, into);
+                    into.push(singleton);
+                }
+                None => into.push(value.clone()),
+            }
+        }
+
+        self.joined(value).is_some().then(|| {
+            let mut operands = Vec::new();
+            flatten(self, value, &mut operands);
+            operands
+        })
     }
 
     /// The operands of an already-reduced value, left to right, each with the number of generators it carries — `None` where any operand's length is not statically known.
