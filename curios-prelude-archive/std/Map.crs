@@ -12,31 +12,27 @@ pub struct Map(V: Type): Type {
     root: Option(Node(V)),
 }
 
--- | How a key type encodes to the byte string that identifies it.
+-- | How a key type encodes to the byte string that identifies it, with the proof that distinct keys encode distinctly.
 -- |
--- | The encoding is `/std/Hash`'s, and every witness below spells it `Hash/hash` rather than repeating one: a type has one identity as bytes, and a key that disagreed with its hash would be a second. What this concept adds is the proof `Hash` does not carry — that the encoding is injective, so the trie cannot silently merge two keys into one entry.
+-- | The encoding is `/std/Hash`'s by the edge rather than by convention: there is no second field to disagree with it, so a type has one identity as bytes by construction. What this concept adds is the proof `Hash` does not carry — that the encoding is injective, so the trie cannot silently merge two keys into one entry.
 pub concept Key(K: Type): pub Type {
-    -- | The encoding.
-    to_bytes(K) -> Bytes,
+    use Hash(K),
     -- | Distinct keys encode distinctly.
-    injective(a: K, b: K, same: Eq(to_bytes(a), to_bytes(b))) -> Eq(a, b),
+    injective(a: K, b: K, same: Eq(Hash/hash(a), Hash/hash(b))) -> Eq(a, b),
 }
 
 -- | The identity encoding.
 satisfy Key(Bytes) {
-    to_bytes = Hash/hash,
     injective(_, _, same) = same,
 }
 
 -- | The UTF-8 bytes.
 satisfy Key(Str) {
-    to_bytes = Hash/hash,
     injective(a, b, same) = Str/eq_of_bytes(a, b, same),
 }
 
 -- | The minimal big-endian encoding, whose injectivity is `/std/Bytes`'s to prove.
 satisfy Key(Nat) {
-    to_bytes = Hash/hash,
     injective = Bytes/of_nat_injective,
 }
 
@@ -137,7 +133,7 @@ pub let len(@V: Type, m: Map(V)) -> Nat =
 
 -- | The value at `key`, or `none`.
 pub let get(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Option(V) =
-    let k = Key/to_bytes(key);
+    let k = Hash/hash(key);
     match m.root
     | none() => Option/none()
     | some(n) =>
@@ -151,7 +147,7 @@ pub let has(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Bool =
 
 -- | `m` with `key` at `v`, replacing an entry under the same key.
 pub let insert(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, v: V) -> Map(V) =
-    let k = Key/to_bytes(key);
+    let k = Hash/hash(key);
     match m.root
     | none() => Map { size = 1, root = Option/some(Node/leaf(k, v)) }
     | some(n) =>
@@ -165,7 +161,7 @@ pub let insert(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, v: V) -> Map(V
 
 -- | `m` without `key`; unchanged when absent.
 pub let remove(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Map(V) =
-    let k = Key/to_bytes(key);
+    let k = Hash/hash(key);
     match m.root
     | none() => m
     | some(n) =>
