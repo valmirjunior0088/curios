@@ -19,8 +19,8 @@ use scalar::*;
 use {
     super::{ReduceError, Reducer},
     crate::{
-        Cost, FUSION_CAP, FreeMonoid, Intrinsic, Located, Nat, Peel, Subterm, Term,
-        normalize_concat, peel_bin, peel_first_atom, peel_first_elem, project_erased_universes,
+        Cost, FUSION_CAP, FreeMonoid, Intrinsic, Nat, Peel, Subterm, Term, normalize_concat,
+        peel_bin, peel_first_atom, peel_first_elem, project_erased_universes,
     },
     curios_num::{Floating, Integer, Natural},
     curios_utilities::{Grain, PackedBin},
@@ -692,41 +692,30 @@ pub fn reduce_intrinsic(
                 return reducer.reduce(element.clone()).map(Term::unwrap_or_clone);
             }
             // A get over a cons spine peels one generator per `0`/`succ` index step: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
-            // Locate the index by the operands' own lengths rather than peeling one generator at a time. A peel walks the whole spine to expose one generator and rebuilds the rest, so reading an index costs a pass per generator ahead of it; the measure reaches the operand holding it in one pass and indexes within that operand alone. `None` means some operand's length is not statically known, which is what the peel below is for.
-            if let Some(i) = i {
-                match FreeMonoid::Bin(grain).locate(&bin, i) {
-                    Some(Located::At(operand, local)) => {
-                        return bin_element(grain, operand, local).ok_or(
-                            ReduceError::BinGetOutOfBounds {
-                                len: local,
-                                index: i,
-                                span,
-                            },
-                        );
+            // An index is a window of one, so the same two strategies that place a window place an index — see `FreeMonoid::window`. The concrete one narrows the operand holding it down to that single generator; the symbolic one takes a whole operand that already carries exactly one, which is the seam case `get([..p, k], len(p)) = k`.
+            match FreeMonoid::Bin(grain).window(
+                reducer,
+                &bin,
+                &index_reduced,
+                &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+                |piece| bin_piece(grain, piece),
+                |operand| Intrinsic::bin_len(grain, operand.clone()),
+            )? {
+                Some(Windowed::Parts(parts)) => {
+                    if let [only] = parts.as_slice()
+                        && let Some(generator) = FreeMonoid::Bin(grain).single_generator(only)
+                    {
+                        return reducer.reduce(generator).map(Term::unwrap_or_clone);
                     }
-                    Some(Located::Past(len)) => {
-                        return Err(ReduceError::BinGetOutOfBounds {
-                            len,
-                            index: i,
-                            span,
-                        });
-                    }
-                    None => {}
                 }
-            }
-            // An index at a seam of a concatenation, where the operand starting there holds exactly one generator: `get([..p, k], len(p)) = k`. It is the walk `seam_window` already performs, asked for a window of one — so what located a symbolic *position* now also locates a symbolic *index*, which the locator above cannot because it reads a `usize`. This closes the asymmetry `curios`'s `tests::laws` recorded: a window at a seam was found and an index at the same seam was not.
-            if let Some(operands) = FreeMonoid::Bin(grain).concatenated(&bin)
-                && let Some(run) = seam_window(
-                    reducer,
-                    &operands,
-                    &index_reduced,
-                    &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                    |operand| Intrinsic::bin_len(grain, operand.clone()),
-                )?
-                && let [only] = run.as_slice()
-                && let Some(generator) = FreeMonoid::Bin(grain).single_generator(only)
-            {
-                return reducer.reduce(generator).map(Term::unwrap_or_clone);
+                Some(Windowed::Past { total, start, .. }) => {
+                    return Err(ReduceError::BinGetOutOfBounds {
+                        len: total,
+                        index: start,
+                        span,
+                    });
+                }
+                None => {}
             }
             if let Some((head, tail)) = peel_first_atom(grain, &bin) {
                 match &*index_reduced {
@@ -1034,46 +1023,31 @@ pub fn reduce_intrinsic(
                     }),
                 };
             }
-            // The `List` twin of `BinGet`'s locator: reach the segment holding the index by the segments' own lengths, then index within it, rather than peeling one element at a time.
-            if let Some(i) = i {
-                match FreeMonoid::List.locate(&list, i) {
-                    Some(Located::At(operand, local)) => {
-                        let local = Term::intrinsic(Intrinsic::Nat(Nat::new(local)));
-                        let operand = operand.clone();
-                        return reducer
-                            .reduce(Term::intrinsic(Intrinsic::list_get(
-                                type_,
-                                operand,
-                                local,
-                                in_range.clone(),
-                            )))
-                            .map(Term::unwrap_or_clone);
+            // An index is a window of one, so the same two strategies that place a window place an index — see `FreeMonoid::window`. The `List` twin of `BinGet`'s, down to the seam case `get([..p, k], len(p)) = k`.
+            match FreeMonoid::List.window(
+                reducer,
+                &list,
+                &index_reduced,
+                &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+                |piece| list_piece(&type_, piece),
+                |operand| Intrinsic::list_len(type_.clone(), operand.clone()),
+            )? {
+                Some(Windowed::Parts(parts)) => {
+                    if let [only] = parts.as_slice()
+                        && let Some(generator) = FreeMonoid::List.single_generator(only)
+                    {
+                        return reducer.reduce(generator).map(Term::unwrap_or_clone);
                     }
-                    Some(Located::Past(len)) => {
-                        return Err(ReduceError::ListGetOutOfBounds {
-                            len,
-                            index: i,
-                            span: index.span(),
-                        });
-                    }
-                    None => {}
                 }
+                Some(Windowed::Past { total, start, .. }) => {
+                    return Err(ReduceError::ListGetOutOfBounds {
+                        len: total,
+                        index: start,
+                        span: index.span(),
+                    });
+                }
+                None => {}
             }
-            // An index at a seam of a concatenation, where the operand starting there holds exactly one element: `get([..p, k], len(p)) = k`. The `List` twin of `BinGet`'s seam rule, and it closes the asymmetry *within* this carrier: `ListSlice` already walks the seams, so a window at one was located where an index at the same seam was not, though the walk reaching each is the same one.
-            if let Some(operands) = FreeMonoid::List.concatenated(&list)
-                && let Some(run) = seam_window(
-                    reducer,
-                    &operands,
-                    &index_reduced,
-                    &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                    |operand| Intrinsic::list_len(type_.clone(), operand.clone()),
-                )?
-                && let [only] = run.as_slice()
-                && let Some(generator) = FreeMonoid::List.single_generator(only)
-            {
-                return reducer.reduce(generator).map(Term::unwrap_or_clone);
-            }
-            // A get over a cons spine peels one element per `0`/`succ` index step, the `List` twin of `BinGet`'s byte peel: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
             if let Some((head, tail)) = peel_first_elem(&list) {
                 match &*index_reduced {
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {

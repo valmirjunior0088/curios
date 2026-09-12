@@ -550,11 +550,6 @@ impl FreeMonoid {
         }
     }
 
-    /// Where an index lands: the operand holding it, and the index *within* that operand. `None` when the value is not wholly measurable, or when the index is past its end — which the caller reports as the out-of-bounds it is.
-    pub(crate) fn locate<'a>(self, value: &'a Term, index: usize) -> Option<Located<'a>> {
-        locate(self.segments(value)?, index)
-    }
-
     /// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end, which the caller reports.
     ///
     /// The point of returning pieces rather than a value: an operand the window covers whole is handed back untouched and shares its payload, and only the two at the edges are narrowed. A window over a spine therefore costs one pass and two slices, where peeling one generator at a time costs a walk of the whole spine per generator read.
@@ -603,27 +598,6 @@ fn measure(segments: &[(&Term, usize)]) -> Option<usize> {
     segments
         .iter()
         .try_fold(0usize, |total, (_, length)| total.checked_add(*length))
-}
-
-/// The outcome of locating an index in a measured value.
-pub(crate) enum Located<'a> {
-    /// The operand holding the index, and the index within it.
-    At(&'a Term, usize),
-    /// The index is past the value's end, which measured this many generators.
-    Past(usize),
-}
-
-fn locate(segments: Vec<(&Term, usize)>, index: usize) -> Option<Located<'_>> {
-    let mut offset = 0usize;
-
-    for (operand, length) in segments {
-        match index.checked_sub(offset) {
-            Some(local) if local < length => return Some(Located::At(operand, local)),
-            _ => offset = offset.checked_add(length)?,
-        }
-    }
-
-    Some(Located::Past(offset))
 }
 
 /// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end, which the caller reports.

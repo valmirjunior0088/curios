@@ -130,16 +130,6 @@ pub(super) fn bin_piece(grain: Grain, piece: Piece<'_>) -> Term {
 
 /// The generator a located index names, read straight out of the literal run holding it.
 ///
-/// Every segment [`bin_segments`](crate::free_monoid) admits is a literal run, so the read is performed here rather than rebuilt as a `BinGet` over that operand for the next pass to fold into exactly this — which is also what keeps the located path from having to *state* a bound it would then have to prove.
-pub(super) fn bin_element(grain: Grain, operand: &Term, local: usize) -> Option<Subterm> {
-    let Subterm::Intrinsic(Intrinsic::Bin(found, run)) = &**operand else {
-        unreachable!("a located index lies in a literal run");
-    };
-    assert_eq!(*found, grain, "a located segment shares the value's grain");
-
-    element_of_run(grain, run, local)
-}
-
 /// The generator at an index of a literal run, as the value its grain reads it as.
 ///
 /// **The one place the grain decides what a generator *is*.** `PackedBin` has a reader per grain and the two produce different carriers — a `Byte` at X, a `Bool` at B — so every path that reads one generator branches here and nowhere else, which is what lets the fold arms above take the grain as a parameter rather than as a case.
