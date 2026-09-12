@@ -593,3 +593,192 @@ fn rec_is_alpha_equivalent() {
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
+
+/// `rec f : (t: Type⟨level⟩, x: Nat, y: Nat) -> Nat = (t, x, y) => match y | 0 => zero_arm | p + 1 => f(t, 0, p); f` — the projection of a one-member group whose only universe data is `level`. The recursive call keeps the body restuck, and it discards `x`. `zero_arm` is where a term-level difference between two such groups is planted.
+fn polymorphic_fold(context: &mut Context, level: Level, zero_arm: Term) -> Term {
+    let f = context.fresh(Some("f"));
+    let t = context.fresh(Some("t"));
+    let x = context.fresh(Some("x"));
+    let y = context.fresh(Some("y"));
+    let motive = context.fresh(Some("m"));
+    let pred = context.fresh(Some("pred"));
+    let ih = context.fresh(Some("ih"));
+    let sort = Term::type_at(level);
+
+    let body = Term::func(
+        [
+            (t.clone(), sort.clone()),
+            (x.clone(), nat_type()),
+            (y.clone(), nat_type()),
+        ],
+        Term::nat_match(
+            Term::free_var(&y),
+            Some(&motive),
+            nat_type(),
+            zero_arm,
+            &pred,
+            &ih,
+            Term::apply(
+                Term::free_var(&f),
+                [Term::free_var(&t), nat(0), Term::free_var(&pred)],
+            ),
+        ),
+    );
+
+    Term::rec(
+        [(
+            f.clone(),
+            Term::func_type([(t, sort), (x, nat_type()), (y, nat_type())], nat_type()),
+            body,
+        )],
+        Term::free_var(&f),
+    )
+}
+
+/// The fold applied to `Nat`, a discarded argument and a symbolic count.
+fn fold_call(fold: Term, discarded: &Free, count: &Free) -> Term {
+    Term::apply(
+        fold,
+        [nat_type(), Term::free_var(discarded), Term::free_var(count)],
+    )
+}
+
+fn zonked(context: &Context, meta: UniverseMetaId) -> Level {
+    context
+        .universes()
+        .zonk(&Level::meta(meta))
+        .expect("levels zonk")
+}
+
+/// Two instances of one recursive group are one term exactly when their levels are identified, and the acceptance carries the identification: the pair is decided at the applied head, where the kernel decides it by its levels under the item's hypotheses. The kernel's twin of this proposition shares the name.
+#[test]
+fn two_instances_of_one_recursive_group_convert_when_their_levels_are_equal_under_the_hypotheses() {
+    let mut context = context();
+    let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let a = context.fresh(Some("a"));
+    let n = context.fresh(Some("n"));
+    let at_u0 = polymorphic_fold(&mut context, Level::meta(u0), nat(0));
+    let at_u1 = polymorphic_fold(&mut context, Level::meta(u1), nat(0));
+
+    assert_eq!(
+        conv(
+            &mut context,
+            &fold_call(at_u0, &a, &n),
+            &fold_call(at_u1, &a, &n)
+        ),
+        Ok(true),
+    );
+    assert_eq!(
+        zonked(&context, u0),
+        zonked(&context, u1),
+        "acceptance must carry the level identification that licenses it",
+    );
+}
+
+/// The same pair where a term metavariable keeps the two groups apart until the walk has solved it: the head cannot be decided, the symmetric unfolding runs, the inner recursive call recurs — and the recurrence, whose sides then differ in nothing but levels once the solved metavariable is materialized, is identified rather than assumed. Assuming it was what left two universe parameters where the program had one level.
+#[test]
+fn a_recurrence_whose_sides_differ_only_in_levels_is_identified_rather_than_assumed() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+    let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let a = context.fresh(Some("a"));
+    let n = context.fresh(Some("n"));
+    let at_u0 = polymorphic_fold(&mut context, Level::meta(u0), Term::hole(0));
+    let at_u1 = polymorphic_fold(&mut context, Level::meta(u1), nat(0));
+
+    assert_eq!(
+        conv(
+            &mut context,
+            &fold_call(at_u0, &a, &n),
+            &fold_call(at_u1, &a, &n)
+        ),
+        Ok(true),
+    );
+    assert_eq!(
+        zonked(&context, u0),
+        zonked(&context, u1),
+        "the recurrence was assumed without the identification that licenses it",
+    );
+}
+
+/// Two instances of one recursive group at two unequal ground levels are refused — at the head, and again where the pair recurs — because no commitment can join `Type 0` to `Type 1`; the coinductive rule used to assume the recurrence and hand the kernel a pair it refuses. The kernel's twin shares the name.
+#[test]
+fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_unfolding() {
+    {
+        let mut context = context();
+        let a = context.fresh(Some("a"));
+        let n = context.fresh(Some("n"));
+        let at_zero = polymorphic_fold(&mut context, Level::zero(), nat(0));
+        let at_one = polymorphic_fold(&mut context, Level::constant(1), nat(0));
+        assert_eq!(
+            conv(
+                &mut context,
+                &fold_call(at_zero, &a, &n),
+                &fold_call(at_one, &a, &n)
+            ),
+            Ok(false),
+            "two ground-unequal instances were reconciled at the head",
+        );
+    }
+
+    {
+        let mut context = context();
+        context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+        let a = context.fresh(Some("a"));
+        let n = context.fresh(Some("n"));
+        let at_zero = polymorphic_fold(&mut context, Level::zero(), Term::hole(0));
+        let at_one = polymorphic_fold(&mut context, Level::constant(1), nat(0));
+        assert_eq!(
+            conv(
+                &mut context,
+                &fold_call(at_zero, &a, &n),
+                &fold_call(at_one, &a, &n)
+            ),
+            Ok(false),
+            "two ground-unequal instances were assumed where they recurred",
+        );
+    }
+}
+
+/// A recurrence that only an unsolved metavariable keeps from being a level question parks rather than assumes, and commits the identification once the metavariable is solved: the two zero arms are distinct unsolved holes, so nothing in the walk solves them, and the outcome is undecided; solved by hand, the same comparison converts with the levels identified.
+#[test]
+fn a_recurrence_blocked_on_a_metavariable_parks_and_commits_once_it_is_solved() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat_type());
+    context.birth_metavar(MetavarId(1), Vec::new(), nat_type());
+    let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let a = context.fresh(Some("a"));
+    let n = context.fresh(Some("n"));
+    let at_u0 = polymorphic_fold(&mut context, Level::meta(u0), Term::hole(0));
+    let at_u1 = polymorphic_fold(&mut context, Level::meta(u1), Term::hole(1));
+    let this = fold_call(at_u0, &a, &n);
+    let that = fold_call(at_u1, &a, &n);
+
+    assert!(
+        matches!(
+            convert_outcome(&mut context, &nat_type(), &this, &that),
+            Ok(Outcome::Blocked(_))
+        ),
+        "a recurrence kept from a level question by unsolved metavariables was decided",
+    );
+    assert_ne!(
+        zonked(&context, u0),
+        zonked(&context, u1),
+        "the levels were identified before anything licensed it",
+    );
+
+    context.solve_metavar(MetavarId(0), nat(0));
+    context.solve_metavar(MetavarId(1), nat(0));
+
+    assert!(
+        matches!(
+            convert_outcome(&mut context, &nat_type(), &this, &that),
+            Ok(Outcome::Converts)
+        ),
+        "the parked recurrence did not convert once its metavariables were solved",
+    );
+    assert_eq!(zonked(&context, u0), zonked(&context, u1));
+}

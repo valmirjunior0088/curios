@@ -5,8 +5,8 @@
 use {
     super::*,
     curios_core::{
-        Argument, Free, FuncType, Instance, InstanceHead, Level, Proj, StructType, Subterm, Term,
-        UniverseConstraintKind, UniverseConstraintOrigin,
+        Argument, Free, FuncType, Instance, InstanceHead, Proj, StructType, Subterm, Term,
+        UniverseConstraintKind, UniverseConstraintOrigin, strip_universe_levels,
     },
 };
 
@@ -14,34 +14,18 @@ use {
 ///
 /// This replaces a rule that compared the two sides through `project_erased_universes` and accepted on projection equality, on the premise that a universe instance cannot affect computation. That premise is false (see `documentation/soundness/what-the-kernel-consults/the-refinement-key.md`): `Type u` embeds a level *in a term*, so a definition carrying a level into a constructor payload reduces to genuinely different values at two instances — and the projection accepted such pairs with no residue for the declaration boundary to refuse. Identification leaves the residue.
 ///
-/// Declines — answering `false` with **nothing inserted**, so the structural path below judges the problem instead — on a pair of unequal ground levels, where there is nothing to identify and the problem may still hold by value, and on a differing pair under a universe binder, whose bound parameters the ambient solver cannot constrain. Every pair is checked before any is committed, because a decline that had already inserted would not be a fall-through.
+/// What it answers is one of [`Identification`]'s verdicts. Declines — answering anything but `Identified`, with **nothing inserted**, so the structural path below judges the problem instead — on a pair of unequal ground levels, where there is nothing to identify and the problem may still hold by value, and on a differing pair under a universe binder, whose bound parameters the ambient solver cannot constrain. Every pair is checked before any is committed, because a decline that had already inserted would not be a fall-through.
 pub(super) fn identify_universe_levels(
     context: &mut Context,
     this: &Term,
     that: &Term,
-) -> Result<bool, ReduceError> {
-    // One traversal per side: collect every level with its universe-binder depth, rewriting it to ground on the way — the stripped terms then compare equal exactly when the sides differ in nothing but levels, and equality of the stripped terms is what aligns the two collections positionally.
-    fn strip_collecting(term: &Term) -> Result<(Term, Vec<(usize, Level)>), UniverseError> {
-        let levels = Rc::new(RefCell::new(Vec::new()));
-        let sink = Rc::clone(&levels);
-        let stripped = rewrite_universe_levels_scoped(term, move |depth, level: &Level| {
-            sink.borrow_mut().push((depth, level.clone()));
-            Ok::<_, UniverseError>(Level::zero())
-        })?;
-
-        let levels = match Rc::try_unwrap(levels) {
-            Ok(cell) => cell.into_inner(),
-            Err(shared) => shared.borrow().clone(),
-        };
-
-        Ok((stripped, levels))
-    }
-
-    let (this_stripped, this_levels) = strip_collecting(this).map_err(ReduceError::Universe)?;
-    let (that_stripped, that_levels) = strip_collecting(that).map_err(ReduceError::Universe)?;
+) -> Result<Identification, ReduceError> {
+    // One traversal per side, shared with the kernel: every level collected with its universe-binder depth, a ground `Type 0` included, and replaced by a sentinel — the skeletons then compare equal exactly when the sides differ in nothing but levels, and that equality is what aligns the two collections positionally. A universes-only walk skipped the `Type 0`, which once aligned `(Type 0, Type u)` with `(Type u, Type 0)` on one level paired with itself.
+    let (this_stripped, this_levels) = strip_universe_levels(this);
+    let (that_stripped, that_levels) = strip_universe_levels(that);
 
     if this_stripped != that_stripped || this_levels.len() != that_levels.len() {
-        return Ok(false);
+        return Ok(Identification::Distinct);
     }
 
     let mut pending = Vec::new();
@@ -51,7 +35,7 @@ pub(super) fn identify_universe_levels(
             continue;
         }
         if *this_depth > 0 || *that_depth > 0 {
-            return Ok(false);
+            return Ok(Identification::UnderBinder);
         }
 
         let this_level = context
@@ -66,7 +50,7 @@ pub(super) fn identify_universe_levels(
             continue;
         }
         if this_level.atoms.is_empty() && that_level.atoms.is_empty() {
-            return Ok(false);
+            return Ok(Identification::GroundUnequal);
         }
 
         pending.push((this_level, that_level));
@@ -83,7 +67,16 @@ pub(super) fn identify_universe_levels(
             .map_err(ReduceError::Universe)?;
     }
 
-    Ok(true)
+    Ok(Identification::Identified)
+}
+
+/// What [`identify_universe_levels`] found: the sides are one term now that their levels are committed equal; they differ in more than levels; a differing pair is two unequal ground levels, which no commitment can join; or a differing pair sits under a universe binder, whose bound parameters the ambient solver cannot constrain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Identification {
+    Identified,
+    Distinct,
+    GroundUnequal,
+    UnderBinder,
 }
 
 /// Binders opened locally by [`Sort::of`] while walking a telescope, innermost last.

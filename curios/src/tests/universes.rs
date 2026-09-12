@@ -8,9 +8,8 @@
 
 use {
     super::run,
-    curios_cert::KernelError,
-    curios_core::{Module, Zonked},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude, typecheck_with_prelude},
+    curios_core::Module,
+    curios_pipeline::{DEFAULT_STEP_BUDGET, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::collections::BTreeMap,
 };
@@ -154,39 +153,17 @@ fn a_refined_scrutinee_carries_the_family_universe_levels() {
     assert_eq!(run(source), b"2");
 }
 
-// The kernel meets `use_call`'s two spellings of `zip` as two instances of one recursive group related only by `u ≤ x1`, `v ≤ z1`; it used to unfold them against each other forever, growing memory until the host died. Now it decides the pair by its levels and refuses it — the intermediate truth this fixture pins, with the parameter count that shows why: the elaborator accepted the pair by a coinductive assumption without ever committing `x1 = u`, so the two stayed separate parameters. The elaborator's half is the change that replaces this fixture with an accepting one. A regression here is the old hang, so this suite runs under a memory cap.
+// `use_call`'s two spellings of `zip` were two instances of one recursive group related only by `u ≤ x1`, `v ≤ z1` while the elaborator assumed their recurrence: the kernel refused the pair, and before it decided such a pair by its levels it unfolded them against each other until the host died. The elaborator now identifies the two instances where they meet, so the declared type's `zip` is spelled at the list levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps every universe parameter it had, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one.
 #[test]
-fn two_instances_of_one_recursive_definition_the_elaborator_never_identified_are_refused_rather_than_unfolded()
- {
-    let entrypoint = TWO_INSTANCES_OF_ZIP
-        .parse::<Entrypoint>()
-        .expect("the fixture parses");
-    let (module, _): (Module, _) =
-        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
-            .expect("the elaborator accepts the program");
-    let zonked = Zonked::project(&module).expect("the checked module is zonked");
-
-    let verdicts = recheck_with_prelude(&zonked, DEFAULT_STEP_BUDGET);
-    let names = verdicts
-        .iter()
-        .map(|verdict| verdict.name.as_ref().map(|name| name.to_string()))
-        .collect::<Vec<_>>();
-    assert_eq!(
-        names,
-        vec![Some("/use_call".to_string())],
-        "the kernel's verdicts were not exactly one refusal of use_call",
-    );
-    assert!(
-        matches!(verdicts[0].error, KernelError::Mismatch { .. }),
-        "the refusal was not a mismatch between the two zip spellings: {}",
-        verdicts[0].error,
-    );
+fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_levels_identified() {
+    super::typecheck_within(DEFAULT_STEP_BUDGET, TWO_INSTANCES_OF_ZIP)
+        .expect("both checkers accept the program");
 
     let parameters = universe_parameters(TWO_INSTANCES_OF_ZIP);
     assert_eq!(
         parameters.get("/use_call"),
         Some(&22),
-        "the levels of the two spellings were identified, so the refusal above should have become an acceptance: {parameters:?}",
+        "identifying the two spellings changed how polymorphic the signature is: {parameters:?}",
     );
 }
 

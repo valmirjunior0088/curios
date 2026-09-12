@@ -1373,6 +1373,42 @@ impl PartialEq for Term {
 
 impl Eq for Term {}
 
+impl Term {
+    /// Structural equality with some subterms standing for anything: `self` and `other` are equal up to `is_wildcard` when they agree at every position where neither side is a wildcard. This is [`PartialEq`]'s masking walk without its hash shortcut, which a wildcard invalidates — a wildcard's hash says nothing about what it stands for.
+    pub fn equal_up_to(&self, other: &Term, mut is_wildcard: impl FnMut(&Term) -> bool) -> bool {
+        let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
+        let mut mask = |subterm: &Subterm| {
+            let masked = subterm.traverse(&mut visit);
+            (masked, visit.take_masked_children())
+        };
+
+        let mut work = vec![(self.clone(), other.clone())];
+        let mut entered: HashSet<(*const Node, *const Node)> = HashSet::new();
+
+        while let Some((this, that)) = work.pop() {
+            if Rc::ptr_eq(&this.inner, &that.inner) || is_wildcard(&this) || is_wildcard(&that) {
+                continue;
+            }
+            if Rc::strong_count(&this.inner) > 1
+                && Rc::strong_count(&that.inner) > 1
+                && !entered.insert((Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner)))
+            {
+                continue;
+            }
+
+            let (this_masked, this_children) = mask(&this.inner.subterm);
+            let (that_masked, that_children) = mask(&that.inner.subterm);
+            if this_masked != that_masked || this_children.len() != that_children.len() {
+                return false;
+            }
+
+            work.extend(this_children.into_iter().zip(that_children));
+        }
+
+        true
+    }
+}
+
 /// Whether two nodes' children are the same allocations pair by pair: `Some(true)` when every child is, `Some(false)` when the counts differ — the nodes cannot be equal — and `None` when some pair is two allocations, which only a structural walk can settle.
 fn children_pairwise_shared(this: &Subterm, that: &Subterm) -> Option<bool> {
     let mut these = Vec::new();

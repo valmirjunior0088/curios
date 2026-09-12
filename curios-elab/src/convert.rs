@@ -34,15 +34,12 @@ use {
         Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
         Level, Match, Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm,
         Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, Variant, Visit, instantiate_universe_levels_scoped,
-        rewrite_universe_levels_scoped,
+        UniverseContext, Variant, Visit, instantiate_universe_levels_scoped, strip_universe_levels,
     },
     curios_utilities::Plicity,
     std::{
-        cell::RefCell,
         collections::{HashMap, HashSet, VecDeque},
         mem,
-        rc::Rc,
     },
 };
 
@@ -110,7 +107,7 @@ pub(crate) struct Problem {
 
 #[derive(Debug)]
 pub(crate) struct Convert {
-    // Structural problems already seen, stored as `history_key` fingerprints. A recurring problem is assumed to hold — the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling problem first.
+    // Structural problems already seen, stored as `history_key` fingerprints. A recurring problem is assumed to hold — the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling problem first. The one disagreement no sibling surfaces is a universe level inside a `rec` group, so a recurrence whose sides agree modulo levels is a level question rather than a cycle: `level_recurrence` identifies, refuses, or parks it, and never assumes it.
     history: HashSet<Problem>,
     pending: VecDeque<Problem>,
     // Constraints postponed because a side is flexible but not yet solvable (flex–flex with distinct heads, or a candidate carrying an unsolved metavariable). Retried whenever a fresh solution lands.
@@ -1550,7 +1547,7 @@ impl Convert {
 
             // Sides differing only in universe levels are decided by identifying the levels, never by erasing them — see `identify_universe_levels` for the rule, its license, and the refuted premise of the projection comparison it replaces. Sound at every problem type, universes included: `Type a ~ Type b` gets the same equality constraint the structural arm below would emit, without the descent.
             if (this.has_universe_data() || that.has_universe_data())
-                && identify_universe_levels(context, &this, &that)?
+                && identify_universe_levels(context, &this, &that)? == Identification::Identified
             {
                 continue;
             }
@@ -1650,7 +1647,16 @@ impl Convert {
 
             let key = self.history_key(context, &problem);
             if self.in_history(&key) {
-                continue;
+                match level_recurrence(context, &problem)? {
+                    Recurrence::Identified | Recurrence::Cycle => continue,
+                    Recurrence::GroundUnequal => return Ok(false),
+                    // Parked under the raw spelling, which is what names the metavariables a wake must watch; the reduced key leaves the history so the retry is compared rather than assumed.
+                    Recurrence::Blocked => {
+                        self.history.remove(&key);
+                        self.blocked.push(raw_problem(&problem.type_));
+                        continue;
+                    }
+                }
             }
 
             let syntax = context.syntax();
@@ -1702,9 +1708,32 @@ impl Convert {
                     let this_head = this_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
                     let that_head = that_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
 
+                    // Two projections of one group at two universe instances are one head exactly when their levels are identified: the kernel decides the same pair by its levels under the item's hypotheses, and an elaborator that assumed it would hand the kernel a pair it refuses. Identified, the spines decide by congruence; two unequal ground levels, or levels under a universe binder, are refused as the kernel refuses them; a pair the skeletons keep apart is two groups and takes the delta step below.
+                    let instances = match (&this_head, &that_head) {
+                        (Some((this_group, index)), Some((that_group, that_index)))
+                            if index == that_index && this_group != that_group =>
+                        {
+                            Some(identify_universe_levels(
+                                context,
+                                &Term::rec_proj(this_group.clone(), *index),
+                                &Term::rec_proj(that_group.clone(), *index),
+                            )?)
+                        }
+                        _ => None,
+                    };
+
                     match (this_head, that_head) {
-                        (Some(this), Some(that)) if this == that => {
+                        (Some(this), Some(that))
+                            if this == that || instances == Some(Identification::Identified) =>
+                        {
                             self.compare_same_rec_apply(context, this_a, that_a, type_.clone())?
+                        }
+                        _ if matches!(
+                            instances,
+                            Some(Identification::GroundUnequal | Identification::UnderBinder)
+                        ) =>
+                        {
+                            false
                         }
                         // Applications of *different* folded members (or a folded member against another stuck head) may still compute the same value, so congruence proves nothing: take one symmetric delta step instead.
                         (Some(_), _) | (_, Some(_)) => {
@@ -1902,4 +1931,40 @@ impl Convert {
 
         Ok(true)
     }
+}
+
+/// What a recurring problem is, once the term metavariables already solved are materialized: a level question the identification decided, one the hypotheses refuse, one that could still become a level question once its remaining metavariables are solved, or a genuine cycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Recurrence {
+    Identified,
+    GroundUnequal,
+    Blocked,
+    Cycle,
+}
+
+/// Classify a problem the history already holds. The walk that produced the recurrence never compared the levels inside the two `rec` groups — no sibling problem surfaces them — so they are decided here: identified when the sides differ in nothing else, refused when two of them are unequal ground levels, parked when an unsolved metavariable is all that keeps the skeletons apart, and assumed only when the sides genuinely differ in structure, which is the cycle the coinductive rule is for. A pair under a universe binder falls back to the cycle rule, since the ambient solver cannot constrain a bound parameter; no instantiated group carries one.
+fn level_recurrence(context: &mut Context, problem: &Problem) -> Result<Recurrence, ReduceError> {
+    let this = crate::zonk_solved_term_metas(context, &problem.this);
+    let that = crate::zonk_solved_term_metas(context, &problem.that);
+
+    match identify_universe_levels(context, &this, &that)? {
+        Identification::Identified => return Ok(Recurrence::Identified),
+        Identification::GroundUnequal => return Ok(Recurrence::GroundUnequal),
+        Identification::UnderBinder => return Ok(Recurrence::Cycle),
+        Identification::Distinct => {}
+    }
+
+    if !this.any_metavar(&mut |_| true) && !that.any_metavar(&mut |_| true) {
+        return Ok(Recurrence::Cycle);
+    }
+
+    // After zonking, every metavariable still standing is unsolved, so a skeleton match with those as wildcards is exactly "these could become one term modulo levels".
+    let (this_skeleton, _) = strip_universe_levels(&this);
+    let (that_skeleton, _) = strip_universe_levels(&that);
+    let wildcard = |term: &Term| matches!(&**term, Subterm::Metavar(_));
+
+    Ok(match this_skeleton.equal_up_to(&that_skeleton, wildcard) {
+        true => Recurrence::Blocked,
+        false => Recurrence::Cycle,
+    })
 }

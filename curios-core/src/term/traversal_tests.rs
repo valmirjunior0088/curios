@@ -267,9 +267,9 @@ fn reach_telescope_absorbs_arity() {
     assert_eq!(f2.reach(), 1); // two binders: (2 + 1) - 2
 }
 
-/// The skeleton `strip_universe_levels` leaves must record where the levels were. A universes-only traversal never visits a `Type 0`, so a zero sentinel would let `(Type 0, Type u)` and `(Type u, Type 0)` strip to one skeleton with one-entry vectors that align `u` with `u` across two different positions; the non-zero sentinel keeps the unvisited ground sort apart from the hole. Two terms that really differ only in levels still strip to one skeleton with aligned vectors.
+/// Every `Type` is a position the stripped skeleton records, a ground `Type 0` included: `(Type 0, Type u)` and `(Type u, Type 0)` strip to one skeleton over two two-entry vectors that pair zero with `u` and `u` with zero, where a universes-only walk would have skipped the `Type 0` and paired `u` with itself. Two terms differing only in levels strip to one skeleton with their vectors aligned.
 #[test]
-fn stripping_levels_keeps_an_unvisited_ground_sort_apart_from_a_stripped_one() {
+fn stripping_levels_records_a_ground_sort_as_a_position() {
     let u = Term::type_at(Level::param(UniverseParam(0)));
     let v = Term::type_at(Level::param(UniverseParam(1)));
     let ground = Term::type_at(Level::zero());
@@ -278,20 +278,44 @@ fn stripping_levels_keeps_an_unvisited_ground_sort_apart_from_a_stripped_one() {
         strip_universe_levels(&Term::tuple([ground.clone(), u.clone()]));
     let (ground_second, ground_second_levels) =
         strip_universe_levels(&Term::tuple([u.clone(), ground]));
-    assert_eq!(ground_first_levels, ground_second_levels);
-    assert_ne!(
-        ground_first, ground_second,
-        "an unvisited ground sort and a stripped level spelled alike, so the two vectors would align across different positions",
+    assert_eq!(ground_first, ground_second);
+    assert_eq!(
+        ground_first_levels,
+        vec![(0, Level::zero()), (0, Level::param(UniverseParam(0)))]
+    );
+    assert_eq!(
+        ground_second_levels,
+        vec![(0, Level::param(UniverseParam(0))), (0, Level::zero())]
     );
 
     let (at_u, u_levels) =
         strip_universe_levels(&Term::tuple([u, Term::intrinsic(Intrinsic::NatType)]));
     let (at_v, v_levels) =
         strip_universe_levels(&Term::tuple([v, Term::intrinsic(Intrinsic::NatType)]));
-    assert_eq!(
-        at_u, at_v,
-        "two terms differing only in levels stripped to different skeletons"
-    );
+    assert_eq!(at_u, at_v);
     assert_eq!(u_levels, vec![(0, Level::param(UniverseParam(0)))]);
     assert_eq!(v_levels, vec![(0, Level::param(UniverseParam(1)))]);
+}
+
+/// Equality up to a wildcard ignores exactly the wildcard positions: a hole against anything is a match, and everything else still has to agree.
+#[test]
+fn equality_up_to_a_wildcard_ignores_only_the_wildcard_positions() {
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let bool_ = Term::intrinsic(Intrinsic::BoolType);
+    let is_hole = |term: &Term| matches!(&**term, Subterm::Metavar(_));
+
+    assert!(
+        Term::tuple([Term::hole(0), nat.clone()])
+            .equal_up_to(&Term::tuple([nat.clone(), nat.clone()]), is_hole),
+        "a hole did not stand for the term in its position",
+    );
+    assert!(
+        !Term::tuple([Term::hole(0), nat.clone()])
+            .equal_up_to(&Term::tuple([nat.clone(), bool_.clone()]), is_hole),
+        "a difference outside the wildcard was ignored",
+    );
+    assert!(
+        !Term::tuple([nat.clone(), nat.clone()]).equal_up_to(&Term::tuple([nat, bool_]), |_| false),
+        "with no wildcards the comparison stopped being structural equality",
+    );
 }

@@ -364,15 +364,19 @@ pub fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
 
 /// Every universe level of `value` in traversal order, each with its universe-binder depth, beside the skeleton left when every one is replaced by a sentinel.
 ///
-/// Two values with equal skeletons differ in nothing but levels, and their vectors are positionally aligned. The sentinel is `Level::constant(1)`, not zero: the universes-only traversal never visits a `Type 0`, which carries no universe data, so a zero sentinel would let an unvisited ground sort and a stripped level spell alike and align two vectors across different positions. A `RecGroup`'s own context is kept, so a generalized group and an instance of it have different skeletons; the groups conversion meets are instantiated, with empty contexts.
+/// Two values with equal skeletons differ in nothing but levels, and their vectors are positionally aligned: the walk visits every node, unlike the universes-only walks, because a ground `Type 0` carries no universe data and would otherwise be a level the vector never records — `(Type 0, Type u)` and `(Type u, Type 0)` then stripped to one skeleton over one-entry vectors that aligned `u` with itself across two positions. A `RecGroup`'s own context is kept, so a generalized group and an instance of it have different skeletons; the groups conversion meets are instantiated, with empty contexts.
 pub fn strip_universe_levels<B: Bound>(value: &B) -> (B, Vec<(usize, Level)>) {
     let levels = Rc::new(RefCell::new(Vec::new()));
     let found = Rc::clone(&levels);
-    let skeleton = rewrite_universe_levels_scoped(value, move |depth, level: &Level| {
-        found.borrow_mut().push((depth, level.clone()));
-        Ok::<_, Infallible>(Level::constant(1))
-    })
-    .unwrap_or_else(|never| match never {});
+    let mut visit = Visit::stripping_levels(
+        |_, _| None,
+        Box::new(move |depth, level: &Level| {
+            found.borrow_mut().push((depth, level.clone()));
+            Level::constant(1)
+        }),
+    );
+    let skeleton = value.traverse(&mut visit);
+    drop(visit);
     let levels = Rc::try_unwrap(levels)
         .expect("the level collector releases its traversal closure")
         .into_inner();
@@ -1082,6 +1086,8 @@ enum Mode {
     RewritingUniverses(Rewrite),
     /// A level-level hook, visiting only nodes that carry universe data.
     RewritingLevels(LevelRewrite),
+    /// [`Mode::RewritingLevels`] over *every* node: a ground `Type 0` carries no universe data and is invisible to the universes-only walks, but a key that aligns levels by position has to see it — see [`strip_universe_levels`].
+    StrippingLevels(LevelRewrite),
     /// Replace every level with the ground representative, visiting only nodes that carry universe data.
     ErasingUniverses,
     /// Hash-consing: replace each rebuilt node with the canonical node of its structure. Pairs with [`Memo::ByNode`], which is what keeps the input's sharing as well as the output's.
@@ -1194,6 +1200,16 @@ where
         }
     }
 
+    pub(crate) fn stripping_levels(visit: F, rewrite: LevelRewrite) -> Self {
+        Self {
+            term_depth: 0,
+            universe_depth: 0,
+            visit,
+            mode: Mode::StrippingLevels(rewrite),
+            memo: Memo::None,
+        }
+    }
+
     fn erasing_universes(visit: F) -> Self {
         Self {
             term_depth: 0,
@@ -1259,7 +1275,9 @@ where
             return Level::zero();
         }
         match &mut self.mode {
-            Mode::RewritingLevels(rewrite) => rewrite(self.universe_depth, level),
+            Mode::RewritingLevels(rewrite) | Mode::StrippingLevels(rewrite) => {
+                rewrite(self.universe_depth, level)
+            }
             _ => level.clone(),
         }
     }
@@ -1280,6 +1298,7 @@ where
             Mode::Plain
             | Mode::Pruning
             | Mode::RewritingLevels(_)
+            | Mode::StrippingLevels(_)
             | Mode::ErasingUniverses
             | Mode::Sharing(_) => None,
         }
