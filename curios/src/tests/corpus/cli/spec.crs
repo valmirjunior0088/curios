@@ -34,21 +34,18 @@ test get_reads_each_carrier_at_the_type_its_entry_decides =
         Test/equal(Cli/get(sample, "root"), "/srv")]);
 
 let serve: Cli =
-    Cli {
-        name = "serve",
-        about = "Serve a directory over HTTP",
-        version = Option/some("0.1.0"),
-        args =
-            [
-                Cli/default("port", Cli/nat, 8080, "Port to listen on"),
-                Cli/positional("root", Cli/str, "Directory to serve")],
-        run(v) =
+    Cli/leaf(
+        "serve",
+        "Serve a directory over HTTP",
+        Option/some("0.1.0"),
+        [
+            Cli/default("port", Cli/nat, 8080, "Port to listen on"),
+            Cli/positional("root", Cli/str, "Directory to serve")],
+        (v) =>
             let port = Cli/get(v, "port");
             let root = Cli/get(v, "root");
-            /std/print(Str/flatten([root, " on ", Nat/to_str(port)])),
-        commands = [],
-    };
+            /std/print(Str/flatten([root, " on ", Nat/to_str(port)])));
 
--- The handler's parameter carries the `args` written two fields above it, so the `get` calls inside `serve` type with nothing annotated. That this file elaborates at all is the claim; the assertion is what keeps the declaration reached.
+-- The handler's parameter carries the `args` handed to the constructor beside it, so the `get` calls inside `serve` type with nothing annotated. That this file elaborates at all is the claim; the assertion is what keeps the declaration reached.
 test a_handler_is_typed_by_the_specification_beside_it =
-    Test/equal(serve.name, "serve");
+    Test/equal(Cli/name(serve), "serve");

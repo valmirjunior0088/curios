@@ -1,42 +1,31 @@
--- Subcommands, one level deep: choosing one by the first token, refusing a name that is not there, and the `Commands:` section a parent's help grows.
+-- Choosing a subcommand by the first token, refusing a name that is not there, and the `Commands:` section a group's help grows. A group takes no arguments of its own, which is why it is a shape of its own rather than a leaf that happens to declare none.
 use /std/{Cli, Str, Option, List, Test};
 
 let add: Cli =
-    Cli {
-        name = "add",
-        about = "Add a dependency",
-        version = Option/none(),
-        args = [Cli/positional("name", Cli/str, "What to add")],
-        run(_) = /std/print("never"),
-        commands = [],
-    };
+    Cli/leaf(
+        "add",
+        "Add a dependency",
+        Option/none(),
+        [Cli/positional("name", Cli/str, "What to add")],
+        (_) => /std/print("never"));
 
 let remove: Cli =
-    Cli {
-        name = "remove",
-        about = "Remove a dependency",
-        version = Option/none(),
-        args = [Cli/positional("name", Cli/str, "What to remove")],
-        run(_) = /std/print("never"),
-        commands = [],
-    };
+    Cli/leaf(
+        "remove",
+        "Remove a dependency",
+        Option/none(),
+        [Cli/positional("name", Cli/str, "What to remove")],
+        (_) => /std/print("never"));
 
 let app: Cli =
-    Cli {
-        name = "deps",
-        about = "Manage dependencies",
-        version = Option/some("0.1.0"),
-        args = [],
-        run(_) = /std/print("never"),
-        commands = [add, remove],
-    };
+    Cli/group("deps", "Manage dependencies", Option/some("0.1.0"), [add, remove]);
 
 let chose(argv: List(Str)) -> Str =
     match Cli/select(app, argv)
     | wanted_help() => "help"
     | wanted_version() => "version"
     | refused(f) => Cli/report(app, f)
-    | chose(sub, rest) => Str/flatten([sub.name, "(", Str/join(",", rest), ")"])
+    | chose(sub, rest) => Str/flatten([Cli/name(sub), "(", Str/join(",", rest), ")"])
     end;
 
 -- Either child, chosen by the first token, with everything after it left for that child to parse.
@@ -45,12 +34,12 @@ test the_first_token_chooses_the_subcommand_and_the_rest_is_its_line =
         Test/equal(chose(["add", "curios"]), "add(curios)"),
         Test/equal(chose(["remove", "curios", "--force"]), "remove(curios,--force)")]);
 
--- A parent answers help and its own version before the first token is read as a name, so `--help` is not an unrecognized subcommand.
-test a_parent_answers_help_before_reading_a_name =
+-- A group owns exactly its first token. `--help` and `--version` are answered here only when they *are* that token; past a subcommand's name they are the subcommand's line, so `add --help` chooses `add` and hands the request to it rather than answering for the parent.
+test a_group_answers_only_for_its_own_first_token =
     Test/all([
         Test/equal(chose(["--help"]), "help"),
         Test/equal(chose(["--version"]), "version"),
-        Test/equal(chose(["add", "--help"]), "help")]);
+        Test/equal(chose(["add", "--help"]), "add(--help)")]);
 
 -- Neither a name that is not there nor no name at all: both refuse, and both list what there is.
 test an_unknown_or_absent_subcommand_lists_the_ones_there_are =

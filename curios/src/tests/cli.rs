@@ -38,21 +38,19 @@ fn serve() -> Compiled {
         use /std/{Cli, Nat, Str, Option, Io, print};
 
         let serve: Cli =
-            Cli {
-                name = "serve",
-                about = "Serve a directory over HTTP",
-                version = Option/some("0.1.0"),
-                args = [
+            Cli/leaf(
+                "serve",
+                "Serve a directory over HTTP",
+                Option/some("0.1.0"),
+                [
                     Cli/Arg { ..Cli/flag("verbose", "Log every request"), short = Option/some('v') },
                     Cli/default("port", Cli/nat, 8080, "Port to listen on"),
                     Cli/positional("root", Cli/str, "Directory to serve"),
                 ],
-                run(v) =
+                (v) =>
                     let port = Cli/get(v, "port");
                     let root = Cli/get(v, "root");
-                    print(Str/flatten(["serving ", root, " on ", Nat/to_str(port), "\n"])),
-                commands = [],
-            };
+                    print(Str/flatten(["serving ", root, " on ", Nat/to_str(port), "\n"])));
 
         Cli/main(serve)
         "#,

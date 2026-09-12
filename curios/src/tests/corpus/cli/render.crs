@@ -2,18 +2,15 @@
 use /std/{Cli, Str, Option, Test};
 
 let serve: Cli =
-    Cli {
-        name = "serve",
-        about = "Serve a directory over HTTP",
-        version = Option/some("0.1.0"),
-        args =
-            [
-                Cli/Arg { ..Cli/flag("verbose", "Log every request"), short = Option/some('v') },
-                Cli/default("port", Cli/nat, 8080, "Port to listen on"),
-                Cli/positional("root", Cli/str, "Directory to serve")],
-        run(_) = /std/print("never"),
-        commands = [],
-    };
+    Cli/leaf(
+        "serve",
+        "Serve a directory over HTTP",
+        Option/some("0.1.0"),
+        [
+            Cli/Arg { ..Cli/flag("verbose", "Log every request"), short = Option/some('v') },
+            Cli/default("port", Cli/nat, 8080, "Port to listen on"),
+            Cli/positional("root", Cli/str, "Directory to serve")],
+        (_) => /std/print("never"));
 
 -- The layout the specification fixes, to the space: one description, a usage line naming the options bundle and every positional, then the sections, each padded to its own widest left column. `-h` and `--version` are rows because the entry answers them, not because the program declared them.
 test help_renders_the_layout_the_specification_fixes =
@@ -42,12 +39,10 @@ test a_refusal_names_the_offender_and_points_at_help =
 -- A command declaring no options gets no `[OPTIONS]`, and a `rest` entry is bracketed to say it collects rather than requires.
 test the_usage_line_says_only_what_the_specification_declares =
     let bare: Cli =
-        Cli {
-            name = "cat",
-            about = "Concatenate",
-            version = Option/none(),
-            args = [Cli/rest("files", Cli/str, "The files")],
-            run(_) = /std/print("never"),
-            commands = [],
-        };
+        Cli/leaf(
+            "cat",
+            "Concatenate",
+            Option/none(),
+            [Cli/rest("files", Cli/str, "The files")],
+            (_) => /std/print("never"));
     Test/equal(Cli/usage(bare), "Usage: cat [FILES]...");

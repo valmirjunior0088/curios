@@ -197,15 +197,29 @@ pub let get(
         end;
     walk(ok);
 
--- | What a program declares: its name and description, an optional version, its arguments and the handler that takes them, or its subcommands.
-pub struct Cli: pub Type {
-    name: Str,
-    about: Str,
-    version: Option(Str),
-    args: List(Arg),
-    run: (Values(args)) -> Io({}),
-    commands: List(Cli),
-}
+-- | What a program declares, in one of two shapes.
+-- |
+-- | A group takes no arguments of its own: its line names one of its subcommands, so a global option is repeated in each leaf it applies to.
+pub induct Cli: pub Type
+-- | A command that reads a line into a record and runs its handler on it.
+| leaf(name: Str, about: Str, version: Option(Str), args: List(Arg), run: (Values(args)) -> Io({}))
+-- | A command whose first token names one of its subcommands, to any depth.
+| group(name: Str, about: Str, version: Option(Str), commands: List(Cli))
+end
+
+pub use Cli/*;
+
+-- | The command's own name, which is the token that selects it under a parent.
+pub let name(cli: Cli) -> Str =
+    match cli | leaf(n, _, _, _, _) => n | group(n, _, _, _) => n end;
+
+-- | The one-line description, shown in help and in a parent's command list.
+pub let about(cli: Cli) -> Str =
+    match cli | leaf(_, a, _, _, _) => a | group(_, a, _, _) => a end;
+
+-- | The version `--version` answers here, when this command declares one.
+pub let version(cli: Cli) -> Option(Str) =
+    match cli | leaf(_, _, v, _, _) => v | group(_, _, v, _) => v end;
 
 -- | Why a line was refused.
 pub induct Failure: pub Type
@@ -500,18 +514,19 @@ let option_rows(spec: List(Arg)) -> List({Str, Str}) =
         end);
 
 let command_rows(subs: List(Cli)) -> List({Str, Str}) =
-    List/map(subs, (c) => (c.name, c.about));
+    List/map(subs, (c) => (name(c), about(c)));
 
 let has_options(spec: List(Arg)) -> Bool =
     List/any(spec, (a) => Bool/not(is_positional(a.kind) || is_rest(a.kind)));
 
 -- | The one-line usage.
 pub let usage(cli: Cli) -> Str =
-    let head =
-        match has_options(cli.args) | true => [cli.name, "[OPTIONS]"] | false => [cli.name] end;
-    let tail = placeholders(cli.args);
-    let commands = match cli.commands | [] => [] | [_, .._] => ["<COMMAND>"] end;
-    Str/flatten(["Usage: ", Str/join(" ", List/flatten([head, tail, commands]))]);
+    match cli
+    | leaf(n, _, _, args, _) =>
+        let head = match has_options(args) | true => [n, "[OPTIONS]"] | false => [n] end;
+        Str/flatten(["Usage: ", Str/join(" ", List/flatten([head, placeholders(args)]))])
+    | group(n, _, _, _) => Str/flatten(["Usage: ", n, " <COMMAND>"])
+    end;
 
 let option_head(a: Arg) -> Str =
     let short =
@@ -535,22 +550,25 @@ let section(heading: Str, rows: List({Str, Str})) -> List(Str) =
 
 let builtin_rows(cli: Cli) -> List({Str, Str}) =
     let help_row: {Str, Str} = ("-h, --help", "Print help");
-    match cli.version
+    match version(cli)
     | none() => [help_row]
     | some(_) => [help_row, ("    --version", "Print version")]
     end;
 
--- | The help screen: usage, then the positionals, the options and the subcommands with their help lines.
+-- | The help screen: usage, then the positionals and options a leaf declares, or the subcommands a group does, each with its help line.
 pub let help(cli: Cli) -> Str =
-    let arguments = positional_rows(cli.args);
-    let options = List/flatten([option_rows(cli.args), builtin_rows(cli)]);
-    let commands = command_rows(cli.commands);
-    Str/flatten(
-        List/flatten([
-            [cli.about, "\n\n", usage(cli), "\n\n"],
-            section("Arguments:", arguments),
-            section("Options:", options),
-            section("Commands:", commands)]));
+    let sections =
+        match cli
+        | leaf(_, _, _, args, _) =>
+            List/flatten([
+                section("Arguments:", positional_rows(args)),
+                section("Options:", List/flatten([option_rows(args), builtin_rows(cli)]))])
+        | group(_, _, _, commands) =>
+            List/flatten([
+                section("Options:", builtin_rows(cli)),
+                section("Commands:", command_rows(commands))])
+        end;
+    Str/flatten(List/flatten([[about(cli), "\n\n", usage(cli), "\n\n"], sections]));
 
 let complaint(f: Failure) -> Str =
     match f
@@ -587,30 +605,37 @@ pub induct Chosen: pub Type
 end
 
 let command_names(subs: List(Cli)) -> List(Str) =
-    match subs | [] => [] | [c, ..more] => [c.name, ..command_names(more)] end;
+    match subs | [] => [] | [c, ..more] => [name(c), ..command_names(more)] end;
 
-let named(subs: List(Cli), name: Str) -> Option(Cli) =
+-- The parameter is `wanted` rather than `name` so that the accessor of that name stays reachable in the body.
+let named(subs: List(Cli), wanted: Str) -> Option(Cli) =
     match subs
     | [] => Option/none()
     | [c, ..more] =>
-        match Str/eql(c.name, name) | true => Option/some(c) | false => named(more, name) end
+        match Str/eql(name(c), wanted) | true => Option/some(c) | false => named(more, wanted) end
     end;
 
 -- | The subcommand the first token names, and the rest of the line as its own.
+-- |
+-- | A group owns exactly its first token, so `--help` and `--version` are answered here only when they *are* that token: anything past the subcommand's name belongs to the subcommand, which answers for itself. A leaf owns no subcommand and refuses.
 pub let select(cli: Cli, argv: List(Str)) -> Chosen =
-    let names = command_names(cli.commands);
-    match wants_help(argv)
-    | true => Chosen/wanted_help()
-    | false =>
-        match Option/is_some(cli.version) && wants_version(argv)
-        | true => Chosen/wanted_version()
-        | false =>
-            match argv
-            | [] => Chosen/refused(Failure/missing_command(names))
-            | [first, ..rest] =>
-                match named(cli.commands, first)
-                | some(sub) => Chosen/chose(sub, rest)
-                | none() => Chosen/refused(Failure/unknown_command(first, names))
+    match cli
+    | leaf(_, _, _, _, _) => Chosen/refused(Failure/missing_command([]))
+    | group(_, _, v, commands) =>
+        let names = command_names(commands);
+        match argv
+        | [] => Chosen/refused(Failure/missing_command(names))
+        | [first, ..rest] =>
+            match wants_help([first])
+            | true => Chosen/wanted_help()
+            | false =>
+                match Option/is_some(v) && wants_version([first])
+                | true => Chosen/wanted_version()
+                | false =>
+                    match named(commands, first)
+                    | some(sub) => Chosen/chose(sub, rest)
+                    | none() => Chosen/refused(Failure/unknown_command(first, names))
+                    end
                 end
             end
         end
@@ -632,7 +657,26 @@ let fail_with(text: Str) -> Io({}) =
     let _ = Io/write(Io/stderr, Str/to_bytes(text))!;
     /std/proc/exit(2);
 
--- | The entry a program hands its `Cli` to: arguments read, help and the version answered on standard output with exit 0, a refusal reported on standard error with exit 2, and otherwise the handler run.
+-- One line against one command, descending while the command is a group. Each step consumes the token that named the subcommand, so the line strictly shortens and the descent ends whatever the declaration's depth.
+let drive(cli: Cli, argv: List(Str)) -> Io({}) =
+    match cli
+    | leaf(_, _, v, args, run) =>
+        match parse(args, argv, Option/is_some(v))
+        | help() => print(help(cli))
+        | version() => print(Str/flatten([Option/unwrap_or(v, ""), "\n"]))
+        | failure(f) => fail_with(report(cli, f))
+        | parsed(vals) => run(vals)
+        end
+    | group(_, _, v, _) =>
+        match select(cli, argv)
+        | wanted_help() => print(help(cli))
+        | wanted_version() => print(Str/flatten([Option/unwrap_or(v, ""), "\n"]))
+        | refused(f) => fail_with(report(cli, f))
+        | chose(sub, rest) => drive(sub, rest)
+        end
+    end;
+
+-- | The entry a program hands its `Cli` to: arguments read, help and the version answered on standard output with exit 0, a refusal reported on standard error with exit 2, and otherwise the handler run. A group descends into the subcommand its first token names, to any depth, and each command answers help and its own version for itself.
 pub let main(cli: Cli) -> Io({}) =
     let raw = /std/proc/args!;
     let dropped = match raw | [] => [] | [_, ..more] => more end;
@@ -645,11 +689,5 @@ pub let main(cli: Cli) -> Io({}) =
                 " is not valid UTF-8\n\n",
                 usage(cli),
                 "\n\nFor more information, try '--help'.\n"]))
-    | success(argv) =>
-        match parse(cli.args, argv, Option/is_some(cli.version))
-        | help() => print(help(cli))
-        | version() => print(Str/flatten([Option/unwrap_or(cli.version, ""), "\n"]))
-        | failure(f) => fail_with(report(cli, f))
-        | parsed(v) => cli.run(v)
-        end
+    | success(argv) => drive(cli, argv)
     end;
