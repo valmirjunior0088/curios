@@ -156,21 +156,21 @@ fn optimized_wat(source: &str) -> String {
 ///
 /// # What it last printed
 ///
-/// Taken 2026-08-20, release, x86-64 Linux, at the recorder's landing:
+/// Taken 2026-09-12, release, x86-64 Linux, over a prelude twice the size of the one the recorder landed on (2026-08-20: 28 products, 30 families, 149 recorded fields):
 ///
 /// ```text
-/// schema roster: 28 products, 30 families, 92 constructors
-/// recorded field shapes (whole prelude + program): {"bits": 4, "bytes": 19, "closure": 11, "family": 15, "flt": 2, "immediate": 34, "list": 13, "opaque": 33, "product": 18}
-/// spines:       i31-cast 109, box 205, unbox 186, rope-cast 72, envr-cast 17, tuple-cast 86, tuple-test 58, tuple-types 5
-/// chain:        i31-cast  83, box 176, unbox 152, rope-cast 51, envr-cast 17, tuple-cast 39, tuple-test 21, tuple-types 4
-/// trees:        i31-cast  82, box 168, unbox 149, rope-cast 51, envr-cast 17, tuple-cast 50, tuple-test 34, tuple-types 5
-/// churn:        i31-cast  77, box 165, unbox 147, rope-cast 51, envr-cast 17, tuple-cast 27, tuple-test 15, tuple-types 4
-/// lcg:          i31-cast  76, box 163, unbox 143, rope-cast 51, envr-cast 17, tuple-cast 27, tuple-test 15, tuple-types 4
-/// monad_io:     i31-cast  80, box 164, unbox 145, rope-cast 51, envr-cast 18, tuple-cast 27, tuple-test 15, tuple-types 4
-/// parse_digits: i31-cast  80, box 162, unbox 146, rope-cast 51, envr-cast 17, tuple-cast 32, tuple-test 18, tuple-types 4
+/// schema roster: 55 products, 59 families, 213 constructors
+/// recorded field shapes (whole prelude + program): {"bits": 4, "bytes": 50, "closure": 16, "family": 54, "flt": 2, "immediate": 91, "immediate/signed": 2, "list": 36, "opaque": 71, "product": 35}
+/// spines:       i31-cast 97, box 223, unbox 258, rope-cast 121, envr-cast 32, tuple-cast 10, tuple-test 6, tuple-types 3
+/// chain:        i31-cast 71, box 205, unbox 220, rope-cast 100, envr-cast 32, tuple-cast 10, tuple-test 6, tuple-types 3
+/// trees:        i31-cast 74, box 207, unbox 223, rope-cast 100, envr-cast 32, tuple-cast 10, tuple-test 6, tuple-types 3
+/// churn:        i31-cast 71, box 205, unbox 221, rope-cast 100, envr-cast 32, tuple-cast 10, tuple-test 6, tuple-types 3
+/// lcg:          i31-cast 70, box 203, unbox 217, rope-cast 100, envr-cast 32, tuple-cast 10, tuple-test 6, tuple-types 3
+/// monad_io:     i31-cast 75, box 204, unbox 219, rope-cast 100, envr-cast 33, tuple-cast 10, tuple-test 6, tuple-types 3
+/// parse_digits: i31-cast 74, box 203, unbox 219, rope-cast 100, envr-cast 30, tuple-cast 10, tuple-test 6, tuple-types 3
 /// ```
 ///
-/// What the figures decided. **116 of 149 recorded fields — 78% — are monomorphic at erasure**, so typed slots have a population; the opaque third is dominated by genuinely polymorphic payloads (`Option`'s, `List`'s, the dictionary fields). The i31 box/unbox class is the largest static population in every program, the rope-base casts (each a Wasmtime `is_subtype` libcall) sit at 51–72 sites, and family keying replaces the 4–5 arity-keyed tuple types with the roster's 58 nominal types — a growth Binaryen's closed-world passes are built to consume, not a cost. The static counts rank *populations*, not costs — the cast step's own history says a static census cannot price a dynamic class, which is what `boxed_field_read_measurements` below is for.
+/// What the figures decided, and the larger prelude only sharpened it. **290 of 361 recorded fields — 80% — are monomorphic at erasure** (116 of 149, 78%, at the recorder's landing), so typed slots have a population; the opaque fifth is dominated by genuinely polymorphic payloads (`Option`'s, `List`'s, the dictionary fields). The i31 box/unbox class is the largest static population in every program, the rope-base casts (each a Wasmtime `is_subtype` libcall) sit at 100–121 sites, and family keying replaced the arity-keyed tuple types with the roster's nominal types — 114 of them now, against 3 tuple types per program — a growth Binaryen's closed-world passes are built to consume, not a cost. The static counts rank *populations*, not costs — the cast step's own history says a static census cannot price a dynamic class, which is what `boxed_field_read_measurements` below is for.
 #[test]
 #[ignore = "measurement: reports the census rather than asserting"]
 fn field_shape_census() {
@@ -297,14 +297,14 @@ end
 ///
 /// # What it last printed
 ///
-/// Taken 2026-08-20, release, x86-64 Linux, right after the per-arity-typed-table landing:
+/// Taken 2026-09-12, release, x86-64 Linux:
 ///
 /// ```text
 /// outputs at 300 rounds: bare "491113", payload "161671"
-/// bare 19.53 ns/element, payload 23.66 ns/element, boxed-field read 4.13 ns (17%)
+/// bare 13.60 ns/element, payload 17.18 ns/element, boxed-field read 3.58 ns (21%)
 /// ```
 ///
-/// What the figure decided: one always-boxed scalar field costs about a sixth of even this dispatch-heavy loop's per-element budget, and it is pure representation tax — the same fold over the same list, differing by one `ref.i31` at the store and one `ref.cast (ref i31)` + `i31.get_u` at the read. A native whole-process take of the same pair before the typed-table landing read 7.7 ns (18%): the absolute halved because the typed tables cut the fold's per-dispatch cost out from under it, while the *relative* share held — the class scales with the loop around it, which is exactly what makes it worth deleting at the representation rather than the site.
+/// What the figure decided: one always-boxed scalar field costs about a fifth of even this dispatch-heavy loop's per-element budget, and it is pure representation tax — the same fold over the same list, differing by one `ref.i31` at the store and one `ref.cast (ref i31)` + `i31.get_u` at the read. The history of the same pair is the argument: a native whole-process take before the typed-table landing read 7.7 ns (18%), the take right after it 4.13 ns (17%), and today's 3.58 ns (21%) — the absolute keeps falling as the fold's per-dispatch cost is cut out from under it, while the *relative* share holds or grows — the class scales with the loop around it, which is exactly what makes it worth deleting at the representation rather than the site.
 #[test]
 #[ignore = "measurement: reports timings rather than asserting"]
 fn boxed_field_read_measurements() {
@@ -353,25 +353,33 @@ fn boxed_field_read_measurements() {
 ///
 /// # What it last printed
 ///
-/// Taken 2026-08-20, release, x86-64 Linux:
+/// Taken 2026-09-12, release, x86-64 Linux (the 2026-08-20 take, over a prelude half this size, split 5 free to 3 paid, with `/std/Map/Node` already the widest row; `/std/Vec` has since become a product and left the table):
 ///
 /// ```text
-/// families holding a family-typed field: 8
-///   free: 5 families, 5 slots typed at no width cost
-///   paid: 3 families, 4 slots typed for 4 slots of width
-///   /std/Io/Chunk             2 slots -> 3 slots, 0 typed -> 1 typed   PAID
-///   /std/Vec/Vec                 4 slots -> 4 slots, 1 typed -> 2 typed   FREE
+/// families holding a family-typed field: 16
+///   free: 9 families, 8 slots typed at no width cost
+///   paid: 7 families, 11 slots typed for 8 slots of width
+///   /std/Io/Chunk/Chunk          2 slots -> 2 slots, 0 typed -> 0 typed   FREE
 ///   /std/Map/Node                4 slots -> 6 slots, 1 typed -> 3 typed   PAID
+///   /std/Async/Step              3 slots -> 3 slots, 0 typed -> 1 typed   FREE
+///   /std/Toml/Error/Error        4 slots -> 5 slots, 2 typed -> 3 typed   PAID
+///   /std/Cli/Kind                3 slots -> 3 slots, 1 typed -> 2 typed   FREE
+///   /std/Cli/Values              5 slots -> 5 slots, 2 typed -> 3 typed   FREE
+///   /std/Cli/Cli                 6 slots -> 6 slots, 2 typed -> 3 typed   FREE
+///   /std/Cli/Outcome             2 slots -> 3 slots, 0 typed -> 2 typed   PAID
+///   /std/Cli/Cluster             4 slots -> 5 slots, 2 typed -> 3 typed   PAID
+///   /std/Cli/Chosen              3 slots -> 4 slots, 1 typed -> 3 typed   PAID
+///   /std/Fmt/Fmt                 3 slots -> 3 slots, 0 typed -> 1 typed   FREE
+///   /std/Test/Test               2 slots -> 3 slots, 0 typed -> 1 typed   PAID
+///   /std/Tui/Layout/Sizes        8 slots -> 9 slots, 5 typed -> 7 typed   PAID
+///   /std/Tui/input/Step          3 slots -> 3 slots, 1 typed -> 2 typed   FREE
 ///   /std/Toml/build/Act          2 slots -> 2 slots, 0 typed -> 1 typed   FREE
 ///   /std/Toml/decode/Stmt        3 slots -> 3 slots, 1 typed -> 2 typed   FREE
-///   /std/Fmt/Fmt                 3 slots -> 3 slots, 0 typed -> 1 typed   FREE
-///   /std/http/Error              2 slots -> 3 slots, 0 typed -> 1 typed   PAID
-///   /std/Async/Step              3 slots -> 3 slots, 0 typed -> 1 typed   FREE
 /// ```
 ///
 /// **What the figures decided, and it is the opposite of what the specification predicted.** The campaign was written around making a fork's children `(ref null $node)`, and `/std/Map/Node` is the *worst* row in this table: four slots to six, a half again as much live memory on the corpus's hottest allocated structure, to replace two casts that are already exact compares against a final type. Set against this campaign's own `trees` finding — that live bytes convert to time under an all-live collector — that is a trade to decline, and the door declines it.
 ///
-/// What the door does instead is admit the free column, by an exact criterion rather than a judgement: type a family's reference slots iff the row's width is unchanged. Five slots qualify here and all five are cold, so **the corpus gain is nil** and this rule is not justified by a measurement — it is justified by generalizing to code the corpus does not contain, at a runtime cost that is zero by construction. A product needs no such test: one writer can never widen a row, so its reference fields always type.
+/// What the door does instead is admit the free column, by an exact criterion rather than a judgement: type a family's reference slots iff the row's width is unchanged. Eight slots qualify here, on the command-line, formatting, scheduler, layout and TOML families rather than on anything the corpus allocates in bulk, so **the corpus gain is nil** and this rule is not justified by a measurement — it is justified by generalizing to code the corpus does not contain, at a runtime cost that is zero by construction. A product needs no such test: one writer can never widen a row, so its reference fields always type.
 #[test]
 #[ignore = "measurement: reports the split rather than asserting"]
 fn family_slot_probe() {
