@@ -970,12 +970,9 @@ pub fn reduce_intrinsic(
             let bit = reducer.reduce_forced(bit.clone())?;
             let appended = match (&*bin, bit.as_bool()) {
                 (Subterm::Intrinsic(Intrinsic::Bin(Grain::B, bits)), Some(bit)) => {
-                    // `append_bit` rebuilds the whole value through `from_bits`, which materializes a `bool` per bit — eight units of scratch for every one the result holds — before packing it and copying that into a fresh buffer. The value row plus a buffer eight times its width is what that comes to.
-                    let width = bits.bit_length() as u64 + 1;
+                    // Twice the whole rebuilt value: `append_bit` copies the packed payload out and then copies the extended run into a fresh buffer. Appending one generator therefore costs the length of everything appended so far, twice — which is the shape that makes a naive accumulation quadratic, and the reason it is charged rather than treated as an increment.
                     reducer.spend(
-                        packed_bound(Grain::B, width)
-                            .saturating_mul(2)
-                            .saturating_add(Cost::buffer(width)),
+                        packed_bound(Grain::B, bits.bit_length() as u64 + 1).saturating_mul(2),
                     )?;
 
                     Intrinsic::Bin(Grain::B, bits.append_bit(bit))

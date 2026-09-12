@@ -154,12 +154,23 @@ impl PackedBin {
         )
     }
 
+    /// The value with one bit appended.
+    ///
+    /// **Packed, like every other append.** [`PackedBin::concat`] already takes the bulk byte copy where the operands allow it and repacks bit by bit only where they do not, and this is that rule at one generator: [`PackedBin::to_packed_bytes`] normalizes any offset and already returns the stored bytes outright for an aligned window, so the cost is the payload rather than the `bool`-per-bit scratch `from_bits` would materialize — eight units for every one the result holds. Total, unlike [`PackedBin::append_byte`], because a bit needs no alignment to land on.
     pub fn append_bit(&self, bit: bool) -> Self {
-        Self::from_bits(
-            (0..self.bit_length)
-                .map(|index| self.bit(index).unwrap())
-                .chain([bit]),
-        )
+        let mut bytes = self.to_packed_bytes();
+        if self.bit_length.is_multiple_of(8) {
+            bytes.push(0);
+        }
+        if bit {
+            bytes[self.bit_length / 8] |= 1 << (self.bit_length % 8);
+        }
+
+        Self {
+            bytes: bytes.into(),
+            bit_offset: 0,
+            bit_length: self.bit_length + 1,
+        }
     }
 
     pub fn append_byte(&self, byte: u8) -> Option<Self> {

@@ -80,6 +80,16 @@ fn exhaustive_short_bit_operations_match_vec_model() {
                     let expected = PackedBin::from_bits(model[start..end].iter().copied());
                     assert_eq!(slice, expected);
                     assert_eq!(hash(&slice), hash(&expected));
+
+                    // Appending to a *window*, whose bit offset is where an append that reads the packed payload rather than the bits would go wrong. Appending only to offset-zero values leaves that untested.
+                    for bit in [false, true] {
+                        let mut shifted = model[start..end].to_vec();
+                        shifted.push(bit);
+                        assert_eq!(
+                            slice.append_bit(bit),
+                            PackedBin::from_bits(shifted.into_iter())
+                        );
+                    }
                 }
             }
             for bit in [false, true] {
