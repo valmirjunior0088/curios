@@ -225,25 +225,44 @@ pub(super) fn concatenated(grain: Grain, value: &Term) -> Option<Vec<Term>> {
 
 /// [`concatenated`] over the `List` carrier, whose append names its parts differently and carries an element type.
 pub(super) fn list_concatenated(value: &Term) -> Option<Vec<Term>> {
-    match &**value {
-        Subterm::Intrinsic(Intrinsic::ListConcat { operands, .. }) => Some(operands.clone()),
-        Subterm::Intrinsic(Intrinsic::ListAppend {
-            element,
-            list,
-            item,
-        }) => Some(vec![
-            list.clone(),
-            Term::intrinsic(Intrinsic::list_append(
-                element.clone(),
-                Term::intrinsic(Intrinsic::List {
-                    element: element.clone(),
-                    items: Vec::new(),
-                }),
-                item.clone(),
-            )),
-        ]),
-        _ => None,
+    fn flatten(value: &Term, into: &mut Vec<Term>) {
+        match &**value {
+            Subterm::Intrinsic(Intrinsic::ListConcat {
+                element: _,
+                operands,
+            }) => {
+                for operand in operands {
+                    flatten(operand, into);
+                }
+            }
+            Subterm::Intrinsic(Intrinsic::ListAppend {
+                element,
+                list,
+                item,
+            }) => {
+                flatten(list, into);
+                into.push(Term::intrinsic(Intrinsic::list_append(
+                    element.clone(),
+                    Term::intrinsic(Intrinsic::List {
+                        element: element.clone(),
+                        items: Vec::new(),
+                    }),
+                    item.clone(),
+                )));
+            }
+            _ => into.push(value.clone()),
+        }
     }
+
+    let nested = matches!(
+        &**value,
+        Subterm::Intrinsic(Intrinsic::ListConcat { .. } | Intrinsic::ListAppend { .. })
+    );
+    nested.then(|| {
+        let mut operands = Vec::new();
+        flatten(value, &mut operands);
+        operands
+    })
 }
 
 /// The single generator of a value whose measure is exactly one, or `None` for anything else.
@@ -265,6 +284,29 @@ pub(super) fn single_generator(grain: Grain, operand: &Term) -> Option<Term> {
                 if *empty == grain && run.len(grain) == 0 =>
             {
                 Some(element.clone())
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// [`single_generator`] over the element carrier: the one element of a value whose measure is exactly one.
+///
+/// The same two shapes, named the way `List` names them — a one-item literal, or an append onto the empty list, which is what [`list_concatenated`] leaves at a seam.
+pub(super) fn list_single_generator(operand: &Term) -> Option<Term> {
+    match &**operand {
+        Subterm::Intrinsic(Intrinsic::List { element: _, items }) => match items.as_slice() {
+            [only] => Some(only.clone()),
+            _ => None,
+        },
+        Subterm::Intrinsic(Intrinsic::ListAppend {
+            element: _,
+            list: base,
+            item,
+        }) => match &**base {
+            Subterm::Intrinsic(Intrinsic::List { element: _, items }) if items.is_empty() => {
+                Some(item.clone())
             }
             _ => None,
         },

@@ -1073,6 +1073,20 @@ pub fn reduce_intrinsic(
                     None => {}
                 }
             }
+            // An index at a seam of a concatenation, where the operand starting there holds exactly one element: `get([..p, k], len(p)) = k`. The `List` twin of `BinGet`'s seam rule, and it closes the asymmetry *within* this carrier: `ListSlice` already walks the seams, so a window at one was located where an index at the same seam was not, though the walk reaching each is the same one.
+            if let Some(operands) = list_concatenated(&list)
+                && let Some(run) = seam_window(
+                    reducer,
+                    &operands,
+                    &index_reduced,
+                    &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+                    |operand| Intrinsic::list_len(type_.clone(), operand.clone()),
+                )?
+                && let [only] = run.as_slice()
+                && let Some(generator) = list_single_generator(only)
+            {
+                return reducer.reduce(generator).map(Term::unwrap_or_clone);
+            }
             // A get over a cons spine peels one element per `0`/`succ` index step, the `List` twin of `BinGet`'s byte peel: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
             if let Some((head, tail)) = peel_first_elem(&list) {
                 match &*index_reduced {
