@@ -1211,7 +1211,7 @@ impl UniverseSolver {
             .collect::<BTreeSet<_>>();
         let relevant = self.connected_metas(interface.iter().chain(&internal).copied());
 
-        // Temporary instrumentation: how much universe machinery does one declaration actually demand? Remove once answered.
+        // The per-declaration magnitudes of the solver's work, recorded only when a profile is listening: the metas a declaration's interface names, the ones its body alone names, the connected component finalization must consider, and the constraint store it minimizes over. These are magnitudes rather than call counts, which is why the profile stream keeps them.
         curios_profile::sample!("universe::finalize_interface_metas", interface.len());
         curios_profile::sample!("universe::finalize_internal_metas", internal.len());
         curios_profile::sample!("universe::finalize_connected_metas", relevant.len());
