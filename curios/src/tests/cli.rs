@@ -129,3 +129,114 @@ fn a_non_utf8_argument_is_refused_by_its_position() {
         String::from_utf8_lossy(&io.errors())
     );
 }
+
+/// A group inside a group, and two leaves that each name one long name twice — the shapes `serve` has none of.
+fn deps() -> Compiled {
+    compile(
+        r#"
+        use /std/{Cli, Str, Option, print};
+
+        let add: Cli =
+            Cli/leaf(
+                "add",
+                "Add a dependency",
+                Option/none(),
+                [Cli/positional("name", Cli/str, "What to add")],
+                (v) => print(Str/flatten(["adding ", Cli/get(v, "name"), "\n"])));
+
+        let registry: Cli =
+            Cli/group("registry", "Manage registry dependencies", Option/none(), [add]);
+
+        let flags: Cli =
+            Cli/leaf(
+                "flags",
+                "One flag named twice",
+                Option/none(),
+                [Cli/flag("verbose", "once"), Cli/flag("verbose", "twice")],
+                (_) => print("ran\n"));
+
+        let ports: Cli =
+            Cli/leaf(
+                "ports",
+                "One required option named twice",
+                Option/none(),
+                [Cli/option("port", Cli/nat, "first"), Cli/option("port", Cli/nat, "second")],
+                (_) => print("ran\n"));
+
+        let deps: Cli =
+            Cli/group("deps", "Manage dependencies", Option/some("0.1.0"), [registry, flags, ports]);
+
+        Cli/main(deps)
+        "#,
+    )
+    .expect("the entry compiles")
+}
+
+/// A group descends into the subcommand its first token names, to any depth, so a handler two groups down runs under `Cli/main` alone.
+#[test]
+fn a_subcommand_two_groups_down_runs_its_handler() {
+    let (system, io) = MockHost::builder()
+        .args(["deps", "registry", "add", "curios"])
+        .build();
+
+    assert_eq!(deps().run(system), Ok(0));
+    assert_eq!(io.output(), b"adding curios\n");
+}
+
+/// Help answered inside a subcommand names the commands that lead to it, so its usage line is the line that reaches the command.
+#[test]
+fn help_inside_a_subcommand_names_the_path_that_reaches_it() {
+    let (system, io) = MockHost::builder()
+        .args(["deps", "registry", "add", "--help"])
+        .build();
+
+    assert_eq!(deps().run(system), Ok(0));
+    let help = String::from_utf8_lossy(&io.output()).into_owned();
+    assert!(
+        help.contains("\n\nUsage: deps registry add <NAME>\n\n"),
+        "help names the path:\n{help}"
+    );
+}
+
+/// A refusal inside a subcommand carries the same path, on standard error with exit 2 like any other refusal.
+#[test]
+fn a_refusal_inside_a_subcommand_names_the_path_that_reaches_it() {
+    let (system, io) = MockHost::builder()
+        .args(["deps", "registry", "add"])
+        .build();
+
+    assert_eq!(deps().run(system), Ok(2));
+    let refusal = String::from_utf8(io.errors()).expect("the refusal is text");
+    assert!(
+        refusal.contains(
+            "error: the argument 'NAME' is required\n\nUsage: deps registry add <NAME>\n\n"
+        ),
+        "the refusal names the path:\n{refusal}"
+    );
+}
+
+/// Nothing refuses a specification that names one long name twice, so what it does is the fact worth pinning: the first entry takes every occurrence, and a flag's second entry reads as absent, so the line parses and the handler runs.
+#[test]
+fn a_repeated_flag_name_parses_with_its_second_entry_absent() {
+    let (system, io) = MockHost::builder()
+        .args(["deps", "flags", "--verbose"])
+        .build();
+
+    assert_eq!(deps().run(system), Ok(0));
+    assert_eq!(io.output(), b"ran\n");
+}
+
+/// A required option's second entry is never filled either, so the line is refused for an argument it did supply.
+#[test]
+fn a_repeated_option_name_reports_the_supplied_argument_as_missing() {
+    let (system, io) = MockHost::builder()
+        .args(["deps", "ports", "--port", "9090"])
+        .build();
+
+    assert_eq!(deps().run(system), Ok(2));
+    let refusal = String::from_utf8(io.errors()).expect("the refusal is text");
+    assert!(
+        refusal.contains("error: the argument 'PORT' is required"),
+        "the second entry reports as missing:\n{refusal}"
+    );
+}
