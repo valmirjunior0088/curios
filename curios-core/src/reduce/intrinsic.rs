@@ -807,46 +807,33 @@ pub fn reduce_intrinsic(
                     }),
                 };
             }
-            // Locate the window by the operands' own lengths. Every operand it covers whole is handed back untouched and shares its payload; only the two at the edges are narrowed, and everything outside the window is dropped without being read.
-            //
-            // Every segment `bin_segments` admits is a literal run, so a narrowed edge is narrowed *here* rather than rebuilt as a `BinSlice` for the next pass to fold — `PackedBin::slice` is an O(1) window into the same payload, so this is the same value by the same operation, one round trip earlier. It also leaves this arm constructing no bounded node at all, which is what keeps a bound off the reducer once these accessors carry one.
-            if let (Some(s), Some(n)) = (s, n) {
-                match FreeMonoid::Bin(grain).window(&bin, s, n) {
-                    Some(Ok(pieces)) => {
-                        let parts = pieces
-                            .into_iter()
-                            .map(|piece| bin_piece(grain, piece))
-                            .collect::<Vec<Term>>();
-                        reducer.spend(Cost::collection(parts.len() as u64))?;
-
-                        return reducer
-                            .reduce(Term::intrinsic(Intrinsic::bin_concat(grain, parts)))
-                            .map(Term::unwrap_or_clone);
-                    }
-                    Some(Err(len)) => {
-                        return Err(ReduceError::BinSliceOutOfRange {
-                            len,
-                            start: s,
-                            length: n,
-                            span,
-                        });
-                    }
-                    None => {}
+            // The window, by whichever strategy reaches it — see `FreeMonoid::window`.
+            match FreeMonoid::Bin(grain).window(
+                reducer,
+                &bin,
+                &start_reduced,
+                &length_reduced,
+                |piece| bin_piece(grain, piece),
+                |operand| Intrinsic::bin_len(grain, operand.clone()),
+            )? {
+                Some(Windowed::Parts(parts)) => {
+                    return reducer
+                        .reduce(Term::intrinsic(Intrinsic::bin_concat(grain, parts)))
+                        .map(Term::unwrap_or_clone);
                 }
-            }
-            // A window on the seams of a symbolic concatenation — see `seam_window`. An append is one of those, which `concatenated` is what says.
-            if let Some(operands) = FreeMonoid::Bin(grain).concatenated(&bin)
-                && let Some(run) = seam_window(
-                    reducer,
-                    &operands,
-                    &start_reduced,
-                    &length_reduced,
-                    |operand| Intrinsic::bin_len(grain, operand.clone()),
-                )?
-            {
-                return reducer
-                    .reduce(Term::intrinsic(Intrinsic::bin_concat(grain, run)))
-                    .map(Term::unwrap_or_clone);
+                Some(Windowed::Past {
+                    total,
+                    start,
+                    count,
+                }) => {
+                    return Err(ReduceError::BinSliceOutOfRange {
+                        len: total,
+                        start,
+                        length: count,
+                        span,
+                    });
+                }
+                None => {}
             }
             // A slice over a cons spine peels one generator per `0`/`succ` boundary step — the reduction partner of the `Utf8` cons the validity proofs walk:  `slice(cons(h, t), 0, succ n) = h ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)`.
             //
@@ -1169,44 +1156,33 @@ pub fn reduce_intrinsic(
                     }),
                 };
             }
-            // The `List` twin of `BinSlice`'s locator: the window's segments, each already narrowed to its overlap, and — since every segment is a literal run — narrowed here rather than rebuilt as a `ListSlice` node for the next pass to fold.
-            if let (Some(s), Some(n)) = (s, n) {
-                match FreeMonoid::List.window(&list, s, n) {
-                    Some(Ok(pieces)) => {
-                        let parts = pieces
-                            .into_iter()
-                            .map(|piece| list_piece(&type_, piece))
-                            .collect::<Vec<Term>>();
-                        reducer.spend(Cost::collection(parts.len() as u64))?;
-
-                        return reducer
-                            .reduce(Term::intrinsic(Intrinsic::list_concat(type_, parts)))
-                            .map(Term::unwrap_or_clone);
-                    }
-                    Some(Err(len)) => {
-                        return Err(ReduceError::ListSliceOutOfRange {
-                            len,
-                            start: s,
-                            length: n,
-                            span: start.span().or_else(|| length.span()),
-                        });
-                    }
-                    None => {}
+            // The window, by whichever strategy reaches it — see `FreeMonoid::window`.
+            match FreeMonoid::List.window(
+                reducer,
+                &list,
+                &start_reduced,
+                &length_reduced,
+                |piece| list_piece(&type_, piece),
+                |operand| Intrinsic::list_len(type_.clone(), operand.clone()),
+            )? {
+                Some(Windowed::Parts(parts)) => {
+                    return reducer
+                        .reduce(Term::intrinsic(Intrinsic::list_concat(type_, parts)))
+                        .map(Term::unwrap_or_clone);
                 }
-            }
-            // A window on the seams of a symbolic concatenation — see `seam_window`. An append is one of those, which `list_concatenated` is what says.
-            if let Some(operands) = FreeMonoid::List.concatenated(&list)
-                && let Some(run) = seam_window(
-                    reducer,
-                    &operands,
-                    &start_reduced,
-                    &length_reduced,
-                    |operand| Intrinsic::list_len(type_.clone(), operand.clone()),
-                )?
-            {
-                return reducer
-                    .reduce(Term::intrinsic(Intrinsic::list_concat(type_, run)))
-                    .map(Term::unwrap_or_clone);
+                Some(Windowed::Past {
+                    total,
+                    start: from,
+                    count,
+                }) => {
+                    return Err(ReduceError::ListSliceOutOfRange {
+                        len: total,
+                        start: from,
+                        length: count,
+                        span: start.span().or_else(|| length.span()),
+                    });
+                }
+                None => {}
             }
             // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `List` twin of `BinSlice`'s element peel: `slice(cons(h, t), 0, succ n) = [h] ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)` — the count riding through the second untouched.
             if let Some((head, tail)) = peel_first_elem(&list) {

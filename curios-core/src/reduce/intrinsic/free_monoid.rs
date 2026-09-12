@@ -246,6 +246,66 @@ impl FreeMonoid {
     }
 }
 
+/// What a window came to: the pieces whose concatenation *is* it, or the measured total of a value it ran past.
+///
+/// `Past` is the concrete strategy's alone — the symbolic one never learns a total, so a window it cannot place is simply not found. It carries the bounds it read as well as the total, because only that strategy has them as indices and the refusal names all three.
+pub(super) enum Windowed {
+    Parts(Vec<Term>),
+    Past {
+        total: usize,
+        start: usize,
+        count: usize,
+    },
+}
+
+impl FreeMonoid {
+    /// The window of `count` generators at `start`, by whichever strategy reaches it — or `None` where neither does, which is where the caller falls through to its cons peel.
+    ///
+    /// **Two strategies, one entry, and that is the point.** They decide different things: the concrete one measures every operand, so it can validate the whole range and *split* the two at the edges, while the symbolic one never learns a total and can only take operands whole at exact seams. Written out at each call site they drifted — `ListGet` had the first and not the second where `ListSlice` had both, so a window at a symbolic seam was located and an index at the same seam was not. An arm that asks here cannot have one without the other.
+    ///
+    /// **The concrete strategy runs first and spends nothing**, which is what keeps a measurable value off the budget: `FreeMonoid::segments` reads each operand's length rather than reducing a `len` term for it. Only the fallback charges, one measure per operand, and only once the first has declined.
+    ///
+    /// `piece` and `measure` are the two things the carrier does not itself hold — a narrowed piece must restate a `List`'s element type, and a measure is spelled in the carrier's own `len`.
+    pub(super) fn window(
+        self,
+        reducer: &mut impl Reducer,
+        value: &Term,
+        start: &Term,
+        count: &Term,
+        piece: impl Fn(Piece<'_>) -> Term,
+        measure: impl Fn(&Term) -> Intrinsic,
+    ) -> Result<Option<Windowed>, ReduceError> {
+        // Every operand it covers whole is handed back untouched and shares its payload; only the two at the edges are narrowed, and everything outside the window is dropped without being read. A narrowed edge is narrowed *here* rather than rebuilt as a bounded node for the next pass to fold into exactly this, which is also what leaves this arm constructing no bounded node at all.
+        if let (Some(start), Some(count)) = (as_index(start), as_index(count)) {
+            match self.measured_window(value, start, count) {
+                Some(Ok(pieces)) => {
+                    let parts = pieces.into_iter().map(piece).collect::<Vec<Term>>();
+                    reducer.spend(Cost::collection(parts.len() as u64))?;
+
+                    return Ok(Some(Windowed::Parts(parts)));
+                }
+                Some(Err(total)) => {
+                    return Ok(Some(Windowed::Past {
+                        total,
+                        start,
+                        count,
+                    }));
+                }
+                None => {}
+            }
+        }
+
+        // A window on the seams of a symbolic concatenation. An append is one of those, which `FreeMonoid::concatenated` is what says.
+        if let Some(operands) = self.concatenated(value)
+            && let Some(run) = seam_window(reducer, &operands, start, count, measure)?
+        {
+            return Ok(Some(Windowed::Parts(run)));
+        }
+
+        Ok(None)
+    }
+}
+
 /// A window aligned to the seams of a concatenation is the run of operands between those seams: `slice([..xs, ..ys], 0, len(xs)) = xs` and `slice([..xs, ..ys], len(xs), len(ys)) = ys`, over *symbolic* operands — the case the literal-run locators above decline. Sound for every value of the symbolic operands: a window whose start is exactly a prefix's length and whose end is exactly a longer prefix's length covers exactly the operands between, whatever those lengths are. `None` where no seam matches; the operands of the matched run otherwise, for the caller to concatenate.
 ///
 /// **The walk consumes a distance rather than growing a prefix.** Each operand's measure is *cancelled off* the distance still to cover by [`Nat::cancel_common`], which reads that operand's own summands rather than every summand before it. What the walk spends is one measure per operand and nothing else: the accumulation no longer re-enters the reducer, and the window's end — a sum of the start and the count — is never built at all. This is a charge against the budget rather than an asymptotic win, and the distinction is worth keeping because it was once claimed the other way: a window written over a long prefix sum spends the bulk of its time normalizing that sum where it is *written*, in `NatAdd`'s own fold, and only a small remainder here.

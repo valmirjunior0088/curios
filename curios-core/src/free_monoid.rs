@@ -558,7 +558,7 @@ impl FreeMonoid {
     /// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end, which the caller reports.
     ///
     /// The point of returning pieces rather than a value: an operand the window covers whole is handed back untouched and shares its payload, and only the two at the edges are narrowed. A window over a spine therefore costs one pass and two slices, where peeling one generator at a time costs a walk of the whole spine per generator read.
-    pub(crate) fn window<'a>(
+    pub(crate) fn measured_window<'a>(
         self,
         value: &'a Term,
         start: usize,
