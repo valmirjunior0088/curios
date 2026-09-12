@@ -229,7 +229,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bytes, the free monoid",
-        binders: "bs: Bytes, cs: Bytes, ds: Bytes, k: Byte",
+        binders: "bs: Bytes, cs: Bytes, ds: Bytes, k: Byte, s: Nat, l: Nat, ok: Nat/Le(s + l, Bytes/len(bs))",
         held: &[
             "Eq(x[..bs, ..x[]], bs)",
             "Eq(x[..x[], ..bs], bs)",
@@ -254,7 +254,10 @@ const CARRIERS: &[Carrier] = &[
             // An append is the concatenation the peel's own law says it is, so a window at its seam locates like any other.
             "Eq(Bytes/slice(x[..bs, k], 0, Bytes/len(bs)), bs)",
         ],
-        refused: &[],
+        refused: &[
+            // A window's length is the count it was cut to. True at every well-typed instance — `slice` takes `s + l <= len(b)` and the node carries the proof — so this is a candidate rather than a bug, and stating it here is what would make taking it a row moving. Not taken: `free_monoid`'s measure reads literal runs and their concatenations and declines everything else, and admitting a window would be a new definitional equation bought for no caller, since an accumulation's spine is literals. It does not open the way to conversion's own decomposition either, which measures a window already but materializes its generators to compare them, where this one counts them without reading any.
+            "Eq(Bytes/len(Bytes/slice(bs, s, l, @ok)), l)",
+        ],
     },
     Carrier {
         name: "Bits, the free monoid",
