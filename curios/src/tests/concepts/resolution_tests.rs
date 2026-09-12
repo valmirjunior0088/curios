@@ -574,3 +574,25 @@ fn a_premise_no_smaller_than_its_head_is_refused() {
         "expected the premise refusal, got: {message}"
     );
 }
+
+// A function telescope puts a `use` premise into the witness scope of every *later domain*, so a later parameter's type may name the premise's methods. A concept's field telescope does not: the edge declared one field above is not in scope while `injective`'s type elaborates, and `Encoded/encode`'s own `use` premise goes unresolved. The two telescopes are one construct in `documentation/syntax.md`, so this is the asymmetry rather than a rule — recorded as the refusal it is today, so taking it moves this assertion rather than adding one.
+#[test]
+fn a_superclass_edge_is_not_in_scope_for_a_later_field_type() {
+    let source = r#"
+        use /std/{Bytes, Eq};
+        pub concept Encoded(A : Type) : pub Type {
+            encode(A) -> Bytes
+        }
+        pub concept Keyed(A : Type) : pub Type {
+            use Encoded(A),
+            injective(a : A, b : A, same : Eq(Encoded/encode(a), Encoded/encode(b))) -> Eq(a, b)
+        }
+        /std/print("unreached")
+        "#;
+
+    let message = error(source);
+    assert!(
+        message.contains("no witness of Encoded(A) found"),
+        "expected the unresolved edge, got: {message}"
+    );
+}
