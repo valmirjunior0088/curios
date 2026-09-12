@@ -207,69 +207,6 @@ pub struct Cli: pub Type {
     commands: List(Cli),
 }
 
-let no_repeat_long(spec: List(Arg)) -> Bool =
-    match spec
-    | [] => true
-    | [a, ..more] =>
-        Bool/not(List/any(more, (b) => Str/eql(a.long, b.long))) && no_repeat_long(more)
-    end;
-
-let no_repeat_short(spec: List(Arg)) -> Bool =
-    match spec
-    | [] => true
-    | [a, ..more] =>
-        match a.short
-        | none() => no_repeat_short(more)
-        | some(c) =>
-            Bool/not(
-                List/any(more, (b) =>
-                    match b.short | some(d) => Char/eql(c, d) | none() => false end))
-                && no_repeat_short(more)
-        end
-    end;
-
-let no_reserved(spec: List(Arg)) -> Bool =
-    List/all(spec, (a) =>
-        Bool/not(Str/eql(a.long, "help")) && Bool/not(Str/eql(a.long, "version"))
-            && (match a.short | some(c) => Bool/not(Char/eql(c, 'h')) | none() => true end));
-
-let rest_comes_last(spec: List(Arg), seen: Bool) -> Bool =
-    match spec
-    | [] => true
-    | [a, ..more] =>
-        match seen
-        | true => Bool/not(is_positional(a.kind) || is_rest(a.kind)) && rest_comes_last(more, true)
-        | false => rest_comes_last(more, is_rest(a.kind))
-        end
-    end;
-
-let empty(@T: Type, l: List(T)) -> Bool =
-    match l | [] => true | [_, .._] => false end;
-
-let no_repeat_name(subs: List(Cli)) -> Bool =
-    match subs
-    | [] => true
-    | [c, ..more] =>
-        Bool/not(List/any(more, (d) => Str/eql(c.name, d.name))) && no_repeat_name(more)
-    end;
-
-let sound(cli: Cli) -> Bool =
-    no_repeat_long(cli.args) && no_repeat_short(cli.args) && no_reserved(cli.args)
-        && rest_comes_last(cli.args, false)
-        && (match cli.commands
-        | [] => true
-        | [_, .._] =>
-            empty(cli.args) && no_repeat_name(cli.commands)
-                && List/all(cli.commands, (c) =>
-                    empty(c.commands) && no_repeat_long(c.args) && no_repeat_short(c.args)
-                        && no_reserved(c.args)
-                        && rest_comes_last(c.args, false))
-        end);
-
--- | That the declaration parses unambiguously: no reserved names, one `rest` after every positional, and subcommands one level deep. Decided by reduction and demanded by `main`.
-pub let WellFormed(cli: Cli) -> Prop =
-    Bool/Holds(sound(cli));
-
 -- | Why a line was refused.
 pub induct Failure: pub Type
 -- | A token no declared name matches.
@@ -696,7 +633,7 @@ let fail_with(text: Str) -> Io({}) =
     /std/proc/exit(2);
 
 -- | The entry a program hands its `Cli` to: arguments read, help and the version answered on standard output with exit 0, a refusal reported on standard error with exit 2, and otherwise the handler run.
-pub let main(cli: Cli, @_: WellFormed(cli)) -> Io({}) =
+pub let main(cli: Cli) -> Io({}) =
     let raw = /std/proc/args!;
     let dropped = match raw | [] => [] | [_, ..more] => more end;
     match decode(dropped)

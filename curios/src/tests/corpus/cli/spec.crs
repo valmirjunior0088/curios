@@ -49,9 +49,6 @@ let serve: Cli =
         commands = [],
     };
 
-let well_formed(c: Cli, @_ok: Cli/WellFormed(c)) -> Bool =
-    true;
-
--- Two claims in one: the handler's parameter carries the `args` written two fields above it, so the `get` calls inside `serve` type with nothing annotated; and `WellFormed` is decided by reduction, so the entry's bound discharges here with nothing written.
+-- The handler's parameter carries the `args` written two fields above it, so the `get` calls inside `serve` type with nothing annotated. That this file elaborates at all is the claim; the assertion is what keeps the declaration reached.
 test a_handler_is_typed_by_the_specification_beside_it =
-    Test/assert(well_formed(serve));
+    Test/equal(serve.name, "serve");

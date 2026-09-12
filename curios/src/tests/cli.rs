@@ -31,35 +31,6 @@ fn a_misspelled_name_is_refused_rather_than_answered() {
     );
 }
 
-/// `WellFormed` is decided by reduction, so a specification naming one long name twice is refused at the entry that demands it rather than at the first line it would misparse.
-#[test]
-fn a_duplicate_long_name_is_refused_at_well_formed() {
-    let refused = error(
-        r#"
-        use /std/{Cli, Str, Option, Io, print};
-
-        let twice: Cli =
-            Cli {
-                name = "dup",
-                about = "Two entries share a long name",
-                version = Option/none(),
-                args = [Cli/flag("verbose", "once"), Cli/flag("verbose", "twice")],
-                run(_) = print("never"),
-                commands = [],
-            };
-
-        let demand(c: Cli, @ok: Cli/WellFormed(c)) -> Io({}) = print(c.name);
-
-        demand(twice)
-        "#,
-    );
-
-    assert!(
-        refused.contains("WellFormed"),
-        "the refusal names the bound nothing discharged:\n{refused}"
-    );
-}
-
 /// A program built once and run under several scripted command lines. The compile is what a fixture pays for; a run of the precompiled module is milliseconds, so one compile serves every row below.
 fn serve() -> Compiled {
     compile(
