@@ -216,10 +216,15 @@ const CARRIERS: &[Carrier] = &[
             "Eq(List/slice([..xs, ..ys], List/len(xs), List/len(ys)), ys)",
             "Eq(List/slice([..xs, ..ys, ..zs], List/len(xs), List/len(ys)), ys)",
             "Eq(List/slice([..xs, ..ys, ..zs], 0, List/len(xs) + List/len(ys)), [..xs, ..ys])",
+            // An append is the concatenation the peel's own law says it is, so a window at its seam locates like any other — held here as it is at `Bytes`, and unstated until now.
+            "Eq(List/slice([..xs, a], 0, List/len(xs)), xs)",
         ],
         refused: &[
             // Function extensionality in disguise: not one to take.
             "Eq(List/map(xs, (v) => v), xs)",
+            // An index at a symbolic seam, where the operand beginning there carries exactly one generator. `Bytes` and `Bits` both take it; `List` does not, and the asymmetry is within this carrier rather than between them — `ListSlice` walks the seams, so the window row above is held, while `ListGet` has no seam path and the same walk that finds a window does not find an index. Taking it is a rule in `curios-core`'s `reduce::intrinsic`, which is what moves these two rows up.
+            "Eq(List/get([..xs, a, ..ys], List/len(xs)), a)",
+            "Eq(List/get([..xs, a], List/len(xs)), a)",
         ],
     },
     Carrier {
