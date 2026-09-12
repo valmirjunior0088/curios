@@ -13,7 +13,7 @@ use {
         ConceptDecl, Definition, Entrypoint, Free, Global, InductParam, Item, Module, StructDecl,
         Zonked, project_erased_universes, wire_term,
     },
-    curios_utilities::grown,
+    curios_utilities::{Span, grown},
     std::{
         collections::{BTreeMap, BTreeSet},
         sync::Arc,
@@ -40,6 +40,8 @@ pub(super) struct Lowering {
     pub(super) pending_families: BTreeMap<Global, curios_ersd::FamilyId>,
     /// The structures whose row is being registered right now. A self-referential structure is uninhabited but elaborates, and unlike an inductive its schema is only decided *after* its fields are classified — so the cycle is cut by declining to name a schema rather than by naming one early.
     pub(super) in_flight: BTreeSet<Global>,
+    /// The span of each computed recursive member's initializer, by the identity it was minted as. The erased verifier refuses a member by that identity after the module holding it is gone, so the frame for the refusal is kept here rather than in the representation, whose nodes are the stored-unit format and carry no spans.
+    pub(super) spans: BTreeMap<curios_ersd::ValueId, Span>,
 }
 
 pub(super) struct UniverseErased<T>(T);
@@ -204,11 +206,14 @@ fn seal_entry(
     let Lowering {
         builder,
         environment,
+        spans,
         ..
     } = lowering;
 
     Ok(ErasedArena {
-        module: builder.finalize().map_err(Error::refused_by_verifier)?,
+        module: builder
+            .finalize()
+            .map_err(|error| Error::refused_by_verifier(error, &spans))?,
         environment,
     })
 }
@@ -583,6 +588,7 @@ fn erase_unit_within(
             owners: Default::default(),
             pending_families: Default::default(),
             in_flight: Default::default(),
+            spans: Default::default(),
         };
         lowering.erase_items(context, &module)?;
 
@@ -593,7 +599,7 @@ fn erase_unit_within(
                 module: lowering
                     .builder
                     .into_module()
-                    .map_err(Error::refused_by_verifier)?,
+                    .map_err(|error| Error::refused_by_verifier(error, &lowering.spans))?,
                 environment: lowering.environment,
             }),
         }

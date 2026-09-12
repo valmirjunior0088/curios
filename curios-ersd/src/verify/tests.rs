@@ -390,7 +390,7 @@ fn an_initializer_that_performs_an_effect_is_rejected() {
         .finalize()
         .expect_err("an initializer that exits cannot be forced by need");
     assert!(
-        matches!(&error, VerifyError::InitializerPerformsEffect { member, through: None }
+        matches!(&error, VerifyError::InitializerPerformsEffect { member, through: None, .. }
             if member == "member"),
         "{error}"
     );

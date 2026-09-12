@@ -104,7 +104,14 @@ impl Lowering {
             .map(|((name, hint), (_, body))| {
                 let member = match &**body {
                     Subterm::Func(_) => Member::Function(self.builder.reserve_function()),
-                    _ => Member::Computed(self.builder.value(hint.clone())),
+                    _ => {
+                        let value = self.builder.value(hint.clone());
+                        // Where the verifier's refusal of this member is framed, should it refuse it: the initializer, since no span of the binder reaches this far.
+                        if let Some(span) = body.span() {
+                            self.spans.insert(value, span);
+                        }
+                        Member::Computed(value)
+                    }
                 };
                 let atom = match &member {
                     Member::Function(function) => curios_ersd::Atom::Function(*function),

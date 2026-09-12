@@ -23,7 +23,7 @@ use {
     std::collections::HashSet,
 };
 
-/// A recursion rule a program broke: what forcing computed members by need could not make right. Members and calls are named by their source names, resolved while the module is still in hand, because a refused module does not survive the refusal.
+/// A recursion rule a program broke: what forcing computed members by need could not make right. Members and calls are named by their source names, resolved while the module is still in hand, because a refused module does not survive the refusal; each member also carries the identity it was minted as, which is what the producer that minted it can still look it up by.
 #[derive(Debug, Clone)]
 pub enum VerifyError {
     /// Computed members whose initializers evaluate one another, directly or through the functions they apply, so no forcing order satisfies them. A single step is a member evaluating itself.
@@ -31,14 +31,16 @@ pub enum VerifyError {
     /// An initializer that performs an effect, directly or through the named call, which forcing it later, or never, could not keep in its place.
     InitializerPerformsEffect {
         member: String,
+        value: ValueId,
         through: Option<String>,
     },
 }
 
-/// One link of an evaluation cycle: a member, and the function it reads the next member through, when that read goes through a call.
+/// One link of an evaluation cycle: a member, the identity it was minted as, and the function it reads the next member through, when that read goes through a call.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CycleStep {
     pub member: String,
+    pub value: ValueId,
     pub through: Option<String>,
 }
 
@@ -62,7 +64,9 @@ impl std::fmt::Display for VerifyError {
                     None => Ok(()),
                 }
             }
-            Self::InitializerPerformsEffect { member, through } => {
+            Self::InitializerPerformsEffect {
+                member, through, ..
+            } => {
                 write!(
                     f,
                     "the initializer of computed group member {member} performs an effect"

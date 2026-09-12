@@ -1068,18 +1068,31 @@ impl Error {
         Self::NatCaseKeyOverflow { value }
     }
 
-    /// The refusal a program earns from the erased verifier. Only its recursion rules come back as an error: a malformed module is a compiler fault, which the verifier panics on rather than returning.
-    pub(crate) fn refused_by_verifier(error: curios_ersd::VerifyError) -> Self {
+    /// The refusal a program earns from the erased verifier, framed at the refused member's initializer when `spans` records one — a cycle at its first member. Only the verifier's recursion rules come back as an error: a malformed module is a compiler fault, which the verifier panics on rather than returning.
+    pub(crate) fn refused_by_verifier(
+        error: curios_ersd::VerifyError,
+        spans: &BTreeMap<curios_ersd::ValueId, Span>,
+    ) -> Self {
         match error {
-            curios_ersd::VerifyError::EvaluationCycle { steps } => Self::EvaluationCycle {
-                steps: steps
-                    .into_iter()
-                    .map(|step| (step.member, step.through))
-                    .collect(),
-            },
-            curios_ersd::VerifyError::InitializerPerformsEffect { member, through } => {
-                Self::InitializerPerformsEffect { member, through }
+            curios_ersd::VerifyError::EvaluationCycle { steps } => {
+                let span = steps
+                    .first()
+                    .and_then(|step| spans.get(&step.value))
+                    .cloned();
+                Self::EvaluationCycle {
+                    steps: steps
+                        .into_iter()
+                        .map(|step| (step.member, step.through))
+                        .collect(),
+                }
+                .at_opt(span)
             }
+            curios_ersd::VerifyError::InitializerPerformsEffect {
+                member,
+                value,
+                through,
+            } => Self::InitializerPerformsEffect { member, through }
+                .at_opt(spans.get(&value).cloned()),
         }
     }
 

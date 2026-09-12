@@ -103,6 +103,10 @@ fn a_value_that_reads_itself_is_refused_at_the_erase_boundary() {
         report.contains("evaluates itself"),
         "expected the verifier's refusal:\n{report}"
     );
+    assert!(
+        report.contains("let xs : Nat = xs + 1;"),
+        "expected the refusal framed at the value's own line:\n{report}"
+    );
 }
 
 #[test]
@@ -119,6 +123,10 @@ fn a_local_value_that_reads_itself_is_refused_at_the_erase_boundary() {
     assert!(
         report.contains("evaluates itself"),
         "expected the verifier's refusal:\n{report}"
+    );
+    assert!(
+        report.contains("let m : Nat = m + 1;"),
+        "expected the refusal framed at the local's own line:\n{report}"
     );
 }
 

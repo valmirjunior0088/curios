@@ -39,6 +39,7 @@ pub(super) fn check_group(module: &Module, values: &[RecValue]) -> Result<(), Ve
         if let Some(through) = evaluation.effect {
             return Err(VerifyError::InitializerPerformsEffect {
                 member: value_name(module, member.value),
+                value: member.value,
                 through: through.map(|callee| function_name(module, callee)),
             });
         }
@@ -71,6 +72,7 @@ pub(super) fn check_group(module: &Module, values: &[RecValue]) -> Result<(), Ve
                     let (from, to) = (window[0], window[1]);
                     CycleStep {
                         member: value_name(module, computed[from]),
+                        value: computed[from],
                         through: evaluates[from][&to].map(|callee| function_name(module, callee)),
                     }
                 })
