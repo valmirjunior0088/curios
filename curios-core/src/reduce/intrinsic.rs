@@ -611,17 +611,16 @@ pub fn reduce_intrinsic(
                 finite: finite.clone(),
             },
         ),
-        Intrinsic::BinType(Grain::X) => Ok(Subterm::Intrinsic(Intrinsic::BinType(Grain::X))),
-        Intrinsic::Bin(Grain::X, bytes) => {
-            Ok(Subterm::Intrinsic(Intrinsic::Bin(Grain::X, bytes.clone())))
-        }
-        Intrinsic::BinLen(Grain::X, bin) => {
+        Intrinsic::BinType(grain) => Ok(Subterm::Intrinsic(Intrinsic::BinType(*grain))),
+        Intrinsic::Bin(grain, run) => Ok(Subterm::Intrinsic(Intrinsic::Bin(*grain, run.clone()))),
+        Intrinsic::BinLen(grain, bin) => {
+            let grain = *grain;
             let bin = reducer.reduce_forced(bin.clone())?;
             // The measure answers a wholly-literal spine by folding it, without rebuilding a `Bin/len` per operand and handing each back to the reducer — which is what made a length over a deep concatenation cost a re-walk of every sub-spine. It agrees with the homomorphism below by construction on the shapes it accepts (a literal run's length, summed over a concatenation's operands) and declines everything else, so every other value reduces exactly as it did.
-            if let Some(total) = bin_measure(Grain::X, &bin) {
+            if let Some(total) = bin_measure(grain, &bin) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
             }
-            let shape = bin_shape(reducer, Grain::X, bin)?;
+            let shape = bin_shape(reducer, grain, bin)?;
 
             reduce_homomorphism(
                 reducer,
@@ -634,10 +633,11 @@ pub fn reduce_intrinsic(
                         base_len,
                     ))
                 },
-                |sub| Term::intrinsic(Intrinsic::bin_len(Grain::X, sub)),
+                |sub| Term::intrinsic(Intrinsic::bin_len(grain, sub)),
             )
         }
-        Intrinsic::BinEql(Grain::X, left, right) => {
+        Intrinsic::BinEql(grain, left, right) => {
+            let grain = *grain;
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
 
@@ -646,7 +646,7 @@ pub fn reduce_intrinsic(
                 return Ok(Subterm::Intrinsic(Intrinsic::Bool(true)));
             }
 
-            // Structural decision via the free-monoid peel (`core::spine`): a peeled-equal pair is `true`, a definite byte or length clash is `false` (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`). Anything the peel leaves undecided stays neutral — the same conservative seam conversion reads, so the fold only ever strengthens, never weakens.
+            // Structural decision via the free-monoid peel (`core::spine`): a peeled-equal pair is `true`, a definite generator or length clash is `false` (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`). Anything the peel leaves undecided stays neutral — the same conservative seam conversion reads, so the fold only ever strengthens, never weakens.
             if let (Subterm::Intrinsic(l), Subterm::Intrinsic(r)) = (&*left, &*right) {
                 match peel_bin(l, r) {
                     Some(Peel::Equal) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(true))),
@@ -655,11 +655,7 @@ pub fn reduce_intrinsic(
                 }
             }
 
-            Ok(Subterm::Intrinsic(Intrinsic::bin_eql(
-                Grain::X,
-                Term::unwrap_or_clone(left),
-                Term::unwrap_or_clone(right),
-            )))
+            Ok(Subterm::Intrinsic(Intrinsic::BinEql(grain, left, right)))
         }
         Intrinsic::BinGet {
             grain: Grain::X,
@@ -958,46 +954,6 @@ pub fn reduce_intrinsic(
                     })
                 },
             )
-        }
-        Intrinsic::BinType(Grain::B) => Ok(Subterm::Intrinsic(Intrinsic::BinType(Grain::B))),
-        Intrinsic::Bin(Grain::B, bits) => {
-            Ok(Subterm::Intrinsic(Intrinsic::Bin(Grain::B, bits.clone())))
-        }
-        Intrinsic::BinLen(Grain::B, bin) => {
-            let bin = reducer.reduce_forced(bin.clone())?;
-            if let Some(total) = bin_measure(Grain::B, &bin) {
-                return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
-            }
-            let shape = bin_shape(reducer, Grain::B, bin)?;
-
-            reduce_homomorphism(
-                reducer,
-                shape,
-                |run| Term::intrinsic(Intrinsic::Nat(Nat::new(run.len()))),
-                nat_sum,
-                |base_len, _| {
-                    Term::intrinsic(Intrinsic::nat_add(
-                        Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                        base_len,
-                    ))
-                },
-                |sub| Term::intrinsic(Intrinsic::bin_len(Grain::B, sub)),
-            )
-        }
-        Intrinsic::BinEql(Grain::B, left, right) => {
-            let left = reducer.reduce_forced(left.clone())?;
-            let right = reducer.reduce_forced(right.clone())?;
-            if left == right {
-                return Ok(Subterm::Intrinsic(Intrinsic::Bool(true)));
-            }
-            if let (Subterm::Intrinsic(l), Subterm::Intrinsic(r)) = (&*left, &*right) {
-                match peel_bin(l, r) {
-                    Some(Peel::Equal) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(true))),
-                    Some(Peel::Clash) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(false))),
-                    Some(Peel::Continue(..)) | Some(Peel::Stuck) | None => {}
-                }
-            }
-            Ok(Subterm::Intrinsic(Intrinsic::BinEql(Grain::B, left, right)))
         }
         Intrinsic::BinGet {
             grain: Grain::B,
