@@ -2,7 +2,7 @@
 
 ## Status
 
-**Not refined yet.** An umbrella over four places where one fact is written down more than once with nothing holding the writings together. Each is separately landable and none blocks another; what they share is a failure mode, not a dependency.
+**Not refined yet.** An umbrella over two places where one fact is written down more than once with nothing holding the writings together. They are separately landable and neither blocks the other; what they share is a failure mode, not a dependency. A third place — the fold arms, a grain-X arm beside a grain-B twin for each of six operations — has been collapsed, and what that work established is kept below rather than lost with the section it came from.
 
 ## Why it exists
 
@@ -10,7 +10,7 @@ The repository already has this principle and already names it where it has been
 
 So the rule is not new: **one statement, or a copy something checks.** These are the places that have neither, collected because they were found together while a bound was being made to reach the kernel, and because each one cost that work time.
 
-Drift is not hypothetical here. It has already happened in two of the four, and in neither case did anything report it — the copies were found by diffing them on purpose.
+Drift is not hypothetical here. It happened in the fold arms and nothing reported it — the copies were found by diffing them on purpose, and the diff showed drift running in *both* directions: the bit copies had lost comments their byte originals carried, and one byte arm had lost a comment only its bit copy still held. Neither side was the master copy, which is what a copy with nothing checking it eventually looks like.
 
 ## What is stated twice
 
@@ -20,19 +20,21 @@ The lift is a view parameterized by its measure. `measure`, `locate` and `window
 
 Folding `Atom` in is the larger half and changes what *conversion* decides, so it wants its own evidence rather than riding along.
 
-**The fold arms, twice per grain and a third time per carrier.** `BinLen`, `BinEql`, `BinGet`, `BinSlice` and `BinAppend` each have a grain-X arm and a grain-B twin in `curios-core`'s `reduce::intrinsic`, about 290 lines on each side, and `ListLen`/`ListGet`/`ListSlice`/`ListAppend`/`ListConcat` are the same shapes again over the unpacked carrier. Grain-erasing the two `Bin` blocks and diffing behaviour puts `BinLen` at 100% identical, `BinEql` at 73%, `BinGet` at 70%, `BinSlice` at 71% and `BinAppend` at 28%.
-
-The twins have drifted, and nothing caught it. `BinAppend` at the bit grain charges `Cost::buffer(width)` and at the byte grain does not — two prices for one operation, against the budget whose whole job is to bound memory. The byte arm also carries an `.unwrap()` the bit arm has no need for. `BinEql`'s bit copy lost both of the explanatory comments its byte original carries and builds its neutral term directly where the other uses the `bin_eql` builder.
-
-`BinConcat` is already one grain-generic arm, which is the proof that sharing is available and that someone took it once. Three tiers, each landable alone: bind the grain instead of matching it, which collapses `BinType`, `Bin`, `BinLen` and `BinEql` with no semantic change at all; push the remaining branch to the element seam for `BinGet` and `BinSlice`, where `bin_piece` already shows the shape; and `BinAppend` last, because unifying it means *deciding* which of its two cost formulas is right, which is a question rather than a refactor.
-
-What this buys is a grade. `intrinsic-fold-laws-and-the-free-monoid-peel.md` and `open-fold-laws-and-the-sum-normal-form.md` both carry one **argued** claim and it is this one — the bit-grain copies, whose only fixture is `bit_get_of_a_symbolic_cons_head_is_the_bit`. Collapse the twins and the grade becomes **probed**, because there is no second arm left to be wrong.
+**The `List` arms are that same lift, one carrier over, and belong to it rather than beside the grain twins.** `Shape<L>` and `reduce_homomorphism<L>` already unify the two carriers at the homomorphism — "the one place its distribution law lives, so a carrier physically cannot forget a case" — and every `Bin`/`List` pair reaches it. What stays split is the decomposition beneath: `bin_shape` beside `list_shape`, `concatenated` beside `list_concatenated`, `bin_piece` beside `list_piece`. Carrier-erased, `BinSlice` and `ListSlice` are most of one arm, and the `List` comments already call themselves twins of the `Bin` ones. Three frictions separate them and each is a real difference rather than drift: a `List` carries an element *type* term that must itself be reduced, where a `Grain` is a `Copy` tag that need not; `Vec::get` copies and charges `Cost::collection` where `PackedBin::slice` is an O(1) window into the same payload and charges nothing, so the cost model is part of the carrier rather than incidental to it; and `bin_shape` is fallible and charges a buffer — a `u8` per generator, eight times the value's own width at the bit grain — where `list_shape` is infallible and free. Collapsing the grain twins needed no measure at all, which is why they were separable; collapsing the carriers needs exactly the measure this section is about, which is why these are not.
 
 **A key's encoding, in the type and in every witness.** `/std/Map`'s `Key` declares `to_bytes(K) -> Bytes` and every witness assigns it `Hash/hash`, with the invariant — a type has one identity as bytes — stated in the concept's header and maintained by convention. A witness that assigned something else would compile, and the header would quietly become false.
 
 `use Hash(K)` as a superclass edge makes it structural: resolution fills the slot, no witness writes the line, and the encoding cannot disagree with the hash because there is only one. Two things to probe before committing to it, neither of them an argument. Whether `Hash/hash(a)` resolves through the edge from *inside* the concept's own field telescope, the edge being anonymous and `injective`'s type needing to name what it compares. And whether `Eq(Hash/hash(a), Hash/hash(b))` reduces to `Eq(a, b)` at `Bytes`, since `Key(Bytes)`'s `injective(_, _, same) = same` depends on it; if it does not, that witness needs a real proof and the change costs more than it saves.
 
 A named field is the trap worth naming. `hash: Hash(K)` reads better at `injective` but forces every witness to supply a dictionary explicitly, and `satisfy` registers an *anonymous* witness — so there is no registered `Hash(K)` to assign, and each `Key` would build a fresh one by hand. That is the same fact written twice again, one layer down.
+
+## What the fold arms established
+
+Two things to carry into the work above, both earned by doing it rather than assumed before it.
+
+**A one-sided check reads exactly like a passing one.** The bit-grain arms were not unchecked. `tests::laws` stated the free monoid's rows and every row it stated passed — but it stated most of them at the byte grain alone, and `eql` at neither, so the grade stayed **argued** while a green suite said nothing was wrong. The rows went in before any arm moved, which is what turned every later step into a refactor with an oracle instead of a change with a hope; state the segment and window rows at `List` as well as at both `Bin` grains, and state them first.
+
+**An asymmetry can be earned.** `BinAppend` charged `Cost::buffer(width)` at the bit grain and not at the byte grain, which reads as drift and was not: each formula was right for its own implementation, because `append_bit` rebuilt the value through `from_bits` and materialized a `bool` per bit where `append_byte` copied the packed payload. The fix was the implementation, not the formula, and one formula priced both appends afterwards. Before unifying any copy above, check whether the versions differ for a reason — where they do, the reason is the thing to remove, and unifying over it would have written the accident into the budget permanently.
 
 ## Where a copy is checked instead
 
