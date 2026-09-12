@@ -186,7 +186,7 @@ fn seed_registries(context: &mut Context, module: &Module) -> Result<(), Error> 
     Ok(())
 }
 
-/// Erase the entrypoint body into the entry block and finalize the arena — the shared tail of both whole-program entry points. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit (a computed-only evaluation cycle); any other failure here is an erasure bug, indistinguishable at this boundary.
+/// Erase the entrypoint body into the entry block and finalize the arena — the shared tail of both whole-program entry points. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit — an evaluation cycle, an initializer that performs an effect — and hands those back as the refusal; a malformed arena is an erasure fault, which the verifier panics on rather than returning here.
 fn seal_entry(
     mut lowering: Lowering,
     context: &mut Context,
@@ -208,9 +208,7 @@ fn seal_entry(
     } = lowering;
 
     Ok(ErasedArena {
-        module: builder
-            .finalize()
-            .map_err(|error| Error::erased_module_invalid(error.to_string()))?,
+        module: builder.finalize().map_err(Error::refused_by_verifier)?,
         environment,
     })
 }
@@ -595,7 +593,7 @@ fn erase_unit_within(
                 module: lowering
                     .builder
                     .into_module()
-                    .map_err(|error| Error::erased_module_invalid(error.to_string()))?,
+                    .map_err(Error::refused_by_verifier)?,
                 environment: lowering.environment,
             }),
         }

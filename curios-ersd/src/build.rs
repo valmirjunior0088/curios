@@ -11,7 +11,7 @@ use {
     super::{
         Block, BlockId, Constant, ConstantId, ConstructorId, FamilyId, Field, ForeignId, Function,
         FunctionId, Module, ProductId, ProductSchema, RecGroup, RecGroupId, RecValue, Rhs,
-        Statement, StatementId, Terminator, ValueId, VerifyError,
+        Statement, StatementId, StructuralFault, StructuralRule, Terminator, ValueId, VerifyError,
     },
     curios_abi::ForeignFunction,
     std::{collections::BTreeSet, sync::Arc},
@@ -220,21 +220,33 @@ impl ErsdBuilder {
         self.module.set_entry(entry);
     }
 
-    /// Finish construction: reject leftover open blocks and dangling function reservations, then run the module verifier and hand the module over. (An empty function slot is a construction error here and an ordinary tombstone to the verifier, which is why the outstanding reservations are tracked in `reserved_functions` rather than read off the arena.)
+    /// Finish construction and hand the module over. A block left open, a function reserved and never defined, or a malformed module is a fault in the producer and panics; a broken recursion rule is the refusal returned. (An empty function slot is a construction fault here and an ordinary tombstone to the verifier, which is why the outstanding reservations are tracked in `reserved_functions` rather than read off the arena.)
     pub fn finalize(self) -> Result<Module, VerifyError> {
-        if !self.open_blocks.is_empty() {
-            return Err(VerifyError(format!(
-                "finalize with {} unsealed open block(s)",
-                self.open_blocks.len()
-            )));
-        }
-        if let Some(&id) = self.reserved_functions.iter().next() {
-            return Err(VerifyError(format!(
-                "function {id} was reserved but never defined"
-            )));
+        if let Some(fault) = self.construction_fault() {
+            fault.raise();
         }
         self.module.verify()?;
         Ok(self.module)
+    }
+
+    /// The first fault in how this builder was driven, which no walk of the module can see: a block left open, or a reserved function never defined. What [`finalize`](Self::finalize) panics on, handed back so a test can read which.
+    pub(crate) fn construction_fault(&self) -> Option<StructuralFault> {
+        if !self.open_blocks.is_empty() {
+            return Some(StructuralFault {
+                rule: StructuralRule::UnsealedBlock,
+                detail: format!(
+                    "finalize with {} unsealed open block(s)",
+                    self.open_blocks.len()
+                ),
+            });
+        }
+        self.reserved_functions
+            .iter()
+            .next()
+            .map(|&id| StructuralFault {
+                rule: StructuralRule::DanglingReservation,
+                detail: format!("function {id} was reserved but never defined"),
+            })
     }
 
     fn emit(&mut self, statement: StatementId) {

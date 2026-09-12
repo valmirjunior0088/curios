@@ -118,30 +118,71 @@ fn a_mixed_recursive_group_builds() {
 }
 
 #[test]
-fn finalize_rejects_a_dangling_reservation() {
+fn a_dangling_reservation_is_a_construction_fault() {
     let mut builder = ErsdBuilder::new();
     builder.reserve_function();
     builder.open_block();
     let unit = builder.constant(Constant::Unit);
     let entry = builder.seal_block(Terminator::Return(Atom::Constant(unit)));
     builder.set_entry(entry);
-    let error = builder
-        .finalize()
-        .expect_err("a reservation must be defined");
-    assert!(error.0.contains("reserved but never defined"), "{error}");
+    let fault = builder.construction_fault();
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::DanglingReservation,
+                ..
+            })
+        ),
+        "a reservation must be defined: {fault:?}"
+    );
 }
 
 #[test]
-fn finalize_rejects_an_unsealed_block() {
+fn an_unsealed_block_is_a_construction_fault() {
     let mut builder = ErsdBuilder::new();
     builder.open_block();
-    let error = builder.finalize().expect_err("open blocks must be sealed");
-    assert!(error.0.contains("unsealed"), "{error}");
+    let fault = builder.construction_fault();
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::UnsealedBlock,
+                ..
+            })
+        ),
+        "open blocks must be sealed: {fault:?}"
+    );
 }
 
 #[test]
-fn finalize_rejects_a_missing_entry() {
+fn a_missing_entry_breaks_the_structure() {
     let builder = ErsdBuilder::new();
-    let error = builder.finalize().expect_err("the entry block is required");
-    assert!(error.0.contains("no entry"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::NoEntry,
+                ..
+            })
+        ),
+        "the entry block is required: {fault:?}"
+    );
+}
+
+/// A malformed module is a fault in whatever built it rather than a refusal of a program, so finalization panics instead of handing an error back.
+#[test]
+#[should_panic(expected = "a fault in the compiler rather than the program")]
+fn finalize_panics_on_a_malformed_module() {
+    let _ = ErsdBuilder::new().finalize();
+}
+
+/// The builder's own faults panic the same way, before the module is walked at all.
+#[test]
+#[should_panic(expected = "a fault in the compiler rather than the program")]
+fn finalize_panics_on_a_construction_fault() {
+    let mut builder = ErsdBuilder::new();
+    builder.open_block();
+    let _ = builder.finalize();
 }

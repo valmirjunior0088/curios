@@ -929,10 +929,7 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
     );
     let error = erase_module(&mut context, &zonked(&module(Vec::new(), body)), &type_)
         .expect_err("the value-level cycle is rejected");
-    assert!(
-        matches!(error, Error::ErasedModuleInvalid { .. }),
-        "{error:?}"
-    );
+    assert!(matches!(error, Error::EvaluationCycle { .. }), "{error:?}");
 }
 
 #[test]

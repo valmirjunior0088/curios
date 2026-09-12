@@ -186,7 +186,8 @@ fn a_cycle_through_a_called_function_is_rejected() {
         .finalize()
         .expect_err("`table` evaluates itself through `build` and `size`");
     assert!(
-        error.0.contains("evaluate each other") && error.0.contains("through a call"),
+        matches!(&error, VerifyError::EvaluationCycle { steps }
+            if steps.len() > 1 && steps.iter().any(|step| step.through.is_some())),
         "{error}"
     );
 }
@@ -305,7 +306,8 @@ fn a_stepper_handed_to_a_combinator_that_applies_it_is_evaluated_by_the_initiali
         .finalize()
         .expect_err("the combinator applies the stepper, which evaluates `table`");
     assert!(
-        error.0.contains("evaluates itself") && error.0.contains("through a call"),
+        matches!(&error, VerifyError::EvaluationCycle { steps }
+            if steps.len() == 1 && steps[0].member == "table" && steps[0].through.is_some()),
         "{error}"
     );
 }
@@ -387,7 +389,11 @@ fn an_initializer_that_performs_an_effect_is_rejected() {
     let error = builder
         .finalize()
         .expect_err("an initializer that exits cannot be forced by need");
-    assert!(error.0.contains("performs an effect"), "{error}");
+    assert!(
+        matches!(&error, VerifyError::InitializerPerformsEffect { member, through: None }
+            if member == "member"),
+        "{error}"
+    );
 }
 
 /// A computed-only evaluation cycle has no satisfiable initialization order.
@@ -406,7 +412,10 @@ fn a_computed_only_cycle_is_rejected() {
     let entry = builder.seal_block(Terminator::Return(Atom::Value(second)));
     builder.set_entry(entry);
     let error = builder.finalize().expect_err("the cycle cannot initialize");
-    assert!(error.0.contains("evaluate each other"), "{error}");
+    assert!(
+        matches!(&error, VerifyError::EvaluationCycle { steps } if steps.len() == 2),
+        "{error}"
+    );
 }
 
 #[test]
@@ -442,7 +451,11 @@ fn a_used_direct_self_knot_is_rejected() {
     let error = builder
         .finalize()
         .expect_err("the used self-knot cannot initialize");
-    assert!(error.0.contains("evaluates itself"), "{error}");
+    assert!(
+        matches!(&error, VerifyError::EvaluationCycle { steps }
+            if steps.len() == 1 && steps[0].member == "value" && steps[0].through.is_none()),
+        "{error}"
+    );
 }
 
 #[test]
@@ -453,10 +466,17 @@ fn an_unbound_value_use_is_out_of_scope() {
     let early = builder.let_value(None, Rhs::Alias(Atom::Value(unbound)));
     let entry = builder.seal_block(Terminator::Return(Atom::Value(early)));
     builder.set_entry(entry);
-    let error = builder
-        .finalize()
-        .expect_err("an unbound use is out of scope");
-    assert!(error.0.contains("out of scope"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::ValueOutOfScope,
+                ..
+            })
+        ),
+        "an unbound use is out of scope: {fault:?}"
+    );
 }
 
 #[test]
@@ -472,8 +492,17 @@ fn a_value_bound_inside_a_function_is_out_of_scope_after_it() {
     builder.open_block();
     let entry = builder.seal_block(Terminator::Return(Atom::Value(local)));
     builder.set_entry(entry);
-    let error = builder.finalize().expect_err("the local escaped its scope");
-    assert!(error.0.contains("out of scope"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::ValueOutOfScope,
+                ..
+            })
+        ),
+        "the local escaped its scope: {fault:?}"
+    );
 }
 
 #[test]
@@ -490,8 +519,17 @@ fn an_operation_arity_mismatch_is_rejected() {
     );
     let entry = builder.seal_block(Terminator::Return(Atom::Value(sum)));
     builder.set_entry(entry);
-    let error = builder.finalize().expect_err("NatAdd takes two operands");
-    assert!(error.0.contains("arity"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::OperationArity,
+                ..
+            })
+        ),
+        "NatAdd takes two operands: {fault:?}"
+    );
 }
 
 #[test]
@@ -513,10 +551,17 @@ fn an_unsaturated_direct_application_is_rejected() {
     );
     let entry = builder.seal_block(Terminator::Return(Atom::Value(call)));
     builder.set_entry(entry);
-    let error = builder
-        .finalize()
-        .expect_err("direct application is saturated");
-    assert!(error.0.contains("arity"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::ApplicationArity,
+                ..
+            })
+        ),
+        "direct application is saturated: {fault:?}"
+    );
 }
 
 /// The mapper is `ListMap`'s second operand — the list comes first, like every sequence operation. The rule once read the first operand, whose list value never looks like a function atom, and so checked nothing.
@@ -548,8 +593,17 @@ fn a_two_parameter_mapper_is_rejected() {
     );
     let entry = builder.seal_block(Terminator::Return(Atom::Value(mapped)));
     builder.set_entry(entry);
-    let error = builder.finalize().expect_err("a mapper takes one element");
-    assert!(error.0.contains("mapper takes one element"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::MapperArity,
+                ..
+            })
+        ),
+        "a mapper takes one element: {fault:?}"
+    );
 }
 
 #[test]
@@ -586,8 +640,17 @@ fn a_match_missing_a_constructor_is_rejected() {
     );
     let entry = builder.seal_block(Terminator::Return(Atom::Value(matched)));
     builder.set_entry(entry);
-    let error = builder.finalize().expect_err("the square arm is missing");
-    assert!(error.0.contains("without arm or default"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::NonExhaustiveMatch,
+                ..
+            })
+        ),
+        "the square arm is missing: {fault:?}"
+    );
 }
 
 #[test]
@@ -620,8 +683,17 @@ fn duplicate_switch_keys_are_rejected() {
     );
     let entry = builder.seal_block(Terminator::Return(Atom::Value(switched)));
     builder.set_entry(entry);
-    let error = builder.finalize().expect_err("keys must be distinct");
-    assert!(error.0.contains("two cases"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::DuplicateCaseKey,
+                ..
+            })
+        ),
+        "keys must be distinct: {fault:?}"
+    );
 }
 
 #[test]
@@ -642,10 +714,17 @@ fn a_block_with_two_owners_is_rejected() {
     );
     let entry = builder.seal_block(Terminator::Return(Atom::Value(switched)));
     builder.set_entry(entry);
-    let error = builder
-        .finalize()
-        .expect_err("both arms own the same block");
-    assert!(error.0.contains("more than one owner"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::BlockOwnedTwice,
+                ..
+            })
+        ),
+        "both arms own the same block: {fault:?}"
+    );
 }
 
 fn nat_bool(builder: &mut ErsdBuilder) -> Atom {
@@ -663,10 +742,17 @@ fn a_leaked_block_is_rejected() {
     builder.open_block();
     let entry = builder.seal_block(Terminator::Return(zero));
     builder.set_entry(entry);
-    let error = builder
-        .finalize()
-        .expect_err("the sealed block has no owner");
-    assert!(error.0.contains("no owner"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::BlockUnowned,
+                ..
+            })
+        ),
+        "the sealed block has no owner: {fault:?}"
+    );
 }
 
 #[test]
@@ -697,8 +783,17 @@ fn a_projection_out_of_range_is_rejected() {
     );
     let entry = builder.seal_block(Terminator::Return(Atom::Value(projected)));
     builder.set_entry(entry);
-    let error = builder.finalize().expect_err("field 2 does not exist");
-    assert!(error.0.contains("width"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::ProjectionWidth,
+                ..
+            })
+        ),
+        "field 2 does not exist: {fault:?}"
+    );
 }
 
 /// A deeply nested module verifies (and a malformed one diagnoses) on the default test-thread stack: the walk is iterative, so nesting depth costs heap, not native stack.
@@ -711,10 +806,17 @@ fn a_deep_module_verifies_without_native_stack() {
 #[test]
 fn a_deep_malformed_module_diagnoses_without_native_stack() {
     let builder = deep_switch_chain(50_000, true);
-    let error = builder
-        .finalize()
-        .expect_err("the innermost block is malformed");
-    assert!(error.0.contains("out of scope"), "{error}");
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::ValueOutOfScope,
+                ..
+            })
+        ),
+        "the innermost block is malformed: {fault:?}"
+    );
 }
 
 /// Build a `depth`-deep chain of nested `SwitchNat` defaults. With `malformed` the innermost block references a value that is never bound.

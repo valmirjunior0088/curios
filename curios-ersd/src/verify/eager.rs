@@ -6,8 +6,8 @@
 
 use {
     super::{
-        Atom, BlockId, FunctionId, Intrinsic, Module, Rhs, Statement, ValueId, VerifyError,
-        spell_function, spell_value,
+        Atom, BlockId, CycleStep, FunctionId, Intrinsic, Module, Rhs, Statement, ValueId,
+        VerifyError,
     },
     crate::{LocalBehavior, RecValue, Semantics},
     std::collections::{BTreeMap, BTreeSet},
@@ -37,16 +37,10 @@ pub(super) fn check_group(module: &Module, values: &[RecValue]) -> Result<(), Ve
     for member in values {
         let evaluation = summaries.settled_region(module, member.init);
         if let Some(through) = evaluation.effect {
-            return Err(VerifyError(format!(
-                "the initializer of computed group member {} performs an effect{}, which \
-                 forcing it by need could not keep in its place",
-                spell_value(module, member.value),
-                match through {
-                    Some(callee) =>
-                        format!(" through a call to {}", spell_function(module, callee)),
-                    None => String::new(),
-                }
-            )));
+            return Err(VerifyError::InitializerPerformsEffect {
+                member: value_name(module, member.value),
+                through: through.map(|callee| function_name(module, callee)),
+            });
         }
         let mut edges = BTreeMap::new();
         for (value, callee) in evaluation.composed {
@@ -71,26 +65,36 @@ pub(super) fn check_group(module: &Module, values: &[RecValue]) -> Result<(), Ve
     let mut path = Vec::new();
     for start in 0..values.len() {
         if let Some(cycle) = cycle_from(start, &evaluates, &mut state, &mut path) {
-            let mut spelled = String::new();
-            for window in cycle.windows(2) {
-                let (from, to) = (window[0], window[1]);
-                spelled.push_str(&spell_value(module, computed[from]));
-                spelled.push_str(match evaluates[from][&to] {
-                    Some(_) => ", through a call, evaluates ",
-                    None => " evaluates ",
-                });
-            }
-            spelled.push_str(&spell_value(module, computed[*cycle.last().unwrap()]));
-            let shape = match cycle.len() {
-                2 => "a computed group member evaluates itself",
-                _ => "computed group members evaluate each other",
-            };
-            return Err(VerifyError(format!(
-                "{shape}, which no forcing order can satisfy: {spelled}"
-            )));
+            let steps = cycle
+                .windows(2)
+                .map(|window| {
+                    let (from, to) = (window[0], window[1]);
+                    CycleStep {
+                        member: value_name(module, computed[from]),
+                        through: evaluates[from][&to].map(|callee| function_name(module, callee)),
+                    }
+                })
+                .collect();
+            return Err(VerifyError::EvaluationCycle { steps });
         }
     }
     Ok(())
+}
+
+/// A member by the name its source gave it, which is how a refusal a program earns calls it. One the source never named falls back to its id, so the refusal still says which.
+fn value_name(module: &Module, id: ValueId) -> String {
+    module
+        .value(id)
+        .and_then(|definition| definition.debug_name.clone())
+        .unwrap_or_else(|| id.to_string())
+}
+
+/// A callee by its source name, falling back to its id the same way.
+fn function_name(module: &Module, id: FunctionId) -> String {
+    module
+        .function(id)
+        .and_then(|definition| definition.debug_name.clone())
+        .unwrap_or_else(|| id.to_string())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

@@ -155,9 +155,7 @@ fn a_refusal_below_the_kernel_is_still_reported() {
     };
     assert_eq!(report.severity, Severity::Error);
     assert!(
-        report
-            .render()
-            .contains("the erased module failed verification"),
+        report.render().contains("evaluate each other"),
         "{}",
         report.render()
     );

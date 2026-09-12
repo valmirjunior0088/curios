@@ -488,9 +488,14 @@ pub enum Error {
     NatCaseKeyOverflow {
         value: Natural,
     },
-    /// A program whose erased module fails the erased representation's verifier — any of its rules, from the recursion classes the language rejects (a computed-only recursive cycle no initialization order satisfies) to the structural ones, and the frame quotes the detail rather than presuming which. The verifier owns rejection; erasure only surfaces its diagnostic.
-    ErasedModuleInvalid {
-        detail: String,
+    /// Computed recursive members whose initializers evaluate one another, so no order of forcing them by need can initialize them — the recursion class the erased verifier owns and this surfaces. Each step is a member by its source name and the call it reads the next member through, when the read goes through one; a single step is a member evaluating itself.
+    EvaluationCycle {
+        steps: Vec<(String, Option<String>)>,
+    },
+    /// A computed recursive member whose initializer performs an effect, directly or through the named call, which forcing it by need could not keep in its place.
+    InitializerPerformsEffect {
+        member: String,
+        through: Option<String>,
     },
     /// A written motive binds the wrong number of names. An eliminator's motive abstracts the scrutinee's indices, in declaration order, and then the scrutinee — `expected` of them. `name` is the eliminated family when there is one to name (an intrinsic carrier has none).
     MotiveBinderCount {
@@ -1063,8 +1068,19 @@ impl Error {
         Self::NatCaseKeyOverflow { value }
     }
 
-    pub(crate) fn erased_module_invalid(detail: String) -> Self {
-        Self::ErasedModuleInvalid { detail }
+    /// The refusal a program earns from the erased verifier. Only its recursion rules come back as an error: a malformed module is a compiler fault, which the verifier panics on rather than returning.
+    pub(crate) fn refused_by_verifier(error: curios_ersd::VerifyError) -> Self {
+        match error {
+            curios_ersd::VerifyError::EvaluationCycle { steps } => Self::EvaluationCycle {
+                steps: steps
+                    .into_iter()
+                    .map(|step| (step.member, step.through))
+                    .collect(),
+            },
+            curios_ersd::VerifyError::InitializerPerformsEffect { member, through } => {
+                Self::InitializerPerformsEffect { member, through }
+            }
+        }
     }
 
     pub(crate) fn motive_binder_count(

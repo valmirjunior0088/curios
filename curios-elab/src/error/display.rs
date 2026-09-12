@@ -848,8 +848,47 @@ impl fmt::Display for Displayed<'_> {
                     "natural dispatch key {value} does not fit a branch table"
                 )
             }
-            Error::ErasedModuleInvalid { detail } => {
-                write!(f, "the erased module failed verification: {detail}")
+            Error::EvaluationCycle { steps } => {
+                let quoted = steps
+                    .iter()
+                    .map(|(member, _)| format!("`{member}`"))
+                    .collect::<Vec<_>>();
+                let listed = match quoted.split_last() {
+                    Some((last, rest)) if !rest.is_empty() => {
+                        format!("{} and {last}", rest.join(", "))
+                    }
+                    _ => quoted.join(", "),
+                };
+                let calls = steps
+                    .iter()
+                    .filter_map(|(_, through)| through.as_ref())
+                    .map(|callee| format!("`{callee}`"))
+                    .collect::<Vec<_>>();
+                let through = match calls.as_slice() {
+                    [] => String::new(),
+                    [call] => format!(" through a call to {call}"),
+                    _ => format!(" through calls to {}", calls.join(", ")),
+                };
+                match steps.len() {
+                    1 => write!(
+                        f,
+                        "{listed} evaluates itself{through} as it is initialized; a value may mention itself only under a lambda, where it is computed the first time it is read"
+                    ),
+                    _ => write!(
+                        f,
+                        "{listed} evaluate each other{through} as they are initialized; values may mention one another only under a lambda, where each is computed the first time it is read"
+                    ),
+                }
+            }
+            Error::InitializerPerformsEffect { member, through } => {
+                let through = match through {
+                    Some(callee) => format!(" through a call to `{callee}`"),
+                    None => String::new(),
+                };
+                write!(
+                    f,
+                    "the initializer of `{member}` performs an effect{through}; a recursive value is computed when it is first read, or never, so its initializer may perform none"
+                )
             }
             Error::MotiveBinderCount {
                 name,

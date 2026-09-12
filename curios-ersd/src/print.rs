@@ -424,7 +424,7 @@ impl Printer<'_, '_, '_> {
     }
 }
 
-/// A value as the printer spells it — its id, then `$hint` when it carries a source name — which is also how a diagnostic should name it: `~v155$table` locates a definition where `~v155` does not. A dead id spells bare, so a message about one can still be formed.
+/// A value as the printer spells it — its id, then `$hint` when it carries a source name — which is also how a structural fault names it, since that reader works from `wonder stage ersd`, where `~v155$table` locates a definition and `~v155` does not. A refusal a program earns names a member by its source name alone, because its reader never sees the stage. A dead id spells bare, so a message about one can still be formed.
 pub(crate) fn spell_value(module: &Module, id: ValueId) -> String {
     match module.value(id) {
         Some(definition) => format!("{id}{}", hint(&definition.debug_name)),
