@@ -61,10 +61,17 @@ pub fn compiler(store: &Store) -> Option<String> {
     let digest = digest(&executable)?;
 
     // Best-effort: a store that cannot be written costs the next compile another digest, and nothing else. It must not cost the verdict.
+    //
+    // Renamed into place rather than written in place, as every slot in the store is. Two compilers sharing a cache would otherwise interleave their writes, and a torn memo pairs a stamp with a digest no binary ever had together — which fails safe, since a stamp nobody matches costs one digest, but the store's one rule is cheaper than the reasoning that it does.
     if let Some(parent) = record.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let _ = fs::write(&record, format!("{stamp} {digest}"));
+    let staged = record.with_extension(std::process::id().to_string());
+    if fs::write(&staged, format!("{stamp} {digest}")).is_ok()
+        && fs::rename(&staged, &record).is_err()
+    {
+        let _ = fs::remove_file(&staged);
+    }
 
     Some(digest)
 }
