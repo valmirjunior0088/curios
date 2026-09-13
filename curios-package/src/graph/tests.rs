@@ -488,6 +488,32 @@ fn a_member_with_no_manifest_is_refused_against_the_umbrella() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A row pointing at a directory that is not a package is refused against the row: the dependency, its dependent and where it resolved, never the operating system's word for a manifest the reader did not name.
+#[test]
+fn a_dependency_with_no_manifest_is_refused_against_the_row() {
+    let root = tree(
+        "graph-dependency-no-manifest",
+        &[
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
+            ),
+            ("app/lib.crs", ""),
+            ("base/README.md", ""),
+        ],
+    );
+
+    let refusal = mounts(&root.join("app")).expect_err("a directory that is not a package");
+    assert!(
+        refusal.starts_with("the dependency \"base\" of \"app\" resolves to"),
+        "{refusal}"
+    );
+    assert!(refusal.contains("holds no `curios.toml`"), "{refusal}");
+    assert!(!refusal.contains("os error"), "{refusal}");
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// The markers that do match resolve: `member` through `members`, `catalog` through `[catalog]`.
 #[test]
 fn the_markers_resolve_through_the_lists_that_answer_them() {

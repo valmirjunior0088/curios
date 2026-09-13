@@ -179,7 +179,18 @@ impl Walk<'_> {
             },
         );
 
-        let Manifest::Package(package) = Manifest::from_path(&directory.join(MANIFEST))? else {
+        // Asked before the read, for the reason `members` asks: the read's refusal names the file it could not open and nothing else, and the reader has to be sent to the row that pointed there. A fetched tree with no manifest lands here too — this is the refusal `curate`'s doc promises for it.
+        let manifest = directory.join(MANIFEST);
+        if !manifest.is_file() {
+            return Err(format!(
+                "the dependency {:?} of {:?} resolves to {}, which holds no `{MANIFEST}`; a dependency is a package",
+                name,
+                dependent.name,
+                directory.display()
+            ));
+        }
+
+        let Manifest::Package(package) = Manifest::from_path(&manifest)? else {
             return Err(format!(
                 "the dependency {:?} resolves to {}, which declares an umbrella; a dependency is a package",
                 name,
