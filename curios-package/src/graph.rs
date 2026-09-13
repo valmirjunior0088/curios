@@ -45,8 +45,19 @@ fn members(governing: &Governing) -> Result<BTreeMap<String, PathBuf>, String> {
 
     for member in &umbrella.members {
         let directory = governing.root.join(member);
+        let manifest = directory.join(MANIFEST);
 
-        let Manifest::Package(package) = Manifest::from_path(&directory.join(MANIFEST))? else {
+        // Asked before the read, because the read's refusal names the file it could not open and nothing else: an entry somebody mistyped is a fault in the umbrella's row (law 4), and the reader has to be sent there rather than to a path they never spelled.
+        if !manifest.is_file() {
+            return Err(format!(
+                "the umbrella at {} enumerates the member {:?}, and no `{MANIFEST}` sits in {}",
+                governing.root.join(MANIFEST).display(),
+                member.display(),
+                directory.display()
+            ));
+        }
+
+        let Manifest::Package(package) = Manifest::from_path(&manifest)? else {
             return Err(format!(
                 "the member {} declares an umbrella, and umbrellas do not nest",
                 member.display()
