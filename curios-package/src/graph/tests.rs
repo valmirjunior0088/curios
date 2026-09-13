@@ -406,6 +406,70 @@ fn a_row_keyed_by_the_wrong_name_is_refused() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A pin and a live row for one name are refused as a pin against a live row, in either order: the store's directory for the pinned side is the right directory and the wrong fact, and a reader sent there would be looking for a path nobody wrote.
+#[test]
+fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
+    // The pinned dependent and the live one, in both fold orders — dependencies fold by name, so which is placed first is the names' doing.
+    for (name, pinned, live) in [
+        ("graph-pin-then-live", "left", "right"),
+        ("graph-live-then-pin", "right", "left"),
+    ] {
+        let root = tree(
+            name,
+            &[
+                (
+                    "app/curios.toml",
+                    "name = \"app\"\n\n[dependencies]\nleft = { source = \"path\", path = \"../left\" }\nright = { source = \"path\", path = \"../right\" }\n",
+                ),
+                ("app/lib.crs", ""),
+                ("left/lib.crs", ""),
+                ("right/lib.crs", ""),
+                ("http/curios.toml", "name = \"http\"\n"),
+                ("http/lib.crs", ""),
+            ],
+        );
+
+        // One delivery in the store, under the hash it hashes to, so the pin can be placed.
+        let delivered = root.join("delivered");
+        fs::create_dir_all(&delivered).unwrap();
+        fs::write(delivered.join("curios.toml"), "name = \"http\"\n").unwrap();
+        fs::write(delivered.join("lib.crs"), "").unwrap();
+        let hash = TreeHash::of(&delivered).unwrap();
+        let placed = crate::Store::at(root.join("app")).source(&hash);
+        fs::create_dir_all(placed.parent().unwrap()).unwrap();
+        fs::rename(&delivered, &placed).unwrap();
+
+        fs::write(
+            root.join(pinned).join("curios.toml"),
+            format!(
+                "name = \"{pinned}\"\n\n[dependencies]\nhttp = {{ source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"{hash}\" }}\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            root.join(live).join("curios.toml"),
+            format!(
+                "name = \"{live}\"\n\n[dependencies]\nhttp = {{ source = \"path\", path = \"../http\" }}\n"
+            ),
+        )
+        .unwrap();
+
+        let refusal = mounts(&root.join("app")).expect_err(name);
+        assert!(
+            refusal.contains(&format!("is pinned to `abc123` ({hash}) by {pinned:?}")),
+            "{name}: {refusal}"
+        );
+        assert!(
+            refusal.contains(&format!("taken live by {live:?} from")),
+            "{name}: {refusal}"
+        );
+        assert!(!refusal.contains("resolves two ways"), "{name}: {refusal}");
+        assert!(!refusal.contains(".curios"), "{name}: {refusal}");
+
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
 /// **The umbrella**, all four mismatches: each marker names exactly the umbrella-side list that answers it, and each way of getting that wrong is its own refusal.
 #[test]
 fn the_four_marker_mismatches_are_four_refusals() {

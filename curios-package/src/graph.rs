@@ -93,19 +93,45 @@ impl Walk<'_> {
         }
 
         if let Some(earlier) = self.placed.get(name) {
-            if let (Some(earlier_snapshot), Some(snapshot)) = (&earlier.snapshot, &snapshot) {
-                return match earlier_snapshot == snapshot {
-                    // A diamond shares its point rather than duplicating it, which is the whole reason a package names itself.
-                    true => Ok(()),
-                    false => Err(format!(
-                        "the dependency {:?} is pinned two ways: {} by {:?}, and {} by {:?}",
+            match (&earlier.snapshot, &snapshot) {
+                (Some(earlier_snapshot), Some(snapshot)) => {
+                    return match earlier_snapshot == snapshot {
+                        // A diamond shares its point rather than duplicating it, which is the whole reason a package names itself.
+                        true => Ok(()),
+                        false => Err(format!(
+                            "the dependency {:?} is pinned two ways: {} by {:?}, and {} by {:?}",
+                            name,
+                            describe(earlier_snapshot),
+                            earlier.dependent,
+                            describe(snapshot),
+                            dependent.name
+                        )),
+                    };
+                }
+
+                // A pin and a live row disagree about what the name *is*, and that is the fact to state. Comparing their locations instead found two directories, one of them the store's — the right directory and the wrong fact, sending the reader after a path nobody wrote. The live side is named by where its row points, not by locating it: the disagreement stands whether or not that place exists.
+                (Some(pinned), None) => {
+                    return Err(format!(
+                        "the dependency {:?} is pinned to {} by {:?}, and taken live by {:?} from {}; a name is pinned or live, never both",
                         name,
-                        describe(earlier_snapshot),
+                        describe(pinned),
                         earlier.dependent,
-                        describe(snapshot),
-                        dependent.name
-                    )),
-                };
+                        dependent.name,
+                        self.point(dependent, from, name, row, &subject)?.display()
+                    ));
+                }
+                (None, Some(pinned)) => {
+                    return Err(format!(
+                        "the dependency {:?} is pinned to {} by {:?}, and taken live by {:?} from {}; a name is pinned or live, never both",
+                        name,
+                        describe(pinned),
+                        dependent.name,
+                        earlier.dependent,
+                        earlier.directory.display()
+                    ));
+                }
+
+                (None, None) => {}
             }
 
             let directory = self.locate(dependent, from, name, row, &subject)?;
