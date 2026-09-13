@@ -6,14 +6,12 @@
 
 use {
     super::*,
+    crate::test_support::Temporary,
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, compile_with_units},
     curios_text::{Entrypoint, Module},
     curios_utilities::RootKind,
     curios_wasm::to_bytes,
-    std::{
-        path::PathBuf,
-        time::{SystemTime, UNIX_EPOCH},
-    },
+    std::path::PathBuf,
 };
 
 /// The engine every invocation here files under. A constant, because the engine is the one address part this crate is handed rather than computes, and no test here is about two engines.
@@ -113,17 +111,9 @@ fn declaring(root: &Path, name: &str, directory: &Path) -> String {
     )
 }
 
-/// A directory of its own, shared with no other test.
-fn temporary(name: &str) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-
-    std::env::temp_dir().join(format!(
-        "curios-payload-{name}-{}-{millis}",
-        std::process::id()
-    ))
+/// A directory of its own, in this file's family.
+fn temporary(name: &str) -> Temporary {
+    Temporary::new("payload", name)
 }
 
 fn write(root: &Path, path: &str, contents: &str) {
@@ -135,7 +125,7 @@ fn write(root: &Path, path: &str, contents: &str) {
 /// A package declaring one executable, whose entry reads its library.
 ///
 /// The entry's own modules are the other half of what a payload's record covers, and they mount at the *empty* prefix: `mod greeting` in `app.crs` reads `app/greeting.crs` and is spelled `/greeting`. [`ENTRY_WITH_MODULE`] is the form that has one.
-fn project(name: &str) -> PathBuf {
+fn project(name: &str) -> Temporary {
     let root = temporary(name);
 
     write(
@@ -200,8 +190,6 @@ fn an_unchanged_program_is_reused() {
         first.payload, second.payload,
         "and it is the payload the compile produced, byte for byte — which is what lets `run` execute it and `compile` bundle it without either knowing where it came from"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// The address carries no file contents, so it is the *record* that has to notice an edit — and the entry's own header is the one file no loader ever reads, so nothing but the record's separate entry half can catch this.
@@ -218,8 +206,6 @@ fn an_edited_entry_is_not_reused() {
         run(&root).reused,
         "the recompile refiles, so the next invocation hits again"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A module the entry declares joins the compilation through the loader, and is recorded there. It cannot join without the entry's own text changing — that is the read-set closure — but a *changed* one has to be caught here.
@@ -238,8 +224,6 @@ fn an_edited_module_of_the_entry_is_not_reused() {
         "and refused once a file its loader read differs"
     );
     assert!(run(&root).reused, "the recompile refiles");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A dependency's edit never reaches the payload's own record: it makes the unit stale, the chain undecidable, and the payload a miss by construction.
@@ -256,8 +240,6 @@ fn an_edited_dependency_is_not_reused() {
         "a stale unit is a stale payload, whatever the payload's own record says"
     );
     assert!(run(&root).reused, "the recompile refiles");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// Changing what a program is compiled *against* moves the address rather than invalidating a record — which is what lets the payload for the old configuration survive and answer again when it comes back.
@@ -293,9 +275,6 @@ fn a_changed_dependency_set_moves_the_address() {
     write(&root, "curios.toml", &with_shape);
     assert!(run(&root).reused, "and so does keeping it");
     assert_eq!(slots(&root), 2, "two configurations, two slots, forever");
-
-    fs::remove_dir_all(root).unwrap();
-    fs::remove_dir_all(shape).unwrap();
 }
 
 /// Two executables of one package are two programs, so they occupy two slots and neither answers for the other.
@@ -320,8 +299,6 @@ fn two_executables_occupy_two_slots() {
     assert_eq!(slots(&root), 2, "one slot each");
     assert!(invoke(&root, Some("one")).reused);
     assert!(invoke(&root, Some("two")).reused);
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// The payload's own digest is in its record, so a slot whose artifact has been damaged is a miss here rather than a failure to deserialize at run time.
@@ -341,8 +318,6 @@ fn a_corrupted_payload_is_not_reused() {
 
     assert!(!run(&root).reused, "damaged bytes are not the bytes filed");
     assert!(run(&root).reused, "and the recompile repairs the slot");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A slot is written beside its name and renamed into place, so an interrupted write leaves the slot as it was, or absent, with at most a staging file beside it that nothing reads. These are the states a store can be found in, and each reads as a miss or as the intact slot it is.
@@ -384,8 +359,6 @@ fn no_state_a_store_is_left_in_reads_as_a_hit_it_is_not() {
     restore();
 
     assert!(run(&root).reused, "and the intact slot still answers");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A slot filed by one project must not answer for another's, even when both address it identically — which two projects declaring a package and an executable of one name, compiled by one compiler after one chain, always do.
@@ -425,10 +398,6 @@ fn a_slot_does_not_answer_for_another_projects_program() {
         asked.payload, filed.payload,
         "and what came back is my program rather than theirs"
     );
-
-    fs::remove_dir_all(mine).unwrap();
-    fs::remove_dir_all(theirs).unwrap();
-    fs::remove_dir_all(shape).unwrap();
 }
 
 /// Copy every unit and payload slot `from`'s store holds into `into`'s, replacing whatever was there.
@@ -477,8 +446,6 @@ fn an_unwritable_store_refuses_once_and_stops_nothing() {
         first.payload, second.payload,
         "and both invocations produce the same program"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A payload is filed only over a chain a later look-up can derive — never over one with a gap in it.
@@ -513,6 +480,4 @@ fn a_payload_is_not_filed_over_a_chain_with_a_gap() {
         "and the gapped invocation left nothing to reuse"
     );
     assert_eq!(filed(&root), 1, "a chain with no gap in it still files");
-
-    fs::remove_dir_all(root).unwrap();
 }

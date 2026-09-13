@@ -4,6 +4,9 @@
 //!
 //! **Taking a unit from here is believing a verdict this compiler reached earlier.** That is a change to what the compiler believes rather than a faster way to do what it already did, and the argument for it is in [Cached verdicts](../../documentation/soundness/admission-without-judgment/cached-verdicts.md). Everything in `verdicts` is the mechanism the argument is about. The payload family in `payload` is that same argument one level up, with [Reused payloads](../../documentation/soundness/admission-without-judgment/reused-payloads.md) stating what it adds. Both file into the one-file slots `slot` frames.
 
+#[cfg(test)]
+mod test_support;
+
 mod slot;
 pub use slot::*;
 

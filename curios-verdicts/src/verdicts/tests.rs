@@ -4,12 +4,10 @@
 
 use {
     super::*,
+    crate::test_support::Temporary,
     curios_pipeline::{Progress, compile_with_units},
     curios_text::Entrypoint,
-    std::{
-        collections::BTreeMap,
-        time::{SystemTime, UNIX_EPOCH},
-    },
+    std::collections::BTreeMap,
 };
 
 /// The entry every project here compiles: it uses the dependency, so the dependency is a unit of the compilation.
@@ -71,21 +69,13 @@ fn reused_through(root: &std::path::Path, shape: &std::path::Path, cache: &dyn C
     reused
 }
 
-/// A directory of its own, shared with no other test.
-fn temporary(name: &str) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-
-    std::env::temp_dir().join(format!(
-        "curios-cache-{name}-{}-{millis}",
-        std::process::id()
-    ))
+/// A directory of its own, in this file's family.
+fn temporary(name: &str) -> Temporary {
+    Temporary::new("cache", name)
 }
 
 /// A project with one dependency and an entry that uses it, at a directory of its own.
-fn project(name: &str) -> PathBuf {
+fn project(name: &str) -> Temporary {
     let root = temporary(name);
 
     write(&root, "shape/curios.toml", "name = \"shape\"\n");
@@ -128,8 +118,6 @@ fn an_unchanged_unit_is_reused() {
 
     assert!(!reused(&root), "nothing is stored for the first compile");
     assert!(reused(&root), "and the second finds what the first filed");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// The regression for what the tree-hashed scheme got wrong. Filing a unit writes into `.curios/`, which sits inside the very directory that scheme hashed into the unit's address — so a package's own library missed forever and the store grew a directory per compile. What a unit was compiled from is now recorded and verified rather than addressed, and a generated file is not something it was compiled from.
@@ -142,8 +130,6 @@ fn writing_into_the_store_does_not_invalidate_it() {
 
     write(&root, ".curios/unrelated", "not a source file");
     assert!(reused(&root), "and neither is anything else under it");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A compilation reading through an overlay is verified against the text it would read: a file the unit was compiled from hits while the editor's text is the disk's and misses once it differs, and an open file the unit never read — the executable beside a package's library, in the directory the library reads from — is no reason to compile the library again. That last case used to cost the language server the whole library on every keystroke in a program file, since the hit was refused whenever any open document lay under the unit's directory.
@@ -170,8 +156,6 @@ fn an_overlaid_compilation_is_verified_by_the_text_it_would_read() {
         ),
         "a file the unit never read leaves the hit standing, wherever it lies"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A slot is addressed without its contents, so it is the *verification* that has to notice an edit. This is the half that would still pass if the record were never checked.
@@ -184,8 +168,6 @@ fn an_edited_unit_is_not_reused() {
 
     write(&root, "shape/lib.crs", &library("second"));
     assert!(!reused(&root), "and refused once its source differs");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A slot filed by one project must not answer for another's, even when both address it identically — which two projects holding a package of one name, compiled by one compiler after one chain, always do.
@@ -206,9 +188,6 @@ fn a_slot_does_not_answer_for_another_projects_source() {
         !reused(&mine),
         "their record names their files, which are not mine to have read"
     );
-
-    fs::remove_dir_all(mine).unwrap();
-    fs::remove_dir_all(theirs).unwrap();
 }
 
 /// The other half of that clause, and the reason it checks containment rather than re-deriving the read set: a dependency materialized once and read from that same path by every project *is* shared, and must still hit.
@@ -236,10 +215,6 @@ fn a_slot_answers_for_a_dependency_both_projects_read() {
         reused_from(&mine, &materialized),
         "and the record names a path mine reads from too, so the unit crosses"
     );
-
-    fs::remove_dir_all(materialized).unwrap();
-    fs::remove_dir_all(mine).unwrap();
-    fs::remove_dir_all(theirs).unwrap();
 }
 
 /// The unit's own digest is in its record, so a unit damaged after it was filed is a miss rather than a belief — bytecheck confirms its structure and nothing about its contents, and a flipped byte inside a string would otherwise read back as a different string.
@@ -262,8 +237,6 @@ fn a_damaged_unit_is_not_reused() {
 
     assert!(!reused(&root), "damaged bytes are not the bytes filed");
     assert!(reused(&root), "and the recompile repairs the slot");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// The store holds one slot per unit rather than one per compile — the property the address exists to have, and the one the previous scheme lost.
@@ -280,8 +253,6 @@ fn compiling_repeatedly_files_one_slot() {
         .count();
 
     assert_eq!(slots, 1, "four compiles of one unit, one slot");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// Opening a store is not a decision to file anything in it: the compiler's memo is written by the first slot that needs the identity, so a compilation refused before any unit is addressed leaves no `.curios/` behind.
@@ -290,7 +261,7 @@ fn opening_a_store_writes_nothing_until_a_slot_is_addressed() {
     let root = temporary("untouched");
     fs::create_dir_all(&root).unwrap();
 
-    let verdicts = Verdicts::at(root.clone());
+    let verdicts = Verdicts::at(root.to_path_buf());
     assert!(
         !root.join(".curios").exists(),
         "opening the store created its directory"
@@ -301,6 +272,4 @@ fn opening_a_store_writes_nothing_until_a_slot_is_addressed() {
         root.join(".curios").join("compiler").is_file(),
         "asking for the identity did not write the memo"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
