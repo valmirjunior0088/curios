@@ -283,3 +283,24 @@ fn compiling_repeatedly_files_one_slot() {
 
     fs::remove_dir_all(root).unwrap();
 }
+
+/// Opening a store is not a decision to file anything in it: the compiler's memo is written by the first slot that needs the identity, so a compilation refused before any unit is addressed leaves no `.curios/` behind.
+#[test]
+fn opening_a_store_writes_nothing_until_a_slot_is_addressed() {
+    let root = temporary("untouched");
+    fs::create_dir_all(&root).unwrap();
+
+    let verdicts = Verdicts::at(root.clone());
+    assert!(
+        !root.join(".curios").exists(),
+        "opening the store created its directory"
+    );
+
+    verdicts.compiler();
+    assert!(
+        root.join(".curios").join("compiler").is_file(),
+        "asking for the identity did not write the memo"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}

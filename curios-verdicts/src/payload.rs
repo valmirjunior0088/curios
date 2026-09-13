@@ -126,7 +126,7 @@ fn slot(
     placed: &[Placed],
     engine: &str,
 ) -> Option<String> {
-    let compiler = verdicts.compiler.as_ref()?;
+    let compiler = verdicts.compiler()?;
     let predecessors = placed
         .iter()
         .map(|placed| placed.slot.clone())

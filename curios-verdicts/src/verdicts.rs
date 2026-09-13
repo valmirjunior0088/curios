@@ -15,7 +15,7 @@ use {
     curios_unit::Unit,
     curios_utilities::Source,
     std::{
-        cell::RefCell,
+        cell::{OnceCell, RefCell},
         fs, io,
         path::{Path, PathBuf},
         rc::Rc,
@@ -51,8 +51,10 @@ pub(crate) struct Placed {
 /// One handle for both because they are one store: the same compiler identity decides both addresses, the chain the fold places *is* the payload's predecessor half, and a directory nobody can write refuses both for one reason, which [`Verdicts::refused`] reports once.
 pub struct Verdicts {
     pub(crate) store: Store,
-    /// `None` when the compiler cannot identify itself — in which case nothing is read and nothing is written, because a verdict recorded under an identity nobody can reproduce would later be believed on behalf of a different compiler.
-    pub(crate) compiler: Option<String>,
+    /// The identity of the compiler running now, asked for on the first slot that needs it and not before. `None` when the compiler cannot identify itself — in which case nothing is read and nothing is written, because a verdict recorded under an identity nobody can reproduce would later be believed on behalf of a different compiler.
+    ///
+    /// Lazy because identifying the compiler writes its memo beside the store, and opening a store is not yet a decision to file anything in it: a compilation that is refused before its first unit is addressed — a package claiming a prefix the prelude mounts — would otherwise leave a `.curios/` holding that memo and nothing else.
+    compiler: OnceCell<Option<String>>,
     /// The units placed so far, in fold order. Read afterwards by [`Verdicts::payload_put`], which files what the whole chain compiled to.
     pub(crate) placed: RefCell<Vec<Placed>>,
     /// Why the store could not be written, if it could not.
@@ -67,11 +69,16 @@ impl Verdicts {
         let store = Store::at(root);
 
         Self {
-            compiler: compiler(&store),
             store,
+            compiler: OnceCell::new(),
             placed: RefCell::new(Vec::new()),
             refused: RefCell::new(None),
         }
+    }
+
+    /// The compiler's identity, memoized on first use — see the field.
+    pub(crate) fn compiler(&self) -> Option<&String> {
+        self.compiler.get_or_init(|| compiler(&self.store)).as_ref()
     }
 
     /// Why nothing was filed, for a caller with somewhere to say it.
@@ -87,7 +94,7 @@ impl Verdicts {
     ///
     /// The chain is a parameter rather than a read of [`Verdicts::placed`] because two callers walk one: the fold accumulates as it goes, and the payload probe re-derives the same chain before the fold has run at all.
     fn slot(&self, source: &UnitSource<'_>, placed: &[Placed]) -> Option<String> {
-        let compiler = self.compiler.as_ref()?;
+        let compiler = self.compiler()?;
 
         if source.directories().is_empty() {
             return None;
