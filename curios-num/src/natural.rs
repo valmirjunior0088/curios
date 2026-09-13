@@ -72,15 +72,9 @@ impl Natural {
         self.value.bits()
     }
 
-    /// The canonical little-endian byte encoding, and [`from_bytes_le`](Natural::from_bytes_le) its inverse. Zero mints one zero byte, `[0]`, never the empty string. The host/guest handle token rides on exactly this pair (`curios-abi`'s `Handle`), so the two ends cannot drift.
+    /// The canonical little-endian byte encoding. Zero mints one zero byte, `[0]`, never the empty string. The host/guest handle token is encoded through exactly this, by `curios-abi`'s `Handle::encode`, and is never decoded back into a number: the host lifts a token by comparing its bytes, so there is no inverse here.
     pub fn to_bytes_le(&self) -> Vec<u8> {
         self.value.to_bytes_le()
-    }
-
-    pub fn from_bytes_le(bytes: &[u8]) -> Self {
-        Self {
-            value: BigUint::from_bytes_le(bytes),
-        }
     }
 
     /// Parse `digits` in `radix` — the surface lexer's one entry point for every numeral it reads, decimal included, so `0x`/`0b`/plain all decode the same way. `None` on an empty or ill-formed numeral.
