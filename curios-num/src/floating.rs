@@ -36,7 +36,7 @@ const INFINITE_FIELD: i32 = 2047;
 /// **No operation below calls an `f64` operation.** Every one unpacks its operands to a signed zero, a signed infinity, the NaN, or a `(sign, magnitude, exponent)` triple with the magnitude under `2^53`; computes exactly over [`Natural`]; and packs the result through the single `round` that owns the subnormal grid, the carry renormalization and the overflow to infinity. That is the whole of why a float means the same thing on every host the compiler runs on, and the reason `to_f64` survives at all is rendering and the tests' oracle — never semantics.
 ///
 /// The choices IEEE leaves open are pinned rather than inherited: `min`/`max` propagate a NaN and order `-0.0` below `+0.0`, which is 754-2019's `minimum`/`maximum` and what Wasm mandates; `nearest` is ties-to-even; `rem` is exact `fmod`; `copysign(x, nan)` is `abs(x)`, since the one NaN has no sign to read.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Floating {
     bits: u64,
@@ -787,8 +787,16 @@ impl Neg for Floating {
     }
 }
 
+/// The host's `Debug` float format rather than its `Display`: it keeps a large magnitude short (`1e300`) and a negative zero signed (`-0.0`). Not a semantics — the surface `Flt/to_str` is `/std`'s own renderer — but what a dump and a report show for a constant.
 impl fmt::Display for Floating {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_f64())
+        write!(f, "{:?}", self.to_f64())
+    }
+}
+
+/// The number, not the wrapper around the bits holding it — [`Natural`]'s reason, at the floating carrier: the erased stages render their IR with `{:?}`, and `wonder stage cont` is read by people, so a derived `Floating { bits: 4615626668101337088 }` would put the representation in every dump where `3.75` belongs.
+impl fmt::Debug for Floating {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
     }
 }
