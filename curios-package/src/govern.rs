@@ -11,6 +11,7 @@ mod tests;
 
 use {
     crate::{MANIFEST, Manifest, Package, Store, Umbrella},
+    curios_text::identity,
     std::path::{Path, PathBuf},
 };
 
@@ -64,18 +65,21 @@ impl Governing {
     ///
     /// The explicit override exists for scripting, and it overrides exactly the search: which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.
     pub fn at(manifest: &Path) -> Result<Self, String> {
-        let directory = manifest
-            .parent()
-            .unwrap_or(Path::new("."))
-            .canonicalize()
-            .map_err(|error| format!("{}: {error}", manifest.display()))?;
+        // Canonical through `identity`, which is what reads a bare `curios.toml` as the working directory's: its parent is `""`, which canonicalizes to nothing, and this used to refuse the file as missing.
+        let manifest = identity(manifest);
 
-        let Manifest::Package(package) = Manifest::from_path(manifest)? else {
+        let Manifest::Package(package) = Manifest::from_path(&manifest)? else {
             return Err(format!(
                 "{} declares an umbrella, and an umbrella compiles nothing of its own: name one of its members instead",
                 manifest.display()
             ));
         };
+
+        // Read after the manifest, because a file that was read is a canonical path with a directory over it.
+        let directory = manifest
+            .parent()
+            .expect("a manifest that was read sits in a directory")
+            .to_path_buf();
 
         Self::rooted(package, directory)
     }

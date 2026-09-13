@@ -93,6 +93,27 @@ fn a_goal_is_answered_on_stdout_with_exit_zero() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// `--manifest` takes the file as it is spelled, and a bare `curios.toml` names the one in the working directory: its parent is the empty path, which is no directory to resolve on its own.
+#[test]
+fn a_bare_manifest_override_names_the_working_directory() {
+    let root = project("manifest-override");
+
+    let answered = curios(
+        &root,
+        &["--manifest", "curios.toml", "wonder", "diagnostics"],
+        "",
+    );
+
+    assert!(
+        answered.status.success(),
+        "{}",
+        String::from_utf8_lossy(&answered.stderr)
+    );
+    assert!(stdout(&answered).is_empty(), "{}", stdout(&answered));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// A file is placed in the unit that declares it: the executable compiles against its library, so `/app/util/word` resolves — which it would not standalone — and a module of the library is checked as the library, reporting at the module's own path.
 #[test]
 fn a_file_is_placed_in_its_unit() {
