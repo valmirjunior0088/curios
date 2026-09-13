@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Governing, LIBRARY, MANIFEST, Manifest, module_of, order},
+    crate::{Governing, LIBRARY, MANIFEST, Manifest, module_of, order, reachable},
     curios_text::{RootSource, identity},
     curios_utilities::Qualifier,
     std::path::{Path, PathBuf},
@@ -67,10 +67,7 @@ impl Membership {
                     name: executable.name.clone(),
                     entry,
                     root: governing.root.clone(),
-                    declares: crate::declared(&governing.package)
-                        .into_iter()
-                        .chain([Qualifier::from([governing.package.name.as_str()])])
-                        .collect(),
+                    declares: reachable(&governing.package),
                     units: order(&governing)?,
                 });
             }

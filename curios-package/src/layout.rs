@@ -51,6 +51,16 @@ pub(crate) fn declared(package: &Package) -> Vec<Qualifier> {
         .collect()
 }
 
+/// The prefixes one of `package`'s executables may name: everything its library may, and the library itself.
+///
+/// An executable is part of its package, so it reaches the package's own library without declaring it — a program does not depend on itself. Spelled once, here, because two products ask it: `run` and `compile` through `Target`, the editor through `Membership`, and an executable that resolves a prefix under one and not the other is a disagreement no test crosses.
+pub(crate) fn reachable(package: &Package) -> Vec<Qualifier> {
+    declared(package)
+        .into_iter()
+        .chain([Qualifier::from([package.name.as_str()])])
+        .collect()
+}
+
 /// The module `file` would be in `package`'s library at `directory`, by the layout rule and its one exception: `lib.crs` beside the manifest is the root, and every other `.crs` under the directory is the qualifier its path spells, `parse/lexer.crs` being `/json/parse/lexer`. `None` when the spelling is no module's — another extension, or a segment no identifier — since no `mod` could declare it.
 ///
 /// The spelling is what is asked, not the disk: whether a `mod` reaches the module is `RootSource::declares_module`'s question, and this is what to ask it about. Both paths are compared as given, so hand them one spelling.

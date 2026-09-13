@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{EXECUTABLE, Executable, Governing, Package, declared, order},
+    crate::{EXECUTABLE, Executable, Governing, Package, order, reachable},
     curios_text::RootSource,
     curios_utilities::Qualifier,
     std::path::{Path, PathBuf},
@@ -104,10 +104,7 @@ impl Target {
             name: executable.name.clone(),
             package: governing.package.name.clone(),
             entry: governing.directory.join(&executable.path),
-            declares: declared(&governing.package)
-                .into_iter()
-                .chain([Qualifier::from([governing.package.name.as_str()])])
-                .collect(),
+            declares: reachable(&governing.package),
             units: order(&governing)?,
         })
     }
