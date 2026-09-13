@@ -1,7 +1,9 @@
 use {
     super::*,
     std::{
+        ffi::OsStr,
         fs,
+        os::unix::ffi::OsStrExt,
         path::PathBuf,
         time::{SystemTime, UNIX_EPOCH},
     },
@@ -133,8 +135,6 @@ fn an_empty_directory_leaves_no_trace() {
 /// A name that is not UTF-8 is refused: the scheme spells paths in UTF-8, and a name it could only spell by replacing bytes is one two different files could share.
 #[test]
 fn a_name_that_is_not_utf8_is_refused() {
-    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
-
     let root = tree("hash-not-utf8", &[("lib.crs", "")]);
     fs::write(root.join(OsStr::from_bytes(b"\xff.crs")), "").unwrap();
 
