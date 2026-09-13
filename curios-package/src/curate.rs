@@ -11,12 +11,7 @@ mod tests;
 
 use {
     crate::{Dependency, Governing, MANIFEST, Manifest, Snapshot, Store, TreeHash},
-    std::{
-        collections::BTreeSet,
-        fmt, fs,
-        path::{Path, PathBuf},
-        process::Command,
-    },
+    std::{collections::BTreeSet, fmt, fs, path::Path, process::Command},
 };
 
 /// One package to bring into the store: which one, where from, and the snapshot that decides what to accept.
@@ -116,9 +111,9 @@ fn acquisitions(governing: &Governing) -> Result<BTreeSet<Acquisition>, String> 
                     governing.store().source(hash)
                 }
                 Dependency::Path { path } => base.join(path),
-                // A member is on disk already: `order` is what refuses a mismatched one, and this walk only needs somewhere further to look.
-                Dependency::Member => match member(governing, name) {
-                    Some(directory) => directory,
+                // A member is on disk already, and governance refused every entry no manifest answers before this walk began; a name the roster lacks is `order`'s to refuse, and this walk only needs somewhere further to look.
+                Dependency::Member => match governing.members.get(name) {
+                    Some(directory) => directory.clone(),
                     None => continue,
                 },
                 // Unreachable: a catalog row may name no marker (`Document::umbrella` refuses one), so the resolution above lands on a fetchable or `path` row or on nothing.
@@ -139,22 +134,6 @@ fn acquisitions(governing: &Governing) -> Result<BTreeSet<Acquisition>, String> 
 /// A row rather than a directory, because where it points is the caller's question and *what it is* decides how: a fetchable one has to be acquired before it points anywhere at all.
 fn catalogued<'a>(governing: &'a Governing, name: &str) -> Option<&'a Dependency> {
     governing.umbrella.as_ref()?.catalog.get(name)
-}
-
-/// Where the member declaring `name` sits, when the governing umbrella enumerates one.
-fn member(governing: &Governing, name: &str) -> Option<PathBuf> {
-    governing
-        .umbrella
-        .as_ref()?
-        .members
-        .iter()
-        .map(|member| governing.root.join(member))
-        .find(|directory| {
-            matches!(
-                Manifest::from_path(&directory.join(MANIFEST)),
-                Ok(Manifest::Package(package)) if package.name == name
-            )
-        })
 }
 
 /// Fetch `acquisition`, verify it, and place it — in that order, and only in that order.

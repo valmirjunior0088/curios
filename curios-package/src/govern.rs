@@ -12,7 +12,10 @@ mod tests;
 use {
     crate::{MANIFEST, Manifest, Package, Store, Umbrella},
     curios_text::identity,
-    std::path::{Path, PathBuf},
+    std::{
+        collections::BTreeMap,
+        path::{Path, PathBuf},
+    },
 };
 
 /// What governs an invocation: the package it is inside, and the umbrella enumerating that package when one does.
@@ -23,6 +26,10 @@ pub struct Governing {
     pub directory: PathBuf,
     /// The umbrella that enumerates it, if any. Membership organizes and dependency compiles (law 3), so this decides where the store goes and what a `member` row can resolve to — never what is compiled.
     pub umbrella: Option<Umbrella>,
+    /// The umbrella's members by declared name, each with the directory its manifest sits in — empty when no umbrella governs, which is what makes every marker a mismatch there.
+    ///
+    /// Read once, here, because every question about a member is answered against it: the dependency walk asks whether a `member` row names one and whether a direct pin may not, and `curate` asks where to look further. Two readers spelling the lookup for themselves came to two answers — one refused a member nothing declared and the other walked past it — and a fetch was performed on behalf of an umbrella the compile then refused.
+    pub members: BTreeMap<String, PathBuf>,
     /// The governing root: the umbrella's directory when one governs, and the package's otherwise. `.curios/` sits beside it.
     pub root: PathBuf,
 }
@@ -92,17 +99,77 @@ impl Governing {
             Some((umbrella, root)) => Self {
                 package,
                 directory: at,
+                members: members(&root, &umbrella)?,
                 umbrella: Some(umbrella),
                 root,
             },
             None => Self {
                 package,
                 umbrella: None,
+                members: BTreeMap::new(),
                 root: at.clone(),
                 directory: at,
             },
         })
     }
+}
+
+/// Each member's declared name, and the directory its manifest sits in.
+///
+/// Every refusal here is the umbrella's: an entry no manifest answers, an entry that is itself an umbrella, and two entries declaring one name — each named against the umbrella's manifest, since that is the file somebody wrote (law 4).
+fn members(root: &Path, umbrella: &Umbrella) -> Result<BTreeMap<String, PathBuf>, String> {
+    let mut members = BTreeMap::new();
+    // Which entry placed each name, for a refusal that quotes the entry as the umbrella wrote it.
+    let mut entries = BTreeMap::new();
+
+    for member in &umbrella.members {
+        let directory = root.join(member);
+        let manifest = directory.join(MANIFEST);
+
+        // Asked before the read, because the read's refusal names the file it could not open and nothing else: an entry somebody mistyped is a fault in the umbrella's row (law 4), and the reader has to be sent there rather than to a path they never spelled.
+        if !manifest.is_file() {
+            return Err(format!(
+                "the umbrella at {} enumerates the member {:?}, and no `{MANIFEST}` sits in {}",
+                root.join(MANIFEST).display(),
+                member.display(),
+                directory.display()
+            ));
+        }
+
+        let Manifest::Package(package) = Manifest::from_path(&manifest)? else {
+            return Err(format!(
+                "the member {} declares an umbrella, and umbrellas do not nest",
+                member.display()
+            ));
+        };
+
+        // Canonical, as every location the walk compares is: `base` and `./base` are one member, and a refusal that read them as two would send the reader after a second package that does not exist.
+        let directory = directory
+            .canonicalize()
+            .map_err(|error| format!("{}: {error}", directory.display()))?;
+
+        if let Some(earlier) = members.insert(package.name.clone(), directory.clone()) {
+            let written: &PathBuf = &entries[&package.name];
+            return Err(match earlier == directory {
+                true => format!(
+                    "the umbrella at {} lists the member {:?} twice, as {:?} and as {:?}",
+                    root.join(MANIFEST).display(),
+                    package.name,
+                    written.display().to_string(),
+                    member.display().to_string()
+                ),
+                false => format!(
+                    "two members declare the name {:?}: {} and {}",
+                    package.name,
+                    earlier.display(),
+                    directory.display()
+                ),
+            });
+        }
+        entries.insert(package.name, member.clone());
+    }
+
+    Ok(members)
 }
 
 /// The package `directory` itself declares, and the directory it sits in — which is `directory`.

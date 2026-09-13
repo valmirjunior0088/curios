@@ -1,6 +1,9 @@
 use {
     super::*,
-    std::time::{SystemTime, UNIX_EPOCH},
+    std::{
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    },
 };
 
 /// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.

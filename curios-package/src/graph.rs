@@ -19,7 +19,6 @@ use {
 /// Every unit the governing package reaches, in the order a compilation folds them: each package after everything it depends on, and the governing package itself last.
 pub fn order(governing: &Governing) -> Result<Vec<RootSource>, String> {
     let mut walk = Walk {
-        members: members(governing)?,
         governing,
         placed: BTreeMap::new(),
         open: Vec::new(),
@@ -33,73 +32,9 @@ pub fn order(governing: &Governing) -> Result<Vec<RootSource>, String> {
     Ok(walk.order)
 }
 
-/// Each member's declared name, and the directory its manifest sits in.
-///
-/// Read once, because every marker in the graph is answered against it: a `member` row asks whether this name is enumerated, and a direct pin asks the same question in order to be told it may not answer it itself.
-fn members(governing: &Governing) -> Result<BTreeMap<String, PathBuf>, String> {
-    let Some(umbrella) = &governing.umbrella else {
-        return Ok(BTreeMap::new());
-    };
-
-    let mut members = BTreeMap::new();
-    // Which entry placed each name, for a refusal that quotes the entry as the umbrella wrote it.
-    let mut entries = BTreeMap::new();
-
-    for member in &umbrella.members {
-        let directory = governing.root.join(member);
-        let manifest = directory.join(MANIFEST);
-
-        // Asked before the read, because the read's refusal names the file it could not open and nothing else: an entry somebody mistyped is a fault in the umbrella's row (law 4), and the reader has to be sent there rather than to a path they never spelled.
-        if !manifest.is_file() {
-            return Err(format!(
-                "the umbrella at {} enumerates the member {:?}, and no `{MANIFEST}` sits in {}",
-                governing.root.join(MANIFEST).display(),
-                member.display(),
-                directory.display()
-            ));
-        }
-
-        let Manifest::Package(package) = Manifest::from_path(&manifest)? else {
-            return Err(format!(
-                "the member {} declares an umbrella, and umbrellas do not nest",
-                member.display()
-            ));
-        };
-
-        // Canonical, as every location the walk compares is: `base` and `./base` are one member, and a refusal that read them as two would send the reader after a second package that does not exist.
-        let directory = directory
-            .canonicalize()
-            .map_err(|error| format!("{}: {error}", directory.display()))?;
-
-        if let Some(earlier) = members.insert(package.name.clone(), directory.clone()) {
-            let written: &PathBuf = &entries[&package.name];
-            return Err(match earlier == directory {
-                true => format!(
-                    "the umbrella at {} lists the member {:?} twice, as {:?} and as {:?}",
-                    governing.root.join(MANIFEST).display(),
-                    package.name,
-                    written.display().to_string(),
-                    member.display().to_string()
-                ),
-                false => format!(
-                    "two members declare the name {:?}: {} and {}",
-                    package.name,
-                    earlier.display(),
-                    directory.display()
-                ),
-            });
-        }
-        entries.insert(package.name, member.clone());
-    }
-
-    Ok(members)
-}
-
 /// A depth-first walk over declared dependencies, accumulating the fold order behind it.
 struct Walk<'a> {
     governing: &'a Governing,
-    /// The umbrella's members by declared name — empty when no umbrella governs, which is what makes every marker a mismatch there.
-    members: BTreeMap<String, PathBuf>,
     /// Where each canonical name resolved, and who said so. Both halves are the conflict refusal.
     placed: BTreeMap<String, Placed>,
     /// The names on the walk's own stack, which is the cycle.
@@ -292,16 +227,18 @@ impl Walk<'_> {
         };
 
         match row {
-            Dependency::Member => match (self.members.get(name), &self.governing.umbrella) {
-                (Some(directory), _) => Ok(directory.clone()),
-                (None, None) => Err(ungoverned("member")),
-                (None, Some(_)) => Err(format!(
-                    "{subject} is `source = \"member\"`, and the governing umbrella enumerates no member declaring that name"
-                )),
-            },
+            Dependency::Member => {
+                match (self.governing.members.get(name), &self.governing.umbrella) {
+                    (Some(directory), _) => Ok(directory.clone()),
+                    (None, None) => Err(ungoverned("member")),
+                    (None, Some(_)) => Err(format!(
+                        "{subject} is `source = \"member\"`, and the governing umbrella enumerates no member declaring that name"
+                    )),
+                }
+            }
 
             Dependency::Catalog => {
-                if self.members.contains_key(name) {
+                if self.governing.members.contains_key(name) {
                     return Err(format!(
                         "{subject} is `source = \"catalog\"`, but that name is a live member of the governing umbrella; a member is the only answer for its own name inside its tree"
                     ));
@@ -327,7 +264,7 @@ impl Walk<'_> {
             }
 
             // A direct row is the consumer answering for a name its own umbrella already answers for. Refused in both directions, because a promotion that only half happened is the shape that compiles two of one package.
-            _ if self.members.contains_key(name) => Err(format!(
+            _ if self.governing.members.contains_key(name) => Err(format!(
                 "{subject} is pinned directly, but that name is a live member of the governing umbrella; a member is the only answer for its own name inside its tree"
             )),
 

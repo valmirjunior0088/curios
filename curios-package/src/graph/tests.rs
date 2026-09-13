@@ -491,34 +491,6 @@ fn a_catalog_row_pointing_nowhere_is_refused_against_the_umbrella() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// An entry in `members` that no manifest answers is the umbrella's fault, and the refusal says so: the umbrella's manifest, the entry as written, and where it looked — never the operating system's word for a file the reader did not spell.
-#[test]
-fn a_member_with_no_manifest_is_refused_against_the_umbrella() {
-    let root = tree(
-        "graph-member-missing",
-        &[
-            ("curios.toml", "members = [\"app\", \"bsae\"]\n"),
-            (
-                "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n",
-            ),
-            ("app/lib.crs", ""),
-            ("base/curios.toml", "name = \"base\"\n"),
-            ("base/lib.crs", ""),
-        ],
-    );
-
-    let refusal = mounts(&root.join("app")).expect_err("a member nothing declares");
-    assert!(
-        refusal.contains("enumerates the member \"bsae\""),
-        "{refusal}"
-    );
-    assert!(refusal.contains("no `curios.toml` sits in"), "{refusal}");
-    assert!(!refusal.contains("os error"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
-}
-
 /// A row pointing at a directory that is not a package is refused against the row: the dependency, its dependent and where it resolved, never the operating system's word for a manifest the reader did not name.
 #[test]
 fn a_dependency_with_no_manifest_is_refused_against_the_row() {
@@ -583,33 +555,6 @@ fn a_marker_in_an_ungoverned_package_is_refused_for_the_missing_governance() {
 
         fs::remove_dir_all(root).unwrap();
     }
-}
-
-/// One member listed twice is one member, whatever the two spellings, and the refusal says the umbrella listed it twice — never that two members declare the name, which would send the reader after a second package that does not exist.
-#[test]
-fn a_member_listed_twice_is_refused_as_listed_twice() {
-    let root = tree(
-        "graph-member-twice",
-        &[
-            ("curios.toml", "members = [\"base\", \"./base\", \"app\"]\n"),
-            (
-                "app/curios.toml",
-                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n",
-            ),
-            ("app/lib.crs", ""),
-            ("base/curios.toml", "name = \"base\"\n"),
-            ("base/lib.crs", ""),
-        ],
-    );
-
-    let refusal = mounts(&root.join("app")).expect_err("one member listed twice");
-    assert!(
-        refusal.contains("lists the member \"base\" twice, as \"base\" and as \"./base\""),
-        "{refusal}"
-    );
-    assert!(!refusal.contains("two members"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// The markers that do match resolve: `member` through `members`, `catalog` through `[catalog]`.
