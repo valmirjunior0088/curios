@@ -149,7 +149,7 @@ impl Floating {
         }
     }
 
-    /// Capture `v`'s bit pattern, canonicalizing a NaN. Not a semantics: this is how a test's oracle and a literal's host parse hand a value in, and [`Floating::to_f64`] is how a printer reads one out.
+    /// Capture `v`'s bit pattern, canonicalizing a NaN. Not a semantics: this is how a test's oracle and the two infinities `/sys` spells as range bounds hand a value in, and [`Floating::to_f64`] is how a printer reads one out. A literal never enters here — the lexer builds it through [`Floating::of_decimal`], so what it means is the model's and not the compiling host's.
     pub fn from_f64(v: f64) -> Self {
         Self::from_bits(v.to_bits())
     }
