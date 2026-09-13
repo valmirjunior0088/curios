@@ -328,6 +328,37 @@ fn a_found_executable_is_listed_with_the_file_that_declares_it() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A `default` naming the package itself is the one the parser lets through without a row, on the promise that a run says what is missing: so the refusal names `exe.crs`, the file whose presence would have declared it.
+#[test]
+fn a_default_naming_the_absent_own_executable_names_the_file_that_would_declare_it() {
+    let root = tree(
+        "run-own-absent",
+        &[
+            (
+                "curios.toml",
+                "name = \"app\"\ndefault = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+            ),
+            ("lib.crs", ""),
+            ("serve.crs", ""),
+        ],
+    );
+
+    let refusal = entry(None, &root).expect_err("no exe.crs to mean");
+    assert_eq!(
+        refusal,
+        "\"app\" has no executable of its own: no `exe.crs` sits beside the manifest, and no `[[executables]]` row declares one by that name; it declares the executable \"serve\""
+    );
+
+    // Asked for by name rather than through `default`, the same absence earns the same words.
+    let refusal = entry(Some("app"), &root).expect_err("no exe.crs to mean");
+    assert!(
+        refusal.starts_with("\"app\" has no executable of its own"),
+        "{refusal}"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// A package declaring no executable refuses a bare target naming the two ways to declare one — and no subcommand, since `compile` and `wonder stage` reach the same refusal and `compile` takes no loose file.
 #[test]
 fn a_bare_target_on_a_package_of_a_library_alone_says_how_to_declare_one() {

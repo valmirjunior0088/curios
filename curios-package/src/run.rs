@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{Executable, Governing, Package, declared, order},
+    crate::{EXECUTABLE, Executable, Governing, Package, declared, order},
     curios_text::RootSource,
     curios_utilities::Qualifier,
     std::path::{Path, PathBuf},
@@ -131,17 +131,26 @@ fn names_a_file(argument: &str) -> bool {
 
 /// The executable `name` names.
 fn named<'a>(package: &'a Package, name: &str) -> Result<&'a Executable, String> {
-    package
+    if let Some(executable) = package
         .executables
         .iter()
         .find(|executable| executable.name == name)
-        .ok_or_else(|| {
-            format!(
-                "{:?} declares no executable named {name:?}{}",
-                package.name,
-                candidates(package)
-            )
-        })
+    {
+        return Ok(executable);
+    }
+
+    // The package's own name is declared by a file's presence rather than by a row, so the refusal names the file: this is the one name `Document::package` lets a `default` state without a row behind it, and the reader who wrote that `default` has to be told what declares it.
+    match name == package.name {
+        true => Err(format!(
+            "{name:?} has no executable of its own: no `{EXECUTABLE}` sits beside the manifest, and no `[[executables]]` row declares one by that name{}",
+            candidates(package)
+        )),
+        false => Err(format!(
+            "{:?} declares no executable named {name:?}{}",
+            package.name,
+            candidates(package)
+        )),
+    }
 }
 
 /// The executable a bare `curios run` means: the sole one, or the one `default` names.
