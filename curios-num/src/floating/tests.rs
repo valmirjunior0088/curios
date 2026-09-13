@@ -260,6 +260,10 @@ fn a_literal_narrows_the_way_the_host_parses_it() {
         ("1", 309),
         ("1", -309),
         ("31415926535897932", -16),
+        // The exponent ceiling and floor the lexer admits: the overflow clamp decides both, and used to overflow itself at the ceiling.
+        ("1", i32::MAX),
+        ("123456789", i32::MAX - 7),
+        ("1", i32::MIN),
     ];
 
     for (digits, exponent) in cases {

@@ -570,13 +570,15 @@ impl Floating {
             return Self::zero(negative);
         }
 
-        let places = i32::try_from(digits.to_string().len()).expect("a numeral of stated width");
+        let places = i64::try_from(digits.to_string().len()).expect("a numeral of stated width");
+        // Widened so the clamps cannot overflow: the lexer admits any exponent an `i32` holds, and a sum at its ceiling is exactly what the overflow clamp exists to answer, not to panic on.
+        let magnitude = places + i64::from(exponent);
 
-        // `10^-324 < 2^-1075`, half the least subnormal; `10^309 > 2^1024`, past the rounding threshold above the largest finite value.
-        if places + exponent <= -324 {
+        // The value is under `10^magnitude` and at least `10^(magnitude - 1)`. `10^-324 < 2^-1075`, half the least subnormal; `10^309 > 2^1024`, past the rounding threshold above the largest finite value, so a magnitude of 310 is past it.
+        if magnitude <= -324 {
             return Self::zero(negative);
         }
-        if places - 1 + exponent >= 309 {
+        if magnitude >= 310 {
             return Self::infinite(negative);
         }
 
