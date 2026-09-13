@@ -8,7 +8,7 @@ use {
     },
 };
 
-/// A type-level integer. Unbounded — the type level pretends ℤ, the way [`Natural`] pretends ℕ; the runtime's 31-bit range is enforced only where a literal must materialize (`erase`'s narrowing) and by the runtime's own overflow traps.
+/// A type-level integer. Unbounded — the type level pretends ℤ, the way [`Natural`] pretends ℕ; the runtime's 31-bit envelope is enforced only where a value must materialize, by `curios-cont`'s refusal at emission and by the runtime's own overflow traps.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub struct Integer {
@@ -124,7 +124,7 @@ impl BitXor for Integer {
     }
 }
 
-/// Negation is total and exact at the type level: ℤ is closed under it, so unlike the erased `i32` carrier there is no `i32::MIN` to trap on.
+/// Negation is total and exact: ℤ is closed under it, and the erased carrier is this same unbounded type, so there is no `i32::MIN` anywhere to trap on.
 impl Neg for Integer {
     type Output = Self;
 

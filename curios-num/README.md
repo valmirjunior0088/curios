@@ -1,6 +1,6 @@
 # curios-num
 
-The Curios numeric tower: the unbounded type-level `Natural` and `Integer`, the bitwise-identity `Floating`, and the `scalar` semantics of the erased `u32`/`i32`/binary64 carriers every stage's constant folder shares. It is also the workspace's only `num-bigint` and `num-traits` dependency. What a numeric carrier means to the *language* belongs to [syntax.md](../documentation/syntax.md); how narrowing refuses rather than wraps is [Numeric carriers narrow by refusing, never by changing a value](../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md); local architecture belongs to the crate rustdoc.
+The Curios numeric tower: the unbounded type-level `Natural` and `Integer`, the bitwise-identity `Floating`, and the `scalar` semantics of the erased carriers — `Natural`, `Integer` and binary64 again — every stage's constant folder shares. It is also the workspace's only `num-bigint` and `num-traits` dependency. What a numeric carrier means to the *language* belongs to [syntax.md](../documentation/syntax.md); how narrowing refuses rather than wraps is [Numeric carriers narrow by refusing, never by changing a value](../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md); local architecture belongs to the crate rustdoc.
 
 ## Design
 
@@ -22,7 +22,7 @@ The consequence to accept is that adding an operation to `Natural` or `Integer` 
 
 ### Two layers, and neither is expressible in the other
 
-**Decision.** `Natural`/`Integer` are *type-level* values — unbounded, pretending ℕ and ℤ. The `scalar` functions are a separate layer giving the exact semantics of the *erased* carriers, where `Nat` is a `u32` and `Int` an `i32`, and a computed value past either is a refusal rather than a wrapped number. Every stage's constant folder shares the second layer so its arithmetic cannot drift from the backend's; the runtime's 31-bit range is enforced only where a literal must materialize, in erasure's narrowing and in the runtime's own overflow traps.
+**Decision.** `Natural`/`Integer` are *type-level* values — unbounded, pretending ℕ and ℤ. The `scalar` functions are a separate layer giving the exact semantics of the *erased* carriers, where `Nat` is again a `Natural` and `Int` an `Integer`, and the operations that can fail — a growing fold past its caller's allowance, a division by zero, a conversion off its domain — decline or refuse rather than answer a changed number. Every stage's constant folder shares the second layer so its arithmetic cannot drift from Core's; the runtime's 31-bit envelope is enforced only where a value must materialize, by `curios-cont`'s refusal at emission and by the runtime's own overflow traps.
 
 **Rationale.** A type-level natural bounded by a machine word would make a term's *meaning* depend on the host, which is not a tradeoff a dependent type theory can take. Conversely an erased carrier that reasoned in ℕ would be describing something the emitted Wasm does not do.
 

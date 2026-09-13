@@ -7,7 +7,7 @@ use {
     },
 };
 
-/// A type-level natural. Unbounded — the type level pretends ℕ, the way [`Integer`](crate::Integer) pretends ℤ; the runtime's 31-bit range is enforced only where a literal must materialize (`erase`'s narrowing) and by the runtime's own overflow traps.
+/// A type-level natural. Unbounded — the type level pretends ℕ, the way [`Integer`](crate::Integer) pretends ℤ; the runtime's 31-bit envelope is enforced only where a value must materialize, by `curios-cont`'s refusal at emission and by the runtime's own overflow traps.
 ///
 /// The wrapped magnitude is private, which is the point: this crate is the only one that names `num-bigint`, so a consumer reaches ℕ through the operations below rather than through a bignum type it would have to depend on. The scalar semantics the *erased* stages share live in [`nat_mul`](crate::nat_mul) and its siblings, which impose no width either: a growing operation takes an allowance from its caller and declines past it, because how large a numeral is worth building is a fact about a stage's resources rather than about ℕ.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -99,7 +99,7 @@ impl Natural {
 
     /// `⌊√self⌋`, exact and total — zero for zero.
     ///
-    /// Here rather than in [`Floating`](crate::Floating) because it is a fact about ℕ, and it is the one operation binary32's square root needs that the ring operations do not supply: a root is exact when `isqrt(n)² = n` and rounds off the remainder otherwise, which is the sticky bit its caller wants.
+    /// Here rather than in [`Floating`](crate::Floating) because it is a fact about ℕ, and it is the one operation binary64's square root needs that the ring operations do not supply: a root is exact when `isqrt(n)² = n` and rounds off the remainder otherwise, which is the sticky bit its caller wants.
     pub fn isqrt(&self) -> Self {
         Self {
             value: self.value.sqrt(),
