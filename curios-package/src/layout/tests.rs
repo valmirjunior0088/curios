@@ -174,6 +174,31 @@ fn an_executable_outside_the_root_claims_no_stem_in_it() {
 }
 
 /// An umbrella compiles nothing of its own, and saying so beats an absent-library refusal about a file it never wanted.
+/// A row may point below the root, into a module's namespace directory, and a `mod` there may reach the same file. The refusal names the row and the module, where the module loader used to report a parse error at the program's first token.
+#[test]
+fn an_executable_the_library_declares_as_a_module_is_refused() {
+    let directory = package(
+        "layout-program-as-module",
+        "name = \"nested\"\n\n[[executables]]\nname = \"tool\"\npath = \"app/main.crs\"\n",
+        &[
+            ("lib.crs", "pub mod app;"),
+            ("app.crs", "pub mod main;"),
+            ("app/main.crs", "/std/print(\"hello\\n\")"),
+        ],
+    );
+
+    let refusal = package_at(&directory)
+        .map(|_| ())
+        .expect_err("a file that is a program and a module");
+    assert!(refusal.contains("the executable \"tool\""), "{refusal}");
+    assert!(
+        refusal.contains("declares as the module `/nested/app/main`"),
+        "{refusal}"
+    );
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
 #[test]
 fn an_umbrella_is_not_a_unit() {
     let directory = package("layout-umbrella", "members = [\"json\"]\n", &[]);

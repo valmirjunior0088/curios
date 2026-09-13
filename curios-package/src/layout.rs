@@ -92,15 +92,42 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
     // Asked whether or not there is a header, because the stem space is the package root's and not the library's: executables claim stems in it with nothing else there to collide with, and two that collide are the same refusal either way. Gating this on the header would mean adding or deleting one silently turned the rule on and off for a manifest that did not change.
     stems(package, library.as_ref())?;
 
-    match present {
-        false => Ok(None),
-        // The library is what a package documents, described as the manifest describes it.
-        true => Ok(Some(
-            RootSource::mounted(&package.name, RootKind::Ordinary, header, directory)
-                .declaring(declared(package))
-                .documented(&package.name, package.description.as_deref()),
-        )),
+    if !present {
+        return Ok(None);
     }
+
+    // The library is what a package documents, described as the manifest describes it.
+    let source = RootSource::mounted(&package.name, RootKind::Ordinary, header, directory)
+        .declaring(declared(package))
+        .documented(&package.name, package.description.as_deref());
+
+    apart(package, directory, &source)?;
+
+    Ok(Some(source))
+}
+
+/// Refuse an executable compiled from a file the library also reaches through a chain of `mod` declarations.
+///
+/// The root stem space is [`stems`]'s, and it is one space because everything in it is spelled from one directory. A row may point below the root, where its file sits in the namespace directory of some module — and nothing stops a `mod` in that module from declaring the same file. The file is then a program and a module at once, and what the reader saw before this check was the module loader failing to parse a program as a module: a parse error at the executable's first token, naming neither the row nor the `mod` (law 4). The question is the one the language server asks of a file it is shown, and it is asked of the same resolver.
+///
+/// A header the walk cannot read is not this refusal: the compilation reports that on its own account, so the question is taken as answered `false` rather than answered twice.
+fn apart(package: &Package, directory: &Path, source: &RootSource) -> Result<(), String> {
+    for executable in &package.executables {
+        let Some(module) = module_of(package, directory, &directory.join(&executable.path)) else {
+            continue;
+        };
+
+        if matches!(source.declares_module(&module), Ok(true)) {
+            return Err(format!(
+                "{} is compiled from {}, which the library also declares as the module `{}`: a file is a program or a module, never both",
+                package.describe(executable),
+                executable.path.display(),
+                module.join()
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /// Refuse a stem claimed twice in the package root: the library header when there is one, every module that header enumerates, and every executable compiled from a file directly inside it.

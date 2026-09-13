@@ -253,6 +253,8 @@ impl RootSource {
     ///
     /// **This is the question "is this file part of the unit", asked before any compile and independent of the store.** A unit's input set is closed (see [`Self::reads`]): a file joins it only by being declared, so a file the walk does not reach is one no compilation of this unit ever reads. Asking the walk rather than the record of a compilation is what keeps the answer the same on a cache hit, where nothing is read at all. An inline `mod x { … }` is walked as the body it carries, and a file module is loaded, so what this reads is exactly what discovery would.
     ///
+    /// The module asked about is never loaded: the `mod` that declares it is the whole answer, and what the file holds is not part of the question. Loading it made a declared file that does not parse — a program a row also compiles, say — answer `Err` where the truthful answer is `true`, and the caller asking whether the file is claimed was told nothing.
+    ///
     /// `Err` is a header on the chain that could not be read or parsed — a fault the compilation reports on its own account, so a caller adds nothing beside it.
     pub fn declares_module(&self, qualifier: &Qualifier) -> Result<bool, Error> {
         let Some((mount, _)) = self.owning(qualifier) else {
@@ -261,8 +263,11 @@ impl RootSource {
 
         let mut items = self.load(&mount.prefix)?.items;
         let mut path = mount.prefix.clone();
+        let mut segments = qualifier.segments()[mount.prefix.segments().len()..]
+            .iter()
+            .peekable();
 
-        for segment in &qualifier.segments()[mount.prefix.segments().len()..] {
+        while let Some(segment) = segments.next() {
             path = path.with(segment);
 
             let Some(declaration) = items.iter().find_map(|item| match item {
@@ -273,6 +278,10 @@ impl RootSource {
             }) else {
                 return Ok(false);
             };
+
+            if segments.peek().is_none() {
+                break;
+            }
 
             items = match &declaration.module {
                 Some(module) => module.items.clone(),
