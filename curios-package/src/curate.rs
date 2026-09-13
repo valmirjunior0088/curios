@@ -98,6 +98,8 @@ fn acquisitions(governing: &Governing) -> Result<BTreeSet<Acquisition>, String> 
             };
 
             let resolved = match row {
+                // A pin of a name the umbrella enumerates is `order`'s to refuse, and it does, naming the member; what this walk declines is to fetch on its behalf first, since a fetch is the one network action in the toolchain and a refused row earns none.
+                Dependency::Git { .. } if governing.members.contains_key(name) => continue,
                 Dependency::Git { url, rev, hash } => {
                     acquisitions.insert(Acquisition {
                         name: name.clone(),

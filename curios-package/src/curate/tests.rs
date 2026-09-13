@@ -106,6 +106,30 @@ fn a_live_project_acquires_nothing() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A pin of a name the umbrella enumerates is refused by `order` as a direct pin of a live member; the walk declines to fetch on its behalf first, so a refused row costs no network round trip.
+#[test]
+fn a_pin_of_a_live_member_is_not_acquired() {
+    let root = tree(
+        "curate-pinned-member",
+        &[
+            ("curios.toml", "members = [\"app\", \"base\"]\n"),
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\nbase = { source = \"git\", url = \"https://example/base\", rev = \"abc123\", hash = \"c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" }\n",
+            ),
+            ("app/lib.crs", ""),
+            ("base/curios.toml", "name = \"base\"\n"),
+            ("base/lib.crs", ""),
+        ],
+    );
+
+    let governing = Governing::of(&root.join("app")).unwrap();
+
+    assert!(curate(&governing).unwrap().is_empty());
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// **A fetchable catalog row is acquired, and this is the regression.** The marker used to be resolved *after* the dispatch that decides what to fetch, so it landed in the store at a hash nothing had put there: `curate` acquired nothing, `order` then refused the dependency naming `curate`, and running it changed nothing. A dead end whose error message named the command that could not escape it.
 ///
 /// Asserted against the walk rather than against a fetch, so it needs no `git` and no network: what was broken is which acquisitions the walk collects.
