@@ -2,7 +2,7 @@ use {
     super::*,
     curios_num::{
         Floating, Integer, Natural, flt_to_int, flt_to_nat, int_div, int_mul, int_rem, int_shl,
-        int_shr, int_to_nat, nat_div, nat_mul, nat_rem, nat_shl, nat_shr, nat_sub,
+        int_to_nat, nat_div, nat_mul, nat_rem, nat_shl, nat_sub,
     },
 };
 
@@ -66,7 +66,7 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
             nat(1)?,
             FOLD_ALLOWANCE_BITS,
         )?)),
-        CpsIntrinsic::NatShr => Some(CpsLiteral::Nat(nat_shr(nat(0)?, nat(1)?))),
+        CpsIntrinsic::NatShr => Some(CpsLiteral::Nat(nat(0)? >> nat(1)?)),
         CpsIntrinsic::NatEqz => bool_(nat(0)?.is_zero()),
         CpsIntrinsic::NatToInt => Some(CpsLiteral::Int(Integer::from(nat(0)?.clone()))),
         CpsIntrinsic::NatToFlt => flt_(Floating::of_natural(nat(0)?)),
@@ -91,7 +91,7 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
             nat(1)?,
             FOLD_ALLOWANCE_BITS,
         )?)),
-        CpsIntrinsic::IntShr => Some(CpsLiteral::Int(int_shr(int(0)?, nat(1)?))),
+        CpsIntrinsic::IntShr => Some(CpsLiteral::Int(int(0)? >> nat(1)?)),
         CpsIntrinsic::IntEqz => bool_(int(0)?.is_zero()),
         CpsIntrinsic::IntToNat => Some(CpsLiteral::Nat(int_to_nat(int(0)?).ok()?)),
         CpsIntrinsic::IntToFlt => flt_(Floating::of_integer(int(0)?)),

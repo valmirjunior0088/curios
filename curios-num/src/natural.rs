@@ -3,7 +3,7 @@ use {
     num_traits::{One, ToPrimitive, Zero},
     std::{
         fmt,
-        ops::{Add, AddAssign, BitAnd, BitOr, BitXor, Div, Mul, Rem, Sub},
+        ops::{Add, AddAssign, BitAnd, BitOr, BitXor, Div, Mul, Rem, Shr, Sub},
     },
 };
 
@@ -120,16 +120,10 @@ impl Natural {
         })
     }
 
-    /// `self << amount` as `self · 2^amount`, and `self >> amount` as `⌊self / 2^amount⌋` — both unbounded. `None` when `amount` is too large to be a shift count, leaving the op a neutral term rather than fabricating a value.
+    /// `self << amount` as `self · 2^amount`, unbounded. `None` when `amount` is too large to be a shift count, leaving the op a neutral term rather than fabricating a value. The right shift has no such case: it is the total `>>` below.
     pub fn checked_shl(self, amount: Self) -> Option<Self> {
         Some(Self {
             value: self.value << amount.value.to_usize()?,
-        })
-    }
-
-    pub fn checked_shr(self, amount: Self) -> Option<Self> {
-        Some(Self {
-            value: self.value >> amount.value.to_usize()?,
         })
     }
 
@@ -210,6 +204,20 @@ binary_op!(Rem, rem);
 binary_op!(BitAnd, bitand);
 binary_op!(BitOr, bitor);
 binary_op!(BitXor, bitxor);
+
+/// `⌊self / 2^amount⌋`, total: a count at or past the magnitude's own width answers zero, which is the arithmetic rather than a decline. The count is consulted before it is narrowed — a count no word holds is past every width there is — which is what keeps the answer the theory's and not the host's: read through `usize` first, `2³²` folded natively and stayed a neutral term on wasm32, a definitional equation that depended on the target.
+impl Shr<&Natural> for &Natural {
+    type Output = Natural;
+
+    fn shr(self, amount: &Natural) -> Natural {
+        match amount.to_u64() {
+            Some(amount) if amount < self.bits() => Natural {
+                value: &self.value >> amount,
+            },
+            _ => Natural::zero(),
+        }
+    }
+}
 
 macro_rules! from_primitive {
     ($($primitive:ty),+ $(,)?) => {

@@ -72,10 +72,7 @@ fn shift_left(value: &Natural, amount: u32) -> Natural {
 
 /// `⌊value / 2^amount⌋`, the counterpart of [`shift_left`].
 fn shift_right(value: &Natural, amount: u32) -> Natural {
-    value
-        .clone()
-        .checked_shr(Natural::from(amount))
-        .expect("a shift count that fits")
+    value >> &Natural::from(amount)
 }
 
 fn is_odd(value: &Natural) -> bool {

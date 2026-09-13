@@ -1,10 +1,10 @@
 use {
     crate::Natural,
-    num_bigint::BigInt,
+    num_bigint::{BigInt, Sign},
     num_traits::{ToPrimitive, Zero},
     std::{
         fmt,
-        ops::{Add, BitAnd, BitOr, BitXor, Mul, Neg, Sub},
+        ops::{Add, BitAnd, BitOr, BitXor, Mul, Neg, Shr, Sub},
     },
 };
 
@@ -31,16 +31,10 @@ impl Integer {
         self.value.to_biguint().map(Natural::new)
     }
 
-    /// `self << amount` as `self * 2^amount`, and `self >> amount` as the arithmetic (floor) shift `num-bigint` provides — both unbounded. The count is a [`Natural`], as `/sys`'s `Int/shl` and `Int/shr` declare it, so there is no negative count to decline; `None` only when it is too large to be a shift count, leaving the op a neutral term rather than fabricating a value.
+    /// `self << amount` as `self * 2^amount`, unbounded. The count is a [`Natural`], as `/sys`'s `Int/shl` declares it, so there is no negative count to decline; `None` only when it is too large to be a shift count, leaving the op a neutral term rather than fabricating a value. The right shift has no such case: it is the total `>>` below.
     pub fn checked_shl(self, amount: Natural) -> Option<Self> {
         Some(Self {
             value: self.value << amount.to_usize()?,
-        })
-    }
-
-    pub fn checked_shr(self, amount: Natural) -> Option<Self> {
-        Some(Self {
-            value: self.value >> amount.to_usize()?,
         })
     }
 
@@ -120,6 +114,23 @@ impl BitXor for Integer {
     fn bitxor(self, other: Self) -> Self {
         Self {
             value: self.value ^ other.value,
+        }
+    }
+}
+
+/// The arithmetic (floor) `⌊self / 2^amount⌋`, total for [`Natural`]'s reason: a count at or past the magnitude's width answers the sign — zero above it and `-1` below — without being narrowed to a host word.
+impl Shr<&Natural> for &Integer {
+    type Output = Integer;
+
+    fn shr(self, amount: &Natural) -> Integer {
+        match amount.to_u64() {
+            Some(amount) if amount < self.bits() => Integer {
+                value: &self.value >> amount,
+            },
+            _ => Integer::from(match self.value.sign() == Sign::Minus {
+                true => -1,
+                false => 0,
+            }),
         }
     }
 }

@@ -11,7 +11,7 @@ use {
     super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator},
     curios_num::{
         Floating, Integer, Natural, ScalarTrap, flt_to_int, flt_to_nat, int_div, int_mul, int_rem,
-        int_shl, int_shr, int_to_nat, nat_div, nat_mul, nat_rem, nat_shl, nat_shr, nat_sub,
+        int_shl, int_to_nat, nat_div, nat_mul, nat_rem, nat_shl, nat_sub,
     },
     curios_utilities::{Grain, PackedBin},
 };
@@ -376,7 +376,7 @@ impl Semantics {
                 NatOr => Constant::Nat(nat(0)? | nat(1)?),
                 NatXor => Constant::Nat(nat(0)? ^ nat(1)?),
                 NatShl => Constant::Nat(nat_shl(nat(0)?, nat(1)?, allowance)?),
-                NatShr => Constant::Nat(nat_shr(nat(0)?, nat(1)?)),
+                NatShr => Constant::Nat(nat(0)? >> nat(1)?),
                 NatEql => Constant::Bool(nat(0)? == nat(1)?),
                 NatNeq => Constant::Bool(nat(0)? != nat(1)?),
                 NatLt => Constant::Bool(nat(0)? < nat(1)?),
@@ -395,7 +395,7 @@ impl Semantics {
                 IntOr => Constant::Int(int(0)?.clone() | int(1)?.clone()),
                 IntXor => Constant::Int(int(0)?.clone() ^ int(1)?.clone()),
                 IntShl => Constant::Int(int_shl(int(0)?, nat(1)?, allowance)?),
-                IntShr => Constant::Int(int_shr(int(0)?, nat(1)?)),
+                IntShr => Constant::Int(int(0)? >> nat(1)?),
                 IntEql => Constant::Bool(int(0)? == int(1)?),
                 IntNeq => Constant::Bool(int(0)? != int(1)?),
                 IntLt => Constant::Bool(int(0)? < int(1)?),

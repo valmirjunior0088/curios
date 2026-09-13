@@ -86,7 +86,7 @@ pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
         Intrinsic::NatShr(operand, amount) => {
             let bound = nat_bound(operand)?;
             match amount.as_nat().and_then(|amount| amount.to_natural()) {
-                Some(amount) => bound.checked_shr(amount),
+                Some(amount) => Some(&bound >> &amount),
                 None => Some(bound),
             }
         }

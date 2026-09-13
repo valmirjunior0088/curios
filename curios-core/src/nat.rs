@@ -88,17 +88,16 @@ impl Nat {
         Some(Self::new(self.to_natural()? ^ other.to_natural()?))
     }
 
-    /// `self << amount` as `self * 2^amount`, and `self >> amount` as `⌊self / 2^amount⌋` — both unbounded. `None` on a symbolic operand or an `amount` too large to be a shift count.
+    /// `self << amount` as `self * 2^amount`, unbounded. `None` on a symbolic operand or an `amount` too large to be a shift count.
     pub(crate) fn checked_shl(self, amount: Self) -> Option<Self> {
         Some(Self::new(
             self.to_natural()?.checked_shl(amount.to_natural()?)?,
         ))
     }
 
+    /// `self >> amount` as `⌊self / 2^amount⌋`, total on values — a count past the width answers zero, [`Natural`]'s `>>` — and `None` only on a symbolic operand, like [`Nat::checked_bitand`].
     pub(crate) fn checked_shr(self, amount: Self) -> Option<Self> {
-        Some(Self::new(
-            self.to_natural()?.checked_shr(amount.to_natural()?)?,
-        ))
+        Some(Self::new(&self.to_natural()? >> &amount.to_natural()?))
     }
 
     /// View a reduced term as a flat successor floor over a symbolic tail: `term = inner + floor`. A non-`Succ` term — literal zero, a variable, any stuck intrinsic — has floor `0` and is its own `inner`; reduction flattens nested `Succ`, so `inner` is never itself successor-headed. The one-value companion to `spine::peel_nat` (which peels the floor shared by *two* values): this is the seam `Nat/add`, `Nat/sub`, `Nat/mul`, and the comparison family share to act on the floor symbolically, then rebuild a canonical neutral.

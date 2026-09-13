@@ -35,7 +35,7 @@ pub(super) fn reduce_bool_binary(
     }))
 }
 
-/// `Int/shl` and `Int/shr`: a signed value over a `Nat` count, the signed twins of [`reduce_nat_shl`] and its right shift. `cost` is what the fold may construct from the value's width and the count — [`shift_bound`] for a left shift, whose result grows by the count, and [`operand_bound`] for a right shift, whose result never does — and `fold` declines only a count too large to be a shift count at all.
+/// `Int/shl` and `Int/shr`: a signed value over a `Nat` count, the signed twins of [`reduce_nat_shl`] and its right shift. `cost` is what the fold may construct from the value's width and the count — [`shift_bound`] for a left shift, whose result grows by the count, and [`operand_bound`] for a right shift, whose result never does — and `fold` declines only a left shift by a count too large to be a shift count at all; the right shift is total, a count past the width answering the sign.
 pub(super) fn reduce_int_shift(
     reducer: &mut impl Reducer,
     left: &Term,

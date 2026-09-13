@@ -393,7 +393,7 @@ pub fn reduce_intrinsic(
                     amount.map_or(0, |amount| u64::from(u64::BITS - amount.leading_zeros())),
                 )
             },
-            |value, amount| value.checked_shr(amount),
+            |value, amount| Some(&value >> &amount),
             Intrinsic::IntShr,
         ),
         Intrinsic::FltType => Ok(Subterm::Intrinsic(Intrinsic::FltType)),
@@ -1398,5 +1398,8 @@ mod free_monoid_tests;
 mod laws_tests;
 #[cfg(test)]
 mod nat_tests;
+
+#[cfg(test)]
+mod shift_tests;
 #[cfg(test)]
 mod test_support;

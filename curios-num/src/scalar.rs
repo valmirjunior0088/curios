@@ -2,7 +2,7 @@
 //!
 //! **The erased carriers are unbounded, and that is what makes a folder agree with Core by construction rather than by differential.** They were `u32` and `i32`, a width that named no target: the runtime's envelope is 31 bits, so a value in the `2³¹ .. 2³²−1` band folded to a number the same expression would have trapped on had an operand been live. Two widths remain — the unbounded one every layer above the emitter computes in, and the envelope `curios-cont` materializes into — and only the second refuses.
 //!
-//! Only operations with semantic freedom live here: the monus, the trap conditions, the shifts whose answer past a width is a fact rather than a wrap, and the conversions whose domain excludes an operand. Addition, subtraction on `Int` and the bitwise operations are total over an unbounded carrier and stay as ordinary arithmetic at their use sites, as the comparisons already did.
+//! Only operations with semantic freedom live here: the monus, the trap conditions, the left shifts whose growth needs an allowance, and the conversions whose domain excludes an operand. Addition, subtraction on `Int`, the right shifts and the bitwise operations are total over an unbounded carrier and stay as ordinary arithmetic at their use sites, as the comparisons already did.
 //!
 //! **A growing operation takes its allowance from its caller.** Multiplication doubles a magnitude and a left shift grows it without bound, so a folder that ran them eagerly could be asked for a numeral no machine holds — `curios-core` is protected from that by charging every reduction step against a budget, and an erased-stage folder is not. The allowance is a parameter rather than a constant here because it is a fact about the caller's resources, not about what the operation means: `curios-ersd` bounds by the growth pool its evaluator already keeps, and `curios-cont` by the envelope it can materialize into. Past it the fold *declines*, which is invisible — a program means the same thing whether or not a fold fires — where a refusal would be observable.
 //!
@@ -74,28 +74,6 @@ pub fn int_shl(value: &Integer, shift: &Natural, allowance: u64) -> Option<Integ
         true => value.clone().checked_shl(shift.clone()),
         false => None,
     }
-}
-
-/// `Nat` right shift — `⌊value / 2^shift⌋` — total, and never a trap: a quotient of a representable value is representable.
-///
-/// A count past the value's own width answers zero rather than reducing modulo anything. That is what the bignum shift in `curios-core` answers, and it is the arithmetic fact: shifting a value right past its top leaves nothing.
-pub fn nat_shr(value: &Natural, shift: &Natural) -> Natural {
-    value
-        .clone()
-        .checked_shr(shift.clone())
-        .unwrap_or_else(Natural::zero)
-}
-
-/// `Int` arithmetic right shift — `⌊value / 2^shift⌋` — total, for the reason [`nat_shr`] gives.
-///
-/// A count past the value's width answers the sign: zero above it and `-1` below, which is what the bignum shift answers.
-pub fn int_shr(value: &Integer, shift: &Natural) -> Integer {
-    value.clone().checked_shr(shift.clone()).unwrap_or_else(|| {
-        Integer::from(match value.to_natural().is_none() {
-            true => -1,
-            false => 0,
-        })
-    })
 }
 
 /// `Nat` subtraction is monus: truncated at zero, never negative.
