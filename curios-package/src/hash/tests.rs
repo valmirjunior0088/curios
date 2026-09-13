@@ -132,7 +132,6 @@ fn an_empty_directory_leaves_no_trace() {
 
 /// A name that is not UTF-8 is refused: the scheme spells paths in UTF-8, and a name it could only spell by replacing bytes is one two different files could share.
 #[test]
-#[cfg(unix)]
 fn a_name_that_is_not_utf8_is_refused() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
@@ -149,7 +148,6 @@ fn a_name_that_is_not_utf8_is_refused() {
 
 /// A symlink in a delivered tree is refused: followed it reaches outside the tree, recorded it hashes a path whose meaning depends on where it is unpacked.
 #[test]
-#[cfg(unix)]
 fn a_symlink_in_a_delivered_tree_is_refused() {
     let root = tree("hash-symlink", &[("lib.crs", "")]);
     std::os::unix::fs::symlink("lib.crs", root.join("alias.crs")).unwrap();
