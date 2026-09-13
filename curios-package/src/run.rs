@@ -172,7 +172,7 @@ fn candidates(package: &Package) -> String {
             "; it declares {}",
             executables
                 .iter()
-                .map(|executable| format!("{:?}", executable.name))
+                .map(|executable| package.describe(executable))
                 .collect::<Vec<_>>()
                 .join(", ")
         ),

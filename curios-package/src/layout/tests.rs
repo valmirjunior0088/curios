@@ -131,7 +131,13 @@ fn a_stem_claimed_twice_is_refused_without_a_library() {
         .expect_err("a stem claimed twice, library or no library");
     assert!(refusal.contains("claims the stem `exe` twice"), "{refusal}");
     assert!(refusal.contains("the executable \"foo\""), "{refusal}");
-    assert!(refusal.contains("the executable \"json\""), "{refusal}");
+    // The second claimant is one the manifest never wrote, so the refusal says what wrote it.
+    assert!(
+        refusal.contains(
+            "the package's own executable \"json\" that `exe.crs` beside the manifest declares"
+        ),
+        "{refusal}"
+    );
 
     fs::remove_dir_all(directory).unwrap();
 }

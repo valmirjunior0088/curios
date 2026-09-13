@@ -302,6 +302,32 @@ fn an_executable_compiles_against_its_package_and_its_dependencies() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// The package's own executable is found rather than declared, so a refusal listing it says what declared it: a reader who wrote one row and is told the package declares two would otherwise look for the second in the manifest.
+#[test]
+fn a_found_executable_is_listed_with_the_file_that_declares_it() {
+    let root = tree(
+        "run-found-listed",
+        &[
+            (
+                "curios.toml",
+                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+            ),
+            ("serve.crs", ""),
+            ("exe.crs", ""),
+        ],
+    );
+
+    let refusal = entry(None, &root).expect_err("two executables and no default");
+    assert!(
+        refusal.ends_with(
+            "; it declares the executable \"serve\", the package's own executable \"app\" that `exe.crs` beside the manifest declares"
+        ),
+        "{refusal}"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// A package declaring no executable refuses a bare target naming the two ways to declare one — and no subcommand, since `compile` and `wonder stage` reach the same refusal and `compile` takes no loose file.
 #[test]
 fn a_bare_target_on_a_package_of_a_library_alone_says_how_to_declare_one() {

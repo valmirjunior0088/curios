@@ -92,12 +92,7 @@ fn stems(package: &Package, library: Option<&Module>) -> Result<(), String> {
         .executables
         .iter()
         .filter(|executable| executable.path.parent() == Some(Path::new("")))
-        .map(|executable| {
-            (
-                stem(&executable.path),
-                format!("the executable {:?}", executable.name),
-            )
-        });
+        .map(|executable| (stem(&executable.path), package.describe(executable)));
 
     let mut claimed = BTreeMap::new();
     if library.is_some() {

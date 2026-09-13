@@ -107,6 +107,17 @@ impl Package {
 
         self
     }
+
+    /// `executable` as a refusal names it: a row by its name, and the package's own program by the file that declares it. Presence is that program's declaration, so a reader who wrote no row for it would otherwise look for the name in the manifest and not find it there.
+    pub fn describe(&self, executable: &Executable) -> String {
+        match executable.name == self.name && executable.path == Path::new(EXECUTABLE) {
+            true => format!(
+                "the package's own executable {:?} that `{EXECUTABLE}` beside the manifest declares",
+                executable.name
+            ),
+            false => format!("the executable {:?}", executable.name),
+        }
+    }
 }
 
 /// A namespace for packages: the ones inside its tree, and the pinned rows those may share.
