@@ -148,15 +148,26 @@ fn a_file_no_mod_declares_is_reported_as_not_part_of_its_unit() {
 
     // Warm: the library is served from the store, and the walk still answers.
     let built = curios(&root, &["run", "app"], "");
-    assert!(built.status.success(), "{}", String::from_utf8_lossy(&built.stderr));
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
     let warm = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
-    assert!(stdout(&warm).contains("is not part of `/app`"), "{}", stdout(&warm));
+    assert!(
+        stdout(&warm).contains("is not part of `/app`"),
+        "{}",
+        stdout(&warm)
+    );
 
     write(&root, "lib.crs", "pub mod util;\npub mod stray;\n");
     let declared = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
     let text = stdout(&declared);
     assert!(!text.contains("is not part of"), "{text}");
-    assert!(text.contains("stray.crs:1:24"), "its own error, now read: {text}");
+    assert!(
+        text.contains("stray.crs:1:24"),
+        "its own error, now read: {text}"
+    );
 
     fs::remove_dir_all(root).unwrap();
 }
