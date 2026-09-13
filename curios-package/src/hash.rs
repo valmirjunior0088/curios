@@ -5,10 +5,7 @@ mod tests;
 
 use {
     sha2::{Digest, Sha256},
-    std::{
-        fmt, fs,
-        path::{Path, PathBuf},
-    },
+    std::{fmt, fs, path::Path},
 };
 
 /// The scheme this compiler computes and verifies.
@@ -62,10 +59,10 @@ impl TreeHash {
     ///
     /// **Both halves are length-framed**, which the scheme has to do and this is where it is said: without it a file `ab` holding `c` and a file `a` holding `bc` feed the digest identical bytes, and two different trees would share a store key. The frame is the byte length as a little-endian `u64` before each half.
     ///
-    /// A symlink is refused rather than followed or recorded. Following one lets a delivered tree reach outside itself; recording one puts a path in the hash whose meaning depends on where it is unpacked. Neither is a criterion a delivery can be accepted against.
+    /// A symlink is refused rather than followed or recorded. Following one lets a delivered tree reach outside itself; recording one puts a path in the hash whose meaning depends on where it is unpacked. Neither is a criterion a delivery can be accepted against. A name that is not UTF-8 is refused for the same reason: the scheme spells every path in UTF-8 whatever the platform, so a name it cannot spell is one it could only hash by replacing bytes, and two names that differ only in the bytes replaced would share a key.
     pub fn of(directory: &Path) -> Result<Self, String> {
         let mut files = Vec::new();
-        collect(directory, &mut PathBuf::new(), &mut files)?;
+        collect(directory, &mut Vec::new(), &mut files)?;
         files.sort();
 
         let mut digest = Sha256::new();
@@ -87,10 +84,10 @@ impl TreeHash {
     }
 }
 
-/// Every regular file under `directory`, as its `/`-spelled path relative to the tree root and its contents.
+/// Every regular file under `directory`, as its `/`-spelled path relative to the tree root and its contents. `at` is the path from the root to `directory`, one checked segment per component, which is what lets the spelling be joined rather than converted.
 fn collect(
     directory: &Path,
-    at: &mut PathBuf,
+    at: &mut Vec<String>,
     files: &mut Vec<(String, Vec<u8>)>,
 ) -> Result<(), String> {
     let entries =
@@ -105,8 +102,6 @@ fn collect(
             .map_err(|error| format!("{}: {error}", path.display()))?
             .file_type();
 
-        at.push(entry.file_name());
-
         if kind.is_symlink() {
             return Err(format!(
                 "{} is a symlink, and a delivered tree may hold none: following one reaches outside the tree, and recording one hashes a path whose meaning depends on where it is unpacked",
@@ -114,13 +109,18 @@ fn collect(
             ));
         }
 
+        let Some(segment) = entry.file_name().to_str().map(str::to_string) else {
+            return Err(format!(
+                "{} is named by bytes that spell no UTF-8, and a delivered tree may hold none: the hash spells every path in UTF-8 whatever the platform, so a name it cannot spell is one it cannot verify",
+                path.display()
+            ));
+        };
+        at.push(segment);
+
         match kind.is_dir() {
             true => collect(&path, at, files)?,
             false => files.push((
-                at.components()
-                    .map(|component| component.as_os_str().to_string_lossy())
-                    .collect::<Vec<_>>()
-                    .join("/"),
+                at.join("/"),
                 fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?,
             )),
         }
