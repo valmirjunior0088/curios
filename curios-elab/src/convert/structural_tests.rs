@@ -189,6 +189,145 @@ fn struct_unit_field_is_irrelevant() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
+// The same discipline at a nominal proposition rather than the unit — the shape the proof-carrying idiom writes, and the proposition the kernel's twin of this test puts to its own copy.
+#[test]
+fn a_struct_field_at_a_proposition_is_not_read() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let p_field = context.fresh(Some("p"));
+    let (p, q) = (context.fresh(Some("p")), context.fresh(Some("q")));
+
+    context
+        .register_induct(
+            &nominal("P"),
+            InductDecl {
+                universe_context: UniverseContext::empty(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: Vec::new(),
+                result_sort: Term::prop(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+            },
+        )
+        .unwrap();
+    let proposition = Term::induct_type(nominal("P"), Vec::<Term>::new(), Vec::<Term>::new());
+    context
+        .register_struct(
+            &nominal("Wrap"),
+            StructDecl {
+                universe_context: UniverseContext::empty(),
+                arity: Telescope::done(Telescope::build(
+                    [
+                        (n.clone(), Term::intrinsic(Intrinsic::NatType)),
+                        (p_field.clone(), proposition.clone()),
+                    ],
+                    (),
+                )),
+                result_sort: Term::type_ground(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+            },
+        )
+        .unwrap();
+    context.assume(&p, &proposition);
+    context.assume(&q, &proposition);
+
+    let this = Term::struct_(
+        nominal("Wrap"),
+        Vec::<Term>::new(),
+        [nat(1), Term::free_var(&p)],
+    );
+    let that = Term::struct_(
+        nominal("Wrap"),
+        Vec::<Term>::new(),
+        [nat(1), Term::free_var(&q)],
+    );
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+
+    let other = Term::struct_(
+        nominal("Wrap"),
+        Vec::<Term>::new(),
+        [nat(2), Term::free_var(&p)],
+    );
+    assert_eq!(conv(&mut context, &this, &other), Ok(false));
+}
+
+#[test]
+fn a_constructor_payload_at_a_proposition_is_not_read() {
+    let mut context = context();
+    let n = context.fresh(Some("n"));
+    let p_field = context.fresh(Some("p"));
+    let (p, q) = (context.fresh(Some("p")), context.fresh(Some("q")));
+
+    context
+        .register_induct(
+            &nominal("P"),
+            InductDecl {
+                universe_context: UniverseContext::empty(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: Vec::new(),
+                result_sort: Term::prop(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+            },
+        )
+        .unwrap();
+    let proposition = Term::induct_type(nominal("P"), Vec::<Term>::new(), Vec::<Term>::new());
+    context
+        .register_induct(
+            &nominal("Wrap"),
+            InductDecl {
+                universe_context: UniverseContext::empty(),
+                arity: Telescope::done(Telescope::done(())),
+                constructors: Vec::from([(
+                    Atom::from("wrap"),
+                    InductParam::new(
+                        Telescope::build(
+                            [
+                                (n.clone(), Term::intrinsic(Intrinsic::NatType)),
+                                (p_field.clone(), proposition.clone()),
+                            ],
+                            Vec::new(),
+                        ),
+                        vec![Plicity::Explicit, Plicity::Explicit],
+                    ),
+                )]),
+                result_sort: Term::type_ground(),
+                module: Qualifier::empty(),
+                rep_public: true,
+                polarities: Vec::new(),
+            },
+        )
+        .unwrap();
+    context.assume(&p, &proposition);
+    context.assume(&q, &proposition);
+
+    let this = Term::variant(
+        nominal("Wrap"),
+        Vec::<Term>::new(),
+        "wrap",
+        [nat(1), Term::free_var(&p)],
+    );
+    let that = Term::variant(
+        nominal("Wrap"),
+        Vec::<Term>::new(),
+        "wrap",
+        [nat(1), Term::free_var(&q)],
+    );
+    assert_eq!(conv(&mut context, &this, &that), Ok(true));
+
+    let other = Term::variant(
+        nominal("Wrap"),
+        Vec::<Term>::new(),
+        "wrap",
+        [nat(2), Term::free_var(&p)],
+    );
+    assert_eq!(conv(&mut context, &this, &other), Ok(false));
+}
+
 // Likewise a variant's payload compares at its constructor's declared types, so a unit-typed payload field is proof-irrelevant.
 #[test]
 fn variant_unit_payload_is_irrelevant() {

@@ -90,3 +90,9 @@ fn a_grounded_argument_forfeits_irrelevance() {
 fn a_nominal_structs_eta_is_not_forfeited_there() {
     assert_eq!(run(A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE), b"1");
 }
+
+// **Where the forfeiture ends.** A struct literal's fields and a constructor's payload have a typed context the opaque head's arguments lack: the declaration's own telescope, which `struct_eta` already reads on the neutral side. The kernel used to compare both at `Type` anyway and refused every proof-carrying value built from a different proof of the same fact — `Str/concat` did not associate, and `Vec/eq_of_list` exists because `Eq/refl()` was refused there. Both checkers now compare fields and payloads at the telescope, and the four equations below are the shapes that were refused: a field, a payload, a standard-library constructor, and the string law that first exposed it.
+#[test]
+fn a_proof_field_does_not_distinguish_two_literals() {
+    assert_eq!(run(A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS), b"1");
+}

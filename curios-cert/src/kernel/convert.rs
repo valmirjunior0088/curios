@@ -16,7 +16,7 @@
 //!
 //! # Where this is incomplete, and why that is the safe direction
 //!
-//! One concession remains — a `rec` group used to be a second, compared syntactically, until two instances of one group at two universe levels showed a syntactic refusal turning into an unfolding that never returned; `rec_instances` now decides such a pair by its levels under the item's hypotheses, the equation `induct_type_args` and the instance arms already apply, and two different groups are refused as before. Every child position without a typed context — an application spine's arguments, a stuck elimination's motive and arms under their opaque binders, and a struct type-former's parameters — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted. An inductive type-former's arguments left this list when the compile path put real programs through the kernel: they are compared at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P, p, q)` at a `Prop`-sorted `P` convert with `Eq(@P, p, p)`.
+//! One concession remains — a `rec` group used to be a second, compared syntactically, until two instances of one group at two universe levels showed a syntactic refusal turning into an unfolding that never returned; `rec_instances` now decides such a pair by its levels under the item's hypotheses, the equation `induct_type_args` and the instance arms already apply, and two different groups are refused as before. Every child position without a typed context — an application spine's arguments, a stuck elimination's motive and arms under their opaque binders, and a struct type-former's parameters — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted. An inductive type-former's arguments left this list when the compile path put real programs through the kernel: they are compared at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P, p, q)` at a `Prop`-sorted `P` convert with `Eq(@P, p, p)`. A struct literal's fields and a constructor's payload left it when the proof-carrying idiom met it: two `Str`s built from different proofs of the same bytes were unequal here and equal to the elaborator, so both now compare at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read.
 //!
 //! That direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. Every one of these can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
@@ -344,12 +344,23 @@ fn structural(
             && kernel.levels_eq(left_universes, right_universes)
             && compare_each(kernel, history, left_params.iter(), right_params.iter())?),
 
-        (Subterm::Variant(left), Subterm::Variant(right)) => Ok(left.name == right.name
-            && left.tag == right.tag
-            && kernel.levels_eq(&left.universes, &right.universes)
-            && compare_each(kernel, history, left.params.iter(), right.params.iter())?
-            && compare_each(kernel, history, left.payload.iter(), right.payload.iter())?),
+        // The payload compares at the constructor's own telescope, opened at the left side's parameters and then at each preceding payload, so a `Prop`-sorted payload discharges by irrelevance without being read — the discipline `eta_tuple` follows at a Σ, and what the elaborator's `compare_variant` does. A tag the declaration does not carry leaves the telescope absent, and the payload then compares at `Type` as it always did, which admits nothing new.
+        (Subterm::Variant(left), Subterm::Variant(right)) => {
+            if left.name != right.name
+                || left.tag != right.tag
+                || !kernel.levels_eq(&left.universes, &right.universes)
+                || !compare_each(kernel, history, left.params.iter(), right.params.iter())?
+            {
+                return Ok(false);
+            }
+            let telescope = kernel
+                .induct_at_params(&left.name, &left.universes, &left.params)
+                .ok()
+                .and_then(|at| at.signature(&left.tag));
+            compare_fields_at(kernel, history, telescope, &left.payload, &right.payload)
+        }
 
+        // A struct literal's fields compare at the declaration's field telescope, as the variant's payload does above — the typed half of what `struct_eta` reads the same telescope for.
         (
             Subterm::Struct(Struct {
                 name: left_name,
@@ -365,10 +376,19 @@ fn structural(
                 fields: right_fields,
                 ..
             }),
-        ) => Ok(left_name == right_name
-            && kernel.levels_eq(left_universes, right_universes)
-            && compare_each(kernel, history, left_params.iter(), right_params.iter())?
-            && compare_each(kernel, history, left_fields.iter(), right_fields.iter())?),
+        ) => {
+            if left_name != right_name
+                || !kernel.levels_eq(left_universes, right_universes)
+                || !compare_each(kernel, history, left_params.iter(), right_params.iter())?
+            {
+                return Ok(false);
+            }
+            let telescope = kernel
+                .struct_at(left_name, left_universes, left_params)
+                .ok()
+                .map(|at| at.fields());
+            compare_fields_at(kernel, history, telescope, left_fields, right_fields)
+        }
 
         // Eta at a nominal struct, against a neutral inhabitant only — see `struct_eta` for the rule and the restriction.
         (Subterm::Struct(literal), _) if matches!(&**that, Subterm::Var(_) | Subterm::Proj(_)) => {
@@ -822,6 +842,34 @@ fn compare_each<'a>(
 
     for (left, right) in this.zip(that) {
         if !ground(kernel, history, left, right)? {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
+}
+
+/// Compare two field sequences at the types `telescope` assigns them, each `rest` opened at the left field's value — so a field at a proposition is discharged by irrelevance without being read, and a dependent field is compared at the type its predecessors determine. A telescope shorter than the fields, or none at all, leaves the remainder at `Type`, which is what the untyped comparison did and can admit nothing it did not. Length is part of the shape.
+fn compare_fields_at<B: Bound>(
+    kernel: &mut Kernel,
+    history: &mut History,
+    mut telescope: Option<Telescope<B>>,
+    this: &[Term],
+    that: &[Term],
+) -> Result<bool, KernelError> {
+    if this.len() != that.len() {
+        return Ok(false);
+    }
+
+    for (left, right) in this.iter().zip(that) {
+        let type_ = match telescope.take() {
+            Some(Telescope::Cons(type_, rest)) => {
+                telescope = Some(rest.open(&[left]));
+                type_
+            }
+            _ => Term::type_ground(),
+        };
+        if !compare(kernel, history, &type_, left, right)? {
             return Ok(false);
         }
     }

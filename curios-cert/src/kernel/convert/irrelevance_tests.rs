@@ -3,7 +3,11 @@
 use super::test_support::*;
 use {
     crate::{KernelError, convert},
-    curios_core::{Free, Intrinsic, Level, Term},
+    curios_core::{
+        Atom, Free, InductDecl, InductParam, Intrinsic, Level, StructDecl, Telescope, Term,
+        UniverseContext,
+    },
+    curios_utilities::{Plicity, Qualifier},
 };
 
 /// Proof irrelevance: at a `Prop`-sorted type any two terms convert, *without* either being examined. This is what licenses erasure to drop proofs wholesale.
@@ -39,6 +43,123 @@ fn does_not_leak_into_a_relevant_type() {
             &Term::free_var(&right),
         ),
         Ok(false),
+    );
+}
+
+/// A struct literal's fields compare at the declaration's field telescope, so a field at a proposition is discharged without being read: two literals differing only in a proof are one value. The elaborator's copy has always decided this; the kernel refused it, comparing every field at `Type`, which is how `Str/concat` associated for one checker and not the other.
+#[test]
+fn a_struct_field_at_a_proposition_is_not_read() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let name = curios_core::Global::Authored(Qualifier::from(["Wrap"]));
+    kernel.declare_struct(
+        &name,
+        &StructDecl {
+            universe_context: UniverseContext::default(),
+            arity: Telescope::done(Telescope::build(
+                [
+                    (binder(60, "n"), nat_type()),
+                    (binder(61, "p"), proposition.clone()),
+                ],
+                (),
+            )),
+            result_sort: Term::type_ground(),
+            module: Qualifier::empty(),
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+    let (p, q) = (binder(62, "p"), binder(63, "q"));
+    kernel.assume(&p, &proposition);
+    kernel.assume(&q, &proposition);
+
+    let this = Term::struct_(
+        name.clone(),
+        Vec::<Term>::new(),
+        [nat(1), Term::free_var(&p)],
+    );
+    let that = Term::struct_(
+        name.clone(),
+        Vec::<Term>::new(),
+        [nat(1), Term::free_var(&q)],
+    );
+    assert_eq!(
+        convert(&mut kernel, &Term::type_ground(), &this, &that),
+        Ok(true),
+        "two literals differing only in a proof field did not convert",
+    );
+
+    // The control: a relevant field is still compared, so irrelevance did not leak past the proposition.
+    let other = Term::struct_(name, Vec::<Term>::new(), [nat(2), Term::free_var(&p)]);
+    assert_eq!(
+        convert(&mut kernel, &Term::type_ground(), &this, &other),
+        Ok(false),
+        "a relevant field stopped being compared",
+    );
+}
+
+/// The constructor twin: a payload compares at the constructor's telescope, so a payload at a proposition is discharged the same way.
+#[test]
+fn a_constructor_payload_at_a_proposition_is_not_read() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let name = curios_core::Global::Authored(Qualifier::from(["Wrap"]));
+    kernel.declare_induct(
+        &name,
+        &InductDecl {
+            universe_context: UniverseContext::default(),
+            arity: Telescope::done(Telescope::done(())),
+            constructors: Vec::from([(
+                Atom::from("wrap"),
+                InductParam::new(
+                    Telescope::build(
+                        [
+                            (binder(60, "n"), nat_type()),
+                            (binder(61, "p"), proposition.clone()),
+                        ],
+                        Vec::new(),
+                    ),
+                    vec![Plicity::Explicit, Plicity::Explicit],
+                ),
+            )]),
+            result_sort: Term::type_ground(),
+            module: Qualifier::empty(),
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+    let (p, q) = (binder(62, "p"), binder(63, "q"));
+    kernel.assume(&p, &proposition);
+    kernel.assume(&q, &proposition);
+
+    let this = Term::variant(
+        name.clone(),
+        Vec::<Term>::new(),
+        "wrap",
+        [nat(1), Term::free_var(&p)],
+    );
+    let that = Term::variant(
+        name.clone(),
+        Vec::<Term>::new(),
+        "wrap",
+        [nat(1), Term::free_var(&q)],
+    );
+    assert_eq!(
+        convert(&mut kernel, &Term::type_ground(), &this, &that),
+        Ok(true),
+        "two constructions differing only in a proof payload did not convert",
+    );
+
+    let other = Term::variant(
+        name,
+        Vec::<Term>::new(),
+        "wrap",
+        [nat(2), Term::free_var(&p)],
+    );
+    assert_eq!(
+        convert(&mut kernel, &Term::type_ground(), &this, &other),
+        Ok(false),
+        "a relevant payload stopped being compared",
     );
 }
 

@@ -552,6 +552,22 @@ pub(super) const A_GROUNDED_ARGUMENT_FORFEITS_IRRELEVANCE: &str = r#"
         /std/print(Nat/to_str(1))
         "#;
 
+pub(super) const A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS: &str = r#"
+        use /std/{Eq, Nat, Option, Str};
+
+        induct P : pub Prop | mk() end
+        struct S : pub Type { n : Nat, p : P }
+        induct W : pub Type | wrap(Nat, P) end
+
+        let field(n : Nat, p : P, q : P) -> Eq(S { n = n, p = p }, S { n = n, p = q }) = Eq/refl();
+        let payload(n : Nat, p : P, q : P) -> Eq(W/wrap(n, p), W/wrap(n, q)) = Eq/refl();
+        let some(p : P, q : P) -> Eq(Option/some(p), Option/some(q)) = Eq/refl();
+        let assoc(a : Str, b : Str, c : Str)
+            -> Eq(Str/concat(Str/concat(a, b), c), Str/concat(a, Str/concat(b, c))) = Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
 pub(super) const A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE: &str = r#"
         use /std/{Eq, Nat};
 
@@ -1221,6 +1237,13 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
     (
         "nominal_struct_eta_survives_grounding",
         A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    // The forfeiture stops at the opaque head: a struct's fields and a constructor's payload compare at their declaration's telescope in both checkers, so a proof there distinguishes nothing.
+    (
+        "proof_field_does_not_distinguish_two_literals",
+        A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS,
         Expect::Accepts,
         Expect::Accepts,
     ),
