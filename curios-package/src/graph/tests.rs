@@ -460,6 +460,37 @@ fn the_four_marker_mismatches_are_four_refusals() {
     }
 }
 
+/// A catalog row that points nowhere is the umbrella's fault, and the refusal says so: the member wrote a marker and no path, so a refusal naming the member alone sends the reader to a file with nothing in it to fix.
+#[test]
+fn a_catalog_row_pointing_nowhere_is_refused_against_the_umbrella() {
+    let root = tree(
+        "graph-catalog-missing",
+        &[
+            (
+                "curios.toml",
+                "members = [\"app\"]\n\n[catalog]\nshape = { source = \"path\", path = \"vendor/shape\" }\n",
+            ),
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\nshape = { source = \"catalog\" }\n",
+            ),
+            ("app/lib.crs", ""),
+        ],
+    );
+
+    let refusal = mounts(&root.join("app")).expect_err("a catalog row with nothing at its path");
+    assert!(
+        refusal.starts_with(&format!(
+            "the catalog row \"shape\" of the umbrella at {}, which the dependency \"shape\" of \"app\" names, resolves to {}",
+            root.join(MANIFEST).display(),
+            root.join("vendor/shape").display()
+        )),
+        "{refusal}"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// An entry in `members` that no manifest answers is the umbrella's fault, and the refusal says so: the umbrella's manifest, the entry as written, and where it looked — never the operating system's word for a file the reader did not spell.
 #[test]
 fn a_member_with_no_manifest_is_refused_against_the_umbrella() {

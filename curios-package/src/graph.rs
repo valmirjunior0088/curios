@@ -139,6 +139,8 @@ impl Walk<'_> {
         name: &str,
         row: &Dependency,
     ) -> Result<(), String> {
+        let subject = format!("the dependency {:?} of {:?}", name, dependent.name);
+
         // The snapshot is read off the row, before anything is located: once the first dependent's pin is placed — which locates it, so its tree has to be there — a second dependent disagreeing about the name is refused whether or not its own tree has been materialized, which is what "before any of the three elaborates" has to mean.
         let snapshot = self.pinned(name, row);
 
@@ -171,7 +173,7 @@ impl Walk<'_> {
                 };
             }
 
-            let directory = self.locate(dependent, from, name, row)?;
+            let directory = self.locate(dependent, from, name, row, &subject)?;
 
             return match earlier.directory == directory {
                 true => Ok(()),
@@ -186,7 +188,7 @@ impl Walk<'_> {
             };
         }
 
-        let directory = self.locate(dependent, from, name, row)?;
+        let directory = self.locate(dependent, from, name, row, &subject)?;
 
         self.placed.insert(
             name.to_string(),
@@ -254,7 +256,7 @@ impl Walk<'_> {
         }
     }
 
-    /// Where `row` points, as the filesystem names it.
+    /// Where `row` points, as the filesystem names it. `subject` names the row for a refusal, and it is the caller's to spell because the caller knows which file holds the row: a dependency row sits in the dependent's manifest, and the catalog row it may name sits in the umbrella's.
     ///
     /// Canonical rather than as written, because a location is compared: `../left/../base` and `../right/../base` are one package, and a diamond that read them as two would compile its point twice and hand out two nominally distinct families spelled the same.
     fn locate(
@@ -263,10 +265,9 @@ impl Walk<'_> {
         from: &Path,
         name: &str,
         row: &Dependency,
+        subject: &str,
     ) -> Result<PathBuf, String> {
-        let subject = format!("the dependency {:?} of {:?}", name, dependent.name);
-
-        let directory = self.point(dependent, from, name, row, &subject)?;
+        let directory = self.point(dependent, from, name, row, subject)?;
 
         directory
             .canonicalize()
@@ -316,7 +317,13 @@ impl Walk<'_> {
                     )
                 })?;
 
-                self.locate(dependent, &self.governing.root, name, row)
+                // The row being located is the umbrella's now, so the refusal has to send the reader to the umbrella's manifest: the member wrote a marker and no path, and a refusal naming the member alone sends them to a file that holds nothing to fix.
+                let catalogued = format!(
+                    "the catalog row {name:?} of the umbrella at {}, which {subject} names,",
+                    self.governing.root.join(MANIFEST).display()
+                );
+
+                self.locate(dependent, &self.governing.root, name, row, &catalogued)
             }
 
             // A direct row is the consumer answering for a name its own umbrella already answers for. Refused in both directions, because a promotion that only half happened is the shape that compiles two of one package.
