@@ -131,6 +131,30 @@ fn a_regrouped_run_still_respects_its_order() {
 }
 
 #[test]
+fn a_symbolic_run_is_the_same_value_however_it_is_grouped() {
+    // **The law above past a head the peel cannot strip.** `a_literal_run_is_the_same_value_however_it_is_grouped` regroups behind chunks that are syntactically their own twin, which the prefix step peels before the nesting matters. Here the leading chunks are convertible but unlike — `g(a + b)` against `g(b + a)`, and two instances of one universe-polymorphic fold — so nothing peels, and the peel used to hand the nesting back intact for shape congruence to refuse on operand count. Regrouping in the peel (`core::spine`) hands back both flat spellings instead, and the operand comparison then decides the heads.
+    //
+    // Stated as a program because the two checkers meet it in turn: an elaborated `refl` is certified by the kernel, so both peels are exercised, and the polymorphic fold is the shape a proof about a structural `reverse` reaches on its first inductive step.
+    let source = r#"
+        use /std/{Str, Eq, Nat, Bytes, List, Io};
+        let list_law(t : List(Nat), h : Nat, g : (Nat) -> List(Nat), a : Nat, b : Nat)
+            -> Eq([..[..g(a + b), ..t], ..[h]], [..g(b + a), ..t, ..[h]]) =
+            Eq/refl();
+        let bytes_law(t : Bytes, g : (Nat) -> Bytes, a : Nat, b : Nat)
+            -> Eq(x[..x[..g(a + b), ..t], 0], x[..g(b + a), ..t, 0]) =
+            Eq/refl();
+        let rev(@T : Type, l : List(T)) -> List(T) =
+            match l | [] => [] | [h, .._t]; r => [..r, ..[h]] end;
+        let fold_law(@T : Type, t : List(T), b : List(T), h : T)
+            -> Eq([..[..rev(b), ..rev(t)], ..[h]], [..rev(b), ..rev(t), ..[h]]) =
+            Eq/refl();
+        let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn a_length_and_a_window_do_not_depend_on_grouping() {
     // **The law the measure adds, stated where both checkers see it.** `Bin/len` now answers a wholly-literal spine by folding the operands' own lengths, and `Bin/get`/`Bin/slice` locate their position the same way, rather than rebuilding a `len` per operand or peeling one generator at a time. A length is a definitional equation, so a measure that disagreed with the run would be a false one and congruence carries a false equation to `False` — which is why this is stated as a checked proof rather than an observed result.
     //

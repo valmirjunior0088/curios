@@ -12,11 +12,11 @@ use {
 pub enum Peel {
     /// Both sides consumed to the identity — definitionally equal.
     Equal,
-    /// A common head peeled off; compare these residual tails next.
+    /// A common head peeled off, or a side regrouped to its segment list; compare these residuals next.
     Continue(Term, Term),
     /// Literal heads differ, or a positive head meets the identity — unequal.
     Clash,
-    /// Undecidable by peeling — a symbolic-length head, or a pair the peel made no progress on; the caller falls back. Every reader treats it as the refusing direction, so declining can only cost reductions.
+    /// Undecidable by peeling — a symbolic-length head, or a pair already spelled flat that the peel made no progress on; the caller falls back. Every reader treats it as the refusing direction, so declining can only cost reductions.
     Stuck,
 }
 
@@ -243,28 +243,45 @@ fn against_identity<E>(atom: &Atom<E>) -> Peel {
 
 /// `Bin` is the free monoid on its bytes. Two values reduce by stripping their longest common prefix — concrete bytes byte-for-byte, identical symbolic chunks whole, and equal slice windows whole (after `bin_atoms` has fused adjacent windows of one base) — and the residual tails ride back on `Continue` (so the inverter can solve a flex binder forced to equal a leftover suffix, and conversion can enqueue the rest). A definite byte disagreement, or a positive run meeting the empty bytestring, is a `Clash`; a symbolic chunk or window facing an unlike one or the identity is `Stuck` (its length is unknown, so peeling cannot decide). `None` means the pair is not two `Bin` values, so the caller keeps its own handling.
 ///
-/// Prefix-only, mirroring `peel_nat`: a common *suffix* (`x ++ x[0x01] ~ y ++ x[0x01]`) is sound to cancel but not yet attempted. Symbolic chunks and windows are matched by syntactic equality, so two convertible-but-unequal chunks (`append(x[], h1)` vs `append(x[], h2)`) — or two windows whose bounds differ only up to arithmetic — are left to the caller's structural comparison rather than decided here.
+/// Prefix-only, mirroring `peel_nat`: a common *suffix* (`x ++ x[0x01] ~ y ++ x[0x01]`) is sound to cancel but not yet attempted. Symbolic chunks and windows are matched by syntactic equality, so two convertible-but-unequal chunks (`append(x[], h1)` vs `append(x[], h2)`) — or two windows whose bounds differ only up to arithmetic — are left to the caller's structural comparison rather than decided here, and they reach it *flat*: see `regroup`.
 pub fn peel_bin(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
     let grain = bin_grain(left)?;
     if bin_grain(right) != Some(grain) {
         return None;
     }
 
-    let mut left = bin_atoms(grain, left);
-    let mut right = bin_atoms(grain, right);
-    let peeled = peel_prefix(&mut left, &mut right);
+    let mut left_atoms = bin_atoms(grain, left);
+    let mut right_atoms = bin_atoms(grain, right);
+    let peeled = peel_prefix(&mut left_atoms, &mut right_atoms);
 
-    Some(match (left.front(), right.front()) {
+    Some(match (left_atoms.front(), right_atoms.front()) {
         (None, None) => Peel::Equal,
         (None, Some(atom)) | (Some(atom), None) => against_identity(atom),
         // Both still lead with a concrete run: the loop only stops here once their first bytes disagree, and bytes are decided — so the values are unequal.
         (Some(Atom::Literal(_)), Some(Atom::Literal(_))) => Peel::Clash,
-        // A literal facing a symbolic chunk, or two unlike symbolic chunks. If a common prefix was peeled the residual tails go back to the caller; otherwise nothing here is decidable by peeling.
-        _ => match peeled {
-            true => Peel::Continue(reassemble_bin(grain, left), reassemble_bin(grain, right)),
-            false => Peel::Stuck,
-        },
+        // A literal facing a symbolic chunk, or two unlike symbolic chunks. If a common prefix was peeled the residual tails go back to the caller; otherwise nothing here is decidable by peeling, and the pair regroups or declines.
+        _ => {
+            let flat_left = reassemble_bin(grain, left_atoms);
+            let flat_right = reassemble_bin(grain, right_atoms);
+            match peeled {
+                true => Peel::Continue(flat_left, flat_right),
+                false => regroup(left, flat_left, right, flat_right),
+            }
+        }
     })
+}
+
+/// The verdict for a pair whose leading segments the prefix step could not match. A side spelled as anything but its own segment list — a nesting, an append, a run split across operands, an empty operand — is handed back as that list, and the pair carries on as `Continue`: regrouping is the identity on values, so the residuals hold the same obligation as any other `Continue`'s, and what the caller then sees is one operand list against another rather than a nesting against its flattening, which its shape congruence refused on operand count before comparing a single chunk. A pair already spelled flat declines as `Stuck`, exactly as `classify_nat` declines an unchanged pair — a `Continue` that changed nothing would re-enter the caller on the same terms and never settle. The round after a regroup is that flat pair, so the two arms are the whole termination argument.
+fn regroup(left: &Intrinsic, flat_left: Term, right: &Intrinsic, flat_right: Term) -> Peel {
+    let flat = |written: &Intrinsic, spelled: &Term| match &**spelled {
+        Subterm::Intrinsic(intrinsic) => intrinsic == written,
+        _ => false,
+    };
+
+    match flat(left, &flat_left) && flat(right, &flat_right) {
+        true => Peel::Stuck,
+        false => Peel::Continue(flat_left, flat_right),
+    }
 }
 
 /// `List` is the free monoid on its elements — the same peel as `peel_bin`, with two differences. Its literal runs hold *terms*, not decided bytes, so two leading runs whose heads disagree are NOT a clash (the elements may still be convertible): the peel defers, and the caller's structural element-wise comparison settles it. And every `List`-valued producer carries its element type, recovered here to rebuild residuals. A leftover literal run against the empty identity (`[x] ~ []`) is still a definite length clash, as in `peel_bin`.
@@ -272,21 +289,22 @@ pub fn peel_list(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
     let elem = list_elem(left)?;
     list_elem(right)?;
 
-    let mut left = list_atoms(left);
-    let mut right = list_atoms(right);
-    let peeled = peel_prefix(&mut left, &mut right);
+    let mut left_atoms = list_atoms(left);
+    let mut right_atoms = list_atoms(right);
+    let peeled = peel_prefix(&mut left_atoms, &mut right_atoms);
 
-    Some(match (left.front(), right.front()) {
+    Some(match (left_atoms.front(), right_atoms.front()) {
         (None, None) => Peel::Equal,
         (None, Some(atom)) | (Some(atom), None) => against_identity(atom),
-        // Two leading literal runs whose heads differ, a literal facing a symbolic chunk, or two unlike chunks — none decidable by peeling (an element disagreement is syntactic, not semantic). Hand back any peeled residual.
-        _ => match peeled {
-            true => Peel::Continue(
-                reassemble_list(left, elem.clone()),
-                reassemble_list(right, elem),
-            ),
-            false => Peel::Stuck,
-        },
+        // Two leading literal runs whose heads differ, a literal facing a symbolic chunk, or two unlike chunks — none decidable by peeling (an element disagreement is syntactic, not semantic). Hand back any peeled residual; otherwise the pair regroups or declines.
+        _ => {
+            let flat_left = reassemble_list(left_atoms, elem.clone());
+            let flat_right = reassemble_list(right_atoms, elem);
+            match peeled {
+                true => Peel::Continue(flat_left, flat_right),
+                false => regroup(left, flat_left, right, flat_right),
+            }
+        }
     })
 }
 

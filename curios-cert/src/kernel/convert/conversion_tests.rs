@@ -4,8 +4,8 @@ use super::test_support::*;
 use {
     crate::{KernelError, convert},
     curios_core::{
-        FuncType, Global, Intrinsic, Level, MetavarId, StructDecl, StructType, Subterm, Telescope,
-        Term, UniverseContext,
+        Free, FuncType, Global, Intrinsic, Level, MetavarId, StructDecl, StructType, Subterm,
+        Telescope, Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -198,6 +198,43 @@ fn a_shared_successor_floor_is_peeled_before_comparing() {
     // The same base: equal after the shared floor comes off.
     let same = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(2)));
     assert_eq!(convert(&mut kernel, &nat_type(), &left, &same), Ok(true));
+}
+
+/// The heads are one number spelled two ways, so the peel cannot strip them, and the nesting is what the peel used to hand back intact — leaving shape congruence a two-operand concatenation against a three-operand one. Regrouping in the peel is what lets the pair reach the operand comparison that decides `n + m ≡ m + n`.
+#[test]
+fn a_nested_concatenation_converts_with_its_flat_spelling_past_unlike_heads() {
+    let mut kernel = kernel();
+    let g = binder(0, "g");
+    let n = binder(1, "n");
+    let m = binder(2, "m");
+    let t = binder(3, "t");
+    let h = binder(4, "h");
+
+    let head = |left: &Free, right: &Free| {
+        Term::apply(
+            Term::free_var(&g),
+            [Term::intrinsic(Intrinsic::nat_add(
+                Term::free_var(left),
+                Term::free_var(right),
+            ))],
+        )
+    };
+    let single = Term::intrinsic(Intrinsic::List {
+        element: nat_type(),
+        items: vec![Term::free_var(&h)],
+    });
+    let cat = |operands: Vec<Term>| Term::intrinsic(Intrinsic::list_concat(nat_type(), operands));
+
+    let nested = cat(vec![
+        cat(vec![head(&n, &m), Term::free_var(&t)]),
+        single.clone(),
+    ]);
+    let flat = cat(vec![head(&m, &n), Term::free_var(&t), single]);
+
+    assert_eq!(
+        convert(&mut kernel, &Term::type_ground(), &nested, &flat),
+        Ok(true)
+    );
 }
 
 /// Plicity is part of a function type's identity: `(A) -> A` and `(@A) -> A` have different calling conventions, and conflating them would let a value be applied through the wrong one.

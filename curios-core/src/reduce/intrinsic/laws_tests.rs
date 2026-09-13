@@ -239,6 +239,18 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
             cat(vec![chunk.clone(), y.clone()]),
         ),
         ("append(x[], c) ~ x[]", chunk.clone(), run_bytes(&[])),
+        // A nesting whose leading chunks the prefix step cannot match regroups: the residuals are both flat spellings, and regrouping is the identity on values, so they hold the same obligation as any `Continue`.
+        (
+            "(x ++ x[05]) ++ y ~ y ++ x[05] ++ x",
+            cat(vec![cat(vec![x.clone(), run_bytes(&[5])]), y.clone()]),
+            cat(vec![y.clone(), run_bytes(&[5]), x.clone()]),
+        ),
+        // The flat twin — what the residuals above are — declines, which is what keeps a regroup from re-entering.
+        (
+            "x ++ x[05] ++ y ~ y ++ x[05] ++ x",
+            cat(vec![x.clone(), run_bytes(&[5]), y.clone()]),
+            cat(vec![y.clone(), run_bytes(&[5]), x.clone()]),
+        ),
     ];
 
     let as_intrinsic = |term: &Term| match &**term {
@@ -303,7 +315,7 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
 
     assert_eq!(
         (equal, clash, carried, stuck),
-        (4, 2, 3, 3),
+        (4, 2, 4, 4),
         "the grid stopped reaching every peel verdict",
     );
 }
@@ -376,6 +388,32 @@ fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
             nat_list(&[7, 8]),
             cat(vec![nat_list(&[7]), xs.clone()]),
         ),
+        // The regrouping shape over the element carrier, and one that is equal at every instantiation while the peel cannot see it: the heads are one number spelled two ways, so nothing peels, and only the flat residuals let the caller compare them.
+        (
+            "([a + b] ++ xs) ++ ys ~ [b + a] ++ xs ++ ys",
+            cat(vec![
+                cat(vec![one(plus(a.clone(), b.clone())), xs.clone()]),
+                ys.clone(),
+            ]),
+            cat(vec![
+                one(plus(b.clone(), a.clone())),
+                xs.clone(),
+                ys.clone(),
+            ]),
+        ),
+        (
+            "[a + b] ++ xs ++ ys ~ [b + a] ++ xs ++ ys",
+            cat(vec![
+                one(plus(a.clone(), b.clone())),
+                xs.clone(),
+                ys.clone(),
+            ]),
+            cat(vec![
+                one(plus(b.clone(), a.clone())),
+                xs.clone(),
+                ys.clone(),
+            ]),
+        ),
     ];
 
     let as_intrinsic = |term: &Term| match &**term {
@@ -439,7 +477,7 @@ fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
 
     assert_eq!(
         (equal, clash, carried, stuck),
-        (2, 1, 2, 1),
+        (2, 1, 3, 2),
         "the grid stopped reaching every peel verdict",
     );
 }

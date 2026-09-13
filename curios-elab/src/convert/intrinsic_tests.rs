@@ -237,6 +237,47 @@ fn intrinsic_bin_concat_recurses_into_operands() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
+// The heads are one number spelled two ways, so the peel cannot strip them, and the nesting is what the peel used to hand back intact — leaving shape congruence a two-operand concatenation against a three-operand one. Regrouping in the peel is what lets the pair reach the operand comparison that decides `n + m ≡ m + n`.
+#[test]
+fn a_nested_concatenation_converts_with_its_flat_spelling_past_unlike_heads() {
+    let mut context = context();
+    let g = context.fresh(Some("g"));
+    let n = context.fresh(Some("n"));
+    let m = context.fresh(Some("m"));
+    let t = context.fresh(Some("t"));
+    let h = context.fresh(Some("h"));
+
+    let head = |left: &Free, right: &Free| {
+        Term::apply(
+            Term::free_var(&g),
+            [Term::intrinsic(Intrinsic::nat_add(
+                Term::free_var(left),
+                Term::free_var(right),
+            ))],
+        )
+    };
+    let single = Term::intrinsic(Intrinsic::List {
+        element: nat_type(),
+        items: vec![Term::free_var(&h)],
+    });
+    let cat = |operands: Vec<Term>| Term::intrinsic(Intrinsic::list_concat(nat_type(), operands));
+
+    let nested = cat(vec![
+        cat(vec![head(&n, &m), Term::free_var(&t)]),
+        single.clone(),
+    ]);
+    let flat = cat(vec![head(&m, &n), Term::free_var(&t), single]);
+
+    assert_eq!(
+        conv(
+            &mut context,
+            &func([&g, &n, &m, &t, &h], nested),
+            &func([&g, &n, &m, &t, &h], flat),
+        ),
+        Ok(true)
+    );
+}
+
 #[test]
 fn intrinsic_bin_slice_recurses_into_operands() {
     let mut context = context();
