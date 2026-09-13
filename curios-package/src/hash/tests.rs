@@ -3,7 +3,7 @@ use {
     std::{
         ffi::OsStr,
         fs,
-        os::unix::ffi::OsStrExt,
+        os::unix::{self, ffi::OsStrExt},
         path::PathBuf,
         time::{SystemTime, UNIX_EPOCH},
     },
@@ -150,7 +150,7 @@ fn a_name_that_is_not_utf8_is_refused() {
 #[test]
 fn a_symlink_in_a_delivered_tree_is_refused() {
     let root = tree("hash-symlink", &[("lib.crs", "")]);
-    std::os::unix::fs::symlink("lib.crs", root.join("alias.crs")).unwrap();
+    unix::fs::symlink("lib.crs", root.join("alias.crs")).unwrap();
 
     let refusal = TreeHash::of(&root)
         .map(|_| ())
