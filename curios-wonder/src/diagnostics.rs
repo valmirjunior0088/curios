@@ -5,7 +5,7 @@ use {
     curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, check_with_units},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
-    curios_utilities::Qualifier,
+    curios_utilities::{Qualifier, Report, Source, Span},
     curios_verdicts::Verdicts,
     std::{collections::BTreeSet, path::PathBuf},
 };
@@ -30,7 +30,63 @@ pub enum Subject {
         declares: Option<Vec<Qualifier>>,
     },
     /// A unit: the last of `units`, compiled against the ones before it. Its verdicts are the answer.
-    Unit { units: Vec<RootSource> },
+    Unit {
+        units: Vec<RootSource>,
+        /// The file the question was asked through, when it was asked through one rather than about the unit entire — so a file the unit never reads is reported as such, ahead of an answer that would otherwise be silent about it.
+        file: Option<FileAsked>,
+    },
+}
+
+/// A file a unit question was asked through: where it is, and the module its spelling names under the unit's prefix.
+///
+/// **A file under a package's directory is placed in its library, and the library may never read it.** A unit's input set is closed — a file joins it only by being declared `mod` somewhere on a chain from the header — so a file no chain reaches is in no unit at all, and an answer computed as if it were reports the library's verdicts and nothing about the file: with a clean library, nothing and exit 0, whatever the file holds. This is what lets the answer say so instead, by asking the unit's own loader whether a `mod` reaches the module, which is the same answer on a cache hit as on a compile.
+pub struct FileAsked {
+    pub path: PathBuf,
+    /// The unit's prefix, for the message.
+    pub prefix: Qualifier,
+    /// The module the file would be, by the layout rule; `None` when its spelling is no module's, which no `mod` could declare.
+    pub module: Option<Qualifier>,
+}
+
+impl FileAsked {
+    /// The diagnostic this file earns when no `mod` reachable from `unit`'s header declares it, and `None` when one does — or when a header on the way could not be read, which the compilation reports on its own account.
+    fn undeclared(&self, unit: &RootSource, overlay: &Overlay) -> Option<Diagnostic> {
+        let declared = match &self.module {
+            Some(module) => unit.declares_module(module).ok()?,
+            None => false,
+        };
+        if declared {
+            return None;
+        }
+
+        let reason = match &self.module {
+            Some(module) => format!(
+                "no `mod` reachable from the library's header declares `{}`",
+                module.join()
+            ),
+            None => "its spelling names no module a `mod` could declare".to_string(),
+        };
+        let message = format!(
+            "{} is not part of `{}`: {reason}, so the library was checked without it",
+            self.path.display(),
+            self.prefix.join()
+        );
+
+        // Located at the file's start, so an editor places it on the document asked about; the text is the overlay's where it holds one, as every read is.
+        let source = match overlay.get(&self.path) {
+            Some(text) => Some(Source::held(&self.path, text)),
+            None => Source::read(&self.path).ok(),
+        };
+        let report = match source {
+            Some(source) => Report::at(Span::new(source, 0, 0), message),
+            None => Report::unlocated(message),
+        };
+
+        Some(Diagnostic {
+            severity: Severity::Error,
+            report,
+        })
+    }
 }
 
 /// Where the program a question is about comes from: a file, or text standing in for one.
@@ -71,9 +127,13 @@ pub fn diagnosed(
     let read_only = cache.map(|cache| ReadOnly { cache, overlay });
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
 
-    let (checked, is_unit) = match subject {
-        Subject::Unit { units } => {
+    let (checked, is_unit, undeclared) = match subject {
+        Subject::Unit { units, file } => {
             let units = overlaid(units, overlay);
+            let undeclared = match (&file, units.last()) {
+                (Some(file), Some(unit)) => file.undeclared(unit, overlay),
+                _ => None,
+            };
             // A library has no written entry, so it is asked through the trivial one, which the tests tail then replaces — the subject is the scope's final unit, exactly as `curios test` compiles a library.
             let entrypoint = Entrypoint::trivial();
             let loader = RootSource::none();
@@ -86,7 +146,7 @@ pub fn diagnosed(
                 EntryTail::LastUnitTests,
                 |_| {},
             );
-            (checked, true)
+            (checked, true, undeclared)
         }
         Subject::Entry {
             units,
@@ -113,11 +173,11 @@ pub fn diagnosed(
                 EntryTail::Authored,
                 |_| {},
             );
-            (checked, false)
+            (checked, false, None)
         }
     };
 
-    match checked {
+    let mut diagnosed = match checked {
         Ok(Checked {
             entry,
             unit,
@@ -135,7 +195,14 @@ pub fn diagnosed(
             }
         }
         Err(error) => Diagnosed::refused(error),
+    };
+
+    // First, because it is the one fact about the file asked: everything after it is about a unit that never read that file.
+    if let Some(undeclared) = undeclared {
+        diagnosed.diagnostics.insert(0, undeclared);
     }
+
+    diagnosed
 }
 
 impl Diagnosed {

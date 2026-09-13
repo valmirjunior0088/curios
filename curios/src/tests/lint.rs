@@ -79,6 +79,7 @@ fn every_corpus_unit_lints_clean() {
         let mounted = RootSource::mounted(&unit, RootKind::Ordinary, &header, root.join(&unit));
         wrong.extend(findings(Subject::Unit {
             units: vec![mounted],
+            file: None,
         }));
     }
     assert!(

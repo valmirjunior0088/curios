@@ -6,7 +6,7 @@
 
 use {
     crate::{
-        Diagnosed, Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, cost,
+        Diagnosed, Diagnostic, FileAsked, Origin, Reached, Refusal, STDIN_LABEL, Subject, cost,
         declared_tests, diagnosed, diagnostics, stage,
     },
     curios_cont::Outcome,
@@ -38,8 +38,23 @@ impl Asked {
                 },
                 store: None,
             },
-            Membership::Library { root, units } => Self {
-                subject: Subject::Unit { units },
+            Membership::Library {
+                root,
+                units,
+                module,
+            } => Self {
+                subject: Subject::Unit {
+                    file: Some(FileAsked {
+                        path: file.to_path_buf(),
+                        prefix: units
+                            .last()
+                            .and_then(|unit| unit.mounts().into_iter().next())
+                            .map(|mount| mount.prefix)
+                            .unwrap_or_default(),
+                        module,
+                    }),
+                    units,
+                },
                 store: Some(Verdicts::at(root)),
             },
             Membership::Executable {
@@ -141,6 +156,7 @@ pub(crate) fn resolve(manifest: Option<&Path>, target: Option<&str>) -> Result<V
                 asked.push(Asked {
                     subject: Subject::Unit {
                         units: order(&governing)?,
+                        file: None,
                     },
                     store: Some(Verdicts::at(governing.root.clone())),
                 });

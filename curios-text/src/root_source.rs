@@ -5,7 +5,7 @@
 //! A stem is never part of a name. `<dir>` and `main` are spelling, and `/util` is the qualifier — which is why [`RootSource::mounted`] takes the header and the directory as two arguments rather than deriving one from the other: a package's library header sits beside its manifest while its namespace *is* the manifest's directory, and that exception is the manifest's to state, not this crate's to guess. See `curios-package`'s `layout` module.
 
 use {
-    super::{Error, LoadError, Module},
+    super::{Error, LoadError, Module, TopItem},
     curios_utilities::{Mount, Qualifier, RootKind, Source, is_identifier},
     std::{
         cell::RefCell,
@@ -247,6 +247,40 @@ impl RootSource {
                 Ok(module)
             }
         }
+    }
+
+    /// Whether a chain of `mod` declarations from the owning mount's header reaches `qualifier`, read as the lowering reads it — through the overlay first, then the disk.
+    ///
+    /// **This is the question "is this file part of the unit", asked before any compile and independent of the store.** A unit's input set is closed (see [`Self::reads`]): a file joins it only by being declared, so a file the walk does not reach is one no compilation of this unit ever reads. Asking the walk rather than the record of a compilation is what keeps the answer the same on a cache hit, where nothing is read at all. An inline `mod x { … }` is walked as the body it carries, and a file module is loaded, so what this reads is exactly what discovery would.
+    ///
+    /// `Err` is a header on the chain that could not be read or parsed — a fault the compilation reports on its own account, so a caller adds nothing beside it.
+    pub fn declares_module(&self, qualifier: &Qualifier) -> Result<bool, Error> {
+        let Some((mount, _)) = self.owning(qualifier) else {
+            return Ok(false);
+        };
+
+        let mut items = self.load(&mount.prefix)?.items;
+        let mut path = mount.prefix.clone();
+
+        for segment in &qualifier.segments()[mount.prefix.segments().len()..] {
+            path = path.with(segment);
+
+            let Some(declaration) = items.iter().find_map(|item| match item {
+                TopItem::Mod(declaration) if declaration.label.to_string() == *segment => {
+                    Some(declaration)
+                }
+                _ => None,
+            }) else {
+                return Ok(false);
+            };
+
+            items = match &declaration.module {
+                Some(module) => module.items.clone(),
+                None => self.load(&path)?.items,
+            };
+        }
+
+        Ok(true)
     }
 
     /// The base whose prefix `qualifier` most specifically lies within.

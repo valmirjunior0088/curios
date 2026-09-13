@@ -133,6 +133,34 @@ fn a_file_is_placed_in_its_unit() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A file under a package that no `mod` reaches is in no unit, and the answer says so rather than reporting the library's verdicts as if they were about it — on a cold store and on a warm one alike, since the walk asks the loader and not the record of a compile. Declaring it is what makes the file's own contents the answer.
+#[test]
+fn a_file_no_mod_declares_is_reported_as_not_part_of_its_unit() {
+    let root = project("undeclared");
+    write(&root, "stray.crs", "pub let w : /std/Str = 1;\n");
+
+    let cold = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
+    assert!(cold.status.success());
+    let text = stdout(&cold);
+    assert!(text.contains("stray.crs is not part of `/app`"), "{text}");
+    assert!(text.contains("declares `/app/stray`"), "{text}");
+    assert!(!text.contains("type mismatch"), "never read: {text}");
+
+    // Warm: the library is served from the store, and the walk still answers.
+    let built = curios(&root, &["run", "app"], "");
+    assert!(built.status.success(), "{}", String::from_utf8_lossy(&built.stderr));
+    let warm = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
+    assert!(stdout(&warm).contains("is not part of `/app`"), "{}", stdout(&warm));
+
+    write(&root, "lib.crs", "pub mod util;\npub mod stray;\n");
+    let declared = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
+    let text = stdout(&declared);
+    assert!(!text.contains("is not part of"), "{text}");
+    assert!(text.contains("stray.crs:1:24"), "its own error, now read: {text}");
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// A stage that the program does not reach is not an answer: diagnostics on stderr, exit 1, stdout empty.
 #[test]
 fn an_unreached_stage_leaves_stdout_empty() {

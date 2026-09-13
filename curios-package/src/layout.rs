@@ -12,10 +12,13 @@
 mod tests;
 
 use {
-    crate::{LIBRARY, MANIFEST, Manifest, Package},
+    crate::{EXTENSION, LIBRARY, MANIFEST, Manifest, Package},
     curios_text::{Module, RootSource, TopItem},
-    curios_utilities::{Qualifier, RootKind},
-    std::{collections::BTreeMap, path::Path},
+    curios_utilities::{Qualifier, RootKind, is_identifier},
+    std::{
+        collections::BTreeMap,
+        path::{Component, Path},
+    },
 };
 
 /// The package whose manifest sits in `directory`, and the resolver its library is lowered from — `None` when it has no library at all.
@@ -46,6 +49,34 @@ pub(crate) fn declared(package: &Package) -> Vec<Qualifier> {
         .map(|name| Qualifier::from([name.as_str()]))
         .chain([Qualifier::from(["std"])])
         .collect()
+}
+
+/// The module `file` would be in `package`'s library at `directory`, by the layout rule and its one exception: `lib.crs` beside the manifest is the root, and every other `.crs` under the directory is the qualifier its path spells, `parse/lexer.crs` being `/json/parse/lexer`. `None` when the spelling is no module's — another extension, or a segment no identifier — since no `mod` could declare it.
+///
+/// The spelling is what is asked, not the disk: whether a `mod` reaches the module is `RootSource::declares_module`'s question, and this is what to ask it about. Both paths are compared as given, so hand them one spelling.
+pub(crate) fn module_of(package: &Package, directory: &Path, file: &Path) -> Option<Qualifier> {
+    if file == directory.join(LIBRARY) {
+        return Some(Qualifier::from([package.name.as_str()]));
+    }
+
+    let relative = file.strip_prefix(directory).ok()?;
+    if relative.extension()? != EXTENSION {
+        return None;
+    }
+
+    let mut segments = vec![package.name.clone()];
+    for component in relative.parent()?.components() {
+        let Component::Normal(segment) = component else {
+            return None;
+        };
+        segments.push(segment.to_str()?.to_string());
+    }
+    segments.push(relative.file_stem()?.to_str()?.to_string());
+
+    segments
+        .iter()
+        .all(|segment| is_identifier(segment))
+        .then(|| Qualifier::from(segments))
 }
 
 /// The resolver `package`'s library is lowered from, its header beside the manifest in `directory`, or `None` when there is no header there.

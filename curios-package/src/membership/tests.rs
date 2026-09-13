@@ -67,11 +67,49 @@ fn a_members_module_is_placed_in_its_library_under_the_umbrella_root() {
         Membership::Library {
             root: governing,
             units,
+            ..
         } => {
             assert_eq!(governing, root.canonicalize().unwrap());
             assert_eq!(units.len(), 1);
         }
         _ => panic!("a module of the library is the library"),
+    }
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A placed file carries the module its spelling names, by the layout rule and its exception: the header is the root, a `.crs` under the directory is its path, and a file no `mod` could declare — another extension, a segment no identifier — names none.
+#[test]
+fn a_placed_file_carries_the_module_its_spelling_names() {
+    let root = tree(
+        "membership-module",
+        &[
+            ("curios.toml", "name = \"app\"\n"),
+            ("lib.crs", ""),
+            ("util.crs", ""),
+            ("parse/lexer.crs", ""),
+            ("notes.txt", ""),
+            ("odd-name.crs", ""),
+        ],
+    );
+
+    for (file, expected) in [
+        ("lib.crs", Some("/app")),
+        ("util.crs", Some("/app/util")),
+        ("parse/lexer.crs", Some("/app/parse/lexer")),
+        ("notes.txt", None),
+        ("odd-name.crs", None),
+    ] {
+        let Membership::Library { module, .. } =
+            Membership::of(&root.join(file), None).expect("a placed file")
+        else {
+            panic!("{file} is under the package directory");
+        };
+        assert_eq!(
+            module.as_ref().map(Qualifier::join),
+            expected.map(str::to_string),
+            "{file}"
+        );
     }
 
     fs::remove_dir_all(root).unwrap();

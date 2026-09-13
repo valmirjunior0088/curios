@@ -20,7 +20,7 @@ pub fn declared_tests(
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
 
     let paths = match subject {
-        Subject::Unit { units } => {
+        Subject::Unit { units, .. } => {
             let units = crate::overlaid(units, overlay);
             unit_test_paths(budget, &units, cache, |_| {})?
         }

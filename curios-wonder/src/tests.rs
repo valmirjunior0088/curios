@@ -232,6 +232,7 @@ fn a_library_reports_its_own_lints() {
         DEFAULT_STEP_BUDGET,
         Subject::Unit {
             units: mounted(&root),
+            file: None,
         },
         &Overlay::default(),
         None,

@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Governing, LIBRARY, MANIFEST, Manifest, order},
+    crate::{Governing, LIBRARY, MANIFEST, Manifest, module_of, order},
     curios_text::{RootSource, identity},
     curios_utilities::Qualifier,
     std::path::{Path, PathBuf},
@@ -22,6 +22,8 @@ pub enum Membership {
     Library {
         root: PathBuf,
         units: Vec<RootSource>,
+        /// The module the file would be, by the layout rule — what to ask the library whether a `mod` declares, since a file under its directory that none does is in no unit at all. `None` when the file's spelling is no module's.
+        module: Option<Qualifier>,
     },
     /// An executable's entry, or a module under its stem directory: `entry` compiled against `units`.
     Executable {
@@ -81,6 +83,7 @@ impl Membership {
 
         Ok(Self::Library {
             root: governing.root.clone(),
+            module: module_of(&governing.package, &directory, &file),
             units: order(&governing)?,
         })
     }
