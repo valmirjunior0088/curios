@@ -1,6 +1,6 @@
-use /std/{Bool, Bytes, Nat, Int, List, Result, Io, Async, True};
 pub use /sys/{Handle};
 pub use /sys/Handle/{close, stdin, stdout, stderr};
+use /std/{Bool, Bytes, Nat, Int, List, Result, Io, Async, True};
 
 -- | What a park asks to be woken for.
 pub mod Interest;
