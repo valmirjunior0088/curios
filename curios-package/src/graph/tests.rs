@@ -426,13 +426,13 @@ fn the_four_marker_mismatches_are_four_refusals() {
         (
             "graph-marker-unenumerated",
             "name = \"app\"\n\n[dependencies]\nabsent = { source = \"member\" }\n",
-            "no governing umbrella enumerates a member",
+            "the governing umbrella enumerates no member declaring that name",
         ),
         // A `catalog` row naming something the catalog does not hold.
         (
             "graph-marker-uncatalogued",
             "name = \"app\"\n\n[dependencies]\nabsent = { source = \"catalog\" }\n",
-            "`[catalog]` holds that name",
+            "the governing umbrella's `[catalog]` holds no row of that name",
         ),
         // A `catalog` row whose name is a live member.
         (
@@ -512,6 +512,46 @@ fn a_dependency_with_no_manifest_is_refused_against_the_row() {
     assert!(!refusal.contains("os error"), "{refusal}");
 
     fs::remove_dir_all(root).unwrap();
+}
+
+/// A marker in a package no umbrella governs is refused for that, not for the name: the umbrella above may list the name asked for and omit the package asking, and a reader told the list lacks the name would check the entry that is there.
+#[test]
+fn a_marker_in_an_ungoverned_package_is_refused_for_the_missing_governance() {
+    for (name, marker) in [
+        ("graph-marker-ungoverned-member", "member"),
+        ("graph-marker-ungoverned-catalog", "catalog"),
+    ] {
+        let root = tree(
+            name,
+            &[
+                (
+                    "curios.toml",
+                    "members = [\"base\"]\n\n[catalog]\nbase = { source = \"path\", path = \"base\" }\n",
+                ),
+                ("base/curios.toml", "name = \"base\"\n"),
+                ("base/lib.crs", ""),
+                (
+                    "app/curios.toml",
+                    &format!(
+                        "name = \"app\"\n\n[dependencies]\nbase = {{ source = \"{marker}\" }}\n"
+                    ),
+                ),
+                ("app/lib.crs", ""),
+            ],
+        );
+
+        let refusal = mounts(&root.join("app")).expect_err(name);
+        assert!(
+            refusal.contains("no umbrella governs \"app\""),
+            "{name}: {refusal}"
+        );
+        assert!(
+            !refusal.contains("declaring that name"),
+            "{name}: {refusal}"
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 
 /// The markers that do match resolve: `member` through `members`, `catalog` through `[catalog]`.

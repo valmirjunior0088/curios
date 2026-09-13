@@ -264,11 +264,20 @@ impl Walk<'_> {
         row: &Dependency,
         subject: &str,
     ) -> Result<PathBuf, String> {
+        // A marker nothing answers is one of two faults, and the refusal has to say which: an umbrella governs and its list lacks the name, or no umbrella governs — one above may well list the name, and what it omits is the package asking. Told the first when the second is true, a reader checks the entry that is there and misses the one that is not.
+        let ungoverned = |marker: &str| {
+            format!(
+                "{subject} is `source = \"{marker}\"`, and no umbrella governs {:?}: a marker is answered by the umbrella whose `members` list the package that wrote it",
+                dependent.name
+            )
+        };
+
         match row {
-            Dependency::Member => match self.members.get(name) {
-                Some(directory) => Ok(directory.clone()),
-                None => Err(format!(
-                    "{subject} is `source = \"member\"`, and no governing umbrella enumerates a member declaring that name"
+            Dependency::Member => match (self.members.get(name), &self.governing.umbrella) {
+                (Some(directory), _) => Ok(directory.clone()),
+                (None, None) => Err(ungoverned("member")),
+                (None, Some(_)) => Err(format!(
+                    "{subject} is `source = \"member\"`, and the governing umbrella enumerates no member declaring that name"
                 )),
             },
 
@@ -279,16 +288,15 @@ impl Walk<'_> {
                     ));
                 }
 
-                let row = self
-                    .governing
-                    .umbrella
-                    .as_ref()
-                    .and_then(|umbrella| umbrella.catalog.get(name))
-                    .ok_or_else(|| {
-                        format!(
-                            "{subject} is `source = \"catalog\"`, and no governing umbrella's `[catalog]` holds that name"
-                        )
-                    })?;
+                let Some(umbrella) = &self.governing.umbrella else {
+                    return Err(ungoverned("catalog"));
+                };
+
+                let row = umbrella.catalog.get(name).ok_or_else(|| {
+                    format!(
+                        "{subject} is `source = \"catalog\"`, and the governing umbrella's `[catalog]` holds no row of that name"
+                    )
+                })?;
 
                 self.locate(dependent, &self.governing.root, name, row)
             }
