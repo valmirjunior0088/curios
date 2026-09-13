@@ -59,10 +59,6 @@ type mismatch
 - A standard library for collections, formatting, IO, networking, tasks, time, randomness, arbitrary-precision integers, JSON, and TOML
 - One lowering pipeline from source to WebAssembly, whether you run it natively or in a browser tab
 
-## Where it is going
-
-Curios aims to be an ergonomic proof assistant and an ergonomic functional programming language at once, and the totality obligations are what let one language be both: general recursion stays unrestricted wherever a program uses it, and is removed from exactly the positions where erasure would turn it into a logical hole. Reduction is not strongly normalizing and values are not canonical — a program may diverge, while a proof may not. The long-term objective is a self-hosting compiler — every language-specific stage from source text to raw Wasm bytes written in Curios — running on the retained Rust host, which already serves the native product and the browser product from one backend.
-
 ## Try it
 
 The [browser playground](https://valmirjunior0088.github.io/curios/playground) runs the same compiler pipeline as the native CLI, entirely in your browser. No install, no account, nothing to uninstall afterwards.
