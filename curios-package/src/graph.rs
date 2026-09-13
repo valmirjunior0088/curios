@@ -42,6 +42,8 @@ fn members(governing: &Governing) -> Result<BTreeMap<String, PathBuf>, String> {
     };
 
     let mut members = BTreeMap::new();
+    // Which entry placed each name, for a refusal that quotes the entry as the umbrella wrote it.
+    let mut entries = BTreeMap::new();
 
     for member in &umbrella.members {
         let directory = governing.root.join(member);
@@ -64,14 +66,30 @@ fn members(governing: &Governing) -> Result<BTreeMap<String, PathBuf>, String> {
             ));
         };
 
+        // Canonical, as every location the walk compares is: `base` and `./base` are one member, and a refusal that read them as two would send the reader after a second package that does not exist.
+        let directory = directory
+            .canonicalize()
+            .map_err(|error| format!("{}: {error}", directory.display()))?;
+
         if let Some(earlier) = members.insert(package.name.clone(), directory.clone()) {
-            return Err(format!(
-                "two members declare the name {:?}: {} and {}",
-                package.name,
-                earlier.display(),
-                directory.display()
-            ));
+            let written: &PathBuf = &entries[&package.name];
+            return Err(match earlier == directory {
+                true => format!(
+                    "the umbrella at {} lists the member {:?} twice, as {:?} and as {:?}",
+                    governing.root.join(MANIFEST).display(),
+                    package.name,
+                    written.display().to_string(),
+                    member.display().to_string()
+                ),
+                false => format!(
+                    "two members declare the name {:?}: {} and {}",
+                    package.name,
+                    earlier.display(),
+                    directory.display()
+                ),
+            });
         }
+        entries.insert(package.name, member.clone());
     }
 
     Ok(members)

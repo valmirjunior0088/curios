@@ -554,6 +554,33 @@ fn a_marker_in_an_ungoverned_package_is_refused_for_the_missing_governance() {
     }
 }
 
+/// One member listed twice is one member, whatever the two spellings, and the refusal says the umbrella listed it twice — never that two members declare the name, which would send the reader after a second package that does not exist.
+#[test]
+fn a_member_listed_twice_is_refused_as_listed_twice() {
+    let root = tree(
+        "graph-member-twice",
+        &[
+            ("curios.toml", "members = [\"base\", \"./base\", \"app\"]\n"),
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n",
+            ),
+            ("app/lib.crs", ""),
+            ("base/curios.toml", "name = \"base\"\n"),
+            ("base/lib.crs", ""),
+        ],
+    );
+
+    let refusal = mounts(&root.join("app")).expect_err("one member listed twice");
+    assert!(
+        refusal.contains("lists the member \"base\" twice, as \"base\" and as \"./base\""),
+        "{refusal}"
+    );
+    assert!(!refusal.contains("two members"), "{refusal}");
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// The markers that do match resolve: `member` through `members`, `catalog` through `[catalog]`.
 #[test]
 fn the_markers_resolve_through_the_lists_that_answer_them() {
