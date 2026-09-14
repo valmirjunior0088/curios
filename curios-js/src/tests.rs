@@ -109,7 +109,7 @@ fn bridge_accessors_roundtrip() {
     }
 }
 
-/// A list built through the bridge holds what was set in it: an i31-boxed `Nat` comes back through the unbox, and the length is what `list_new` was asked for — the shape `poll` builds its `revents` list in.
+/// A list built through the bridge holds what was set in it: an i31-boxed `Nat` comes back through the unbox, and the length is what `list_new` was asked for — the shape `handle_poll` builds its `revents` list in.
 #[test]
 fn list_accessors_roundtrip_an_i31_element() {
     let mut bridge = bridge();

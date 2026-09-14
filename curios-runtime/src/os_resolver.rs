@@ -44,7 +44,7 @@ impl Resolved {
     }
 }
 
-/// The shared cell a worker fills with a finished lookup's result, drained later by the host's `resolve`. Empty until the worker completes; the [`Resolved`] it then holds is exactly what `resolve` hands back. Cloning shares the one underlying cell — the worker holds one handle, the host the other.
+/// The shared cell a worker fills with a finished lookup's result, drained later by the host's `dns_resolve`. Empty until the worker completes; the [`Resolved`] it then holds is exactly what `dns_resolve` hands back. Cloning shares the one underlying cell — the worker holds one handle, the host the other.
 #[derive(Clone)]
 pub(crate) struct Slot {
     cell: Arc<Mutex<Option<Resolved>>>,
@@ -159,7 +159,7 @@ impl OsResolver {
                         Err(_) => break,
                     };
 
-                    // The blocking `getaddrinfo`, off the scheduler thread. Each blob is the canonical "ip:port" string — debuggable, and `socket` recovers the family from it.
+                    // The blocking `getaddrinfo`, off the scheduler thread. Each blob is the canonical "ip:port" string — debuggable, and `socket_open` recovers the family from it.
                     let resolved = match job.address.to_socket_addrs() {
                         Ok(addresses) => Resolved::found(
                             addresses

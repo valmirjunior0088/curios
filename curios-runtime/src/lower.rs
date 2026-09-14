@@ -43,7 +43,7 @@ impl Lower for Handle {
 
 /// Box `value` as the i31 ref every scalar crosses this boundary in, refusing a value the carrier cannot hold rather than wrapping one.
 ///
-/// **The refusal is the point, and it is the guest half's rule stated on the host half.** `I31::wrapping_u32` drops bit 31 and reports nothing, while `into_wasm`'s literal materialization emits `unreachable` for exactly the values it would drop — so a wrapping host result would be the one direction across this boundary in which leaving the envelope changed a number instead of stopping. Every result that crosses today is in range, but each for a separate reason held somewhere else: `clock_wall` is split base-10⁹ so its limbs fit, `clock_mono`'s seconds would need decades of uptime, a status code is small, and `write`'s count is bounded by a buffer the guest allocated. Five facts in four files are what a check here replaces.
+/// **The refusal is the point, and it is the guest half's rule stated on the host half.** `I31::wrapping_u32` drops bit 31 and reports nothing, while `into_wasm`'s literal materialization emits `unreachable` for exactly the values it would drop — so a wrapping host result would be the one direction across this boundary in which leaving the envelope changed a number instead of stopping. Every result that crosses today is in range, but each for a separate reason held somewhere else: `clock_wall` is split base-10⁹ so its limbs fit, `clock_mono`'s seconds would need decades of uptime, a status code is small, and `handle_write`'s count is bounded by a buffer the guest allocated. Five facts in four files are what a check here replaces.
 fn i31_ref(caller: &mut Caller<'_, ()>, value: u32) -> Result<Val, wasmtime::Error> {
     let boxed = I31::new_u32(value).ok_or_else(|| {
         wasmtime::Error::msg(format!("host result {value} leaves the i31 carrier"))
@@ -65,7 +65,7 @@ impl Lower for u32 {
     }
 }
 
-/// Tuples lower positionally: each component fills one result slot, and slicing re-aligns the single-value impls, which all write `results[0]`. Arities two through seven — `stat`'s seven results are the widest row.
+/// Tuples lower positionally: each component fills one result slot, and slicing re-aligns the single-value impls, which all write `results[0]`. Arities two through seven — `file_stat`'s seven results are the widest row.
 macro_rules! lower_tuple {
     ($($name:ident $value:ident $index:tt),+) => {
         impl<$($name: Lower),+> Lower for ($($name,)+) {
@@ -131,7 +131,7 @@ impl Lower for Vec<u8> {
     }
 }
 
-/// `List(Nat)`: `poll`'s parallel `revents` masks, lowered as an array of i31-boxed bits. Same uniform `List` shape as `Vec<Vec<u8>>` below (anyref elements over the codegen's `list_type`), only the elements are i31s rather than `Bytes` — the outbound dual of `lift.rs`'s `lift_i31_array`.
+/// `List(Nat)`: `handle_poll`'s parallel `revents` masks, lowered as an array of i31-boxed bits. Same uniform `List` shape as `Vec<Vec<u8>>` below (anyref elements over the codegen's `list_type`), only the elements are i31s rather than `Bytes` — the outbound dual of `lift.rs`'s `lift_i31_array`.
 impl Lower for Vec<Poll> {
     fn lower(
         self,

@@ -34,3 +34,7 @@ rustix = { version = "1.1.4", features = ["event", "fs", "process", "termios"] }
 rustls = { version = "0.23.41", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-pemfile = { version = "2.2.0" }
 webpki-roots = { version = "1.0.8" }
+
+[dev-dependencies]
+# The pseudo-terminal a serial open is tested on. A dev-dependency rather than a feature of the row above, so the launcher `cargo x runtime` builds never carries it.
+rustix = { version = "1.1.4", features = ["pty"] }

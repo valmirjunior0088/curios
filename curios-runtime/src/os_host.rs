@@ -1,11 +1,15 @@
 use {
     super::{OsResolver, Running, Slot, Spawned, Table, host::*, os_child},
-    curios_abi::{event, file_kind},
+    curios_abi::{event, file_kind, serial_op},
     rustix::{
         event::{PollFd, PollFlags, Timespec, poll},
         fs::{OFlags, fcntl_getfl, fcntl_setfl},
         io::Errno,
-        termios::{OptionalActions, Termios, tcgetattr, tcgetwinsize, tcsetattr},
+        ioctl::{Opcode, Setter, ioctl},
+        termios::{
+            ControlModes, OptionalActions, QueueSelector, Termios, ioctl_tiocexcl, tcflush,
+            tcgetattr, tcgetwinsize, tcsetattr,
+        },
     },
     rustls::{
         ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
@@ -14,7 +18,7 @@ use {
     socket2::{Domain, SockAddr, Socket, Type},
     std::{
         env,
-        ffi::OsStr,
+        ffi::{OsStr, c_int},
         fs::{self, File, OpenOptions},
         io::{ErrorKind, Read, Write, stderr, stdin, stdout},
         net::SocketAddr,
@@ -28,7 +32,7 @@ use {
     webpki_roots::TLS_SERVER_ROOTS,
 };
 
-/// The shared client TLS configuration: a bundled `webpki-roots` trust-anchor set with certificate verification on, built once and `Arc`-cloned by every `start_tls`. An explicit `ring` crypto provider is wired in so the config never depends on a process-global default provider being installed.
+/// The shared client TLS configuration: a bundled `webpki-roots` trust-anchor set with certificate verification on, built once and `Arc`-cloned by every `tls_start`. An explicit `ring` crypto provider is wired in so the config never depends on a process-global default provider being installed.
 static CLIENT_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
     let mut roots = RootCertStore::empty();
 
@@ -43,50 +47,50 @@ static CLIENT_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
     )
 });
 
-/// A non-stdio handle in [`OsHost`]'s unified table, tracking the BSD lifecycle with one concrete type per state: `open` files a `File`; `socket` mints an `Unconnected` socket, `connect` turns it into a `Connected` one at once or into a `Connecting` one that `finish_connect` settles (`accept` mints a `Connected` one directly), and `listen` turns it into a `Listener`. `start_tls` / `start_tls_server` upgrade a `Connected` socket in place to a `ClientTls` / `ServerTls` stream; `tls_server_config` files a host-owned `TlsConfig` token. `read`/`write` serve `File`, `Connected`, and both TLS streams alike (all are `Read + Write`); `close` drops any kind, releasing its descriptor.
+/// A non-stdio handle in [`OsHost`]'s unified table, tracking the BSD lifecycle with one concrete type per state: `file_open` files a `File`; `socket_open` mints an `Unconnected` socket, `socket_connect` turns it into a `Connected` one at once or into a `Connecting` one that `socket_finish_connect` settles (`socket_accept` mints a `Connected` one directly), and `socket_listen` turns it into a `Listener`. `tls_start` / `tls_start_server` upgrade a `Connected` socket in place to a `ClientTls` / `ServerTls` stream; `tls_server_config` files a host-owned `TlsConfig` token. `handle_read`/`handle_write` serve `File`, `Connected`, and both TLS streams alike (all are `Read + Write`); `handle_close` drops any kind, releasing its descriptor.
 ///
-/// Every kind on which a peer decides — a socket in any state, an accepted stream, a pipe to a child — is filed non-blocking at the moment it is minted, so no row waits on a peer: a `read`, `write`, `connect` or `accept` that cannot progress answers `WouldBlock` and `poll` is the one place the host sleeps. A regular file is synchronous, since the disk rather than a peer answers it.
+/// Every kind on which a peer decides — a socket in any state, an accepted stream, a pipe to a child, a serial port — is filed non-blocking at the moment it is minted, so no row waits on a peer: a `handle_read`, `handle_write`, `socket_connect` or `socket_accept` that cannot progress answers `WouldBlock` and `handle_poll` is the one place the host sleeps. A regular file is synchronous, since the disk rather than a peer answers it.
 enum OsResource {
     File(File),
-    /// An in-flight asynchronous name lookup minted by `lookup`. `done` is the read end of a pipe a worker thread writes one byte to once it has filled `slot` with the `getaddrinfo` result; that write makes `done` poll-`READ` readable, waking the scheduler. `resolve` then drains `slot` and drops the handle (closing `done`). `poll` watches `done` like any other fd.
+    /// An in-flight asynchronous name lookup minted by `dns_lookup`. `done` is the read end of a pipe a worker thread writes one byte to once it has filled `slot` with the `getaddrinfo` result; that write makes `done` poll-`READ` readable, waking the scheduler. `dns_resolve` then drains `slot` and drops the handle (closing `done`). `handle_poll` watches `done` like any other fd.
     Resolving {
         done: OwnedFd,
         slot: Slot,
     },
-    /// A bare owned descriptor — one end of a pipe to a child, filed by `spawn`, and the shape a serial device takes. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one applies `O_NONBLOCK` through `fcntl` first, so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, while `read`, `write`, `poll` and `close` serve it as they serve a file.
+    /// A bare owned descriptor — one end of a pipe to a child, filed by `proc_spawn`, or a serial port, filed by `serial_open`. Named by what it holds, as `File` and `Listener` are, and the one thing separating it from `File` is that it is non-blocking for real: whoever files one makes it so first — `proc_spawn` through `fcntl`, `serial_open` at the open itself — so a fiber draining it yields on `WouldBlock` instead of blocking the scheduler, while `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve it as they serve a file.
     Descriptor(OwnedFd),
-    /// A running child minted by `spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the exit, `wait` drains it, `kill` addresses its pid, and `stream` hands out the handles of its piped standard streams — filed as `Descriptor`s at spawn time and boxed here so a child costs the table no more than a socket does.
+    /// A running child minted by `proc_spawn`: its `done` pipe end becomes `READ`-ready when the reaper has recorded the exit, `proc_wait` drains it, `proc_kill` addresses its pid, and `proc_stream` hands out the handles of its piped standard streams — filed as `Descriptor`s at spawn time and boxed here so a child costs the table no more than a socket does.
     Child {
         running: Running,
         streams: Box<[Handle; 3]>,
     },
     Connected(Socket),
     Unconnected(Socket),
-    /// A non-blocking `connect` under way: `EINPROGRESS` filed it, `poll` watches its descriptor for `WRITE`, and `finish_connect` settles it into `Connected` or reports what refused it.
+    /// A non-blocking `socket_connect` under way: `EINPROGRESS` filed it, `handle_poll` watches its descriptor for `WRITE`, and `socket_finish_connect` settles it into `Connected` or reports what refused it.
     Connecting(Socket),
-    /// A listening socket. It never blocks, so `accept` runs under the table lock like any other row.
+    /// A listening socket. It never blocks, so `socket_accept` runs under the table lock like any other row.
     Listener(Socket),
-    /// A client-side TLS stream: the encrypted conduit a `Connected` socket became under `start_tls`, serving the same `read`/`write`/`close`.
+    /// A client-side TLS stream: the encrypted conduit a `Connected` socket became under `tls_start`, serving the same `handle_read`/`handle_write`/`handle_close`.
     ///
     /// Boxed, and so is [`OsResource::ServerTls`], because an enum is as large as its largest variant and a `rustls` connection carries its record buffers inline — around a kilobyte each. Unboxed they set the size of *every* entry in the handle table, so an open file or a plain socket paid a kilobyte for TLS state it does not have.
     ClientTls(Box<StreamOwned<ClientConnection, Socket>>),
-    /// A server-side TLS stream: the encrypted conduit an accepted socket became under `start_tls_server`.
+    /// A server-side TLS stream: the encrypted conduit an accepted socket became under `tls_start_server`.
     ServerTls(Box<StreamOwned<ServerConnection, Socket>>),
-    /// An opaque server TLS configuration minted by `tls_server_config`, held in the table as a handle and consumed by `start_tls_server`.
+    /// An opaque server TLS configuration minted by `tls_server_config`, held in the table as a handle and consumed by `tls_start_server`.
     TlsConfig(Arc<ServerConfig>),
 }
 
 /// The native-OS `Host`: stdio passes straight through, and every other handle — files, plain and TLS sockets, listeners, in-flight DNS lookups, TLS configs — lives in one token-keyed table so the BSD-style lifecycle can transition a handle in place. This is the host the CLI's `run` and a bundled executable execute under; tests reach for `MockHost` instead. Each instance is self-contained: its own table, monotonic clock origin, `args`, and lazily-started resolver pool.
 pub struct OsHost {
-    /// One [`Table`] for every non-stdio handle, keyed by token bytes. Files, unconnected sockets, connected streams, and listeners share it so the BSD lifecycle can transition a handle in place and `close` releases any kind uniformly.
+    /// One [`Table`] for every non-stdio handle, keyed by token bytes. Files, unconnected sockets, connected streams, and listeners share it so the BSD lifecycle can transition a handle in place and `handle_close` releases any kind uniformly.
     table: Mutex<Table<OsResource>>,
     /// Monotonic origin: `clock_mono` reports elapsed time since this.
     start: Instant,
-    /// The process arguments served by `args` (argv\[0\] is the program name).
+    /// The process arguments served by `proc_args` (argv\[0\] is the program name).
     args: Vec<Vec<u8>>,
-    /// The blocking-DNS worker pool, started on the first `lookup` so programs that never resolve a name pay for no threads.
+    /// The blocking-DNS worker pool, started on the first `dns_lookup` so programs that never resolve a name pay for no threads.
     resolver: OnceLock<OsResolver>,
-    /// The termios of every descriptor `raw` switched, keyed by the handle's token, so `raw(h, false)` and [`Drop`] restore exactly what the program found. The first host state with an exit obligation: a terminal left raw outlives the process that switched it.
+    /// The termios of every descriptor `tty_raw` switched, keyed by the handle's token, so `tty_raw(h, false)` and [`Drop`] restore exactly what the program found. The first host state with an exit obligation: a terminal left raw outlives the process that switched it.
     termios: Mutex<Vec<(Vec<u8>, Termios)>>,
 }
 
@@ -95,7 +99,7 @@ impl OsHost {
         Self::with_args(env::args_os().map(|arg| arg.into_encoded_bytes()).collect())
     }
 
-    /// Build a host whose `args` are the given byte strings — used by the CLI to forward a program's own arguments instead of the `curios` process's.
+    /// Build a host whose `proc_args` are the given byte strings — used by the CLI to forward a program's own arguments instead of the `curios` process's.
     pub fn with_args(args: Vec<Vec<u8>>) -> Self {
         Self {
             table: Mutex::new(Table::new()),
@@ -125,7 +129,7 @@ impl OsHost {
         self.table.lock().unwrap().mint(resource)
     }
 
-    /// Pull an unconnected socket out of the table by handle, leaving any other resource (or none) in place. Lets `connect`/`listen` transition a handle in place.
+    /// Pull an unconnected socket out of the table by handle, leaving any other resource (or none) in place. Lets `socket_connect`/`socket_listen` transition a handle in place.
     fn take_unconnected(&self, handle: &Handle) -> Option<Socket> {
         self.table
             .lock()
@@ -136,7 +140,7 @@ impl OsHost {
             })
     }
 
-    /// Pull a connected stream socket out of the table by handle, leaving any other resource (or none) in place. Lets `start_tls`/`start_tls_server` upgrade a handle without holding the lock across the blocking handshake.
+    /// Pull a connected stream socket out of the table by handle, leaving any other resource (or none) in place. Lets `tls_start`/`tls_start_server` upgrade a handle without holding the lock across the blocking handshake.
     fn take_connected(&self, handle: &Handle) -> Option<Socket> {
         self.table
             .lock()
@@ -194,7 +198,7 @@ impl Default for OsHost {
     }
 }
 
-/// Restore every terminal `raw` switched. `instantiate` drops the host after a trap is classified and before the process exits, so a trap or an `exit` leaves the terminal as the program found it, whether or not the program's own bracket ran.
+/// Restore every terminal `tty_raw` switched. `instantiate` drops the host after a trap is classified and before the process exits, so a trap or an `exit` leaves the terminal as the program found it, whether or not the program's own bracket ran.
 impl Drop for OsHost {
     fn drop(&mut self) {
         let records = std::mem::take(&mut *self.termios.lock().unwrap());
@@ -207,7 +211,7 @@ impl Drop for OsHost {
 }
 
 impl HostOps for OsHost {
-    fn open(&self, path: &[u8], mode: Mode) -> (Status, Handle) {
+    fn file_open(&self, path: &[u8], mode: Mode) -> (Status, Handle) {
         let path = OsStr::from_bytes(path);
 
         let mut options = OpenOptions::new();
@@ -224,7 +228,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn lookup(&self, host: &[u8], port: u32) -> (Status, Handle) {
+    fn dns_lookup(&self, host: &[u8], port: u32) -> (Status, Handle) {
         let host = String::from_utf8_lossy(host).into_owned();
         let address = format!("{host}:{port}");
 
@@ -246,8 +250,8 @@ impl HostOps for OsHost {
         }
     }
 
-    fn resolve(&self, handle: Handle) -> (Status, Vec<Vec<u8>>) {
-        // Drain the finished lookup. Reached only after `poll` reports the handle ready, so the slot is filled; a stray early call leaves the handle intact and honestly reports `WouldBlock` so the caller can retry.
+    fn dns_resolve(&self, handle: Handle) -> (Status, Vec<Vec<u8>>) {
+        // Drain the finished lookup. Reached only after `handle_poll` reports the handle ready, so the slot is filled; a stray early call leaves the handle intact and honestly reports `WouldBlock` so the caller can retry.
         let mut table = self.table.lock().unwrap();
 
         let ready = match table.get(&handle) {
@@ -265,14 +269,14 @@ impl HostOps for OsHost {
         }
     }
 
-    fn socket(&self, addr: &[u8]) -> (Status, Handle) {
-        // The address blob is the canonical "ip:port" string `resolve` minted.
+    fn socket_open(&self, addr: &[u8]) -> (Status, Handle) {
+        // The address blob is the canonical "ip:port" string `dns_resolve` minted.
         let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
             Ok(address) => address,
             Err(_) => return (Status::NotFound, Handle::none()),
         };
 
-        // Non-blocking from birth: a peer decides when this socket progresses, so `connect`, `read` and `write` on it answer `WouldBlock` rather than wait, and `poll` is where the wait happens. `Socket::new` then `set_nonblocking` is the spelling both release targets share.
+        // Non-blocking from birth: a peer decides when this socket progresses, so `socket_connect`, `handle_read` and `handle_write` on it answer `WouldBlock` rather than wait, and `handle_poll` is where the wait happens. `Socket::new` then `set_nonblocking` is the spelling both release targets share.
         let created = Socket::new(Domain::for_address(address), Type::STREAM, None)
             .and_then(|socket| socket.set_nonblocking(true).map(|()| socket));
 
@@ -282,8 +286,8 @@ impl HostOps for OsHost {
         }
     }
 
-    fn bind(&self, io: Handle, addr: &[u8]) -> Status {
-        // The address blob is the canonical "ip:port" string `resolve` minted.
+    fn socket_bind(&self, io: Handle, addr: &[u8]) -> Status {
+        // The address blob is the canonical "ip:port" string `dns_resolve` minted.
         let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
             Ok(address) => address,
             Err(_) => return Status::NotFound,
@@ -298,8 +302,8 @@ impl HostOps for OsHost {
         }
     }
 
-    fn connect(&self, io: Handle, addr: &[u8]) -> Status {
-        // The address blob is the canonical "ip:port" string `resolve` minted.
+    fn socket_connect(&self, io: Handle, addr: &[u8]) -> Status {
+        // The address blob is the canonical "ip:port" string `dns_resolve` minted.
         let address = match String::from_utf8_lossy(addr).parse::<SocketAddr>() {
             Ok(address) => address,
             Err(_) => return Status::NotFound,
@@ -310,7 +314,7 @@ impl HostOps for OsHost {
             None => return Status::NotFound,
         };
 
-        // A non-blocking connect answers at once: `Ok` when the kernel completed it synchronously, as loopback often does, `EINPROGRESS` when it is under way — the socket is re-filed as connecting for `poll` to watch and `finish_connect` to settle — and its refusal otherwise, on which the socket drops. `EINPROGRESS` and `EALREADY` have no `ErrorKind`, so they are matched by errno; an interrupted connect continues asynchronously by POSIX and is filed the same way.
+        // A non-blocking connect answers at once: `Ok` when the kernel completed it synchronously, as loopback often does, `EINPROGRESS` when it is under way — the socket is re-filed as connecting for `handle_poll` to watch and `socket_finish_connect` to settle — and its refusal otherwise, on which the socket drops. `EINPROGRESS` and `EALREADY` have no `ErrorKind`, so they are matched by errno; an interrupted connect continues asynchronously by POSIX and is filed the same way.
         match socket.connect(&SockAddr::from(address)) {
             Ok(()) => {
                 self.table
@@ -344,7 +348,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn finish_connect(&self, io: Handle) -> Status {
+    fn socket_finish_connect(&self, io: Handle) -> Status {
         let mut table = self.table.lock().unwrap();
         let socket = match table.take_if(&io, |resource| match resource {
             OsResource::Connecting(socket) => Ok(socket),
@@ -379,7 +383,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn start_tls(&self, io: Handle, sni: &[u8]) -> Status {
+    fn tls_start(&self, io: Handle, sni: &[u8]) -> Status {
         let server_name = match std::str::from_utf8(sni)
             .ok()
             .and_then(|name| ServerName::try_from(name.to_owned()).ok())
@@ -398,7 +402,7 @@ impl HostOps for OsHost {
             Err(_) => return Status::TlsError,
         };
 
-        // The stream is filed with its handshake still to run: the socket is non-blocking, so the handshake is driven by the reads and writes that follow — `rustls`'s stream completes prior IO before each — and parks the fiber through `poll` like any other progress. A verification or protocol failure surfaces as `TlsError` from the read or write that discovers it.
+        // The stream is filed with its handshake still to run: the socket is non-blocking, so the handshake is driven by the reads and writes that follow — `rustls`'s stream completes prior IO before each — and parks the fiber through `handle_poll` like any other progress. A verification or protocol failure surfaces as `TlsError` from the read or write that discovers it.
         self.table.lock().unwrap().insert(
             &io,
             OsResource::ClientTls(Box::new(StreamOwned::new(conn, socket))),
@@ -431,7 +435,7 @@ impl HostOps for OsHost {
         (Status::Ok, self.mint(OsResource::TlsConfig(config)))
     }
 
-    fn start_tls_server(&self, io: Handle, cfg: Handle) -> Status {
+    fn tls_start_server(&self, io: Handle, cfg: Handle) -> Status {
         // Clone the config `Arc` out, never holding the lock across the handshake. The config handle stays in the table for reuse.
         let config = match self.table.lock().unwrap().get(&cfg) {
             Some(OsResource::TlsConfig(config)) => config.clone(),
@@ -448,7 +452,7 @@ impl HostOps for OsHost {
             Err(_) => return Status::TlsError,
         };
 
-        // Filed with the handshake still to run, as `start_tls` files the client side.
+        // Filed with the handshake still to run, as `tls_start` files the client side.
         self.table.lock().unwrap().insert(
             &io,
             OsResource::ServerTls(Box::new(StreamOwned::new(conn, socket))),
@@ -457,7 +461,7 @@ impl HostOps for OsHost {
         Status::Ok
     }
 
-    fn listen(&self, io: Handle, backlog: u32) -> Status {
+    fn socket_listen(&self, io: Handle, backlog: u32) -> Status {
         let socket = match self.take_unconnected(&io) {
             Some(socket) => socket,
             None => return Status::NotFound,
@@ -476,7 +480,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn accept(&self, io: Handle) -> (Status, Handle) {
+    fn socket_accept(&self, io: Handle) -> (Status, Handle) {
         // The listener is non-blocking, so the accept answers at once under the lock: `WouldBlock` with nothing pending, else the stream. `accept4` hands the stream over blocking whatever the listener's flag, so it is switched here, since a fiber will drain it.
         let mut table = self.table.lock().unwrap();
         let accepted = match table.get(&io) {
@@ -490,11 +494,11 @@ impl HostOps for OsHost {
         }
     }
 
-    fn set_reuseaddr(&self, io: Handle, on: u32) -> Status {
+    fn socket_set_reuseaddr(&self, io: Handle, on: u32) -> Status {
         self.with_socket(&io, |socket| socket.set_reuse_address(on != 0))
     }
 
-    fn poll(&self, handles: &[Handle], events: &[Poll], timeout_ms: i32) -> Vec<Poll> {
+    fn handle_poll(&self, handles: &[Handle], events: &[Poll], timeout_ms: i32) -> Vec<Poll> {
         let table = self.table.lock().unwrap();
 
         // Keep the stdio owners alive for the duration of the borrow: each `PollFd` holds a `BorrowedFd` into one of these (or into the table).
@@ -521,7 +525,7 @@ impl HostOps for OsHost {
                     // The lookup's pipe read end: `READ`-ready once the worker has written its wakeup byte, which is the completion signal.
                     OsResource::Resolving { done, .. } => Some((done.as_fd(), requested)),
                     OsResource::Descriptor(fd) => Some((fd.as_fd(), requested)),
-                    // The reaper's pipe read end: `READ`-ready once the child has exited, which is when `wait` answers.
+                    // The reaper's pipe read end: `READ`-ready once the child has exited, which is when `proc_wait` answers.
                     OsResource::Child { running, .. } => Some((running.done.as_fd(), requested)),
                     // A TLS stream is watched through its socket, for the interest `rustls` itself has while the handshake is under way and the guest's own afterwards; the config token has no descriptor and reports as unrecognized.
                     OsResource::ClientTls(stream) => {
@@ -570,15 +574,15 @@ impl HostOps for OsHost {
         results
     }
 
-    fn close(&self, io: Handle) {
+    fn handle_close(&self, io: Handle) {
         self.table.lock().unwrap().remove(&io);
     }
 
-    fn read(&self, io: Handle, count: u32) -> (Status, Vec<u8>) {
+    fn handle_read(&self, io: Handle, count: u32) -> (Status, Vec<u8>) {
         let mut buffer = vec![0; count as usize];
 
         let result = match &io {
-            // Standard input is the process's, shared with the terminal or the pipe that feeds it, so its descriptor's flags are never touched; the read is gated by a zero-timeout poll instead, answering `WouldBlock` when nothing is there, which is how a shared descriptor keeps the rule that no row waits on a peer. On the raw descriptor, as the write below is, rather than through `std::io::Stdin`'s buffered reader: a request smaller than what arrived would leave the remainder in a buffer `poll` cannot see, and a fiber waiting on fd 0 would stall with input already inside the process.
+            // Standard input is the process's, shared with the terminal or the pipe that feeds it, so its descriptor's flags are never touched; the read is gated by a zero-timeout poll instead, answering `WouldBlock` when nothing is there, which is how a shared descriptor keeps the rule that no row waits on a peer. On the raw descriptor, as the write below is, rather than through `std::io::Stdin`'s buffered reader: a request smaller than what arrived would leave the remainder in a buffer `handle_poll` cannot see, and a fiber waiting on fd 0 would stall with input already inside the process.
             Handle::Stdin => {
                 let input = stdin();
 
@@ -622,7 +626,7 @@ impl HostOps for OsHost {
         read_outcome(result, buffer)
     }
 
-    fn write(&self, io: Handle, bytes: &[u8]) -> (Status, u32) {
+    fn handle_write(&self, io: Handle, bytes: &[u8]) -> (Status, u32) {
         // The blocking std streams write the whole buffer or fail; report the full length on success so callers see the write completed.
         match io {
             Handle::Stdout => {
@@ -652,7 +656,7 @@ impl HostOps for OsHost {
         let stream = match table.get_mut(&io) {
             Some(OsResource::File(file)) => file as &mut dyn Write,
             Some(OsResource::Connected(socket)) => socket,
-            // A TLS write completes the pending handshake first and accepts no plaintext until it has, so `WouldBlock` here reports `written` 0 and the caller resends. Once established it buffers the plaintext, reports it all accepted, and flushes as far as the socket allows: the next read or write on the handle pushes the remainder, and a `close` drops what never left — acceptable for a request that is always followed by a read, and the limitation a streaming protocol would meet.
+            // A TLS write completes the pending handshake first and accepts no plaintext until it has, so `WouldBlock` here reports `written` 0 and the caller resends. Once established it buffers the plaintext, reports it all accepted, and flushes as far as the socket allows: the next read or write on the handle pushes the remainder, and a `handle_close` drops what never left — acceptable for a request that is always followed by a read, and the limitation a streaming protocol would meet.
             Some(OsResource::ClientTls(tls)) => {
                 return match tls.write(bytes) {
                     Ok(written) => (Status::Ok, written as u32),
@@ -701,25 +705,25 @@ impl HostOps for OsHost {
         (elapsed.as_secs() as u32, elapsed.subsec_nanos())
     }
 
-    fn random(&self, count: u32) -> Vec<u8> {
+    fn rand_bytes(&self, count: u32) -> Vec<u8> {
         let mut buffer = vec![0u8; count as usize];
         getrandom::fill(&mut buffer).expect("OS randomness unavailable");
 
         buffer
     }
 
-    fn args(&self) -> Vec<Vec<u8>> {
+    fn proc_args(&self) -> Vec<Vec<u8>> {
         self.args.clone()
     }
 
-    fn env(&self, name: &[u8]) -> (Status, Vec<u8>) {
+    fn proc_env(&self, name: &[u8]) -> (Status, Vec<u8>) {
         match env::var_os(OsStr::from_bytes(name)) {
             Some(value) => (Status::Ok, value.into_encoded_bytes()),
             None => (Status::NotFound, vec![]),
         }
     }
 
-    fn raw(&self, io: Handle, on: u32) -> Status {
+    fn tty_raw(&self, io: Handle, on: u32) -> Status {
         let token = io.bytes();
 
         let outcome = self.with_fd(&io, |fd| {
@@ -727,7 +731,7 @@ impl HostOps for OsHost {
             let recorded = records.iter().position(|(saved, _)| *saved == token);
 
             match (on != 0, recorded) {
-                // The record is taken once, on the first switch, so a second `raw(h, true)` cannot overwrite the settings the program found with raw ones.
+                // The record is taken once, on the first switch, so a second `tty_raw(h, true)` cannot overwrite the settings the program found with raw ones.
                 (true, recorded) => {
                     let current = tcgetattr(fd)?;
 
@@ -757,7 +761,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn size(&self, io: Handle) -> (Status, u32, u32) {
+    fn tty_size(&self, io: Handle) -> (Status, u32, u32) {
         match self.with_fd(&io, |fd| tcgetwinsize(fd)) {
             None => (Status::NotFound, 0, 0),
             Some(Ok(size)) => (Status::Ok, size.ws_col.into(), size.ws_row.into()),
@@ -765,7 +769,73 @@ impl HostOps for OsHost {
         }
     }
 
-    fn stat(&self, path: &[u8]) -> (Status, u32, u32, u32, u32, u32, u32) {
+    fn serial_open(
+        &self,
+        path: &[u8],
+        baud: u32,
+        data_bits: u32,
+        parity: u32,
+        stop_bits: u32,
+        flow: u32,
+    ) -> (Status, Handle) {
+        // A frame outside the row's ranges is refused before the device is touched, so it can neither leave a half-configured port behind nor reset a board through the open's DTR.
+        let Some(frame) = serial_frame(data_bits, parity, stop_bits, flow) else {
+            return (
+                status_from_error(std::io::Error::from(Errno::INVAL)),
+                Handle::none(),
+            );
+        };
+
+        // Non-blocking from the open rather than switched after it, because opening a port whose carrier line is down waits for carrier until `CLOCAL` is set, and `CLOCAL` is set on a descriptor already open. `NOCTTY` keeps the port from becoming this process's controlling terminal, and `CLOEXEC` keeps a spawned child from holding it, and its exclusive hold, past the program's own close.
+        let opened = rustix::fs::open(
+            path,
+            OFlags::RDWR | OFlags::NOCTTY | OFlags::NONBLOCK | OFlags::CLOEXEC,
+            rustix::fs::Mode::empty(),
+        )
+        .and_then(|fd| {
+            ioctl_tiocexcl(&fd)?;
+
+            let mut termios = tcgetattr(&fd)?;
+
+            termios.make_raw();
+            termios.control_modes -= ControlModes::CSIZE
+                | ControlModes::PARENB
+                | ControlModes::PARODD
+                | ControlModes::CSTOPB
+                | ControlModes::CRTSCTS;
+            termios.control_modes |= frame | ControlModes::CLOCAL | ControlModes::CREAD;
+            termios.set_speed(baud)?;
+
+            tcsetattr(&fd, OptionalActions::Now, &termios)?;
+
+            Ok(fd)
+        });
+
+        match opened {
+            Ok(fd) => (Status::Ok, self.mint(OsResource::Descriptor(fd))),
+            Err(errno) => (
+                status_from_error(std::io::Error::from(errno)),
+                Handle::none(),
+            ),
+        }
+    }
+
+    fn serial_control(&self, io: Handle, op: u32, on: u32) -> Status {
+        let outcome = self.with_fd(&io, |fd| match op {
+            serial_op::DTR => set_modem_lines(fd, TIOCM_DTR, on != 0),
+            serial_op::RTS => set_modem_lines(fd, TIOCM_RTS, on != 0),
+            serial_op::DISCARD_INPUT => tcflush(fd, QueueSelector::IFlush),
+            _ => Err(Errno::INVAL),
+        });
+
+        match outcome {
+            None => Status::NotFound,
+            Some(Ok(())) => Status::Ok,
+            Some(Err(errno)) => status_from_error(std::io::Error::from(errno)),
+        }
+    }
+
+    fn file_stat(&self, path: &[u8]) -> (Status, u32, u32, u32, u32, u32, u32) {
         let path = OsStr::from_bytes(path);
 
         let metadata = match fs::metadata(path) {
@@ -811,15 +881,15 @@ impl HostOps for OsHost {
         )
     }
 
-    fn remove_file(&self, path: &[u8]) -> Status {
+    fn file_remove(&self, path: &[u8]) -> Status {
         outcome(fs::remove_file(OsStr::from_bytes(path)))
     }
 
-    fn rename(&self, from: &[u8], to: &[u8]) -> Status {
+    fn file_rename(&self, from: &[u8], to: &[u8]) -> Status {
         outcome(fs::rename(OsStr::from_bytes(from), OsStr::from_bytes(to)))
     }
 
-    fn list(&self, path: &[u8]) -> (Status, Vec<Vec<u8>>) {
+    fn dir_list(&self, path: &[u8]) -> (Status, Vec<Vec<u8>>) {
         let entries = match fs::read_dir(OsStr::from_bytes(path)) {
             Ok(entries) => entries,
             Err(error) => return (status_from_error(error), vec![]),
@@ -840,22 +910,22 @@ impl HostOps for OsHost {
         (Status::Ok, names)
     }
 
-    fn create_dir(&self, path: &[u8]) -> Status {
+    fn dir_create(&self, path: &[u8]) -> Status {
         outcome(fs::create_dir(OsStr::from_bytes(path)))
     }
 
-    fn remove_dir(&self, path: &[u8]) -> Status {
+    fn dir_remove(&self, path: &[u8]) -> Status {
         outcome(fs::remove_dir(OsStr::from_bytes(path)))
     }
 
-    fn cwd(&self) -> (Status, Vec<u8>) {
+    fn proc_cwd(&self) -> (Status, Vec<u8>) {
         match env::current_dir() {
             Ok(path) => (Status::Ok, path.into_os_string().into_vec()),
             Err(error) => (status_from_error(error), vec![]),
         }
     }
 
-    fn spawn(
+    fn proc_spawn(
         &self,
         argv: &[Vec<u8>],
         cwd: &[u8],
@@ -871,7 +941,7 @@ impl HostOps for OsHost {
                 stdout,
                 stderr,
             }) => {
-                // An unpiped stream is the empty handle a failed `open` returns; a piped one is filed as a `Descriptor` with `O_NONBLOCK` applied, since a fiber drains it and a read that blocked on one pipe while the child filled the other is the deadlock every process library documents. A flag that cannot be set leaves that stream as the empty handle with the child running; `wait` and `kill` still reach it.
+                // An unpiped stream is the empty handle a failed `file_open` returns; a piped one is filed as a `Descriptor` with `O_NONBLOCK` applied, since a fiber drains it and a read that blocked on one pipe while the child filled the other is the deadlock every process library documents. A flag that cannot be set leaves that stream as the empty handle with the child running; `proc_wait` and `proc_kill` still reach it.
                 let file = |fd: Option<OwnedFd>| match fd {
                     Some(fd) => match nonblocking(&fd) {
                         Ok(()) => self.mint(OsResource::Descriptor(fd)),
@@ -893,7 +963,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn stream(&self, child: Handle, which: u32) -> (Status, Handle) {
+    fn proc_stream(&self, child: Handle, which: u32) -> (Status, Handle) {
         match self.table.lock().unwrap().get(&child) {
             Some(OsResource::Child { streams, .. }) => match streams.get(which as usize) {
                 Some(handle) => (Status::Ok, handle.clone()),
@@ -903,8 +973,8 @@ impl HostOps for OsHost {
         }
     }
 
-    fn wait(&self, child: Handle) -> (Status, u32, u32) {
-        // Reached once `poll` reports the child's handle ready, so the slot is filled; an early call leaves the handle intact and reports `WouldBlock`, as `resolve` does.
+    fn proc_wait(&self, child: Handle) -> (Status, u32, u32) {
+        // Reached once `handle_poll` reports the child's handle ready, so the slot is filled; an early call leaves the handle intact and reports `WouldBlock`, as `dns_resolve` does.
         let mut table = self.table.lock().unwrap();
 
         let exit = match table.get(&child) {
@@ -922,7 +992,7 @@ impl HostOps for OsHost {
         }
     }
 
-    fn kill(&self, child: Handle) -> Status {
+    fn proc_kill(&self, child: Handle) -> Status {
         match self.table.lock().unwrap().get(&child) {
             Some(OsResource::Child { running, .. }) => running.kill(),
             _ => Status::NotFound,
@@ -951,6 +1021,29 @@ fn nonblocking(fd: &OwnedFd) -> std::io::Result<()> {
     let flags = fcntl_getfl(fd)?;
 
     fcntl_setfl(fd, flags | OFlags::NONBLOCK).map_err(std::io::Error::from)
+}
+
+// The modem-line ioctls rustix does not wrap, as each platform numbers them: Linux's generic tty numbers, which both release architectures use, and the BSD family's `_IOW('t', 108, int)` and `_IOW('t', 107, int)`, which macOS keeps. The line bits agree across all of them.
+#[cfg(target_os = "linux")]
+const TIOCMBIS: Opcode = 0x5416;
+#[cfg(target_os = "linux")]
+const TIOCMBIC: Opcode = 0x5417;
+#[cfg(not(target_os = "linux"))]
+const TIOCMBIS: Opcode = 0x8004_746C;
+#[cfg(not(target_os = "linux"))]
+const TIOCMBIC: Opcode = 0x8004_746B;
+const TIOCM_DTR: c_int = 0x002;
+const TIOCM_RTS: c_int = 0x004;
+
+/// Raise (`on`) or lower the modem lines `mask` names on `fd`. `TIOCMBIS` and `TIOCMBIC` touch only those lines, where a `TIOCMGET` read back and a `TIOCMSET` of the lot would race whatever else drives the port between the two.
+fn set_modem_lines(fd: BorrowedFd<'_>, mask: c_int, on: bool) -> rustix::io::Result<()> {
+    // SAFETY: both opcodes take a pointer to an `int` holding the line mask and write nothing back, which is the opcode and input type `Setter` is built for.
+    unsafe {
+        match on {
+            true => ioctl(fd, Setter::<TIOCMBIS, c_int>::new(mask)),
+            false => ioctl(fd, Setter::<TIOCMBIC, c_int>::new(mask)),
+        }
+    }
 }
 
 /// Whether `error` carries the OS errno `errno` — the read for the connect statuses that have no `ErrorKind`.
@@ -1006,7 +1099,7 @@ fn split_billions(count: u64) -> (u32, u32) {
     )
 }
 
-/// The reply of one `read`: a zero count is end of stream, a positive one the prefix it filled, an error its status. Shared by every descriptor `read` serves, the raw ones included.
+/// The reply of one `handle_read`: a zero count is end of stream, a positive one the prefix it filled, an error its status. Shared by every descriptor `handle_read` serves, the raw ones included.
 fn read_outcome(result: std::io::Result<usize>, mut buffer: Vec<u8>) -> (Status, Vec<u8>) {
     match result {
         Ok(0) => (Status::Eof, vec![]),

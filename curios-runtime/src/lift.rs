@@ -23,7 +23,7 @@ impl Lift for Handle {
     }
 }
 
-/// `open`'s mode lifts from its `/std/File` `Mode` tag. An out-of-range tag is a codegen bug (the inductive only marshals `0`/`1`/`2`), so it panics.
+/// `file_open`'s mode lifts from its `/std/File` `Mode` tag. An out-of-range tag is a codegen bug (the inductive only marshals `0`/`1`/`2`), so it panics.
 impl Lift for Mode {
     fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(match params[0].unwrap_i32() as u32 {
@@ -47,7 +47,7 @@ impl Lift for i32 {
     }
 }
 
-/// Tuples lift positionally: each component consumes one param slot, and slicing re-aligns the single-value impls, which all read `params[0]`. Arities two through seven — `spawn`'s seven operands are the widest row.
+/// Tuples lift positionally: each component consumes one param slot, and slicing re-aligns the single-value impls, which all read `params[0]`. Arities two through seven — `proc_spawn`'s seven operands are the widest row.
 macro_rules! lift_tuple {
     ($($name:ident $index:tt),+) => {
         impl<$($name: Lift),+> Lift for ($($name,)+) {
@@ -110,7 +110,7 @@ fn lift_i31_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<u32>, 
         .collect()
 }
 
-/// `List(Nat)` lifts to the per-handle interest masks — `poll`'s `events` array.
+/// `List(Nat)` lifts to the per-handle interest masks — `handle_poll`'s `events` array.
 impl Lift for Vec<Poll> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(lift_i31_array(caller, &params[0])?
@@ -144,14 +144,14 @@ fn lift_bytes_array(
         .collect()
 }
 
-/// `List(Bytes)` lifts each element as the `Bytes` it is — `spawn`'s argument and environment lists.
+/// `List(Bytes)` lifts each element as the `Bytes` it is — `proc_spawn`'s argument and environment lists.
 impl Lift for Vec<Vec<u8>> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         lift_bytes_array(caller, &params[0])
     }
 }
 
-/// `List(Handle)` lifts each token through the same stdio/handle classification a single `Handle` does — `poll`'s `handles` array.
+/// `List(Handle)` lifts each token through the same stdio/handle classification a single `Handle` does — `handle_poll`'s `handles` array.
 impl Lift for Vec<Handle> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(lift_bytes_array(caller, &params[0])?

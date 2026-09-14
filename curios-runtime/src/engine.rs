@@ -166,47 +166,50 @@ impl ForeignBindings {
     }
 }
 
-/// `spawn`'s lifted operands — `argv`, `cwd`, `env` and the three stdio-wiring tags — the one row wide enough to deserve a name.
+/// `proc_spawn`'s lifted operands — `argv`, `cwd`, `env` and the three stdio-wiring tags — a row wide enough to deserve a name.
 type SpawnOperands = (Vec<Vec<u8>>, Vec<u8>, Vec<Vec<u8>>, u32, u32, u32);
+
+/// `serial_open`'s lifted operands — the path, the speed, and the four frame settings — the other row wide enough to deserve one.
+type SerialOpenOperands = (Vec<u8>, u32, u32, u32, u32, u32);
 
 /// The registry of builtin implementations: every [`host_ops`] row bound to its [`HostOps`] method. The store and the trait are generated from one authored list in `curios-abi`, and these hand-written bindings are cross-checked against both — each `define` name must be a real store row (asserted), and each method call must match the trait (compiler-checked) — so the three stay in agreement without a fourth independent spelling.
 fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBindings {
     let mut impls = ForeignBindings::new(host_ops());
 
-    impls.define("read", {
+    impls.define("handle_read", {
         let host = host.clone();
 
-        move |(handle, count): (Handle, u32)| host.read(handle, count)
+        move |(handle, count): (Handle, u32)| host.handle_read(handle, count)
     });
 
-    impls.define("write", {
+    impls.define("handle_write", {
         let host = host.clone();
 
-        move |(handle, bytes): (Handle, Vec<u8>)| host.write(handle, &bytes)
+        move |(handle, bytes): (Handle, Vec<u8>)| host.handle_write(handle, &bytes)
     });
 
-    impls.define("open", {
+    impls.define("file_open", {
         let host = host.clone();
 
-        move |(path, mode): (Vec<u8>, Mode)| host.open(&path, mode)
+        move |(path, mode): (Vec<u8>, Mode)| host.file_open(&path, mode)
     });
 
-    impls.define("connect", {
+    impls.define("socket_connect", {
         let host = host.clone();
 
-        move |(handle, addr): (Handle, Vec<u8>)| host.connect(handle, &addr)
+        move |(handle, addr): (Handle, Vec<u8>)| host.socket_connect(handle, &addr)
     });
 
-    impls.define("finish_connect", {
+    impls.define("socket_finish_connect", {
         let host = host.clone();
 
-        move |handle: Handle| host.finish_connect(handle)
+        move |handle: Handle| host.socket_finish_connect(handle)
     });
 
-    impls.define("start_tls", {
+    impls.define("tls_start", {
         let host = host.clone();
 
-        move |(handle, sni): (Handle, Vec<u8>)| host.start_tls(handle, &sni)
+        move |(handle, sni): (Handle, Vec<u8>)| host.tls_start(handle, &sni)
     });
 
     impls.define("tls_server_config", {
@@ -215,66 +218,66 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
         move |(cert, key): (Vec<u8>, Vec<u8>)| host.tls_server_config(&cert, &key)
     });
 
-    impls.define("start_tls_server", {
+    impls.define("tls_start_server", {
         let host = host.clone();
 
-        move |(handle, cfg): (Handle, Handle)| host.start_tls_server(handle, cfg)
+        move |(handle, cfg): (Handle, Handle)| host.tls_start_server(handle, cfg)
     });
 
-    impls.define("listen", {
+    impls.define("socket_listen", {
         let host = host.clone();
 
-        move |(handle, backlog): (Handle, u32)| host.listen(handle, backlog)
+        move |(handle, backlog): (Handle, u32)| host.socket_listen(handle, backlog)
     });
 
-    impls.define("accept", {
+    impls.define("socket_accept", {
         let host = host.clone();
 
-        move |handle: Handle| host.accept(handle)
+        move |handle: Handle| host.socket_accept(handle)
     });
 
-    impls.define("lookup", {
+    impls.define("dns_lookup", {
         let host = host.clone();
 
-        move |(name, port): (Vec<u8>, u32)| host.lookup(&name, port)
+        move |(name, port): (Vec<u8>, u32)| host.dns_lookup(&name, port)
     });
 
-    impls.define("resolve", {
+    impls.define("dns_resolve", {
         let host = host.clone();
 
-        move |handle: Handle| host.resolve(handle)
+        move |handle: Handle| host.dns_resolve(handle)
     });
 
-    impls.define("socket", {
+    impls.define("socket_open", {
         let host = host.clone();
 
-        move |addr: Vec<u8>| host.socket(&addr)
+        move |addr: Vec<u8>| host.socket_open(&addr)
     });
 
-    impls.define("bind", {
+    impls.define("socket_bind", {
         let host = host.clone();
 
-        move |(handle, addr): (Handle, Vec<u8>)| host.bind(handle, &addr)
+        move |(handle, addr): (Handle, Vec<u8>)| host.socket_bind(handle, &addr)
     });
 
-    impls.define("set_reuseaddr", {
+    impls.define("socket_set_reuseaddr", {
         let host = host.clone();
 
-        move |(handle, on): (Handle, u32)| host.set_reuseaddr(handle, on)
+        move |(handle, on): (Handle, u32)| host.socket_set_reuseaddr(handle, on)
     });
 
-    impls.define("poll", {
+    impls.define("handle_poll", {
         let host = host.clone();
 
         move |(handles, events, timeout): (Vec<Handle>, Vec<Poll>, i32)| {
-            host.poll(&handles, &events, timeout)
+            host.handle_poll(&handles, &events, timeout)
         }
     });
 
-    impls.define("close", {
+    impls.define("handle_close", {
         let host = host.clone();
 
-        move |handle: Handle| host.close(handle)
+        move |handle: Handle| host.handle_close(handle)
     });
 
     impls.define("clock_wall", {
@@ -289,102 +292,116 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
         move |()| host.clock_mono()
     });
 
-    impls.define("random", {
+    impls.define("rand_bytes", {
         let host = host.clone();
 
-        move |count: u32| host.random(count)
+        move |count: u32| host.rand_bytes(count)
     });
 
-    impls.define("args", {
+    impls.define("proc_args", {
         let host = host.clone();
 
-        move |()| host.args()
+        move |()| host.proc_args()
     });
 
-    impls.define("env", {
+    impls.define("proc_env", {
         let host = host.clone();
 
-        move |name: Vec<u8>| host.env(&name)
+        move |name: Vec<u8>| host.proc_env(&name)
     });
 
-    impls.define("raw", {
+    impls.define("tty_raw", {
         let host = host.clone();
 
-        move |(handle, on): (Handle, u32)| host.raw(handle, on)
+        move |(handle, on): (Handle, u32)| host.tty_raw(handle, on)
     });
 
-    impls.define("size", {
+    impls.define("tty_size", {
         let host = host.clone();
 
-        move |handle: Handle| host.size(handle)
+        move |handle: Handle| host.tty_size(handle)
     });
 
-    impls.define("stat", {
+    impls.define("serial_open", {
         let host = host.clone();
 
-        move |path: Vec<u8>| host.stat(&path)
-    });
-
-    impls.define("remove_file", {
-        let host = host.clone();
-
-        move |path: Vec<u8>| host.remove_file(&path)
-    });
-
-    impls.define("rename", {
-        let host = host.clone();
-
-        move |(from, to): (Vec<u8>, Vec<u8>)| host.rename(&from, &to)
-    });
-
-    impls.define("list", {
-        let host = host.clone();
-
-        move |path: Vec<u8>| host.list(&path)
-    });
-
-    impls.define("create_dir", {
-        let host = host.clone();
-
-        move |path: Vec<u8>| host.create_dir(&path)
-    });
-
-    impls.define("remove_dir", {
-        let host = host.clone();
-
-        move |path: Vec<u8>| host.remove_dir(&path)
-    });
-
-    impls.define("cwd", {
-        let host = host.clone();
-
-        move |()| host.cwd()
-    });
-
-    impls.define("spawn", {
-        let host = host.clone();
-
-        move |(argv, cwd, env, stdin, stdout, stderr): SpawnOperands| {
-            host.spawn(&argv, &cwd, &env, stdin, stdout, stderr)
+        move |(path, baud, data_bits, parity, stop_bits, flow): SerialOpenOperands| {
+            host.serial_open(&path, baud, data_bits, parity, stop_bits, flow)
         }
     });
 
-    impls.define("stream", {
+    impls.define("serial_control", {
         let host = host.clone();
 
-        move |(child, which): (Handle, u32)| host.stream(child, which)
+        move |(handle, op, on): (Handle, u32, u32)| host.serial_control(handle, op, on)
     });
 
-    impls.define("wait", {
+    impls.define("file_stat", {
         let host = host.clone();
 
-        move |child: Handle| host.wait(child)
+        move |path: Vec<u8>| host.file_stat(&path)
     });
 
-    impls.define("kill", {
+    impls.define("file_remove", {
         let host = host.clone();
 
-        move |child: Handle| host.kill(child)
+        move |path: Vec<u8>| host.file_remove(&path)
+    });
+
+    impls.define("file_rename", {
+        let host = host.clone();
+
+        move |(from, to): (Vec<u8>, Vec<u8>)| host.file_rename(&from, &to)
+    });
+
+    impls.define("dir_list", {
+        let host = host.clone();
+
+        move |path: Vec<u8>| host.dir_list(&path)
+    });
+
+    impls.define("dir_create", {
+        let host = host.clone();
+
+        move |path: Vec<u8>| host.dir_create(&path)
+    });
+
+    impls.define("dir_remove", {
+        let host = host.clone();
+
+        move |path: Vec<u8>| host.dir_remove(&path)
+    });
+
+    impls.define("proc_cwd", {
+        let host = host.clone();
+
+        move |()| host.proc_cwd()
+    });
+
+    impls.define("proc_spawn", {
+        let host = host.clone();
+
+        move |(argv, cwd, env, stdin, stdout, stderr): SpawnOperands| {
+            host.proc_spawn(&argv, &cwd, &env, stdin, stdout, stderr)
+        }
+    });
+
+    impls.define("proc_stream", {
+        let host = host.clone();
+
+        move |(child, which): (Handle, u32)| host.proc_stream(child, which)
+    });
+
+    impls.define("proc_wait", {
+        let host = host.clone();
+
+        move |child: Handle| host.proc_wait(child)
+    });
+
+    impls.define("proc_kill", {
+        let host = host.clone();
+
+        move |child: Handle| host.proc_kill(child)
     });
 
     // Completeness — the half the per-`define` asserts cannot see: a store row with no binding would otherwise surface only when a program that imports it reaches `link`. Membership and uniqueness are asserted per `define`, so no unbound row is exactly one binding per row.

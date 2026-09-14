@@ -28,7 +28,7 @@ pub enum WireLeaf {
 
 /// The type of one value crossing the host boundary — a closed *subset of guest types*, not a vocabulary of wire shapes. Nothing below the type distinguishes `Bytes` from `Handle`: they share a wasm `ValType`, a wasmtime `FuncType` slot, and a load/force/embed path. What separates them is only the guest type `curios-core`'s `wire_term` builds, which is why each variant is spelled the way its guest type is.
 ///
-/// The scalar cases matter to codegen: a `Nat`/`Bool` operand is unboxed from its i31 carrier *unsigned* (`i31.get_u`) and crosses as a raw wasm `i32`, while `Int` is unboxed *signed* (`i31.get_s`) — `poll`'s timeout keeps the `poll(2)` sign convention. Scalar results re-enter pre-boxed as i31 refs. `Bytes` is the byte grain alone: `Bits` and `Byte` are guest types with no wire spelling.
+/// The scalar cases matter to codegen: a `Nat`/`Bool` operand is unboxed from its i31 carrier *unsigned* (`i31.get_u`) and crosses as a raw wasm `i32`, while `Int` is unboxed *signed* (`i31.get_s`) — `handle_poll`'s timeout keeps the `poll(2)` sign convention. Scalar results re-enter pre-boxed as i31 refs. `Bytes` is the byte grain alone: `Bits` and `Byte` are guest types with no wire spelling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum WireType {

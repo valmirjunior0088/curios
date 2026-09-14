@@ -4,7 +4,7 @@
 //!
 //! Each operand and result is one of a closed vocabulary of slot kinds (`Handle`, `Nat`, `Bool`, `Int`, `Bytes`, `Mode`, `Status`, `ListBytes`, `ListHandle`, `ListPoll`), each a fixed `(wire type, trait parameter, trait result)` triple the `*_of!` helpers below encode. Result arity fixes the guest-facing shape exactly as the prelude's `host_fn` reads it: `0` results is the unit value, `1` the bare result, `2..` a record of the named fields. A reference result (`Handle`, `Bytes`, a list) may only be the last: `results_of!` has no arm for one earlier, so such a row does not expand, and [`WireResults`] cannot hold it — the shape codegen's embed step and the runtime's lowering both rest on. If an operation ever needs an eleventh slot kind, reconsider the vocabulary before extending it. `exit` is deliberately absent from the list — it traps rather than returns, so no results row could describe it — and so from both projections; its import name is [`EXIT`](super::EXIT).
 //!
-//! Each row also states where the guest surfaces it, as `wire_name as Subject/label`. The wire name is the ABI and never moves; the `Subject/label` pair is the `/sys` placement, and it is a column of this table rather than a lookup beside it so a new row cannot acquire a placement nothing checks. A subject capitalized names a type module the operation joins (`Handle`), a lowercase one a module of operations alone (`socket`, `clock`).
+//! Each row also states where the guest surfaces it, as `wire_name as Subject/label`. The `Subject/label` pair is the `/sys` placement, and it is a column of this table rather than a lookup beside it so a new row cannot acquire a placement nothing checks. The wire name is that pair spelled flat — the subject lowercased, an underscore, the label, so `Handle/read` is `handle_read` — which keeps two rows sharing a label, `file/open` and `serial/open`, from contending for one import name; `a_wire_name_is_its_placement_spelled_flat` holds every row to it. A subject capitalized names a type module the operation joins (`Handle`), a lowercase one a module of operations alone (`socket_open`, `clock`).
 
 use super::{
     ForeignFunction, ForeignStore, Handle, Mode, Namespace, Poll, Status, WireLeaf, WireReference,
@@ -17,56 +17,56 @@ use super::{
 macro_rules! host_ops {
     ($callback:ident) => {
         $callback! {
-            /// Read up to `n` bytes from `h`. `(status, bytes)`: `Ok` with 1..n bytes, `Eof` with none, or an error status. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `poll` is where the wait happens; a regular file is read synchronously, since the disk answers it.
-            read as Handle/read [h: Handle, n: Nat] [status: Status, bytes: Bytes];
+            /// Read up to `n` bytes from `h`. `(status, bytes)`: `Ok` with 1..n bytes, `Eof` with none, or an error status. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and `handle_poll` is where the wait happens; a regular file is read synchronously, since the disk answers it.
+            handle_read as Handle/read [h: Handle, n: Nat] [status: Status, bytes: Bytes];
 
             /// Write `b` to `h`, returning `(status, written)` — the bytes accepted this call. A non-blocking handle may take only a prefix (so the caller resends the tail without duplicating); `WouldBlock` reports `written` 0. The standard output streams write the whole buffer, waiting on the terminal or pipe that reads them: they are shared with the parent rather than a peer the program chose, and a partial write to a terminal would interleave its output. A TLS stream reports the plaintext it accepted and pushes the encrypted remainder on the next read or write of the handle.
-            write as Handle/write [h: Handle, b: Bytes] [status: Status, written: Nat];
+            handle_write as Handle/write [h: Handle, b: Bytes] [status: Status, written: Nat];
 
             /// Open the file at `path` in `mode`. `(status, handle)`; the handle is meaningful only when the status is `Ok`.
-            open as file/open [path: Bytes, mode: Mode] [status: Status, handle: Handle];
+            file_open as file/open [path: Bytes, mode: Mode] [status: Status, handle: Handle];
 
-            /// Start an asynchronous lookup of `host`:`port`. `(status, handle)`; on `Ok` the handle becomes `READ`-ready once resolution completes, at which point `resolve` forces the address list off it. The blocking resolution runs off the calling thread.
-            lookup as dns/lookup [host: Bytes, port: Nat] [status: Status, handle: Handle];
+            /// Start an asynchronous lookup of `host`:`port`. `(status, handle)`; on `Ok` the handle becomes `READ`-ready once resolution completes, at which point `dns_resolve` forces the address list off it. The blocking resolution runs off the calling thread.
+            dns_lookup as dns/lookup [host: Bytes, port: Nat] [status: Status, handle: Handle];
 
-            /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it. `(status, addresses)`; non-empty on `Ok`, each blob the host's private encoding the guest only shuttles back into `socket`/`bind`/`connect`. `WouldBlock` before readiness.
-            resolve as dns/resolve [handle: Handle] [status: Status, addresses: ListBytes];
+            /// Force a finished lookup `handle` to its list of opaque address blobs, consuming it. `(status, addresses)`; non-empty on `Ok`, each blob the host's private encoding the guest only shuttles back into `socket_open`/`socket_bind`/`socket_connect`. `WouldBlock` before readiness.
+            dns_resolve as dns/resolve [handle: Handle] [status: Status, addresses: ListBytes];
 
-            /// Create an unconnected, non-blocking socket for the address family encoded in `addr`. `(status, handle)` like `open`; transitioned by `bind`/`connect`/`listen`.
-            socket as socket/open [addr: Bytes] [status: Status, handle: Handle];
+            /// Create an unconnected, non-blocking socket for the address family encoded in `addr`. `(status, handle)` like `file_open`; transitioned by `socket_bind`/`socket_connect`/`socket_listen`.
+            socket_open as socket/open [addr: Bytes] [status: Status, handle: Handle];
 
             /// Bind socket `h` to the local address `addr`.
-            bind as socket/bind [h: Handle, addr: Bytes] [status: Status];
+            socket_bind as socket/bind [h: Handle, addr: Bytes] [status: Status];
 
-            /// Start connecting socket `h` to the resolved address `addr`. `Ok` when the kernel completed it at once, on which the handle is an ordinary byte stream `read`/`write`/`close` serve; `WouldBlock` while it is under way, on which `poll` reports `h` `WRITE`-ready once it has settled and `finish_connect` reads the outcome; a refusal otherwise, on which the socket drops.
-            connect as socket/connect [h: Handle, addr: Bytes] [status: Status];
+            /// Start connecting socket `h` to the resolved address `addr`. `Ok` when the kernel completed it at once, on which the handle is an ordinary byte stream `handle_read`/`handle_write`/`handle_close` serve; `WouldBlock` while it is under way, on which `handle_poll` reports `h` `WRITE`-ready once it has settled and `socket_finish_connect` reads the outcome; a refusal otherwise, on which the socket drops.
+            socket_connect as socket/connect [h: Handle, addr: Bytes] [status: Status];
 
-            /// Complete a `connect` that answered `WouldBlock`, once `poll` reports `h` `WRITE`-ready. `Ok` re-files `h` as a connected byte stream; a refusal or other failure reports its status and drops the socket; `WouldBlock` while the connect is still pending. `Ok` on a connect that never went pending.
-            finish_connect as socket/finish_connect [h: Handle] [status: Status];
+            /// Complete a `socket_connect` that answered `WouldBlock`, once `handle_poll` reports `h` `WRITE`-ready. `Ok` re-files `h` as a connected byte stream; a refusal or other failure reports its status and drops the socket; `WouldBlock` while the connect is still pending. `Ok` on a connect that never went pending.
+            socket_finish_connect as socket/finish_connect [h: Handle] [status: Status];
 
             /// Mark bound socket `h` as listening with accept-queue depth `backlog` (OS-clamped to `somaxconn`).
-            listen as socket/listen [h: Handle, backlog: Nat] [status: Status];
+            socket_listen as socket/listen [h: Handle, backlog: Nat] [status: Status];
 
             /// Pull the next connection from listener `h`: `WouldBlock` when none is pending, else `(Ok, handle)`, a non-blocking byte stream like a connected socket.
-            accept as socket/accept [h: Handle] [status: Status, handle: Handle];
+            socket_accept as socket/accept [h: Handle] [status: Status, handle: Handle];
 
-            /// Upgrade connected socket `h` to a TLS client stream in place. `sni` is the server name to present and verify against. The handshake is driven by the reads and writes that follow, each answering `WouldBlock` while it waits on the peer; a failed verification or protocol surfaces as `TlsError` from the read or write that discovers it, with the handle still filed for `close`.
-            start_tls as tls/start [h: Handle, sni: Bytes] [status: Status];
+            /// Upgrade connected socket `h` to a TLS client stream in place. `sni` is the server name to present and verify against. The handshake is driven by the reads and writes that follow, each answering `WouldBlock` while it waits on the peer; a failed verification or protocol surfaces as `TlsError` from the read or write that discovers it, with the handle still filed for `handle_close`.
+            tls_start as tls/start [h: Handle, sni: Bytes] [status: Status];
 
-            /// Build an opaque server-side TLS configuration from a PEM certificate chain and private key. `(status, handle)` like `socket`: a host-owned config token consumed by `start_tls_server` and released by `close`.
+            /// Build an opaque server-side TLS configuration from a PEM certificate chain and private key. `(status, handle)` like `socket_open`: a host-owned config token consumed by `tls_start_server` and released by `handle_close`.
             tls_server_config as tls/server_config [cert: Bytes, key: Bytes] [status: Status, handle: Handle];
 
-            /// Upgrade accepted socket `h` to a TLS server stream in place using configuration handle `cfg`; the handshake is driven by the reads and writes that follow, as `start_tls`'s is.
-            start_tls_server as tls/start_server [h: Handle, cfg: Handle] [status: Status];
+            /// Upgrade accepted socket `h` to a TLS server stream in place using configuration handle `cfg`; the handshake is driven by the reads and writes that follow, as `tls_start`'s is.
+            tls_start_server as tls/start_server [h: Handle, cfg: Handle] [status: Status];
 
-            /// Set socket `h`'s `SO_REUSEADDR` flag; set before `bind`.
-            set_reuseaddr as socket/set_reuseaddr [h: Handle, on: Bool] [status: Status];
+            /// Set socket `h`'s `SO_REUSEADDR` flag; set before `socket_bind`.
+            socket_set_reuseaddr as socket/set_reuseaddr [h: Handle, on: Bool] [status: Status];
 
             /// The readiness oracle. Wait until at least one of `handles` is ready for the interest in the parallel `events` mask, or `timeout` milliseconds elapse (`poll(2)` sign convention: negative waits forever, `0` returns immediately). Returns the parallel `revents` masks, one per handle.
-            poll as Handle/poll [handles: ListHandle, events: ListPoll, timeout: Int] [revents: ListPoll];
+            handle_poll as Handle/poll [handles: ListHandle, events: ListPoll, timeout: Int] [revents: ListPoll];
 
             /// Close `h`. Closing an unknown handle is a no-op.
-            close as Handle/close [h: Handle] [];
+            handle_close as Handle/close [h: Handle] [];
 
             /// Read the wall clock. `(secs_hi, secs_lo, nanos)`: seconds since the Unix epoch split base-10⁹ so each limb fits an i31, plus sub-second nanoseconds.
             clock_wall as clock/wall [] [secs_hi: Nat, secs_lo: Nat, nanos: Nat];
@@ -75,52 +75,58 @@ macro_rules! host_ops {
             clock_mono as clock/mono [] [secs: Nat, nanos: Nat];
 
             /// Return `n` random bytes.
-            random as rand/bytes [n: Nat] [bytes: Bytes];
+            rand_bytes as rand/bytes [n: Nat] [bytes: Bytes];
 
             /// The process arguments, each an opaque byte string.
-            args as proc/args [] [argv: ListBytes];
+            proc_args as proc/args [] [argv: ListBytes];
 
             /// Look up the environment variable `name`. `(status, value)`: `Ok` with the value, or `NotFound` with empty bytes.
-            env as proc/env [name: Bytes] [status: Status, value: Bytes];
+            proc_env as proc/env [name: Bytes] [status: Status, value: Bytes];
 
             /// Put terminal `h` in raw mode (`on`) — the descriptor's termios recorded on first use, then no canonical mode, no echo, no signal keys, no output post-processing, `VMIN` 1, `VTIME` 0 — or restore the record (`off`). The native host also restores every record when it is dropped, so a trap or an `exit` leaves the terminal usable. `ENOTTY` through the errno lane is how a program learns it has no terminal.
-            raw as tty/raw [h: Handle, on: Bool] [status: Status];
+            tty_raw as tty/raw [h: Handle, on: Bool] [status: Status];
 
             /// The terminal's dimensions (`TIOCGWINSZ`). `(status, cols, rows)`; the counts are meaningful only under `Ok`.
-            size as tty/size [h: Handle] [status: Status, cols: Nat, rows: Nat];
+            tty_size as tty/size [h: Handle] [status: Status, cols: Nat, rows: Nat];
+
+            /// Open the serial device at `path`: read-write, no controlling terminal, non-blocking, and exclusive (`TIOCEXCL`), then raw termios with `CLOCAL` and `CREAD`, `baud` as the speed, and the frame `data_bits` (7 or 8), `parity` (a [`serial_parity`](crate::serial_parity) tag), `stop_bits` (1 or 2) and `flow` (a [`serial_flow`](crate::serial_flow) tag). `(status, handle)`: on `Ok` a non-blocking byte stream `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve as they serve a pipe to a child. A setting outside those ranges answers `EINVAL` through the errno lane without opening; a speed the platform cannot set answers what `tcsetattr` reports. Opening asserts DTR on Linux whatever the program wants, so a board that resets on DTR resets on open — a program that cares discards the boot noise afterwards.
+            serial_open as serial/open [path: Bytes, baud: Nat, data_bits: Nat, parity: Nat, stop_bits: Nat, flow: Nat] [status: Status, handle: Handle];
+
+            /// Drive serial port `h`: `op` is a [`serial_op`](crate::serial_op) tag — `DTR` or `RTS` set to the level `on`, or `DISCARD_INPUT`, which drops what the device sent and the program has not read (`on` ignored). Break, the four status lines and drain are deliberately absent until a program needs them; drain in particular waits on the wire, which no row does.
+            serial_control as serial/control [h: Handle, op: Nat, on: Bool] [status: Status];
 
             /// What is at `path`, following symbolic links. `kind` is a [`file_kind`](crate::file_kind) tag; the size and the modification time are split base-10⁹ as `clock_wall` splits its seconds, so the i31 envelope is never asked to hold a file size. A dangling link reports the `SYMLINK` kind with zero sizes; every field but `status` is meaningful only under `Ok`.
-            stat as file/stat [path: Bytes] [status: Status, kind: Nat, size_hi: Nat, size_lo: Nat, mtime_hi: Nat, mtime_lo: Nat, mtime_nanos: Nat];
+            file_stat as file/stat [path: Bytes] [status: Status, kind: Nat, size_hi: Nat, size_lo: Nat, mtime_hi: Nat, mtime_lo: Nat, mtime_nanos: Nat];
 
             /// Remove the file at `path`. `IsDirectory` on a directory.
-            remove_file as file/remove [path: Bytes] [status: Status];
+            file_remove as file/remove [path: Bytes] [status: Status];
 
             /// Rename `from` to `to`, file or directory, replacing an existing `to` as `rename(2)` does.
-            rename as file/rename [from: Bytes, to: Bytes] [status: Status];
+            file_rename as file/rename [from: Bytes, to: Bytes] [status: Status];
 
             /// The names in directory `path`, as the bytes the directory holds — no `.` or `..`, sorted so two listings agree. `NotDirectory` on a file.
-            list as dir/list [path: Bytes] [status: Status, names: ListBytes];
+            dir_list as dir/list [path: Bytes] [status: Status, names: ListBytes];
 
             /// Create the directory at `path`; its parent must exist. `AlreadyExists` when anything is there.
-            create_dir as dir/create [path: Bytes] [status: Status];
+            dir_create as dir/create [path: Bytes] [status: Status];
 
             /// Remove the empty directory at `path`. `NotEmpty` when it has entries, `NotDirectory` on a file.
-            remove_dir as dir/remove [path: Bytes] [status: Status];
+            dir_remove as dir/remove [path: Bytes] [status: Status];
 
             /// The process's working directory, as bytes. WASI has preopens instead, so the browser denies it.
-            cwd as proc/cwd [] [status: Status, path: Bytes];
+            proc_cwd as proc/cwd [] [status: Status, path: Bytes];
 
-            /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. `(status, child)`: the child handle becomes `READ`-ready when the child exits, which is when `wait` answers, and its piped streams are fetched one at a time through `stream`, because a row carries at most one reference result and it is the last.
-            spawn as proc/spawn [argv: ListBytes, cwd: Bytes, env: ListBytes, stdin: Nat, stdout: Nat, stderr: Nat] [status: Status, child: Handle];
+            /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. `(status, child)`: the child handle becomes `READ`-ready when the child exits, which is when `proc_wait` answers, and its piped streams are fetched one at a time through `proc_stream`, because a row carries at most one reference result and it is the last.
+            proc_spawn as proc/spawn [argv: ListBytes, cwd: Bytes, env: ListBytes, stdin: Nat, stdout: Nat, stderr: Nat] [status: Status, child: Handle];
 
-            /// One of `child`'s piped streams, `which` being the [`stdio`](crate::stdio) index of the stream (`0` stdin, `1` stdout, `2` stderr). `(status, handle)`: a piped stream is a non-blocking handle `read`, `write`, `poll` and `close` serve; an unpiped one is the empty handle a failed `open` returns.
-            stream as proc/stream [child: Handle, which: Nat] [status: Status, handle: Handle];
+            /// One of `child`'s piped streams, `which` being the [`stdio`](crate::stdio) index of the stream (`0` stdin, `1` stdout, `2` stderr). `(status, handle)`: a piped stream is a non-blocking handle `handle_read`, `handle_write`, `handle_poll` and `handle_close` serve; an unpiped one is the empty handle a failed `file_open` returns.
+            proc_stream as proc/stream [child: Handle, which: Nat] [status: Status, handle: Handle];
 
             /// How `child` ended, once its handle is readable: `(status, code, signal)`, `signal` nonzero when a signal ended it and `code` the exit code otherwise. `WouldBlock` while it still runs; consumes the handle.
-            wait as proc/wait [child: Handle] [status: Status, code: Nat, signal: Nat];
+            proc_wait as proc/wait [child: Handle] [status: Status, code: Nat, signal: Nat];
 
-            /// Send `child` `SIGKILL`; `wait` then reports the signal.
-            kill as proc/kill [child: Handle] [status: Status];
+            /// Send `child` `SIGKILL`; `proc_wait` then reports the signal.
+            proc_kill as proc/kill [child: Handle] [status: Status];
         }
     };
 }

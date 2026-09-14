@@ -15,7 +15,7 @@ impl<T> Table<T> {
         }
     }
 
-    /// Mint a fresh handle for `resource` and file the resource under its token bytes. The bytes are the handle the guest shuttles back; `close` removes them and the mint never reproduces them.
+    /// Mint a fresh handle for `resource` and file the resource under its token bytes. The bytes are the handle the guest shuttles back; `handle_close` removes them and the mint never reproduces them.
     pub(crate) fn mint(&mut self, resource: T) -> Handle {
         let bytes = self.tokens.mint();
         self.map.insert(bytes.clone(), resource);
@@ -31,7 +31,7 @@ impl<T> Table<T> {
         self.map.get_mut(&handle.bytes())
     }
 
-    /// File `resource` under `handle`, keeping the exact token the guest already holds — used to re-file a handle whose state changed in place (e.g. `connect` turning a socket into a stream).
+    /// File `resource` under `handle`, keeping the exact token the guest already holds — used to re-file a handle whose state changed in place (e.g. `socket_connect` turning a socket into a stream).
     pub(crate) fn insert(&mut self, handle: &Handle, resource: T) {
         self.map.insert(handle.bytes(), resource);
     }

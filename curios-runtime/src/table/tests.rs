@@ -50,7 +50,7 @@ fn a_declined_resource_stays_filed_under_its_handle() {
     assert_eq!(declined, None);
     assert_eq!(table.get(&a), Some(&10));
 
-    // Claiming takes it out, so the handle misses afterwards — the transition `connect`/`start_tls` perform.
+    // Claiming takes it out, so the handle misses afterwards — the transition `socket_connect`/`tls_start` perform.
     assert_eq!(
         table.take_if(&a, |value| Ok::<u32, u32>(value + 1)),
         Some(11)

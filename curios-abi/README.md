@@ -1,6 +1,6 @@
 # curios-abi
 
-The host/guest wire contract shared by the compiler and both runtimes: the numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring and stdio-handle tags, the `ForeignStore` of self-describing `ForeignFunction` rows every host operation is, the `HostOps` trait a host implements, and the two import namespaces both ends link on. Every consumer — the compiler minting the `/sys` prelude and emitting the wasm imports, the native runtime typing and binding the `sys.*` imports, the browser harness answering with the codes — reads these definitions rather than restating them. What each type means, how a row is read, and where the crate sits in the layering belong to the crate rustdoc; that a host operation is complete only when its row, its compiler use and both runtime implementations agree is CLAUDE.md's invariant.
+The host/guest wire contract shared by the compiler and both runtimes: the numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, serial-parity, serial-flow, serial-op and stdio-handle tags, the `ForeignStore` of self-describing `ForeignFunction` rows every host operation is, the `HostOps` trait a host implements, and the two import namespaces both ends link on. Every consumer — the compiler minting the `/sys` prelude and emitting the wasm imports, the native runtime typing and binding the `sys.*` imports, the browser harness answering with the codes — reads these definitions rather than restating them. What each type means, how a row is read, and where the crate sits in the layering belong to the crate rustdoc; that a host operation is complete only when its row, its compiler use and both runtime implementations agree is CLAUDE.md's invariant.
 
 ## Design
 
@@ -43,3 +43,11 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 **Decision.** A `ForeignFunction` compares and hashes by `(namespace, name)` alone, and `Namespace` is a two-variant enum rather than a `&'static str`.
 
 **Rationale.** A store never holds two functions with one name, so the pair determines the whole row; comparing by it keeps term-level equality and hashing O(1), and lets a cached prelude row match a freshly minted one with the same content. The enum makes the namespaces that exist exactly the namespaces that can be written, and it archives as its own discriminant — the byte a hand-rolled code table used to assign, beside a panic asserting a validity the string type could not give it.
+
+### A row's wire name is its placement spelled flat
+
+**Decision.** A builtin row's wire name — its wasm import name and its `HostOps` method — is its `/sys` placement spelled flat: the subject lowercased, an underscore, the label, so `Handle/read` is `handle_read` and `socket/open` is `socket_open`. `a_wire_name_is_its_placement_spelled_flat` holds every row to it.
+
+**Rationale.** The names were chosen beside the placement, and a label two subjects share had no second spelling to fall back on: `serial/open` could not be `open`, and a name picked for the occasion would have sat beside `open`, `socket` and `raw` with nothing saying which of them was the rule. Deriving the name from the column that already decides the placement leaves nothing to choose, so rows sharing a label never contend for one import, and a row is found from either spelling.
+
+**Rejected.** Prefixing only a row whose name collides, which makes the naming a history of collisions rather than a rule. Keeping the subject's case, `Handle_read`, which a Rust method cannot carry without a lint exception. Flattening to POSIX calls instead of labels, `file_unlink` for `file/remove`: the name takes the label as the placement spells it, so a label's wording is a question about placement, not about the wire.

@@ -26,7 +26,10 @@ use {
         Doc, Intrinsic, Match, MatchPattern, MatrixArm, Module, Nat, NatLiteral, Subterm, Term,
         TopCase, TopInduct, TopItem,
     },
-    curios_abi::{ForeignStore, event, file_kind, open_mode, status, stdio, stdio_mode},
+    curios_abi::{
+        ForeignStore, event, file_kind, open_mode, serial_flow, serial_op, serial_parity, status,
+        stdio, stdio_mode,
+    },
     curios_num::Integer,
     curios_utilities::{Grain, Plicity, SyntaxRegistry},
 };
@@ -999,7 +1002,7 @@ fn proc_exit() -> Decl {
     )
 }
 
-/// The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source. Each is named by the tag it holds — `status`, `event`, `open_mode`, `file_kind`, `stdio_mode` — as `curios-abi`'s `codes` names them, and all are lowercase because no type backs them.
+/// The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source. Each is named by the tag it holds — `status`, `event`, `open_mode`, `file_kind`, `stdio_mode`, `serial_parity`, `serial_flow`, `serial_op` — as `curios-abi`'s `codes` names them, and all are lowercase because no type backs them.
 fn code_modules() -> Vec<SysModule> {
     vec![
         // The wire-code mirror: the guest counterpart of ABI wire codes, so the standard library compares against named constants the host derives from the same source.
@@ -1056,6 +1059,29 @@ fn code_modules() -> Vec<SysModule> {
                 pub_let("inherit", nat(), nat_lit(stdio_mode::INHERIT)),
                 pub_let("pipe", nat(), nat_lit(stdio_mode::PIPE)),
                 pub_let("null", nat(), nat_lit(stdio_mode::NULL)),
+            ],
+        ),
+        SysModule::ops(
+            "serial_parity",
+            vec![
+                pub_let("none", nat(), nat_lit(serial_parity::NONE)),
+                pub_let("even", nat(), nat_lit(serial_parity::EVEN)),
+                pub_let("odd", nat(), nat_lit(serial_parity::ODD)),
+            ],
+        ),
+        SysModule::ops(
+            "serial_flow",
+            vec![
+                pub_let("none", nat(), nat_lit(serial_flow::NONE)),
+                pub_let("hardware", nat(), nat_lit(serial_flow::HARDWARE)),
+            ],
+        ),
+        SysModule::ops(
+            "serial_op",
+            vec![
+                pub_let("dtr", nat(), nat_lit(serial_op::DTR)),
+                pub_let("rts", nat(), nat_lit(serial_op::RTS)),
+                pub_let("discard_input", nat(), nat_lit(serial_op::DISCARD_INPUT)),
             ],
         ),
     ]

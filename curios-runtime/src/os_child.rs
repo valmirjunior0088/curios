@@ -1,6 +1,6 @@
 //! Children of the native host: spawning a program with each standard stream wired as the guest asked, reaping it on a thread that signals a pipe the scheduler polls, and killing it by pid.
 //!
-//! The reaping follows `os_resolver`'s pattern for a finished lookup: a thread does the blocking `wait`, fills a slot, and writes one byte to a pipe whose read end is the child's handle, so `poll` sees the exit as readiness and `wait` drains the slot at once. One thread per child is the native host's cost for observing an exit without a signal handler; the guest never sees it.
+//! The reaping follows `os_resolver`'s pattern for a finished lookup: a thread does the blocking `wait`, fills a slot, and writes one byte to a pipe whose read end is the child's handle, so `handle_poll` sees the exit as readiness and `proc_wait` drains the slot at once. One thread per child is the native host's cost for observing an exit without a signal handler; the guest never sees it.
 
 use {
     super::{Status, status_from_error},
@@ -25,7 +25,7 @@ pub(crate) struct Exit {
     pub(crate) signal: u32,
 }
 
-/// The cell the reaper fills once the child has exited, drained by the host's `wait`. Cloning shares the one underlying cell — the reaper holds one handle, the host the other.
+/// The cell the reaper fills once the child has exited, drained by the host's `proc_wait`. Cloning shares the one underlying cell — the reaper holds one handle, the host the other.
 #[derive(Clone, Default)]
 pub(crate) struct ExitSlot {
     cell: Arc<Mutex<Option<Exit>>>,
@@ -38,7 +38,7 @@ impl ExitSlot {
     }
 }
 
-/// A running child as the host files it: `done` is the read end of a pipe the reaper writes to once the child has exited, so `poll` sees the exit; `exit` then holds it; `pid` is what `kill` addresses. Dropping it closes the pipe's read end; the reaper's later write fails with `EPIPE` and is discarded, and the child, already killed or finished, is reaped regardless.
+/// A running child as the host files it: `done` is the read end of a pipe the reaper writes to once the child has exited, so `handle_poll` sees the exit; `exit` then holds it; `pid` is what `proc_kill` addresses. Dropping it closes the pipe's read end; the reaper's later write fails with `EPIPE` and is discarded, and the child, already killed or finished, is reaped regardless.
 pub(crate) struct Running {
     pub(crate) done: OwnedFd,
     pub(crate) exit: ExitSlot,
@@ -46,7 +46,7 @@ pub(crate) struct Running {
 }
 
 impl Running {
-    /// `SIGKILL` the child. The reaper thread still reaps it, so `wait` then reports the signal.
+    /// `SIGKILL` the child. The reaper thread still reaps it, so `proc_wait` then reports the signal.
     pub(crate) fn kill(&self) -> Status {
         match kill_process(self.pid, Signal::KILL) {
             Ok(()) => Status::Ok,
@@ -55,7 +55,7 @@ impl Running {
     }
 }
 
-/// Everything `spawn` hands back: the running child and whichever of its streams were piped.
+/// Everything `proc_spawn` hands back: the running child and whichever of its streams were piped.
 pub(crate) struct Spawned {
     pub(crate) child: Running,
     pub(crate) stdin: Option<OwnedFd>,

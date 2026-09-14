@@ -31,7 +31,7 @@ impl Handle {
         token.to_bytes_le()
     }
 
-    /// No handle: the empty token, which no host mints. It is what a `(status, handle)` row hands back beside a status other than `Ok`, and what `proc/stream` answers for a stream that was not piped — the guest never inspects it, and `close` on it is the no-op closing any unknown handle is.
+    /// No handle: the empty token, which no host mints. It is what a `(status, handle)` row hands back beside a status other than `Ok`, and what `proc/stream` answers for a stream that was not piped — the guest never inspects it, and `handle_close` on it is the no-op closing any unknown handle is.
     pub fn none() -> Self {
         Handle::Other(Vec::new())
     }
@@ -97,7 +97,7 @@ impl Default for TokenMint {
     }
 }
 
-/// A `poll` event mask — the interest a guest registers for a handle, and the readiness the host reports back. The one bitfield in the host design: a set of flags riding a `u32`, mirroring the guest's per-handle `Nat` mask. Lifts from / lowers to the raw `Nat` bits; [`Status`] lowers to its code the same way. The mapping to platform `POLLIN`/`POLLOUT`/… (whose raw values differ per platform) is the native adapter's concern.
+/// A `handle_poll` event mask — the interest a guest registers for a handle, and the readiness the host reports back. The one bitfield in the host design: a set of flags riding a `u32`, mirroring the guest's per-handle `Nat` mask. Lifts from / lowers to the raw `Nat` bits; [`Status`] lowers to its code the same way. The mapping to platform `POLLIN`/`POLLOUT`/… (whose raw values differ per platform) is the native adapter's concern.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Poll(u32);
 
@@ -126,11 +126,11 @@ pub enum Status {
     NotFound,
     PermissionDenied,
     AlreadyExists,
-    /// A `connect` was actively refused — no listener at the target host:port.
+    /// A `socket_connect` was actively refused — no listener at the target host:port.
     ConnectionRefused,
     /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). Every handle a peer decides on is non-blocking from the moment the host mints it, so this is the status a fiber parks on: `/std`'s scheduler matches on it to reschedule the read/write instead of treating it as a real failure.
     WouldBlock,
-    /// A TLS upgrade (`start_tls`/`start_tls_server`) or server-config build failed: an unparseable certificate/key, an invalid SNI, or a failed handshake (bad cert chain, protocol error). These are `rustls`'s own errors, not OS errnos, so they collapse to this one named code rather than passing through the errno mapping.
+    /// A TLS upgrade (`tls_start`/`tls_start_server`) or server-config build failed: an unparseable certificate/key, an invalid SNI, or a failed handshake (bad cert chain, protocol error). These are `rustls`'s own errors, not OS errnos, so they collapse to this one named code rather than passing through the errno mapping.
     TlsError,
     /// A directory removal refused because the directory still has entries (`ErrorKind::DirectoryNotEmpty`).
     NotEmpty,

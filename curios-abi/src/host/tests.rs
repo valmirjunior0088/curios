@@ -39,41 +39,43 @@ fn names_are_the_wire_abi() {
     assert_eq!(
         names,
         [
-            "read",
-            "write",
-            "open",
-            "lookup",
-            "resolve",
-            "socket",
-            "bind",
-            "connect",
-            "finish_connect",
-            "listen",
-            "accept",
-            "start_tls",
+            "handle_read",
+            "handle_write",
+            "file_open",
+            "dns_lookup",
+            "dns_resolve",
+            "socket_open",
+            "socket_bind",
+            "socket_connect",
+            "socket_finish_connect",
+            "socket_listen",
+            "socket_accept",
+            "tls_start",
             "tls_server_config",
-            "start_tls_server",
-            "set_reuseaddr",
-            "poll",
-            "close",
+            "tls_start_server",
+            "socket_set_reuseaddr",
+            "handle_poll",
+            "handle_close",
             "clock_wall",
             "clock_mono",
-            "random",
-            "args",
-            "env",
-            "raw",
-            "size",
-            "stat",
-            "remove_file",
-            "rename",
-            "list",
-            "create_dir",
-            "remove_dir",
-            "cwd",
-            "spawn",
-            "stream",
-            "wait",
-            "kill",
+            "rand_bytes",
+            "proc_args",
+            "proc_env",
+            "tty_raw",
+            "tty_size",
+            "serial_open",
+            "serial_control",
+            "file_stat",
+            "file_remove",
+            "file_rename",
+            "dir_list",
+            "dir_create",
+            "dir_remove",
+            "proc_cwd",
+            "proc_spawn",
+            "proc_stream",
+            "proc_wait",
+            "proc_kill",
         ]
     );
 }
@@ -111,20 +113,21 @@ fn result_records_keep_their_labels() {
             .collect()
     };
 
-    assert_eq!(labels("read"), ["status", "bytes"]);
-    assert_eq!(labels("write"), ["status", "written"]);
-    assert_eq!(labels("open"), ["status", "handle"]);
-    assert_eq!(labels("lookup"), ["status", "handle"]);
-    assert_eq!(labels("resolve"), ["status", "addresses"]);
-    assert_eq!(labels("socket"), ["status", "handle"]);
-    assert_eq!(labels("accept"), ["status", "handle"]);
+    assert_eq!(labels("handle_read"), ["status", "bytes"]);
+    assert_eq!(labels("handle_write"), ["status", "written"]);
+    assert_eq!(labels("file_open"), ["status", "handle"]);
+    assert_eq!(labels("dns_lookup"), ["status", "handle"]);
+    assert_eq!(labels("dns_resolve"), ["status", "addresses"]);
+    assert_eq!(labels("socket_open"), ["status", "handle"]);
+    assert_eq!(labels("socket_accept"), ["status", "handle"]);
     assert_eq!(labels("tls_server_config"), ["status", "handle"]);
     assert_eq!(labels("clock_wall"), ["secs_hi", "secs_lo", "nanos"]);
     assert_eq!(labels("clock_mono"), ["secs", "nanos"]);
-    assert_eq!(labels("env"), ["status", "value"]);
-    assert_eq!(labels("size"), ["status", "cols", "rows"]);
+    assert_eq!(labels("proc_env"), ["status", "value"]);
+    assert_eq!(labels("tty_size"), ["status", "cols", "rows"]);
+    assert_eq!(labels("serial_open"), ["status", "handle"]);
     assert_eq!(
-        labels("stat"),
+        labels("file_stat"),
         [
             "status",
             "kind",
@@ -135,11 +138,11 @@ fn result_records_keep_their_labels() {
             "mtime_nanos"
         ]
     );
-    assert_eq!(labels("list"), ["status", "names"]);
-    assert_eq!(labels("cwd"), ["status", "path"]);
-    assert_eq!(labels("spawn"), ["status", "child"]);
-    assert_eq!(labels("stream"), ["status", "handle"]);
-    assert_eq!(labels("wait"), ["status", "code", "signal"]);
+    assert_eq!(labels("dir_list"), ["status", "names"]);
+    assert_eq!(labels("proc_cwd"), ["status", "path"]);
+    assert_eq!(labels("proc_spawn"), ["status", "child"]);
+    assert_eq!(labels("proc_stream"), ["status", "handle"]);
+    assert_eq!(labels("proc_wait"), ["status", "code", "signal"]);
 }
 
 /// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature. Nothing asserts that `List` does not nest, nor that a reference result comes last — [`WireLeaf`](super::WireLeaf) and [`WireResults`] make both unrepresentable.
@@ -167,7 +170,7 @@ fn results_cross_scalars_first_and_the_reference_last() {
     assert_eq!(single.iter().collect::<Vec<_>>(), [("_", WireType::Bytes)]);
 
     let store = host_ops();
-    let read = store.get("read").expect("host_ops defines read");
+    let read = store.get("handle_read").expect("host_ops defines read");
     assert_eq!(
         read.signature.results.iter().collect::<Vec<_>>(),
         [("status", WireType::Nat), ("bytes", WireType::Bytes)]
@@ -187,7 +190,7 @@ fn results_cross_scalars_first_and_the_reference_last() {
     );
 }
 
-/// The guest-facing shape is read off the count and nothing else: `close` answers the unit value, `random` its bytes bare, `read` a record of its two labelled results.
+/// The guest-facing shape is read off the count and nothing else: `handle_close` answers the unit value, `rand_bytes` its bytes bare, `handle_read` a record of its two labelled results.
 #[test]
 fn the_guest_shape_is_read_off_the_result_count() {
     let store = host_ops();
@@ -200,10 +203,10 @@ fn the_guest_shape_is_read_off_the_result_count() {
             .shape()
     };
 
-    assert_eq!(shape("close"), ResultShape::Unit);
-    assert_eq!(shape("random"), ResultShape::Single(WireType::Bytes));
+    assert_eq!(shape("handle_close"), ResultShape::Unit);
+    assert_eq!(shape("rand_bytes"), ResultShape::Single(WireType::Bytes));
     assert_eq!(
-        shape("read"),
+        shape("handle_read"),
         ResultShape::Record(vec![("status", WireType::Nat), ("bytes", WireType::Bytes)])
     );
 }
@@ -216,7 +219,7 @@ fn register_rejects_a_duplicate_name() {
 
     store.register(ForeignFunction {
         namespace: Namespace::Sys,
-        name: "read".to_string(),
+        name: "handle_read".to_string(),
         subject: Some("Handle".to_string()),
         label: "read_again".to_string(),
         description: String::new(),
@@ -260,4 +263,22 @@ fn equality_is_the_import_pair() {
         base(Namespace::Sys, "frobnicate"),
         base(Namespace::Ffi, "frobnicate")
     );
+}
+
+/// A row's wire name is its placement spelled flat — the subject lowercased, an underscore, the label — so no two rows sharing a label contend for one import name, and a new row cannot choose a name beside where it is placed.
+#[test]
+fn a_wire_name_is_its_placement_spelled_flat() {
+    for function in host_ops().iter() {
+        let subject = function
+            .subject
+            .as_deref()
+            .expect("every builtin row names its subject");
+
+        assert_eq!(
+            function.name,
+            format!("{}_{}", subject.to_lowercase(), function.label),
+            "the row placed at {subject}/{}",
+            function.label,
+        );
+    }
 }

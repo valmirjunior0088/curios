@@ -117,23 +117,23 @@ export async function run(config) {
 
   // The `sys` import object, keyed by wire name. A `host_ops` row without a browser implementation surfaces as a `LinkError` naming the import when a program calls it.
   const sysEnv = {
-    read: () => [config.status.EOF, emptyBytes()],
-    write: write,
-    open: deniedHandle,
-    lookup: deniedHandle,
-    resolve: unsupported("resolve"),
-    socket: deniedHandle,
-    bind: denied,
-    connect: denied,
-    finish_connect: denied,
-    listen: denied,
-    accept: deniedHandle,
-    start_tls: denied,
+    handle_read: () => [config.status.EOF, emptyBytes()],
+    handle_write: write,
+    file_open: deniedHandle,
+    dns_lookup: deniedHandle,
+    dns_resolve: unsupported("dns_resolve"),
+    socket_open: deniedHandle,
+    socket_bind: denied,
+    socket_connect: denied,
+    socket_finish_connect: denied,
+    socket_listen: denied,
+    socket_accept: deniedHandle,
+    tls_start: denied,
     tls_server_config: deniedHandle,
-    start_tls_server: denied,
-    set_reuseaddr: reuseaddr,
+    tls_start_server: denied,
+    socket_set_reuseaddr: reuseaddr,
     // Readiness in the playground: the three standard streams are always ready — stdin is at its end, which reads at once, and the output streams accept everything — and no other handle exists here, so anything else reports nothing. The timeout is ignored, since nothing can become ready later; a fiber parked on stdin therefore resumes at once and reads `EOF`.
-    poll: (handles, events, _timeout) => {
+    handle_poll: (handles, events, _timeout) => {
       const count = bridge.list_len(handles);
       const ready = bridge.list_new(count);
 
@@ -148,7 +148,7 @@ export async function run(config) {
 
       return ready;
     },
-    close: () => {},
+    handle_close: () => {},
     clock_wall: () => {
       const millis = Date.now();
       const secs = Math.floor(millis / 1000);
@@ -169,7 +169,7 @@ export async function run(config) {
         Math.floor((millis % 1000) * 1_000_000),
       ];
     },
-    random: (count) => {
+    rand_bytes: (count) => {
       const bytes = new Uint8Array(count);
 
       // Web Crypto caps one `getRandomValues` at 65536 bytes (a `QuotaExceededError` past it), so a larger request is filled a slice at a time; the native host has no such ceiling, and `rand/bytes` promises none.
@@ -179,24 +179,27 @@ export async function run(config) {
 
       return encodeBytes(bytes);
     },
-    args: unsupported("args"),
-    env: () => [config.status.NOT_FOUND, emptyBytes()],
-    // The playground has no terminal to switch or measure, so both tty rows are denied as `open` is.
-    raw: denied,
-    size: () => [config.status.PERMISSION_DENIED, 0, 0],
-    // No filesystem either: every filesystem row is denied as `open` is. `list` would answer a `List(Bytes)`, and `resolve` and `args` likewise, which nothing in the playground can fill — so they trap by name rather than returning an empty list a program would read as a fact.
-    stat: () => [config.status.PERMISSION_DENIED, 0, 0, 0, 0, 0, 0],
-    remove_file: denied,
-    rename: denied,
-    list: unsupported("list"),
-    create_dir: denied,
-    remove_dir: denied,
-    cwd: deniedHandle,
+    proc_args: unsupported("proc_args"),
+    proc_env: () => [config.status.NOT_FOUND, emptyBytes()],
+    // The playground has no terminal to switch or measure, so both tty rows are denied as `file_open` is.
+    tty_raw: denied,
+    tty_size: () => [config.status.PERMISSION_DENIED, 0, 0],
+    // No serial devices either: Web Serial asks the user to pick a port, which no row can do, so opening one is denied as `file_open` is.
+    serial_open: deniedHandle,
+    serial_control: denied,
+    // No filesystem either: every filesystem row is denied as `file_open` is. `dir_list` would answer a `List(Bytes)`, and `dns_resolve` and `proc_args` likewise, which nothing in the playground can fill — so they trap by name rather than returning an empty list a program would read as a fact.
+    file_stat: () => [config.status.PERMISSION_DENIED, 0, 0, 0, 0, 0, 0],
+    file_remove: denied,
+    file_rename: denied,
+    dir_list: unsupported("dir_list"),
+    dir_create: denied,
+    dir_remove: denied,
+    proc_cwd: deniedHandle,
     // WASI has no process creation and neither does the playground.
-    spawn: deniedHandle,
-    stream: deniedHandle,
-    wait: () => [config.status.PERMISSION_DENIED, 0, 0],
-    kill: denied,
+    proc_spawn: deniedHandle,
+    proc_stream: deniedHandle,
+    proc_wait: () => [config.status.PERMISSION_DENIED, 0, 0],
+    proc_kill: denied,
     exit: (code) => {
       throw new ExitSignal(code);
     },

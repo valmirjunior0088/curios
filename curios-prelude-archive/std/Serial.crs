@@ -1,0 +1,130 @@
+use /std/{Bytes, Nat, Bool, List, Result, Path, Try, Async, Io, Handle, fs};
+
+-- | An open serial port.
+pub struct Serial: Type {
+    Handle,
+}
+
+-- | The parity bit a character is framed with.
+pub induct Parity: pub Type
+-- | No parity bit.
+| none()
+-- | A bit making the count of one bits even.
+| even()
+-- | A bit making the count of one bits odd.
+| odd()
+end
+
+-- | How the wire is paced.
+pub induct Flow: pub Type
+-- | No flow control.
+| none()
+-- | Hardware flow control over the RTS and CTS lines.
+| hardware()
+end
+
+-- | How a port is opened: its speed and its frame. `data_bits` is 7 or 8 and `stop_bits` 1 or 2; the host refuses any other as `other(22)`.
+pub struct Config: pub Type {
+    baud: Nat,
+    data_bits: Nat,
+    parity: Parity,
+    stop_bits: Nat,
+    flow: Flow,
+}
+
+-- | `baud` with the frame nearly every device speaks: 8 data bits, no parity, 1 stop bit, and no flow control. The speed has no default, since only the device knows it.
+pub let config(baud: Nat) -> Config =
+    Config { baud = baud, data_bits = 8, parity = Parity/none(), stop_bits = 1, flow = Flow/none() };
+
+let of_parity(parity: Parity) -> Nat =
+    match parity
+    | none() => /sys/serial_parity/none
+    | even() => /sys/serial_parity/even
+    | odd() => /sys/serial_parity/odd
+    end;
+
+let of_flow(flow: Flow) -> Nat =
+    match flow
+    | none() => /sys/serial_flow/none
+    | hardware() => /sys/serial_flow/hardware
+    end;
+
+-- | The port at `path`, opened raw at `c`'s speed and frame and held exclusively until it is closed.
+-- |
+-- | Linux raises DTR as a port opens whatever the program wants, so a board that resets on DTR resets here; `discard_input` once it has booted drops the banner it printed.
+pub let open(path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
+    let r =
+        /sys/serial/open(
+            Path/to_bytes(path),
+            c.baud,
+            c.data_bits,
+            of_parity(c.parity),
+            c.stop_bits,
+            of_flow(c.flow))!;
+    match Io/Error/of(r.status)
+    | some(e) => Try/raise(e)
+    | none() => Try/pure(Serial { r.handle })
+    end;
+
+-- | Close `s`, releasing its hold.
+pub let close(s: Serial) -> Io({}) =
+    Handle/close(s.0);
+
+-- | Up to `n` bytes, parking until some arrive.
+pub let read(s: Serial, n: Nat) -> Async(Io/Chunk) =
+    Async/Read/read(s.0, n);
+
+-- | The whole of `b`, parking while the device cannot take more.
+pub let write(s: Serial, b: Bytes) -> Async(Result(Io/Error, {})) =
+    Async/Write/write(s.0, b);
+
+satisfy Async/Read(Async, Serial) {
+    read(s, n) = read(s, n),
+}
+
+satisfy Async/Write(Async, Serial) {
+    write(s, b) = write(s, b),
+}
+
+let control(s: Serial, op: Nat, on: Bool) -> Try(Io, Io/Error, {}) =
+    let status = /sys/serial/control(s.0, op, on)!;
+    match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
+
+-- | The Data Terminal Ready line at `on`. Lowering and raising it is how most boards are reset.
+pub let set_dtr(s: Serial, on: Bool) -> Try(Io, Io/Error, {}) =
+    control(s, /sys/serial_op/dtr, on);
+
+-- | The Request To Send line at `on`. Beside DTR, it drives the reset and boot pins a board wires to the pair.
+pub let set_rts(s: Serial, on: Bool) -> Try(Io, Io/Error, {}) =
+    control(s, /sys/serial_op/rts, on);
+
+-- | Drop what the device sent and the program has not read.
+pub let discard_input(s: Serial) -> Try(Io, Io/Error, {}) =
+    control(s, /sys/serial_op/discard_input, false);
+
+-- | `body` over the port at `path`, closed whichever way the task ends, a cancellation included; the body's own failure is the answer after the close.
+pub let with(
+    @A: Type,
+    path: Path,
+    c: Config,
+    body: (Serial) -> Try(Async, Io/Error, A),
+) -> Try(Async, Io/Error, A) =
+    let s = open(path, c)!;
+    let outcome = Async/using(close(s), Try/run(body(s)))!;
+    let a = outcome!;
+    Try/pure(a);
+
+let by_id: Path =
+    Path/of_str("/dev/serial/by-id");
+
+let entries: Try(Io, Io/Error, List(Path)) =
+    let names = fs/list(by_id)!;
+    Try/pure(List/map(names, (name) => Path/join(by_id, name)));
+
+-- | The serial devices the host names by what they are: on Linux, every entry of `/dev/serial/by-id`, whose names carry each device's vendor, product and serial number and which `open` follows to the port. Empty where there is no such directory — no device plugged in, or a host that keeps none.
+pub let list: Try(Io, Io/Error, List(Path)) =
+    Try/rescue(entries, (e) =>
+        match e
+        | not_found() => Try/pure([])
+        | _ => Try/raise(e)
+        end);

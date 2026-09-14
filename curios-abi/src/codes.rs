@@ -1,18 +1,18 @@
-//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, and stdio-handle tags, each module named by the tag it holds. Each set is mirrored by a guest-side `/sys` module of the same name; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
+//! The numeric wire codes for `/sys/Handle`'s status, poll-event, open-mode, file-kind, stdio-wiring, serial-parity, serial-flow, serial-op, and stdio-handle tags, each module named by the tag it holds. Each set is mirrored by a guest-side `/sys` module of the same name; the runtime cites these constants when it lowers a `Status`/`Poll`/`Mode` to the wire, and both ends cite [`stdio`] for the well-known handle tokens.
 
 /// Status codes of failable IO ops, mirrored by the guest's `/sys/status` and decoded into `/std/Io/Error`. `Other` has no fixed code here: it lowers its carried errno offset by `OTHER_BASE`, keeping the errno lane disjoint from the named codes.
 pub mod status {
     /// The op succeeded — the reply's payload fields are meaningful only under this code.
     pub const OK: u32 = 0;
-    /// A `read` reached the end of the stream and returned no bytes. Terminal but not a fault — the guest's stream consumers stop on it rather than erroring.
+    /// A `handle_read` reached the end of the stream and returned no bytes. Terminal but not a fault — the guest's stream consumers stop on it rather than erroring.
     pub const EOF: u32 = 1;
-    /// The named thing does not exist: an `open` path, an `env` variable, or a `resolve` that yielded no addresses (mapped at that call site, since the OS reports it errno-less).
+    /// The named thing does not exist: a `file_open` path, a `proc_env` variable, or a `dns_resolve` that yielded no addresses (mapped at that call site, since the OS reports it errno-less).
     pub const NOT_FOUND: u32 = 2;
     /// The OS denied access to the path or socket op (`ErrorKind::PermissionDenied`).
     pub const PERMISSION_DENIED: u32 = 3;
     /// The target the op would create already exists (`ErrorKind::AlreadyExists`).
     pub const ALREADY_EXISTS: u32 = 4;
-    /// A `connect` was actively refused — no listener at the target address.
+    /// A `socket_connect` was actively refused — no listener at the target address.
     pub const CONNECTION_REFUSED: u32 = 5;
     /// A non-blocking op could not make progress right now. Retriable by design: `/std`'s task scheduler matches on it to reschedule the read/write instead of surfacing a failure.
     pub const WOULD_BLOCK: u32 = 6;
@@ -28,7 +28,7 @@ pub mod status {
     pub const OTHER_BASE: u32 = NOT_DIRECTORY + 1;
 }
 
-/// `poll` interest/readiness flags — a bitmask, mirrored by `/sys/event`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.
+/// `handle_poll` interest/readiness flags — a bitmask, mirrored by `/sys/event`. `READ`/`WRITE` are settable interests; `ERR`/`HUP` are result-only.
 pub mod event {
     /// The handle is (or should be watched to become) readable.
     pub const READ: u32 = 0b0001;
@@ -40,7 +40,7 @@ pub mod event {
     pub const HUP: u32 = 0b1000;
 }
 
-/// `open` modes, mirrored by `/sys/open_mode` and the guest's `/std/File/Mode`.
+/// `file_open` modes, mirrored by `/sys/open_mode` and the guest's `/std/File/Mode`.
 pub mod open_mode {
     /// Open an existing file read-only.
     pub const READ: u32 = 0;
@@ -50,7 +50,7 @@ pub mod open_mode {
     pub const APPEND: u32 = 2;
 }
 
-/// What `file/stat` found at a path, mirrored by `/sys/file_kind` and the guest's `/std/fs/Kind`. `stat` follows symbolic links, so `SYMLINK` is reported only where the link's target is missing.
+/// What `file/stat` found at a path, mirrored by `/sys/file_kind` and the guest's `/std/fs/Kind`. `file_stat` follows symbolic links, so `SYMLINK` is reported only where the link's target is missing.
 pub mod file_kind {
     /// A regular file.
     pub const FILE: u32 = 0;
@@ -70,6 +70,34 @@ pub mod stdio_mode {
     pub const PIPE: u32 = 1;
     /// The stream is attached to the null device.
     pub const NULL: u32 = 2;
+}
+
+/// The parity `serial/open` frames a character with, mirrored by `/sys/serial_parity` and the guest's `/std/Serial/Parity`. Mark and space parity are deliberately absent: the one modern design that pruned by usage, Web Serial, ships exactly these three.
+pub mod serial_parity {
+    /// No parity bit.
+    pub const NONE: u32 = 0;
+    /// A parity bit making the count of one bits even.
+    pub const EVEN: u32 = 1;
+    /// A parity bit making the count of one bits odd.
+    pub const ODD: u32 = 2;
+}
+
+/// How `serial/open` paces the wire, mirrored by `/sys/serial_flow` and the guest's `/std/Serial/Flow`. Software (XON/XOFF) flow control is deliberately absent, as it is from Web Serial.
+pub mod serial_flow {
+    /// No flow control.
+    pub const NONE: u32 = 0;
+    /// Hardware flow control over RTS and CTS.
+    pub const HARDWARE: u32 = 1;
+}
+
+/// What `serial/control` does to a port, mirrored by `/sys/serial_op`. The two output lines a program drives to reset a board or enter its bootloader, and the one buffer it drops afterwards.
+pub mod serial_op {
+    /// Set the Data Terminal Ready line to the given level.
+    pub const DTR: u32 = 0;
+    /// Set the Request To Send line to the given level.
+    pub const RTS: u32 = 1;
+    /// Drop what the device sent and the program has not read.
+    pub const DISCARD_INPUT: u32 = 2;
 }
 
 /// The well-known stdio handle tokens minted by the `/sys/Handle` prelude. A handle's wire encoding is the little-endian `Natural` bytes of its token (see `Handle::encode`), which mints one zero byte for zero — so STDIN encodes as `[0]`, never the empty byte string.

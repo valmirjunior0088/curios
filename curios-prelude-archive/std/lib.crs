@@ -246,6 +246,10 @@ pub use Tty/{let Tty};
 -- | The filesystem beyond a file's contents: what is at a path, a directory's entries, and making, moving and removing things. Every operation is `Io`, and `Try` over it where it can fail.
 pub mod fs;
 
+-- | A serial device: a port opened at its speed and frame, read and written as a stream, its DTR and RTS lines driven and its unread input dropped, and the devices the host names listed.
+pub mod Serial;
+pub use Serial/{let Serial};
+
 -- | A terminal interface: a screen is a frame whose size is in its type, and a program is a model, an `update` and a `view` that the loop drives.
 -- |
 -- | A frame that does not fill its pane is refused where it is written; `Frame/fit` is the one coercion where a runtime size meets a typed one. `drive` is the loop with no terminal, for a test.

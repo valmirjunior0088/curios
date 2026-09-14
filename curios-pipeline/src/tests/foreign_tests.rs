@@ -44,8 +44,8 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
     assert!(
         imports
             .iter()
-            .any(|(namespace, name, _)| namespace == "sys" && name == "write"),
-        "expected a sys.write import, got {imports:?}"
+            .any(|(namespace, name, _)| namespace == "sys" && name == "handle_write"),
+        "expected a sys.handle_write import, got {imports:?}"
     );
     assert!(
         imports

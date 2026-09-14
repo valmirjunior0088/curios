@@ -6,7 +6,7 @@ use super::test_support::*;
 
 #[test]
 fn call_imports_and_invokes_the_host() {
-    let wat = wat(&foreign_call("read"));
+    let wat = wat(&foreign_call("handle_read"));
     assert_contains(&wat, "(import \"sys\" \"read\"");
     assert_contains(&wat, "call $host/sys/read");
 }
@@ -14,11 +14,11 @@ fn call_imports_and_invokes_the_host() {
 #[test]
 fn result_arity_shapes_the_resume() {
     // A single scalar result forwards straight through; a multi-result row with a reference field embeds that field back into a rope before binding it.
-    let one = wat(&foreign_call("bind"));
+    let one = wat(&foreign_call("socket_bind"));
     assert_contains(&one, "call $host/sys/bind");
     assert_absent(&one, "$bytes/embed");
 
-    let many = wat(&foreign_call("read"));
+    let many = wat(&foreign_call("handle_read"));
     assert_contains(&many, "call $host/sys/read");
     assert_contains(&many, "call $bytes/embed");
 }
