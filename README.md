@@ -21,10 +21,13 @@ Curios is a dependently typed programming language that compiles to WebAssembly.
 Here is the standard library's vector, which carries its own length around in its type:
 
 ```crs
-pub induct Vec(T: Type): (Nat) -> pub Type
-| nil(): (0)
-| cons(@m: Nat, x: T, xs: Vec(T, m)): (m + 1)
-end
+pub let Counted(@T: Type, l: List(T), n: Nat) -> Prop =
+    Eq(List/len(l), n);
+
+pub struct Vec(T: Type, n: Nat): pub Type {
+    list: List(T),
+    counted: Counted(list, n),
+}
 ```
 
 That length is not a comment, and nobody has to remember to check it. Try telling the compiler that an empty vector holds one element:
@@ -47,7 +50,7 @@ type mismatch
       |                           ^^^^^
 ```
 
-`Vec(Nat, 0)` and `Vec(Nat, 1)` are simply different types, so the off-by-one never reaches the generated program — there is nothing to test for, because there is nothing to run. And the `@m` that made that work does its thinking at compile time and then goes home: none of it survives into the WebAssembly.
+`Vec(Nat, 0)` and `Vec(Nat, 1)` are simply different types, so the off-by-one never reaches the generated program — there is nothing to test for, because there is nothing to run. And the `counted` field that made that work does its thinking at compile time and then goes home: a proof weighs nothing, so a `Vec` in the WebAssembly is exactly the list.
 
 ## What you get
 
