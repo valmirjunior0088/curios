@@ -91,12 +91,7 @@ let cong_cmp_match(
 ) -> Eq(
     match s | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
     match t | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end) =
-    match p: (u, v, _) =>
-        Eq(
-            match u | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
-            match v | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end)
-    | refl(@_) => Eq/refl()
-    end;
+    match p | refl(@_) => Eq/refl() end;
 
 -- | Words that compare equal are equal.
 pub let raw_to_eq(x: Bits, y: Bits, p: Eq(raw(x, y), Ordering/eq())) -> Eq(x, y) =

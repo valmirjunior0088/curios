@@ -422,10 +422,7 @@ let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCar
     match k
     | flag() => Result/success(match occurrences | [] => false | [_, .._] => true end)
     | option(v, presence) =>
-        match presence: (p) =>
-            Result(
-                Failure,
-                match p | required() => v.A | optional() => Option(v.A) | default(_) => v.A end)
+        match presence
         | required() =>
             match last_of
             | none() => Result/failure(Failure/missing_required(name))

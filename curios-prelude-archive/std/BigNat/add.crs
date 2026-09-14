@@ -548,8 +548,7 @@ pub let raw_assoc(
                 end
             end
         | b[yh, ..yt] =>
-            match z: (zv) =>
-                Eq(raw(raw(b[], b[yh, ..yt], c1), zv, c2), raw(b[], raw(b[yh, ..yt], zv, c1), c2))
+            match z
             | b[] =>
                 match yh
                 | true =>
@@ -665,11 +664,9 @@ pub let raw_assoc(
             end
         end
     | b[xh, ..xt] =>
-        match y: (yv) =>
-            Eq(raw(raw(b[xh, ..xt], yv, c1), z, c2), raw(b[xh, ..xt], raw(yv, z, c1), c2))
+        match y
         | b[] =>
-            match z: (zv) =>
-                Eq(raw(raw(b[xh, ..xt], b[], c1), zv, c2), raw(b[xh, ..xt], raw(b[], zv, c1), c2))
+            match z
             | b[] =>
                 match c1
                 | true =>
@@ -797,10 +794,7 @@ pub let raw_assoc(
                 end
             end
         | b[yh, ..yt] =>
-            match z: (zv) =>
-                Eq(
-                    raw(raw(b[xh, ..xt], b[yh, ..yt], c1), zv, c2),
-                    raw(b[xh, ..xt], raw(b[yh, ..yt], zv, c1), c2))
+            match z
             | b[] =>
                 match xh
                 | true =>

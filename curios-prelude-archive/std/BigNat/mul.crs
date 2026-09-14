@@ -254,8 +254,7 @@ pub let trim_distrib_l(
     y: Bits,
     z: Bits,
 ) -> Eq(trim(raw(x, add/raw(y, z, false))), trim(add/raw(raw(x, y), raw(x, z), false))) =
-    match x: (a) =>
-        Eq(trim(raw(a, add/raw(y, z, false))), trim(add/raw(raw(a, y), raw(a, z), false)))
+    match x
     | b[] => Eq/refl()
     | b[xh, ..xt] =>
         match xh
@@ -379,26 +378,9 @@ let dbl_add_raw(
 ) -> Eq(
     combine(false, add/raw(x, y, false)),
     add/raw(combine(false, x), combine(false, y), false)) =
-    match x: (u) =>
-        Eq(
-            combine(false, add/raw(u, y, false)),
-            add/raw(combine(false, u), combine(false, y), false))
-    | b[] =>
-        match y: (v) =>
-            Eq(
-                combine(false, add/raw(b[], v, false)),
-                add/raw(combine(false, b[]), combine(false, v), false))
-        | b[] => Eq/refl()
-        | b[_, .._] => Eq/refl()
-        end
-    | b[xh, ..xt] =>
-        match y: (v) =>
-            Eq(
-                combine(false, add/raw(b[xh, ..xt], v, false)),
-                add/raw(combine(false, b[xh, ..xt]), combine(false, v), false))
-        | b[] => Eq/refl()
-        | b[_, .._] => Eq/refl()
-        end
+    match x
+    | b[] => match y | b[] => Eq/refl() | b[_, .._] => Eq/refl() end
+    | b[_, .._] => match y | b[] => Eq/refl() | b[_, .._] => Eq/refl() end
     end;
 
 let dbl_add(a: BigNat, b: BigNat) -> Eq(dbl(add/add(a, b)), add/add(dbl(a), dbl(b))) =
