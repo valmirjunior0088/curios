@@ -153,7 +153,7 @@ fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
 
 // Soundness gate for the `Bin` peel's verdicts over values — the `Bin` half of what `every_nat_peel_verdict_holds_at_every_closed_instantiation` states for `Nat`, written because the perimeter graded these laws argued in code comments only. The obligations are the same three. A `Peel::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Peel::Clash` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. A `Peel::Continue`'s residuals must be equi-satisfiable with the pair they replaced, since the caller compares the residuals and reports their verdict as the originals'. `Peel::Stuck` promises nothing and is only tallied.
 //
-// The shapes reach the laws the code comments assert and nothing else stated: symbolic chunks cancelling by syntactic equality with a byte clash surviving past them, window fusion across a shared seam (`slice(w, s, l₁) ++ slice(w, s + l₁, l₂) = slice(w, s, l₁ + l₂)`), the empty-window drop (`slice(w, i, 0)` vanishing), append-as-concatenation (`append(b, c) = b ++ append(x[], c)`), and a near-miss control beside each: windows meeting at no seam must not fuse, and a one-byte symbolic cons against the identity stays undecided. Ground truth is the folded value at every closed instantiation of the symbols — instantiations respect `/sys/slice`'s `s + l <= len(b)` precondition, since a program outside them cannot be written, and that typing fact is exactly what makes the window laws unconditional.
+// The shapes reach the laws the code comments assert and nothing else stated: symbolic chunks cancelling by syntactic equality with a byte clash surviving past them, window fusion across a shared seam (`slice(w, s, l₁) ++ slice(w, s + l₁, l₂) = slice(w, s, l₁ + l₂)`), the empty-window drop (`slice(w, i, 0)` vanishing), append-as-concatenation (`append(b, c) = b ++ append(x[], c)`), and a near-miss control beside each: windows meeting at no seam must not fuse, and a one-byte symbolic cons against the identity clashes — as does a positive run behind a symbolic chunk, since the identity check reads the whole residual and not its head. Ground truth is the folded value at every closed instantiation of the symbols — instantiations respect `/sys/slice`'s `s + l <= len(b)` precondition, since a program outside them cannot be written, and that typing fact is exactly what makes the window laws unconditional.
 //
 // Mutation-checked: fusing two windows of one base without the seam check (`*seam == lo` dropped from `push`) turns the no-seam control into a false `Equal` and this grid fails it at the first anchor whose seam bytes differ. The tally is the anti-inertness assertion the perimeter asks of a sole-reach fixture: `Stuck` is where a pair falls when nothing fires, so a grid that decided nothing would otherwise pass while checking nothing.
 #[test]
@@ -242,6 +242,12 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
             cat(vec![chunk.clone(), y.clone()]),
         ),
         ("append(x[], c) ~ x[]", chunk.clone(), run_bytes(&[])),
+        // A positive run behind a symbolic chunk: whatever `x` takes, the left side has a byte the empty bytestring does not.
+        (
+            "x ++ x[05] ~ x[]",
+            cat(vec![x.clone(), run_bytes(&[5])]),
+            run_bytes(&[]),
+        ),
         // A nesting whose leading chunks the prefix step cannot match regroups: the residuals are both flat spellings, and regrouping is the identity on values, so they hold the same obligation as any `Continue`.
         (
             "(x ++ x[05]) ++ y ~ y ++ x[05] ++ x",
@@ -318,7 +324,7 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
 
     assert_eq!(
         (equal, clash, carried, stuck),
-        (4, 2, 4, 4),
+        (4, 4, 4, 3),
         "the grid stopped reaching every peel verdict",
     );
 }

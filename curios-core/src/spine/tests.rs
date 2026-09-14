@@ -335,3 +335,37 @@ fn peel_bin_still_clashes_a_reordered_run() {
         "`0x30 ++ 0x31` is not `0x31 0x30`"
     );
 }
+
+// The identity check reads the whole residual: a literal run behind a symbolic chunk gives the value a positive length whatever the chunk takes, so the pair is impossible — the suffix twin of the prefix clash, which the head-only read decided while leaving this one undecided.
+#[test]
+fn peel_bin_clashes_a_positive_run_behind_a_symbolic_chunk_against_the_identity() {
+    let x = sym(0, "x");
+    let suffixed = Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: vec![x, bytes([0x05])],
+    };
+
+    assert!(
+        matches!(
+            peel_bin(&suffixed, as_intrinsic(&bytes([]))),
+            Some(Peel::Clash)
+        ),
+        "`x ++ x[05]` is never empty"
+    );
+}
+
+// A symbolic appended byte is one byte long whatever it is, so an append against its own base leaves a single element against the identity, and that is a clash rather than an opaque chunk of unknown length.
+#[test]
+fn peel_bin_clashes_a_symbolic_byte_against_the_identity() {
+    let (x, c) = (sym(0, "x"), sym(1, "c"));
+    let appended = Intrinsic::bin_append(Grain::X, x.clone(), c);
+    let base = Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: vec![x],
+    };
+
+    assert!(
+        matches!(peel_bin(&appended, &base), Some(Peel::Clash)),
+        "`append(x, c)` is one byte longer than `x`"
+    );
+}

@@ -333,6 +333,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bytes/get(x[..bs, ..cs], Bytes/len(bs), @head), Bytes/get(cs, 0, @head))",
             "Eq(Bytes/get(x[..bs, ..cs], Bytes/len(bs) + s, @into), Bytes/get(cs, s, @into))",
             "Eq(Bytes/slice(x[..bs, ..cs], Bytes/len(bs), l, @fits), Bytes/slice(cs, 0, l, @fits))",
+            // A positive segment anywhere in a value decides it against the empty one, and against a value it extends.
+            "Eq(x[..bs, k] == x[], false)",
+            "Eq(x[..bs, 1] == x[], false)",
         ],
         refused: &[],
     },
@@ -366,6 +369,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bits/get(b[..ts, ..us], Bits/len(ts), @head), Bits/get(us, 0, @head))",
             "Eq(Bits/get(b[..ts, ..us], Bits/len(ts) + s, @into), Bits/get(us, s, @into))",
             "Eq(Bits/slice(b[..ts, ..us], Bits/len(ts), l, @fits), Bits/slice(us, 0, l, @fits))",
+            "Eq(b[..ts, v] == b[], false)",
+            "Eq(b[..ts, 1] == b[], false)",
         ],
         refused: &[],
     },
@@ -377,6 +382,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Str/concat(\"\", s), s)",
             "Eq(Str/len(\"\"), 0)",
             "Eq(s == s, true)",
+            // The bytes decide a suffix as they decide a prefix: a string with a character appended is not the empty one.
+            "Eq(Str/concat(s, \"a\") == \"\", false)",
+            "Eq(Str/concat(\"a\", s) == \"\", false)",
         ],
         refused: &[],
     },
