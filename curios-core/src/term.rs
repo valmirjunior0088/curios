@@ -1782,6 +1782,22 @@ impl Term {
         self.any_child_term(&mut |child| child.mentions_term(needle))
     }
 
+    /// This term with every syntactic occurrence of `needle` replaced by `replacement`, at any depth and under any binder; an outer occurrence wins and is not descended into. `replacement` must carry no loose index, since it is inserted verbatim at every depth.
+    pub fn replace_term(&self, needle: &Term, replacement: &Term) -> Term {
+        if self == needle {
+            return replacement.clone();
+        }
+        if !self.mentions_term(needle) {
+            return self.clone();
+        }
+        let needle = needle.clone();
+        let replacement = replacement.clone();
+        self.traverse(&mut Visit::rewriting(
+            |_, _| None,
+            Box::new(move |_, term: &Term| (*term == needle).then(|| replacement.clone())),
+        ))
+    }
+
     /// The free-variable identities of this term. Inherent so a `term.free_vars()` call routes through the memoized, iteratively-filled set (this and the [`Bound`] impl agree) rather than deref-ing to the uncached, recursive [`Subterm::free_vars`] when the `Bound` trait is out of scope.
     pub fn free_vars(&self) -> BTreeSet<Free> {
         self.get_or_init_free_vars().as_ref().clone()

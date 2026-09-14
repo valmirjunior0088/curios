@@ -514,19 +514,6 @@ fn check_cases(
     scrutinee: &Term,
     scrutinee_type: &Term,
 ) -> Result<(), KernelError> {
-    // The ambient form's precondition, stated rather than assumed: the goal is specialized by substituting the case's value for the scrutinee, so the scrutinee must be a variable with a binder to substitute at.
-    if result.ambient().is_some() {
-        let variable = match &**scrutinee {
-            Subterm::Var(var) => var
-                .as_free()
-                .is_some_and(|name| kernel.local_type(name).is_some()),
-            _ => false,
-        };
-        if !variable {
-            return Err(KernelError::AmbientOverExpression(scrutinee.clone()));
-        }
-    }
-
     let motive_sort = check_motive(kernel, family, result, scrutinee_type)?;
 
     let at = |kernel: &mut Kernel, value: Term, body: &Term| {

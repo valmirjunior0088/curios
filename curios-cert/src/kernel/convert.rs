@@ -33,7 +33,7 @@ mod recursion_tests;
 mod test_support;
 
 use {
-    super::{Kernel, KernelError, Sort, unfold_spelling},
+    super::{Counted, Kernel, KernelError, Sort, infer, unfold_spelling},
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, FuncType, Global, InductType, Instance, Level, Many,
         MatchResult, Proj, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Three,
@@ -420,8 +420,12 @@ fn structural(
                     (MatchResult::Ambient(this), MatchResult::Ambient(that)) => {
                         ground(kernel, history, this, that)?
                     }
-                    // Two forms of result are two shapes, and the shape stays rigid: refusing here is incomplete, never unsound.
-                    _ => false,
+                    // One source match reaches both forms: written over a variable it is an ambient goal, and that goal substituted at an expression — a definition's `match o` unfolded at `o := f(x)` — meets the family the same match elaborates to where it was written over `f(x)`. A family at the scrutinee itself *is* the elimination's type, so the two results compare at that instance.
+                    (MatchResult::Family(motive), MatchResult::Ambient(goal))
+                    | (MatchResult::Ambient(goal), MatchResult::Family(motive)) => {
+                        let at_head = family_at_head(kernel, motive, &left.head)?;
+                        ground(kernel, history, &at_head, goal)?
+                    }
                 }
                 && ground_cases(kernel, history, &left.cases, &right.cases)?)
         }
@@ -592,6 +596,32 @@ fn applied_head(term: &Term) -> &Term {
 }
 
 /// Open both scopes at one shared set of opaque binders and compare the bodies at `Type`. The binders are assumed at `Type` as a stand-in, sound because `ground` is already the untyped concession: a binder's recorded type feeds only the conversion history's context key, identically on both sides.
+/// A family opened at the scrutinee's actual indices and the scrutinee — the elimination's own type. An unindexed family binds the scrutinee alone; an indexed one is opened at the indices its scrutinee's type carries, read by inference, which the head's own typing has already paid for.
+fn family_at_head(
+    kernel: &mut Kernel,
+    motive: &Scope<Many>,
+    head: &Term,
+) -> Result<Term, KernelError> {
+    let mut arguments = Vec::with_capacity(motive.arity());
+    if motive.arity() > 1 {
+        let head_type = infer(kernel, head)?;
+        let head_type = kernel.reduce_forced(head_type)?;
+        if let Subterm::InductType(InductType { indices, .. }) = &*head_type {
+            arguments.extend(indices.iter().cloned());
+        }
+    }
+    arguments.push(head.clone());
+    if arguments.len() != motive.arity() {
+        return Err(KernelError::Arity {
+            counted: Counted::MotiveBinders,
+            expected: motive.arity(),
+            actual: arguments.len(),
+        });
+    }
+    let refs = arguments.iter().collect::<Vec<_>>();
+    Ok(motive.open(&refs))
+}
+
 fn ground_scope(
     kernel: &mut Kernel,
     history: &mut History,

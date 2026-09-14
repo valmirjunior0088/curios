@@ -27,13 +27,13 @@ mod test_support;
 
 use {
     super::{
-        Context, applied_head, check, reduce, reduce_forced, stalled_unfolding, unfold_rec,
+        Context, applied_head, check, infer, reduce, reduce_forced, stalled_unfolding, unfold_rec,
         unfold_rec_apply,
     },
     curios_core::{
         Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
-        Level, Match, MatchResult, Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
+        Level, Many, Match, MatchResult, Metavar, Proj, Rec, ReduceError, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, Variant, Visit,
         instantiate_universe_levels_scoped, strip_universe_levels,
     },
@@ -702,9 +702,10 @@ impl Convert {
         this: Match,
         that: Match,
     ) -> Result<bool, ReduceError> {
+        let head = this.head.clone();
         self.enqueue(Term::type_ground(), this.head, that.head);
 
-        // Two forms of result are two shapes, and a motive's arity is part of its shape — 1 except for an annotated inductive-match motive (pattern binders then the scrutinee); different arities are structurally distinct.
+        // A motive's arity is part of its shape — 1 except for an annotated inductive-match motive (pattern binders then the scrutinee); different arities are structurally distinct. One source match reaches both forms: written over a variable it is an ambient goal, and that goal substituted at an expression — a definition's `match o` unfolded at `o := f(x)` — meets the family the same match elaborates to where it was written over `f(x)`. A family at the scrutinee itself *is* the elimination's type, so the two results compare at that instance.
         match (this.result, that.result) {
             (MatchResult::Family(this_motive), MatchResult::Family(that_motive)) => {
                 if this_motive.arity() != that_motive.arity() {
@@ -724,7 +725,13 @@ impl Convert {
             (MatchResult::Ambient(this_goal), MatchResult::Ambient(that_goal)) => {
                 self.enqueue(Term::type_ground(), this_goal, that_goal);
             }
-            _ => return Ok(false),
+            (MatchResult::Family(motive), MatchResult::Ambient(goal))
+            | (MatchResult::Ambient(goal), MatchResult::Family(motive)) => {
+                let Some(at_head) = family_at_head(context, &motive, &head) else {
+                    return Ok(false);
+                };
+                self.enqueue(Term::type_ground(), at_head, goal);
+            }
         }
 
         match (this.cases, that.cases) {
@@ -2010,4 +2017,22 @@ fn level_question(
         true => LevelQuestion::Blocked,
         false => LevelQuestion::Distinct,
     })
+}
+
+/// A family opened at the scrutinee's actual indices and the scrutinee — the elimination's own type. An unindexed family binds the scrutinee alone; an indexed one is opened at the indices the scrutinee's type carries, read by inference. `None` where that reading fails, which conversion answers as not convertible: incomplete, never unsound.
+fn family_at_head(context: &mut Context, motive: &Scope<Many>, head: &Term) -> Option<Term> {
+    let mut arguments = Vec::with_capacity(motive.arity());
+    if motive.arity() > 1 {
+        let head_type = infer(context, head).ok()?;
+        let head_type = reduce_forced(context, head_type).ok()?;
+        if let Subterm::InductType(InductType { indices, .. }) = &*head_type {
+            arguments.extend(indices.iter().cloned());
+        }
+    }
+    arguments.push(head.clone());
+    if arguments.len() != motive.arity() {
+        return None;
+    }
+    let refs = arguments.iter().collect::<Vec<_>>();
+    Some(motive.open(&refs))
 }

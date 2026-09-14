@@ -274,12 +274,37 @@ pub struct Match {
 ///
 /// A **family** is a motive: a scope closed at the eliminator's own arity — the scrutinee's indices in declaration order, then the scrutinee — which is 1 for every intrinsic carrier and for an unindexed inductive, and `n_indices + 1` for an indexed one. Parameters are never abstracted, being uniform across constructors and fixed by the scrutinee's type, so the body refers to them through the ambient scope like any other term. Before elaboration a written motive is carried in an arity-0 scope instead — see `Term::match_motive_written`. A family is the only form that can state a result over an *expression* scrutinee, and the only one an induction hypothesis can be typed from, so it is what a written motive lowers to and what every free-monoid fold carries.
 ///
-/// The **ambient** form is the expected type as it stood in the enclosing context, stated once there and inhabited by each arm under that case's specialization: the scrutinee variable replaced by the case's value and each variable index by the case's target. It exists because a family must typecheck under fresh binders *outside* any arm — where a hypothesis whose type mentions the scrutinee no longer matches the position it occupies in the goal — while the ambient goal was typed where it was written and needs no such check. That is the whole reason the convoy pattern existed, and this form retires it. It is only ever built over a *variable* scrutinee: a case can be substituted for a variable, while an expression's occurrences would have to be read through a case equation, which is not a certification contract (see `documentation/design/language/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md`).
+/// The **ambient** form is the expected type as it stood in the enclosing context, stated once there and inhabited by each arm under that case's specialization: the scrutinee standing for the case's value and each variable index for the case's target. It exists because a family must typecheck under fresh binders *outside* any arm — where a hypothesis whose type mentions the scrutinee no longer matches the position it occupies in the goal — while the ambient goal was typed where it was written and needs no such check. That is the whole reason the convoy pattern existed, and this form retires it. Elaboration builds it over a *variable* scrutinee, which a case is substituted for; substitution then carries the form to an expression scrutinee — a `let` value into its tail, an argument into a body — where the goal's syntactic occurrences of that expression stand for the case instead, the with-abstraction reading, which is a fixed operation on the spelling rather than a case equation the reducer may or may not meet (see `documentation/design/language/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum MatchResult {
     Family(Scope<Many>),
     Ambient(Term),
+}
+
+/// What one case substitutes in an ambient goal: each *variable* actual index for its target, and a variable scrutinee for the case's value. A repeated index variable takes its first target, exactly as an abstraction label binds it once; an expression index or scrutinee has nothing to substitute and is absent. The elaborator re-assumes every local whose type mentions one of these binders at the substituted type, as the kernel shadows them, which is what keeps a hypothesis typed by the scrutinee usable in the arm wherever the arm's refinements do not reach.
+pub fn case_substitution<'a>(
+    head: &'a Term,
+    actual_indices: &'a [Term],
+    case_indices: &'a [Term],
+    case_value: &'a Term,
+) -> Vec<(&'a Free, &'a Term)> {
+    let mut substitution: Vec<(&Free, &Term)> = Vec::new();
+    for (actual, target) in actual_indices.iter().zip(case_indices) {
+        if let Subterm::Var(var) = &**actual
+            && let Some(name) = var.as_free()
+            && !substitution.iter().any(|(bound, _)| *bound == name)
+        {
+            substitution.push((name, target));
+        }
+    }
+    if let Subterm::Var(var) = &**head
+        && let Some(name) = var.as_free()
+        && !substitution.iter().any(|(bound, _)| *bound == name)
+    {
+        substitution.push((name, case_value));
+    }
+    substitution
 }
 
 impl MatchResult {
@@ -307,7 +332,7 @@ impl MatchResult {
         }
     }
 
-    /// The result at one case: the family opened at the case's index targets then its value, or the ambient goal with the scrutinee variable standing for the value and each variable actual index for its target. A repeated index variable takes its first target, exactly as an abstraction label binds it once; a non-variable scrutinee or index has nothing to substitute and the goal keeps its spelling.
+    /// The result at one case: the family opened at the case's index targets then its value, or the ambient goal with the scrutinee standing for the value and each variable actual index for its target. A variable scrutinee is substituted for; an expression scrutinee has its syntactic occurrences in the goal replaced by the value, which is what a substitution into the variable form leaves behind and what with-abstraction reads. A repeated index variable takes its first target, exactly as an abstraction label binds it once; a non-variable index has nothing to substitute and the goal keeps its spelling there.
     pub fn at(
         &self,
         head: &Term,
@@ -321,25 +346,21 @@ impl MatchResult {
                 motive.open(&refs)
             }
             MatchResult::Ambient(goal) => {
-                let mut binders: Vec<&Free> = Vec::new();
-                let mut values: Vec<&Term> = Vec::new();
-                for (actual, target) in actual_indices.iter().zip(case_indices) {
-                    if let Subterm::Var(var) = &**actual
-                        && let Some(name) = var.as_free()
-                        && !binders.contains(&name)
-                    {
-                        binders.push(name);
-                        values.push(target);
-                    }
-                }
-                if let Subterm::Var(var) = &**head
-                    && let Some(name) = var.as_free()
-                    && !binders.contains(&name)
-                {
-                    binders.push(name);
-                    values.push(case_value);
-                }
-                Scope::close(Many(binders.len()), &binders, goal.clone()).open(&values)
+                let substitution =
+                    case_substitution(head, actual_indices, case_indices, case_value);
+                let binders = substitution
+                    .iter()
+                    .map(|(name, _)| *name)
+                    .collect::<Vec<_>>();
+                let values = substitution
+                    .iter()
+                    .map(|(_, value)| *value)
+                    .collect::<Vec<_>>();
+                let goal = match &**head {
+                    Subterm::Var(var) if var.as_free().is_some() => goal.clone(),
+                    _ => goal.replace_term(head, case_value),
+                };
+                Scope::close(Many(binders.len()), &binders, goal).open(&values)
             }
         }
     }

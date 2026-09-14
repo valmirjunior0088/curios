@@ -1,10 +1,14 @@
 use {
     super::{Context, Error, Mode, check, elaborate, expect},
-    crate::{MotiveShape, check_intrinsic_head, check_motive, is_prop, reduce_with, refine_head},
+    crate::{
+        MotiveShape, TermBuilders, check_intrinsic_head, check_motive, is_prop, reduce_with,
+        refine_head,
+    },
     curios_analysis::{Invert, case_target_indices, invert_indices, pinned_by_targets},
     curios_core::{
         Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic, IntrinsicHead,
         Many, Match, MatchResult, Nat, Scope, Subterm, Telescope, Term, Three, Two,
+        case_substitution,
     },
     curios_num::Natural,
     curios_utilities::{Grain, PackedBin},
@@ -361,6 +365,23 @@ fn elaborate_bin_match(
     Ok((rebuilt, result_type))
 }
 
+/// The result of a `Bool` or `Switch` elimination, which binds no induction hypothesis: an elided motive over a variable scrutinee checked against an expected type takes that type as its ambient result, and anything else resolves as an intrinsic motive. A fold keeps the family whatever its shape — its hypothesis is typed at the motive opened at the tail.
+fn resolve_intrinsic_result(
+    context: &mut Context,
+    head_type: &Term,
+    head: &Term,
+    motive: &Scope<Many>,
+    mode: &Mode,
+) -> Result<MatchResult, Error> {
+    if let Mode::Check(expected) = mode
+        && is_elided_motive(motive)
+        && is_variable(head)
+    {
+        return Ok(MatchResult::Ambient(expected.clone()));
+    }
+    resolve_intrinsic_motive(context, head_type, head, motive, mode).map(MatchResult::Family)
+}
+
 fn elaborate_switch(
     context: &mut Context,
     head: &Term,
@@ -372,41 +393,42 @@ fn elaborate_switch(
 ) -> Result<(Term, Term), Error> {
     let (head_elaborated, _) = elaborate_intrinsic_head(context, head, IntrinsicHead::Nat)?;
 
-    // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = resolve_intrinsic_motive(
+    // The *rebuilt* motive throughout, as in `elaborate_nat_match`, or the ambient goal.
+    let result = resolve_intrinsic_result(
         context,
         &Subterm::Intrinsic(Intrinsic::NatType).into(),
         &head_elaborated,
         motive,
         &mode,
     )?;
-
-    seed_motive(context, term, &motive, &head_elaborated, &mode)?;
+    if let Some(motive) = result.family() {
+        seed_motive(context, term, motive, &head_elaborated, &mode)?;
+    }
 
     // The arms keep the order they arrived in, which `Cases::Switch` states is strictly ascending — elaborating an arm rewrites its body, never its key.
     let mut cases_elaborated = Vec::with_capacity(cases.len());
     for (n, body) in cases {
         let body = context.with_frame(|context| {
-            refine_head(
-                context,
-                &head_elaborated,
-                &Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n.clone()))).into(),
-            )?;
+            let literal: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n.clone()))).into();
+            refine_head(context, &head_elaborated, &literal)?;
+            if result.ambient().is_some() {
+                shadow_specialized(context, &head_elaborated, &[], &[], &literal);
+            }
             check(
                 context,
                 body,
-                motive.open(&[&Subterm::Intrinsic(Intrinsic::Nat(Nat::new(n.clone()))).into()]),
+                result.at(&head_elaborated, &[], &[], &literal),
             )
         })?;
         cases_elaborated.push((n.clone(), body));
     }
 
-    let default_elaborated = check(context, default, motive.open(&[&head_elaborated]))?;
+    let result_type = result.of(&head_elaborated, &[]);
+    let default_elaborated = check(context, default, result_type.clone())?;
 
-    let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        result: MatchResult::Family(motive),
+        result,
         cases: Cases::Switch {
             cases: cases_elaborated,
             default: default_elaborated,
@@ -428,10 +450,17 @@ pub(crate) fn elaborate_match(
         result,
         cases,
     } = m;
+    // A rebuilt match coming back through re-elaboration at its ambient goal: the goal *is* the expected type it was elaborated against, so it re-elaborates as the elided motive it came from, checked against that goal.
+    let mut mode = mode;
+    let elided;
     let motive = match result {
         MatchResult::Family(motive) => motive,
-        MatchResult::Ambient(_) => {
-            unreachable!("an ambient result is built by elaboration and never re-elaborated")
+        MatchResult::Ambient(goal) => {
+            if matches!(mode, Mode::Infer) {
+                mode = Mode::Check(goal.clone());
+            }
+            elided = Term::match_motive_written(Term::hole(context.mint_metavar()));
+            &elided
         }
     };
 
@@ -507,47 +536,48 @@ fn elaborate_bool_match(
 ) -> Result<(Term, Term), Error> {
     let (head_elaborated, _) = elaborate_intrinsic_head(context, head, IntrinsicHead::Bool)?;
 
-    // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
-    let motive = resolve_intrinsic_motive(
+    // The *rebuilt* motive throughout, as in `elaborate_nat_match`, or the ambient goal.
+    let result = resolve_intrinsic_result(
         context,
         &Subterm::Intrinsic(Intrinsic::BoolType).into(),
         &head_elaborated,
         motive,
         &mode,
     )?;
-
-    seed_motive(context, term, &motive, &head_elaborated, &mode)?;
+    if let Some(motive) = result.family() {
+        seed_motive(context, term, motive, &head_elaborated, &mode)?;
+    }
 
     let false_elaborated = context.with_frame(|context| {
-        refine_head(
-            context,
-            &head_elaborated,
-            &Subterm::Intrinsic(Intrinsic::Bool(false)).into(),
-        )?;
+        let literal: Term = Subterm::Intrinsic(Intrinsic::Bool(false)).into();
+        refine_head(context, &head_elaborated, &literal)?;
+        if result.ambient().is_some() {
+            shadow_specialized(context, &head_elaborated, &[], &[], &literal);
+        }
         check(
             context,
             false_case,
-            motive.open(&[&Subterm::Intrinsic(Intrinsic::Bool(false)).into()]),
+            result.at(&head_elaborated, &[], &[], &literal),
         )
     })?;
 
     let true_elaborated = context.with_frame(|context| {
-        refine_head(
-            context,
-            &head_elaborated,
-            &Subterm::Intrinsic(Intrinsic::Bool(true)).into(),
-        )?;
+        let literal: Term = Subterm::Intrinsic(Intrinsic::Bool(true)).into();
+        refine_head(context, &head_elaborated, &literal)?;
+        if result.ambient().is_some() {
+            shadow_specialized(context, &head_elaborated, &[], &[], &literal);
+        }
         check(
             context,
             true_case,
-            motive.open(&[&Subterm::Intrinsic(Intrinsic::Bool(true)).into()]),
+            result.at(&head_elaborated, &[], &[], &literal),
         )
     })?;
 
-    let result_type = motive.open(&[&head_elaborated]);
+    let result_type = result.of(&head_elaborated, &[]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        result: MatchResult::Family(motive),
+        result,
         cases: Cases::Bool {
             false_case: false_elaborated,
             true_case: true_elaborated,
@@ -656,40 +686,19 @@ fn elaborate_induct_match(
         indices: induct_decl.indices_at(&params),
     };
 
-    // An elided motive (the lowering's bare metavar) checked against an expected type is filled in by dependent-motive synthesis: the arms are then checked against the expected type specialised at each constructor, exactly as a hand-written convoy motive would, and the match's result is a concrete type rather than a metavar that would stall the large-elimination guard. Outside checking mode there is no expected type to abstract, so the metavar stays and is solved by unifying the arms (`check_motive`).
-    //
-    // A defaulted match (`| _ =>` catch-all / bind-arm fallthrough) keeps the plain path: its default stands in for constructors whose target indices are unknown here, so there is nothing for per-constructor specialisation to buy, and unifying the arms is what the surface form asks for.
-    let (motive_elaborated, generalized) = match &mode {
-        Mode::Check(expected) if is_elided_motive(motive) && default.is_none() => {
-            synthesize_induct_motive(
-                context,
-                &shape,
-                &induct_decl,
-                &actual_indices,
-                &head_elaborated,
-                expected,
-            )?
+    // An elided motive over a variable scrutinee, checked against an expected type, takes that type as its *ambient* result: each arm is checked against the expected type with the scrutinee and its variable indices standing for the arm's case, and the match's result is the expected type itself. That is what a hand-written convoy used to arrange, and what the elaborator used to synthesize one for; the ambient form needs no family to close, so a hypothesis whose type mentions the scrutinee rides along unchanged — see `MatchResult::Ambient`. Anything else — a written motive, inference mode, an expression scrutinee, whose occurrences in the goal only `solve`'s occurrence abstraction can find — is a family, checked or solved as before.
+    let result = match &mode {
+        Mode::Check(expected) if is_elided_motive(motive) && is_variable(&head_elaborated) => {
+            MatchResult::Ambient(expected.clone())
         }
-        _ => (check_motive(context, &shape, motive)?, vec![]),
+        _ => MatchResult::Family(check_motive(context, &shape, motive)?),
     };
 
-    // The match's own type: the motive at the scrutinee's actual indices and the scrutinee itself. Opened from the *rebuilt* motive, as in `elaborate_nat_match`. When hypotheses were generalized this is a Π over them (`elim_type`); the eliminator is then *applied* to the originals below, recovering the original goal.
-    let result_refs = actual_indices
-        .iter()
-        .chain([&head_elaborated])
-        .collect::<Vec<_>>();
-    let elim_type = motive_elaborated.open(&result_refs);
+    // The match's own type: the result at the scrutinee's actual indices and the scrutinee itself — opened from the *rebuilt* motive, as in `elaborate_nat_match`, or the ambient goal as written.
+    let result_type = result.of(&head_elaborated, &actual_indices);
 
-    // The type this whole expression has. With no generalization it is the eliminator's own type; with generalization the eliminator is a function we apply to the original hypotheses, so the expression's type is the original expected goal (generalization only happens in checking mode).
-    let result_type = match &mode {
-        Mode::Check(expected) if !generalized.is_empty() => expected.clone(),
-        _ => elim_type.clone(),
-    };
-
-    // The seed (`seed_motive`'s job, generalized over the pattern binders): in checking mode, pin the motive — a bare metavar when elided — to the expected type before the arms are checked. Skipped under generalization: `result_type` is already the expected goal verbatim, and `elim_type` (a Π) is deliberately *not* the expected type.
-    if let Mode::Check(expected) = &mode
-        && generalized.is_empty()
-    {
+    // The seed (`seed_motive`'s job, generalized over the pattern binders): in checking mode, pin the motive — a bare metavar when elided — to the expected type before the arms are checked. An ambient result is that type already, and the expectation is met by construction.
+    if let Mode::Check(expected) = &mode {
         expect(context, term, &result_type, expected)?;
     }
 
@@ -838,12 +847,14 @@ fn elaborate_induct_match(
                 }
             }
 
-            // The motive at this case: the index binders take the case's target indices, the scrutinee binder the constructed value.
-            let arm_refs = ix_c.iter().chain([&ctor_val]).collect::<Vec<_>>();
-            let expected = motive_elaborated.open(&arm_refs);
+            // The result at this case: a family's index binders take the case's target indices and its scrutinee binder the constructed value; an ambient goal has the case's targets and value substituted for its variable indices and scrutinee.
+            let expected = result.at(&head_elaborated, &actual_indices, &ix_c, &ctor_val);
+            if result.ambient().is_some() {
+                shadow_specialized(context, &head_elaborated, &actual_indices, &ix_c, &ctor_val);
+            }
 
             let var_refs = vars.iter().collect::<Vec<_>>();
-            check_generalized_arm(context, &scope.open(&var_refs), expected, &generalized)
+            check(context, &scope.open(&var_refs), expected)
         })?;
 
         let label_strs = labels.iter().collect::<Vec<_>>();
@@ -857,18 +868,14 @@ fn elaborate_induct_match(
         ));
     }
 
-    // The catch-all binds nothing and refines no index, so it is checked at the unrefined head — the motive at the actual scrutinee (`elim_type`), exactly as `elaborate_switch` checks its default. Under generalization `elim_type` is the Π over the hypotheses, so it routes through `check_generalized_arm` (with no arm binders) just as the constructor arms do.
+    // The catch-all binds nothing and refines no index, so it is checked at the unrefined head — the result at the actual scrutinee, exactly as `elaborate_switch` checks its default.
     let default_elaborated = default
-        .map(|d| {
-            context.with_frame(|context| {
-                check_generalized_arm(context, d, elim_type.clone(), &generalized)
-            })
-        })
+        .map(|d| context.with_frame(|context| check(context, d, result_type.clone())))
         .transpose()?;
 
-    let rebuilt_match: Term = Subterm::Match(Match {
+    let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        result: MatchResult::Family(motive_elaborated),
+        result,
         cases: Cases::Induct {
             cases: cases_elaborated,
             default: default_elaborated,
@@ -876,130 +883,46 @@ fn elaborate_induct_match(
     })
     .into();
 
-    // Under generalization the eliminator is a function over the generalized telescope; apply it to the original hypotheses (in binding order) to recover a term of the original goal — the `go(nz)` of a hand-written convoy, synthesized.
-    let rebuilt = if generalized.is_empty() {
-        rebuilt_match
-    } else {
-        Term::apply(
-            rebuilt_match,
-            generalized.iter().map(|(name, _)| Term::free_var(name)),
-        )
-    };
-
     Ok((rebuilt, result_type))
 }
 
-/// Whether a motive scope is the lowering's elided form — a bare metavariable body (`match s | ..` or the explicit hole `match s : _ | ..`), as opposed to a user-written constant or scrutinee-binding motive. Synthesis only steps in for the elided form; everything else is taken verbatim.
+/// Re-assume, at its specialized type, every local whose type mentions a variable the case substitutes for — the elaborator's copy of the kernel's `shadow`. The arm's refinements already make such a type *reduce* at the case, which is enough for the arm body's own conversions, but not for a metavariable solution parked and retried outside the frame: `z : Sizes(s)` used as `(z).0` under `s := node(a, b)` has to be a tuple where the solution is checked, which the shadow states outright. The substituted variables' own entries are left alone, exactly as the kernel leaves them.
+fn shadow_specialized(
+    context: &mut Context,
+    head: &Term,
+    actual_indices: &[Term],
+    case_indices: &[Term],
+    case_value: &Term,
+) {
+    let substitution = case_substitution(head, actual_indices, case_indices, case_value);
+    if substitution.is_empty() {
+        return;
+    }
+    let binders = substitution
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>();
+    let values = substitution
+        .iter()
+        .map(|(_, value)| *value)
+        .collect::<Vec<_>>();
+    let locals = context.locals().to_vec();
+    for (name, type_) in locals {
+        if binders.contains(&&name) || !binders.iter().any(|binder| type_.mentions_free(binder)) {
+            continue;
+        }
+        let specialized = Scope::close(Many(binders.len()), &binders, type_).open(&values);
+        context.assume(&name, &specialized);
+    }
+}
+
+/// Whether a scrutinee is a variable with a binder — the one shape a case can be substituted for, and so the precondition of an ambient result.
+fn is_variable(head: &Term) -> bool {
+    matches!(&**head, Subterm::Var(var) if var.as_free().is_some())
+}
+
+/// Whether a motive scope is the lowering's elided form — a bare metavariable body (`match s | ..` or the explicit hole `match s : _ | ..`), as opposed to a user-written constant or scrutinee-binding motive. Only the elided form takes the ambient result; everything else is taken verbatim.
 fn is_elided_motive(motive: &Scope<Many>) -> bool {
     // A silent hole only: a written `?` motive is a user-written motive the author is asking about, checked against the eliminator's motive type like any other and reported by zonk (`MetavarOrigin` states the rule).
     matches!(&**motive.body(), Subterm::Metavar(metavar) if metavar.is_hole())
-}
-
-/// The label by which a flat motive slot (or the scrutinee) abstracts the expected type: a slot whose actual value is a not-yet-used free variable abstracts by that variable's name, so the eliminator specialises the goal at each constructor when it reopens the motive; a forced constructor, a compound term, or a repeated variable takes a fresh label and binds vacuously (the inversion already pins it).
-fn abstraction_label(context: &mut Context, value: &Term, used: &mut BTreeSet<Free>) -> Free {
-    if let Subterm::Var(var) = &**value
-        && let Some(name) = var.as_free()
-        && used.insert(name.clone())
-    {
-        return name.clone();
-    }
-    context.fresh(None)
-}
-
-/// The product of motive synthesis: the rebuilt motive scope and the hypotheses generalized into it (in binding order, for the caller to re-apply the eliminator to).
-type SynthesizedMotive = (Scope<Many>, Vec<(Free, Term)>);
-
-/// Derive, for an inductive match that elided its motive, the dependent motive the convoy pattern would otherwise be written by hand. The expected type is abstracted over the scrutinee's index *variables* and the scrutinee itself (forced or compound positions bind vacuously); the resulting scope is validated by the same [`check_motive`] a written motive goes through, so its per-arm specialisation behaves identically. Any context hypothesis whose type mentions an abstracted index and which occurs in the goal is generalized into the motive as a Π-telescope (the convoy, automated).
-fn synthesize_induct_motive(
-    context: &mut Context,
-    shape: &MotiveShape<'_>,
-    induct_decl: &InductDecl,
-    actual_indices: &[Term],
-    head: &Term,
-    expected: &Term,
-) -> Result<SynthesizedMotive, Error> {
-    let n_indices = induct_decl.index_count();
-
-    // One abstraction label per index, then the scrutinee — the binder order every motive has. The labels that come back as a variable's own name (`used` accumulates them) are the *roots*: the binders that genuinely specialise the goal, and the ones a context hypothesis can depend on.
-    //
-    // Parameters are deliberately *not* abstracted. They are uniform across constructors and fixed by the scrutinee's type, so abstracting one binds it to the identical term in the match's own type and in every arm — a vacuous binder that specialises nothing. Leaving them out keeps them out of `used`, hence out of `infected`, so a hypothesis whose type merely mentions a parameter is not generalized into the convoy below.
-    let mut used = BTreeSet::new();
-    let mut labels = Vec::with_capacity(n_indices + 1);
-    for value in actual_indices {
-        labels.push(abstraction_label(context, value, &mut used));
-    }
-    labels.push(abstraction_label(context, head, &mut used));
-
-    // Dependent generalization — automate the convoy. A context hypothesis whose type mentions a root (an abstracted index/parameter/scrutinee variable) cannot stay free in the abstracted goal: once the root becomes a fresh motive binder, the hypothesis's stated type no longer matches the position it occupies (the `Lt(0, len b)` vs `Lt(0, len b2)` mismatch). Such hypotheses ride into the motive as a Π-telescope ahead of the goal — exactly the binders a hand-written convoy introduces — and the caller re-applies the eliminator to the originals.
-    //
-    // Two conditions, both necessary. *Infected*: the hypothesis's type transitively mentions a root (a forward sweep — a hypothesis's type can only name earlier binders). *Reachable*: the hypothesis actually occurs in the goal, or in the type of an already-generalized hypothesis (a backward sweep). Generalizing an infected-but-unreachable hypothesis — e.g. an induction hypothesis whose type mentions the index but which the goal never names — is sound yet needless, and it would restructure a match that converges fine on its own (via arm-local refinement), so we leave it alone.
-    let mut infected = used.clone();
-    for (label, type_) in context.locals() {
-        if !infected.contains(label) && type_.free_vars().iter().any(|v| infected.contains(v)) {
-            infected.insert(label.clone());
-        }
-    }
-
-    let mut needed = expected.free_vars();
-    let mut generalized: Vec<(Free, Term)> = Vec::new();
-    for (label, type_) in context.locals().iter().rev() {
-        if used.contains(label) {
-            continue;
-        }
-        if needed.contains(label) && infected.contains(label) {
-            needed.extend(type_.free_vars());
-            generalized.push((label.clone(), type_.clone()));
-        }
-    }
-    generalized.reverse();
-
-    // The goal the motive abstracts: the expected type, prefixed by the generalized telescope. `func_type` captures each hypothesis name in the later hypothesis types and in the goal, leaving the roots free for the motive's own `close` below.
-    let goal = if generalized.is_empty() {
-        expected.clone()
-    } else {
-        Term::func_type(
-            generalized.iter().map(|(n, t)| (n.clone(), t.clone())),
-            expected.clone(),
-        )
-    };
-
-    let label_refs = labels.iter().collect::<Vec<_>>();
-    let motive = Scope::close(Many(labels.len()), &label_refs, goal);
-
-    Ok((check_motive(context, shape, &motive)?, generalized))
-}
-
-/// Check an arm body against its (possibly generalized) per-case goal. Without generalization this is a plain `check`. With it, the goal is a Π over the generalized hypotheses (`(h : T_specialised) -> G`); peel that telescope, re-assuming each hypothesis under its *case-specialised* type and its original name — shadowing the ambient binder — so the body (which names the hypotheses) and the codomain `G` (which also mentions them) line up at the refined types, then wrap the checked body back into the matching lambda. This is the convoy's `(h) => …` arm, synthesized; the eliminator's branch must be a function because its motive is a Π.
-fn check_generalized_arm(
-    context: &mut Context,
-    body: &Term,
-    expected: Term,
-    generalized: &[(Free, Term)],
-) -> Result<Term, Error> {
-    if generalized.is_empty() {
-        return check(context, body, expected);
-    }
-
-    let ft = match Term::unwrap_or_clone(reduce_with(context, &expected)?) {
-        Subterm::FuncType(ft) => ft,
-        _ => unreachable!("a generalized arm goal is the Π synthesize built"),
-    };
-
-    // Walk the Π at the originals' names, re-assuming each hypothesis under its *case-specialised* type — shadowing the ambient binder — and collecting the lambda's domains as we go. `walk` returns the codomain `G`, which (like the body) names the hypotheses, so both line up at the refined types.
-    let names = generalized
-        .iter()
-        .map(|(name, _)| Term::free_var(name))
-        .collect::<Vec<_>>();
-
-    let mut domains = Vec::with_capacity(generalized.len());
-    let plicities = ft.plicities().to_vec();
-    let codomain = ft.telescope.walk(&names, |i, name, type_| {
-        let name = name.head_name().expect("walked at a fresh free variable");
-        context.assume(name, type_);
-        domains.push((plicities[i], name.clone(), type_.clone()));
-        Ok::<(), Error>(())
-    })?;
-
-    let inner = check(context, body, codomain)?;
-    Ok(Term::func_marked(domains, inner))
 }

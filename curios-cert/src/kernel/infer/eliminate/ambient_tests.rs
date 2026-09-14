@@ -4,8 +4,7 @@ use {
     super::test_support::*,
     crate::{Kernel, KernelError, infer},
     curios_core::{
-        Atom, Carrier, Cases, Free, Global, InductArm, Level, Many, Scope, Term, Two,
-        UniverseContext,
+        Atom, Carrier, Cases, Free, Global, InductArm, Many, Scope, Term, Two, UniverseContext,
     },
     curios_utilities::Plicity,
 };
@@ -156,24 +155,41 @@ fn a_lying_ambient_goal_is_refused() {
     ));
 }
 
-/// The precondition: a case is substituted for the scrutinee, so the scrutinee must be a variable. A constructor value at the head is refused before anything about the arms is asked.
+/// An ambient result over an expression scrutinee — what substituting a `let` value or an argument into the variable form leaves behind — reads the goal's occurrences of that expression as the case: `P(0, f(n))` over `match f(n)` is `P(0, a())` in the `a` arm, which `h : P(0, f(n))` inhabits there through the case equation the arm records for `f(n)`, exactly as it would under a family. A goal that never names the expression is the same goal in every arm.
 #[test]
-fn an_ambient_result_needs_a_variable_scrutinee() {
+fn an_ambient_result_over_an_expression_replaces_its_occurrences() {
     let mut kernel = kernel();
     let family = family(&mut kernel);
+    let p = scrutinee_family(&mut kernel, binder(60, "P"), &family);
 
-    let value = Term::variant_at(
-        family,
-        Vec::<Level>::new(),
-        Vec::<Term>::new(),
-        Atom::from("a"),
-        Vec::<Term>::new(),
+    // `f : (Nat) -> F(0)` applied to a parameter is an expression scrutinee typed at index `0`, so only the `a` arm is reachable, and `b`'s targets clash with the actual index.
+    let f = binder(62, "f");
+    let n = binder(63, "n");
+    let at_zero = Term::induct_type(family.clone(), Vec::<Term>::new(), [nat(0)]);
+    kernel.declare(
+        &f,
+        &Term::func_type([(binder(64, "k"), nat_type())], at_zero.clone()),
+        &UniverseContext::default(),
     );
-    let over_value = Term::match_ambient(value, nat_type(), arms(&nat(0)));
-    assert!(matches!(
-        infer(&mut kernel, &over_value),
-        Err(KernelError::AmbientOverExpression(_))
-    ));
+    kernel.assume(&n, &nat_type());
+    let expression = Term::apply(Term::free_var(&f), [Term::free_var(&n)]);
+    let h = binder(65, "h");
+    let goal = Term::apply(p, [nat(0), expression.clone()]);
+    kernel.assume(&h, &goal);
+
+    // The goal names the expression, so the `a` arm is checked at `P(0, a())`, and the elimination's type is the goal as written.
+    let naming = Term::match_ambient(expression.clone(), goal.clone(), arms(&Term::free_var(&h)));
+    assert_eq!(
+        infer(&mut kernel, &naming).expect("the occurrence stands for the case"),
+        goal
+    );
+
+    // A goal that never names the expression is the same goal in every arm, and the elimination's type is that goal.
+    let constant = Term::match_ambient(expression, nat_type(), arms(&nat(0)));
+    assert_eq!(
+        infer(&mut kernel, &constant).expect("a constant goal is inhabited by each arm"),
+        nat_type()
+    );
 }
 
 /// A fold's induction hypothesis is the fold at the tail, typed at the result at the tail, and an ambient goal has no tail to be taken at once the head is substituted away: refused, whatever the arms.

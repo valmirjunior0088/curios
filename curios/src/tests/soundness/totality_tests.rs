@@ -570,3 +570,22 @@ fn a_let_alias_keeps_its_descent_visible() {
         "#;
     assert_eq!(run(source), b"ok");
 }
+
+// The program the synthesized convoy used to refuse: the goal's implicit was still a metavariable when the inner match was elaborated, its spine named every local, and the hypothesis `d` was generalized into a convoy whose lambda-bound copy the walk could not read as below the parameter. At the ambient result there is no convoy: `rest` is the payload of `d`, and the proof descends.
+#[test]
+fn a_proof_over_a_dependent_hypothesis_descends() {
+    let source = r#"
+        use /std/{Nat, Bytes, Eq, Str};
+        use /std/Str/{Scan, Utf8, step};
+
+        let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq(0, 0) =
+            match s
+            | lead() => match d | stop() => Eq/refl() | more(c, _, t, rest) => dv(step(c, Scan/lead()), rest) end
+            | cont(_, _, _) => match d | more(c, _, _, rest) => dv(step(c, s), rest) end
+            | bad() => match d | more(c, _, _, rest) => dv(step(c, Scan/bad()), rest) end
+            end;
+
+        /std/print("ok")
+        "#;
+    assert_eq!(run(source), b"ok");
+}
