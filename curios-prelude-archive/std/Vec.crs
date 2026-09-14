@@ -94,10 +94,7 @@ pub let replicate(@T: Type, n: Nat, x: T) -> Vec(T, n) =
 
 -- | Pairs, position by position.
 pub let zip(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), w: Vec(B, n)) -> Vec({A, B}, n) =
-    (match n: (k) => (Vec(A, k), Vec(B, k)) -> Vec({A, B}, k)
-    | 0 => (_, _) => nil()
-    | _ + 1; ih => (a, b) => cons((first(a), first(b)), ih(rest(a), rest(b)))
-    end)(v, w);
+    match n | 0 => nil() | _ + 1 => cons((first(v), first(w)), zip(rest(v), rest(w))) end;
 
 -- | Left to right with `f(elem, acc)`.
 pub let fold(@T: Type, @A: Type, @n: Nat, v: Vec(T, n), init: A, f: (T, A) -> A) -> A =
