@@ -177,16 +177,22 @@ pub let sort(@T: Type, use Ord(T), l: List(T)) -> List(T) =
     sort_by(l, (a, b) => Ord/ord(a, b));
 
 -- | `n` singles combined as a balanced tree, so `combine` nests to a depth of `log2(n)` rather than `n`.
+-- |
+-- | The walk halves an interval, which no structural descent shows, so it descends on a fuel instead: `n` levels, of which a logarithmic number are ever spent, so the count changes no answer and is what lets the function stand in a type.
 pub let balanced(@A: Type, n: Nat, empty: A, single: (Nat) -> A, combine: (A, A) -> A) -> A =
-    let go(lo: Nat, hi: Nat) -> A =
-        choose
-        | lo + 1 < hi =>
-            let mid = (lo + hi) / 2;
-            combine(go(lo, mid), go(mid, hi))
-        | lo < hi => single(lo)
-        | _ => empty
+    let go(fuel: Nat, lo: Nat, hi: Nat) -> A =
+        match fuel
+        | 0 => empty
+        | pred + 1 =>
+            choose
+            | lo + 1 < hi =>
+                let mid = (lo + hi) / 2;
+                combine(go(pred, lo, mid), go(pred, mid, hi))
+            | lo < hi => single(lo)
+            | _ => empty
+            end
         end;
-    go(0, n);
+    go(n, 0, n);
 
 satisfy (@A: Type, use Eql(A)) => Eql(List(A)) {
     eql(a, b) =
