@@ -2,7 +2,7 @@
 
 ## Status
 
-Measured and designed, not built. Nothing below the unit is reused today: a store slot is taken whole when every file it recorded still digests as recorded, and recompiled whole otherwise, and the language server rebuilds every fold from nothing on every check. The prerequisite this depends on, per-item recovery in elaboration, is named in `curios-wonder/src/diagnostics.rs` as pending and is specified here as the first step. When the mechanism lands, the equivalence argument under [The argument](#the-argument) graduates to `documentation/design/toolchain/`, beside [A module is a compilation unit, and the prelude is an environment](../design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md), whose reasoning it extends one level down.
+Measured and designed, not built. Nothing below the unit is reused today: a store slot is taken whole when every file it recorded still digests as recorded, and recompiled whole otherwise, and the language server rebuilds every fold from nothing on every check. The two prerequisites this depends on, item-level resynchronization in the parser and per-item recovery in elaboration, are named in `curios-wonder/src/diagnostics.rs` as pending and are specified here as the first two steps. When the mechanism lands, the equivalence argument under [The argument](#the-argument) graduates to `documentation/design/toolchain/`, beside [A module is a compilation unit, and the prelude is an environment](../design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md), whose reasoning it extends one level down.
 
 ## Why it exists
 
@@ -44,6 +44,8 @@ Every mechanism the design needs exists for whole units and is applied here insi
 
 **The archive is the baseline for the prelude.** The image gains the same `Record` a slot carries, written by the build script from the read log it already holds, so the fixed prelude's provenance is a recorded fact rather than a belief. `standard.rs`, the one module licensed to name the prelude, withholds an archived root from the scope exactly when a unit in the fold claims its prefix from the directory the record names, grants that unit what the withheld root could see, and hands the archived unit over as its baseline. Any other unit claiming the prefix collides as today. This is what makes a question about a `/std` file cost its first answer in the time it takes to restore the archive.
 
+**A broken item is skipped to the next anchor, and named if it can be.** A parse failure the item grammar has committed to no longer ends the module. The item loop records it, scans forward for the next line that begins at column 0 with `pub`, a `-- |` comment, or an item head word followed by whitespace, and resumes there. A candidate is never trusted: the loop parses an item at it, a failure that does not commit means it was not an item and is skipped silently, and one that commits is another broken item and resynchronizes again. The trigger is committed failures only, so an uncommitted failure still ends the loop and hands the text to an entrypoint's tail, and the item-or-tail ambiguity gains no heuristic. A broken item stays in the list as `TopItem::Broken` with its span, its error and the name its head declared where the head parsed that far, which is what lets lowering poison references to it instead of reporting them unbound. Inline module bodies get no anchor of their own: a committed failure inside one is the `mod` item's, and the loop resumes at column 0 after it. `Module::parse` succeeds with broken items and every one is reported; `run`, `compile` and the archive build refuse a module holding any, listing all; the formatter refuses one, which its reparse check already implies. Column 0 is the formatter's convention rather than a rule of the grammar, and the cost of code that ignores it is only that recovery finds no anchor and the parse ends where it ends today. A wrong anchor cannot produce a wrong tree, and inside a body the only head words that could stand at column 0 are `let`, `test`, `concept` and `satisfy`, which commit only after `pub` or a documentation comment, so a wrong anchor cannot produce a spurious diagnostic either. Once a baseline exists, the previous good parse's item spans bound each hole exactly, and reparsing between them is the second step; the anchor rule is what produces the first good parse and recovers the item being typed at the end of a file, which spans never can.
+
 **Recovery is the prerequisite, and poisoning is its rule.** Elaboration continues past a refused item: universes roll back to the item's mark, parked and deferred work stamped with the item is dropped, a witness the item registered before its body is unregistered, its registry entries are removed before positivity, and every later item whose lowered form mentions a poisoned name is skipped and poisoned in turn. Every refusal is reported; the module never reaches the kernel or erasure with one. The poison set is this design's invalidation closure walked forwards, over the same graph.
 
 **Two whole-unit passes narrow to the closure.** Zonk runs over the new items only, since reused ones are zonked. The type and proof totality obligations run over the closure only, since they are per definition over recorded positions. Totality classification, positivity and the witness-cycle check stay whole; together they cost under a second.
@@ -72,6 +74,8 @@ The claim is held to by evidence, not by this paragraph: a differential test ser
 - **Recognizing the prelude in `curios-wonder` or `Membership`.** `curios-package` cannot reach the archive, and every other product would keep colliding.
 - **On-disk per-declaration slots.** Redundant while the unit slot plus the item diff gives the same reuse with no new key.
 - **Building this into the server as private state.** It would be the third place a fold is spelled, and `test`, `document` and the executables compiled against a moved library would gain nothing.
+- **Resynchronizing a broken item at its terminator.** Consuming to the item's `;` or matching `end` needs a lexer for strings, comments and `end` nesting that the scannerless grammar does not have and that can drift from it, and `;` also ends a local `let` inside a body.
+- **Reusing the editor grammar's recovery.** Tree-sitter recovers, but it is a second grammar owned by the editors, and the compiler would parse what the editor guessed.
 
 ## What has to be decided
 
@@ -80,13 +84,14 @@ The claim is held to by evidence, not by this paragraph: a differential test ser
 - **How the closure treats a removed or renamed declaration.** A name that disappears poisons its dependents like a refusal; whether the diagnostic names the removal is a wording decision.
 - **The recovery diagnostic for a poisoned dependent.** Silence, or one line naming the root cause; the kernel's own recovery reports nothing for dependents and is the precedent.
 - **Whether the parse memo lives in `RootSource` or in the overlay.** The former covers the CLI too; the latter is smaller.
+- **Whether an inline module body ever gets an anchor column of its own.** The standard library holds one such body against 137 file-backed modules, so the first cut resumes after the `mod` item; the column of the body's first item is the candidate if that ever proves too coarse.
 
 ## Deliberately not specified
 
 - Incremental resolution and lowering, the next floor at about 2.5 s for `/std`.
 - Incremental erasure. The arena appends and tombstones, so re-erasing the closure onto the previous arena is structurally supported, and it is the 3.7 s after that.
 - Interface-aware invalidation, where a `Prop` body invalidates nothing but itself. A refinement of the closure, not a change to the mechanism.
-- Item-level parse resynchronization in `curios-parse`. An editor needs it as much as it needs this, and it is a separate change.
+- Reparsing between the previous good parse's item spans. The exact form of resynchronization, and the second step once a baseline exists.
 - Per-item instrumentation of the kernel. Worth taking before the first cut is sized, not a condition of it.
 
 ## How to retake the measurements
