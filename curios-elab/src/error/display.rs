@@ -89,27 +89,28 @@ impl fmt::Display for Displayed<'_> {
                 write!(f, "conversion ran out of steps between {this} and {that}")
             }
             Error::TypeMismatch { inferred, expected } => {
-                // Reports erase universe instances, which reads better everywhere except here: when the instances *are* the disagreement, both sides render as one string and the message states nothing. Detected on the rendering rather than on the terms, so it covers every axis that could collapse two sides into one spelling and not merely the one that is known to.
+                // Reports erase universe instances and splice nested concatenations, which reads better everywhere except here: when the instances or the grouping *are* the disagreement, both sides render as one string and the message states nothing. Detected on the rendering rather than on the terms, so it covers every axis that could collapse two sides into one spelling and not merely the ones that are known to. Grouping is tried first because it changes nothing where no nesting is present, whereas two polymorphic instances always differ once their levels are shown, so trying the universes first would answer with two metavariable ids where the nesting was the difference.
                 let plain = (
                     inferred.spelled(spelling).to_string(),
                     expected.spelled(spelling).to_string(),
                 );
                 let detailed = (plain.0 == plain.1).then(|| {
-                    let shown = Rc::new(spelling.as_ref().clone().with_shown_universes());
-                    let pair = (
-                        inferred.spelled(&shown).to_string(),
-                        expected.spelled(&shown).to_string(),
-                    );
-                    // Universes were not the axis that collapsed them: fall back to core's own spelling, which abbreviates nothing. Unreadable beside the shortened form, and better than a message that says two things are unequal in identical words.
-                    match pair.0 == pair.1 {
-                        false => pair,
-                        true => {
-                            let bare = Rc::new(Spelling::default());
-                            (
-                                inferred.spelled(&bare).to_string(),
-                                expected.spelled(&bare).to_string(),
-                            )
-                        }
+                    let render = |spelling: Spelling| {
+                        let spelling = Rc::new(spelling);
+                        (
+                            inferred.spelled(&spelling).to_string(),
+                            expected.spelled(&spelling).to_string(),
+                        )
+                    };
+                    let grouped = render(spelling.as_ref().clone().with_faithful_grouping());
+                    if grouped.0 != grouped.1 {
+                        return grouped;
+                    }
+                    let shown = render(spelling.as_ref().clone().with_shown_universes());
+                    // Neither grouping nor universes was the axis that collapsed them: fall back to core's own spelling, which abbreviates nothing. Unreadable beside the shortened form, and better than a message that says two things are unequal in identical words.
+                    match shown.0 == shown.1 {
+                        false => shown,
+                        true => render(Spelling::default()),
                     }
                 });
                 let (shown_inferred, shown_expected) = match detailed {

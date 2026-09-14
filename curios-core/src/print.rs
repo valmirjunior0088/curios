@@ -48,6 +48,8 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 //
 // axis (f) — string literals: the identity of the certified `Str` declaration, so a literal spells as the text it stands for rather than as the struct over its bytes. A `Str` is bytes beside a scan witness certifying them, and a report that spells one structurally — `Str { x[0x62, 0x6F, 0x64, 0x79], of_scan_eq(x[0x62, 0x6F, 0x64, 0x79], refl_scan(x[0x62, 0x6F, 0x64, 0x79])) }` for `"body"` — buries the one thing the reader wrote under the representation that certifies it. The identity is supplied rather than spelled: this crate sits below `curios-prelude-archive`, so it may not name a `/syn` declaration and takes the one the syntax registry names instead. Diagnostics and goal reports set it; `wonder stage`'s dumps do not, for axis (c)'s reason.
 //
+// axis (g) — grouping: a flag under which a nested concatenation spells as the operand it is, `[..[..a, ..b], ..c]`, rather than splicing its entries into the enclosing literal. The splice is right everywhere the reader wants the program quoted rather than its lowering, and it is what makes two terms that differ only in how a run is grouped render as one string — which a mismatch report cannot afford, since grouping is a difference conversion can refuse on. The report's escalation sets it, first, because it changes nothing unless a nesting is present; nothing else does.
+//
 // `Spelling::label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
 /// How a term is spelled for a reader. The default spells nothing differently, which is what a bare `Display` uses.
@@ -65,6 +67,8 @@ pub struct Spelling {
     anonymous_metavars: bool,
     /// axis (f) — the certified-string declaration, so a `Str` literal spells as its own text.
     string_literal: Option<Global>,
+    /// axis (g) — whether a nested concatenation keeps its grouping instead of being spliced into the enclosing literal.
+    grouped: bool,
 }
 
 impl Spelling {
@@ -97,6 +101,14 @@ impl Spelling {
     /// Spell every metavariable as a bare `?` (axis (e)).
     pub fn with_anonymous_metavars(mut self) -> Self {
         self.anonymous_metavars = true;
+        self
+    }
+
+    /// Keep a nested concatenation's grouping instead of splicing it (axis (g)).
+    ///
+    /// For the report that has found two sides rendering as one string: a nesting is a difference conversion can refuse on, and the splice is what hid it. A consumer that has detected that case re-renders under this before it reaches for the universe instances, since grouping changes nothing where no nesting is present.
+    pub fn with_faithful_grouping(mut self) -> Self {
+        self.grouped = true;
         self
     }
 
@@ -577,7 +589,7 @@ fn bin_atoms(grain: Grain, packed: &PackedBin) -> Vec<Printer> {
     }
 }
 
-/// The entries of a list concatenation as the surface spells them: a literal operand contributes its items in place, a nested concatenation its own entries, and anything else a `..` spread. Lowering turns the `[h, ..t]` a reader wrote into a concatenation of the literal `[h]` with `t`, and substitution nests one concatenation inside another; splicing both back is what lets the report quote the program rather than its lowering. Concatenation is associative, so the splice changes no value.
+/// The entries of a list concatenation as the surface spells them: a literal operand contributes its items in place, a nested concatenation its own entries, and anything else a `..` spread. Lowering turns the `[h, ..t]` a reader wrote into a concatenation of the literal `[h]` with `t`, and substitution nests one concatenation inside another; splicing both back is what lets the report quote the program rather than its lowering. Concatenation is associative, so the splice changes no value — which is exactly why axis (g) exists: a report that has found two groupings rendering alike keeps the nesting instead.
 fn list_concat_entries(operands: Vec<Term>, frame: Frame, entries: &mut Vec<Printer>) {
     for operand in operands {
         match &*operand {
@@ -589,7 +601,7 @@ fn list_concat_entries(operands: Vec<Term>, frame: Frame, entries: &mut Vec<Prin
                 };
                 entries.extend(items.into_iter().map(|item| sub(item, frame)));
             }
-            Subterm::Intrinsic(Intrinsic::ListConcat { .. }) => {
+            Subterm::Intrinsic(Intrinsic::ListConcat { .. }) if !frame.spelling.grouped => {
                 let Subterm::Intrinsic(Intrinsic::ListConcat { operands, .. }) =
                     Term::unwrap_or_clone(operand)
                 else {
@@ -609,7 +621,9 @@ fn bin_concat_entries(grain: Grain, operands: Vec<Term>, frame: Frame, entries: 
             Subterm::Intrinsic(Intrinsic::Bin(g, packed)) if *g == grain => {
                 entries.extend(bin_atoms(grain, packed));
             }
-            Subterm::Intrinsic(Intrinsic::BinConcat { grain: g, .. }) if *g == grain => {
+            Subterm::Intrinsic(Intrinsic::BinConcat { grain: g, .. })
+                if *g == grain && !frame.spelling.grouped =>
+            {
                 let Subterm::Intrinsic(Intrinsic::BinConcat { operands, .. }) =
                     Term::unwrap_or_clone(operand)
                 else {

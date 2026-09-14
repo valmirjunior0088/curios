@@ -4,7 +4,7 @@
 
 use {
     super::*,
-    curios_core::{Global, Level, Term},
+    curios_core::{Free, Global, Intrinsic, Level, Term},
     curios_utilities::Qualifier,
 };
 
@@ -42,6 +42,30 @@ fn a_disagreement_only_in_universe_instances_shows_them() {
     assert_ne!(
         inferred, expected,
         "a mismatch may not state its two sides in identical words:\n{shown}"
+    );
+}
+
+/// One run grouped two ways. The splice that quotes a program rather than its lowering renders both as `[..a, ..b, ..c]`, so the report has to keep the nesting — the shape a proof about a structural fold meets on its first inductive step, and the one this report used to state in identical words.
+#[test]
+fn a_disagreement_only_in_grouping_shows_it() {
+    let list = |index: u32, name: &'static str| Term::free_var(&Free::local(index, Some(name)));
+    let elem = Term::intrinsic(Intrinsic::NatType);
+    let cat = |operands: Vec<Term>| Term::intrinsic(Intrinsic::list_concat(elem.clone(), operands));
+
+    let nested = cat(vec![cat(vec![list(0, "a"), list(1, "b")]), list(2, "c")]);
+    let flat = cat(vec![list(0, "a"), list(1, "b"), list(2, "c")]);
+    let shown = rendered(nested, flat);
+
+    let (inferred, expected) = shown
+        .split_once("\n  expected: ")
+        .expect("a mismatch renders both sides");
+    assert_ne!(
+        inferred, expected,
+        "a mismatch may not state its two sides in identical words:\n{shown}"
+    );
+    assert!(
+        inferred.contains("..["),
+        "the nesting is the difference, so the report keeps it:\n{shown}"
     );
 }
 
