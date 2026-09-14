@@ -500,6 +500,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
     let bool_p = Free::local(10, Some("p"));
     let int_i = Free::local(11, Some("i"));
     let nat_z = Free::local(12, Some("z"));
+    let list_tail = Free::local(13, Some("ys"));
     let x = Term::free_var(&nat_x);
     let z = Term::free_var(&nat_z);
     let p = Term::free_var(&bool_p);
@@ -556,6 +557,11 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         Term::intrinsic(Intrinsic::list_append(elem.clone(), base, element))
     };
     let list_len = |base: Term| Term::intrinsic(Intrinsic::list_len(elem.clone(), base));
+    let list_get = |base: Term, index: Term| {
+        Term::intrinsic(Intrinsic::list_get(elem.clone(), base, index, qed()))
+    };
+    let list_cat = |parts: Vec<Term>| Term::intrinsic(Intrinsic::list_concat(elem.clone(), parts));
+    let ys = Term::free_var(&list_tail);
     let list_slice = |base: Term, start: Term, count: Term| {
         Term::intrinsic(Intrinsic::list_slice(
             elem.clone(),
@@ -1074,6 +1080,83 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
                     (&list_base, nat_list(&[1, 2, 3])),
                     (&nat_start, lit(3)),
                     (&nat_end, lit(0)),
+                ],
+            ],
+        ),
+        // A window past every operand but the last lies inside the last one, at the distance that remains: the seam walk narrows there because the caller's bound cancels to exactly that operand's length. Instantiations keep to the bound the narrowed operation states.
+        (
+            "get(b ++ t, len(b) + s) = get(t, s)",
+            bin_get(
+                cat(vec![b.clone(), t.clone()]),
+                plus(bin_len(b.clone()), s.clone()),
+            ),
+            bin_get(t.clone(), s.clone()),
+            vec![
+                vec![
+                    (&bin_base, run_bytes(&[9, 8])),
+                    (&bin_tail, run_bytes(&[7, 6, 5])),
+                    (&nat_start, lit(0)),
+                ],
+                vec![
+                    (&bin_base, run_bytes(&[])),
+                    (&bin_tail, run_bytes(&[7, 6, 5])),
+                    (&nat_start, lit(2)),
+                ],
+            ],
+        ),
+        (
+            "slice(b ++ t, len(b) + s, e) = slice(t, s, e)",
+            bin_slice(
+                cat(vec![b.clone(), t.clone()]),
+                plus(bin_len(b.clone()), s.clone()),
+                e.clone(),
+            ),
+            bin_slice(t.clone(), s.clone(), e.clone()),
+            vec![
+                vec![
+                    (&bin_base, run_bytes(&[9, 8])),
+                    (&bin_tail, run_bytes(&[7, 6, 5])),
+                    (&nat_start, lit(1)),
+                    (&nat_end, lit(2)),
+                ],
+                vec![
+                    (&bin_base, run_bytes(&[9])),
+                    (&bin_tail, run_bytes(&[7, 6, 5])),
+                    (&nat_start, lit(0)),
+                    (&nat_end, lit(0)),
+                ],
+            ],
+        ),
+        (
+            "get(xs ++ ys, len(xs)) = get(ys, 0)",
+            list_get(list_cat(vec![xs.clone(), ys.clone()]), list_len(xs.clone())),
+            list_get(ys.clone(), lit(0)),
+            vec![
+                vec![
+                    (&list_base, nat_list(&[1, 2])),
+                    (&list_tail, nat_list(&[3, 4])),
+                ],
+                vec![(&list_base, nat_list(&[])), (&list_tail, nat_list(&[3]))],
+            ],
+        ),
+        (
+            "slice(xs ++ ys, len(xs), e) = slice(ys, 0, e)",
+            list_slice(
+                list_cat(vec![xs.clone(), ys.clone()]),
+                list_len(xs.clone()),
+                e.clone(),
+            ),
+            list_slice(ys.clone(), lit(0), e.clone()),
+            vec![
+                vec![
+                    (&list_base, nat_list(&[1, 2])),
+                    (&list_tail, nat_list(&[3, 4, 5])),
+                    (&nat_end, lit(2)),
+                ],
+                vec![
+                    (&list_base, nat_list(&[1])),
+                    (&list_tail, nat_list(&[3, 4, 5])),
+                    (&nat_end, lit(3)),
                 ],
             ],
         ),

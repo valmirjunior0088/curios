@@ -269,11 +269,17 @@ impl FreeMonoid {
     }
 }
 
-/// What a window came to: the pieces whose concatenation *is* it, or the measured total of a value it ran past.
+/// What a window came to: the pieces whose concatenation *is* it, the last operand it lies inside with the distance into that operand, or the measured total of a value it ran past.
 ///
 /// `Past` is the concrete strategy's alone — the symbolic one never learns a total, so a window it cannot place is simply not found. It carries the bounds it read as well as the total, because only that strategy has them as indices and the refusal names all three.
+///
+/// `Inside` is the symbolic strategy's, and it is the one answer that names an operand *without* covering it whole: the caller rebuilds its own operation over that operand at `start`, with the same count and the same bound. The bound is reused, not derived — see [`seam_window`] for why it proves the narrowed proposition.
 pub(super) enum Windowed {
     Parts(Vec<Term>),
+    Inside {
+        operand: Term,
+        start: Term,
+    },
     Past {
         total: usize,
         start: usize,
@@ -318,11 +324,11 @@ impl FreeMonoid {
             }
         }
 
-        // A window on the seams of a symbolic concatenation. An append is one of those, which `FreeMonoid::concatenated` is what says.
+        // A window on the seams of a symbolic concatenation, or inside its last operand. An append is one of those concatenations, which `FreeMonoid::concatenated` is what says.
         if let Some(operands) = self.concatenated(value)
-            && let Some(run) = seam_window(reducer, &operands, start, count, measure)?
+            && let Some(windowed) = seam_window(reducer, &operands, start, count, measure)?
         {
-            return Ok(Some(Windowed::Parts(run)));
+            return Ok(Some(windowed));
         }
 
         Ok(None)
@@ -334,13 +340,15 @@ impl FreeMonoid {
 /// **The walk consumes a distance rather than growing a prefix.** Each operand's measure is *cancelled off* the distance still to cover by [`Nat::cancel_common`], which reads that operand's own summands rather than every summand before it. What the walk spends is one measure per operand and nothing else: the accumulation no longer re-enters the reducer, and the window's end — a sum of the start and the count — is never built at all. This is a charge against the budget rather than an asymptotic win, and the distinction is worth keeping because it was once claimed the other way: a window written over a long prefix sum spends the bulk of its time normalizing that sum where it is *written*, in `NatAdd`'s own fold, and only a small remainder here.
 ///
 /// **What a surviving measure means.** [`consume`] hands back whatever neither side absorbed, and a measure carrying a summand the distance lacks is an overshoot: the seam is already behind, and since a prefix only ever grows no later operand can bring it back. Declining there is exact rather than conservative, which is why the walk can stop at the first one. What cancellation sees through that whole-term equality did not is a universe instance, [`Nat::cancel_common`] keying its summands through `project_erased_universes` — the admitting direction, on the licence the carrier already gives its other readers, recorded in `documentation/soundness/what-the-kernel-consults/the-refinement-key.md`. Two spellings of one length that cancellation does not pair still decline, which is the refusing direction and the incompleteness this rule keeps.
+///
+/// **An overshoot on the *last* operand is not a decline but a narrowing.** A window that has consumed every operand before the last and still has distance to cover lies inside the last one, at whatever distance remains: `get([..xs, ..ys], len(xs) + i) = get(ys, i)` and `slice([..xs, ..ys], len(xs), n) = slice(ys, 0, n)`. What makes this the one operand a walk may stop inside is the bound. The caller holds `start + count <= len(whole)`, and `len(whole)` is the sum of every operand's measure, so cancelling the consumed prefix off both sides leaves exactly `rest + count <= len(last)` — the proposition the narrowed operation states, reached by the same cancellation that placed the window, so the caller's own proof term proves it and nothing is derived. Stopping inside an earlier operand would leave the later operands' measures standing on the right, a proposition no term in hand proves, which is why that case still declines.
 pub(super) fn seam_window(
     reducer: &mut impl Reducer,
     operands: &[Term],
     start: &Term,
     length: &Term,
     measure: impl Fn(&Term) -> Intrinsic,
-) -> Result<Option<Vec<Term>>, ReduceError> {
+) -> Result<Option<Windowed>, ReduceError> {
     let mut remaining = start.clone();
     let mut begin = None;
 
@@ -352,17 +360,35 @@ pub(super) fn seam_window(
         if let Some(begin) = begin
             && Nat::is_zero(&remaining)
         {
-            return Ok(Some(operands[begin..index].to_vec()));
+            return Ok(Some(Windowed::Parts(operands[begin..index].to_vec())));
         }
         let measured = reducer.reduce_forced(Term::intrinsic(measure(operand)))?;
         match consume(&remaining, &measured) {
             Some(rest) => remaining = rest,
+            None if index + 1 == operands.len() => {
+                return Ok(match begin {
+                    // The window begins at this operand's seam and ends inside it.
+                    Some(begin) if begin == index => Some(Windowed::Inside {
+                        operand: operand.clone(),
+                        start: Term::intrinsic(Intrinsic::Nat(Nat::Zero)),
+                    }),
+                    // The window begins and ends inside this operand, `remaining` into it.
+                    None => Some(Windowed::Inside {
+                        operand: operand.clone(),
+                        start: remaining,
+                    }),
+                    // The window began at an earlier seam and ends inside this operand: its tail would need a bound no term in hand proves once the run before it is taken whole.
+                    Some(_) => None,
+                });
+            }
             None => return Ok(None),
         }
     }
 
     Ok(match begin {
-        Some(begin) if Nat::is_zero(&remaining) => Some(operands[begin..].to_vec()),
+        Some(begin) if Nat::is_zero(&remaining) => {
+            Some(Windowed::Parts(operands[begin..].to_vec()))
+        }
         _ => None,
     })
 }

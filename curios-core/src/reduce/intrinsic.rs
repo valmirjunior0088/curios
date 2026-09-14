@@ -710,6 +710,17 @@ pub fn reduce_intrinsic(
                         return reducer.reduce(generator).map(Term::unwrap_or_clone);
                     }
                 }
+                // The index lies inside the last operand: the same `get` over that operand, under the same bound — which the seam walk's cancellation has already turned into a bound on that operand alone.
+                Some(Windowed::Inside { operand, start }) => {
+                    return reducer
+                        .reduce(Term::intrinsic(Intrinsic::bin_get(
+                            grain,
+                            operand,
+                            start,
+                            in_range.clone(),
+                        )))
+                        .map(Term::unwrap_or_clone);
+                }
                 Some(Windowed::Past { total, start, .. }) => {
                     return Err(ReduceError::BinGetOutOfBounds {
                         len: total,
@@ -810,6 +821,18 @@ pub fn reduce_intrinsic(
                 Some(Windowed::Parts(parts)) => {
                     return reducer
                         .reduce(Term::intrinsic(Intrinsic::bin_concat(grain, parts)))
+                        .map(Term::unwrap_or_clone);
+                }
+                // The window lies inside the last operand: the same window into that operand, under the same bound.
+                Some(Windowed::Inside { operand, start }) => {
+                    return reducer
+                        .reduce(Term::intrinsic(Intrinsic::bin_slice(
+                            grain,
+                            operand,
+                            start,
+                            length_reduced,
+                            within.clone(),
+                        )))
                         .map(Term::unwrap_or_clone);
                 }
                 Some(Windowed::Past {
@@ -1043,6 +1066,17 @@ pub fn reduce_intrinsic(
                         return reducer.reduce(generator).map(Term::unwrap_or_clone);
                     }
                 }
+                // The `List` twin of `BinGet`'s: the index lies inside the last operand, so it is the same `get` over that operand under the same bound.
+                Some(Windowed::Inside { operand, start }) => {
+                    return reducer
+                        .reduce(Term::intrinsic(Intrinsic::list_get(
+                            type_,
+                            operand,
+                            start,
+                            in_range.clone(),
+                        )))
+                        .map(Term::unwrap_or_clone);
+                }
                 Some(Windowed::Past { total, start, .. }) => {
                     return Err(ReduceError::ListGetOutOfBounds {
                         len: total,
@@ -1146,6 +1180,18 @@ pub fn reduce_intrinsic(
                 Some(Windowed::Parts(parts)) => {
                     return reducer
                         .reduce(Term::intrinsic(Intrinsic::list_concat(type_, parts)))
+                        .map(Term::unwrap_or_clone);
+                }
+                // The `List` twin of `BinSlice`'s: the window lies inside the last operand, so it is the same window into that operand under the same bound.
+                Some(Windowed::Inside { operand, start }) => {
+                    return reducer
+                        .reduce(Term::intrinsic(Intrinsic::list_slice(
+                            type_,
+                            operand,
+                            start,
+                            length_reduced,
+                            within.clone(),
+                        )))
                         .map(Term::unwrap_or_clone);
                 }
                 Some(Windowed::Past {

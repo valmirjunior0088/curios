@@ -195,7 +195,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "List, the free monoid",
-        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Nat/Le(s + l, List/len(xs)), first: Nat/Lt(0, l), at: Nat/Lt(s, List/len(xs))",
+        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Nat/Le(s + l, List/len(xs)), first: Nat/Lt(0, l), at: Nat/Lt(s, List/len(xs)), head: Nat/Lt(0, List/len(ys)), into: Nat/Lt(s, List/len(ys)), fits: Nat/Le(l, List/len(ys))",
         held: &[
             "Eq([..xs, ..[]], xs)",
             "Eq([..[], ..xs], xs)",
@@ -226,6 +226,10 @@ const CARRIERS: &[Carrier] = &[
             // A window's length is the count it was cut to, and a map moves inside a window with the same bound, since `len(map(xs, f))` is `len(xs)`. Both rest on `slice`'s own precondition, which the binder `ok` states.
             "Eq(List/len(List/slice(@Nat, xs, s, l, @ok)), l)",
             "Eq(List/map(List/slice(@Nat, xs, s, l, @ok), f), List/slice(@Nat, List/map(xs, f), s, l, @ok))",
+            // A window past every operand but the last is that window into the last operand. The bound cancels the consumed prefix off both sides, so the same proof places the narrowed operation.
+            "Eq(List/get(@Nat, [..xs, ..ys], List/len(xs), @head), List/get(@Nat, ys, 0, @head))",
+            "Eq(List/get(@Nat, [..xs, ..ys], List/len(xs) + s, @into), List/get(@Nat, ys, s, @into))",
+            "Eq(List/slice(@Nat, [..xs, ..ys], List/len(xs), l, @fits), List/slice(@Nat, ys, 0, l, @fits))",
         ],
         refused: &[
             // Function extensionality in disguise: not one to take.
@@ -236,7 +240,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bytes, the free monoid",
-        binders: "bs: Bytes, cs: Bytes, ds: Bytes, k: Byte, s: Nat, l: Nat, ok: Nat/Le(s + l, Bytes/len(bs))",
+        binders: "bs: Bytes, cs: Bytes, ds: Bytes, k: Byte, s: Nat, l: Nat, ok: Nat/Le(s + l, Bytes/len(bs)), head: Nat/Lt(0, Bytes/len(cs)), into: Nat/Lt(s, Bytes/len(cs)), fits: Nat/Le(l, Bytes/len(cs))",
         held: &[
             "Eq(x[..bs, ..x[]], bs)",
             "Eq(x[..x[], ..bs], bs)",
@@ -262,12 +266,16 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bytes/slice(x[..bs, k], 0, Bytes/len(bs)), bs)",
             // A window's length is the count it was cut to: `slice` takes `s + l <= len(b)`, so the count is the measure at every well-typed instance. Taken where the homomorphism reads the window rather than in `free_monoid`'s measure, which still counts only literal runs.
             "Eq(Bytes/len(Bytes/slice(bs, s, l, @ok)), l)",
+            // A window past every operand but the last is that window into the last operand, under the caller's own bound.
+            "Eq(Bytes/get(x[..bs, ..cs], Bytes/len(bs), @head), Bytes/get(cs, 0, @head))",
+            "Eq(Bytes/get(x[..bs, ..cs], Bytes/len(bs) + s, @into), Bytes/get(cs, s, @into))",
+            "Eq(Bytes/slice(x[..bs, ..cs], Bytes/len(bs), l, @fits), Bytes/slice(cs, 0, l, @fits))",
         ],
         refused: &[],
     },
     Carrier {
         name: "Bits, the free monoid",
-        binders: "ts: Bits, us: Bits, ws: Bits, v: Bool, s: Nat, l: Nat, ok: Nat/Le(s + l, Bits/len(ts))",
+        binders: "ts: Bits, us: Bits, ws: Bits, v: Bool, s: Nat, l: Nat, ok: Nat/Le(s + l, Bits/len(ts)), head: Nat/Lt(0, Bits/len(us)), into: Nat/Lt(s, Bits/len(us)), fits: Nat/Le(l, Bits/len(us))",
         held: &[
             // The byte grain's laws, stated again here: one grain's fold arm is not evidence for the other's, and a law held at one grain and unstated at the other is a copy with nothing checking it. The explanations are the byte group's, above.
             "Eq(b[..ts, ..b[]], ts)",
@@ -291,6 +299,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bits/get(b[..ts, v], Bits/len(ts)), v)",
             "Eq(Bits/slice(b[..ts, v], 0, Bits/len(ts)), ts)",
             "Eq(Bits/len(Bits/slice(ts, s, l, @ok)), l)",
+            "Eq(Bits/get(b[..ts, ..us], Bits/len(ts), @head), Bits/get(us, 0, @head))",
+            "Eq(Bits/get(b[..ts, ..us], Bits/len(ts) + s, @into), Bits/get(us, s, @into))",
+            "Eq(Bits/slice(b[..ts, ..us], Bits/len(ts), l, @fits), Bits/slice(us, 0, l, @fits))",
         ],
         refused: &[],
     },
