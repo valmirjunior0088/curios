@@ -108,6 +108,26 @@ pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
     }
 }
 
+/// The operands a reduced term never exceeds, as terms, each with whether the bound is strict — [`nat_bound`]'s criterion read at the operands instead of at a literal: a result antitone in one operand is at most its other operand, so the minuend, the dividend, either operand of `and` and the shifted value each bound their result, and a remainder is below its divisor outright, `non_zero` having placed the divisor at one or more. Only a shape whose operand *is* the bound is listed: a sum or a product of bounded parts stays under no operand of its own, and `nat_bound` is where those go.
+///
+/// Every pair is unconditional, as the literal oracle's arms are, and for the same reason it may be turned into a verdict: an under-report here is a false definitional equation. `dominators_upper_bound_every_closed_instantiation` holds each listed pair over values, block per shape.
+pub(super) fn nat_dominators(term: &Term) -> Vec<(Term, bool)> {
+    let Subterm::Intrinsic(intrinsic) = &**term else {
+        return Vec::new();
+    };
+
+    match intrinsic {
+        Intrinsic::NatSub(left, _) => vec![(left.clone(), false)],
+        Intrinsic::NatDiv { dividend, .. } => vec![(dividend.clone(), false)],
+        Intrinsic::NatRem {
+            dividend, divisor, ..
+        } => vec![(dividend.clone(), false), (divisor.clone(), true)],
+        Intrinsic::NatAnd(left, right) => vec![(left.clone(), false), (right.clone(), false)],
+        Intrinsic::NatShr(operand, _) => vec![(operand.clone(), false)],
+        _ => Vec::new(),
+    }
+}
+
 /// A reduced summand read as `coefficient · factor` with a *literal* coefficient, or `None` for a summand that is not such a product — the reading [`Nat::literal_factor`] takes, minus its unit default, for the callers that need to know whether a literal was there.
 fn nat_literal_factor(summand: &Term) -> Option<(Natural, Term)> {
     matches!(&**summand, Subterm::Intrinsic(Intrinsic::NatMul(..)))

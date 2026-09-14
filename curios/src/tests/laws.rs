@@ -124,6 +124,16 @@ const CARRIERS: &[Carrier] = &[
             "Eq(x % 7 <= 6, true)",
             "Eq(x % 7 > 6, false)",
             "Eq(6 >= x % 7, true)",
+            // A value against an operand it never exceeds.
+            "Eq(x - y <= x, true)",
+            "Eq(x / (y + 1) <= x, true)",
+            "Eq(x % (y + 1) <= x, true)",
+            "Eq(x % (y + 1) < y + 1, true)",
+            "Eq(Nat/and(x, y) <= x, true)",
+            "Eq(Nat/and(x, y) <= y, true)",
+            "Eq(Nat/shr(x, y) <= x, true)",
+            "Eq(x < x - y, false)",
+            "Eq(x - y <= x + 3, true)",
         ],
         // Parity: not a law of any monoid here, and not one to take.
         refused: &["Eq(x * 2 + 1 == y * 2, false)"],

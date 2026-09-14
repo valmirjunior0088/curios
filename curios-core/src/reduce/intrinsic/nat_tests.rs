@@ -1,7 +1,7 @@
 //! `Nat` bounds and Euclidean split, and the cancellation a symbolic operand admits.
 
 use {
-    super::{Comparison, compare_nat, nat_bound, nat_euclid_split},
+    super::{Comparison, compare_nat, nat_bound, nat_dominators, nat_euclid_split},
     crate::{Free, Intrinsic, Peel, Subterm, Term, peel_nat},
     curios_num::Natural,
 };
@@ -129,6 +129,81 @@ fn bound_upper_bounds_every_closed_instantiation() {
     under(
         Term::intrinsic(Intrinsic::NatXor(low(16, &x), low(8, &y))),
         "Nat/xor(x % 16, y % 8)",
+    );
+}
+
+// Soundness gate for the term-valued bounds, the twin of the literal gate above: every operand `nat_dominators` lists must bound its shape at every closed instantiation, strictly where it says so, because the comparison turns the pair into a verdict. One block per shape, as above, since the oracle enumerates nothing.
+#[test]
+fn dominators_upper_bound_every_closed_instantiation() {
+    let x = Free::local(0, Some("x"));
+    let y = Free::local(1, Some("y"));
+    let positive = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&y), lit(1)));
+    let samples = [
+        (0u32, 0u32),
+        (1, 1),
+        (5, 3),
+        (3, 5),
+        (1000, 7),
+        (7, 1000),
+        (255, 255),
+    ];
+
+    let value = |term: Term, left: u32, right: u32| {
+        let closed = at(term, &x, lit(left));
+        fold(at(closed, &y, lit(right)))
+            .as_nat()
+            .expect("closed")
+            .to_natural()
+            .expect("literal")
+    };
+    let under = |shape: Term, name: &str| {
+        let dominators = nat_dominators(&shape);
+        assert!(!dominators.is_empty(), "{name} lists no operand");
+        for (bound, strict) in dominators {
+            for (left, right) in samples {
+                let (result, ceiling) = (
+                    value(shape.clone(), left, right),
+                    value(bound.clone(), left, right),
+                );
+                assert!(
+                    if strict {
+                        result < ceiling
+                    } else {
+                        result <= ceiling
+                    },
+                    "{name} exceeded its operand at x = {left}, y = {right}",
+                );
+            }
+        }
+    };
+
+    under(
+        Term::intrinsic(Intrinsic::nat_sub(Term::free_var(&x), Term::free_var(&y))),
+        "x - y",
+    );
+    under(
+        Term::intrinsic(Intrinsic::NatDiv {
+            dividend: Term::free_var(&x),
+            divisor: positive.clone(),
+            non_zero: qed(),
+        }),
+        "x / (y + 1)",
+    );
+    under(
+        Term::intrinsic(Intrinsic::NatRem {
+            dividend: Term::free_var(&x),
+            divisor: positive,
+            non_zero: qed(),
+        }),
+        "x % (y + 1)",
+    );
+    under(
+        Term::intrinsic(Intrinsic::NatAnd(Term::free_var(&x), Term::free_var(&y))),
+        "Nat/and(x, y)",
+    );
+    under(
+        Term::intrinsic(Intrinsic::NatShr(Term::free_var(&x), Term::free_var(&y))),
+        "Nat/shr(x, y)",
     );
 }
 

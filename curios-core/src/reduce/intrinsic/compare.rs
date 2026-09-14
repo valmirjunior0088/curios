@@ -5,6 +5,7 @@
 use {
     super::*,
     crate::{Nat, ReduceError, Reducer, Subterm, Term},
+    curios_num::Natural,
     std::cmp::Ordering,
 };
 
@@ -73,7 +74,47 @@ pub(super) fn compare_nat(
         decided => decided,
     };
 
+    // A symbolic bound decides by the same criterion, through the operand the value never exceeds: `x - y` is at most `x`, so `x - y <= x + z` is decided by comparing `x` in its place, and `x % (y + 1)` is below `y + 1` outright. The dominator is compared one strict subterm down, so the recursion ends, and an at-most there is an at-most here, strict where either step is. See `nat_dominators` for why each pair holds unconditionally.
+    let outcome = match outcome {
+        Comparison::Stuck => dominated(reducer, &sl, &il, &left, &sr, &ir, &right)?,
+        decided => decided,
+    };
+
     Ok((outcome, left, right))
+}
+
+/// The verdict a dominator forces, tried on the left inner and then the right, or `Stuck` when no listed operand compares.
+#[allow(clippy::too_many_arguments)]
+fn dominated(
+    reducer: &mut impl Reducer,
+    sl: &Natural,
+    il: &Term,
+    left: &Term,
+    sr: &Natural,
+    ir: &Term,
+    right: &Term,
+) -> Result<Comparison, ReduceError> {
+    for (bound, strict) in nat_dominators(il) {
+        let (verdict, _, _) = compare_nat(reducer, Nat::rebuild(sl.clone(), bound), right.clone())?;
+        match (verdict, strict) {
+            (Comparison::Lt, _) | (Comparison::Le | Comparison::Eq, true) => {
+                return Ok(Comparison::Lt);
+            }
+            (Comparison::Le | Comparison::Eq, false) => return Ok(Comparison::Le),
+            _ => {}
+        }
+    }
+    for (bound, strict) in nat_dominators(ir) {
+        let (verdict, _, _) = compare_nat(reducer, left.clone(), Nat::rebuild(sr.clone(), bound))?;
+        match (verdict, strict) {
+            (Comparison::Gt, _) | (Comparison::Ge | Comparison::Eq, true) => {
+                return Ok(Comparison::Gt);
+            }
+            (Comparison::Ge | Comparison::Eq, false) => return Ok(Comparison::Ge),
+            _ => {}
+        }
+    }
+    Ok(Comparison::Stuck)
 }
 
 /// Reduce a `Nat` comparison through the shared structural body [`compare_nat`]. `read` projects the outcome to this op's boolean (or `None` when the operands do not decide it), in which case the neutral term is rebuilt from the peeled operands so undecided comparisons land in a normal form.

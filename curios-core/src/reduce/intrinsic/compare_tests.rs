@@ -158,3 +158,29 @@ fn nat_agrees_with_literal_ordering() {
         }
     }
 }
+
+// A value compared to an operand it never exceeds: the minuend bounds a difference whatever is subtracted, and a divisor bounds a remainder strictly, `non_zero` having placed it at one or more. The control is the remainder against a value the divisor may equal: `x % (y + 1)` can be `y`, so nothing decides it.
+#[test]
+fn nat_decides_a_value_against_an_operand_it_never_exceeds() {
+    let (x, y) = (sym(0, "x"), sym(1, "y"));
+    let divisor = Nat::rebuild(1u32.into(), y.clone());
+
+    let difference = Term::intrinsic(Intrinsic::nat_sub(x.clone(), y.clone()));
+    let (at_most, _, _) = compare_nat(&mut Inert, difference, x.clone()).expect("reduces");
+    assert_eq!(at_most, Comparison::Le, "`x - y <= x` for every `y`");
+
+    let remainder = Term::intrinsic(Intrinsic::NatRem {
+        dividend: x,
+        divisor: divisor.clone(),
+        non_zero: qed(),
+    });
+    let (below, _, _) = compare_nat(&mut Inert, remainder.clone(), divisor).expect("reduces");
+    assert_eq!(below, Comparison::Lt, "`x % (y + 1) < y + 1` for every `x`");
+
+    let (open, _, _) = compare_nat(&mut Inert, remainder, y).expect("reduces");
+    assert_eq!(
+        open,
+        Comparison::Stuck,
+        "`x % (y + 1)` against `y` is undecided"
+    );
+}
