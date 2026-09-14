@@ -38,22 +38,29 @@ fn std_from_elsewhere() -> RootSource {
     )
 }
 
+/// One edit the census measures: what it is, the file it touches, and the text it leaves there.
+struct Edit {
+    label: &'static str,
+    file: &'static str,
+    edit: fn(&str) -> String,
+}
+
 /// What a question about the standard library costs after an edit to one declaration: the closure the edit reaches and the time each phase takes, for a leaf and for a hub. A measurement, so it reports rather than asserts, and its timings are the profile it was built under.
 #[test]
 #[ignore = "measurement: lowers the standard library and recompiles it over the archive, reporting closure sizes and per-phase timings"]
 fn std_recompile_closure_census() {
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../curios-prelude-archive/std");
-    let edits: [(&str, &str, fn(&str) -> String); 2] = [
-        (
-            "a leaf: a declaration added to /std/Nat",
-            "Nat.crs",
-            |text| format!("{text}\npub let _census_probe(a: Nat) -> Nat =\n    a;\n"),
-        ),
-        (
-            "a hub: the body of /std/Bool/not respelled",
-            "Bool.crs",
-            |text| text.replacen("xor(b, true)", "xor(true, b)", 1),
-        ),
+    let edits = [
+        Edit {
+            label: "a leaf: a declaration added to /std/Nat",
+            file: "Nat.crs",
+            edit: |text| format!("{text}\npub let _census_probe(a: Nat) -> Nat =\n    a;\n"),
+        },
+        Edit {
+            label: "a hub: the body of /std/Bool/not respelled",
+            file: "Bool.crs",
+            edit: |text| text.replacen("xor(b, true)", "xor(true, b)", 1),
+        },
     ];
 
     with_stored(|stored| {
@@ -63,7 +70,7 @@ fn std_recompile_closure_census() {
         let scope = Prefix::over(&roots);
 
         println!("\n=== recompiling /std over the archive ===");
-        for (label, file, edit) in edits {
+        for Edit { label, file, edit } in edits {
             let path = directory.join(file);
             let text = edit(&fs::read_to_string(&path).expect("an authored source"));
             let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
