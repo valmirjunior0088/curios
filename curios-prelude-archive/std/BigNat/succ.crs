@@ -15,19 +15,19 @@ pub let cong_raw(@s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(raw(s), raw(t)) =
     Eq/cong(raw, p);
 
 let raw_nonempty(x: Bits) -> Eq(nonempty(raw(x)), true) =
-    match x: (a) => Eq(nonempty(raw(a)), true)
+    match x
     | b[] => Eq/refl()
     | b[h, .._] => match h | true => Eq/refl() | false => Eq/refl() end
     end;
 
 -- | The successor of a trimmed word is trimmed.
 pub let raw_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(is_trimmed(raw(x)), true) =
-    match x: (a) => Eq(is_trimmed(raw(a)), true)
+    match x
     | b[] => Eq/refl()
     | b[h, ..t] =>
         match h
         | true =>
-            match t: (u) => Eq(is_trimmed(raw(b[1, ..u])), true)
+            match t
             | b[] => Eq/refl()
             | b[th, ..tt] =>
                 is_trimmed_cons(
@@ -36,11 +36,7 @@ pub let raw_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(is_trimmed(raw(x)
                     raw_trimmed(b[th, ..tt], p),
                     raw_nonempty(b[th, ..tt]))
             end
-        | false =>
-            match t: (u) => Eq(is_trimmed(raw(b[0, ..u])), true)
-            | b[] => Eq/refl()
-            | b[_, .._] => p
-            end
+        | false => match t | b[] => Eq/refl() | b[_, .._] => p end
         end
     end;
 
@@ -73,14 +69,14 @@ pub let raw_inj(
     pz: Eq(is_trimmed(z), true),
     p: Eq(raw(y), raw(z)),
 ) -> Eq(y, z) =
-    match y: (b) => Eq(b, z)
+    match y
     | b[] =>
-        match z: (d) => Eq(b[], d)
+        match z
         | b[] => Eq/refl()
         | b[zh, ..zt] => match raw_inj_absurd(zh, zt, pz, p) end
         end
     | b[yh, ..yt] =>
-        match z: (d) => Eq(b[yh, ..yt], d)
+        match z
         | b[] => match raw_inj_absurd(yh, yt, py, Eq/sym(p)) end
         | b[zh, ..zt] =>
             match yh

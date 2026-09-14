@@ -4,13 +4,9 @@ use /std/BigNat/{is_trimmed, trim, xor3, maj3};
 use /std/BigPos/{is_cons, trim_head_non_zero, trim_head_true};
 
 let raw_cons(x: Bits, y: Bits, c: Bool, ne: is_cons(x)) -> is_cons(BigNat/add/raw(x, y, c)) =
-    match x: (r) => is_cons(BigNat/add/raw(r, y, c))
+    match x
     | b[] => match ne end
-    | b[xh, ..xt] =>
-        match y: (yy) => is_cons(BigNat/add/raw(b[xh, ..xt], yy, c))
-        | b[] => True/qed()
-        | b[_, .._] => True/qed()
-        end
+    | b[_, .._] => match y | b[] => True/qed() | b[_, .._] => True/qed() end
     end;
 
 let carry_non_zero(x: Bits) -> is_cons(trim(BigNat/add/raw(b[], x, true))) =

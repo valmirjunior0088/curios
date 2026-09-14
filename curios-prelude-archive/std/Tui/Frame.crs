@@ -8,14 +8,14 @@ pub let Frame(w: Nat, h: Nat) -> Type =
 
 -- Pad with `fill` or cut, whichever the count calls for: fitting a frame into a box is this at both axes.
 let padded(@T: Type, fill: T, m: Nat) -> (List(T)) -> List(T) =
-    match m: (_) => (List(T)) -> List(T)
+    match m
     | 0 => (_) => []
     | _ + 1; ih => (l) => match l | [] => [fill, ..ih([])] | [h, ..t] => [h, ..ih(t)] end
     end;
 
 -- Either arm adds exactly one element to a run the hypothesis already counted, so the count is the one asked for whatever the input was.
 let padded_len(@T: Type, fill: T, m: Nat) -> (l: List(T)) -> Vec/Counted(padded(fill, m)(l), m) =
-    match m: (k) => (l: List(T)) -> Vec/Counted(padded(fill, k)(l), k)
+    match m
     | 0 => (_) => Eq/refl()
     | _ + 1; ih =>
         (l) =>

@@ -419,7 +419,7 @@ let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCar
     let last_of = List/last(occurrences);
     let read_with(v: Value, s: Str) -> Result(Failure, v.A) =
         Result/map_failure(v.read(s), (reason) => Failure/bad_value(name, reason));
-    match k: (k2) => Result(Failure, KindCarrier(k2))
+    match k
     | flag() => Result/success(match occurrences | [] => false | [_, .._] => true end)
     | option(v, presence) =>
         match presence: (p) =>
@@ -449,7 +449,7 @@ let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCar
     end;
 
 let fill(spec: List(Arg), slots: List(List(Str))) -> Result(Failure, Values(spec)) =
-    match spec: (s) => Result(Failure, Values(s))
+    match spec
     | [] => Result/success(Values/nil())
     | [a, ..more] =>
         let here = Option/unwrap_or(List/try_get(slots, 0), no_occurrences);

@@ -20,9 +20,7 @@ pub let recurse(
     x: A,
     acc: Accessible(R, x),
 ) -> P(x) =
-    match acc: (w, _) => P(w)
-    | intro(@w, below) => step(w, (y, r) => recurse(P, step, y, below(y, r)))
-    end;
+    match acc | intro(@w, below) => step(w, (y, r) => recurse(P, step, y, below(y, r))) end;
 
 let lt_below(k: Nat, n: Nat, le: Le(n, k)) -> Accessible((a: Nat, b: Nat) => Nat/Lt(a, b), n) =
     match k

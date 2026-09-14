@@ -34,12 +34,12 @@ let add_combine_l(
     v: Bits,
     c: Bool,
 ) -> Eq(trim(add/raw(combine(h, w), v, c)), trim(add/raw(b[h, ..w], v, c))) =
-    match w: (a) => Eq(trim(add/raw(combine(h, a), v, c)), trim(add/raw(b[h, ..a], v, c)))
+    match w
     | b[] =>
         match h
         | true => Eq/refl()
         | false =>
-            match v: (b) => Eq(trim(add/raw(b[], b, c)), trim(add/raw(b[0], b, c)))
+            match v
             | b[] => match c | true => Eq/refl() | false => Eq/refl() end
             | b[_, .._] => Eq/refl()
             end
@@ -52,10 +52,10 @@ let trim_add_raw_trim_l(
     v: Bits,
     c: Bool,
 ) -> Eq(trim(add/raw(trim(u), v, c)), trim(add/raw(u, v, c))) =
-    match u: (a) => Eq(trim(add/raw(trim(a), v, c)), trim(add/raw(a, v, c)))
+    match u
     | b[] => Eq/refl()
     | b[uh, ..ut] =>
-        match v: (b) => Eq(trim(add/raw(trim(b[uh, ..ut]), b, c)), trim(add/raw(b[uh, ..ut], b, c)))
+        match v
         | b[] =>
             Eq/trans(
                 add_combine_l(uh, trim(ut), b[], c),
@@ -81,13 +81,13 @@ let combine_l(
     w: Bits,
     v: Bits,
 ) -> Eq(trim(raw(combine(h, w), v)), trim(raw(b[h, ..w], v))) =
-    match w: (a) => Eq(trim(raw(combine(h, a), v)), trim(raw(b[h, ..a], v)))
+    match w
     | b[] => match h | true => Eq/refl() | false => Eq/refl() end
     | b[_, .._] => Eq/refl()
     end;
 
 let trim_raw_trim_l(u: Bits, v: Bits) -> Eq(trim(raw(trim(u), v)), trim(raw(u, v))) =
-    match u: (a) => Eq(trim(raw(trim(a), v)), trim(raw(a, v)))
+    match u
     | b[] => Eq/refl()
     | b[uh, ..ut] =>
         match uh
@@ -106,7 +106,7 @@ let trim_raw_trim_l(u: Bits, v: Bits) -> Eq(trim(raw(trim(u), v)), trim(raw(u, v
     end;
 
 let trim_raw_trim_r(u: Bits, v: Bits) -> Eq(trim(raw(u, trim(v))), trim(raw(u, v))) =
-    match u: (a) => Eq(trim(raw(a, trim(v))), trim(raw(a, v)))
+    match u
     | b[] => Eq/refl()
     | b[uh, ..ut] =>
         match uh
@@ -154,7 +154,7 @@ let trim_add_raw_r_cong(
         Eq/trans(cong_trim(add/cong_raw_r(u, p, c)), trim_add_raw_trim_r(u, t, c)));
 
 let trim_zero_r(y: Bits) -> Eq(trim(raw(y, b[])), b[]) =
-    match y: (a) => Eq(trim(raw(a, b[])), b[])
+    match y
     | b[] => Eq/refl()
     | b[yh, ..yt] =>
         match yh
@@ -168,7 +168,7 @@ let trim_zero_r(y: Bits) -> Eq(trim(raw(y, b[])), b[]) =
 
 -- | Multiplying by one trims to the same word.
 pub let trim_one_r(x: Bits) -> Eq(trim(raw(x, b[1])), trim(x)) =
-    match x: (a) => Eq(trim(raw(a, b[1])), trim(a))
+    match x
     | b[] => Eq/refl()
     | b[xh, ..xt] =>
         match xh
@@ -180,7 +180,7 @@ pub let trim_one_r(x: Bits) -> Eq(trim(raw(x, b[1])), trim(x)) =
 
 -- | A zero low bit on the right shifts the product.
 pub let trim_bit0_r(x: Bits, y: Bits) -> Eq(trim(raw(x, b[0, ..y])), trim(b[0, ..raw(x, y)])) =
-    match x: (a) => Eq(trim(raw(a, b[0, ..y])), trim(b[0, ..raw(a, y)]))
+    match x
     | b[] => Eq/refl()
     | b[xh, ..xt] =>
         match xh
@@ -194,7 +194,7 @@ pub let trim_bit1_r(
     x: Bits,
     y: Bits,
 ) -> Eq(trim(raw(x, b[1, ..y])), trim(add/raw(x, b[0, ..raw(x, y)], false))) =
-    match x: (a) => Eq(trim(raw(a, b[1, ..y])), trim(add/raw(a, b[0, ..raw(a, y)], false)))
+    match x
     | b[] => Eq/sym(cong_trim(add/raw_zero_l(b[0])))
     | b[xh, ..xt] =>
         match xh
@@ -218,7 +218,7 @@ pub let trim_bit1_r(
 
 -- | `raw` is commutative up to trim.
 pub let trim_comm(x: Bits, y: Bits) -> Eq(trim(raw(x, y)), trim(raw(y, x))) =
-    match x: (a) => Eq(trim(raw(a, y)), trim(raw(y, a)))
+    match x
     | b[] => Eq/sym(trim_zero_r(y))
     | b[xh, ..xt] =>
         match xh
@@ -290,7 +290,7 @@ pub let trim_assoc(
     y: Bits,
     z: Bits,
 ) -> Eq(trim(raw(raw(x, y), z)), trim(raw(x, raw(y, z)))) =
-    match x: (a) => Eq(trim(raw(raw(a, y), z)), trim(raw(a, raw(y, z))))
+    match x
     | b[] => Eq/refl()
     | b[xh, ..xt] =>
         match xh
@@ -418,21 +418,18 @@ pub let pow2_add(
     b: BigNat,
     k: Nat,
 ) -> Eq(pow2(add/add(a, b), k), add/add(pow2(a, k), pow2(b, k))) =
-    match k: (n) => Eq(pow2(add/add(a, b), n), add/add(pow2(a, n), pow2(b, n)))
+    match k
     | 0 => refl_at(add/add(a, b))
     | pred + 1; ih => Eq/trans(cong_dbl(ih), dbl_add(pow2(a, pred), pow2(b, pred)))
     end;
 
 -- | `pow2` of a product moves onto the left factor.
 pub let pow2_mul_l(a: BigNat, b: BigNat, k: Nat) -> Eq(pow2(mul(a, b), k), mul(pow2(a, k), b)) =
-    match k: (n) => Eq(pow2(mul(a, b), n), mul(pow2(a, n), b))
+    match k
     | 0 => refl_at(mul(a, b))
     | pred + 1; ih => Eq/trans(cong_dbl(ih), dbl_mul_l(pow2(a, pred), b))
     end;
 
 -- | Two `pow2`s compose by adding their exponents.
 pub let pow2_compose(a: BigNat, j: Nat, k: Nat) -> Eq(pow2(pow2(a, j), k), pow2(a, j + k)) =
-    match k: (n) => Eq(pow2(pow2(a, j), n), pow2(a, j + n))
-    | 0 => refl_at(pow2(a, j))
-    | _ + 1; ih => cong_dbl(ih)
-    end;
+    match k | 0 => refl_at(pow2(a, j)) | _ + 1; ih => cong_dbl(ih) end;

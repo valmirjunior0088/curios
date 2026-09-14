@@ -23,7 +23,7 @@ struct Split(n: Nat): Type {
 --
 -- The step decides whether the digit has filled. The bump branch discharges its own bound by the arm's refinement, `Lt(d + 1, 256)` being `Lt(d, 255)` after cancellation; the carry branch is where the digit is known to be `255`, which takes both directions of the order — `le_of_not_lt` for the half the guard refuted and the carrier's own bound for the other.
 let split(n: Nat) -> Split(n) =
-    match n: (m) => Split(m)
+    match n
     | 0 => Split { high = 0, low = 0, joined = Eq/refl() }
     | p + 1; prev =>
         match Byte/to_nat(prev.low) < 255

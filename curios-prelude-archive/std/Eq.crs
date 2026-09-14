@@ -8,7 +8,7 @@ pub use Eq/*;
 
 -- | Symmetry.
 pub let sym(@A: Type, @x: A, @y: A, p: Eq(x, y)) -> Eq(y, x) =
-    match p: (s, t, _) => Eq(t, s) | refl(@_) => Eq/refl() end;
+    match p | refl(@_) => Eq/refl() end;
 
 -- | Transitivity.
 pub let trans(@A: Type, @x: A, @y: A, @z: A, p: Eq(x, y), q: Eq(y, z)) -> Eq(x, z) =

@@ -51,11 +51,7 @@ let absorb_eq(
     o: Ordering,
     p: Eq(o, Ordering/eq()),
 ) -> Eq(
-    match o: (_) => Ordering
-    | eq() => Ordering/eq()
-    | lt() => Ordering/lt()
-    | gt() => Ordering/gt()
-    end,
+    match o | eq() => Ordering/eq() | lt() => Ordering/lt() | gt() => Ordering/gt() end,
     Ordering/eq()) =
     Eq/subst(
         (v: Ordering) =>
@@ -67,7 +63,7 @@ let absorb_eq(
 
 -- | A word compares equal to itself.
 pub let raw_refl(x: Bits) -> Eq(raw(x, x), Ordering/eq()) =
-    match x: (a) => Eq(raw(a, a), Ordering/eq())
+    match x
     | b[] => Eq/refl()
     | b[h, ..t] =>
         match h
@@ -81,7 +77,7 @@ let sub_split(
     @E: Ordering,
     p: Eq(match s | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end, Ordering/eq()),
 ) -> Eq(s, Ordering/eq()) =
-    match s: (r) => Eq(r, Ordering/eq())
+    match s
     | eq() => Eq/refl()
     | lt() => match lt_neq_eq(p) end
     | gt() => match gt_neq_eq(p) end
@@ -93,20 +89,12 @@ let cong_cmp_match(
     p: Eq(s, t),
     @E: Ordering,
 ) -> Eq(
-    match s: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
-    match t: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end) =
+    match s | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
+    match t | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end) =
     match p: (u, v, _) =>
         Eq(
-            match u: (_) => Ordering
-            | eq() => E
-            | lt() => Ordering/lt()
-            | gt() => Ordering/gt()
-            end,
-            match v: (_) => Ordering
-            | eq() => E
-            | lt() => Ordering/lt()
-            | gt() => Ordering/gt()
-            end)
+            match u | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
+            match v | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end)
     | refl(@_) => Eq/refl()
     end;
 
@@ -170,14 +158,10 @@ let flip_heads(
 
 -- | Swapping the operands flips the answer.
 pub let raw_flip(x: Bits, y: Bits) -> Eq(raw(y, x), Ordering/flip(raw(x, y))) =
-    match x: (a) => Eq(raw(y, a), Ordering/flip(raw(a, y)))
-    | b[] =>
-        match y: (b) => Eq(raw(b, b[]), Ordering/flip(raw(b[], b)))
-        | b[] => Eq/refl()
-        | b[_, .._] => Eq/refl()
-        end
+    match x
+    | b[] => match y | b[] => Eq/refl() | b[_, .._] => Eq/refl() end
     | b[xh, ..xt] =>
-        match y: (b) => Eq(raw(b, b[xh, ..xt]), Ordering/flip(raw(b[xh, ..xt], b)))
+        match y
         | b[] => Eq/refl()
         | b[yh, ..yt] =>
             Eq/trans(
@@ -216,9 +200,7 @@ let force_lt(
     @s: Ordering,
     @E: Ordering,
     p: Eq(s, Ordering/lt()),
-) -> Eq(
-    match s: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
-    Ordering/lt()) =
+) -> Eq(match s | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end, Ordering/lt()) =
     Eq/subst(
         (v: Ordering) =>
             Eq(
@@ -278,9 +260,7 @@ let reduce_whole(
     p: Eq(
         match raw(a, b) | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
         Ordering/lt()),
-) -> Eq(
-    match s: (_) => Ordering | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end,
-    Ordering/lt()) =
+) -> Eq(match s | eq() => E | lt() => Ordering/lt() | gt() => Ordering/gt() end, Ordering/lt()) =
     Eq/subst(
         (r: Ordering) =>
             Eq(
@@ -318,10 +298,10 @@ let trans_cons(
         raw(xt, zt),
         Ordering/lt()),
 ) -> Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt()) =
-    match s1: (_) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
+    match s1
     | gt() => match gt_neq_lt(reduce_whole(e1, p)) end
     | lt() =>
-        match s2: (_) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
+        match s2
         | gt() => match gt_neq_lt(reduce_whole(e2, q)) end
         | lt() => cons_lt(xh, zh, ih(e1)(e2))
         | eq() =>
@@ -331,7 +311,7 @@ let trans_cons(
                 Eq/subst((w: Bits) => Eq(raw(xt, w), Ordering/lt()), raw_to_eq(yt, zt, e2), e1))
         end
     | eq() =>
-        match s2: (_) => Eq(raw(b[xh, ..xt], b[zh, ..zt]), Ordering/lt())
+        match s2
         | gt() => match gt_neq_lt(reduce_whole(e2, q)) end
         | lt() =>
             cons_lt(

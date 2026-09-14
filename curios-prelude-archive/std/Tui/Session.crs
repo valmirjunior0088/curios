@@ -94,10 +94,10 @@ pub let read(@E: Type, s: Session) -> Async(Option(List(Event(E)))) =
                 let _ = Cell/set(s.rest, x[])!;
                 Async/pure(Option/some([..d.events, ..input/flush(d.rest)]));
             let more = Async/timeout(Duration/of_millis(30), Async/Read/read(Io/stdin, 1024))!;
-            match more: (_) => Async(Option(List(Event(E))))
+            match more
             | none() => settle()
             | some(c) =>
-                match c: (_) => Async(Option(List(Event(E))))
+                match c
                 | chunk(next) =>
                     let settled = input/decode(x[..d.rest, ..next]);
                     let _ = Cell/set(s.rest, settled.rest)!;

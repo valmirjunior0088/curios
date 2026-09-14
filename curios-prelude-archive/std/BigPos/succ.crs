@@ -2,7 +2,7 @@ use /std/{Bits, True, BigNat, BigPos};
 use /std/BigPos/{is_cons};
 
 let raw_cons(x: Bits) -> is_cons(BigNat/succ/raw(x)) =
-    match x: (r) => is_cons(BigNat/succ/raw(r))
+    match x
     | b[] => True/qed()
     | b[xh, .._] => match xh | true => True/qed() | false => True/qed() end
     end;

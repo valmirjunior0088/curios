@@ -21,7 +21,7 @@ pub let raw(x: Bits, y: Bits, carry: Bool) -> Bits =
     end;
 
 let raw_zero_r(x: Bits) -> Eq(raw(x, b[], false), x) =
-    match x: (a) => Eq(raw(a, b[], false), a)
+    match x
     | b[] => Eq/refl()
     | b[h, ..t] =>
         match h
@@ -32,7 +32,7 @@ let raw_zero_r(x: Bits) -> Eq(raw(x, b[], false), x) =
 
 -- | The empty word with no carry is a left identity.
 pub let raw_zero_l(y: Bits) -> Eq(raw(b[], y, false), y) =
-    match y: (b) => Eq(raw(b[], b, false), b)
+    match y
     | b[] => Eq/refl()
     | b[h, ..t] =>
         match h
@@ -42,7 +42,7 @@ pub let raw_zero_l(y: Bits) -> Eq(raw(b[], y, false), y) =
     end;
 
 let raw_succ_r(x: Bits) -> Eq(raw(x, b[], true), succ/raw(x)) =
-    match x: (a) => Eq(raw(a, b[], true), succ/raw(a))
+    match x
     | b[] => Eq/refl()
     | b[h, ..t] =>
         match h
@@ -52,7 +52,7 @@ let raw_succ_r(x: Bits) -> Eq(raw(x, b[], true), succ/raw(x)) =
     end;
 
 let raw_succ_l(y: Bits) -> Eq(raw(b[], y, true), succ/raw(y)) =
-    match y: (b) => Eq(raw(b[], b, true), succ/raw(b))
+    match y
     | b[] => Eq/refl()
     | b[h, ..t] =>
         match h
@@ -67,10 +67,7 @@ let raw_nonempty_l(
     y: Bits,
     c: Bool,
 ) -> Eq(nonempty(raw(b[xh, ..xt], y, c)), true) =
-    match y: (b) => Eq(nonempty(raw(b[xh, ..xt], b, c)), true)
-    | b[] => Eq/refl()
-    | b[_, .._] => Eq/refl()
-    end;
+    match y | b[] => Eq/refl() | b[_, .._] => Eq/refl() end;
 
 let raw_nonempty_r(
     x: Bits,
@@ -78,10 +75,7 @@ let raw_nonempty_r(
     yt: Bits,
     c: Bool,
 ) -> Eq(nonempty(raw(x, b[yh, ..yt], c)), true) =
-    match x: (a) => Eq(nonempty(raw(a, b[yh, ..yt], c)), true)
-    | b[] => Eq/refl()
-    | b[_, .._] => Eq/refl()
-    end;
+    match x | b[] => Eq/refl() | b[_, .._] => Eq/refl() end;
 
 -- | The sum of two trimmed words is trimmed.
 pub let raw_trimmed(
@@ -91,14 +85,14 @@ pub let raw_trimmed(
     px: Eq(is_trimmed(x), true),
     py: Eq(is_trimmed(y), true),
 ) -> Eq(is_trimmed(raw(x, y, c)), true) =
-    match x: (a) => Eq(is_trimmed(raw(a, y, c)), true)
+    match x
     | b[] =>
         match c
         | true => Eq/trans(cong_is_trimmed(raw_succ_l(y)), succ/raw_trimmed(y, py))
         | false => Eq/trans(cong_is_trimmed(raw_zero_l(y)), py)
         end
     | b[xh, ..xt] =>
-        match y: (b) => Eq(is_trimmed(raw(b[xh, ..xt], b, c)), true)
+        match y
         | b[] =>
             match c
             | true =>
@@ -108,9 +102,9 @@ pub let raw_trimmed(
             | false => Eq/trans(cong_is_trimmed(raw_zero_r(b[xh, ..xt])), px)
             end
         | b[yh, ..yt] =>
-            match xt: (u) => Eq(is_trimmed(raw(b[xh, ..u], b[yh, ..yt], c)), true)
+            match xt
             | b[] =>
-                match yt: (v) => Eq(is_trimmed(raw(b[xh], b[yh, ..v], c)), true)
+                match yt
                 | b[] =>
                     match xh
                     | true =>
@@ -128,7 +122,7 @@ pub let raw_trimmed(
                         raw_nonempty_r(b[], a2, b2, maj3(xh, yh, c)))
                 end
             | b[a2, ..b2] =>
-                match yt: (v) => Eq(is_trimmed(raw(b[xh, a2, ..b2], b[yh, ..v], c)), true)
+                match yt
                 | b[] =>
                     is_trimmed_cons(
                         xor3(xh, yh, c),
@@ -267,14 +261,14 @@ let cong_raw_c(
 
 -- | `raw` is commutative.
 pub let raw_comm(x: Bits, y: Bits, c: Bool) -> Eq(raw(x, y, c), raw(y, x, c)) =
-    match x: (a) => Eq(raw(a, y, c), raw(y, a, c))
+    match x
     | b[] =>
-        match y: (b) => Eq(raw(b[], b, c), raw(b, b[], c))
+        match y
         | b[] => refl_at(raw(b[], b[], c))
         | b[yh, ..yt] => raw_swap_step(b[], yt, false, yh, c)
         end
     | b[xh, ..xt] =>
-        match y: (b) => Eq(raw(b[xh, ..xt], b, c), raw(b, b[xh, ..xt], c))
+        match y
         | b[] => raw_swap_step(xt, b[], xh, false, c)
         | b[yh, ..yt] => raw_swap_step(xt, yt, xh, yh, c)
         end
@@ -314,9 +308,9 @@ pub let cong_raw_r(
 
 -- | A carry in is the successor of the sum without it.
 pub let raw_carry_spec(x: Bits, y: Bits) -> Eq(raw(x, y, true), succ/raw(raw(x, y, false))) =
-    match x: (a) => Eq(raw(a, y, true), succ/raw(raw(a, y, false)))
+    match x
     | b[] =>
-        match y: (b) => Eq(raw(b[], b, true), succ/raw(raw(b[], b, false)))
+        match y
         | b[] => Eq/refl()
         | b[yh, ..yt] =>
             match yh
@@ -325,7 +319,7 @@ pub let raw_carry_spec(x: Bits, y: Bits) -> Eq(raw(x, y, true), succ/raw(raw(x, 
             end
         end
     | b[xh, ..xt] =>
-        match y: (b) => Eq(raw(b[xh, ..xt], b, true), succ/raw(raw(b[xh, ..xt], b, false)))
+        match y
         | b[] =>
             match xh
             | true => cong_cons2(refl_at(false), raw_carry_spec(xt, b[]))
@@ -353,9 +347,9 @@ pub let raw_succ_out_l(
     v: Bits,
     c: Bool,
 ) -> Eq(raw(succ/raw(u), v, c), succ/raw(raw(u, v, c))) =
-    match u: (a) => Eq(raw(succ/raw(a), v, c), succ/raw(raw(a, v, c)))
+    match u
     | b[] =>
-        match v: (b) => Eq(raw(succ/raw(b[]), b, c), succ/raw(raw(b[], b, c)))
+        match v
         | b[] => match c | true => Eq/refl() | false => Eq/refl() end
         | b[vh, ..vt] =>
             match vh
@@ -374,7 +368,7 @@ pub let raw_succ_out_l(
     | b[uh, ..ut] =>
         match uh
         | true =>
-            match v: (b) => Eq(raw(succ/raw(b[1, ..ut]), b, c), succ/raw(raw(b[1, ..ut], b, c)))
+            match v
             | b[] =>
                 match c
                 | true =>
@@ -404,7 +398,7 @@ pub let raw_succ_out_l(
                 end
             end
         | false =>
-            match v: (b) => Eq(raw(succ/raw(b[0, ..ut]), b, c), succ/raw(raw(b[0, ..ut], b, c)))
+            match v
             | b[] =>
                 match c
                 | true => cong_cons2(refl_at(false), raw_carry_spec(ut, b[]))
@@ -433,9 +427,9 @@ pub let raw_succ_out_r(
     v: Bits,
     c: Bool,
 ) -> Eq(raw(u, succ/raw(v), c), succ/raw(raw(u, v, c))) =
-    match v: (b) => Eq(raw(u, succ/raw(b), c), succ/raw(raw(u, b, c)))
+    match v
     | b[] =>
-        match u: (a) => Eq(raw(a, succ/raw(b[]), c), succ/raw(raw(a, b[], c)))
+        match u
         | b[] => match c | true => Eq/refl() | false => Eq/refl() end
         | b[uh, ..ut] =>
             match uh
@@ -454,7 +448,7 @@ pub let raw_succ_out_r(
     | b[vh, ..vt] =>
         match vh
         | true =>
-            match u: (a) => Eq(raw(a, succ/raw(b[1, ..vt]), c), succ/raw(raw(a, b[1, ..vt], c)))
+            match u
             | b[] =>
                 match c
                 | true =>
@@ -484,7 +478,7 @@ pub let raw_succ_out_r(
                 end
             end
         | false =>
-            match u: (a) => Eq(raw(a, succ/raw(b[0, ..vt]), c), succ/raw(raw(a, b[0, ..vt], c)))
+            match u
             | b[] =>
                 match c
                 | true => cong_cons2(refl_at(false), raw_carry_spec(b[], vt))
@@ -529,11 +523,11 @@ pub let raw_assoc(
     c1: Bool,
     c2: Bool,
 ) -> Eq(raw(raw(x, y, c1), z, c2), raw(x, raw(y, z, c1), c2)) =
-    match x: (xv) => Eq(raw(raw(xv, y, c1), z, c2), raw(xv, raw(y, z, c1), c2))
+    match x
     | b[] =>
-        match y: (yv) => Eq(raw(raw(b[], yv, c1), z, c2), raw(b[], raw(yv, z, c1), c2))
+        match y
         | b[] =>
-            match z: (zv) => Eq(raw(raw(b[], b[], c1), zv, c2), raw(b[], raw(b[], zv, c1), c2))
+            match z
             | b[] =>
                 match c1
                 | true => match c2 | true => Eq/refl() | false => Eq/refl() end
@@ -1121,7 +1115,7 @@ pub let raw_assoc(
 
 -- | Adding one is the successor.
 pub let raw_one_r(x: Bits) -> Eq(raw(x, b[1], false), succ/raw(x)) =
-    match x: (a) => Eq(raw(a, b[1], false), succ/raw(a))
+    match x
     | b[] => Eq/refl()
     | b[h, ..t] =>
         match h
@@ -1156,14 +1150,14 @@ pub let raw_cancel_l(
         | false => Eq/trans(Eq/sym(raw_zero_l(y)), Eq/trans(p, raw_zero_l(z)))
         end
     | b[xh, ..xt] =>
-        match y: (b) => Eq(b, z)
+        match y
         | b[] =>
-            match z: (d) => Eq(b[], d)
+            match z
             | b[] => Eq/refl()
             | b[zh, ..zt] => match raw_cancel_absurd(xh, xt, zh, zt, c, pz, p) end
             end
         | b[yh, ..yt] =>
-            match z: (d) => Eq(b[yh, ..yt], d)
+            match z
             | b[] => match raw_cancel_absurd(xh, xt, yh, yt, c, py, Eq/sym(p)) end
             | b[zh, ..zt] =>
                 cong_cons2(

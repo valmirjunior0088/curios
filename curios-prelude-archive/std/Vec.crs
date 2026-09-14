@@ -86,10 +86,7 @@ pub let map(@A: Type, @B: Type, @n: Nat, f: (A) -> B, v: Vec(A, n)) -> Vec(B, n)
 
 -- A run of one value is as long as the count it was built from, which the fold's own shape gives.
 let replicate_len(@T: Type, n: Nat, x: T) -> Counted(List/replicate(n, x), n) =
-    match n: (k) => Counted(List/replicate(k, x), k)
-    | 0 => Eq/refl()
-    | _ + 1; ih => Eq/cong((w: Nat) => w + 1, ih)
-    end;
+    match n | 0 => Eq/refl() | _ + 1; ih => Eq/cong((w: Nat) => w + 1, ih) end;
 
 -- | `n` copies of `x`.
 pub let replicate(@T: Type, n: Nat, x: T) -> Vec(T, n) =

@@ -18,14 +18,11 @@ pub let le_one_of_positive(@n: Nat, p: Lt(0, n)) -> Nat/Le(1, n) =
 
 -- | `a <= b` by induction gives `a < b + 1`.
 pub let succ_of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Lt(a, b + 1) =
-    match p: (x, y, _) => Lt(x, y + 1)
-    | z(@_) => True/qed()
-    | s(@_, @_, prev) => succ_of_ind(prev)
-    end;
+    match p | z(@_) => True/qed() | s(@_, @_, prev) => succ_of_ind(prev) end;
 
 -- | `a + 1 <= b` by induction gives `a < b`.
 pub let of_ind_succ(@a: Nat, @b: Nat, p: Ind(a + 1, b)) -> Lt(a, b) =
-    match p: (x, y, _) => Lt(x - 1, y) | s(@_, @_, prev) => succ_of_ind(prev) end;
+    match p | s(@_, @_, prev) => succ_of_ind(prev) end;
 
 -- | `a < b` as the inductive `Ind(a, b)`: the strict bound weakened into the family a proof can recurse over.
 pub let ind_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Ind(a, b) =

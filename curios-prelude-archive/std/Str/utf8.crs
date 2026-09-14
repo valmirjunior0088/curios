@@ -2,7 +2,7 @@ use /std/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /std/{Char, Nat, Byte, Bytes, Eq, Option, False, True};
 
 let seq(@s: Scan, @a: Bytes, @b: Bytes, va: Utf8(s, a), vb: Valid(b)) -> Utf8(s, x[..a, ..b]) =
-    match va: (q, x, _) => Utf8(q, x[..x, ..b])
+    match va
     | stop() => vb
     | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
     end;
@@ -41,7 +41,7 @@ pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
 
 -- | `drop_width` never passes the end.
 pub let drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, b), Bytes/len(b)) =
-    match b: (v) => Nat/Le(drop_width(n, s, v), Bytes/len(v))
+    match b
     | x[] => True/qed()
     | x[h, ..t] =>
         match s

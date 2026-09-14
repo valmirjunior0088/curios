@@ -28,18 +28,14 @@ let combine_is_trimmed(
     t: Bits,
     p: Eq(is_trimmed(t), true),
 ) -> Eq(is_trimmed(combine(head, t)), true) =
-    match t: (u) => Eq(is_trimmed(combine(head, u)), true)
-    | b[] =>
-        match head: (h) => Eq(is_trimmed(combine(h, b[])), true)
-        | true => Eq/refl()
-        | false => Eq/refl()
-        end
+    match t
+    | b[] => match head | true => Eq/refl() | false => Eq/refl() end
     | b[_, .._] => p
     end;
 
 -- | `trim` answers a trimmed word.
 pub let trim_is_trimmed(bits: Bits) -> Eq(is_trimmed(trim(bits)), true) =
-    match bits: (r) => Eq(is_trimmed(trim(r)), true)
+    match bits
     | b[] => Eq/refl()
     | b[head, ..tail]; ih => combine_is_trimmed(head, trim(tail), ih)
     end;
@@ -73,7 +69,7 @@ let tail_is_trimmed(
     tail: Bits,
     p: Eq(is_trimmed(b[head, ..tail]), true),
 ) -> Eq(is_trimmed(tail), true) =
-    match tail: (t) => Eq(is_trimmed(t), true) | b[] => Eq/refl() | b[_, .._] => p end;
+    match tail | b[] => Eq/refl() | b[_, .._] => p end;
 
 -- | The certificate as a decided equation.
 pub let is_trimmed_of_canonical(bits: Bits, c: Canonical(bits)) -> Eq(is_trimmed(bits), true) =
@@ -174,8 +170,8 @@ pub let cong_cons2(
     @t2: Bits,
     pt: Eq(t1, t2),
 ) -> Eq(b[h1, ..t1], b[h2, ..t2]) =
-    match ph: (a, b, _) => Eq(b[a, ..t1], b[b, ..t2])
-    | refl(@_) => match pt: (a2, b2, _) => Eq(b[h1, ..a2], b[h1, ..b2]) | refl(@_) => Eq/refl() end
+    match ph
+    | refl(@_) => match pt | refl(@_) => Eq/refl() end
     end;
 
 -- | Congruence of `combine` in its tail.
@@ -221,19 +217,19 @@ let is_trimmed_cons(
     pt: Eq(is_trimmed(u), true),
     pn: Eq(nonempty(u), true),
 ) -> Eq(is_trimmed(b[head, ..u]), true) =
-    match u: (v) => Eq(is_trimmed(b[head, ..v]), true)
+    match u
     | b[] => match false_neq_true(pn) end
     | b[_, .._] => pt
     end;
 
 -- | A trimmed word is its own trim.
 pub let trim_of_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
-    match x: (a) => Eq(trim(a), a)
+    match x
     | b[] => Eq/refl()
     | b[h, ..t] =>
-        match t: (u) => Eq(trim(b[h, ..u]), b[h, ..u])
+        match t
         | b[] =>
-            match h: (g) => Eq(trim(b[g]), b[g])
+            match h
             | true => Eq/refl()
             | false => match false_neq_true(p) end
             end
