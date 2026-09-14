@@ -23,9 +23,10 @@ use {
     super::Kernel,
     curios_core::{
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
-        Instance, InstanceHead, Layer, Let, Match, MatchResult, Nat, Proj, Rec, RecGroup,
-        ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit, accelerable,
-        instantiate_universe_levels_scoped, reduce_closed, reduce_intrinsic,
+        Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Proj, Rec,
+        RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit,
+        accelerable, dual_comparison, instantiate_universe_levels_scoped, reduce_closed,
+        reduce_intrinsic,
     },
     curios_utilities::recurse,
 };
@@ -130,6 +131,10 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
             term = refined;
             continue;
         }
+        if let Some(refined) = refined_dual(kernel, &term) {
+            term = refined;
+            continue;
+        }
 
         let step = match Term::unwrap_or_clone(term) {
             Subterm::Intrinsic(intrinsic) => {
@@ -174,6 +179,16 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     }
 }
 
+/// A stuck comparison under a guard recorded on its dual spelling: the false arm of `n < m` records `n < m` alone, and `m <= n` is that fact read the other way, so a miss on a comparison's written spelling is retried on its dual with the literal negated. Lookup only — the equation stays recorded as written.
+fn refined_dual(kernel: &Kernel, term: &Term) -> Option<Term> {
+    let Subterm::Intrinsic(intrinsic) = &**term else {
+        return None;
+    };
+    let dual = Term::intrinsic(dual_comparison(intrinsic)?);
+    let literal = kernel.refinement_of(&dual)?.as_bool()?;
+    Some(Term::intrinsic(Intrinsic::Bool(!literal)))
+}
+
 /// The refinement probe at a stuck reduct: the written spelling first, then the reduced one, settling reduced spellings until one answers or none is left to settle.
 ///
 /// **Why the escalation is here and not at the other probe point.** An equation is recorded under the scrutinee as written, and reduction reaches the scrutinee's *reduct* — `Le(s + l, len b)` instantiated at a call arrives as `Le(0 + n, len b)` and folds to a spelling the written key does not carry. The point before decomposition sees terms on the way in, where the written spelling is what matches; this point sees the forms reduction produced, which is exactly where a spelling that exists only as a reduct can appear.
@@ -185,19 +200,38 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
     if let Some(refined) = kernel.refinement_of(value) {
         return Ok(Some(refined));
     }
+    if let Some(refined) = refined_dual(kernel, value) {
+        return Ok(Some(refined));
+    }
 
     if !value.has_local_free() || !kernel.has_refinements() {
         return Ok(None);
     }
 
     let canonical = canonical_operands(kernel, value)?;
+    // The dual under the reduced spelling too: a guard dispatched through a witness is recorded under the projection it elaborated to and answers only once its reduct is settled, so the dual is asked of the settled reducts exactly as the written spelling was asked of the record.
+    let dual = match &*canonical {
+        Subterm::Intrinsic(intrinsic) => dual_comparison(intrinsic).map(Term::intrinsic),
+        _ => None,
+    };
 
     loop {
         if let Some(refined) = kernel.refinement_of_reduct(&canonical) {
             return Ok(Some(refined));
         }
+        if let Some(dual) = &dual
+            && let Some(literal) = kernel
+                .refinement_of_reduct(dual)
+                .and_then(|refined| refined.as_bool())
+        {
+            return Ok(Some(Term::intrinsic(Intrinsic::Bool(!literal))));
+        }
 
-        let Some((index, key)) = kernel.unasked_refinement(&canonical) else {
+        let unasked = kernel.unasked_refinement(&canonical).or_else(|| {
+            dual.as_ref()
+                .and_then(|dual| kernel.unasked_refinement(dual))
+        });
+        let Some((index, key)) = unasked else {
             return Ok(None);
         };
 

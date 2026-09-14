@@ -359,3 +359,26 @@ fn a_reduct_that_drops_a_local_is_still_reached() {
 
     assert_eq!(answered, Ok(nat(0)));
 }
+
+/// A guard's equation is recorded on the guard's written spelling, and the false arm of `n < m` is the fact `m <= n` read the other way: the reducer asks the dual spelling with the literal negated, and the record stays as written.
+#[test]
+fn a_comparison_refined_answers_its_dual_negated() {
+    let mut kernel = kernel();
+    let n = binder(1, "n");
+    let m = binder(2, "m");
+    kernel.assume(&n, &nat_type());
+    kernel.assume(&m, &nat_type());
+    let guard = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), Term::free_var(&m)));
+    let dual = Term::intrinsic(Intrinsic::NatLe(Term::free_var(&m), Term::free_var(&n)));
+
+    kernel.scoped(|kernel| {
+        kernel.refine(guard.clone(), Term::intrinsic(Intrinsic::Bool(false)));
+        let reduced = whnf(kernel, dual.clone()).expect("a dual probe reduces");
+        assert_eq!(reduced.as_bool(), Some(true));
+        assert_eq!(
+            kernel.refinement_of(&dual),
+            None,
+            "the record stays as written"
+        );
+    });
+}

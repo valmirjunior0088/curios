@@ -154,3 +154,23 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
     // `A` is 65, so the depth is 5: the cons cells carry 0..4 and `stop` carries 5.
     assert_eq!(io.output(), b"15");
 }
+
+// The false arm of `n < m` is the fact `m <= n`, read the other way. The arm records its equation on the guard as written, and the goal spells the dual, so the reducer asks the dual spelling with the literal negated — in both checkers, since the program certifies.
+#[test]
+fn the_false_arm_of_a_comparison_proves_its_dual() {
+    let source = r#"
+        use /std/{Nat, Option, True};
+
+        let at_least(n : Nat, m : Nat) -> Option(Nat/Le(m, n)) =
+            match n < m
+            | true => Option/none()
+            | false => Option/some(True/qed())
+            end;
+
+        let shown(n : Nat, m : Nat) -> Nat =
+            match at_least(n, m) | some(_) => n | none() => m end;
+
+        /std/print(Nat/to_str(shown(7, 3)))
+        "#;
+    assert_eq!(run(source), b"7");
+}

@@ -157,6 +157,17 @@ fn dual_of_negated(
     let Subterm::Intrinsic(comparison) = &*negated else {
         return Ok(None);
     };
+    let Some(dual) = dual_comparison(comparison) else {
+        return Ok(None);
+    };
+    reducer.spend(Cost::term(1))?;
+    Ok(Some(dual))
+}
+
+/// The comparison that is true exactly when `comparison` is false, on a total order: `a < b` against `b <= a`, `a == b` against `a != b`, and on `Bool` an equality against the `xor` its inequality lowers to. `None` for anything else — a `Flt` comparison, whose negation against the NaN is not the mirror, or a `xor` with a literal operand, which is a negation and not a comparison.
+///
+/// Two readers: [`align_comparisons`], which spells a negated probe as its dual, and both reducers' refinement probes, which ask a case equation recorded on a guard's written spelling under the guard's dual as well — the false arm of `n < m` is the fact `m <= n`, read the other way.
+pub fn dual_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
     let dual = match comparison {
         Intrinsic::NatLt(a, b) => Intrinsic::NatLe(b.clone(), a.clone()),
         Intrinsic::NatLe(a, b) => Intrinsic::NatLt(b.clone(), a.clone()),
@@ -178,10 +189,9 @@ fn dual_of_negated(
         Intrinsic::BoolXor(a, b) if a.as_bool().is_none() && b.as_bool().is_none() => {
             Intrinsic::BoolEql(a.clone(), b.clone())
         }
-        _ => return Ok(None),
+        _ => return None,
     };
-    reducer.spend(Cost::term(1))?;
-    Ok(Some(dual))
+    Some(dual)
 }
 
 pub fn reduce_intrinsic(

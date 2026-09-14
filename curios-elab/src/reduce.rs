@@ -16,8 +16,8 @@ use {
         Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Layer,
         Let, Match, MatchResult, Metavar, Nat, One, Proj, Rec, RecGroup, ReduceError, Reducer,
         Scope, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var,
-        Variant, Visit, accelerable, instantiate_universe_levels_scoped, project_erased_universes,
-        reduce_closed, reduce_intrinsic,
+        Variant, Visit, accelerable, dual_comparison, instantiate_universe_levels_scoped,
+        project_erased_universes, reduce_closed, reduce_intrinsic,
     },
     curios_utilities::recurse,
 };
@@ -662,6 +662,21 @@ fn canonical_key(context: &mut Context, key: &Term, original: &Term) -> Result<T
     Ok(canonical)
 }
 
+/// A stuck comparison under a guard recorded on its dual spelling: the false arm of `n < m` refines `n < m` and nothing else, and `m <= n` is that fact read the other way, so a miss on a comparison key is retried on its dual with the literal negated. Lookup only — the store keeps every key as written, which is what the comparison record protects.
+fn refined_dual(context: &Context, term: &Term) -> Option<Term> {
+    let Subterm::Intrinsic(intrinsic) = &**term else {
+        return None;
+    };
+    let dual = Term::intrinsic(dual_comparison(intrinsic)?);
+    if !context.scrutinee_head_refined(dual.head_key()?) {
+        return None;
+    }
+    let literal = context
+        .scrutinee_reduct(&shallow_scrutinee(context, &dual))?
+        .as_bool()?;
+    Some(Term::intrinsic(Intrinsic::Bool(!literal)))
+}
+
 /// The refinement probe for an intrinsic the loop has just folded — the second look every *other* arm of the dispatch gets for free.
 ///
 /// **Why one arm needs its own.** Each arm returns a [`Reduce`]: on progress it `Continue`s, the loop comes back around, and the probe at the top runs again on the new term. That is how a refinement keeps up with reduction. This arm answers a normal form in one step and breaks, so without this the store is asked exactly once, about a term whose operands have not been reduced yet.
@@ -677,7 +692,7 @@ fn refined_after_fold(context: &mut Context, folded: &Term) -> Result<Option<Ter
     };
 
     if !context.scrutinee_head_refined(head) {
-        return Ok(None);
+        return Ok(refined_dual(context, folded));
     }
 
     // Suppression needs no arm: `scrutinee_reduct` withholds under it, and breaking on the folded term leaves standing the neutral a suppressed key wants.
@@ -767,6 +782,13 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                         }
                     }
                 }
+            }
+
+            // The dual spelling, when the written one has no key: the false arm of `n < m` recorded `n < m` alone, and `m <= n` is the same fact read the other way. Lookup only — every key stays as written.
+            if context.has_scrutinee_refinements()
+                && let Some(value) = refined_dual(context, &term)
+            {
+                break 'step Reduce::Continue(value);
             }
 
             match Term::unwrap_or_clone(term) {
