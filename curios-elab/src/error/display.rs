@@ -176,12 +176,35 @@ impl fmt::Display for Displayed<'_> {
                 }
                 Ok(())
             }
-            Error::NotAFunctionType { expected } => {
+            Error::NotAFunctionType { expected, argument } => {
                 let expected = expected.spelled(spelling);
                 write!(
                     f,
                     "introduced a lambda where the expected type is not a function type\n  expected: {expected}"
-                )
+                )?;
+                if let Some(site) = argument {
+                    let parameter = match &site.parameter {
+                        Some(name) => format!("`{name}`, "),
+                        None => String::new(),
+                    };
+                    write!(
+                        f,
+                        "\n  checked as {parameter}the {} argument of '{}'",
+                        site.ordinal, site.function
+                    )?;
+                    if let Some((name, ordinal)) = &site.function_typed {
+                        let name = match name {
+                            Some(name) => format!("`{name}`, "),
+                            None => String::new(),
+                        };
+                        write!(
+                            f,
+                            "\n  '{}' takes a function as {name}its {ordinal} argument",
+                            site.function
+                        )?;
+                    }
+                }
+                Ok(())
             }
             Error::NotATuple { head_type } => {
                 let head_type = head_type.spelled(spelling);

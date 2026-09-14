@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::{SettleTier, exhausted_bound},
+    crate::{ArgumentSite, SettleTier, exhausted_bound},
 };
 
 pub(super) fn elaborate_func_type(
@@ -268,10 +268,14 @@ pub(super) fn elaborate_apply(
     // The pendings this apply minted: (slot, placeholder, written term), consulted by the fallback pin below.
     let mut pendings: Vec<(usize, MetavarId, Term)> = Vec::new();
     let mut tele = original.clone();
-    for plicity in ft.plicities() {
+    let mut explicit_seen = 0usize;
+    for (index, plicity) in ft.plicities().iter().enumerate() {
         let Telescope::Cons(ty, rest) = tele else {
             unreachable!("plicities parallel the telescope");
         };
+        if *plicity == Plicity::Explicit {
+            explicit_seen += 1;
+        }
         let written = match plicity {
             Plicity::Explicit => Some(plain.pop_front().expect("arity checked above")),
             Plicity::Implicit => marked.pop_front(),
@@ -310,7 +314,14 @@ pub(super) fn elaborate_apply(
                     pendings.push((elaborated.len(), placeholder, written));
                     stand_in
                 } else {
-                    check(context, &written, ty.clone())?
+                    check(context, &written, ty.clone()).map_err(|error| {
+                        error.at_argument(argument_site(
+                            &func_label,
+                            explicit_seen,
+                            &rest,
+                            &ft.plicities()[index + 1..],
+                        ))
+                    })?
                 }
             }
             None => {
@@ -377,6 +388,38 @@ pub(super) fn elaborate_apply(
 }
 
 /// The metavariables the result `expect` can pin, as seen from one slot: the suffix telescope's terminal with this and every later binder opened as a fresh variable. Only prefix-born metavariables can occur in a slot's own domain — domains open over the prefix — so fresh-var opening of the unvisited suffix is decision-equivalent to a full-argument pre-read of the output, computed only for postponement candidates instead of once per application.
+/// Where the argument just checked sits: the parameter it filled, its ordinal among the explicit arguments, and the next explicit parameter of function type, if any — the slot a lambda handed in here was likely meant for.
+fn argument_site(
+    function: &str,
+    explicit_seen: usize,
+    rest: &Scope<One, Telescope<Term>>,
+    later_plicities: &[Plicity],
+) -> ArgumentSite {
+    let mut function_typed = None;
+    let mut cursor = rest.body();
+    let mut explicit = explicit_seen;
+    for plicity in later_plicities {
+        let Telescope::Cons(ty, next) = cursor else {
+            break;
+        };
+        if *plicity == Plicity::Explicit {
+            explicit += 1;
+            if matches!(&**ty, Subterm::FuncType(_)) {
+                function_typed =
+                    Some((next.first_hint().map(str::to_string), ordinal(explicit - 1)));
+                break;
+            }
+        }
+        cursor = next.body();
+    }
+    ArgumentSite {
+        function: function.to_string(),
+        parameter: rest.first_hint().map(str::to_string),
+        ordinal: ordinal(explicit_seen - 1),
+        function_typed,
+    }
+}
+
 fn result_metavars_from(
     context: &mut Context,
     rest: &Scope<One, Telescope<Term>>,

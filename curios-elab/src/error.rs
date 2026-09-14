@@ -84,6 +84,19 @@ pub enum Underivable {
     },
 }
 
+/// Where an argument was checked, for a report that names the parameter it filled.
+#[derive(Debug)]
+pub struct ArgumentSite {
+    /// The applied function, as the call spells it.
+    pub function: String,
+    /// The parameter the argument filled, when the telescope names it.
+    pub parameter: Option<String>,
+    /// The argument's ordinal among the explicit arguments, spelled (`1st`).
+    pub ordinal: String,
+    /// A later explicit parameter whose type is a function type, with its name and ordinal — the slot a misplaced lambda was meant for.
+    pub function_typed: Option<(Option<String>, String)>,
+}
+
 #[derive(Debug)]
 pub enum Error {
     ReduceExhausted {
@@ -156,8 +169,10 @@ pub enum Error {
         head_type: Box<Term>,
         reduced: Box<Term>,
     },
+    /// A lambda checked against a type that is no function type. `argument` says where, when the lambda was an argument: the parameter it filled and, when the callee takes a function somewhere later, which parameter that is — the report a reader who swapped two arguments needs.
     NotAFunctionType {
         expected: Box<Term>,
+        argument: Option<Box<ArgumentSite>>,
     },
     NotATuple {
         head_type: Box<Term>,
@@ -638,6 +653,25 @@ impl Error {
     pub(crate) fn not_a_function_type<U: Into<Term>>(expected: U) -> Self {
         Self::NotAFunctionType {
             expected: Box::new(expected.into()),
+            argument: None,
+        }
+    }
+
+    /// Name the argument position `self` arose at. Only a lambda against a non-function type takes it — that is the refusal an argument in the wrong position produces — and only once, through a span wrapper if one is already on.
+    pub(crate) fn at_argument(self, site: ArgumentSite) -> Self {
+        match self {
+            Self::NotAFunctionType {
+                expected,
+                argument: None,
+            } => Self::NotAFunctionType {
+                expected,
+                argument: Some(Box::new(site)),
+            },
+            Self::Located { span, error } => Self::Located {
+                span,
+                error: Box::new(error.at_argument(site)),
+            },
+            error => error,
         }
     }
 
@@ -1359,7 +1393,7 @@ impl Error {
             | Self::NotListType { head_type }
             | Self::NotBinType { head_type, .. }
             | Self::NotAInductType { head_type } => out.push(head_type),
-            Self::NotAFunctionType { expected } | Self::NotATupleType { expected } => {
+            Self::NotAFunctionType { expected, .. } | Self::NotATupleType { expected } => {
                 out.push(expected)
             }
             Self::NotAStructType { found } => out.push(found),
