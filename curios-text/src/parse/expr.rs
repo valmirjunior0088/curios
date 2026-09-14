@@ -2,7 +2,7 @@ use super::*;
 
 // A plain-label binding with a mandatory type: every top-level member, and every member of a local group after the first.
 pub(super) fn parse_binding<'a>() -> Parser<'a, (Label, LetSignature)> {
-    parse_declared_label().and(parse_let_signature())
+    declared(parse_let_signature())
 }
 
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
@@ -51,7 +51,7 @@ pub(super) fn parse_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
 }
 
 // The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the type-required and the local (type-optional) signature parsers.
-pub(super) fn parse_func_let_signature<'a>() -> Parser<'a, LetSignature> {
+pub(super) fn parse_func_let_signature<'a>(owns_body: bool) -> Parser<'a, LetSignature> {
     parse_literal("(")
         .and_keep(sep_by0_trailing(parse_func_sugar_param, || {
             parse_literal(",")
@@ -60,7 +60,7 @@ pub(super) fn parse_func_let_signature<'a>() -> Parser<'a, LetSignature> {
         .and_drop(parse_literal("->"))
         .and(lazy(parse_term))
         .and_drop(parse_literal("="))
-        .and(lazy(parse_term))
+        .and(body(owns_body))
         .map(|((params, output), body)| LetSignature::Func {
             params,
             output,
@@ -69,15 +69,23 @@ pub(super) fn parse_func_let_signature<'a>() -> Parser<'a, LetSignature> {
 }
 
 // The plain `: T = body` form with a mandatory type.
-pub(super) fn parse_required_name_signature<'a>() -> Parser<'a, LetSignature> {
+pub(super) fn parse_required_name_signature<'a>(owns_body: bool) -> Parser<'a, LetSignature> {
     parse_literal(":")
         .and_keep(lazy(parse_term))
         .and_drop(parse_literal("="))
-        .and(lazy(parse_term))
+        .and(body(owns_body))
         .map(|(type_, body)| LetSignature::Name {
             type_: Some(type_),
             body,
         })
+}
+
+/// A definition's body, committed when the signature before it could have been nothing but a declaration's: past `let name : T =` or `let name(params) -> T =` the local reading is the same text failing the same way, so a mistake in the body is the item's own diagnosis rather than a reason to try the tail — which is what lets the item loop recover past it. A local `let` keeps its body recoverable, since the term grammar around it decides its diagnoses.
+fn body<'a>(owned: bool) -> Parser<'a, Term> {
+    match owned {
+        true => commit(lazy(parse_term)),
+        false => lazy(parse_term),
+    }
 }
 
 // The plain `(: T)? = body` form: the type may be omitted (inferred from `body`).
@@ -95,8 +103,8 @@ pub(super) fn parse_optional_name_signature<'a>() -> Parser<'a, LetSignature> {
 //
 // The local spelling, `= body` with no type, is refused by the rule rather than by the token: both forms above fail at the `=` without consuming it, so the report was the sugar's `Expected '('`, which names one of the two tokens that would have served and reads as a demand for a parameter list. The `=` is consumed before the failure so this arm is the furthest and wins [`Parser::or`]'s tie-break, as `refuse_declaration_head` does, and read raw so the caret underlines the `=` alone.
 pub(super) fn parse_let_signature<'a>() -> Parser<'a, LetSignature> {
-    parse_func_let_signature()
-        .or(parse_required_name_signature())
+    parse_func_let_signature(true)
+        .or(parse_required_name_signature(true))
         .or(mark().and_drop(take_exact("=")).flat_map(|start| {
             fail_from(
                 &start,
@@ -107,7 +115,7 @@ pub(super) fn parse_let_signature<'a>() -> Parser<'a, LetSignature> {
 
 // Like `parse_let_signature`, but the plain form's type annotation may be omitted. Used only by local `let`, where the body's type can be inferred.
 pub(super) fn parse_local_let_signature<'a>() -> Parser<'a, LetSignature> {
-    parse_func_let_signature().or(parse_optional_name_signature())
+    parse_func_let_signature(false).or(parse_optional_name_signature())
 }
 
 // `let x = e; tail` / `let x : T = e; tail` / `let (x, y) = e; tail` / `let f(p : T, …) -> R = …; tail` / `let f … and g …; tail`. The binder accepts a tuple/struct pattern (see `Pattern`), desugaring at lowering into a fresh binder plus a projection-`let` chain.

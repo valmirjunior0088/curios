@@ -12,8 +12,8 @@ use {
     },
     curios_ersd::lower_to_cont,
     curios_text::{
-        Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, UnitSource, into_core_unit,
-        into_core_with_prelude,
+        BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, UnitSource,
+        into_core_unit, into_core_with_prelude,
     },
     curios_unit::{Prefix, Unit},
     curios_utilities::{Qualifier, Report, SyntaxRegistry},
@@ -91,6 +91,34 @@ impl CompileError {
         }
     }
 
+    /// `failures` — hard ones, reported first — ahead of what this error carries; the classification follows, a goal batch behind a failure being mixed.
+    pub fn after_failures(self, mut failures: Vec<Report>) -> Self {
+        let count = failures.len();
+        match self {
+            Self::Incomplete(goals) => {
+                failures.extend(goals);
+                Self::Mixed {
+                    reports: failures,
+                    failures: count,
+                }
+            }
+            Self::Failure(more) => {
+                failures.extend(more);
+                Self::Failure(failures)
+            }
+            Self::Mixed {
+                reports,
+                failures: hard,
+            } => {
+                failures.extend(reports);
+                Self::Mixed {
+                    reports: failures,
+                    failures: count + hard,
+                }
+            }
+        }
+    }
+
     /// A hard failure about nothing in particular — a store, a manifest, a backend — which is what every message that arrives as plain text is.
     pub fn failure(message: impl Into<String>) -> Self {
         Self::Failure(vec![Report::unlocated(message)])
@@ -116,6 +144,22 @@ impl From<CompileError> for String {
     fn from(error: CompileError) -> Self {
         error.to_string()
     }
+}
+
+/// What a unit holding items the parser could not read compiles to: a refusal listing every broken item, ahead of whatever elaboration said of the rest — a broken item is refused as a refused item is, and the reader fixing it is owed the goals and refusals beside it in the same run. Nothing past elaboration is reached, so no unit is judged, erased or filed with a hole in it.
+pub(crate) fn with_broken<T>(
+    broken: &[BrokenItem],
+    result: Result<T, CompileError>,
+) -> Result<T, CompileError> {
+    if broken.is_empty() {
+        return result;
+    }
+
+    let reports = broken.iter().map(|item| item.report.clone()).collect();
+    Err(match result {
+        Ok(_) => CompileError::Failure(reports),
+        Err(error) => error.after_failures(reports),
+    })
 }
 
 /// Put `module` to the independent kernel with `scope` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built.
@@ -201,6 +245,7 @@ pub fn typecheck_measured(
         universe_floor,
         unbound,
         imports,
+        broken,
         ..
     } = into_core_with_prelude(entrypoint, loader, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
@@ -216,24 +261,33 @@ pub fn typecheck_measured(
 
     let mut context = Context::new(budget, *syntax);
     context.set_imports(imports.clone());
+    context.set_broken(
+        broken
+            .iter()
+            .filter_map(|item| item.declares.clone())
+            .collect(),
+    );
     let FinalizedModule {
         module,
         obligations,
         ..
-    } = elaborate_and_zonk_unit_reporting(
-        &mut context,
-        Established::over(&cores),
-        &lowered,
-        metavars,
-        universe_floor,
-        core_mode,
-        Tail::Written,
-    )
-    .map_err(|error| {
-        CompileError::of(&error, |member| {
-            member.reports_with_hints(&lowered, &cores, syntax, &unbound, &imports)
-        })
-    })?;
+    } = with_broken(
+        &broken,
+        elaborate_and_zonk_unit_reporting(
+            &mut context,
+            Established::over(&cores),
+            &lowered,
+            metavars,
+            universe_floor,
+            core_mode,
+            Tail::Written,
+        )
+        .map_err(|error| {
+            CompileError::of(&error, |member| {
+                member.reports_with_hints(&lowered, &cores, syntax, &unbound, &imports)
+            })
+        }),
+    )?;
 
     let obligations = obligations
         .into_iter()
@@ -381,6 +435,7 @@ where
         imports,
         lints: _,
         reached: _,
+        broken,
     } = lowered;
 
     // A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules; `type_: None` on the synthesized entry routes it into the `Io({})` expectation below like an authored tail without an annotation. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
@@ -417,20 +472,29 @@ where
 
     let mut context = Context::new(budget, *syntax);
     context.set_imports(imports.clone());
-    let (module, core_type) = elaborate_and_zonk_unit(
-        &mut context,
-        Established::over(&cores),
-        &lowered,
-        metavars,
-        universe_floor,
-        core_mode,
-        elab_tail,
-    )
-    .map_err(|error| {
-        CompileError::of(&error, |member| {
-            member.reports_with_hints(&lowered, &cores, syntax, &unbound, &imports)
-        })
-    })?;
+    context.set_broken(
+        broken
+            .iter()
+            .filter_map(|item| item.declares.clone())
+            .collect(),
+    );
+    let (module, core_type) = with_broken(
+        &broken,
+        elaborate_and_zonk_unit(
+            &mut context,
+            Established::over(&cores),
+            &lowered,
+            metavars,
+            universe_floor,
+            core_mode,
+            elab_tail,
+        )
+        .map_err(|error| {
+            CompileError::of(&error, |member| {
+                member.reports_with_hints(&lowered, &cores, syntax, &unbound, &imports)
+            })
+        }),
+    )?;
 
     observe(Stage::CoreElab(&module));
 
@@ -605,26 +669,30 @@ pub fn compile_unit(
 
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
-    let (core, _body_type) = elaborate_and_zonk_unit(
-        &mut context,
-        Established::over(&cores),
-        lowered.core(),
-        lowered.metavariable_floor(),
-        lowered.universe_floor(),
-        Mode::Infer,
-        Tail::Written,
-    )
-    .map_err(|error| {
-        CompileError::of(&error, |member| {
-            member.reports_with_hints(
-                lowered.core(),
-                &cores,
-                syntax,
-                lowered.unbound(),
-                lowered.imports(),
-            )
-        })
-    })?;
+    context.set_broken(lowered.broken_names());
+    let (core, _body_type) = with_broken(
+        lowered.broken(),
+        elaborate_and_zonk_unit(
+            &mut context,
+            Established::over(&cores),
+            lowered.core(),
+            lowered.metavariable_floor(),
+            lowered.universe_floor(),
+            Mode::Infer,
+            Tail::Written,
+        )
+        .map_err(|error| {
+            CompileError::of(&error, |member| {
+                member.reports_with_hints(
+                    lowered.core(),
+                    &cores,
+                    syntax,
+                    lowered.unbound(),
+                    lowered.imports(),
+                )
+            })
+        }),
+    )?;
 
     let core = curios_core::Zonked::project(&core)
         .map_err(|refusal| CompileError::failure(refusal.to_string()))?;

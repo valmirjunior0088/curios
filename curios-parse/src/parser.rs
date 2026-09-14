@@ -142,6 +142,14 @@ where
     Parser::new(move |state| parser.parse(state).map_err(|error| error.uncommit()))
 }
 
+/// Names what `parser`'s failure is about — the declaration whose head an alternative had read, or `None` to say it is about nothing nameable — for a caller that recovers past the failure and needs to say what was there. The outermost name wins, since each wrapper restates it on the way out: a failure inside an inline body belongs to the item enclosing it, and a body's own local binding is not what a top-level item declared.
+pub fn tagging<'a, T>(tag: Option<String>, parser: Parser<'a, T>) -> Parser<'a, T>
+where
+    T: 'a,
+{
+    Parser::new(move |state| parser.parse(state).map_err(|error| error.tag(tag)))
+}
+
 /// Runs the parser and hands its output back at the position it started from, consuming nothing. A positive look-ahead — the dual of [`not_ahead`](crate::not_ahead) — for a grammar that must inspect the next word before choosing among alternatives none of which may be denied their turn at it.
 pub fn look_ahead<'a, T>(parser: Parser<'a, T>) -> Parser<'a, T>
 where

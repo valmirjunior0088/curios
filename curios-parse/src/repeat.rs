@@ -1,4 +1,53 @@
-use super::{Parser, ParserError, ParserState};
+use {
+    super::{Parser, ParserError, ParserState},
+    curios_utilities::Span,
+};
+
+/// One item of a [`recover`]ed repetition: what parsed, or what broke and the text the loop skipped to resume.
+#[derive(Debug)]
+pub enum Recovered<T> {
+    Item(T),
+    Broken { error: ParserError, span: Span },
+}
+
+/// [`many0`] that resynchronizes past a committed failure instead of aborting on it. The failure is kept as [`Recovered::Broken`] with the span from where the item began to where parsing resumed, and `anchor` says where that is: given the source text and the offset the failure was reported at, the offset of the next place an item could begin, or `None` for nowhere, which ends the loop at the end of the input. An uncommitted failure ends the loop exactly as [`many0`]'s does, so a caller's tail grammar still gets its turn and the item-or-tail ambiguity gains no heuristic. A candidate anchor is never trusted: the item parser runs at it, and a failure there that does not commit only ends the loop. Progress is forced past the item's first character, so a failure reported at the item's own start cannot resume at itself.
+pub fn recover<'a, T, F, A>(mut f: F, anchor: A) -> Parser<'a, Vec<Recovered<T>>>
+where
+    T: 'a,
+    F: FnMut() -> Parser<'a, T> + 'a,
+    A: Fn(&str, usize) -> Option<usize> + 'a,
+{
+    Parser::new(move |mut state| {
+        let mut items = Vec::new();
+
+        loop {
+            let start = state.offset;
+            match f().parse(state) {
+                Ok((item, next_state)) => {
+                    if start == next_state.offset {
+                        panic!("Infinite repetition");
+                    }
+
+                    items.push(Recovered::Item(item));
+                    state = next_state;
+                }
+                Err(error) if error.is_uncaught() => {
+                    let text = &state.source.text;
+                    let past_start = start + text[start..].chars().next().map_or(0, char::len_utf8);
+                    let from = error.offset.max(past_start);
+                    let resume = anchor(text, from).unwrap_or(text.len());
+
+                    items.push(Recovered::Broken {
+                        error,
+                        span: Span::new(state.source.clone(), start, resume),
+                    });
+                    state = state.jump_to(resume);
+                }
+                Err(_) => return Ok((items, state)),
+            }
+        }
+    })
+}
 
 /// The one loop behind [`many0`]/[`many1`]: accumulate until the first recoverable failure, panicking on zero-width progress; `require_first` decides whether an empty result reports that failure instead of an empty list.
 fn many_core<'a, T, F>(mut f: F, require_first: bool) -> Parser<'a, Vec<T>>

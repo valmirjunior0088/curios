@@ -511,8 +511,8 @@ impl Reader<'_> {
     ) {
         match item {
             TopItem::Mod(_) => {}
-            // An import is not a declaration, and a test is not part of the interface.
-            TopItem::Use(_) | TopItem::Test(_) => {}
+            // An import is not a declaration, a test is not part of the interface, and a broken item is read by nobody.
+            TopItem::Use(_) | TopItem::Test(_) | TopItem::Broken(_) => {}
             TopItem::Let(members) => {
                 for member in members.iter().filter(|member| member.vis_pub) {
                     let binders = sugar_binders(match &member.signature {
@@ -890,8 +890,12 @@ fn declares(item: &TopItem, label: &str) -> bool {
             .iter()
             .any(|member| named(member.vis_pub, member.label.as_str())),
         TopItem::Foreign(declaration) => named(declaration.vis_pub, declaration.label.as_str()),
-        // A witness is anonymous, and neither a module, an import nor a test declares a name a `use` can select.
-        TopItem::Witness(_) | TopItem::Mod(_) | TopItem::Use(_) | TopItem::Test(_) => false,
+        // A witness is anonymous, and neither a module, an import, a test nor a broken item declares a name a `use` can select.
+        TopItem::Witness(_)
+        | TopItem::Mod(_)
+        | TopItem::Use(_)
+        | TopItem::Test(_)
+        | TopItem::Broken(_) => false,
     }
 }
 

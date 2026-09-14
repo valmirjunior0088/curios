@@ -56,7 +56,9 @@ use {
     super::*,
     curios_abi::ForeignStore,
     curios_core::Bound,
-    curios_utilities::{Entropy, Mount, Plicity, Qualifier, RootKind, Span, SyntaxRegistry},
+    curios_utilities::{
+        Entropy, Mount, Plicity, Qualifier, Report, RootKind, Span, SyntaxRegistry,
+    },
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -188,13 +190,36 @@ pub struct PreparedText {
     lints: Vec<Lint>,
     /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_spelled`.
     reached: BTreeSet<Qualifier>,
+    /// Every item the parser could not read, in reading order — see [`BrokenItem`]. Empty for any unit that compiles.
+    broken: Vec<BrokenItem>,
     /// This unit's interface for its consumers, when its resolver marked a mount as documented — built here, as the last thing the lowering does, so it travels with the unit. See `document`.
     documentation: Option<Documentation>,
+}
+
+/// An item the parser could not read, as the lowering carries it: the parser's report, and the name its head declared, registered so a reference to it resolves to this name — which the elaborator withholds, as it withholds every dependent of a refusal — rather than reporting as unbound. `None` where the head did not parse as far as a name, whose references then report as the unbound names they are.
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub struct BrokenItem {
+    pub declares: Option<curios_core::Global>,
+    pub report: Report,
 }
 
 impl PreparedText {
     pub fn lints(&self) -> &[Lint] {
         &self.lints
+    }
+
+    /// Every item the parser could not read. A unit holding one is refused whatever elaboration said of the rest, and what it said is reported beside these.
+    pub fn broken(&self) -> &[BrokenItem] {
+        &self.broken
+    }
+
+    /// The names the broken items declared — what the elaborator withholds dependents of.
+    pub fn broken_names(&self) -> BTreeSet<curios_core::Global> {
+        self.broken
+            .iter()
+            .filter_map(|item| item.declares.clone())
+            .collect()
     }
 
     pub fn reached(&self) -> &BTreeSet<Qualifier> {
@@ -371,6 +396,12 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
             TopItem::Foreign(f) => info.insert_binding(&f.label, f.vis_pub)?,
             // A test binds its name privately — referable within its subtree, colliding with a like-named sibling, never `pub`.
             TopItem::Test(t) => info.insert_binding(&t.label, false)?,
+            // A broken item binds the name its head declared, public so a reference from anywhere resolves to it and is withheld rather than reported unbound; nothing can use the binding.
+            TopItem::Broken(b) => {
+                if let Some(label) = &b.declares {
+                    info.insert_binding(label, true)?;
+                }
+            }
             _ => {}
         }
     }
@@ -449,12 +480,18 @@ fn process_items(
     witnesses: &mut BTreeSet<curios_core::Global>,
     tests: &mut Vec<curios_core::Global>,
     foreigns: &mut ForeignStore,
+    broken: &mut Vec<BrokenItem>,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
     for top_item in top_items {
         match top_item {
             TopItem::Mod(m) => {
                 context.insert_scope(m.label.to_string(), context.prefixed(&m.label))?
+            }
+            TopItem::Broken(b) => {
+                if let Some(label) = &b.declares {
+                    context.insert_binding(label.to_string(), context.prefixed(label))?;
+                }
             }
             TopItem::Let(labels) => {
                 for l in labels {
@@ -494,6 +531,14 @@ fn process_items(
 
     for top_item in top_items {
         match top_item {
+            // Nothing lowers: the item is carried as its report, under the name it declared, for the compile boundary to refuse the unit by and the elaborator to withhold dependents of.
+            TopItem::Broken(b) => broken.push(BrokenItem {
+                declares: b
+                    .declares
+                    .as_ref()
+                    .map(|label| curios_core::Global::Authored(context.prefixed(label))),
+                report: b.report.clone(),
+            }),
             TopItem::Mod(mod_item) => match &mod_item.module {
                 Some(module) => {
                     process_items(
@@ -506,6 +551,7 @@ fn process_items(
                         witnesses,
                         tests,
                         foreigns,
+                        broken,
                         modules,
                     )?;
                 }
@@ -524,6 +570,7 @@ fn process_items(
                         witnesses,
                         tests,
                         foreigns,
+                        broken,
                         modules,
                     )?;
                 }
@@ -1556,6 +1603,7 @@ fn into_core_unit_within(
     let mut witnesses = BTreeSet::new();
     let mut tests = Vec::new();
     let mut foreigns = ForeignStore::new();
+    let mut broken = Vec::new();
 
     // The compilation root's own items — the entry's, and none for a unit with no entrypoint — then one pass per prefix this unit claims. Exactly one of the two does any work, because owning the empty prefix is what makes a unit the entry.
     process_items(
@@ -1568,6 +1616,7 @@ fn into_core_unit_within(
         &mut witnesses,
         &mut tests,
         &mut foreigns,
+        &mut broken,
         &modules,
     )?;
 
@@ -1588,6 +1637,7 @@ fn into_core_unit_within(
             &mut witnesses,
             &mut tests,
             &mut foreigns,
+            &mut broken,
             &modules,
         )?;
     }
@@ -1677,6 +1727,7 @@ fn into_core_unit_within(
         universe_floor: universes.count(),
         unbound: unbound.into_inner(),
         imports: imports.into_inner(),
+        broken,
         lints: ordered(
             unused_imports(sites.into_inner())
                 .into_iter()
@@ -1728,6 +1779,8 @@ pub struct LoweredEntry {
     pub imports: curios_core::Imports,
     /// See [`PreparedText::lints`].
     pub lints: Vec<Lint>,
+    /// See [`PreparedText::broken`].
+    pub broken: Vec<BrokenItem>,
     /// See [`PreparedText::reached`].
     pub reached: BTreeSet<Qualifier>,
 }
@@ -1762,5 +1815,6 @@ pub fn into_core_with_prelude(
         imports: unit.imports,
         lints: unit.lints,
         reached: unit.reached,
+        broken: unit.broken,
     })
 }

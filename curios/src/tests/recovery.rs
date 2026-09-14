@@ -1,10 +1,19 @@
 //! What a run reports when more than one declaration is refused: every independent refusal, nothing from a declaration that reaches a refused one, and both erasure obligations when both fail.
 
 use {
-    super::error,
+    super::{error, run_entrypoint},
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, compile_tests_with_units},
+    curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
+
+/// Run `source` as standard input is run — the reading that recovers past a broken item — expecting a refusal, and return its report.
+fn supplied_error(source: &str) -> String {
+    let (entrypoint, loader, _) =
+        Entrypoint::supplied("<stdin>", source).expect("the program parses, holes and all");
+    let (system, _io) = MockHost::builder().build();
+    run_entrypoint(&entrypoint, &loader, system).expect_err("the fixture is refused")
+}
 
 /// Compile `source` as its own test program, expecting a refusal, and return its report.
 fn tests_error(source: &str) -> String {
@@ -183,4 +192,30 @@ fn both_erasure_obligations_are_reported_together() {
 
     assert!(report.contains("is a type position"), "{report}");
     assert!(report.contains("is a proof position"), "{report}");
+}
+
+/// A declaration the parser could not read is a refusal like any other: reported once, with its dependents withheld.
+#[test]
+fn a_dependent_of_a_broken_declaration_reports_nothing_of_its_own() {
+    let report = supplied_error(
+        "use /std/{Nat};\n\nlet _a : Nat = ;\nlet _b : Nat = _a;\n\n/std/print(\"\")\n",
+    );
+
+    assert!(report.contains("expected a term"), "{report}");
+    assert!(!report.contains("_b"), "{report}");
+    assert!(!report.contains("unbound"), "{report}");
+}
+
+#[test]
+fn a_broken_declaration_is_reported_beside_a_refusal_after_it() {
+    let report = supplied_error(
+        "use /std/{Nat};\n\nlet _a : Nat = ;\nlet _c : Nat = true;\n\n/std/print(\"\")\n",
+    );
+
+    assert!(report.contains("expected a term"), "{report}");
+    assert!(report.contains("while elaborating /_c:"), "{report}");
+    assert!(
+        report.find("expected a term") < report.find("while elaborating"),
+        "the parse failure first: {report}"
+    );
 }

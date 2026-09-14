@@ -13,6 +13,8 @@ pub struct ParserError {
     from: Option<usize>,
     message: String,
     source: Rc<Source>,
+    /// What the failure was about, when an alternative said so with [`tagging`](crate::tagging): the declaration whose head it had read. Read by a caller recovering past the failure, to say what was there; nothing else consults it.
+    tag: Option<String>,
 }
 
 impl ParserError {
@@ -26,7 +28,27 @@ impl ParserError {
             from: None,
             message: message.into(),
             source: state.source.clone(),
+            tag: None,
         }
+    }
+
+    /// Where the parser stopped, as a byte offset into its source.
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    /// Whether an alternative [`commit`](crate::commit)ted to this failure — the diagnosis, rather than a guess a sibling may still improve on.
+    pub fn is_committed(&self) -> bool {
+        self.fatal
+    }
+
+    pub(crate) fn tag(self, tag: Option<String>) -> Self {
+        Self { tag, ..self }
+    }
+
+    /// What the failure was about, when an alternative said so — see [`tagging`](crate::tagging).
+    pub fn tagged(&self) -> Option<&str> {
+        self.tag.as_deref()
     }
 
     pub(crate) fn from(self, start: usize) -> Self {

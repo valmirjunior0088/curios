@@ -2028,6 +2028,8 @@ pub(crate) fn print_top_item(item: TopItem) -> Printer {
         TopItem::Witness(w) => print_top_witness(w),
         TopItem::Foreign(f) => print_top_foreign(f),
         TopItem::Test(t) => print_top_test(t),
+        // Verbatim: there is no tree to print, and the formatter never reaches here, since it refuses a module it could not read whole.
+        TopItem::Broken(b) => pure(b.text().to_string()),
     }
 }
 

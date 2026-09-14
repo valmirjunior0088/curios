@@ -5,7 +5,7 @@
 //! **The diff is over lowered items, modulo what a lowering mints.** A lowering numbers every written `Type` and every elided annotation in lowering order across the unit, so the same declaration lowered after different neighbours carries different ids at the same positions; [`Term::equal_modulo_metas`] identifies them by position instead. Everything else compares exactly — spans and binder names excepted, as always — so a moved declaration is not a change and a renamed parameter is not one either.
 
 use {
-    crate::{CompileError, globals, kernel_refusal},
+    crate::{CompileError, globals, kernel_refusal, with_broken},
     curios_cert::{Verdict, recheck_module_verdicts},
     curios_core::{
         Bound, ConceptDecl, Global, InductDecl, Item, MetaRenaming, Module, StructDecl, Telescope,
@@ -49,30 +49,34 @@ pub fn compile_unit_over(
 
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
-    let (core, _body_type) = elaborate_and_zonk_unit_over(
-        &mut context,
-        Established::over(&cores),
-        Recompile {
-            reused: &reused,
-            closure: &changed,
-            lowered: lowered.core(),
-        },
-        lowered.metavariable_floor(),
-        lowered.universe_floor(),
-        Mode::Infer,
-        Tail::Written,
-    )
-    .map_err(|error| {
-        CompileError::of(&error, |member| {
-            member.reports_with_hints(
-                lowered.core(),
-                &cores,
-                syntax,
-                lowered.unbound(),
-                lowered.imports(),
-            )
-        })
-    })?;
+    context.set_broken(lowered.broken_names());
+    let (core, _body_type) = with_broken(
+        lowered.broken(),
+        elaborate_and_zonk_unit_over(
+            &mut context,
+            Established::over(&cores),
+            Recompile {
+                reused: &reused,
+                closure: &changed,
+                lowered: lowered.core(),
+            },
+            lowered.metavariable_floor(),
+            lowered.universe_floor(),
+            Mode::Infer,
+            Tail::Written,
+        )
+        .map_err(|error| {
+            CompileError::of(&error, |member| {
+                member.reports_with_hints(
+                    lowered.core(),
+                    &cores,
+                    syntax,
+                    lowered.unbound(),
+                    lowered.imports(),
+                )
+            })
+        }),
+    )?;
 
     let core =
         Zonked::project(&core).map_err(|refusal| CompileError::failure(refusal.to_string()))?;

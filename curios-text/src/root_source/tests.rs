@@ -189,7 +189,7 @@ fn a_parse_failure_is_reported_and_leaves_the_last_good_parse_in_place() {
     let good = json(&root);
     good.load(&qualifier).unwrap();
 
-    fs::write(root.join("lib.crs"), "pub mod ;\n").unwrap();
+    fs::write(root.join("lib.crs"), "pub mod parse;\n%%%\n").unwrap();
     let broken = json(&root);
     assert!(matches!(
         broken.load(&qualifier),

@@ -30,6 +30,8 @@ mod match_expr_tests;
 #[cfg(test)]
 mod module_tests;
 #[cfg(test)]
+mod recovery_tests;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod top_level_tests;
@@ -51,8 +53,8 @@ use {
     curios_num::{Floating, Natural},
     curios_parse::{
         Mark, Parser, commit, fail, fail_from, lazy, look_ahead, many0, many1, mark, memoize,
-        not_ahead, preceded_by_space, pure, sep_by0_trailing, sep_by1_trailing, spanned, take_eof,
-        take_exact, take_n, take_while, uncommit,
+        not_ahead, preceded_by_space, pure, sep_by0_trailing, sep_by1_trailing, spanned, tagging,
+        take_eof, take_exact, take_n, take_while, uncommit,
     },
     curios_utilities::{
         Grain, InfixOp, Plicity, Qualifier, Sign, Span, is_identifier_char, is_keyword,
@@ -253,6 +255,13 @@ fn parse_label<'a>() -> Parser<'a, Label> {
 // Uncommitted it was discarded every time. `let match : Nat = 1;` reported at second hand through the struct-pattern alternative, as `path 'match' contains a reserved keyword` with the caret past the word, and `use /std/{match}` reported as `Expected '}', obtained 'm'`, which names the brace for a mistake about a name.
 pub(super) fn parse_declared_label<'a>() -> Parser<'a, Label> {
     parse_label_owning(true)
+}
+
+/// A declared label and what follows it, the failure of the rest named for the label ([`tagging`]): what lets a loop recovering past the item say which declaration broke.
+pub(super) fn declared<'a, T: 'a>(rest: Parser<'a, T>) -> Parser<'a, (Label, T)> {
+    parse_declared_label().flat_map(move |label| {
+        tagging(Some(label.to_string()), rest).map(move |rest| (label, rest))
+    })
 }
 
 fn parse_label_owning<'a>(owns_the_fault: bool) -> Parser<'a, Label> {

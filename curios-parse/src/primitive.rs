@@ -17,6 +17,14 @@ where
     Parser::new(move |state| Err(ParserError::new(state, message)))
 }
 
+/// Always fails with `error`, as it stands — for a caller that read an error out of a recovered repetition and decided the parse as a whole must not survive it.
+pub fn raise<'a, A>(error: ParserError) -> Parser<'a, A>
+where
+    A: 'a,
+{
+    Parser::new(move |_| Err(error))
+}
+
 /// [`fail`] about the text from `start` to the current offset: only the reported span reaches back, and the failure still sits at the current offset, so it commits and ranks in [`Parser::or`]'s tie-break exactly as `fail` would — for a word read and refused, so the caret underlines the word rather than standing after it.
 pub fn fail_from<'a, A, S>(start: &Mark, message: S) -> Parser<'a, A>
 where

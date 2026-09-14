@@ -552,3 +552,17 @@ fn a_goal_beside_a_refusal_keeps_its_goal_severity() {
     assert_eq!(goal.severity, Severity::Goal);
     assert_eq!(goal.report.span.as_ref().unwrap().line_column(), (2, 21));
 }
+
+/// A parse failure inside one declaration is that declaration's record, and the file is read past it: the refusal after it is reported beside it, at its own term.
+#[test]
+fn a_broken_declaration_is_reported_beside_the_declarations_after_it() {
+    let reports = of("let _a : /std/Nat = ;\nlet _c : /std/Nat = true;\n/std/print(\"\")");
+    let [first, second] = reports.as_slice() else {
+        panic!("two records, got {reports:?}");
+    };
+
+    assert_eq!(first.severity, Severity::Error);
+    assert_eq!(first.report.span.as_ref().unwrap().line_column().0, 1);
+    assert_eq!(second.severity, Severity::Error);
+    assert_eq!(second.report.span.as_ref().unwrap().line_column(), (2, 21));
+}

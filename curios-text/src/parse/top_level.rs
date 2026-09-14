@@ -50,12 +50,11 @@ pub(super) fn parse_top_test<'a>(vis_pub: bool) -> Parser<'a, TopItem> {
         true => fail("a test is never `pub`: its name is its report line, not an export"),
         false => pure(()),
     }
-    .and_keep(parse_declared_label())
-    .and(commit(
+    .and_keep(declared(commit(
         parse_literal("=")
             .and_keep(lazy(parse_term))
             .and_drop(parse_literal(";")),
-    ))
+    )))
     .map(|(label, body)| TopItem::Test(TopTest { label, body }))
 }
 
@@ -70,10 +69,18 @@ pub(super) fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, T
     };
 
     member(doc, vis_pub)
-        .and(many0(move || {
-            parse_and_head().flat_map(move |(doc, vis_pub)| commit(member(doc, vis_pub)))
-        }))
-        .and_drop(parse_literal(";"))
+        .flat_map(move |first| {
+            // The item declares what its head declared: a failure anywhere after the first member — a later member, the `;` — is named for the first, whatever a later member's own tag said.
+            let tag = first.label.to_string();
+            tagging(
+                Some(tag),
+                many0(move || {
+                    parse_and_head().flat_map(move |(doc, vis_pub)| commit(member(doc, vis_pub)))
+                })
+                .and_drop(parse_literal(";")),
+            )
+            .map(move |rest| (first, rest))
+        })
         .map(|(first, rest)| iter::once(first).chain(rest).collect())
         .map(TopItem::Let)
 }
@@ -144,18 +151,19 @@ pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
 
 // `foreign name : T;` — a name and a wire signature with no body, bound to a host-provided implementation at link time. Mirrors `parse_top_let`, but ends after the signature instead of parsing `= body`.
 pub(super) fn parse_top_foreign<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopItem> {
-    parse_declared_label()
-        .and_drop(parse_literal(":"))
-        .and(parse_wire_signature())
-        .and_drop(parse_literal(";"))
-        .map(move |(label, signature)| {
-            TopItem::Foreign(TopForeign {
-                doc,
-                vis_pub,
-                label,
-                signature,
-            })
+    declared(
+        parse_literal(":")
+            .and_keep(parse_wire_signature())
+            .and_drop(parse_literal(";")),
+    )
+    .map(move |(label, signature)| {
+        TopItem::Foreign(TopForeign {
+            doc,
+            vis_pub,
+            label,
+            signature,
         })
+    })
 }
 
 pub(super) fn parse_top_mod<'a>(
@@ -164,21 +172,25 @@ pub(super) fn parse_top_mod<'a>(
     start: Mark,
 ) -> Parser<'a, TopItem> {
     parse_declared_label().flat_map(move |label| {
-        many0(parse_top_item)
-            .and_drop(parse_keyword("end"))
-            .map(|items| Some(Module { items }))
-            .or(parse_literal(";").map(|()| None))
-            // The span reaches back to the mark the dispatch took before `pub`, since the head it covers was consumed there.
-            .and(mark())
-            .map(move |(module, end)| {
-                TopItem::Mod(TopMod {
-                    doc,
-                    span: Some(start.to(&end)),
-                    vis_pub,
-                    label,
-                    module,
-                })
+        // Named for nothing: a module declares a scope rather than a binding, and a broken item inside its body is the module's, not the binding the body's item named.
+        tagging(
+            None,
+            many0(parse_top_item)
+                .and_drop(parse_keyword("end"))
+                .map(|items| Some(Module { items })),
+        )
+        .or(parse_literal(";").map(|()| None))
+        // The span reaches back to the mark the dispatch took before `pub`, since the head it covers was consumed there.
+        .and(mark())
+        .map(move |(module, end)| {
+            TopItem::Mod(TopMod {
+                doc,
+                span: Some(start.to(&end)),
+                vis_pub,
+                label,
+                module,
             })
+        })
     })
 }
 
@@ -376,68 +388,75 @@ pub(super) fn parse_induct_arity<'a>() -> Parser<'a, InductArity> {
 }
 
 pub(super) fn parse_top_induct_body<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopInduct> {
-    parse_declared_label()
-        .and(
-            parse_literal("(")
-                .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
-                .and_drop(parse_literal(")"))
-                .or(pure(vec![])),
-        )
-        // The head's arity: `: (n : Nat) -> Prop` or `: Prop`. The sort is required — there is no implicit `Type`.
-        .and(parse_literal(":").and_keep(parse_induct_arity()))
-        .and(many0(parse_top_induct_case))
-        .flat_map(
-            move |(((label, params), (indices, rep_pub, result_sort)), cases)| {
-                // Targets are required on every case iff the head declares indices, with arity equal to the index telescope's.
-                for case in &cases {
-                    match (&case.target, indices.len()) {
-                        (None, 0) => {}
-                        (None, _) => {
-                            return fail(format!(
-                                "case '{}' of indexed inductive '{label}' must state its \
+    declared(
+        parse_literal("(")
+            .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
+            .and_drop(parse_literal(")"))
+            .or(pure(vec![]))
+            // The head's arity: `: (n : Nat) -> Prop` or `: Prop`. The sort is required — there is no implicit `Type`.
+            .and(parse_literal(":").and_keep(parse_induct_arity()))
+            .and(many0(parse_top_induct_case)),
+    )
+    .flat_map(
+        move |(label, ((params, (indices, rep_pub, result_sort)), cases))| {
+            // Targets are required on every case iff the head declares indices, with arity equal to the index telescope's.
+            for case in &cases {
+                match (&case.target, indices.len()) {
+                    (None, 0) => {}
+                    (None, _) => {
+                        return fail(format!(
+                            "case '{}' of indexed inductive '{label}' must state its \
                              index target: `{}(...) : (...)`",
-                                case.label, case.label,
-                            ));
-                        }
-                        (Some(_), 0) => {
-                            return fail(format!(
-                                "case '{}' states an index target, but inductive '{label}' \
-                             declares no indices",
-                                case.label,
-                            ));
-                        }
-                        (Some(target), arity) if target.len() != arity => {
-                            return fail(format!(
-                                "case '{}' of inductive '{label}' states {} index \
-                             expression(s), but the head declares {arity}",
-                                case.label,
-                                target.len(),
-                            ));
-                        }
-                        _ => {}
+                            case.label, case.label,
+                        ));
                     }
+                    (Some(_), 0) => {
+                        return fail(format!(
+                            "case '{}' states an index target, but inductive '{label}' \
+                             declares no indices",
+                            case.label,
+                        ));
+                    }
+                    (Some(target), arity) if target.len() != arity => {
+                        return fail(format!(
+                            "case '{}' of inductive '{label}' states {} index \
+                             expression(s), but the head declares {arity}",
+                            case.label,
+                            target.len(),
+                        ));
+                    }
+                    _ => {}
                 }
+            }
 
-                pure(TopInduct {
-                    doc,
-                    vis_pub,
-                    rep_pub,
-                    label,
-                    params,
-                    indices,
-                    result_sort,
-                    cases,
-                })
-            },
-        )
+            pure(TopInduct {
+                doc,
+                vis_pub,
+                rep_pub,
+                label,
+                params,
+                indices,
+                result_sort,
+                cases,
+            })
+        },
+    )
 }
 
 pub(super) fn parse_top_induct<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopItem> {
     parse_top_induct_body(doc, vis_pub)
-        .and(many0(|| {
-            parse_and_head().flat_map(|(doc, vis_pub)| parse_top_induct_body(doc, vis_pub))
-        }))
-        .and_drop(parse_keyword("end"))
+        .flat_map(|first| {
+            // Named for the head's family, as a `let` group is for its first member — the `end` included.
+            let tag = first.label.to_string();
+            tagging(
+                Some(tag),
+                many0(|| {
+                    parse_and_head().flat_map(|(doc, vis_pub)| parse_top_induct_body(doc, vis_pub))
+                })
+                .and_drop(parse_keyword("end")),
+            )
+            .map(move |rest| (first, rest))
+        })
         .map(|(first, rest)| TopItem::Induct(iter::once(first).chain(rest).collect()))
 }
 
@@ -457,37 +476,43 @@ fn parse_struct_field<'a>() -> Parser<'a, StructField> {
 
 // One structure of a `struct` item, after its `pub` and keyword: the name, the parameters, the result sort with its own `pub`, and the fields.
 fn parse_struct_member<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopStruct> {
-    parse_declared_label()
-        .and(
-            parse_literal("(")
-                .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
-                .and_drop(parse_literal(")"))
-                .or(pure(vec![])),
-        )
-        // The result sort: `: Type` or `: Prop` after the parameters. Required.
-        .and(parse_literal(":").and_keep(parse_representation_sort()))
-        .and_drop(parse_literal("{"))
-        .and(sep_by0_trailing(parse_struct_field, || parse_literal(",")))
-        .and_drop(parse_literal("}"))
-        .map(
-            move |(((label, params), (rep_pub, result_sort)), fields)| TopStruct {
-                doc,
-                vis_pub,
-                rep_pub,
-                label,
-                params,
-                result_sort,
-                fields,
-            },
-        )
+    declared(
+        parse_literal("(")
+            .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
+            .and_drop(parse_literal(")"))
+            .or(pure(vec![]))
+            // The result sort: `: Type` or `: Prop` after the parameters. Required.
+            .and(parse_literal(":").and_keep(parse_representation_sort()))
+            .and_drop(parse_literal("{"))
+            .and(sep_by0_trailing(parse_struct_field, || parse_literal(",")))
+            .and_drop(parse_literal("}")),
+    )
+    .map(
+        move |(label, ((params, (rep_pub, result_sort)), fields))| TopStruct {
+            doc,
+            vis_pub,
+            rep_pub,
+            label,
+            params,
+            result_sort,
+            fields,
+        },
+    )
 }
 
 // A `struct` item: one structure, or a `struct A … and B …` group whose fields name one another. Each member takes its own `pub`, before `struct` for the first and before `and` for the rest.
 pub(super) fn parse_top_struct<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopItem> {
     parse_struct_member(doc, vis_pub)
-        .and(many0(|| {
-            parse_and_head().flat_map(|(doc, vis_pub)| parse_struct_member(doc, vis_pub))
-        }))
+        .flat_map(|first| {
+            let tag = first.label.to_string();
+            tagging(
+                Some(tag),
+                many0(|| {
+                    parse_and_head().flat_map(|(doc, vis_pub)| parse_struct_member(doc, vis_pub))
+                }),
+            )
+            .map(move |rest| (first, rest))
+        })
         .map(|(first, rest)| iter::once(first).chain(rest).collect())
         .map(TopItem::Struct)
 }
@@ -537,37 +562,43 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
 
 // One concept of a `concept` item, after its `pub` and keyword — the struct member's shape with concept fields.
 fn parse_concept_member<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopConcept> {
-    parse_declared_label()
-        .and(
-            parse_literal("(")
-                .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
-                .and_drop(parse_literal(")"))
-                .or(pure(vec![])),
-        )
-        // The representation sort: `: pub Type`, `: Type`, `: pub Prop`, or `: Prop` after the parameters. Required, like a struct's.
-        .and(parse_literal(":").and_keep(parse_representation_sort()))
-        .and_drop(parse_literal("{"))
-        .and(sep_by0_trailing(parse_concept_field, || parse_literal(",")))
-        .and_drop(parse_literal("}"))
-        .map(
-            move |(((label, params), (rep_pub, result_sort)), fields)| TopConcept {
-                doc,
-                vis_pub,
-                rep_pub,
-                label,
-                params,
-                result_sort,
-                fields,
-            },
-        )
+    declared(
+        parse_literal("(")
+            .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
+            .and_drop(parse_literal(")"))
+            .or(pure(vec![]))
+            // The representation sort: `: pub Type`, `: Type`, `: pub Prop`, or `: Prop` after the parameters. Required, like a struct's.
+            .and(parse_literal(":").and_keep(parse_representation_sort()))
+            .and_drop(parse_literal("{"))
+            .and(sep_by0_trailing(parse_concept_field, || parse_literal(",")))
+            .and_drop(parse_literal("}")),
+    )
+    .map(
+        move |(label, ((params, (rep_pub, result_sort)), fields))| TopConcept {
+            doc,
+            vis_pub,
+            rep_pub,
+            label,
+            params,
+            result_sort,
+            fields,
+        },
+    )
 }
 
 // A `concept` item: one concept, or a `concept A … and B …` group whose method types name one another's dictionaries. Each member takes its own `pub`, as a `struct` group's do.
 pub(super) fn parse_top_concept<'a>(doc: Option<Doc>, vis_pub: bool) -> Parser<'a, TopItem> {
     parse_concept_member(doc, vis_pub)
-        .and(many0(|| {
-            parse_and_head().flat_map(|(doc, vis_pub)| parse_concept_member(doc, vis_pub))
-        }))
+        .flat_map(|first| {
+            let tag = first.label.to_string();
+            tagging(
+                Some(tag),
+                many0(|| {
+                    parse_and_head().flat_map(|(doc, vis_pub)| parse_concept_member(doc, vis_pub))
+                }),
+            )
+            .map(move |rest| (first, rest))
+        })
         .map(|(first, rest)| iter::once(first).chain(rest).collect())
         .map(TopItem::Concept)
 }
@@ -655,7 +686,7 @@ const NOT_A_TOP_LEVEL_ITEM: &str = "Expected a top-level item: one of 'mod', 'us
 ///
 /// **A head commits when it is reserved and cannot begin a term**, which is exactly `mod`, `use`, `induct`, `struct` and `foreign`. Nothing else may be written in their place, so once one is read its arm owns the error and [`commit`] stops an enclosing choice from backtracking into a vaguer one.
 ///
-/// **The other four fall through, and the language decides which.** A failure inside one of these arms backtracks like any other, which is what lets the item loop end and a program's tail begin where an item does not. `concept`, `satisfy` and `test` are contextual words — `documentation/syntax.md` keeps them ordinary identifiers outside a declaration position, so one of them here may really be a program's tail calling a function of that name. `let` is reserved but shared with the term grammar: a top-level `let` requires an annotation, and `let x = 1; tail` has to fall through to a local `let`. An unrecognized head is recoverable for the same reason — it is how the item loop terminates before a program's tail begins.
+/// **The other four fall through, and the language decides which.** A failure inside one of these arms backtracks like any other, which is what lets the item loop end and a program's tail begin where an item does not. `concept`, `satisfy` and `test` are contextual words — `documentation/syntax.md` keeps them ordinary identifiers outside a declaration position, so one of them here may really be a program's tail calling a function of that name. `let` is reserved but shared with the term grammar: a top-level `let` requires an annotation, and `let x = 1; tail` has to fall through to a local `let`. It falls through only as far as the `=`: past `let name : T =` the local reading is the same text failing the same way, so the body commits and a broken body is the item's own diagnosis, which is what lets the item loop recover past it. An unrecognized head is recoverable for the same reason — it is how the item loop terminates before a program's tail begins.
 ///
 /// **How far the fall-through reaches is the arm's to say, and `test` says: as far as the label.** The rest of the grammar catches the prefix that discriminates an alternative and lets the tail commit — `parse_struct_pattern` catches `Name {` and reports a missing `}` itself. `test` may be a program's tail, but `test name` is two names in a row and so no term at all, so [`parse_top_test`] lets its own refusal backtrack no further than the label and this arm hands it the item uncaught: past the label, a mistake inside a test is the diagnosis. `concept` and `satisfy` end theirs inside themselves for the same reason. Neither can end it at the keyword — `satisfy (…) => …` and a call `satisfy(…)` share their next token — so each commits at the first point its own grammar could be nothing else: `satisfy` at the concept's name, since `satisfy Name` is two names in a row and a `(` is no name, and a `concept` field at the `:` or `->` that introduces its type.
 ///

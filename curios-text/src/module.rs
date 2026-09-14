@@ -9,9 +9,12 @@ use {
         take_comments,
     },
     curios_abi::WireSignature,
-    curios_parse::{Parser, ParserError, lazy, many0, run_parser, spanned, take_eof},
+    curios_parse::{
+        Parser, ParserError, Recovered, commit, fail, lazy, many0, raise, recover, run_parser,
+        spanned, take_eof,
+    },
     curios_print::{flat, pure, run_printer},
-    curios_utilities::{Plicity, Source, Span},
+    curios_utilities::{Plicity, Report, Source, Span},
     std::{fmt, path::Path, rc::Rc, str::FromStr},
 };
 
@@ -246,6 +249,100 @@ pub enum TopItem {
     Witness(Vec<TopWitness>),
     Foreign(TopForeign),
     Test(TopTest),
+    Broken(TopBroken),
+}
+
+/// An item the parser could not read: what it reported, the text it skipped to resume past it, and the name its head declared where the head parsed that far. Kept in the list rather than beside it so the module is an honest record of the file — every consumer says what it does with one, lowering registers the name so a reference to it resolves and is withheld rather than reported unbound, and nothing that reaches erasure ever holds one. See [`Module::parse`] for what recovers, and what refuses instead.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopBroken {
+    pub span: Span,
+    pub report: Report,
+    /// `None` when the head did not parse as far as a name, and for a `mod`, which declares a scope rather than a binding.
+    pub declares: Option<Label>,
+}
+
+impl TopBroken {
+    /// The text the item stood in, verbatim — what a printer shows for it, since there is no tree to print.
+    pub fn text(&self) -> &str {
+        &self.span.source.text[self.span.start..self.span.end]
+    }
+}
+
+/// Where an item could next begin after a failure reported at `from`: the start of the next line that begins at column 0 with `pub`, a `-- |` documentation comment, or an item's head word, followed by whitespace. Column 0 is the formatter's convention rather than the grammar's, so code that ignores it only recovers less; a wrong candidate cannot produce a wrong tree, since the item parser runs at it and a failure that does not commit only ends the loop. `None` past the last line.
+fn next_item_anchor(text: &str, from: usize) -> Option<usize> {
+    let mut at = match from == 0 || text[..from].ends_with('\n') {
+        true => from,
+        false => from + text[from..].find('\n')? + 1,
+    };
+
+    loop {
+        let rest = &text[at..];
+        if rest.is_empty() {
+            return None;
+        }
+        if begins_item(rest) {
+            return Some(at);
+        }
+        at += rest.find('\n')? + 1;
+    }
+}
+
+fn begins_item(line: &str) -> bool {
+    if line.starts_with("-- |") {
+        return true;
+    }
+    let word = line
+        .split(|character: char| !character.is_alphanumeric() && character != '_')
+        .next()
+        .unwrap_or("");
+    let head = matches!(
+        word,
+        "pub"
+            | "mod"
+            | "use"
+            | "induct"
+            | "struct"
+            | "foreign"
+            | "concept"
+            | "satisfy"
+            | "test"
+            | "let"
+    );
+
+    head && line[word.len()..].starts_with(char::is_whitespace)
+}
+
+/// The item loop, recovering past a broken item ([`recover`]) or, when `strict`, refusing at the first one with its own error: the whole-or-nothing reading `str::parse` gives.
+fn parse_items<'a>(strict: bool) -> Parser<'a, Vec<Recovered<TopItem>>> {
+    recover(parse_top_item, next_item_anchor).flat_map(move |recovered| {
+        match (strict, first_broken(&recovered)) {
+            (true, Some(error)) => raise(error),
+            // Qualified: `curios_print::pure` is the printer's, imported for the `Display` impls below.
+            _ => curios_parse::pure(recovered),
+        }
+    })
+}
+
+fn first_broken(recovered: &[Recovered<TopItem>]) -> Option<ParserError> {
+    recovered.iter().find_map(|item| match item {
+        Recovered::Broken { error, .. } => Some(error.clone()),
+        Recovered::Item(_) => None,
+    })
+}
+
+/// The recovered list as items, a broken one carried as [`TopItem::Broken`].
+fn into_items(recovered: Vec<Recovered<TopItem>>) -> Vec<TopItem> {
+    recovered
+        .into_iter()
+        .map(|item| match item {
+            Recovered::Item(item) => item,
+            Recovered::Broken { error, span } => TopItem::Broken(TopBroken {
+                report: error.report(),
+                declares: error.tagged().map(Label::from),
+                span,
+            }),
+        })
+        .collect()
 }
 
 /// A parsed module body: its top-level items in source order — an order that matters, since `use` scoping is point-of-use and flat-item order is the downstream topological-sort tiebreak. Parsed via `FromStr`, loaded from disk through a [`RootSource`], or built synthetically (the embedded `sys` prelude).
@@ -262,21 +359,28 @@ fn parse_items_end<'a>() -> Parser<'a, ()> {
 }
 
 impl Module {
+    /// The compilation's reading of a module: an item the parser could not read is kept as [`TopItem::Broken`] and parsing resumes at the next item, so one mistake costs one item's diagnosis rather than the file's. `str::parse` is the other reading — whole or nothing, refusing at the first broken item with that item's own error — for a fixture, a header a package reads to learn what it declares, and the formatter, none of which may act on a file it could not read whole.
     pub(crate) fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
         Self::parse_with_comments(source).map(|(module, _)| module)
     }
 
-    /// [`Module::parse`] (by way of `FromStr`), additionally returning every comment the parse consumed — spans into `source`, ascending. (The formatter itself goes through `parse_for_format`, whose `FormatInput` carries its own comment list; this pairing exists for the comment-visibility tests.) Comments are not syntax: they live beside the module, never in it, so the parsed module is identical either way and nothing downstream changes.
+    /// [`Module::parse`], additionally returning every comment the parse consumed — spans into `source`, ascending. (The formatter itself goes through `parse_for_format`, whose `FormatInput` carries its own comment list; this pairing exists for the comment-visibility tests.) Comments are not syntax: they live beside the module, never in it, so the parsed module is identical either way and nothing downstream changes.
     pub(crate) fn parse_with_comments(
         source: &Rc<Source>,
     ) -> Result<(Self, Vec<Span>), ParserError> {
+        Self::parse_reading(source, false)
+    }
+
+    fn parse_reading(source: &Rc<Source>, strict: bool) -> Result<(Self, Vec<Span>), ParserError> {
         clear_comments();
         curios_profile::profile!("parse", group = "module");
         let module = run_parser(
             parse_whitespace()
-                .and_keep(many0(parse_top_item))
+                .and_keep(parse_items(strict))
                 .and_drop(parse_items_end())
-                .map(|items| Module { items }),
+                .map(|items| Module {
+                    items: into_items(items),
+                }),
             source,
         )?;
         Ok((module, take_comments()))
@@ -304,7 +408,7 @@ impl FromStr for Module {
     type Err = ParserError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Module::parse(&Source::inline(input))
+        Module::parse_reading(&Source::inline(input), true).map(|(module, _)| module)
     }
 }
 
@@ -341,6 +445,7 @@ impl Entrypoint {
 }
 
 impl Entrypoint {
+    /// The compilation's reading of a program, recovering past a broken item as [`Module::parse`] does. A broken item that stands last swallows the tail, since a tail begins with no word an anchor could find; the tail's absence is then that item's fault and reported as it, rather than as a term missing at the end of the input.
     fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
         Self::parse_with_comments(source).map(|(entrypoint, _)| entrypoint)
     }
@@ -349,14 +454,25 @@ impl Entrypoint {
     pub(crate) fn parse_with_comments(
         source: &Rc<Source>,
     ) -> Result<(Self, Vec<Span>), ParserError> {
+        Self::parse_reading(source, false)
+    }
+
+    fn parse_reading(source: &Rc<Source>, strict: bool) -> Result<(Self, Vec<Span>), ParserError> {
         clear_comments();
         curios_profile::profile!("parse", group = "entrypoint");
         let entrypoint = run_parser(
             parse_whitespace()
-                .and_keep(many0(parse_top_item))
-                .and(lazy(parse_term))
-                .and_drop(take_eof())
-                .map(|(items, tail)| Entrypoint::new(items, tail)),
+                .and_keep(parse_items(strict))
+                .flat_map(|items| {
+                    let swallowed = match first_broken(&items) {
+                        Some(error) => commit(raise(error)),
+                        None => fail("Expected a program's final term"),
+                    };
+                    lazy(parse_term)
+                        .and_drop(take_eof())
+                        .map(move |tail| Entrypoint::new(into_items(items), tail))
+                        .or(swallowed)
+                }),
             source,
         )?;
         Ok((entrypoint, take_comments()))
@@ -477,7 +593,7 @@ impl FromStr for Entrypoint {
     type Err = ParserError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Entrypoint::parse(&Source::inline(input))
+        Entrypoint::parse_reading(&Source::inline(input), true).map(|(entrypoint, _)| entrypoint)
     }
 }
 
