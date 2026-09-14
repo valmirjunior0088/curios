@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod binder_tests;
 #[cfg(test)]
+mod equality_tests;
+#[cfg(test)]
 mod sharing_tests;
 #[cfg(test)]
 mod test_support;
@@ -22,9 +24,9 @@ pub use subterm::*;
 
 use {
     super::{
-        Atom, Bound, Enter, Free, Global, Intrinsic, Level, Many, Nat, Scope, SelfReference,
-        Spelled, Spelling, Telescope, Three, Two, UniverseContext, UniverseError, UniverseMetaId,
-        UniverseScheme, Var, Visit, instantiate_universe_levels_scoped, print_term,
+        Atom, Bound, Enter, Free, Global, Intrinsic, Level, LevelHead, Many, Nat, Scope,
+        SelfReference, Spelled, Spelling, Telescope, Three, Two, UniverseContext, UniverseError,
+        UniverseMetaId, UniverseScheme, Var, Visit, instantiate_universe_levels_scoped, print_term,
         project_erased_universes,
     },
     curios_abi::ForeignFunction,
@@ -1407,6 +1409,124 @@ impl Term {
                 && !entered.insert((Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner)))
             {
                 continue;
+            }
+
+            let (this_masked, this_children) = mask(&this.inner.subterm);
+            let (that_masked, that_children) = mask(&that.inner.subterm);
+            if this_masked != that_masked || this_children.len() != that_children.len() {
+                return false;
+            }
+
+            work.extend(this_children.into_iter().zip(that_children));
+        }
+
+        true
+    }
+}
+
+/// A bijection between the identities two lowerings minted for one declaration, grown as a comparison meets them.
+///
+/// Every `Type` a lowering writes is a fresh universe metavariable and every elided annotation a fresh hole, numbered in lowering order across the whole unit — so the same declaration lowered after different neighbours carries different ids at the same positions, and equality by id would call it changed. What two lowerings of one declaration share is the *shape* of that numbering: the first pair met binds the two ids, every later pair must agree, and an id shared on one side and split on the other is a difference.
+#[derive(Default)]
+pub struct MetaRenaming {
+    universes: BTreeMap<UniverseMetaId, UniverseMetaId>,
+    universes_back: BTreeMap<UniverseMetaId, UniverseMetaId>,
+    metavars: BTreeMap<MetavarId, MetavarId>,
+    metavars_back: BTreeMap<MetavarId, MetavarId>,
+}
+
+impl MetaRenaming {
+    /// Bind `this` to `that` in both directions, or confirm the binding already made: `false` when either is already bound to something else.
+    fn bind<K: Ord + Copy>(
+        forward: &mut BTreeMap<K, K>,
+        back: &mut BTreeMap<K, K>,
+        this: K,
+        that: K,
+    ) -> bool {
+        match (forward.get(&this), back.get(&that)) {
+            (None, None) => {
+                forward.insert(this, that);
+                back.insert(that, this);
+                true
+            }
+            (Some(bound), Some(bound_back)) => *bound == that && *bound_back == this,
+            _ => false,
+        }
+    }
+
+    fn universe(&mut self, this: UniverseMetaId, that: UniverseMetaId) -> bool {
+        Self::bind(&mut self.universes, &mut self.universes_back, this, that)
+    }
+
+    fn metavar(&mut self, this: MetavarId, that: MetavarId) -> bool {
+        Self::bind(&mut self.metavars, &mut self.metavars_back, this, that)
+    }
+
+    /// Whether two levels are equal under the renaming. A one-atom level pairs its atom unambiguously and binds it; any other shape is compared exactly, since the order of a map keyed by id says nothing about which atom stands where — and a lowering mints one metavariable per written `Type`, so a lowered level is one atom.
+    fn levels_equal(&mut self, this: &Level, that: &Level) -> bool {
+        let these = this.atoms().collect::<Vec<_>>();
+        let those = that.atoms().collect::<Vec<_>>();
+
+        match (these.as_slice(), those.as_slice()) {
+            (
+                [(LevelHead::Meta(this_meta), this_offset)],
+                [(LevelHead::Meta(that_meta), that_offset)],
+            ) => {
+                this.constant_part() == that.constant_part()
+                    && this_offset == that_offset
+                    && self.universe(*this_meta, *that_meta)
+            }
+            _ => this == that,
+        }
+    }
+}
+
+impl Term {
+    /// Structural equality with a metavariable, and a universe metavariable, identified by position rather than by id, under `renaming`.
+    ///
+    /// [`PartialEq`]'s masking walk with two cases decided ahead of the mask: two `Type`s are equal when their levels are under the renaming, and two metavariables when their origins agree, their ids bind, and their spines are pairwise equal. Every other payload compares exactly, spans and binder names excepted as in `PartialEq`. No pointer or hash shortcut: one allocation on both sides still carries ids the renaming has to see.
+    pub fn equal_modulo_metas(&self, other: &Term, renaming: &mut MetaRenaming) -> bool {
+        let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
+        let mut mask = |subterm: &Subterm| {
+            let masked = subterm.traverse(&mut visit);
+            (masked, visit.take_masked_children())
+        };
+
+        let mut work = vec![(self.clone(), other.clone())];
+        let mut entered: HashSet<(*const Node, *const Node)> = HashSet::new();
+
+        while let Some((this, that)) = work.pop() {
+            if Rc::strong_count(&this.inner) > 1
+                && Rc::strong_count(&that.inner) > 1
+                && !entered.insert((Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner)))
+            {
+                continue;
+            }
+
+            match (&this.inner.subterm, &that.inner.subterm) {
+                (Subterm::Type(this_level), Subterm::Type(that_level)) => {
+                    if !renaming.levels_equal(this_level, that_level) {
+                        return false;
+                    }
+                    continue;
+                }
+                (Subterm::Metavar(this_meta), Subterm::Metavar(that_meta)) => {
+                    if this_meta.origin != that_meta.origin
+                        || this_meta.spine.len() != that_meta.spine.len()
+                        || !renaming.metavar(this_meta.id, that_meta.id)
+                    {
+                        return false;
+                    }
+                    work.extend(
+                        this_meta
+                            .spine
+                            .iter()
+                            .cloned()
+                            .zip(that_meta.spine.iter().cloned()),
+                    );
+                    continue;
+                }
+                _ => {}
             }
 
             let (this_masked, this_children) = mask(&this.inner.subterm);
