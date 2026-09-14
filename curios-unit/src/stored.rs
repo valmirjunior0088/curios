@@ -6,6 +6,7 @@
 mod tests;
 
 use {
+    crate::Unit,
     curios_utilities::{Source, digest},
     std::{
         path::{Path, PathBuf},
@@ -47,6 +48,14 @@ impl Record {
             .min_by_key(|path| path.components().count())
             .and_then(Path::parent)
     }
+}
+
+/// A stored unit restored: the record beside the unit it vouches for.
+///
+/// Two values rather than one, because they are consumed apart: the unit is what a compilation is folded over, and the record is what the one consumer that asks where a unit came from reads.
+pub struct Stored {
+    pub record: Record,
+    pub unit: Unit,
 }
 
 /// A read log as a record spells it: each file by canonical path, with the digest of the text that was parsed from it.

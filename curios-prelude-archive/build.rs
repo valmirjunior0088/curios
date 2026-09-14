@@ -15,8 +15,14 @@ use {
         erase_unit, validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::{PreparedText, prepare_prelude},
-    curios_unit::Unit,
-    std::{collections::BTreeSet, env, fs, path::PathBuf},
+    curios_unit::{Record, Unit, framed},
+    curios_utilities::{Source, digest},
+    std::{
+        collections::BTreeSet,
+        env, fs,
+        path::{Path, PathBuf},
+        rc::Rc,
+    },
 };
 
 // Installed for the whole build script so the capture's memory columns are populated; the counters are what make this build's own footprint measurable, which is the question the prelude build most often raises.
@@ -61,8 +67,6 @@ fn build() {
     println!("cargo:rerun-if-changed=src/syntax.rs");
 
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
-    // The directory rather than each discovered file: Cargo scans a watched directory recursively, so a *newly added* source triggers the rerun a per-file directive cannot — it matches no directive from the run that predates it. One directive now, where there were two: `/std`'s header moved inside its own package, which is where its manifest is too.
-    println!("cargo:rerun-if-changed={}", manifest.join("std").display());
 
     let sys_modules = sys_source();
     let std_modules = std_source(&manifest);
@@ -72,7 +76,12 @@ fn build() {
     let std_text = lower("std", &std_modules, &[&sys_text]);
     validate_syntax_targets(&[sys_text.core(), std_text.core()]);
 
-    // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each image is a bare `Unit`, in the format every store slot files a unit in, so a restored prelude is a two-unit prefix and not a shape of its own.
+    // Each file the lowering read, rather than the directory: the read set is closed — a module joins `/std` only through a `mod` in a header that is itself a read, so the edit that adds a file changes a file already watched, and the rerun then records the new one. Watching the directory would also rerun this build for anything else written under it, and a question asked about a `/std` module writes its store's memo there.
+    for (path, _) in std_modules.reads() {
+        println!("cargo:rerun-if-changed={}", path.display());
+    }
+
+    // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each image is a stored unit, in the format every store slot files a unit in, so a restored prelude is a two-unit prefix and not a shape of its own.
     let sys = archive(
         "sys",
         sys_text,
@@ -92,8 +101,15 @@ fn build() {
     // Filed beside this crate rather than under `OUT_DIR`, because the images are read outside the build: `curios document` renders the standard library's pages from `std.rkyv`, so it needs a path a recipe can name. The crate includes them from the same paths, so there is one image per unit in one place; the rule for a product that outlives its build is `.artifacts/`, which `cargo clean` leaves alone and `cargo x clean` removes.
     let artifacts = manifest.join(".artifacts");
     fs::create_dir_all(&artifacts).expect("failed to create the archive's .artifacts directory");
-    write_image(&artifacts, "sys", &sys);
-    write_image(&artifacts, "std", &std);
+    // Each image carries the record a slot carries: what the root was compiled from, by the read log the lowering kept, and what came before it. `/sys` is supplied whole and reads nothing; `/std` reads its tree and follows `/sys`, whose image is what its record's one predecessor digests.
+    let sys_digest = write_image(&artifacts, "sys", &sys, sys_modules.reads(), Vec::new());
+    write_image(
+        &artifacts,
+        "std",
+        &std,
+        std_modules.reads(),
+        vec![sys_digest],
+    );
 }
 
 /// Resolve and lower one prelude root against the roots already lowered, with every invariant the lowered form is trusted to satisfy asserted here.
@@ -193,20 +209,34 @@ fn archive(
     Unit::new(prepared, core, ersd, binder_floor)
 }
 
-/// Serialize one unit to `<root>.rkyv`, twice, and refuse a serializer that does not agree with itself.
+/// Serialize one unit to `<root>.rkyv` as a stored unit — its record, of `reads` and `predecessors`, framed ahead of it — serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the unit's digest, which is what the next root's record names it by.
 ///
 /// The image carries no version and is no stable interchange format: Cargo regenerates it whenever its inputs change — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare a build against itself.
-fn write_image(artifacts: &std::path::Path, root: &str, image: &Unit) {
+///
+/// The record is the compiler's own account of the tree the root was built from, by canonical path on the machine that built it. That is the intended meaning: a checkout claiming `/std` is the tree the archive came from exactly when the paths agree, and a compiler moved to another machine or built from another checkout records paths no other tree has.
+fn write_image(
+    artifacts: &Path,
+    root: &str,
+    image: &Unit,
+    reads: Vec<(PathBuf, Rc<Source>)>,
+    predecessors: Vec<String>,
+) -> String {
     let first = curios_archive::to_bytes(image)
         .unwrap_or_else(|error| panic!("/{root} archive serialization failed: {error}"));
     let second = curios_archive::to_bytes(image)
         .unwrap_or_else(|error| panic!("/{root} archive repeat serialization failed: {error}"));
     assert_eq!(&*first, &*second, "/{root} archive is not deterministic");
 
+    let record = Record::of(reads, predecessors, digest(&first));
+    let recorded = curios_archive::to_bytes(&record)
+        .unwrap_or_else(|error| panic!("/{root} record serialization failed: {error}"));
+
     let path = artifacts.join(format!("{root}.rkyv"));
     println!("/{root} archived to {} bytes", first.len());
-    fs::write(&path, &*first)
+    fs::write(&path, framed(&recorded, &first))
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+
+    record.unit
 }
 
 /// Check every registered syntax target against the lowered prelude, over the **union** of its roots.

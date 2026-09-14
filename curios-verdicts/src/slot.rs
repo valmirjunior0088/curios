@@ -1,4 +1,4 @@
-//! One slot, one file: the rename that replaces a slot whole, and the reader that takes a unit back out of one — or out of a bare archive, which is what the prelude image is. The framing itself, a record ahead of an artifact, is `curios-unit`'s.
+//! One slot, one file: the rename that replaces a slot whole, and the reader that takes a unit back out of one — or out of the prelude image, which is framed the same way. The framing itself, a record ahead of an artifact, is `curios-unit`'s.
 //!
 //! **A slot is one file, and it is replaced by one rename.** The record and the artifact are framed together (`curios_unit::framed`), written beside the slot and renamed into place, so no interrupted or concurrent write can leave a record beside an artifact it was not made from: a reader sees the old slot, the new one, or none. The artifact segment is the same bytes the artifact is archived as on its own, which is what lets `curios document` read a unit off a slot exactly as it reads one off the prelude image.
 
@@ -34,12 +34,13 @@ pub(crate) fn replace(slot: &Path, record: &[u8], artifact: &[u8]) -> io::Result
     })
 }
 
-/// The unit archived at `path`: a verdict slot under a store, or the prelude image. A slot frames a record ahead of the unit and the image is the unit alone, and the unit is archived the same way in both, so the one difference is where it starts. Validated before it is read, so a file that is not a unit is an error rather than undefined behaviour.
+/// The unit archived at `path`: a verdict slot under a store, or the prelude image, both stored units framed one way. Validated before it is read, so a file that is not a unit is an error rather than undefined behaviour.
 ///
 /// What is read is the unit and nothing about it: no record is checked, because no compilation is about to believe anything on its strength. `curios document` is the consumer, reading an interface off a unit that was filed without compiling it again.
 pub fn archived_unit(path: &Path) -> Result<Unit, String> {
     let filed = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
-    let bytes = segments(&filed).map_or(filed.as_slice(), |(_, artifact)| artifact);
+    let (_, bytes) =
+        segments(&filed).ok_or_else(|| format!("{}: not a stored unit", path.display()))?;
 
     curios_archive::from_bytes::<Unit>(bytes)
         .map_err(|error| format!("{}: not an archived unit: {error}", path.display()))

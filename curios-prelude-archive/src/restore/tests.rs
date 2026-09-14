@@ -11,10 +11,12 @@ use {
         Bound, Cases, Global, Item, Match, Subterm, Term, Visit, Zonked, derived_binder_floor,
     },
     curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedArena, Resumed, erase_unit},
-    curios_unit::Unit,
+    curios_unit::{Record, Unit, segments},
+    curios_utilities::digest,
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet},
+        path::PathBuf,
         rc::Rc,
         thread,
         time::Instant,
@@ -100,6 +102,74 @@ fn string_literal_machinery_is_monomorphic() {
 fn a_truncated_archive_is_rejected() {
     for (root, bytes) in ROOTS {
         assert!(validate_bytes(root, &bytes[..bytes.len() / 2]).is_err());
+    }
+}
+
+/// `/sys` is supplied whole by the build script — no file is read and nothing precedes it — so its record says so, which is what keeps a source tree from ever claiming to be the one it came from.
+#[test]
+fn the_sys_image_records_no_reads_and_no_predecessor() {
+    with_stored(|stored| {
+        let sys = &stored[0].record;
+
+        assert!(sys.reads.is_empty());
+        assert!(sys.predecessors.is_empty());
+        assert_eq!(sys.directory(), None);
+    });
+}
+
+/// The digest a record names its predecessor by is the one that predecessor's own record names itself by: the chain is checkable from the records alone.
+#[test]
+fn the_std_image_records_the_sys_image_as_its_predecessor() {
+    with_stored(|stored| {
+        assert_eq!(
+            stored[1].record.predecessors,
+            [stored[0].record.unit.clone()]
+        );
+    });
+}
+
+/// The read set is closed and every authored module is registered, so the record and the tree agree exactly — and the record's directory is the tree, which is what a source unit claiming `/std` is held against.
+#[test]
+fn the_std_record_names_every_authored_source_and_no_other() {
+    let authored = crate::tests::authored()
+        .into_iter()
+        .map(|path| {
+            path.canonicalize()
+                .expect("an authored source canonicalizes")
+        })
+        .collect::<BTreeSet<_>>();
+
+    with_stored(|stored| {
+        let std = &stored[1].record;
+        let recorded = std
+            .reads
+            .iter()
+            .map(|(path, _)| PathBuf::from(path))
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(recorded, authored);
+        assert_eq!(
+            std.directory().map(PathBuf::from),
+            Some(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("std")
+                    .canonicalize()
+                    .expect("the tree canonicalizes")
+            ),
+            "and the record's directory is the tree's root, where the header lies"
+        );
+    });
+}
+
+/// The record ahead of each image digests exactly the unit segment behind it, as a slot's record digests the unit it was filed with.
+#[test]
+fn each_record_digests_the_unit_segment_it_sits_ahead_of() {
+    for (root, bytes) in ROOTS {
+        let (record, unit) = segments(bytes).unwrap_or_else(|| panic!("/{root} is a stored unit"));
+        let record = curios_archive::from_bytes::<Record>(record)
+            .unwrap_or_else(|error| panic!("/{root} record restores: {error}"));
+
+        assert_eq!(record.unit, digest(unit));
     }
 }
 

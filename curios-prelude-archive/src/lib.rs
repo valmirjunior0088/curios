@@ -1,6 +1,6 @@
 //! The build-scoped images of Curios's fixed `/sys` and `/std` prelude: the authored sources, their elaboration, and the [`curios_unit::Unit`] each root is archived as.
 //!
-//! Two units, folded in that order: `/sys` names nothing above it and `/std` names `/sys`, so [`with_prelude`] hands back the pair as the ordered prefix every compilation starts from rather than as one merged image.
+//! Two units, folded in that order: `/sys` names nothing above it and `/std` names `/sys`, so [`with_prelude`] hands back the pair as the ordered prefix every compilation starts from rather than as one merged image. Each image is a stored unit exactly as a store slot holds one — the record of the tree the root was compiled from, framed ahead of the unit — and [`with_stored`] hands back the records beside the units for the one consumer that asks which tree that was.
 //!
 //! `/sys` mirrors the host store one declaration per wire row, and every row returns an `Io` — a description of the call, not its result. `/sys/Io` holds the sequencing (`pure`, `bind`) and nothing else; `/std` owns the taxonomy that wraps them. See this crate's README for the placement law, and `documentation/design/language/effects-are-descriptions-and-the-carrier-has-no-eliminator.md` for the invariant those wrappers rest on.
 //!
