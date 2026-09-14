@@ -259,6 +259,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(List/len([..xs, ..ys]), List/len(xs) + List/len(ys))",
             "Eq(List/len([1, 2, ..xs]), List/len(xs) + 2)",
             "Eq(List/map(@Nat, @Nat, [], f), [])",
+            "Eq(List/map(xs, (x) => x), xs)",
             "Eq(List/map([a, ..xs], f), [f(a), ..List/map(xs, f)])",
             "Eq(List/map([..xs, ..ys], f), [..List/map(xs, f), ..List/map(ys, f)])",
             "Eq(List/slice(xs, 0, List/len(xs)), xs)",

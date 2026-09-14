@@ -22,9 +22,9 @@ use scalar::*;
 use {
     super::{ReduceError, Reducer},
     crate::{
-        Cost, FUSION_CAP, FreeMonoid, Intrinsic, Nat, Peel, Subterm, Term, int_negate, int_product,
-        int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
-        project_erased_universes,
+        Cost, FUSION_CAP, FreeMonoid, Func, Intrinsic, Nat, Peel, Subterm, Telescope, Term,
+        int_negate, int_product, int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom,
+        peel_first_elem, project_erased_universes,
     },
     curios_num::{Floating, Integer, Natural},
     curios_utilities::{Grain, PackedBin},
@@ -67,6 +67,20 @@ pub fn normalize_bool(
         .reduce(|acc, leaf| Term::intrinsic(rebuild(acc, leaf)))
         .expect("a connective has two operands, so at least two leaves");
     reducer.reduce_forced(tree).map(Some)
+}
+
+/// Whether a function is the identity lambda: one binder, whose body is that binder and nothing else.
+fn is_identity(function: &Term) -> bool {
+    let Subterm::Func(Func { telescope, .. }) = &**function else {
+        return false;
+    };
+    let Telescope::Cons(_, rest) = telescope else {
+        return false;
+    };
+    let Telescope::Done(body) = rest.body() else {
+        return false;
+    };
+    matches!(&***body, Subterm::Var(var) if var.as_bound() == Some(0))
 }
 
 /// Two stuck comparisons spelled across the family, aligned to one spelling so the congruence can compare them: a negated comparison — `Bool/not` is `xor(_, true)` once unfolded — becomes its dual, `not(a < b)` reading `b <= a` and `not(a == b)` reading `a != b`, and a `<=` meeting a `<` on the other side becomes `<` of the successor, since `a <= b` and `a < b + 1` are one relation on `Nat` and on `Int`. `None` when neither side moved.
@@ -1492,6 +1506,10 @@ pub fn reduce_intrinsic(
             let b = reducer.reduce(b.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
             let f = reducer.reduce(f.clone())?;
+            // `map` with the identity is the list itself, whatever its shape: a function whose one binder is its whole body sends every element to itself.
+            if is_identity(&f) {
+                return Ok(Term::unwrap_or_clone(list));
+            }
             reduce_homomorphism(
                 reducer,
                 list_shape(list),
