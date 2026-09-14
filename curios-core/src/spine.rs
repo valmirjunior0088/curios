@@ -36,7 +36,7 @@ pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
     }
 }
 
-/// The `Int` peel: ℤ under `+` is a group, so two reduced sums are one value exactly when their difference is zero, and [`int_cancel_common`] moves that difference to the two sides by sign. Two constant residuals decide `Equal` or `Clash`; a pair the cancellation changed carries on as `Continue` over its residuals, so `i + a ~ i + b` becomes `a ~ b` for the caller; and a pair it left untouched is `Stuck`, the stability [`classify_nat`] rests on for the same reason. `None` when neither side is a literal, a sum spine or a product, so the caller keeps its own handling.
+/// The `Int` peel: ℤ under `+` is a group, so two reduced sums are one value exactly when their difference is zero, and [`int_cancel_common`] moves that difference to the two sides by sign. Two constant residuals decide `Equal` or `Clash`; a pair the cancellation changed carries on as `Continue` over its residuals, so `i + a ~ i + b` becomes `a ~ b` for the caller; and a pair it left untouched is `Stuck`, the stability `classify_nat` rests on for the same reason. `None` when neither side is a literal, a sum spine or a product, so the caller keeps its own handling.
 pub fn peel_int_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
     let this = Term::intrinsic(left.clone());
     let that = Term::intrinsic(right.clone());
