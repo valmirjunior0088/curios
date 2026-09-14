@@ -722,7 +722,6 @@ dependencies = [
  "curios-text",
  "curios-utilities",
  "serde",
- "sha2 0.11.0",
  "toml",
 ]
 
@@ -839,6 +838,7 @@ name = "curios-utilities"
 version = "0.14.0"
 dependencies = [
  "curios-archive",
+ "sha2 0.11.0",
  "stacker",
 ]
 

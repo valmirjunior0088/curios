@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_utilities::{Qualifier, RootKind},
+    curios_utilities::{Qualifier, RootKind, digest},
 };
 
 /// A binary nests under the package that declares it — so two members of one umbrella declaring `serve` cannot collide, and nothing has to refuse it.
@@ -230,23 +230,4 @@ fn a_payload_slot_does_not_move_when_its_source_changes() {
 #[test]
 fn the_two_families_are_tagged_apart() {
     assert_ne!(SCHEMA, PAYLOAD_SCHEMA);
-}
-
-/// A fingerprint is the adapter between a producer that writes into a `Hasher` and a key that is spelled as a digest, so what was written has to decide what comes out.
-#[test]
-fn a_fingerprint_answers_for_what_was_written_into_it() {
-    let fold = |bytes: &[u8]| {
-        let mut fingerprint = Fingerprint::new();
-        fingerprint.write(bytes);
-
-        fingerprint.hex()
-    };
-
-    assert_eq!(fold(b"one"), fold(b"one"), "and it is a function");
-    assert_ne!(fold(b"one"), fold(b"two"));
-    assert_eq!(
-        fold(b"one"),
-        digest(b"one"),
-        "and it is the same digest a record is checked with, since both are SHA-256 over what they were given"
-    );
 }

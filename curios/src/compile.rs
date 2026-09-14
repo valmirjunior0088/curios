@@ -4,11 +4,11 @@
 //!
 //! Neither wasmtime operation below is spelled here. `curios_runtime::validate` and `curios_runtime::precompile` are, because they belong beside the engine whose configuration decides what a valid module is and what a `.cwasm` is compatible with; this crate names no wasmtime type at all, and its `curios-runtime` dependency row is a feature switch rather than an API dependency.
 
-use {curios_package::Fingerprint, std::sync::LazyLock};
+use {curios_utilities::Fingerprint, std::sync::LazyLock};
 
 /// What decides whether a payload compiled on this machine runs on another, as a key part — computed once, since it is a property of the process, and handed to `curios-verdicts`'s payload family beside every program it files.
 ///
-/// **The payload is the store's first machine-dependent artifact.** A unit is a judgment and travels wherever the compiler binary does; a payload is machine code Cranelift emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. `curios-runtime` describes its engine, `curios-package`'s `Fingerprint` turns the description into a digest, and `curios-verdicts` files under it; this is the one crate that names all three, so the crate that names wasmtime and the crate that names `sha2` stay apart.
+/// **The payload is the store's first machine-dependent artifact.** A unit is a judgment and travels wherever the compiler binary does; a payload is machine code Cranelift emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. `curios-runtime` describes its engine, `curios-utilities`'s `Fingerprint` turns the description into a digest, and `curios-verdicts` files under it; this is the one crate that names all three, so the crate that names wasmtime and the crate that names `sha2` stay apart.
 pub fn engine() -> &'static str {
     static ENGINE: LazyLock<String> = LazyLock::new(|| {
         let mut fingerprint = Fingerprint::new();

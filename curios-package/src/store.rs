@@ -24,9 +24,8 @@ mod tests;
 
 use {
     crate::TreeHash,
-    curios_utilities::{Mount, Qualifier},
-    sha2::{Digest, Sha256},
-    std::{hash::Hasher, path::PathBuf},
+    curios_utilities::{Fingerprint, Mount, Qualifier},
+    std::path::PathBuf,
 };
 
 /// The generated directory itself.
@@ -126,30 +125,30 @@ pub fn unit_slot(
     mounts: &[Mount],
     declared: Option<&[Qualifier]>,
 ) -> String {
-    let mut digest = Sha256::new();
+    let mut fingerprint = Fingerprint::new();
 
-    feed(&mut digest, SCHEMA);
-    feed(&mut digest, compiler);
-    feed(&mut digest, &predecessors.len().to_string());
+    fingerprint.feed(SCHEMA);
+    fingerprint.feed(compiler);
+    fingerprint.feed(predecessors.len().to_string());
     for predecessor in predecessors {
-        feed(&mut digest, predecessor);
+        fingerprint.feed(predecessor);
     }
-    feed(&mut digest, &mounts.len().to_string());
+    fingerprint.feed(mounts.len().to_string());
     for mount in mounts {
-        feed(&mut digest, &mount.prefix.join());
+        fingerprint.feed(mount.prefix.join());
     }
     match declared {
         // Two distinguishable shapes rather than one, so "declared nothing" and "declared none" cannot collide: a length-prefixed list can never spell the sentinel.
-        None => feed(&mut digest, "*"),
+        None => fingerprint.feed("*"),
         Some(declared) => {
-            feed(&mut digest, &declared.len().to_string());
+            fingerprint.feed(declared.len().to_string());
             for prefix in declared {
-                feed(&mut digest, &prefix.join());
+                fingerprint.feed(prefix.join());
             }
         }
     }
 
-    hex(digest)
+    fingerprint.hex()
 }
 
 /// The slot the precompiled payload of `package`'s `executable`, built by `compiler` after `predecessors` and run by the engine `engine` fingerprints, is filed under.
@@ -166,79 +165,17 @@ pub fn payload_slot(
     executable: &str,
     engine: &str,
 ) -> String {
-    let mut digest = Sha256::new();
+    let mut fingerprint = Fingerprint::new();
 
-    feed(&mut digest, PAYLOAD_SCHEMA);
-    feed(&mut digest, compiler);
-    feed(&mut digest, &predecessors.len().to_string());
+    fingerprint.feed(PAYLOAD_SCHEMA);
+    fingerprint.feed(compiler);
+    fingerprint.feed(predecessors.len().to_string());
     for predecessor in predecessors {
-        feed(&mut digest, predecessor);
+        fingerprint.feed(predecessor);
     }
-    feed(&mut digest, package);
-    feed(&mut digest, executable);
-    feed(&mut digest, engine);
+    fingerprint.feed(package);
+    fingerprint.feed(executable);
+    fingerprint.feed(engine);
 
-    hex(digest)
-}
-
-/// The digest of `bytes`, for a caller checking one thing against a record of it.
-///
-/// Deliberately not a [`TreeHash`]: that answers what a delivered tree *is*, and carries a scheme prefix because it is written into manifests and compared across machines. This answers whether some bytes are the bytes something was made from, is never published, and would be a lie in the other's spelling.
-pub fn digest(bytes: &[u8]) -> String {
-    let mut digest = Sha256::new();
-    digest.update(bytes);
-
-    hex(digest)
-}
-
-/// A [`Hasher`] that finishes into a digest, for a key part whose producer speaks `std::hash` and whose consumer speaks SHA-256.
-///
-/// One part of the payload address is not a string anybody here can build: the engine compatibility stamp, which only `curios-runtime` can describe and which it hands over by *writing into* a hasher rather than by returning a digest — keeping `sha2` out of that crate and `wasmtime` out of the one that assembles the address. This is the adapter between the two vocabularies, and it lives beside [`digest`] because what it produces is one.
-///
-/// [`Hasher::finish`] is not how a value is taken out of this. It has to exist, and a `u64` is not what a store key is spelled in, so it answers with the leading eight bytes of the digest so far and [`Fingerprint::hex`] is what a caller uses. Nothing in `std::hash` calls `finish` on the caller's behalf — `Hash::hash` only ever writes — so the narrow answer is never the one that reaches a key.
-pub struct Fingerprint(Sha256);
-
-impl Fingerprint {
-    /// A fingerprint with nothing folded into it yet.
-    pub fn new() -> Self {
-        Self(Sha256::new())
-    }
-
-    /// Everything written so far, as the hex digest a key part is spelled in.
-    pub fn hex(self) -> String {
-        hex(self.0)
-    }
-}
-
-impl Default for Fingerprint {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Hasher for Fingerprint {
-    fn write(&mut self, bytes: &[u8]) {
-        self.0.update(bytes);
-    }
-
-    fn finish(&self) -> u64 {
-        let digest = self.0.clone().finalize();
-
-        u64::from_le_bytes(digest[..8].try_into().expect("a digest is 32 bytes wide"))
-    }
-}
-
-/// A finished digest, in hex.
-fn hex(digest: Sha256) -> String {
-    digest
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}
-
-/// One length-framed part of a key.
-fn feed(digest: &mut Sha256, part: &str) {
-    digest.update((part.len() as u64).to_le_bytes());
-    digest.update(part.as_bytes());
+    fingerprint.hex()
 }

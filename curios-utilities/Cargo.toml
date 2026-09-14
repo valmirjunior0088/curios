@@ -11,6 +11,9 @@ workspace = true
 [features]
 archive = ["curios-archive/enabled"]
 
+# The one SHA-256 authority: every content digest, store key and tree hash is spelled through
+# `digest.rs`, so nothing above this crate names `sha2`.
 [dependencies]
 curios-archive = { workspace = true }
 stacker = { version = "0.1.25" }
+sha2 = "0.11.0"

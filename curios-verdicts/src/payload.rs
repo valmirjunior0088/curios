@@ -11,8 +11,9 @@ mod tests;
 
 use {
     crate::{Placed, Verdicts, chained, digested, read_within, replace, segments},
-    curios_package::{digest, payload_slot},
+    curios_package::payload_slot,
     curios_text::{RootSource, UnitSource},
+    curios_utilities::digest,
     std::{fs, io, path::Path},
 };
 
@@ -57,7 +58,7 @@ impl Verdicts {
     ///
     /// Consulting this does not enter the fold's chain: a hit means no fold runs at all, and a miss leaves the fold to place its own units as it always did.
     ///
-    /// `engine` is what decides whether a payload compiled on this machine runs on another, as a key part: the payload is the store's first machine-dependent artifact. A unit is a judgment and travels wherever the compiler binary does; this is machine code emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. The crate that owns the runtime describes its engine, `curios-package`'s `Fingerprint` turns the description into a digest, and this crate files under it, so nothing here names wasmtime and nothing there names `sha2`.
+    /// `engine` is what decides whether a payload compiled on this machine runs on another, as a key part: the payload is the store's first machine-dependent artifact. A unit is a judgment and travels wherever the compiler binary does; this is machine code emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. The crate that owns the runtime describes its engine, `curios-utilities`'s `Fingerprint` turns the description into a digest, and this crate files under it, so nothing here names wasmtime and nothing there names `sha2`.
     pub fn payload_get(
         &self,
         program: &Program<'_>,

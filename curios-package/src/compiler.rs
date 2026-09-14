@@ -17,9 +17,10 @@ mod tests;
 
 use {
     crate::Store,
-    sha2::{Digest, Sha256},
+    curios_utilities::Fingerprint,
     std::{
         fs::{self, File},
+        hash::Hasher,
         io::Read,
         os::unix::fs::MetadataExt,
         path::Path,
@@ -79,21 +80,15 @@ pub fn compiler(store: &Store) -> Option<String> {
 /// SHA-256 over a file, read in chunks rather than into memory — a compiler binary is large enough that the difference matters and small enough that reading it once per compiler does not.
 fn digest(path: &Path) -> Option<String> {
     let mut file = File::open(path).ok()?;
-    let mut hasher = Sha256::new();
+    let mut fingerprint = Fingerprint::new();
     let mut buffer = [0_u8; 64 * 1024];
 
     loop {
         match file.read(&mut buffer).ok()? {
             0 => break,
-            read => hasher.update(&buffer[..read]),
+            read => fingerprint.write(&buffer[..read]),
         }
     }
 
-    Some(
-        hasher
-            .finalize()
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect(),
-    )
+    Some(fingerprint.hex())
 }

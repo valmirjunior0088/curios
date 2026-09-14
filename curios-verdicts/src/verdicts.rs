@@ -9,11 +9,11 @@ mod tests;
 
 use {
     crate::{replace, segments},
-    curios_package::{Store, compiler, digest, unit_slot},
+    curios_package::{Store, compiler, unit_slot},
     curios_pipeline::Cache,
     curios_text::{Overlay, UnitSource},
     curios_unit::Unit,
-    curios_utilities::Source,
+    curios_utilities::{Source, digest},
     std::{
         cell::{OnceCell, RefCell},
         fs, io,

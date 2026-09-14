@@ -4,7 +4,7 @@
 mod tests;
 
 use {
-    sha2::{Digest, Sha256},
+    curios_utilities::Fingerprint,
     std::{fmt, fs, path::Path},
 };
 
@@ -57,7 +57,7 @@ impl TreeHash {
     ///
     /// **What goes into it, exactly.** Every regular file the tree holds, sorted by relative path, each contributing its path and then its contents. Paths are spelled with `/` whatever the platform, so a tree delivered to Windows hashes as it did on the machine that published it. Nothing else exists for the scheme: not permissions, not timestamps, not directories — an empty one leaves no trace, because a tree is its files.
     ///
-    /// **Both halves are length-framed**, which the scheme has to do and this is where it is said: without it a file `ab` holding `c` and a file `a` holding `bc` feed the digest identical bytes, and two different trees would share a store key. The frame is the byte length as a little-endian `u64` before each half.
+    /// **Both halves are length-framed**, which the scheme has to do and [`Fingerprint::feed`] is how: without it a file `ab` holding `c` and a file `a` holding `bc` feed the digest identical bytes, and two different trees would share a store key. The frame is the byte length as a little-endian `u64` before each half, the one frame every key in the workspace uses.
     ///
     /// A symlink is refused rather than followed or recorded. Following one lets a delivered tree reach outside itself; recording one puts a path in the hash whose meaning depends on where it is unpacked. Neither is a criterion a delivery can be accepted against. A name that is not UTF-8 is refused for the same reason: the scheme spells every path in UTF-8 whatever the platform, so a name it cannot spell is one it could only hash by replacing bytes, and two names that differ only in the bytes replaced would share a key.
     pub fn of(directory: &Path) -> Result<Self, String> {
@@ -65,22 +65,13 @@ impl TreeHash {
         collect(directory, &mut Vec::new(), &mut files)?;
         files.sort();
 
-        let mut digest = Sha256::new();
+        let mut fingerprint = Fingerprint::new();
         for (path, contents) in &files {
-            digest.update((path.len() as u64).to_le_bytes());
-            digest.update(path.as_bytes());
-            digest.update((contents.len() as u64).to_le_bytes());
-            digest.update(contents);
+            fingerprint.feed(path);
+            fingerprint.feed(contents);
         }
 
-        Ok(Self(format!(
-            "{SCHEME}{}",
-            digest
-                .finalize()
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
-        )))
+        Ok(Self(format!("{SCHEME}{}", fingerprint.hex())))
     }
 }
 

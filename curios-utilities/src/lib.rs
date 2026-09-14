@@ -1,4 +1,4 @@
-//! Foundational utilities shared across every Curios pipeline stage: source spans, the fresh-name `Entropy`/`Mint` supply, the `name!` and `id!` newtype macros, the typed identity-addressed [`Arena`], the resolved-module-path `Qualifier` identity, the value types the surface (`curios-text`) and core (`curios-core`) `Term` representations share verbatim (`Plicity`, `InfixOp`), and the [`SyntaxRegistry`] shape those two stages read their emitted vocabulary from. Compiler-known names themselves belong to `curios-prelude-archive`, alongside the source declarations they name: this crate states the slots, never the spellings.
+//! Foundational utilities shared across every Curios pipeline stage: source spans, the fresh-name `Entropy`/`Mint` supply, the `name!` and `id!` newtype macros, the typed identity-addressed [`Arena`], the SHA-256 content [`digest`] and the [`Fingerprint`] every store key, record and tree hash is spelled with, the resolved-module-path `Qualifier` identity, the value types the surface (`curios-text`) and core (`curios-core`) `Term` representations share verbatim (`Plicity`, `InfixOp`), and the [`SyntaxRegistry`] shape those two stages read their emitted vocabulary from. Compiler-known names themselves belong to `curios-prelude-archive`, alongside the source declarations they name: this crate states the slots, never the spellings.
 //!
 //! Why names are never ordered, why every identity space has one source, why qualifiers share their segments and the archive interns them, why a segment's legality is decided here, why a mount is a prefix, why the syntax registry states slots and never spellings, and why depth is bought with stack are `README.md`'s decisions.
 //!
@@ -40,3 +40,6 @@ pub use packed::*;
 
 mod recurse;
 pub use recurse::*;
+
+mod digest;
+pub use digest::*;
