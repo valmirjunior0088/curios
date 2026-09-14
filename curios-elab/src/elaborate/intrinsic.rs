@@ -88,9 +88,12 @@ fn synth_intrinsic(
                 }
             }
             Operand::IsType => crate::check_is_sort(context, &operand)?.0,
-            Operand::Function { domain, codomain } => {
-                let binder = context.fresh(Some("x"));
-                let expected = Term::func_type([(binder, domain.clone())], codomain.clone());
+            Operand::Function { domains, codomain } => {
+                let params = domains
+                    .iter()
+                    .map(|domain| (context.fresh(Some("x")), domain.clone()))
+                    .collect::<Vec<_>>();
+                let expected = Term::func_type(params, codomain.clone());
 
                 elaborate(context, &operand, Mode::Check(expected))?.0
             }

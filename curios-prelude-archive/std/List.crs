@@ -1,6 +1,6 @@
 pub use /sys/{List};
-pub use /sys/List/{get, len, slice, map};
-use /std/{Nat, Bool, Option, Eq, Str, Show, Spell, Monad, Ordering, Ord, True};
+pub use /sys/List/{get, len, slice, map, fold};
+use /std/{Nat, Bool, Option, Eq, Str, Show, Spell, Monad, Ordering, Ord};
 use /std/ops/{Eql, Cmp};
 
 -- | The element at `i`, or `none` past the end.
@@ -22,18 +22,6 @@ pub let drop(@T: Type, a: List(T), k: Nat, @ok: Nat/Le(k, len(a))) -> List(T) =
 -- | The concatenation, in order.
 pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
     fold(parts, [], (a, acc) => [..acc, ..a]);
-
--- | Left to right with `f(elem, acc)`.
-pub let fold(@T: Type, @A: Type, l: List(T), init: A, f: (T, A) -> A) -> A =
-    let n = len(l);
-    let go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
-        match k
-        | 0 => acc
-        | kp + 1 =>
-            let below = Eq/subst((x) => Nat/Lt(i, x), inv, True/qed());
-            go(kp, i + 1, f(get(@T, l, i, @below), acc), inv)
-        end;
-    go(n, 0, init, Eq/refl());
 
 -- | The first element `pred` accepts, or `none`.
 pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =

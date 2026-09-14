@@ -688,6 +688,25 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
     };
     let list_cat = |parts: Vec<Term>| Term::intrinsic(Intrinsic::list_concat(elem.clone(), parts));
     let ys = Term::free_var(&list_tail);
+    let stepper = Free::local(15, Some("g"));
+    let g = Term::free_var(&stepper);
+    let seed = Free::local(16, Some("z"));
+    let z_free = Term::free_var(&seed);
+    let one_of = |item: Term| {
+        Term::intrinsic(Intrinsic::List {
+            element: elem.clone(),
+            items: vec![item],
+        })
+    };
+    let list_fold = |base: Term, init: Term| {
+        Term::intrinsic(Intrinsic::list_fold(
+            elem.clone(),
+            elem.clone(),
+            base,
+            init,
+            g.clone(),
+        ))
+    };
     let list_slice = |base: Term, start: Term, count: Term| {
         Term::intrinsic(Intrinsic::list_slice(
             elem.clone(),
@@ -1206,6 +1225,34 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
                     (&list_base, nat_list(&[1, 2, 3])),
                     (&nat_start, lit(3)),
                     (&nat_end, lit(0)),
+                ],
+            ],
+        ),
+        // The left fold over the shape: a cons steps once and folds the tail from there, and a concatenation folds its operands in order. Ground truth is structural, as for `map`: `g` stays a free symbol, so both sides fold to the same nest of applications.
+        (
+            "fold([a, ..xs], z, g) = fold(xs, g(a, z), g)",
+            list_fold(
+                list_cat(vec![one_of(a.clone()), xs.clone()]),
+                z_free.clone(),
+            ),
+            list_fold(
+                xs.clone(),
+                Term::apply(g.clone(), [a.clone(), z_free.clone()]),
+            ),
+            vec![
+                vec![(&list_base, nat_list(&[])), (&nat_elem, lit(5))],
+                vec![(&list_base, nat_list(&[1, 2])), (&nat_elem, lit(5))],
+            ],
+        ),
+        (
+            "fold(xs ++ ys, z, g) = fold(ys, fold(xs, z, g), g)",
+            list_fold(list_cat(vec![xs.clone(), ys.clone()]), z_free.clone()),
+            list_fold(ys.clone(), list_fold(xs.clone(), z_free.clone())),
+            vec![
+                vec![(&list_base, nat_list(&[])), (&list_tail, nat_list(&[3]))],
+                vec![
+                    (&list_base, nat_list(&[1, 2])),
+                    (&list_tail, nat_list(&[3, 4])),
                 ],
             ],
         ),

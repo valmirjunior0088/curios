@@ -179,6 +179,7 @@ impl Sort {
                 | Intrinsic::ListGet { .. }
                 | Intrinsic::ListLen { .. }
                 | Intrinsic::ListMap { .. }
+                | Intrinsic::ListFold { .. }
                 | Intrinsic::ListSlice { .. }
                 | Intrinsic::Nat(..)
                 | Intrinsic::NatAdd(..)

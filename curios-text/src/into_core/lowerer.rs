@@ -1443,6 +1443,19 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.term(list)?,
                 self.term(f)?,
             ),
+            Intrinsic::ListFold {
+                element,
+                result,
+                list,
+                init,
+                function,
+            } => curios_core::Intrinsic::list_fold(
+                self.term(element)?,
+                self.term(result)?,
+                self.term(list)?,
+                self.term(init)?,
+                self.term(function)?,
+            ),
             Intrinsic::CellType(inner) => curios_core::Intrinsic::cell_type(self.term(inner)?),
             Intrinsic::Cell {
                 element: type_,

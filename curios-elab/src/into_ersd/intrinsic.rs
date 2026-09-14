@@ -469,6 +469,14 @@ pub(super) fn erase_intrinsic(
             ))
         }
 
+        Intrinsic::ListFold {
+            element,
+            result,
+            list,
+            init,
+            function,
+        } => lowering.erase_list_fold(context, element, result, list, init, function, hint),
+
         &Intrinsic::Handle(token) => Ok(lowering.constant(curios_ersd::Constant::Handle(token))),
         // Every operation the host performs is typed `Io`, so every one erases to a thunk: the operands are computed where the description is *built*, and the operation itself happens only when the description is forced. Nothing below changes what the host call is — only where it sits relative to the closure boundary.
 

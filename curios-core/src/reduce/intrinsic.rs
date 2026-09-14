@@ -1424,6 +1424,72 @@ pub fn reduce_intrinsic(
                 |sub| Term::intrinsic(Intrinsic::list_map(a.clone(), b.clone(), sub, f.clone())),
             )
         }
+        // A left fold over the free-monoid shape: a literal run applies `f` element by element from the left, a concatenation folds its operands in order threading the accumulator, and an append folds its base and then the appended element — so `fold([h, ..t], z, f) = fold(t, f(h, z), f)` and `fold([..a, ..b], z, f) = fold(b, fold(a, z, f), f)` are definitional. A window or an opaque value stays neutral: the fold's value depends on every element, and none is in hand. Not a homomorphism — the accumulator threads through — so it does not go through `reduce_homomorphism`.
+        Intrinsic::ListFold {
+            element,
+            result,
+            list,
+            init,
+            function,
+        } => {
+            let element = reducer.reduce(element.clone())?;
+            let result = reducer.reduce(result.clone())?;
+            let list = reducer.reduce_forced(list.clone())?;
+            let init = reducer.reduce(init.clone())?;
+            let function = reducer.reduce(function.clone())?;
+            let fold = |list: Term, init: Term| {
+                Term::intrinsic(Intrinsic::list_fold(
+                    element.clone(),
+                    result.clone(),
+                    list,
+                    init,
+                    function.clone(),
+                ))
+            };
+            let step = |item: Term, acc: Term| Term::apply(function.clone(), [item, acc]);
+            match list_shape(list) {
+                Shape::Literal(items) => {
+                    reducer.spend(Cost::collection(items.len() as u64))?;
+                    let folded = items.into_iter().fold(init, |acc, item| step(item, acc));
+                    reducer.reduce(folded).map(Term::unwrap_or_clone)
+                }
+                Shape::Concat(operands) => {
+                    reducer.spend(Cost::collection(operands.len() as u64))?;
+                    let folded = operands
+                        .into_iter()
+                        .fold(init, |acc, operand| fold(operand, acc));
+                    reducer.reduce(folded).map(Term::unwrap_or_clone)
+                }
+                Shape::Append(base, item) => reducer
+                    .reduce(step(item, fold(base, init)))
+                    .map(Term::unwrap_or_clone),
+                Shape::Window {
+                    base,
+                    start,
+                    length,
+                    within,
+                } => Ok(Subterm::Intrinsic(Intrinsic::list_fold(
+                    element.clone(),
+                    result.clone(),
+                    Term::intrinsic(Intrinsic::list_slice(
+                        element.clone(),
+                        base,
+                        start,
+                        length,
+                        within,
+                    )),
+                    init,
+                    function.clone(),
+                ))),
+                Shape::Opaque(value) => Ok(Subterm::Intrinsic(Intrinsic::list_fold(
+                    element.clone(),
+                    result.clone(),
+                    value,
+                    init,
+                    function.clone(),
+                ))),
+            }
+        }
         // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.
         Intrinsic::HandleType => Ok(Subterm::Intrinsic(Intrinsic::HandleType)),
         Intrinsic::Handle(token) => Ok(Subterm::Intrinsic(Intrinsic::Handle(*token))),

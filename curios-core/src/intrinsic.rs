@@ -224,6 +224,14 @@ pub enum Intrinsic {
         list: Term,
         function: Term,
     },
+    // (@T, @A, list : List(T), init : A, f : (T, A) -> A) -> A: a structural left fold, `f(x_n, … f(x_1, init))`. Reduces over the free-monoid shape — a literal run applies `f` element by element, a concatenation folds its operands in order threading the accumulator, an append folds its base and then applies `f` to the appended element — and stays neutral on a symbolic operand, so `fold([h, ..t], z, f) = fold(t, f(h, z), f)` is definitional. Erases to a bounded `Nat` fold over the list's length with one read per step, the loop the library's index-loop fold used to spell by hand.
+    ListFold {
+        element: Term,
+        result: Term,
+        list: Term,
+        init: Term,
+        function: Term,
+    },
     HandleType,
     Handle(u32),
     // `(Nat) -> Io({})`: end the process. Like every host operation it denotes an inert description here and becomes a host call only at erasure.
@@ -502,6 +510,24 @@ impl Intrinsic {
         }
     }
 
+    /// A `ListFold` node from term-shaped element type, result type, list, initial accumulator, and stepper — the collection first, like every other sequence operation.
+    pub fn list_fold<T, A, L, I, F>(element: T, result: A, list: L, init: I, function: F) -> Self
+    where
+        T: Into<Term>,
+        A: Into<Term>,
+        L: Into<Term>,
+        I: Into<Term>,
+        F: Into<Term>,
+    {
+        Self::ListFold {
+            element: element.into(),
+            result: result.into(),
+            list: list.into(),
+            init: init.into(),
+            function: function.into(),
+        }
+    }
+
     /// A `CellType` node from a term-shaped element type.
     pub fn cell_type<T>(elem: T) -> Self
     where
@@ -677,6 +703,20 @@ impl Intrinsic {
                 visit(a);
                 visit(b);
                 visit(c);
+            }
+
+            Intrinsic::ListFold {
+                element: a,
+                result: b,
+                list: c,
+                init: d,
+                function: e,
+            } => {
+                visit(a);
+                visit(b);
+                visit(c);
+                visit(d);
+                visit(e);
             }
 
             Intrinsic::ListMap {
@@ -1094,6 +1134,19 @@ impl Intrinsic {
                 to: visit.visit_subterm(b),
                 list: visit.visit_subterm(list),
                 function: visit.visit_subterm(f),
+            },
+            Intrinsic::ListFold {
+                element,
+                result,
+                list,
+                init,
+                function,
+            } => Intrinsic::ListFold {
+                element: visit.visit_subterm(element),
+                result: visit.visit_subterm(result),
+                list: visit.visit_subterm(list),
+                init: visit.visit_subterm(init),
+                function: visit.visit_subterm(function),
             },
             Intrinsic::HandleType => Intrinsic::HandleType,
             Intrinsic::Handle(token) => Intrinsic::Handle(*token),

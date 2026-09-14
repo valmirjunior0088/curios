@@ -116,12 +116,20 @@ pub(super) fn list_of(elem: Term) -> Term {
 
 // A single-argument function type `(domain) -> output`, for higher-order intrinsics (the `f` of `List/map`).
 pub(super) fn fn_of(domain: Term, output: Term) -> Term {
+    fn_over(vec![domain], output)
+}
+
+// A function type over several explicit parameters `(domains…) -> output`, for the stepper of `List/fold`.
+pub(super) fn fn_over(domains: Vec<Term>, output: Term) -> Term {
     Subterm::FuncType(FuncType {
-        params: vec![FuncTypeParam {
-            plicity: Plicity::Explicit,
-            label: None,
-            type_: domain,
-        }],
+        params: domains
+            .into_iter()
+            .map(|domain| FuncTypeParam {
+                plicity: Plicity::Explicit,
+                label: None,
+                type_: domain,
+            })
+            .collect(),
         output,
     })
     .into()

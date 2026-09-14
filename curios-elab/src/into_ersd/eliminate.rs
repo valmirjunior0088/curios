@@ -378,6 +378,86 @@ impl Lowering {
         ))
     }
 
+    /// The `List/fold` intrinsic as a bounded `Nat` fold over the list's length, one read per step: `fold-nat len(l) { zero => init; step(i, acc) => f(get(l, i), acc) }`. The loop the library's index-loop fold used to spell by hand, now emitted here, so the type level keeps the intrinsic's laws and the runtime keeps the loop. `FoldSequence` is the wrong shape for it, being a right fold whose accumulator is the suffix's result; a left fold threads its accumulator the other way, and the `Nat` loop runs that way already.
+    ///
+    /// The list and the stepper are aliased once through `scrutinee_operand`, so a compound operand is erased before the loop rather than once per step. The read inside the step carries a dead bound: erasure never reads a `get`'s proof, and `i < len(l)` holds by construction of the loop.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn erase_list_fold(
+        &mut self,
+        context: &mut Context,
+        element: &Term,
+        result: &Term,
+        list: &Term,
+        init: &Term,
+        function: &Term,
+        hint: Option<&str>,
+    ) -> Result<Outcome, Error> {
+        let nat_type = Term::intrinsic(Intrinsic::NatType);
+        let list_type = Term::intrinsic(Intrinsic::ListType(element.clone()));
+        let (list, _) = match self.scrutinee_operand(context, list, &list_type)? {
+            Ok(pair) => pair,
+            Err(diverged) => return Ok(diverged),
+        };
+        let function_type = Term::func_type(
+            [
+                (context.fresh(Some("x")), element.clone()),
+                (context.fresh(Some("acc")), result.clone()),
+            ],
+            result.clone(),
+        );
+        let (function, _) = match self.scrutinee_operand(context, function, &function_type)? {
+            Ok(pair) => pair,
+            Err(diverged) => return Ok(diverged),
+        };
+        let length = Term::intrinsic(Intrinsic::list_len(element.clone(), list.clone()));
+        let (_, scrutinee) = match self.scrutinee_operand(context, &length, &nat_type)? {
+            Ok(pair) => pair,
+            Err(diverged) => return Ok(diverged),
+        };
+
+        let zero = self.open_arm(context, result, init)?;
+
+        let index_label = context.fresh(Some("i"));
+        let accumulator_label = context.fresh(Some("acc"));
+        let predecessor = self.builder.value(Some("i".to_string()));
+        let hypothesis = self.builder.value(Some("acc".to_string()));
+        self.environment
+            .bind(&index_label, curios_ersd::Atom::Value(predecessor));
+        self.environment
+            .bind(&accumulator_label, curios_ersd::Atom::Value(hypothesis));
+
+        self.builder.open_block();
+        let outcome = context.with_frame(|context| {
+            context.assume(&index_label, &nat_type);
+            context.assume(&accumulator_label, result);
+
+            // The bound never reaches the erased read, so any term serves its slot.
+            let dead_bound = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+            let item = Term::intrinsic(Intrinsic::list_get(
+                element.clone(),
+                list.clone(),
+                Term::free_var(&index_label),
+                dead_bound,
+            ));
+            let body = Term::apply(function.clone(), [item, Term::free_var(&accumulator_label)]);
+            self.walk(context, &body, result, None)
+        })?;
+        let step = self.seal(outcome);
+
+        Ok(self.bind(
+            hint,
+            curios_ersd::Rhs::FoldNat {
+                scrutinee,
+                zero,
+                step: curios_ersd::FoldNatStep {
+                    predecessor,
+                    hypothesis,
+                    block: step,
+                },
+            },
+        ))
+    }
+
     /// A `List`/`Bin` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a first-class `UnconsSequence` binding the element and the suffix alone. Both hand the reads to `curios-ersd`'s lowering rather than emitting them, which is what keeps a window's operand convention out of this crate.
     #[allow(clippy::too_many_arguments)]
     fn erase_seq_fold(

@@ -225,7 +225,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "List, the free monoid",
-        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Nat/Le(s + l, List/len(xs)), first: Nat/Lt(0, l), at: Nat/Lt(s, List/len(xs)), head: Nat/Lt(0, List/len(ys)), into: Nat/Lt(s, List/len(ys)), fits: Nat/Le(l, List/len(ys))",
+        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Nat/Le(s + l, List/len(xs)), first: Nat/Lt(0, l), at: Nat/Lt(s, List/len(xs)), head: Nat/Lt(0, List/len(ys)), into: Nat/Lt(s, List/len(ys)), fits: Nat/Le(l, List/len(ys)), z: Nat, g: (Nat, Nat) -> Nat",
         held: &[
             "Eq([..xs, ..[]], xs)",
             "Eq([..[], ..xs], xs)",
@@ -260,6 +260,12 @@ const CARRIERS: &[Carrier] = &[
             "Eq(List/get(@Nat, [..xs, ..ys], List/len(xs), @head), List/get(@Nat, ys, 0, @head))",
             "Eq(List/get(@Nat, [..xs, ..ys], List/len(xs) + s, @into), List/get(@Nat, ys, s, @into))",
             "Eq(List/slice(@Nat, [..xs, ..ys], List/len(xs), l, @fits), List/slice(@Nat, ys, 0, l, @fits))",
+            // A left fold reduces over the shape: the empty run is the seed, a cons steps once and folds the tail from there, and a concatenation folds its operands in order.
+            "Eq(List/fold(@Nat, @Nat, [], z, g), z)",
+            "Eq(List/fold([a], z, g), g(a, z))",
+            "Eq(List/fold([a, ..xs], z, g), List/fold(xs, g(a, z), g))",
+            "Eq(List/fold([..xs, ..ys], z, g), List/fold(ys, List/fold(xs, z, g), g))",
+            "Eq(List/fold([..xs, a], z, g), g(a, List/fold(xs, z, g)))",
         ],
         refused: &[
             // Function extensionality in disguise: not one to take.

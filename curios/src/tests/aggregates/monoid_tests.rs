@@ -20,6 +20,18 @@ fn list_match_is_a_foldr() {
 }
 
 #[test]
+fn list_fold_is_a_left_loop() {
+    // `List/fold` is the structural left fold, an intrinsic whose erasure is a bounded `Nat` fold over the length with one read per step. `f(h, acc) = acc * 10 + h` is non-commutative, so the result pins the order: `[1, 2, 3, 4]` folds to `1234`, the mirror of what the right-fold eliminator gives.
+    let source = r#"
+        use /std/{Str, Nat, List, Io};
+        let digits : Nat = List/fold([1, 2, 3, 4], 0, (h, acc) => acc * 10 + h);
+        let _ = Io/write(Io/stdout, Str/to_bytes(Nat/to_str(digits)))!;
+        /std/Io/pure(())
+        "#;
+    assert_eq!(run(source), b"1234");
+}
+
+#[test]
 fn list_map_fills_every_slot() {
     // `List/map` erases to a single O(n) fill loop (`emit_map`): size the result from `src.len`, allocate once, then write `f(src[i])` into slot `i` via an inline closure `call_ref`. A non-identity `f` (`+1`) over `[10, 20, 30]` must fill *every* slot, not just one: `get(_, 0) + get(_, 2)` = 11 + 31 = 42.
     let source = r#"

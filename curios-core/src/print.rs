@@ -946,6 +946,18 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             list,
             function: f,
         } => print_call("List/map", vec![a, b], vec![list, f], frame),
+        Intrinsic::ListFold {
+            element,
+            result,
+            list,
+            init,
+            function,
+        } => print_call(
+            "List/fold",
+            vec![element, result],
+            vec![list, init, function],
+            frame,
+        ),
         Intrinsic::HandleType => pure("Handle"),
         // The three `/sys/Handle` constants are the only handles a term ever holds: every other handle is minted by the host at run time, behind an `Io` no reduction enters. The last arm names a token no source can spell, and spells the token rather than abort the diagnostic it is inside.
         Intrinsic::Handle(stdio::STDIN) => pure("Handle/stdin"),

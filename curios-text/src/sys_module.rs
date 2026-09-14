@@ -830,6 +830,31 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
                 }),
             ),
         ),
+        documented(
+            &["Left to right with `f(elem, acc)`: `f(x_n, … f(x_1, init))`."],
+            pub_fn_marked(
+                "fold",
+                vec![
+                    (Plicity::Implicit, "T", type_()),
+                    (Plicity::Implicit, "A", type_()),
+                    (Plicity::Explicit, "l", list_of(name("T"))),
+                    (Plicity::Explicit, "init", name("A")),
+                    (
+                        Plicity::Explicit,
+                        "f",
+                        fn_over(vec![name("T"), name("A")], name("A")),
+                    ),
+                ],
+                name("A"),
+                intrinsic(Intrinsic::ListFold {
+                    element: name("T"),
+                    result: name("A"),
+                    list: name("l"),
+                    init: name("init"),
+                    function: name("f"),
+                }),
+            ),
+        ),
     ]
 }
 

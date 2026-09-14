@@ -780,6 +780,7 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::ListAppend { .. }
             | Intrinsic::ListConcat { .. }
             | Intrinsic::ListMap { .. }
+            | Intrinsic::ListFold { .. }
             | Intrinsic::Handle(_)
             | Intrinsic::ProcExit { .. }
             | Intrinsic::Cell { .. }

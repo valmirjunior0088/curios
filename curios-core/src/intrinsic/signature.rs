@@ -32,10 +32,10 @@ pub enum Operand {
     At(Term),
     /// The operand *is* a type; check that it is one. An intrinsic carrying its element type carries a type, and taking that on trust is how a container of nonsense would be admitted.
     IsType,
-    /// Check the operand against `(x: domain) -> codomain`.
+    /// Check the operand against `(x₁: domain₁, …, xₙ: domainₙ) -> codomain`.
     ///
-    /// Spelled as its two halves rather than as the function type itself because the binder has to be minted, and a signature is a pure function of the node with no name source of its own. The two operations that need it — `ListMap` and `IoBind` — are both non-dependent, so which name the walker picks cannot matter.
-    Function { domain: Term, codomain: Term },
+    /// Spelled as its halves rather than as the function type itself because the binders have to be minted, and a signature is a pure function of the node with no name source of its own. The three operations that need it — `ListMap`, `IoBind` and `ListFold` — are all non-dependent, so which names the walker picks cannot matter.
+    Function { domains: Vec<Term>, codomain: Term },
 }
 
 /// What an intrinsic produces.
@@ -344,7 +344,7 @@ impl Intrinsic {
                     Operand::IsType,
                     Operand::At(list_type(from.clone())),
                     Operand::Function {
-                        domain: from.clone(),
+                        domains: vec![from.clone()],
                         codomain: to.clone(),
                     },
                 ],
@@ -378,13 +378,28 @@ impl Intrinsic {
                 vec![Operand::IsType, Operand::At(result.clone())],
                 io_type(result.clone()),
             ),
+            ListFold {
+                element, result, ..
+            } => sig(
+                vec![
+                    Operand::IsType,
+                    Operand::IsType,
+                    Operand::At(list_type(element.clone())),
+                    Operand::At(result.clone()),
+                    Operand::Function {
+                        domains: vec![element.clone(), result.clone()],
+                        codomain: result.clone(),
+                    },
+                ],
+                result.clone(),
+            ),
             IoBind { from, to, .. } => sig(
                 vec![
                     Operand::IsType,
                     Operand::IsType,
                     Operand::At(io_type(from.clone())),
                     Operand::Function {
-                        domain: from.clone(),
+                        domains: vec![from.clone()],
                         codomain: io_type(to.clone()),
                     },
                 ],

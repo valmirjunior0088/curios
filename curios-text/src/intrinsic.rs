@@ -188,6 +188,13 @@ pub enum Intrinsic {
         list: Term,
         function: Term,
     },
+    ListFold {
+        element: Term,
+        result: Term,
+        list: Term,
+        init: Term,
+        function: Term,
+    },
     HandleType,
     Handle(u32),
     ProcExit {

@@ -929,6 +929,17 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             list,
             function: f,
         } => print_intrinsic_call("List/map", vec![a, b], vec![list, f]),
+        Intrinsic::ListFold {
+            element,
+            result,
+            list,
+            init,
+            function,
+        } => print_intrinsic_call(
+            "List/fold",
+            vec![element, result],
+            vec![list, init, function],
+        ),
         Intrinsic::HandleType => pure("Handle"),
         // The three `/sys/Handle` constants are the only handles a `/sys` body plants; the last arm spells a token no source can write rather than fail the print.
         Intrinsic::Handle(stdio::STDIN) => pure("Handle/stdin"),
