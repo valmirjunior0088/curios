@@ -232,7 +232,9 @@ let count_concat(
     | stop() => Eq/refl()
     | more(c, st, t, rest) =>
         match st: (q) =>
-            Eq(count_scalars(q, x[c, ..t, ..b]), count_scalars(q, x[c, ..t]) + count_scalars(Scan/lead(), b))
+            Eq(
+                count_scalars(q, x[c, ..t, ..b]),
+                count_scalars(q, x[c, ..t]) + count_scalars(Scan/lead(), b))
         | lead() => Eq/cong((n: Nat) => n + 1, count_concat(t, b, rest))
         | cont(_, _, _) => count_concat(t, b, rest)
         | bad() => count_concat(t, b, rest)
