@@ -529,6 +529,8 @@ pub enum Error {
     FoldMotiveCapturesScrutinee {
         scrutinee: Term,
     },
+    /// A witness goal keyed where a refused declaration's witness stood. Never reported: the item that met it is withheld as any dependent of a refusal is, so the one report the reader sees is the refusal's own, and this exists only to carry that verdict out of resolution.
+    Poisoned,
     Located {
         span: Span,
         error: Box<Error>,
@@ -1373,7 +1375,7 @@ impl Error {
     }
 
     /// The error under every wrapper.
-    fn unwrapped(&self) -> &Self {
+    pub(crate) fn unwrapped(&self) -> &Self {
         match self {
             Self::Located { error, .. } | Self::InDeclaration { error, .. } => error.unwrapped(),
             error => error,

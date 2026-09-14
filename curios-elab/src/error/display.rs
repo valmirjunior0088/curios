@@ -986,6 +986,9 @@ impl fmt::Display for Displayed<'_> {
             Error::FltLiteralOutOfRange { value } => {
                 write!(f, "Flt literal {value} overflows the finite range")
             }
+            Error::Poisoned => {
+                write!(f, "a witness a refused declaration held was needed")
+            }
             // `render_body` intercepts both wrappers before a real spelling ever reaches this match, but these arms must not rely on that: interpolating `{error}` would route through `Display for Error`, silently resetting a nested term's spelling to core's default. Recurse with the spelling in hand instead.
             Error::InDeclaration { name, error } => {
                 writeln!(f, "while elaborating {name}:")?;

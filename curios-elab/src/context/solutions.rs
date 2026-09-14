@@ -3,7 +3,7 @@
 //! Everything here is frame-independent — a metavariable's record freezes the Γ it was born under, and parked work freezes the frame it blocked in, so neither is touched by `enter_frame`/`leave_frame`. Writes that must reach the cache stamps are stamped by the `Context` façade; the transactional watermark (`SolutionMark`) also stays there, because it spans this store and the universe solver together.
 
 use {
-    super::{FrozenFrame, SharedTelescope},
+    super::{FrozenFrame, ItemStamp, SharedTelescope},
     crate::Problem,
     curios_core::{Bound, Metavar, MetavarId, MetavarOrigin, Subterm, Term, WitnessOrigin},
     curios_utilities::Entropy,
@@ -78,8 +78,8 @@ pub(crate) struct Solutions {
     solved_log: Vec<MetavarId>,
     /// While set, `expect` may not park: conversion is being used as a yes/no oracle (re-validation) and provisional success would leak into it.
     suppress_parking: bool,
-    /// Witness goals whose key is rigid but has no table entry *yet*: a later item may register the missing witness (the table is program-wide while items elaborate in order), so these defer — retried after each item, reported as errors only when the whole module has been elaborated.
-    deferred_witnesses: Vec<ParkedProblem>,
+    /// Witness goals whose key is rigid but has no table entry *yet*: a later item may register the missing witness (the table is program-wide while items elaborate in order), so these defer — retried after each item, reported as errors only when the whole module has been elaborated. Each carries the item that raised it, which is what a report that surfaces items later is attributed to.
+    deferred_witnesses: Vec<(ItemStamp, ParkedProblem)>,
 }
 
 impl Solutions {
@@ -305,21 +305,27 @@ impl Solutions {
         mem::replace(&mut self.suppress_parking, suppressed)
     }
 
-    /// Defer a witness goal whose key is rigid but has no table entry yet. The façade stamps the write.
-    pub(crate) fn defer_witness(&mut self, parked: ParkedProblem) {
-        self.deferred_witnesses.push(parked);
+    /// Defer a witness goal whose key is rigid but has no table entry yet, under the item that raised it. The façade stamps the write.
+    pub(crate) fn defer_witness(&mut self, item: ItemStamp, parked: ParkedProblem) {
+        self.deferred_witnesses.push((item, parked));
     }
 
-    /// Take every deferred witness goal for a retry sweep.
-    pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<ParkedProblem> {
+    /// Take every deferred witness goal, with its item, for a retry sweep.
+    pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<(ItemStamp, ParkedProblem)> {
         mem::take(&mut self.deferred_witnesses)
+    }
+
+    /// Drop the deferred goals `item` raised, keeping every other item's.
+    pub(crate) fn drop_deferred_of(&mut self, item: ItemStamp) {
+        self.deferred_witnesses
+            .retain(|(raised_by, _)| *raised_by != item);
     }
 
     /// The deferred witness goals' slots and goal types, read-only — the item drain's diagnosis of a conversion stuck on a witness whose registration never arrived in time.
     pub(crate) fn deferred_witness_goals(&self) -> impl Iterator<Item = (MetavarId, &Term)> {
         self.deferred_witnesses
             .iter()
-            .filter_map(|parked| match &parked.work {
+            .filter_map(|(_, parked)| match &parked.work {
                 ParkedWork::Witness { slot, goal, .. } => Some((*slot, goal)),
                 _ => None,
             })

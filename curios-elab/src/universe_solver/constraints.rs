@@ -167,6 +167,24 @@ impl ConstraintStore {
         self.rewrites.clear();
     }
 
+    /// Close every open scope and drop the journal — see `UniverseSolver::abandon_speculation` for where that is sound.
+    pub(super) fn abandon(&mut self) {
+        self.speculation = 0;
+        self.rewrites.clear();
+    }
+
+    /// How many speculative scopes are open.
+    #[cfg(test)]
+    pub(super) fn speculation(&self) -> usize {
+        self.speculation
+    }
+
+    /// How many pre-images the journal holds.
+    #[cfg(test)]
+    pub(super) fn journal_len(&self) -> usize {
+        self.rewrites.len()
+    }
+
     /// Drop every constraint failing `keep` and rebuild the index.
     ///
     /// Retaining renumbers the survivors, so the rewrite journal — which names positions — cannot outlive it. Callers use this only at a declaration boundary, past any mark that could still be rolled back to.

@@ -527,3 +527,28 @@ fn a_module_of_the_standard_library_is_answered_against_the_prelude_it_is_part_o
     assert_eq!(stdout(&answered), "", "the standard library is clean");
     assert!(!stderr.contains("collid"), "{stderr}");
 }
+
+/// A file with two refusals answers with both: the compiler recovers past the first and reports the second beside it, and a declaration reaching a refused one is not in the answer.
+#[test]
+fn diagnostics_on_a_broken_file_lists_every_refusal() {
+    let root = temporary("broken");
+    fs::create_dir_all(&root).unwrap();
+
+    let answered = curios(
+        &root,
+        &["wonder", "diagnostics", "-"],
+        "let _a : /std/Nat = true;\nlet _b : /std/Nat = _a;\nlet _c : /std/Nat = false;\n/std/print(\"\")\n",
+    );
+
+    assert!(
+        answered.status.success(),
+        "{}",
+        String::from_utf8_lossy(&answered.stderr)
+    );
+    let text = stdout(&answered);
+    assert!(text.contains("--> <stdin>:1:21"), "{text}");
+    assert!(text.contains("--> <stdin>:3:21"), "{text}");
+    assert!(!text.contains("_b"), "{text}");
+
+    fs::remove_dir_all(root).unwrap();
+}

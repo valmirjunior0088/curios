@@ -11,7 +11,7 @@
 
 use {
     super::{
-        Context, EmbeddingDiagnosis, Error, HeadKey, Outcome, ParkedProblem, ParkedWork,
+        Context, EmbeddingDiagnosis, Error, HeadKey, ItemStamp, Outcome, ParkedProblem, ParkedWork,
         ShapeDiagnosis, Witness, WitnessKey, convert_outcome, reduce_with,
     },
     curios_core::{
@@ -30,8 +30,16 @@ enum Resolution {
     Flex,
     /// The key is rigid and keyable but the table has no entry (yet) — defer.
     Missing,
+    /// The key is one a refused declaration's witness stood under: the goal is that refusal's dependent, and the caller withholds rather than reports.
+    Poisoned,
     /// Definitely unresolvable: rigid non-keyable head, or a table hit whose remaining parameters do not unify. The caller reports `NoWitness`.
     NoMatch,
+}
+
+/// A deferred witness goal that will never resolve, attributed to the item that raised it.
+pub(crate) struct DeferredRefusal {
+    pub item: ItemStamp,
+    pub error: Error,
 }
 
 /// Best-effort display form of a goal for diagnostics — the renderer every mismatch report uses (`resolved_for_display`), so a goal is spelled as the rest of the reports spell a type. A bare strict zonk stood here before, and it rendered a nominal type through its recursive-group projection — `no witness of Spell(rec #0: Type = Opaque; #0) found` — because a zonked solution spells a stuck recursive call as the `Rec` node itself until the refold gives it back its name.
@@ -390,7 +398,10 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
     let key = WitnessKey(heads);
 
     let Some(witness) = context.witness(&concept_name, &key).cloned() else {
-        return Ok(Resolution::Missing);
+        return Ok(match context.is_poisoned_witness(&concept_name, &key) {
+            true => Resolution::Poisoned,
+            false => Resolution::Missing,
+        });
     };
 
     instantiate(context, &witness, &goal_whnf, origin)
@@ -630,6 +641,7 @@ pub(crate) fn attempt_witness_goal(
             });
             Ok(())
         }
+        Resolution::Poisoned => Err(Error::Poisoned),
         Resolution::NoMatch => {
             Err(no_witness_error(context, goal, &provenance).at_opt(origin.span()))
         }
@@ -680,20 +692,24 @@ pub(crate) fn retry_witness(
             });
             Ok(())
         }
+        Resolution::Poisoned => Err(Error::Poisoned),
         Resolution::NoMatch => {
             Err(no_witness_error(context, &goal, &provenance).at_opt(origin.span()))
         }
     }
 }
 
-/// Retry every deferred witness goal — after an item, when new witnesses may have registered. Goals that stay unresolvable re-defer; solutions that land wake parked constraints.
-pub(crate) fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
+/// Retry every deferred witness goal — after an item, when new witnesses may have registered. Goals that stay unresolvable re-defer; solutions that land wake parked constraints. A goal that fails is handed back attributed to the item that raised it rather than raised here, and the goals after it are still retried: that item has finalized, so its failure is its own and stops nothing else's retry. The error raised is the current item's — a parked constraint of its own that a landed solution woke and refused.
+pub(crate) fn retry_deferred_witnesses(
+    context: &mut Context,
+) -> Result<Vec<DeferredRefusal>, Error> {
     let deferred = context.take_deferred_witnesses();
     if deferred.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
-    for parked in deferred {
+    let mut refusals = Vec::new();
+    for (item, parked) in deferred {
         let ParkedProblem {
             work:
                 ParkedWork::Witness {
@@ -708,7 +724,14 @@ pub(crate) fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Erro
         else {
             unreachable!("only witness goals defer");
         };
-        retry_witness(context, slot, goal, provenance, origin, frame)?;
+        // As the item that raised it, so a re-deferral keeps that attribution.
+        let retried = context.with_item(item, |context| {
+            retry_witness(context, slot, goal, provenance, origin, frame)
+        });
+        if let Err(error) = retried {
+            refusals.push(DeferredRefusal { item, error });
+            continue;
+        }
 
         // The deferred store is retried only *between* items, so the declaration that raised this goal has already finalized: its universe scheme is fixed, and no later pass will generalize or minimize a level introduced now. `instantiate` pins the witness's instance against the goal for exactly that reason. Check it held. Without this, a level that slips through is reported by `zonk` at the end of the module as an anonymous `?uN` escaping, naming neither the goal that introduced it nor the witness it came from.
         if let Some(solution) = context.metavar_solution(slot).cloned()
@@ -719,20 +742,27 @@ pub(crate) fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Erro
                     .is_ok_and(|level| !level.metas().collect::<Vec<_>>().is_empty())
             })
         {
-            return Err(Error::UniverseInvariant(format!(
-                "a deferred witness left an unsolved universe level in {solution}"
-            )));
+            refusals.push(DeferredRefusal {
+                item,
+                error: Error::UniverseInvariant(format!(
+                    "a deferred witness left an unsolved universe level in {solution}"
+                )),
+            });
         }
     }
 
-    context.retry_parked()
+    context.retry_parked()?;
+
+    Ok(refusals)
 }
 
-/// The end-of-module sweep: retry once more, then report any survivor — the whole program has elaborated, so a still-missing table entry will never register.
-pub(crate) fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Error> {
-    retry_deferred_witnesses(context)?;
+/// The end-of-module sweep: retry once more, then hand back every survivor as its item's refusal — the whole program has elaborated, so a still-missing table entry will never register.
+pub(crate) fn finish_deferred_witnesses(
+    context: &mut Context,
+) -> Result<Vec<DeferredRefusal>, Error> {
+    let mut refusals = retry_deferred_witnesses(context)?;
 
-    if let Some(parked) = context.take_deferred_witnesses().into_iter().next() {
+    for (item, parked) in context.take_deferred_witnesses() {
         let ParkedProblem {
             work: ParkedWork::Witness {
                 goal, provenance, ..
@@ -743,10 +773,13 @@ pub(crate) fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Err
         else {
             unreachable!("only witness goals defer");
         };
-        return Err(no_witness_error(context, &goal, &provenance).at_opt(origin.span()));
+        refusals.push(DeferredRefusal {
+            item,
+            error: no_witness_error(context, &goal, &provenance).at_opt(origin.span()),
+        });
     }
 
-    Ok(())
+    Ok(refusals)
 }
 
 /// Register an elaborated definition as a witness: validate its telescope (no explicit binders, regular premises), key it on the tuple of rigid heads of the concept's parameters, and insert it into the program-wide table — rejecting a duplicate key. `signature` is the definition's *elaborated* type, and `module` its declaring `Definition`'s own island, which the orphan-rule check below resolves to a mount. Registration ignores `pub`: visibility governs the name, never table membership.

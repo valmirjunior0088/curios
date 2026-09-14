@@ -319,8 +319,8 @@ fn a_wide_goal_type_breaks_across_lines_in_the_report() {
 }
 
 #[test]
-fn a_hard_error_preempts_the_goal_batch() {
-    // A goal already registered does not soften a later hard failure: the interrupted elaboration established no complete batch, so only the hard error reports.
+fn a_hard_error_beside_a_goal_is_reported_with_it() {
+    // A goal already registered does not soften a later hard failure, and the failure does not hide the goal: elaboration recovers past the refused item, so the run reports both — the refusal first, then the goal batch — and classifies as the refusal's (`goal_tests::a_goal_beside_a_refusal_classifies_as_mixed`).
     let source = r#"
         use /std/{Nat};
         let m : Nat = ?;
@@ -331,7 +331,11 @@ fn a_hard_error_preempts_the_goal_batch() {
     let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
-    assert!(!error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(
+        error.find("type mismatch") < error.find("goal `?`"),
+        "the refusal comes first: {error}"
+    );
 }
 
 /// The reference's own span survives the instance wrapper elaboration mints around a polymorphic occurrence: the typed head is a bare `Var` with no span of its own, so the wrapper carries the occurrence's, and the mismatch renders with its source snippet and a caret under the reference rather than arriving unlocated.

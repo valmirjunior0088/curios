@@ -197,7 +197,7 @@ Exit status is a tri-state, so tooling can tell "here is your goal batch" from "
 | Code | Meaning |
 | --- | --- |
 | `0` | compiled, and for `run`, the program itself exited 0 |
-| `1` | a hard error, or for `lint`, a lint |
+| `1` | a hard error, alone or beside written goals, or for `lint`, a lint |
 | `2` | the program contains written goals (`?`), and their report went to stderr |
 
 A running program's own exit code passes through untouched, so `0` never hides a failure.

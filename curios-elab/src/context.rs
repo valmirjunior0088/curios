@@ -104,6 +104,10 @@ pub(crate) struct SolutionMark {
     universe: UniverseMark,
 }
 
+/// Which top-level item raised a deferred witness goal: the item's position in its module's order, with the entry after the last item. What attributes a refusal that surfaces only once later items have elaborated — a witness that never registered — to the declaration that raised it rather than to the item the sweep happened to run after.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct ItemStamp(pub(crate) usize);
+
 /// The kernel's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: the *frame-scoped* lexical state (`Frames`), pushed and popped as binders and match arms are entered, and the *flat monotonic facts* about the program (`Solutions`, `Program`), which frames never touch. The `Caches` police both with their write stamps, and this façade is where the two halves coordinate: any method that writes a store *and* must stamp or clear a cache lives here, naming both sub-stores explicitly. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
 #[derive(Debug)]
 pub struct Context {
@@ -132,8 +136,14 @@ pub struct Context {
     island: Option<Qualifier>,
     // Every term elaboration settled, with the type it settled at — the seed of obligation (V). Recorded here rather than reconstructed afterwards because "what type was this checked against" is a fact elaboration computes for every term and a later walk can only re-derive, incompletely (see `crate::totality`). The site travels as an `Rc<str>` so recording is three pointer bumps.
     checked: Vec<(Term, Term, Rc<str>)>,
+    /// The item that recorded each entry of `checked`, in parallel, so a retracted item's terms can be taken out from among the others'.
+    checked_by: Vec<ItemStamp>,
     // The definition whose body is currently elaborating, for those sites.
     checked_site: Rc<str>,
+    /// The item being elaborated, stamped onto every witness goal it defers.
+    item: ItemStamp,
+    /// The names whose declarations the parser could not read, handed in before elaboration so their dependents are withheld from the start. Empty until a lowering reports them.
+    broken: BTreeSet<Global>,
     // The names the type-directed features synthesize — infix dispatch and row subsumption. Supplied rather than spelled: the elaborator knows *which* declaration it needs, and `curios-prelude` knows what that declaration is called. See [`Context::syntax`].
     syntax: SyntaxRegistry,
     // Conversions the item drain gave up on because written goals alone held them up — what each such `?` must make true, carried to the goal batch rather than reported as an error. See `Context::note_goal_obligation`.
@@ -187,7 +197,10 @@ impl Context {
             program: Program::new(),
             island: Some(Qualifier::empty()),
             checked: Vec::new(),
+            checked_by: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
+            item: ItemStamp(0),
+            broken: BTreeSet::new(),
             syntax,
             imports: Imports::default(),
             goal_obligations: Vec::new(),
@@ -260,6 +273,7 @@ impl Context {
     pub(crate) fn record_checked(&mut self, term: &Term, type_: &Term) {
         self.checked
             .push((term.clone(), type_.clone(), Rc::clone(&self.checked_site)));
+        self.checked_by.push(self.item);
     }
 
     /// Name the definition whose body is elaborating, for (V)'s diagnostics. Returns the previous site so the caller can restore it.
@@ -272,9 +286,55 @@ impl Context {
         self.checked_site = site;
     }
 
+    /// The site being elaborated, as [`Context::set_checked_site`] last set it.
+    pub(crate) fn checked_site(&self) -> Rc<str> {
+        Rc::clone(&self.checked_site)
+    }
+
     /// Read the recorded terms without consuming them — obligation (T) reads them first, and (V) drains afterwards.
     pub(crate) fn checked(&self) -> &[(Term, Term, Rc<str>)] {
         &self.checked
+    }
+
+    /// How many terms are recorded — where an item begins, so [`Context::truncate_checked`] can forget what a refused item recorded.
+    pub(crate) fn checked_mark(&self) -> usize {
+        self.checked.len()
+    }
+
+    /// Forget every term recorded since `mark`: a refused item's, which no obligation may read.
+    pub(crate) fn truncate_checked(&mut self, mark: usize) {
+        self.checked.truncate(mark);
+        self.checked_by.truncate(mark);
+    }
+
+    /// Forget every term `item` recorded, wherever it sits among the others': a retracted item's, refused after later items recorded theirs.
+    pub(crate) fn retract_checked(&mut self, item: ItemStamp) {
+        let mut recorded_by = self.checked_by.iter();
+        self.checked
+            .retain(|_| *recorded_by.next().expect("one recorder per entry") != item);
+        self.checked_by.retain(|recorder| *recorder != item);
+    }
+
+    /// Enter the item stamped onto the witness goals deferred from here on.
+    pub(crate) fn begin_item(&mut self, item: ItemStamp) {
+        self.item = item;
+    }
+
+    /// Run `f` as `item`, restoring the current item after: a deferred goal retried later still belongs to the item that raised it, and a re-deferral must keep saying so.
+    pub(crate) fn with_item<R>(&mut self, item: ItemStamp, f: impl FnOnce(&mut Self) -> R) -> R {
+        let outer = mem::replace(&mut self.item, item);
+        let result = f(self);
+        self.item = outer;
+        result
+    }
+
+    /// Name the declarations a lowering could not read. Their dependents are withheld from elaboration before the first item is checked, so a parse failure in one declaration reports as that declaration's and nothing else's.
+    pub fn set_broken(&mut self, names: BTreeSet<Global>) {
+        self.broken = names;
+    }
+
+    pub(crate) fn take_broken(&mut self) -> BTreeSet<Global> {
+        mem::take(&mut self.broken)
     }
 
     pub(crate) fn record_definition_totality(&mut self, name: &Global, totality: Totality) {
@@ -291,6 +351,7 @@ impl Context {
 
     /// Drain the recorded terms. The gate takes them once per module.
     pub(crate) fn take_checked(&mut self) -> Vec<(Term, Term, Rc<str>)> {
+        self.checked_by.clear();
         mem::take(&mut self.checked)
     }
 
@@ -867,6 +928,12 @@ impl Context {
         self.frames.definition_kind(name)
     }
 
+    /// Undo a top-level declaration's bindings ([`Frames::forget`]) — a refused item's, so the scope holds what elaborated and nothing of what did not. The caches clear as for a redefinition: an entry may have consumed the binding.
+    pub(crate) fn forget(&mut self, name: &Free) {
+        self.frames.forget(name);
+        self.caches.invalidate_for_redefinition();
+    }
+
     // === Refinements (see [`Frames`]) =======================================
 
     /// [`Frames::refine`], with the refinement cache protocol — the variable now reduces differently.
@@ -969,6 +1036,24 @@ impl Context {
         self.program.update_induct(name, induct_decl);
     }
 
+    /// Take a refused declaration's inductive entry out of the registry, if it had one.
+    pub(crate) fn remove_induct(&mut self, name: &Global) {
+        self.program.remove_induct(name);
+        self.caches.note_write();
+    }
+
+    /// Take a refused declaration's struct entry out of the registry, if it had one.
+    pub(crate) fn remove_struct(&mut self, name: &Global) {
+        self.program.remove_struct(name);
+        self.caches.note_write();
+    }
+
+    /// Take a refused declaration's concept entry out of the registry, if it had one.
+    pub(crate) fn remove_concept(&mut self, name: &Global) {
+        self.program.remove_concept(name);
+        self.caches.note_write();
+    }
+
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
         self.program.induct_decl(name)
     }
@@ -1058,6 +1143,24 @@ impl Context {
         existing
     }
 
+    /// [`Program::remove_witness`], stamping the write: a witness gone can change which pure elaborations succeed as much as one arriving.
+    pub(crate) fn remove_witness(&mut self, name: &Global) -> Vec<(Global, WitnessKey)> {
+        let keys = self.program.remove_witness(name);
+        if !keys.is_empty() {
+            self.caches.note_write();
+        }
+        keys
+    }
+
+    /// Mark `(concept, key)` as a slot a refused declaration's witness stood in — see [`Program::poison_witness_key`].
+    pub(crate) fn poison_witness_key(&mut self, concept: Global, key: WitnessKey) {
+        self.program.poison_witness_key(concept, key);
+    }
+
+    pub(crate) fn is_poisoned_witness(&self, concept: &Global, key: &WitnessKey) -> bool {
+        self.program.is_poisoned_witness(concept, key)
+    }
+
     /// [`Program::update_witness_scheme`], stamping the write.
     pub(crate) fn update_witness_scheme(
         &mut self,
@@ -1070,14 +1173,20 @@ impl Context {
         self.caches.note_write();
     }
 
-    /// Defer a witness goal ([`Solutions::defer_witness`]), stamping the write.
+    /// Defer a witness goal ([`Solutions::defer_witness`]) under the current item, stamping the write.
     pub(crate) fn defer_witness(&mut self, parked: ParkedProblem) {
         self.caches.note_write();
-        self.solutions.defer_witness(parked);
+        self.solutions.defer_witness(self.item, parked);
     }
 
-    pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<ParkedProblem> {
+    /// Every deferred witness goal with the item that raised it, for a retry sweep.
+    pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<(ItemStamp, ParkedProblem)> {
         self.solutions.take_deferred_witnesses()
+    }
+
+    /// Drop the deferred goals one item raised — a refused item's, which would otherwise be retried and reported for a declaration already reported.
+    pub(crate) fn drop_deferred_of(&mut self, item: ItemStamp) {
+        self.solutions.drop_deferred_of(item);
     }
 
     /// The deferred witness goals' slots and goal types ([`Solutions::deferred_witness_goals`]).
@@ -1328,6 +1437,11 @@ impl Context {
         if self.universe_solver.state_token() != before {
             self.caches.invalidate_for_universe_transaction();
         }
+    }
+
+    /// Close every speculative universe scope a refusal left open — see [`UniverseSolver::abandon_speculation`] for where that is sound.
+    pub(crate) fn abandon_universe_speculation(&mut self) {
+        self.universe_solver.abandon_speculation();
     }
 
     pub(crate) fn fresh_universe(

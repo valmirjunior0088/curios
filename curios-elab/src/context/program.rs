@@ -1,6 +1,6 @@
 //! The program-wide declaration stores: flat, monotonic facts about the module being elaborated.
 //!
-//! Everything here is registry state — inductive, struct, and concept declarations, the witness table, and per-definition totality verdicts. None of it is lexically scoped: `enter_frame`/`leave_frame` never touch these stores, and entries are only ever added or refined in place, never popped. The one write that must reach the cache stamps (`insert_witness`, `update_witness_scheme`) is stamped by the `Context` façade, which alone holds the [`Caches`](super::Caches).
+//! Everything here is registry state — inductive, struct, and concept declarations, the witness table, and per-definition totality verdicts. None of it is lexically scoped: `enter_frame`/`leave_frame` never touch these stores, and entries are only ever added or refined in place, never popped — except a refused declaration's, which the item loop takes out whole (`remove_induct` and its siblings, `remove_witness`) so nothing a later item reads was written by an item that failed. The writes that must reach the cache stamps (`insert_witness`, `update_witness_scheme`, the removals) are stamped by the `Context` façade, which alone holds the [`Caches`](super::Caches).
 
 use {
     crate::{Error, HeadKey, Witness, WitnessKey},
@@ -26,6 +26,8 @@ pub(crate) struct Program {
     totality: BTreeMap<Global, Totality>,
     /// Every prefix this compilation mounts — the scope's, then the unit's own. Accumulated as each module is seeded, from the `mounts` that module carries, so the elaborator answers a privilege question out of what was actually mounted rather than out of a stamp copied onto each declaration.
     mounts: Vec<Mount>,
+    /// The keys a refused declaration's witnesses stood under. A goal keyed here would have resolved through the refused witness, so it is the refusal's dependent and reports nothing of its own — where a plain miss would report `no witness` for a witness the reader can see.
+    poisoned_witnesses: BTreeSet<(Global, WitnessKey)>,
 }
 
 impl Program {
@@ -60,6 +62,11 @@ impl Program {
         self.induct_decls.get(name)
     }
 
+    /// Take `name`'s inductive entry out, if it has one — a refused declaration's, or a withheld one's. Nothing elaborated against a removed entry survives it: the item that declared it is out, and every item that could reach it is withheld.
+    pub(crate) fn remove_induct(&mut self, name: &Global) {
+        self.induct_decls.remove(name);
+    }
+
     /// Record a new struct declaration's metadata. Called once per `struct` declaration as a module is seeded into the context (elaboration or erasure). Errs with `DuplicateStruct` (leaving the existing entry untouched) if `name` is already registered — the registry is shared across every root elaborated into this context, so a collision is rejected rather than silently overwriting a prior root's declaration. Mid-elaboration rebuilds of an already-registered entry go through [`Program::update_struct`] instead.
     pub(crate) fn register_struct(
         &mut self,
@@ -85,6 +92,11 @@ impl Program {
     /// Look up a struct declaration by the type's qualified name.
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         self.struct_decls.get(name)
+    }
+
+    /// Take `name`'s struct entry out, if it has one — see [`Program::remove_induct`].
+    pub(crate) fn remove_struct(&mut self, name: &Global) {
+        self.struct_decls.remove(name);
     }
 
     /// Record a new concept declaration's resolution metadata (its record shape is registered separately, as an ordinary structure). Called once per `concept` declaration when a module's registries are seeded. Errs with `DuplicateConcept` (leaving the existing entry untouched) if `name` is already registered — the registry is shared across every root elaborated into this context, so a collision is rejected rather than silently overwriting a prior root's declaration.
@@ -116,6 +128,11 @@ impl Program {
     /// The registered concepts, for whole-registry validation (superclass acyclicity) at seed time.
     pub(crate) fn concepts(&self) -> &BTreeMap<Global, ConceptDecl> {
         &self.concepts
+    }
+
+    /// Take `name`'s concept entry out, if it has one — see [`Program::remove_induct`].
+    pub(crate) fn remove_concept(&mut self, name: &Global) {
+        self.concepts.remove(name);
     }
 
     /// Record the prefixes one seeded module's unit claims. Called once per module as it enters the context — the scope's, then the unit's own.
@@ -191,6 +208,31 @@ impl Program {
                 None
             }
         }
+    }
+
+    /// Take every table entry the witness `name` holds, handing back the keys it stood under — what a refused declaration's registration leaves behind, for the caller to poison. A witness registers before its body elaborates, so a refused one may well be in the table.
+    pub(crate) fn remove_witness(&mut self, name: &Global) -> Vec<(Global, WitnessKey)> {
+        let keys = self
+            .witness_table
+            .iter()
+            .filter(|(_, witness)| witness.name == *name)
+            .map(|(key, _)| key.clone())
+            .collect::<Vec<_>>();
+        for key in &keys {
+            self.witness_table.remove(key);
+        }
+
+        keys
+    }
+
+    /// Mark `(concept, key)` as a slot a refused witness stood in.
+    pub(crate) fn poison_witness_key(&mut self, concept: Global, key: WitnessKey) {
+        self.poisoned_witnesses.insert((concept, key));
+    }
+
+    pub(crate) fn is_poisoned_witness(&self, concept: &Global, key: &WitnessKey) -> bool {
+        self.poisoned_witnesses
+            .contains(&(concept.clone(), key.clone()))
     }
 
     /// Rewrite a registered witness's generalized scheme once its signature finalizes. Panics if `name` was never registered. The façade stamps the write.

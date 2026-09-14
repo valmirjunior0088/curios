@@ -557,3 +557,32 @@ fn typecheck_rejects_a_goal() {
 
     assert!(error.contains("goal `?`"), "unexpected error: {error}");
 }
+
+/// A refusal beside a written goal is the refusal's exit and both reports: the refused item's first, then the goal at its occurrence.
+#[test]
+fn a_goal_beside_a_refusal_classifies_as_mixed() {
+    let mixed = with_entrypoint_type(
+        "let bad : /std/Nat = true; let m : /std/Nat = ?; m",
+        Some("/std/Nat"),
+    );
+    let Err(error) = compile_with_prelude(DEFAULT_STEP_BUDGET, &mixed, &RootSource::none(), |_| {})
+    else {
+        panic!("a refused item compiles nothing");
+    };
+
+    let CompileError::Mixed { reports, failures } = error else {
+        panic!("mixed, got {error:?}");
+    };
+    assert_eq!(failures, 1);
+    assert_eq!(reports.len(), 2, "{reports:?}");
+    assert!(
+        reports[0].message.contains("bad:"),
+        "{}",
+        reports[0].message
+    );
+    assert!(
+        reports[1].message.starts_with("goal `?`"),
+        "{}",
+        reports[1].message
+    );
+}

@@ -523,3 +523,32 @@ fn a_file_target_the_disk_does_not_hold_is_refused_before_it_is_placed() {
         "{refusal}"
     );
 }
+
+/// Elaboration recovers past a refusal, so a file with two answers with two — each an error at its own term — and a declaration reaching a refused one is not in the answer.
+#[test]
+fn every_refusal_in_a_broken_file_is_listed() {
+    let reports = of(
+        "let _a : /std/Nat = true;\nlet _b : /std/Nat = _a;\nlet _c : /std/Nat = false;\n/std/print(\"\")",
+    );
+    let [first, second] = reports.as_slice() else {
+        panic!("two refusals, got {reports:?}");
+    };
+
+    assert_eq!(first.severity, Severity::Error);
+    assert_eq!(second.severity, Severity::Error);
+    assert_eq!(first.report.span.as_ref().unwrap().line_column(), (1, 21));
+    assert_eq!(second.report.span.as_ref().unwrap().line_column(), (3, 21));
+}
+
+#[test]
+fn a_goal_beside_a_refusal_keeps_its_goal_severity() {
+    let reports = of("let _a : /std/Nat = true;\nlet _m : /std/Nat = ?;\n/std/print(\"\")");
+    let [refusal, goal] = reports.as_slice() else {
+        panic!("a refusal and a goal, got {reports:?}");
+    };
+
+    assert_eq!(refusal.severity, Severity::Error);
+    assert_eq!(refusal.report.span.as_ref().unwrap().line_column(), (1, 21));
+    assert_eq!(goal.severity, Severity::Goal);
+    assert_eq!(goal.report.span.as_ref().unwrap().line_column(), (2, 21));
+}

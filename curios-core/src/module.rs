@@ -412,36 +412,19 @@ impl Module {
         marks
     }
 
-    /// Every top-level name `item`'s elaboration consumed: what its definitions [reach](Definition::reaches), plus what the registry entries it declares reach — a struct's field types, an inductive's constructor payloads and a concept's parameters live only in the entry, and an item whose entry names another declaration depends on it as its body would.
-    ///
-    /// A recursive group's members are read under the group's own binders rather than opened, so a member's reference to a sibling is not an edge to itself.
+    /// Every top-level name `item`'s elaboration consumed: what the item [reaches](Item::reaches) through its definitions, plus what the registry entries it declares reach — a struct's field types, an inductive's constructor payloads and a concept's parameters live only in the entry, and an item whose entry names another declaration depends on it as its body would.
     pub fn reaches(&self, item: &Item) -> BTreeSet<Global> {
-        let mut names = BTreeSet::new();
-
-        match item {
-            Item::Let(definition) => names.extend(definition.reaches()),
-            Item::Rec(rec) => {
-                for member in rec.group.iter() {
-                    names.extend(term_reaches(member.type_.body()));
-                    names.extend(term_reaches(member.body.body()));
-                }
-            }
-        }
+        let mut names = item.reaches();
 
         for name in item.declared_names() {
             if let Some(declaration) = self.induct_decls.get(name) {
-                names.extend(arity_reaches(&declaration.arity));
-                names.extend(term_reaches(&declaration.result_sort));
-                for (_, constructor) in &declaration.constructors {
-                    names.extend(payload_reaches(&constructor.telescope));
-                }
+                names.extend(declaration.reaches());
             }
             if let Some(declaration) = self.struct_decls.get(name) {
-                names.extend(arity_reaches(&declaration.arity));
-                names.extend(term_reaches(&declaration.result_sort));
+                names.extend(declaration.reaches());
             }
             if let Some(concept) = self.concepts.get(name) {
-                names.extend(fields_reaches(&concept.params));
+                names.extend(concept.reaches());
             }
         }
 
@@ -566,6 +549,67 @@ impl fmt::Display for Module {
         }
 
         Ok(())
+    }
+}
+
+impl Term {
+    /// The top-level names this term reaches: its global free variables, and the nominal heads of its constructions and type-former normal forms, which live in the registry rather than the variable graph.
+    pub fn reaches(&self) -> BTreeSet<Global> {
+        term_reaches(self)
+    }
+}
+
+impl Entrypoint {
+    /// The top-level names the entry reaches, through its body and its annotation.
+    pub fn reaches(&self) -> BTreeSet<Global> {
+        let mut names = term_reaches(&self.body);
+        names.extend(self.type_.iter().flat_map(term_reaches));
+        names
+    }
+}
+
+impl Item {
+    /// The top-level names this item's definitions reach — [`Definition::reaches`] for a `let`; for a `rec`, its members read under the group's own binders rather than opened, so a member's reference to a sibling is not an edge to itself.
+    pub fn reaches(&self) -> BTreeSet<Global> {
+        match self {
+            Item::Let(definition) => definition.reaches(),
+            Item::Rec(rec) => {
+                let mut names = BTreeSet::new();
+                for member in rec.group.iter() {
+                    names.extend(term_reaches(member.type_.body()));
+                    names.extend(term_reaches(member.body.body()));
+                }
+                names
+            }
+        }
+    }
+}
+
+impl InductDecl {
+    /// The top-level names this declaration reaches: through its arity, its result sort and its constructors' signatures.
+    pub fn reaches(&self) -> BTreeSet<Global> {
+        let mut names = arity_reaches(&self.arity);
+        names.extend(term_reaches(&self.result_sort));
+        for (_, constructor) in &self.constructors {
+            names.extend(payload_reaches(&constructor.telescope));
+        }
+        names
+    }
+}
+
+impl StructDecl {
+    /// The top-level names this declaration reaches: through its arity, fields included, and its result sort.
+    pub fn reaches(&self) -> BTreeSet<Global> {
+        let mut names = arity_reaches(&self.arity);
+        names.extend(term_reaches(&self.result_sort));
+        names
+    }
+}
+
+impl ConceptDecl {
+    /// The top-level names this declaration reaches through its parameters; its fields are its record entry's.
+    pub fn reaches(&self) -> BTreeSet<Global> {
+        fields_reaches(&self.params)
     }
 }
 

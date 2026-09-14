@@ -200,6 +200,21 @@ impl Frames {
             .find_map(|assumptions| assumptions.get(name))
     }
 
+    /// Drop every base-frame binding of `name`: its assumption, its universe context, its definition, and its places in the local and witness scopes. Base frame only — an inner frame is popped whole by [`Frames::leave`] — because the one binding that needs forgetting singly is a top-level declaration's, undone when its item is refused.
+    pub(crate) fn forget(&mut self, name: &Free) {
+        assert_eq!(
+            self.assumptions.len(),
+            1,
+            "forget: '{name}' outside the base frame"
+        );
+        self.locals_stamp.fresh();
+        self.assumptions[0].remove(name);
+        self.assumption_universes[0].remove(name);
+        self.definitions[0].remove(name);
+        self.local.retain(|(bound, _)| bound != name);
+        self.witness_scope.retain(|(bound, _)| bound != name);
+    }
+
     /// The innermost registered universe context for `name`, if any.
     pub(crate) fn assumption_universe_context(&self, name: &Free) -> Option<UniverseContext> {
         self.assumption_universes

@@ -6,6 +6,14 @@ impl UniverseSolver {
         self.constraints.as_slice()
     }
 
+    fn open_scopes(&self) -> usize {
+        self.constraints.speculation()
+    }
+
+    fn journal_len(&self) -> usize {
+        self.constraints.journal_len()
+    }
+
     /// Minimize flexible metas from their current lower bounds. Repeating to a fixpoint handles classifier chains; unconstrained flexible metas become zero. Generalizable metas are left for declaration finalization. Production reaches minimization through [`UniverseSolver::solve_flexible_in`]; this whole-store form exists for these tests.
     fn solve_flexible(&mut self) -> Result<(), UniverseError> {
         let metas = (0..self.metas.len())
@@ -638,4 +646,23 @@ fn an_interface_level_is_generalized_through_a_chain_of_aliases() {
         context.parameter_count, 1,
         "the level the signature mentions is the declaration's parameter, however far it was aliased"
     );
+}
+
+/// A refusal unwinds through brackets that never release, leaving their scopes open and the journal recording pre-images nothing will roll back to; the item boundary closes them all at once.
+#[test]
+fn abandoning_speculation_closes_every_scope_a_refusal_left_open() {
+    let mut solver = UniverseSolver::new(0);
+    let u = solver.fresh(UniverseRole::Flexible, None);
+    let _outer = solver.mark();
+    let _inner = solver.mark();
+    solver
+        .add_leq(Level::zero(), Level::meta(u), origin("bound"))
+        .unwrap();
+    solver.solve_flexible().unwrap();
+    assert_eq!(solver.open_scopes(), 2);
+
+    solver.abandon_speculation();
+
+    assert_eq!(solver.open_scopes(), 0);
+    assert_eq!(solver.journal_len(), 0);
 }

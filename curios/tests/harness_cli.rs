@@ -327,3 +327,29 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
 
     fs::remove_dir_all(root).unwrap();
 }
+
+/// A unit holding a written goal beside a refused declaration could not be built, and the exit says so: the goal is reported beside the refusal, and the code is the refusal's rather than the goal's.
+#[test]
+fn a_goal_beside_a_refusal_exits_one_with_both_reported() {
+    let root = temporary("mixed");
+    write(
+        &root,
+        "curios.toml",
+        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+    );
+    write(
+        &root,
+        "lib.crs",
+        "use /std/{Nat};\n\npub let broken : Nat = true;\n\npub let open : Nat = ?;\n",
+    );
+    write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
+
+    let output = curios(&root, &["test"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    let report = stderr(&output);
+    assert!(report.contains("broken:"), "{report}");
+    assert!(report.contains("goal `?`"), "{report}");
+
+    fs::remove_dir_all(root).unwrap();
+}
