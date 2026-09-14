@@ -13,19 +13,30 @@ pub(super) fn as_index(term: &Term) -> Option<usize> {
     term.as_nat().and_then(|n| n.to_natural()?.to_usize())
 }
 
+/// Whether a `Bool` binary fold reads its right operand under a stuck left. `&&` and `||` leave it as written; `==`, `!=` and `xor` reduce it; see [`reduce_bool_binary`] for why each side of that line is where it is.
+pub(super) enum Right {
+    AsWritten,
+    Reduced,
+}
+
 /// Reduce the operands of a `Bool` binary intrinsic as far as a fold could use them, then either `fold` the two literals or `rebuild` the neutral term. `Bool` has no numeric carrier at the type level, so the fold reads the `true`/`false` constructors directly.
 ///
-/// **The right operand is reduced only once the left is a literal.** A fold needs both, so a stuck left settles the verdict whatever the right holds, and reducing the right then is work the answer cannot use. It was reduced regardless, and that made weak-head reduction of a `&&`/`||` tree its *full* normalization: a web of predicate definitions each naming the one before it twice unfolded `2^n` times under any demand on its top, since a local-bearing term is remembered by nothing — the cliff `curios`' `scrutinee_refinement_measurements` records under `proved`. Stopping at the left leaves the right as written, which conversion compares lazily through its own reduction, so no equality decision moves. The `Nat` folds below keep both operands eager because their identity laws (`x + 0`) read the right.
+/// **A connective's right operand is reduced only once the left is a literal.** A fold needs both, so a stuck left settles the verdict whatever the right holds, and reducing the right then is work the answer cannot use. It was reduced regardless, and that made weak-head reduction of a `&&`/`||` tree its *full* normalization: a web of predicate definitions each naming the one before it twice unfolded `2^n` times under any demand on its top, since a local-bearing term is remembered by nothing — the cliff `curios`' `scrutinee_refinement_measurements` records under `proved`. Stopping at the left leaves the right as written, which conversion compares lazily through its own reduction, so no equality decision moves. `==`, `!=` and `xor` read both operands, as the `Nat` folds below do, because their laws read the right — `b == true` is `b`, `xor(b, xor(b, c))` is `c`, and `b == not b` is `false` only once `not b` is the `xor` it unfolds to — and no predicate web is built out of equalities the way one is out of conjunctions: `not` is `xor(_, true)`, whose right is a literal.
 pub(super) fn reduce_bool_binary(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
+    reads: Right,
     fold: impl FnOnce(bool, bool) -> bool,
     rebuild: impl FnOnce(Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
     let left = reducer.reduce_forced(left.clone())?;
     let Some(l) = left.as_bool() else {
-        return Ok(Subterm::Intrinsic(rebuild(left, right.clone())));
+        let right = match reads {
+            Right::AsWritten => right.clone(),
+            Right::Reduced => reducer.reduce_forced(right.clone())?,
+        };
+        return Ok(Subterm::Intrinsic(rebuild(left, right)));
     };
 
     let right = reducer.reduce_forced(right.clone())?;

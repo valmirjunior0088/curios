@@ -68,6 +68,25 @@ pub(crate) fn convert_intrinsic(
                 }
             }
         }
+        // A tree against a `Bool` literal is flattened the same way: what decides it against `true` or `false` is a law on its leaves — an operand beside its own negation — and the fold left those leaves as written.
+        (Some(this_tree), None) if matches!(that, Intrinsic::Bool(_)) => {
+            match as_intrinsic(&this_tree) {
+                Some(this) => (this, that),
+                None => {
+                    cmp.enqueue(Term::type_ground(), this_tree, Term::intrinsic(that));
+                    return Ok(true);
+                }
+            }
+        }
+        (None, Some(that_tree)) if matches!(this, Intrinsic::Bool(_)) => {
+            match as_intrinsic(&that_tree) {
+                Some(that) => (this, that),
+                None => {
+                    cmp.enqueue(Term::type_ground(), Term::intrinsic(this), that_tree);
+                    return Ok(true);
+                }
+            }
+        }
         _ => (this, that),
     };
     // A negated comparison, and a `<=` meeting a `<`, are aligned to one spelling of the family before the peels — probe-side, as the `&&`/`||` trees were, so no recorded refinement key is respelled.

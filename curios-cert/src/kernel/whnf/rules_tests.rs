@@ -334,6 +334,23 @@ fn a_stuck_left_operand_leaves_the_right_as_written() {
     );
 }
 
+/// The line the rule above draws: an equality reads its right operand under a stuck left, because its laws read it — `x == true` is `x` — where a connective's laws would only meet a leaf the tree flattening forces later. No predicate web is built out of equalities, so the cliff the connectives step back from is not here.
+#[test]
+fn an_equality_reads_its_right_operand() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+    kernel.assume(&x, &Term::intrinsic(Intrinsic::BoolType));
+    let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+    let folds = Term::intrinsic(Intrinsic::BoolAnd(literal(true), literal(true)));
+
+    let equality = Term::intrinsic(Intrinsic::BoolEql(Term::free_var(&x), folds));
+    assert_eq!(
+        whnf(&mut kernel, equality),
+        Ok(Term::free_var(&x)),
+        "the right folds to `true`, and `x == true` is `x`"
+    );
+}
+
 #[test]
 fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
     let mut kernel = kernel();

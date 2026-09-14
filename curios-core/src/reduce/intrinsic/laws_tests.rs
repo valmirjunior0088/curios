@@ -1009,6 +1009,59 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             boolean(false),
             bools(),
         ),
+        // The complement law on values: an operand beside its negation, spelled as `xor(_, true)` or as a comparison beside its dual, decided by cases on the `Bool` each side computes to.
+        (
+            "p && xor(p, true) = false",
+            Term::intrinsic(Intrinsic::BoolAnd(
+                p.clone(),
+                Term::intrinsic(Intrinsic::BoolXor(p.clone(), boolean(true))),
+            )),
+            boolean(false),
+            bools(),
+        ),
+        (
+            "xor(p, true) || p = true",
+            Term::intrinsic(Intrinsic::BoolOr(
+                Term::intrinsic(Intrinsic::BoolXor(p.clone(), boolean(true))),
+                p.clone(),
+            )),
+            boolean(true),
+            bools(),
+        ),
+        (
+            "p == xor(p, true) = false",
+            Term::intrinsic(Intrinsic::BoolEql(
+                p.clone(),
+                Term::intrinsic(Intrinsic::BoolXor(p.clone(), boolean(true))),
+            )),
+            boolean(false),
+            bools(),
+        ),
+        (
+            "x < y && y <= x = false",
+            Term::intrinsic(Intrinsic::BoolAnd(
+                Term::intrinsic(Intrinsic::nat_lt(x.clone(), y.clone())),
+                Term::intrinsic(Intrinsic::NatLe(y.clone(), x.clone())),
+            )),
+            boolean(false),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(2)), (&nat_y, lit(5))],
+                vec![(&nat_x, lit(5)), (&nat_y, lit(2))],
+            ],
+        ),
+        (
+            "x == y || x != y = true",
+            Term::intrinsic(Intrinsic::BoolOr(
+                Term::intrinsic(Intrinsic::nat_eql(x.clone(), y.clone())),
+                Term::intrinsic(Intrinsic::NatNeq(x.clone(), y.clone())),
+            )),
+            boolean(true),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(2)), (&nat_y, lit(5))],
+            ],
+        ),
         (
             "and(x, 0) = 0",
             Term::intrinsic(Intrinsic::NatAnd(x.clone(), lit(0))),

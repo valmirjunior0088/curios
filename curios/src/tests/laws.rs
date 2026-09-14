@@ -115,6 +115,11 @@ const CARRIERS: &[Carrier] = &[
             "Eq(x >= y, y < x + 1)",
             "Eq(x <= 3, x < 4)",
             "Eq(Bool/not(x < y) && Bool/not(y < x), y <= x && x <= y)",
+            // A comparison beside its dual computes complementary booleans at every pair.
+            "Eq(x < y && y <= x, false)",
+            "Eq(x < y || y <= x, true)",
+            "Eq(x == y && x != y, false)",
+            "Eq(x == y || x != y, true)",
         ],
         // Parity: not a law of any monoid here, and not one to take.
         refused: &["Eq(x * 2 + 1 == y * 2, false)"],
@@ -198,6 +203,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bool/not(i <= j), j < i)",
             "Eq(Bool/not(i == j), i != j)",
             "Eq(i <= j, i < j + 1)",
+            "Eq(i < j && j <= i, false)",
+            "Eq(i <= j || j < i, true)",
         ],
         refused: &[],
     },
@@ -238,6 +245,12 @@ const CARRIERS: &[Carrier] = &[
             // A negated equality reads as the inequality.
             "Eq(Bool/not(b == c), b != c)",
             "Eq(Bool/not(b != c), b == c)",
+            // The complement law on values: an operand beside its own negation, by cases on `b`.
+            "Eq(b && Bool/not(b), false)",
+            "Eq(Bool/not(b) && b, false)",
+            "Eq(b || Bool/not(b), true)",
+            "Eq(b == Bool/not(b), false)",
+            "Eq(b != Bool/not(b), true)",
         ],
         // De Morgan and absorption need a normal form past the leaf set, and neither is taken.
         refused: &[
