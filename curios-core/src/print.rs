@@ -7,7 +7,7 @@ use {
     },
     curios_abi::stdio,
     curios_num::Floating,
-    curios_print::{Printer, flat, group, indent, line, pure, sep_flat, soft_line},
+    curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat, soft_line},
     curios_utilities::{Grain, PackedBin, Plicity, Qualifier, recurse},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -1130,11 +1130,15 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             } else {
                 format!("({})", marked.join(", "))
             };
-            // The body sits on the arrow's line when it fits and indents on its own line when it does not; a body carrying a break of its own — a match — breaks the group and takes the line either way.
+            // The body sits on the arrow's line when it fits and indents on its own line when it does not. A body that is a multi-line form of its own takes the line unconditionally: those forms spell their breaks as literal newlines, which end the fits scan within budget rather than failing it, so a group would render the arrow's line flat and leave the form's first line trailing the arrow.
+            let separator = match &*body {
+                Subterm::Match(_) | Subterm::Let(_) | Subterm::Rec(_) => hard_line(),
+                _ => line(),
+            };
             group(flat([
                 pure(param_str),
                 pure(" =>"),
-                indent(flat([line(), sub(body, minting)])),
+                indent(flat([separator, sub(body, minting)])),
             ]))
         }
         Subterm::Apply(Apply { head, arguments }) => flat([
