@@ -284,3 +284,121 @@ fn a_surviving_transient_refuses_the_zonked_projection() {
     let refusal = Zonked::project(&module).expect_err("the transient must refuse the projection");
     assert!(refusal.to_string().contains("infixed"), "{refusal}");
 }
+
+/// A module with no registry and no entry, over `items`.
+fn over(items: Vec<Item>) -> Module {
+    Module {
+        items,
+        mounts: Vec::new(),
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+        binder_floor: 0,
+        entry: None,
+    }
+}
+
+fn authored(name: &str) -> Global {
+    Global::Authored(Qualifier::from([name]))
+}
+
+/// A construction names its declaration in the registry rather than in the variable graph, so `mentions` misses the edge and `reaches` must not.
+#[test]
+fn a_construction_reaches_the_nominal_head_it_never_mentions() {
+    let mut packed = definition("packed", UniverseContext::empty());
+    packed.body = Term::struct_(
+        authored("Box"),
+        Vec::<Term>::new(),
+        [Term::intrinsic(crate::Intrinsic::NatType)],
+    );
+
+    assert!(!packed.mentions().contains(&authored("Box")));
+    assert!(packed.reaches().contains(&authored("Box")));
+}
+
+/// A struct's field types live only in its registry entry, so the item declaring it reaches them through the entry.
+#[test]
+fn a_struct_declaration_reaches_its_field_types() {
+    let mut module = over(vec![Item::Let(definition("Box", UniverseContext::empty()))]);
+    module.struct_decls.insert(
+        authored("Box"),
+        StructDecl {
+            universe_context: UniverseContext::empty(),
+            arity: Telescope::done(Telescope::build(
+                [(
+                    Free::local(0, Some("value")),
+                    Term::free_var(&Free::Global(authored("Payload"))),
+                )],
+                (),
+            )),
+            result_sort: Term::type_ground(),
+            module: Qualifier::empty(),
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+
+    let reached = module.reaches(&module.items[0]);
+
+    assert!(reached.contains(&authored("Payload")));
+}
+
+#[test]
+fn restriction_keeps_a_rec_group_whole() {
+    let group = RecItem::new(vec![
+        definition("even", UniverseContext::empty()),
+        definition("odd", UniverseContext::empty()),
+    ]);
+    let module = over(vec![
+        Item::Rec(group),
+        Item::Let(definition("other", UniverseContext::empty())),
+    ]);
+
+    let kept = module.restricted(|name| *name != authored("other"));
+
+    assert_eq!(kept.items.len(), 1);
+    assert!(matches!(kept.items[0], Item::Rec(_)));
+}
+
+#[test]
+#[should_panic(expected = "restricted whole")]
+fn restricting_half_a_rec_group_is_refused() {
+    let group = RecItem::new(vec![
+        definition("even", UniverseContext::empty()),
+        definition("odd", UniverseContext::empty()),
+    ]);
+    let module = over(vec![Item::Rec(group)]);
+
+    let _ = module.restricted(|name| *name == authored("even"));
+}
+
+#[test]
+fn restriction_drops_the_registry_entries_witnesses_and_tests_of_excluded_names() {
+    let mut module = over(vec![
+        Item::Let(definition("Box", UniverseContext::empty())),
+        Item::Let(definition("probe", UniverseContext::empty())),
+    ]);
+    module.struct_decls.insert(
+        authored("Box"),
+        StructDecl {
+            universe_context: UniverseContext::empty(),
+            arity: Telescope::done(Telescope::done(())),
+            result_sort: Term::type_ground(),
+            module: Qualifier::empty(),
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+    module.witnesses.insert(authored("Box"));
+    module.tests.push(authored("probe"));
+
+    let kept = module.restricted(|name| *name == authored("probe"));
+
+    assert_eq!(kept.items.len(), 1);
+    assert!(kept.struct_decls.is_empty());
+    assert!(kept.witnesses.is_empty());
+    assert_eq!(kept.tests, vec![authored("probe")]);
+}

@@ -8,13 +8,13 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, Free, FuncType, Global, InductDecl, Many, RecGroup,
-        RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Term, UniverseContext,
-        UniverseError, UniverseSeed, build_shorten,
+        Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Many, RecGroup,
+        RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Telescope, Term,
+        UniverseContext, UniverseError, UniverseSeed, build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier},
     std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashSet},
         fmt,
         rc::Rc,
     },
@@ -193,6 +193,16 @@ impl Definition {
             .chain(self.type_.free_vars())
             .filter_map(|free| free.as_global().cloned())
             .collect()
+    }
+
+    /// Every top-level name this definition's elaboration consumed: what it [`mentions`](Self::mentions), plus the nominal heads its constructions and type-former normal forms name. Those live in the registry rather than the variable graph, so `mentions` cannot see them — and an item that builds a `Struct` or matches a `Variant` depends on that declaration exactly as one that names it does.
+    ///
+    /// This is the edge set an invalidation is closed over and a refusal is poisoned along. [`mentions`](Self::mentions) is what the kernel's order and the totality closure need, which the variable edges alone serve.
+    pub fn reaches(&self) -> BTreeSet<Global> {
+        let mut names = self.mentions();
+        names.extend(construction_heads(&self.type_));
+        names.extend(construction_heads(&self.body));
+        names
     }
 
     fn print(&self, formatter: &mut fmt::Formatter<'_>, spelling: &Rc<Spelling>) -> fmt::Result {
@@ -402,6 +412,104 @@ impl Module {
         marks
     }
 
+    /// Every top-level name `item`'s elaboration consumed: what its definitions [reach](Definition::reaches), plus what the registry entries it declares reach — a struct's field types, an inductive's constructor payloads and a concept's parameters live only in the entry, and an item whose entry names another declaration depends on it as its body would.
+    ///
+    /// A recursive group's members are read under the group's own binders rather than opened, so a member's reference to a sibling is not an edge to itself.
+    pub fn reaches(&self, item: &Item) -> BTreeSet<Global> {
+        let mut names = BTreeSet::new();
+
+        match item {
+            Item::Let(definition) => names.extend(definition.reaches()),
+            Item::Rec(rec) => {
+                for member in rec.group.iter() {
+                    names.extend(term_reaches(member.type_.body()));
+                    names.extend(term_reaches(member.body.body()));
+                }
+            }
+        }
+
+        for name in item.declared_names() {
+            if let Some(declaration) = self.induct_decls.get(name) {
+                names.extend(arity_reaches(&declaration.arity));
+                names.extend(term_reaches(&declaration.result_sort));
+                for (_, constructor) in &declaration.constructors {
+                    names.extend(payload_reaches(&constructor.telescope));
+                }
+            }
+            if let Some(declaration) = self.struct_decls.get(name) {
+                names.extend(arity_reaches(&declaration.arity));
+                names.extend(term_reaches(&declaration.result_sort));
+            }
+            if let Some(concept) = self.concepts.get(name) {
+                names.extend(fields_reaches(&concept.params));
+            }
+        }
+
+        names
+    }
+
+    /// This module narrowed to the names `keep` admits: the items every one of whose declared names it admits, the registry entries keyed by such a name, and the witness and test markers naming one, with the mounts, the seed table, the floor and the entry carried whole.
+    ///
+    /// A recursive group is one node — its members share one scheme — so a predicate admitting some of a group's names and not others is a caller's mistake, refused rather than resolved either way.
+    pub fn restricted(&self, keep: impl Fn(&Global) -> bool) -> Module {
+        let items = self
+            .items
+            .iter()
+            .filter(|item| {
+                let names = item.declared_names();
+                let kept = names.iter().filter(|name| keep(name)).count();
+                assert!(
+                    kept == 0 || kept == names.len(),
+                    "a recursive group is restricted whole: {}",
+                    item.describe()
+                );
+
+                kept > 0
+            })
+            .cloned()
+            .collect();
+        let entries = |declarations: &BTreeMap<Global, InductDecl>| {
+            declarations
+                .iter()
+                .filter(|(name, _)| keep(name))
+                .map(|(name, declaration)| (name.clone(), declaration.clone()))
+                .collect()
+        };
+
+        Module {
+            items,
+            mounts: self.mounts.clone(),
+            universe_seeds: self.universe_seeds.clone(),
+            induct_decls: entries(&self.induct_decls),
+            struct_decls: self
+                .struct_decls
+                .iter()
+                .filter(|(name, _)| keep(name))
+                .map(|(name, declaration)| (name.clone(), declaration.clone()))
+                .collect(),
+            concepts: self
+                .concepts
+                .iter()
+                .filter(|(name, _)| keep(name))
+                .map(|(name, concept)| (name.clone(), concept.clone()))
+                .collect(),
+            witnesses: self
+                .witnesses
+                .iter()
+                .filter(|name| keep(name))
+                .cloned()
+                .collect(),
+            tests: self
+                .tests
+                .iter()
+                .filter(|name| keep(name))
+                .cloned()
+                .collect(),
+            binder_floor: self.binder_floor,
+            entry: self.entry.clone(),
+        }
+    }
+
     /// Every global qualified name in `self`: each definition (`let`/`rec`), each inductive type, each struct type. The universe a global is shortened *against*.
     pub fn module_symbols(&self) -> Vec<Global> {
         let mut symbols = Vec::new();
@@ -459,6 +567,96 @@ impl fmt::Display for Module {
 
         Ok(())
     }
+}
+
+/// The names `term` reaches: its global free variables and its construction heads.
+fn term_reaches(term: &Term) -> BTreeSet<Global> {
+    let mut names = term
+        .free_vars()
+        .into_iter()
+        .filter_map(|free| free.as_global().cloned())
+        .collect::<BTreeSet<_>>();
+    names.extend(construction_heads(term));
+
+    names
+}
+
+/// The nominal heads `term`'s constructions and type-former normal forms name.
+///
+/// On the shared walk driver, deduplicated on node identity, for the reason every walk over shared structure is: a string literal's scan chain is linear in nodes and quadratic in paths, and a walk that revisits shared nodes pays the square.
+fn construction_heads(term: &Term) -> BTreeSet<Global> {
+    let mut state: (HashSet<Term>, BTreeSet<Global>) = (HashSet::new(), BTreeSet::new());
+    term.walk(
+        &mut state,
+        |state, term| {
+            if !state.0.insert(term.clone()) {
+                return Enter::Skip(());
+            }
+            match &**term {
+                Subterm::InductType(node) => {
+                    state.1.insert(node.name.clone());
+                }
+                Subterm::Variant(node) => {
+                    state.1.insert(node.name.clone());
+                }
+                Subterm::StructType(node) => {
+                    state.1.insert(node.name.clone());
+                }
+                Subterm::Struct(node) => {
+                    state.1.insert(node.name.clone());
+                }
+                _ => {}
+            }
+            Enter::Descend
+        },
+        |_, _, _| (),
+    );
+
+    state.1
+}
+
+/// A telescope's entry types in order, and what it ends in.
+fn entries<B: Bound>(telescope: &Telescope<B>) -> (Vec<&Term>, &B) {
+    let mut types = Vec::new();
+    let mut rest = telescope;
+    loop {
+        match rest {
+            Telescope::Cons(type_, scope) => {
+                types.push(type_);
+                rest = scope.body();
+            }
+            Telescope::Done(done) => return (types, done),
+        }
+    }
+}
+
+/// The names a field telescope reaches.
+fn fields_reaches(fields: &Telescope<()>) -> BTreeSet<Global> {
+    entries(fields)
+        .0
+        .into_iter()
+        .flat_map(term_reaches)
+        .collect()
+}
+
+/// The names a declaration's arity reaches: its parameters, then the telescope they end in.
+fn arity_reaches(arity: &Telescope<Telescope<()>>) -> BTreeSet<Global> {
+    let (params, fields) = entries(arity);
+    params
+        .into_iter()
+        .flat_map(term_reaches)
+        .chain(fields_reaches(fields))
+        .collect()
+}
+
+/// The names a constructor's signature reaches: its payloads, then the index targets they end in.
+fn payload_reaches(signature: &Telescope<Vec<Term>>) -> BTreeSet<Global> {
+    let (payloads, targets) = entries(signature);
+    payloads
+        .into_iter()
+        .chain(targets.iter())
+        .flat_map(term_reaches)
+        .collect()
 }
 
 /// One question a walk asks of whatever sits at a module position.
