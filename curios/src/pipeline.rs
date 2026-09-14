@@ -184,7 +184,8 @@ pub(crate) fn report(
     progress: Progress<'_>,
 ) {
     match progress {
-        Progress::Compiling(prefix) => {
+        // A recompile over a baseline reads as a compile: what the line reports is that the unit is being worked on and how long it took, and the store this product hands the fold never offers a baseline anyway.
+        Progress::Compiling(prefix) | Progress::Recompiling(prefix) => {
             *line = Some(Line::nested(
                 Heading::Compiling,
                 &Subject::Mounted(prefix.clone()),

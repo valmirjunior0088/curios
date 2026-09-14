@@ -122,7 +122,7 @@ pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::M
 // These are the tests the specification insists come in a pair. A unit boundary is not packaging: it is where coherence is enforced, so the same three declarations are *refused* across units and *accepted* across modules of one unit. Either half alone proves nothing — the first could pass because the fixture is malformed, the second because the rule never ran.
 
 /// Compile `sources` as units in order, then `entrypoint` as the entry against all of them.
-pub(super) fn compile_with_units(
+pub(crate) fn compile_with_units(
     sources: &[(&str, &str)],
     entrypoint: &str,
 ) -> Result<curios_wasm::Module, String> {
@@ -177,7 +177,7 @@ pub(super) fn compile_with_units(
 // --- A unit over a baseline ------------------------------------------------
 
 /// `source` as the modules of a unit mounted at `prefix`, supplied already parsed.
-fn mounted(prefix: &str, source: &str) -> RootSource {
+pub(super) fn mounted(prefix: &str, source: &str) -> RootSource {
     let mut modules = RootSource::supplied();
     modules.insert_root(
         prefix,

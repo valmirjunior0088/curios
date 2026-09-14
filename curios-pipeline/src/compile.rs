@@ -1,7 +1,7 @@
 //! The stage sequence itself: [`compile_entrypoint`] and the two halves it is assembled from — the type-checking prologue and the lowering back half — each observing every [`Stage`] it produces before moving past it.
 
 use {
-    super::Stage,
+    super::{Stage, compile_unit_over},
     curios_abi::ForeignStore,
     curios_cert::{Globals, Kernel, Verdict, recheck_module_measured, recheck_module_verdicts},
     curios_cont::into_wasm,
@@ -637,6 +637,14 @@ pub trait Cache {
     /// The unit already recorded for `source`, if one is.
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit>;
 
+    /// A unit to compile `source` over when it is not a hit: one this cache holds from an earlier text of the same sources, or `offered`, which the scope's assembler holds for a prefix it withheld from the scope on this source's account. `None`, the default, is a whole compile.
+    ///
+    /// **A cache that answers is one whose `put` places without filing.** What is compiled over a baseline is handed to `put` like any other unit, so the units after it stay addressed, and a cache that filed it would file a unit whose judgment rests on the closure having been closed — which the differential gate argues and has not yet earned. The store's own cache keeps the default; the `wonder` engine's read-only cache answers.
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<Unit>) -> Option<Unit> {
+        let _ = (source, offered);
+        None
+    }
+
     /// Record what `source` compiled to. Best effort — a store that cannot be written costs the next compilation the work, and nothing else.
     fn put(&self, source: &UnitSource<'_>, unit: &Unit);
 }
@@ -667,7 +675,13 @@ where
             continue;
         }
 
-        progress(Progress::Compiling(&source.prefix()));
+        // A baseline is asked for only on a miss: a hit is the empty case of a recompile, where nothing changed and everything is reused.
+        let baseline = cache.and_then(|cache| cache.baseline(source, None));
+        let prefix = source.prefix();
+        progress(match &baseline {
+            Some(_) => Progress::Recompiling(&prefix),
+            None => Progress::Compiling(&prefix),
+        });
 
         let scope = base
             .units()
@@ -676,7 +690,12 @@ where
             .chain(produced.iter())
             .collect::<Vec<_>>();
 
-        let unit = compile_unit(budget, Prefix::over(&scope), syntax, source)?;
+        let unit = match &baseline {
+            Some(baseline) => {
+                compile_unit_over(budget, Prefix::over(&scope), syntax, source, baseline)?
+            }
+            None => compile_unit(budget, Prefix::over(&scope), syntax, source)?,
+        };
         progress(Progress::Compiled);
 
         if let Some(cache) = cache {
@@ -697,6 +716,8 @@ where
 pub enum Progress<'a> {
     /// A mounted unit is about to be compiled, named by the prefix it claims.
     Compiling(&'a Qualifier),
+    /// A mounted unit is about to be compiled over a baseline — an earlier compilation of its sources, every item the edit did not reach reused from it — named by the prefix it claims. Followed by [`Progress::Compiled`] as a [`Progress::Compiling`] is.
+    Recompiling(&'a Qualifier),
     /// The entry program is about to be compiled. Unnamed: it owns the empty prefix, so only the caller knows what was asked for.
     Entry,
     /// A mounted unit came from the store instead; nothing is compiled for it, and no [`Progress::Compiled`] follows.
