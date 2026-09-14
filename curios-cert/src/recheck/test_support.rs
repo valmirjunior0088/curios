@@ -1071,6 +1071,95 @@ pub(super) fn lying_motive(sort: Term) -> Module {
     }
 }
 
+/// The three motives [`fold_motive`] states over `match n`, for `n : Nat`.
+pub(super) enum FoldMotive {
+    /// `(_) => Eq(n, 0)`: names the scrutinee instead of binding it, with the hypothesis returned whole in the successor arm.
+    Captured,
+    /// `(m) => Eq(m, 0)`: binds the scrutinee, with the same successor arm — which is then the mismatch it should be.
+    Honest,
+    /// `(m) => Eq(m, m)`, with `refl(k + 1)` in the successor arm: the same shape at a goal each arm can inhabit, so the module is otherwise well-formed.
+    Reflexive,
+}
+
+/// `all_zero : (n : Nat) -> Eq(n, 0)` (or `Eq(n, n)` for [`FoldMotive::Reflexive`]) by a `Nat` fold under the given motive, with `refl` in the zero arm.
+///
+/// Under the captured motive the hypothesis is assumed at `Eq(n, 0)` inside an arm where `n` is specialized to `k + 1`, which is the arm's own goal, so the successor arm checks and `all_zero(1) : Eq(1, 0)` follows. The honest motive types the hypothesis at `Eq(k, 0)`, and the same arm is a mismatch against `Eq(k + 1, 0)`.
+///
+/// `Eq` is the two-index equality [`equality_declaration`] declares, at `Nat`, so the module needs nothing from the prelude; its `refl` payload is the value alone, the carrier being the family's parameter.
+pub(super) fn fold_motive(motive: FoldMotive) -> Module {
+    let equality = Global::Authored(Qualifier::from(["Eq"]));
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
+    let equal =
+        |left: Term, right: Term| Term::induct_type(equality.clone(), [nat()], [left, right]);
+    let refl = |value: Term| {
+        Term::variant_at(
+            equality.clone(),
+            Vec::new(),
+            vec![nat()],
+            Atom::from("refl"),
+            vec![value],
+        )
+    };
+
+    let n = Free::local(610, Some("n"));
+    let bound = Free::local(611, Some("m"));
+    let pred = Free::local(612, Some("k"));
+    let hypothesis = Free::local(613, Some("ih"));
+    let successor = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&pred), literal(1)));
+
+    let (goal, family, step) = match motive {
+        FoldMotive::Captured => (
+            equal(Term::free_var(&n), literal(0)),
+            equal(Term::free_var(&n), literal(0)),
+            Term::free_var(&hypothesis),
+        ),
+        FoldMotive::Honest => (
+            equal(Term::free_var(&bound), literal(0)),
+            equal(Term::free_var(&n), literal(0)),
+            Term::free_var(&hypothesis),
+        ),
+        FoldMotive::Reflexive => (
+            equal(Term::free_var(&bound), Term::free_var(&bound)),
+            equal(Term::free_var(&n), Term::free_var(&n)),
+            refl(successor),
+        ),
+    };
+    let motive = Scope::close(Many(1), &[&bound], goal);
+
+    let all_zero = authored(
+        &Global::Authored(Qualifier::from(["all_zero"])),
+        Term::func_type([(n.clone(), nat())], family),
+        Term::func(
+            [(n.clone(), nat())],
+            Term::nat_match_scoped(
+                Term::free_var(&n),
+                motive,
+                refl(literal(0)),
+                &pred,
+                &hypothesis,
+                step,
+            ),
+        ),
+    );
+
+    Module {
+        mounts: Vec::new(),
+        items: vec![all_zero],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(equality, equality_declaration())]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+        binder_floor: 1_000,
+        entry: Some(Entrypoint {
+            body: Term::tuple(Vec::<Term>::new()),
+            type_: None,
+        }),
+    }
+}
+
 /// The three ways an occurrence of a one-parameter, one-index family can disagree with it.
 pub(super) fn arity_cases() -> Vec<(&'static str, Vec<Term>, Vec<Term>)> {
     let zero = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));

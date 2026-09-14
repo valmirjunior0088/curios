@@ -1768,6 +1768,20 @@ impl Term {
         self.inner.frees.contains(name)
     }
 
+    /// Whether `needle` occurs in this term as a subterm, at any depth and under any binder — a syntactic occurrence, decided by term equality. A bound variable never equals a free one, so a needle that is a free variable is found exactly where `mentions_free` finds it; a compound needle is found where its spelling stands whole, which is also the only place a case equation recorded against that spelling can fire.
+    pub fn mentions_term(&self, needle: &Term) -> bool {
+        if self == needle {
+            return true;
+        }
+        if let Subterm::Var(var) = &**needle
+            && let Some(name) = var.as_free()
+            && !self.mentions_free(name)
+        {
+            return false;
+        }
+        self.any_child_term(&mut |child| child.mentions_term(needle))
+    }
+
     /// The free-variable identities of this term. Inherent so a `term.free_vars()` call routes through the memoized, iteratively-filled set (this and the [`Bound`] impl agree) rather than deref-ing to the uncached, recursive [`Subterm::free_vars`] when the `Bound` trait is out of scope.
     pub fn free_vars(&self) -> BTreeSet<Free> {
         self.get_or_init_free_vars().as_ref().clone()

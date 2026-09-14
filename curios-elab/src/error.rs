@@ -507,6 +507,10 @@ pub enum Error {
     MissingArmNotImpossible {
         tag: Atom,
     },
+    /// A fold's motive mentions its scrutinee other than through the binder it declares. The induction hypothesis is assumed at the motive opened at the tail inside the cons arm, where the scrutinee is refined to the cons value — so a captured occurrence is refined too, and the hypothesis would be typed at the arm's own goal.
+    FoldMotiveCapturesScrutinee {
+        scrutinee: Term,
+    },
     Located {
         span: Span,
         error: Box<Error>,
@@ -1106,6 +1110,10 @@ impl Error {
             expected,
             written,
         }
+    }
+
+    pub(crate) fn fold_motive_captures_scrutinee(scrutinee: Term) -> Self {
+        Self::FoldMotiveCapturesScrutinee { scrutinee }
     }
 
     pub(crate) fn missing_arm_not_impossible(tag: Atom) -> Self {

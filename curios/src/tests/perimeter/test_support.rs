@@ -932,6 +932,77 @@ pub(super) fn both_checkers(source: &str) -> (Verdict, Verdict) {
     }
 }
 
+pub(super) const A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE: &str = r#"
+        use /std/{Nat, Eq};
+
+        let all_zero(n : Nat) -> Eq(n, 0) =
+            match n : (_) => Eq(n, 0)
+            | 0 => Eq/refl()
+            | k + 1; ih => ih
+            end;
+
+        let boom : Eq(1, 0) = all_zero(1);
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const A_LIST_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE: &str = r#"
+        use /std/{Nat, Eq, List};
+
+        let all_empty(l : List(Nat)) -> Eq(List/len(l), 0) =
+            match l : (_) => Eq(List/len(l), 0)
+            | [] => Eq/refl()
+            | [h, ..t]; ih => ih
+            end;
+
+        let boom : Eq(1, 0) = all_empty([7]);
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_EXPRESSION: &str = r#"
+        use /std/{Nat, Eq};
+
+        let twice(n : Nat) -> Nat = n + n;
+
+        let all_zero(n : Nat) -> Eq(twice(n), 0) =
+            match twice(n) : (_) => Eq(twice(n), 0)
+            | 0 => Eq/refl()
+            | k + 1; ih => ih
+            end;
+
+        let boom : Eq(2, 0) = all_zero(1);
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_THROUGH_AN_ALIAS: &str = r#"
+        use /std/{Nat, Eq};
+
+        let all_zero(n : Nat) -> Eq(n, 0) =
+            let y = n;
+            match n : (_) => Eq(y, 0)
+            | 0 => Eq/refl()
+            | k + 1; ih => ih
+            end;
+
+        let boom : Eq(1, 0) = all_zero(1);
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const A_FOLD_MOTIVE_THAT_BINDS_ITS_SCRUTINEE_STILL_FOLDS: &str = r#"
+        use /std/{Nat, Eq};
+
+        let plus_zero(n : Nat) -> Eq(n + 0, n) =
+            match n : (m) => Eq(m + 0, m)
+            | 0 => Eq/refl()
+            | k + 1; ih => Eq/cong((w : Nat) => w + 1, ih)
+            end;
+
+        /std/print(Nat/to_str(3))
+        "#;
+
 /// What a fixture's row claims a checker does.
 pub(super) enum Expect {
     Accepts,
@@ -1244,6 +1315,36 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
     (
         "proof_field_does_not_distinguish_two_literals",
         A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    (
+        "fold_motive_captures_scrutinee",
+        A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE,
+        Expect::Refuses("through the binder it declares"),
+        Expect::NotAsked,
+    ),
+    (
+        "list_fold_motive_captures_scrutinee",
+        A_LIST_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE,
+        Expect::Refuses("through the binder it declares"),
+        Expect::NotAsked,
+    ),
+    (
+        "fold_motive_captures_scrutinee_expression",
+        A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_EXPRESSION,
+        Expect::Refuses("through the binder it declares"),
+        Expect::NotAsked,
+    ),
+    (
+        "fold_motive_captures_scrutinee_through_an_alias",
+        A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_THROUGH_AN_ALIAS,
+        Expect::Refuses("through the binder it declares"),
+        Expect::NotAsked,
+    ),
+    (
+        "fold_motive_binds_scrutinee",
+        A_FOLD_MOTIVE_THAT_BINDS_ITS_SCRUTINEE_STILL_FOLDS,
         Expect::Accepts,
         Expect::Accepts,
     ),

@@ -292,3 +292,58 @@ fn no_type_position_admits_a_lying_motive() {
         );
     }
 }
+
+/// A fold's induction hypothesis is typed at the motive opened at the tail, inside an arm where the scrutinee is specialized to the cons value. A motive that names the scrutinee instead of binding it — `(_) => Eq(n, 0)` over `match n` — has that occurrence specialized too, so the hypothesis is assumed at `Eq(k + 1, 0)`, the arm's own goal, and `all_zero(1) : Eq(1, 0)` certifies. Verified while the hole was open: the surface program `let all_zero(n: Nat) -> Eq(n, 0) = match n: (_) => Eq(n, 0) | 0 => Eq/refl() | k + 1; ih => ih end;` compiled, ran, and printed, with the same shape over a `List` fold and over an expression scrutinee read through its case equation.
+///
+/// Closed in both checkers by one syntactic test: the motive's body may not mention the scrutinee. The control is the same module with the motive binding `m` and stating `Eq(m, 0)`, which must be refused for the reason it should be — the successor arm's hypothesis is `Eq(k, 0)` and its goal `Eq(k + 1, 0)`.
+#[test]
+fn a_fold_motive_that_captures_its_scrutinee_is_refused() {
+    let verdicts = fixture_verdicts(
+        &fold_motive(FoldMotive::Captured),
+        1_000_000,
+        &Globals::default(),
+        crate::SYNTAX,
+    );
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, KernelError::FoldMotiveCapturesScrutinee(_))),
+        "the kernel typed a fold's hypothesis at the arm's own goal: {verdicts:?}",
+    );
+}
+
+#[test]
+fn a_fold_motive_that_binds_its_scrutinee_types_the_hypothesis_at_the_tail() {
+    let verdicts = fixture_verdicts(
+        &fold_motive(FoldMotive::Honest),
+        1_000_000,
+        &Globals::default(),
+        crate::SYNTAX,
+    );
+
+    // The successor arm's hypothesis is `Eq(k, 0)` and its goal `Eq(k + 1, 0)`: refused as the mismatch it is, at the successor.
+    assert!(
+        verdicts.iter().any(|verdict| match &verdict.error {
+            KernelError::Mismatch { expected, .. } => expected.to_string().contains("+ 1"),
+            _ => false,
+        }),
+        "the honest motive was not refused at the successor arm: {verdicts:?}",
+    );
+}
+
+/// The same module at a goal each arm inhabits, which is what proves the two refusals above are about the motive rather than about the fixture.
+#[test]
+fn a_fold_motive_that_binds_its_scrutinee_is_accepted_at_an_inhabited_goal() {
+    let verdicts = fixture_verdicts(
+        &fold_motive(FoldMotive::Reflexive),
+        1_000_000,
+        &Globals::default(),
+        crate::SYNTAX,
+    );
+
+    assert!(
+        verdicts.is_empty(),
+        "the reflexive fold was refused: {verdicts:?}"
+    );
+}

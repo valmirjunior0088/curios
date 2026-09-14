@@ -616,6 +616,11 @@ fn check_free_monoid(
     carrier: &Carrier,
     at: &impl Fn(&mut Kernel, Term, &Term) -> Result<(), KernelError>,
 ) -> Result<(), KernelError> {
+    // The hypothesis below is typed at the motive opened at the tail, and the arm is then checked with the scrutinee specialized to the cons value. A motive that reaches the scrutinee other than through its binder has that occurrence specialized as well, so the hypothesis would be assumed at the arm's own goal — `match n : (_) => Eq(n, 0) | 0 => refl | k + 1; ih => ih end` proving `Eq(n, 0)` for every `n`. Refused syntactically, which is exact for a variable scrutinee and, for an expression, covers every occurrence the case equation recorded against that spelling could reach.
+    if motive.body().mentions_term(scrutinee) {
+        return Err(KernelError::FoldMotiveCapturesScrutinee(scrutinee.clone()));
+    }
+
     // One cons arm: open the binders, assume them at the carrier's types with the induction hypothesis at the tail, and check the body at the motive of the cons value — with the scrutinee standing refined to that value, exactly as in every other arm.
     let cons = |kernel: &mut Kernel,
                 binders: Vec<(&Free, Term)>,

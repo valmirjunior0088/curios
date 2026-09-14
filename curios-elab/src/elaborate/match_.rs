@@ -61,6 +61,63 @@ fn resolve_intrinsic_motive(
     check_motive(context, &shape, motive)
 }
 
+/// Refuse a fold whose motive reaches its scrutinee other than through the binder it declares.
+///
+/// The induction hypothesis is assumed at the motive opened at the tail *inside* the cons arm, where `refine_head` has the scrutinee reducing to the cons value. A captured occurrence reduces with it, so the hypothesis would be typed at the arm's own goal: `match n : (_) => Eq(n, 0) | 0 => refl | k + 1; ih => ih end` then proves `Eq(n, 0)` for every `n`. The kernel refuses the same shape by the same test (`check_free_monoid`); this is the elaborator's copy, so the refusal is reported where the motive was written. A local defined in the frame — a `let` alias of the scrutinee, or a binder an enclosing arm refined — is read through its definition, since the reducer will read it the same way.
+fn refuse_captured_scrutinee(
+    context: &Context,
+    motive: &Scope<Many>,
+    head: &Term,
+) -> Result<(), Error> {
+    // A metavariable's spine names every local in scope and is not an occurrence of any of them; a solution that does capture the scrutinee is met by the kernel's copy of this test, which runs post-zonk. `Term::mentions_term` would read the spine, so the walk is spelled here.
+    fn occurs(term: &Term, head: &Term) -> bool {
+        if term == head {
+            return true;
+        }
+        if matches!(&**term, Subterm::Metavar(_)) {
+            return false;
+        }
+        term.any_child_term(&mut |child| occurs(child, head))
+    }
+
+    // The free variables outside any metavariable spine, for the same reason: a spine names the whole context, and reading a scrutinee an *enclosing* arm refined through its reduct is a real capture only where the motive names that scrutinee.
+    fn frees(term: &Term, out: &mut BTreeSet<Free>) {
+        match &**term {
+            Subterm::Var(var) => {
+                if let Some(name) = var.as_free() {
+                    out.insert(name.clone());
+                }
+            }
+            Subterm::Metavar(_) => {}
+            _ => {
+                term.any_child_term(&mut |child| {
+                    frees(child, out);
+                    false
+                });
+            }
+        }
+    }
+
+    fn captures(context: &Context, term: &Term, head: &Term, seen: &mut BTreeSet<Free>) -> bool {
+        if occurs(term, head) {
+            return true;
+        }
+        let mut names = BTreeSet::new();
+        frees(term, &mut names);
+        names.iter().any(|name| {
+            seen.insert(name.clone())
+                && context
+                    .var_reduct(name)
+                    .is_some_and(|reduct| captures(context, reduct, head, seen))
+        })
+    }
+
+    match captures(context, motive.body(), head, &mut BTreeSet::new()) {
+        true => Err(Error::fold_motive_captures_scrutinee(head.clone())),
+        false => Ok(()),
+    }
+}
+
 fn elaborate_nat_match(
     context: &mut Context,
     head: &Term,
@@ -80,6 +137,7 @@ fn elaborate_nat_match(
         motive,
         &mode,
     )?;
+    refuse_captured_scrutinee(context, &motive, &head_elaborated)?;
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
@@ -149,6 +207,7 @@ fn elaborate_list_match(
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
     let motive = resolve_intrinsic_motive(context, &head_type, &head_elaborated, motive, &mode)?;
+    refuse_captured_scrutinee(context, &motive, &head_elaborated)?;
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
@@ -233,6 +292,7 @@ fn elaborate_bin_match(
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
     let motive = resolve_intrinsic_motive(context, &head_type, &head_elaborated, motive, &mode)?;
+    refuse_captured_scrutinee(context, &motive, &head_elaborated)?;
 
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 

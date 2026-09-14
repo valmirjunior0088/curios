@@ -119,6 +119,8 @@ pub enum KernelError {
     AmbientOverExpression(Term),
     /// A free-monoid fold at an ambient goal. The fold's induction hypothesis is the fold itself at the tail, and its type is the goal at the tail — an instance only a family can state once the head has been substituted away.
     AmbientFold(Term),
+    /// A free-monoid fold whose motive mentions its scrutinee other than through the binder. The induction hypothesis is typed at the motive opened at the tail, and the arm is checked with the scrutinee specialized to the cons value — so a captured occurrence is specialized too, and the hypothesis is assumed at the goal of the arm instead of at the tail's, which proves the goal from itself.
+    FoldMotiveCapturesScrutinee(Term),
     /// A term arrived with a type other than the one required of it.
     Mismatch {
         inferred: Box<Term>,
@@ -267,6 +269,13 @@ impl fmt::Display for Displayed<'_> {
                 write!(
                     formatter,
                     "a fold needs a motive for its induction hypothesis, and `{goal}` is an ambient goal",
+                )
+            }
+            KernelError::FoldMotiveCapturesScrutinee(scrutinee) => {
+                let scrutinee = scrutinee.spelled(spelling);
+                write!(
+                    formatter,
+                    "a fold's motive may only reach its scrutinee `{scrutinee}` through the binder it declares, or its induction hypothesis would be typed at the arm's own goal",
                 )
             }
             KernelError::Mismatch { inferred, expected } => {
