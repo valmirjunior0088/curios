@@ -261,6 +261,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq(List/map(@Nat, @Nat, [], f), [])",
             // The syntactic identity lambda is beta, not extensionality: `map` sends every element to itself and the list is returned whole.
             "Eq(List/map(xs, (v) => v), xs)",
+            // An index into a map is the function at the index into its argument; the bound is the argument's, since `len(map(xs, f))` is `len(xs)`.
+            "Eq(List/get(@Nat, List/map(xs, f), s, @at), f(List/get(@Nat, xs, s, @at)))",
             "Eq(List/map([a, ..xs], f), [f(a), ..List/map(xs, f)])",
             "Eq(List/map([..xs, ..ys], f), [..List/map(xs, f), ..List/map(ys, f)])",
             "Eq(List/slice(xs, 0, List/len(xs)), xs)",

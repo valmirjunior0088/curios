@@ -1220,6 +1220,24 @@ pub fn reduce_intrinsic(
                     }),
                 };
             }
+            // An index into a map is the function at the index into its argument: a map is elementwise, and the bound carries over unchanged because `len(map(xs, f))` reduces to `len(xs)` and a bound is a proof. The `get` twin of the `len` law above.
+            if let Subterm::Intrinsic(Intrinsic::ListMap {
+                from,
+                list: inner,
+                function,
+                ..
+            }) = &*list
+            {
+                let inner_get = Term::intrinsic(Intrinsic::list_get(
+                    from.clone(),
+                    inner.clone(),
+                    index.clone(),
+                    in_range.clone(),
+                ));
+                return reducer
+                    .reduce(Term::apply(function.clone(), [inner_get]))
+                    .map(Term::unwrap_or_clone);
+            }
             // An index is a window of one, so the same two strategies that place a window place an index — see `FreeMonoid::window`. The `List` twin of `BinGet`'s, down to the seam case `get([..p, k], len(p)) = k`.
             match FreeMonoid::List.window(
                 reducer,
