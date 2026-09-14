@@ -60,20 +60,30 @@ pub let cmp(a: Char, b: Char) -> Ordering =
     Nat/cmp(a.code, b.code);
 
 -- | Whether `a` is below `b` in code-point order.
+-- |
+-- | Stated on the code points directly, as `Byte`'s order is on its values, so that a comparison of characters is a comparison of naturals once unfolded and reduces as one — its negation is its dual, and swapping its operands is the mirrored comparison. Read through `cmp` it would be a stuck match on an `Ordering`, which no law relates to another.
 pub let lt(a: Char, b: Char) -> Bool =
-    match cmp(a, b) | lt() => true | _ => false end;
+    a.code < b.code;
 
 -- | Whether `a` is at most `b` in code-point order.
 pub let le(a: Char, b: Char) -> Bool =
-    match cmp(a, b) | gt() => false | _ => true end;
+    a.code <= b.code;
 
 -- | Whether `a` is above `b` in code-point order.
 pub let gt(a: Char, b: Char) -> Bool =
-    match cmp(a, b) | gt() => true | _ => false end;
+    a.code > b.code;
 
 -- | Whether `a` is at least `b` in code-point order.
 pub let ge(a: Char, b: Char) -> Bool =
-    match cmp(a, b) | lt() => false | _ => true end;
+    a.code >= b.code;
+
+-- | That `a` is below `b` in code-point order, decided as `Nat/Lt` is.
+pub let Lt(a: Char, b: Char) -> Prop =
+    Bool/Holds(lt(a, b));
+
+-- | That `a` is at most `b` in code-point order, decided as `Nat/Le` is.
+pub let Le(a: Char, b: Char) -> Prop =
+    Bool/Holds(le(a, b));
 
 -- | Space, tab, newline, vertical tab, form feed or carriage return.
 pub let is_whitespace(c: Char) -> Bool =

@@ -16,7 +16,7 @@ struct Carrier {
     refused: &'static [&'static str],
 }
 
-const IMPORTS: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Bits, List, Str, Eq, Io};";
+const IMPORTS: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Bits, List, Str, Char, Eq, Io};";
 
 const CARRIERS: &[Carrier] = &[
     Carrier {
@@ -390,6 +390,22 @@ const CARRIERS: &[Carrier] = &[
             "Eq(b[..ts, v] == b[], false)",
             "Eq(b[..ts, 1] == b[], false)",
             "Eq(b[..ts, v] == ts, false)",
+        ],
+        refused: &[],
+    },
+    Carrier {
+        name: "Char, over Nat",
+        binders: "c: Char, d: Char",
+        held: &[
+            // An order on characters is the order on their code points once unfolded, so it reduces as one: reflexive cases, the mirrored comparison, and the dual of a negation.
+            "Eq(Char/lt(c, c), false)",
+            "Eq(Char/le(c, c), true)",
+            "Eq(Char/eql(c, d), Char/eql(d, c))",
+            "Eq(Char/lt(c, d), Char/gt(d, c))",
+            "Eq(Char/le(c, d), Char/ge(d, c))",
+            "Eq(Bool/not(Char/lt(c, d)), Char/ge(c, d))",
+            "Eq(Bool/not(Char/le(c, d)), Char/gt(c, d))",
+            "Eq(Char/lt(c, d) && Char/ge(c, d), false)",
         ],
         refused: &[],
     },
