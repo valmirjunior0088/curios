@@ -53,21 +53,41 @@ pub struct Checked {
     pub verdict: Result<curios_core::Module, CompileError>,
 }
 
-/// A compile failure, split for process-level reporting: a written-goal batch is *incomplete* development state, everything else a hard *failure*. The CLI maps the two to distinct exit codes — 2 for incomplete, 1 for failure — so tooling can distinguish "here is your goal batch" from "something is wrong" without parsing stderr.
+/// A compile failure, split for process-level reporting: a written-goal batch is *incomplete* development state, everything else a hard *failure*, and hard failures beside written goals are *mixed*. The CLI maps them to exit codes — 2 for incomplete, 1 for the other two, since a refusal is one whatever stands beside it — so tooling can distinguish "here is your goal batch" from "something is wrong" without parsing stderr.
 ///
-/// Both carry what was said as located [`Report`]s — one per goal for a batch, one otherwise — rather than as text, so a consumer placing a diagnostic in a buffer reads the span instead of parsing the `-->` header back out. The text is the reports rendered, through `Display` or the `String` conversion, and it is exactly the text the CLI prints: the located form and the printed form are one value.
+/// All three carry what was said as located [`Report`]s — one per goal for a batch, one per refusal otherwise — rather than as text, so a consumer placing a diagnostic in a buffer reads the span instead of parsing the `-->` header back out. The text is the reports rendered, through `Display` or the `String` conversion, and it is exactly the text the CLI prints: the located form and the printed form are one value.
 #[derive(Debug)]
 pub enum CompileError {
     Incomplete(Vec<Report>),
     Failure(Vec<Report>),
+    /// The first `failures` reports are the hard ones and the rest the goals, each half in item order. A transport placing diagnostics reads the split off the count; a reader of the printed form gets the refusals first, since those are what stops the program compiling once the goals are filled.
+    Mixed {
+        reports: Vec<Report>,
+        failures: usize,
+    },
 }
 
 impl CompileError {
-    /// Classify a front-end error by [`curios_elab::Error::is_incomplete`], pairing it with its already-located reports.
-    pub(crate) fn of(error: &curios_elab::Error, reports: Vec<Report>) -> Self {
-        match error.is_incomplete() {
-            true => Self::Incomplete(reports),
-            false => Self::Failure(reports),
+    /// Classify a front-end error by [`curios_elab::Error::is_incomplete`], member by member: incomplete when every member of a batch is, a failure when none is, mixed otherwise. `reports` locates one member.
+    pub(crate) fn of(
+        error: &curios_elab::Error,
+        reports: impl Fn(&curios_elab::Error) -> Vec<Report>,
+    ) -> Self {
+        let (goals, refusals): (Vec<_>, Vec<_>) =
+            error.each().partition(|member| member.is_incomplete());
+        let located = |members: Vec<&curios_elab::Error>| {
+            members.into_iter().flat_map(&reports).collect::<Vec<_>>()
+        };
+
+        match (refusals.is_empty(), goals.is_empty()) {
+            (true, _) => Self::Incomplete(located(goals)),
+            (false, true) => Self::Failure(located(refusals)),
+            (false, false) => {
+                let mut reports = located(refusals);
+                let failures = reports.len();
+                reports.extend(located(goals));
+                Self::Mixed { reports, failures }
+            }
         }
     }
 
@@ -79,7 +99,9 @@ impl CompileError {
     /// What was said, located, whichever way it was classified.
     pub fn reports(&self) -> &[Report] {
         match self {
-            Self::Incomplete(reports) | Self::Failure(reports) => reports,
+            Self::Incomplete(reports) | Self::Failure(reports) | Self::Mixed { reports, .. } => {
+                reports
+            }
         }
     }
 }
@@ -208,10 +230,9 @@ pub fn typecheck_measured(
         Tail::Written,
     )
     .map_err(|error| {
-        CompileError::of(
-            &error,
-            error.reports_with_hints(&lowered, &cores, syntax, &unbound, &imports),
-        )
+        CompileError::of(&error, |member| {
+            member.reports_with_hints(&lowered, &cores, syntax, &unbound, &imports)
+        })
     })?;
 
     let obligations = obligations
@@ -406,10 +427,9 @@ where
         elab_tail,
     )
     .map_err(|error| {
-        CompileError::of(
-            &error,
-            error.reports_with_hints(&lowered, &cores, syntax, &unbound, &imports),
-        )
+        CompileError::of(&error, |member| {
+            member.reports_with_hints(&lowered, &cores, syntax, &unbound, &imports)
+        })
     })?;
 
     observe(Stage::CoreElab(&module));
@@ -595,16 +615,15 @@ pub fn compile_unit(
         Tail::Written,
     )
     .map_err(|error| {
-        CompileError::of(
-            &error,
-            error.reports_with_hints(
+        CompileError::of(&error, |member| {
+            member.reports_with_hints(
                 lowered.core(),
                 &cores,
                 syntax,
                 lowered.unbound(),
                 lowered.imports(),
-            ),
-        )
+            )
+        })
     })?;
 
     let core = curios_core::Zonked::project(&core)

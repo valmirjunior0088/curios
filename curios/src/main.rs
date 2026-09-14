@@ -92,7 +92,9 @@ impl From<CompileError> for Failure {
     fn from(error: CompileError) -> Self {
         match error {
             CompileError::Incomplete(_) => Failure::Incomplete(error.to_string()),
-            CompileError::Failure(_) => Failure::Error(error.to_string()),
+            CompileError::Failure(_) | CompileError::Mixed { .. } => {
+                Failure::Error(error.to_string())
+            }
         }
     }
 }

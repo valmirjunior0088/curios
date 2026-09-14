@@ -1466,16 +1466,16 @@ fn finalize_and_check(
     })
 }
 
-/// The first erasure-obligation verdict, as an error — how every caller but the two-checker fixture harness consumes [`finalize_and_check`]'s report.
+/// The erasure-obligation verdicts, as one error — how every caller but the two-checker fixture harness consumes [`finalize_and_check`]'s report. Both obligations are reported when both fail: they are decided independently, and a reader fixing one is owed the other.
 fn raise(outcome: FinalizedModule) -> Result<(Module, Option<Term>), Error> {
     let FinalizedModule {
         module,
         body_type,
         obligations,
     } = outcome;
-    match obligations.into_iter().next() {
-        Some(error) => Err(error),
-        None => Ok((module, body_type)),
+    match obligations.is_empty() {
+        true => Ok((module, body_type)),
+        false => Err(Error::batch(obligations)),
     }
 }
 

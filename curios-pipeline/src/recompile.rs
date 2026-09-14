@@ -63,16 +63,15 @@ pub fn compile_unit_over(
         Tail::Written,
     )
     .map_err(|error| {
-        CompileError::of(
-            &error,
-            error.reports_with_hints(
+        CompileError::of(&error, |member| {
+            member.reports_with_hints(
                 lowered.core(),
                 &cores,
                 syntax,
                 lowered.unbound(),
                 lowered.imports(),
-            ),
-        )
+            )
+        })
     })?;
 
     let core =

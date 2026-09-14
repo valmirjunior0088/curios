@@ -248,16 +248,27 @@ pub(crate) fn open(
     }
 }
 
-/// A compile failure as records: the classification the compile path made, on every report it carries.
+/// A compile failure as records: the classification the compile path made, on every report it carries — for a mixed failure, the first `failures` reports as errors and the rest as goals, which is how it says which is which.
 pub(crate) fn of_error(error: CompileError) -> Vec<Diagnostic> {
-    let (severity, reports) = match error {
-        CompileError::Incomplete(reports) => (Severity::Goal, reports),
-        CompileError::Failure(reports) => (Severity::Error, reports),
+    let (reports, failures) = match error {
+        CompileError::Incomplete(reports) => (reports, 0),
+        CompileError::Failure(reports) => {
+            let failures = reports.len();
+            (reports, failures)
+        }
+        CompileError::Mixed { reports, failures } => (reports, failures),
     };
 
     reports
         .into_iter()
-        .map(|report| Diagnostic { severity, report })
+        .enumerate()
+        .map(|(index, report)| Diagnostic {
+            severity: match index < failures {
+                true => Severity::Error,
+                false => Severity::Goal,
+            },
+            report,
+        })
         .collect()
 }
 

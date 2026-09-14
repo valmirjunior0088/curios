@@ -1,6 +1,9 @@
 mod display;
 use display::*;
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{Erased, HeadKey, WitnessKey},
     curios_core::{
@@ -537,6 +540,8 @@ pub enum Error {
         name: String,
         error: Box<Error>,
     },
+    /// Several refusals reported together, in the order their items were elaborated: what a module holding more than one refused item raises, so one run reports every failure rather than the first. Never empty and never nested — [`Error::batch`] flattens, and a batch of one is that member — and never wrapped, since each member carries its own location and declaration.
+    Batch(Vec<Error>),
 }
 
 impl Error {
@@ -1012,13 +1017,39 @@ impl Error {
         Self::Goals(reports)
     }
 
-    /// Whether this failure is a written-goal batch — incomplete development state rather than a hard error. The process boundary reports the two distinctly (the CLI exits 2 for incomplete, 1 for hard), so the distinction must survive formatting.
+    /// `errors` as one error: the member itself when there is one, otherwise a flat [`Error::Batch`] in the given order. `errors` must not be empty — a batch of nothing is not a failure.
+    pub(crate) fn batch(errors: Vec<Error>) -> Self {
+        let mut members = Vec::with_capacity(errors.len());
+        for error in errors {
+            match error {
+                Self::Batch(inner) => members.extend(inner),
+                error => members.push(error),
+            }
+        }
+
+        match members.len() {
+            0 => panic!("a batch of no refusals"),
+            1 => members.pop().expect("the one member"),
+            _ => Self::Batch(members),
+        }
+    }
+
+    /// The refusals this error is made of: the members of a batch, or the error itself.
+    pub fn each(&self) -> impl Iterator<Item = &Error> {
+        match self {
+            Self::Batch(errors) => errors.iter(),
+            error => std::slice::from_ref(error).iter(),
+        }
+    }
+
+    /// Whether this failure is a written-goal batch — incomplete development state rather than a hard error. The process boundary reports the two distinctly (the CLI exits 2 for incomplete, 1 for hard), so the distinction must survive formatting. A batch of refusals is incomplete only when every member is; the compile path classifies its members one by one.
     pub fn is_incomplete(&self) -> bool {
         match self {
             Self::Goals(_) => true,
             Self::Located { error, .. } | Self::InDeclaration { error, .. } => {
                 error.is_incomplete()
             }
+            Self::Batch(errors) => errors.iter().all(Error::is_incomplete),
             _ => false,
         }
     }
@@ -1154,10 +1185,10 @@ impl Error {
         Self::MissingArmNotImpossible { tag }
     }
 
-    /// Name the declaration this error arose in. Innermost wins, matching [`Error::at`]: a nested item keeps its own attribution.
+    /// Name the declaration this error arose in. Innermost wins, matching [`Error::at`]: a nested item keeps its own attribution, and a batch's members already carry theirs.
     pub(crate) fn in_declaration(self, name: &str) -> Self {
         match self {
-            Self::InDeclaration { .. } => self,
+            Self::InDeclaration { .. } | Self::Batch(_) => self,
             error => Self::InDeclaration {
                 name: name.to_string(),
                 error: Box::new(error),
@@ -1167,7 +1198,7 @@ impl Error {
 
     pub(crate) fn at(self, span: Span) -> Self {
         match self {
-            Self::Located { .. } => self,
+            Self::Located { .. } | Self::Batch(_) => self,
             error => Self::Located {
                 span,
                 error: Box::new(error),
@@ -1265,8 +1296,7 @@ impl Error {
                 .with_anonymous_metavars()
                 .with_string_literals(Global::Authored(syntax.string.string.qualifier())),
         );
-        let suggestion = self.unbound_suggestion(unbound, &spelling);
-        self.reports(&spelling, suggestion)
+        self.reports(&spelling, unbound)
     }
 
     /// The lines an `unbound variable` report adds from the text stage's table, or `None` for any other error or an unknown binder — one [`Qualifier::reach_hint`] per candidate, the line the text stage's `unresolved qualifier` report spells its own candidates with.
@@ -1295,10 +1325,31 @@ impl Error {
         (!lines.is_empty()).then(|| lines.join("\n"))
     }
 
-    /// One report per rendered error, at the innermost span attached to it — or one per goal for a batch, each at its own occurrence, under whatever declaration prefix the wrappers add.
+    /// One report per rendered error, at the innermost span attached to it — or one per goal for a goal batch, each at its own occurrence, under whatever declaration prefix the wrappers add — and for a batch of refusals, every member's reports in order.
     ///
     /// [`Error::at`] is first-wins *per wrapper*, so the innermost span is the first one stamped — but `in_declaration` may wrap a located error, after which a further `at` sees a non-`Located` head and stamps again, leaving the coarser span outermost. Locating therefore searches for the innermost rather than reading the outermost, and the message body is assembled separately so a nested `Located` cannot swallow it: `Display` for the wrappers deliberately prints no snippet, and a body rendered through `to_string` would drop the inner span silently.
-    fn reports(&self, spelling: &Rc<Spelling>, suggestion: Option<String>) -> Vec<Report> {
+    fn reports(
+        &self,
+        spelling: &Rc<Spelling>,
+        unbound: &BTreeMap<Free, Vec<Qualifier>>,
+    ) -> Vec<Report> {
+        if let Self::Batch(errors) = self {
+            // Each member under its own rename map, as each entry of a goal batch is: a binder is suffixed only against a collision the reader can see in the one report that shows it, not against a binder of the same name in another member's terms.
+            let shorten = spelling.short_names();
+            return errors
+                .iter()
+                .flat_map(|error| {
+                    let spelling = Rc::new(
+                        spelling
+                            .as_ref()
+                            .clone()
+                            .with_pretty_names(error.rename_map(&shorten)),
+                    );
+                    error.reports(&spelling, unbound)
+                })
+                .collect();
+        }
+
         if let Self::Goals(goals) = self.unwrapped() {
             let prefix = self.declaration_prefix();
             return goals
@@ -1311,7 +1362,7 @@ impl Error {
         }
 
         let mut body = self.render_body(spelling);
-        if let Some(suggestion) = suggestion {
+        if let Some(suggestion) = self.unbound_suggestion(unbound, spelling) {
             body.push('\n');
             body.push_str(&suggestion);
         }
@@ -1365,6 +1416,11 @@ impl Error {
         match self {
             Self::Located { error, .. } | Self::InDeclaration { error, .. } => {
                 error.collect_terms(out)
+            }
+            Self::Batch(errors) => {
+                for error in errors {
+                    error.collect_terms(out);
+                }
             }
             Self::ReduceExhausted { term } => out.push(term),
             Self::ConvertExhausted { this, that } => {

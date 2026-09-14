@@ -992,6 +992,16 @@ impl fmt::Display for Displayed<'_> {
                 Displayed(error, Rc::clone(spelling)).fmt(f)
             }
             Error::Located { error, .. } => Displayed(error, Rc::clone(spelling)).fmt(f),
+            Error::Batch(errors) => {
+                // Every member's own rendering, separated by a blank line as a goal batch's entries are. Nothing is added around them: each member carries its own declaration and location.
+                for (index, error) in errors.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, "\n\n")?;
+                    }
+                    Displayed(error, Rc::clone(spelling)).fmt(f)?;
+                }
+                Ok(())
+            }
         }
     }
 }
