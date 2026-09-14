@@ -37,18 +37,6 @@ fn a_slot_truncated_past_its_record_is_not_read() {
     assert_eq!(segments(truncated), None);
 }
 
-#[test]
-fn a_record_names_the_directory_its_header_lies_in() {
-    let record = of_reads(&["/w/std/lib.crs", "/w/std/Nat.crs", "/w/std/Nat/add.crs"]);
-
-    assert_eq!(record.directory(), Some(Path::new("/w/std")));
-}
-
-#[test]
-fn a_record_of_no_reads_names_no_directory() {
-    assert_eq!(of_reads(&[]).directory(), None);
-}
-
 /// Containment is checked per read against every directory, so one read outside all of them is enough to refuse the record.
 #[test]
 fn a_read_outside_every_directory_is_not_within_them() {

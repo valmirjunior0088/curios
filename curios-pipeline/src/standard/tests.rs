@@ -23,7 +23,7 @@ fn std_from_its_tree() -> RootSource {
     .declaring([Qualifier::from(["sys"])])
 }
 
-/// The same claim from a directory the record does not name.
+/// The same claim from a directory that is not the archive's tree.
 fn std_from_elsewhere() -> RootSource {
     let directory = env::temp_dir().join("curios-standard-elsewhere");
 
@@ -35,47 +35,69 @@ fn std_from_elsewhere() -> RootSource {
     )
 }
 
-#[test]
-fn a_root_claimed_from_the_directory_its_record_names_is_withheld() {
-    with_stored(|stored| {
-        let (index, root) =
-            withheld(stored, &[std_from_its_tree()]).expect("the tree is the archive's");
-
-        assert_eq!(index + 1, stored.len(), "the last root, /std");
-        assert_eq!(root.unit.mounts()[0].prefix, Qualifier::from(["std"]));
-    });
-}
-
-/// Neither a claim from another directory nor one supplied whole — which reads no directory at all — is the tree the archive came from.
-#[test]
-fn a_root_claimed_from_elsewhere_is_not_withheld() {
-    let mut supplied = RootSource::supplied();
-    supplied.insert_root(
-        "std",
+/// A unit supplied whole under `prefix`, holding one declaration.
+fn supplied(prefix: &str) -> RootSource {
+    let mut modules = RootSource::supplied();
+    modules.insert_root(
+        prefix,
         RootKind::Ordinary,
         "pub let a : /std/Nat = 1;".parse().unwrap(),
     );
 
+    modules
+}
+
+/// The name is the claim: a package named `std` takes the archived root's place wherever it is read from, and however it arrived.
+#[test]
+fn a_package_named_std_takes_the_archived_roots_place() {
     with_stored(|stored| {
-        assert!(withheld(stored, &[std_from_elsewhere()]).is_none());
-        assert!(withheld(stored, &[supplied]).is_none());
+        for claim in [std_from_its_tree(), std_from_elsewhere(), supplied("std")] {
+            let (index, root) = withheld(stored, &[claim]).expect("a package named std");
+
+            assert_eq!(index + 1, stored.len(), "the last root, /std");
+            assert_eq!(root.unit.mounts()[0].prefix, Qualifier::from(["std"]));
+        }
+    });
+}
+
+#[test]
+fn a_package_named_otherwise_takes_no_roots_place() {
+    with_stored(|stored| {
+        assert!(withheld(stored, &[supplied("other")]).is_none());
         assert!(withheld(stored, &[]).is_none());
     });
 }
 
-/// A unit after the first has a scope the archived unit was never compiled in, so it is not the one that takes the root's place.
+/// Only the last root can be taken, since the roots after a withheld one were compiled against it: a claim on the compiler's own root, which nothing could name anyway, collides with it as any claim does.
+#[test]
+fn a_package_named_sys_collides_with_the_compilers_own_root() {
+    with_stored(|stored| {
+        assert!(withheld(stored, &[supplied("sys")]).is_none());
+    });
+
+    let error = compile_with_units(&[("sys", "pub let a : /std/Nat = 1;")], "0")
+        .expect_err("the compiler's own root is in scope");
+
+    assert!(error.contains("sys"), "unexpected error: {error}");
+}
+
+/// A unit after the first has a scope the archived unit was never compiled in, so it is not the one that takes the root's place — and it collides, as any later claim does.
 #[test]
 fn only_the_first_unit_can_take_a_roots_place() {
-    let mut other = RootSource::supplied();
-    other.insert_root(
-        "other",
-        RootKind::Ordinary,
-        "pub let a : /std/Nat = 1;".parse().unwrap(),
-    );
-
     with_stored(|stored| {
-        assert!(withheld(stored, &[other, std_from_its_tree()]).is_none());
+        assert!(withheld(stored, &[supplied("other"), std_from_its_tree()]).is_none());
     });
+
+    let error = compile_with_units(
+        &[
+            ("other", "pub let a : /std/Nat = 1;"),
+            ("std", "pub let b : /std/Nat = 2;"),
+        ],
+        "0",
+    )
+    .expect_err("a package named std after another unit claims a root still in scope");
+
+    assert!(error.contains("std"), "unexpected error: {error}");
 }
 
 #[test]
@@ -111,24 +133,12 @@ fn the_withheld_root_is_offered_as_the_baseline() {
             withheld: Some((Qualifier::from(["std"]), &root.unit)),
         };
         let std = std_from_its_tree();
-        let elsewhere = std_from_elsewhere();
-        let mut other = RootSource::supplied();
-        other.insert_root(
-            "other",
-            RootKind::Ordinary,
-            "pub let a : /std/Nat = 1;".parse().unwrap(),
-        );
+        let other = supplied("other");
 
         assert!(
             baselined
                 .baseline(&UnitSource::mounted(&std), None)
                 .is_some()
-        );
-        assert!(
-            baselined
-                .baseline(&UnitSource::mounted(&elsewhere), None)
-                .is_some(),
-            "the offer is by prefix; which directory claims it was decided when the root was withheld"
         );
         assert!(
             baselined
@@ -147,13 +157,4 @@ fn the_withheld_root_is_offered_as_the_baseline() {
             "no cache, no taker"
         );
     });
-}
-
-/// A unit supplied whole claiming `/std` reads no directory, so the root stands and the claim collides as it always did.
-#[test]
-fn a_root_claimed_from_elsewhere_still_collides() {
-    let error = compile_with_units(&[("std", "pub let a : /std/Nat = 1;")], "0")
-        .expect_err("the archived root is in scope");
-
-    assert!(error.contains("std"), "unexpected error: {error}");
 }

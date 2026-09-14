@@ -113,7 +113,6 @@ fn the_sys_image_records_no_reads_and_no_predecessor() {
 
         assert!(sys.reads.is_empty());
         assert!(sys.predecessors.is_empty());
-        assert_eq!(sys.directory(), None);
     });
 }
 
@@ -128,7 +127,7 @@ fn the_std_image_records_the_sys_image_as_its_predecessor() {
     });
 }
 
-/// The read set is closed and every authored module is registered, so the record and the tree agree exactly — and the record's directory is the tree, which is what a source unit claiming `/std` is held against.
+/// The read set is closed and every authored module is registered, so the record and the tree agree exactly: the record is the compiler's own account of which sources the image came from.
 #[test]
 fn the_std_record_names_every_authored_source_and_no_other() {
     let authored = crate::tests::authored()
@@ -148,16 +147,6 @@ fn the_std_record_names_every_authored_source_and_no_other() {
             .collect::<BTreeSet<_>>();
 
         assert_eq!(recorded, authored);
-        assert_eq!(
-            std.directory().map(PathBuf::from),
-            Some(
-                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("std")
-                    .canonicalize()
-                    .expect("the tree canonicalizes")
-            ),
-            "and the record's directory is the tree's root, where the header lies"
-        );
     });
 }
 

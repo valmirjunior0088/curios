@@ -37,17 +37,6 @@ impl Record {
             unit,
         }
     }
-
-    /// The directory the unit was compiled from: the parent of the shallowest read, which by the layout rule is the header beside the manifest — or `None` for a record of no reads, which is a unit supplied whole.
-    ///
-    /// Read off the record rather than written beside it. A record is the compiler's own account of what it read; a directory carried beside it would be a second account, and two accounts of one fact can disagree.
-    pub fn directory(&self) -> Option<&Path> {
-        self.reads
-            .iter()
-            .map(|(path, _)| Path::new(path))
-            .min_by_key(|path| path.components().count())
-            .and_then(Path::parent)
-    }
 }
 
 /// A stored unit restored: the record beside the unit it vouches for.
