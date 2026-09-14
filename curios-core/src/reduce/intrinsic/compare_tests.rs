@@ -69,6 +69,25 @@ fn nat_decides_the_bound_an_indexed_loop_walks_under() {
     );
 }
 
+// A bound met exactly is the non-strict verdict: `x % 7` is at most `6`, which `<=` reads as `true` where `<` reads nothing, and the same bound one higher is the strict one. The mirrored pair puts the literal on the left.
+#[test]
+fn nat_decides_a_bound_met_exactly_as_non_strict() {
+    let remainder = Term::intrinsic(Intrinsic::NatRem {
+        dividend: sym(0, "x"),
+        divisor: lit(7),
+        non_zero: qed(),
+    });
+
+    let (met, _, _) = compare_nat(&mut Inert, remainder.clone(), lit(6)).expect("reduces");
+    assert_eq!(met, Comparison::Le, "`x % 7 <= 6` for every `x`");
+
+    let (under, _, _) = compare_nat(&mut Inert, remainder.clone(), lit(7)).expect("reduces");
+    assert_eq!(under, Comparison::Lt, "`x % 7 < 7` for every `x`");
+
+    let (mirrored, _, _) = compare_nat(&mut Inert, lit(6), remainder).expect("reduces");
+    assert_eq!(mirrored, Comparison::Ge, "`6 >= x % 7` for every `x`");
+}
+
 // Soundness gate: the conversions preserve the number. `Nat/to_int` folds every literal — ℕ embeds in ℤ, both unbounded here — and `Int/to_nat` folds a non-negative to the same value and reports a negative like a zero divisor, never wrapping bits.
 #[test]
 fn conversion_folds_preserve_the_number() {

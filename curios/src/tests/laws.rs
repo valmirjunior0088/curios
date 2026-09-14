@@ -120,6 +120,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq(x < y || y <= x, true)",
             "Eq(x == y && x != y, false)",
             "Eq(x == y || x != y, true)",
+            // A bound met exactly is the non-strict verdict, on either side.
+            "Eq(x % 7 <= 6, true)",
+            "Eq(x % 7 > 6, false)",
+            "Eq(6 >= x % 7, true)",
         ],
         // Parity: not a law of any monoid here, and not one to take.
         refused: &["Eq(x * 2 + 1 == y * 2, false)"],
@@ -155,6 +159,10 @@ const CARRIERS: &[Carrier] = &[
         held: &[
             // The carrier's own bound, which is what the oracle answers for a `Byte` however the value was produced.
             "Eq(Byte/to_nat(b) < 256, true)",
+            "Eq(Byte/to_nat(b) <= 255, true)",
+            "Eq(Byte/to_nat(b) + 1 <= 256, true)",
+            "Eq(Byte/to_nat(b) > 255, false)",
+            "Eq(256 >= Byte/to_nat(b) + 1, true)",
             "Eq(Nat/to_byte(Byte/to_nat(b)), b)",
             // Euclid's seam, which is what `Key(Nat)`'s recombination rests on: a residual carried in a `Byte` divides out of a scaled symbol, and the remainder twin recovers it.
             "Eq((256 * q + Byte/to_nat(b)) / 256, q)",

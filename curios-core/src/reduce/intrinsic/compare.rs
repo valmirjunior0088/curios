@@ -58,14 +58,16 @@ pub(super) fn compare_nat(
         }
     };
 
-    // A statically bounded operand decides against a literal one where the floors alone cannot: `bound(l) < r` forces `l < r` for every value `l` takes. This is what reduces `x % n < n`, whose left inner is a stuck `NatRem` the structural body has nothing to say about. See `nat_bound` for why each bound holds unconditionally.
+    // A statically bounded operand decides against a literal one where the floors alone cannot: `bound(l) < r` forces `l < r` for every value `l` takes, and `bound(l) = r` forces `l <= r` — the non-strict verdict `le` reads and `lt` cannot, so `x % 7 <= 6` decides as `x % 7 < 7` does. This is what reduces `x % n < n`, whose left inner is a stuck `NatRem` the structural body has nothing to say about. See `nat_bound` for why each bound holds unconditionally.
     let outcome = match outcome {
         Comparison::Stuck if Nat::is_zero(&ir) => match nat_bound(&il).map(|bound| bound + &sl) {
             Some(bound) if bound < sr => Comparison::Lt,
+            Some(bound) if bound == sr => Comparison::Le,
             _ => Comparison::Stuck,
         },
         Comparison::Stuck if Nat::is_zero(&il) => match nat_bound(&ir).map(|bound| bound + &sr) {
             Some(bound) if bound < sl => Comparison::Gt,
+            Some(bound) if bound == sl => Comparison::Ge,
             _ => Comparison::Stuck,
         },
         decided => decided,
