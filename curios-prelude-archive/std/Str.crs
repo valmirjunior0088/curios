@@ -220,8 +220,6 @@ pub let len_concat(a: Str, b: Str) -> Eq(len(concat(a, b)), len(a) + len(b)) =
     count_concat(a.bytes, b.bytes, a.valid);
 
 -- | `count_scalars` splits at the seam of a concatenation whose first half the witness reads to the end, from whatever state the witness starts in — the strengthening `len_concat` needs to descend through `more`, where the state has moved.
---
--- The inner motive is written. Inferred, the elaborator generalizes `rest` into a convoy, and the descent through `rest` is then out of the totality analysis's sight.
 let count_concat(
     a: Bytes,
     b: Bytes,
@@ -230,11 +228,8 @@ let count_concat(
 ) -> Eq(count_scalars(s, x[..a, ..b]), count_scalars(s, a) + count_scalars(Scan/lead(), b)) =
     match w
     | stop() => Eq/refl()
-    | more(c, st, t, rest) =>
-        match st: (q) =>
-            Eq(
-                count_scalars(q, x[c, ..t, ..b]),
-                count_scalars(q, x[c, ..t]) + count_scalars(Scan/lead(), b))
+    | more(_, st, t, rest) =>
+        match st
         | lead() => Eq/cong((n: Nat) => n + 1, count_concat(t, b, rest))
         | cont(_, _, _) => count_concat(t, b, rest)
         | bad() => count_concat(t, b, rest)

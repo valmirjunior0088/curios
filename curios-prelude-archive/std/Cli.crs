@@ -179,23 +179,20 @@ pub let get(
     name: Str,
     @ok: Has(spec, name),
 ) -> Lookup(spec, name) =
-    let walk =
-        match v: (s, _) => (found: Has(s, name)) -> Lookup(s, name)
-        | nil() => (absent) => match absent end
-        | cons(@a, @rest, head, tail) =>
-            (found) =>
-                let pick =
-                    match Str/eql(a.long, name): (b) =>
-                        (here: match b | true => True | false => Has(rest, name) end) -> match b
-                        | true => Carrier(a)
-                        | false => Lookup(rest, name)
-                        end
-                    | true => (_) => head
-                    | false => (later) => get(@rest, tail, name, @later)
-                    end;
-                pick(found)
-        end;
-    walk(ok);
+    match v
+    | nil() => match ok end
+    | cons(@a, @rest, head, tail) =>
+        let pick =
+            match Str/eql(a.long, name): (b) =>
+                (here: match b | true => True | false => Has(rest, name) end) -> match b
+                | true => Carrier(a)
+                | false => Lookup(rest, name)
+                end
+            | true => (_) => head
+            | false => (later) => get(@rest, tail, name, @later)
+            end;
+        pick(ok)
+    end;
 
 -- | What a program declares, in one of two shapes.
 -- |
