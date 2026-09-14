@@ -26,11 +26,39 @@ pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
         // Finite scalars are the degenerate (zero-generator) spines: no tail.
         (Intrinsic::Bool(actual), Intrinsic::Bool(target)) => Some(decide(actual == target)),
         (Intrinsic::Int(actual), Intrinsic::Int(target)) => Some(decide(actual == target)),
-        // `Nat` is the free commutative monoid on its summands, `Bin`/`List` the free monoids on their bytes/elements (each returns `None` for the other's shapes).
+        // `Nat` is the free commutative monoid on its summands, `Bin`/`List` the free monoids on their bytes/elements (each returns `None` for the other's shapes), and `&&`/`||` the semilattices on their leaves.
         _ => peel_nat_pair(left, right)
             .or_else(|| peel_bin(left, right))
-            .or_else(|| peel_list(left, right)),
+            .or_else(|| peel_list(left, right))
+            .or_else(|| peel_bool(left, right))
+            .or_else(|| peel_symmetric(left, right)),
     }
+}
+
+/// A symmetric comparison — `==`, `!=`, and the `xor` that `!=` on `Bool` lowers through — denotes one value with its operands in either order, so two of one operation are `Equal` when their operand pairs are one pair swapped, and `Stuck` otherwise, never `Clash`. `None` for any other pair.
+///
+/// Decided here rather than by spelling the operands in one order at the fold, because a comparison is what a `choose` guard refines on, and a refinement is recorded under the guard's *written* spelling: both checkers canonicalize a probe's operands and never its node, so a fold that swapped them would take `rem == 1` past its own refinement inside `Str/step`. The peel changes no spelling, so every key stays where it was written.
+pub fn peel_symmetric(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
+    let swapped = match (left, right) {
+        (Intrinsic::NatEql(a, b), Intrinsic::NatEql(c, d))
+        | (Intrinsic::NatNeq(a, b), Intrinsic::NatNeq(c, d))
+        | (Intrinsic::IntEql(a, b), Intrinsic::IntEql(c, d))
+        | (Intrinsic::IntNeq(a, b), Intrinsic::IntNeq(c, d))
+        | (Intrinsic::BoolEql(a, b), Intrinsic::BoolEql(c, d))
+        | (Intrinsic::BoolNeq(a, b), Intrinsic::BoolNeq(c, d))
+        | (Intrinsic::BoolXor(a, b), Intrinsic::BoolXor(c, d))
+        | (Intrinsic::FltEql(a, b), Intrinsic::FltEql(c, d))
+        | (Intrinsic::FltNeq(a, b), Intrinsic::FltNeq(c, d)) => a == d && b == c,
+        (Intrinsic::BinEql(this, a, b), Intrinsic::BinEql(that, c, d)) if this == that => {
+            a == d && b == c
+        }
+        _ => return None,
+    };
+
+    Some(match swapped {
+        true => Peel::Equal,
+        false => Peel::Stuck,
+    })
 }
 
 fn decide(equal: bool) -> Peel {
@@ -38,6 +66,50 @@ fn decide(equal: bool) -> Peel {
         true => Peel::Equal,
         false => Peel::Clash,
     }
+}
+
+/// `&&` and `||` are each idempotent, commutative and associative, so two conjunctions — or two disjunctions — are one value exactly when they hold the same *set* of leaves under that connective. Each side is flattened to its leaves and the two sets compared by syntactic identity: the same set is `Equal`, anything else is `Stuck`, never `Clash`, since two different leaf sets may still agree as values (`x && y` against `x` when `y` is `true`). `None` for a pair that is not two conjunctions or two disjunctions, so the caller keeps its own handling.
+///
+/// Decided here rather than by a canonical spelling in the fold, on the record `documentation/roadmap.md` keeps of the `&&`/`||` cliff: a fold that normalized a tree whole on every step paid for the whole tree at every leaf, where a comparison flattens each side once. A leaf that is convertible but not identical is the caller's shape congruence's, as before, so declining costs reductions and never correctness.
+pub fn peel_bool(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
+    let (conjunction, left_leaves) = bool_leaves(left)?;
+    let (that, right_leaves) = bool_leaves(right)?;
+    if conjunction != that {
+        return None;
+    }
+
+    let covers = |these: &[Term], those: &[Term]| these.iter().all(|leaf| those.contains(leaf));
+
+    Some(
+        match covers(&left_leaves, &right_leaves) && covers(&right_leaves, &left_leaves) {
+            true => Peel::Equal,
+            false => Peel::Stuck,
+        },
+    )
+}
+
+/// The leaves of a `&&` tree (`true`) or a `||` tree (`false`), left to right, with an explicit worklist because the tree's depth is data-shaped. `None` for any other intrinsic.
+fn bool_leaves(intrinsic: &Intrinsic) -> Option<(bool, Vec<Term>)> {
+    let conjunction = match intrinsic {
+        Intrinsic::BoolAnd(..) => true,
+        Intrinsic::BoolOr(..) => false,
+        _ => return None,
+    };
+
+    let mut leaves = Vec::new();
+    let mut pending = vec![Term::intrinsic(intrinsic.clone())];
+    while let Some(term) = pending.pop() {
+        match (&*term, conjunction) {
+            (Subterm::Intrinsic(Intrinsic::BoolAnd(left, right)), true)
+            | (Subterm::Intrinsic(Intrinsic::BoolOr(left, right)), false) => {
+                pending.push(right.clone());
+                pending.push(left.clone());
+            }
+            _ => leaves.push(term),
+        }
+    }
+
+    Some((conjunction, leaves))
 }
 
 /// The `Nat` peel over two reduced intrinsics — [`peel_nat_terms`] at the shape [`peel_intrinsic`] and the two congruences hold their operands in.

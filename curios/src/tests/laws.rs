@@ -102,6 +102,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq(x + 1 > 0, true)",
             "Eq(x <= x + y, true)",
             "Eq(x + y < x, false)",
+            // A stuck symmetric comparison is spelled with its operands in one order.
+            "Eq(x == y, y == x)",
+            "Eq(x != y, y != x)",
         ],
         // Parity: not a law of any monoid here, and not one to take.
         refused: &["Eq(x * 2 + 1 == y * 2, false)"],
@@ -160,13 +163,15 @@ const CARRIERS: &[Carrier] = &[
             "Eq(0 * i, 0)",
             "Eq(i == i, true)",
             "Eq(i != i, false)",
+            "Eq(i == j, j == i)",
+            "Eq(i != j, j != i)",
         ],
         // Commutativity needs the summand normal form `Nat` has and `Int` does not.
         refused: &["Eq(i + j, j + i)"],
     },
     Carrier {
         name: "Bool",
-        binders: "b: Bool, c: Bool",
+        binders: "b: Bool, c: Bool, d: Bool",
         held: &[
             "Eq(b && true, b)",
             "Eq(true && b, b)",
@@ -189,9 +194,17 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bool/xor(false, b), b)",
             "Eq(Bool/xor(b, b), false)",
             "Eq(Bool/not(Bool/not(b)), b)",
+            // `&&` and `||` are semilattices on their leaves, decided as sets by the peel: commuted, reassociated and repeated leaves are one value.
+            "Eq(b && c, c && b)",
+            "Eq((b && c) && d, b && (c && d))",
+            "Eq(b || c, c || b)",
+            "Eq((b || c) || d, b || (c || d))",
+            "Eq((b && c) && b, c && b)",
+            // A stuck symmetric comparison is spelled with its operands in one order.
+            "Eq(b == c, c == b)",
+            "Eq(b != c, c != b)",
         ],
-        // Commutativity: the same normal-form question as `Int`'s.
-        refused: &["Eq(b && c, c && b)"],
+        refused: &[],
     },
     Carrier {
         name: "List, the free monoid",
@@ -256,6 +269,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bytes/get(x[k, ..bs], 0), k)",
             "Eq(Bytes/eql(bs, bs), true)",
             "Eq(bs == bs, true)",
+            "Eq(bs == cs, cs == bs)",
             "Eq(Bytes/slice(x[..bs, ..cs], 0, Bytes/len(bs)), bs)",
             "Eq(Bytes/slice(x[..bs, ..cs], Bytes/len(bs), Bytes/len(cs)), cs)",
             "Eq(Bytes/slice(x[..bs, ..cs, ..ds], Bytes/len(bs), Bytes/len(cs)), cs)",
@@ -292,6 +306,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bits/get(b[v, ..ts], 0), v)",
             "Eq(Bits/eql(ts, ts), true)",
             "Eq(ts == ts, true)",
+            "Eq(ts == us, us == ts)",
             "Eq(Bits/slice(b[..ts, ..us], 0, Bits/len(ts)), ts)",
             "Eq(Bits/slice(b[..ts, ..us], Bits/len(ts), Bits/len(us)), us)",
             "Eq(Bits/slice(b[..ts, ..us, ..ws], Bits/len(ts), Bits/len(us)), us)",

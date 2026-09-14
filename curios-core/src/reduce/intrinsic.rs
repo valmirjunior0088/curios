@@ -26,6 +26,45 @@ use {
     curios_utilities::{Grain, PackedBin},
 };
 
+/// A `&&` or `||` tree with every leaf forced and the tree re-nested to the left, asked for by name where a comparison needs one set of leaves against another — the converters' rule for two conjunctions or two disjunctions, the twin of `Nat::normalize` for a stuck product. `None` for any other intrinsic.
+///
+/// The fold leaves a stuck connective's right operand as written, on the record `reduce_bool_binary` keeps of the `&&`/`||` cliff, so a leaf as the fold left it may be a spelling that reduces to a subtree — a witness projection standing for `c && d`. Forcing each leaf and descending is what makes the leaf set the value's rather than the spelling's, and it is paid once per comparison of two trees rather than at every reduction of one, which is the whole of the difference from the cliff. The rebuilt tree is reduced again, so a leaf that forced to a literal meets the lattice laws where it stands.
+pub fn normalize_bool(
+    reducer: &mut impl Reducer,
+    intrinsic: &Intrinsic,
+) -> Result<Option<Term>, ReduceError> {
+    let (conjunction, left, right) = match intrinsic {
+        Intrinsic::BoolAnd(left, right) => (true, left, right),
+        Intrinsic::BoolOr(left, right) => (false, left, right),
+        _ => return Ok(None),
+    };
+    let rebuild = |left: Term, right: Term| match conjunction {
+        true => Intrinsic::BoolAnd(left, right),
+        false => Intrinsic::BoolOr(left, right),
+    };
+
+    let mut leaves = Vec::new();
+    let mut pending = vec![right.clone(), left.clone()];
+    while let Some(term) = pending.pop() {
+        let forced = reducer.reduce_forced(term)?;
+        match (&*forced, conjunction) {
+            (Subterm::Intrinsic(Intrinsic::BoolAnd(left, right)), true)
+            | (Subterm::Intrinsic(Intrinsic::BoolOr(left, right)), false) => {
+                pending.push(right.clone());
+                pending.push(left.clone());
+            }
+            _ => leaves.push(forced),
+        }
+    }
+    reducer.spend(Cost::collection(leaves.len() as u64))?;
+
+    let tree = leaves
+        .into_iter()
+        .reduce(|acc, leaf| Term::intrinsic(rebuild(acc, leaf)))
+        .expect("a connective has two operands, so at least two leaves");
+    reducer.reduce_forced(tree).map(Some)
+}
+
 pub fn reduce_intrinsic(
     reducer: &mut impl Reducer,
     intrinsic: &Intrinsic,

@@ -8,8 +8,8 @@ use {
     super::Convert,
     crate::Context,
     curios_core::{
-        Intrinsic, Nat, Operand, Peel, ReduceError, Subterm, Term, Var, Visit, peel_bin, peel_list,
-        peel_nat_pair,
+        Intrinsic, Nat, Operand, Peel, ReduceError, Subterm, Term, Var, Visit, normalize_bool,
+        peel_bin, peel_bool, peel_list, peel_nat_pair, peel_symmetric,
     },
     curios_utilities::{Grain, PackedBin, SyntaxRegistry},
 };
@@ -44,10 +44,28 @@ pub(crate) fn convert_intrinsic(
             }
         }
     };
-    // `Nat`, `Bin`, and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off (`core::spine`). This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Stuck` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
+    // **Two `&&` trees, or two `||` trees, are flattened with their leaves forced before they are peeled** — the same demand by name as the stuck product's, because the fold leaves a stuck connective's right operand as written and the peel reads leaves without reducing.
+    let (this, that) = match (
+        normalize_bool(context, &this)?,
+        normalize_bool(context, &that)?,
+    ) {
+        (Some(this_tree), Some(that_tree)) => {
+            match (as_intrinsic(&this_tree), as_intrinsic(&that_tree)) {
+                (Some(this), Some(that)) => (this, that),
+                _ => {
+                    cmp.enqueue(Term::type_ground(), this_tree, that_tree);
+                    return Ok(true);
+                }
+            }
+        }
+        _ => (this, that),
+    };
+    // `Nat`, `Bin`, and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off (`core::spine`), and `&&`/`||` are semilattices, so two of one are equal when they hold one set of leaves. This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Stuck` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
     if let Some(peel) = peel_nat_pair(&this, &that)
         .or_else(|| peel_bin(&this, &that))
         .or_else(|| peel_list(&this, &that))
+        .or_else(|| peel_bool(&this, &that))
+        .or_else(|| peel_symmetric(&this, &that))
     {
         match peel {
             Peel::Equal => return Ok(true),
