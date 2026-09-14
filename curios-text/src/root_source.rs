@@ -3,13 +3,16 @@
 //! **The layout rule:** `mod x` declared in a namespace's header resolves to `x.crs` in that namespace's directory, and a header's namespace directory is its stem directory. `mod util` in `<dir>/main.crs` reads `<dir>/main/util.crs`, and `util`'s own children read from `<dir>/main/util/`. One rule governs every file in the language, so the file handed to `run` is a header like any other and declaring a file never changes what its `mod`s mean.
 //!
 //! A stem is never part of a name. `<dir>` and `main` are spelling, and `/util` is the qualifier — which is why [`RootSource::mounted`] takes the header and the directory as two arguments rather than deriving one from the other: a package's library header sits beside its manifest while its namespace *is* the manifest's directory, and that exception is the manifest's to state, not this crate's to guess. See `curios-package`'s `layout` module.
+//!
+//! Every file a source reads passes through one seam, [`RootSource::load`], and that seam parses each distinct text once per thread: see [`parsed`].
 
 use {
     super::{Error, LoadError, Module, TopItem},
     curios_utilities::{Mount, Qualifier, RootKind, Source, is_identifier},
     std::{
         cell::RefCell,
-        collections::BTreeMap,
+        collections::{BTreeMap, HashMap},
+        fs,
         path::{Path, PathBuf},
         rc::Rc,
     },
@@ -230,14 +233,12 @@ impl RootSource {
                     false => file(directory, qualifier, mount.prefix.segments().len()),
                 };
 
-                let (module, source) = self
-                    .overlay
-                    .read(&path)
-                    .unwrap_or_else(|| Module::read(&path))
-                    .map_err(|cause| Error::ModuleLoadFailed {
+                let (module, source) = parsed(&path, self.overlay.get(&path)).map_err(|cause| {
+                    Error::ModuleLoadFailed {
                         label: qualifier.join(),
                         cause: Box::new(cause),
-                    })?;
+                    }
+                })?;
 
                 // Recorded after the read succeeded and canonicalized against the file that answered it, so the record names something that existed and names it the one way. A path that will not canonicalize was read anyway, so it is recorded as given rather than dropped: a record short one entry would let a cache confirm a unit against less than it was compiled from.
                 self.reads
@@ -316,6 +317,48 @@ impl Default for RootSource {
     }
 }
 
+thread_local! {
+    /// Every file this thread has parsed, by the one spelling of its path, with the text it held then. See [`parsed`].
+    static PARSED: RefCell<HashMap<PathBuf, (Rc<Source>, Module)>> = RefCell::new(HashMap::new());
+}
+
+/// The module at `path`, parsed once per distinct text per thread — from `held` when an overlay holds the file, from the disk otherwise.
+///
+/// **A hit hands back the same `Rc<Source>` the memo parsed and a clone of its tree**, so the read record digests exactly the text that was parsed, and the clone is an `Rc` bump per term and one vector per item. Keyed by the path's one spelling and validated by text equality rather than keyed by a digest: one entry per file, replaced when the file changes, so the memo is bounded by how many files a process reads and never by how often one is edited. A parse failure is not entered and evicts nothing, so the last good parse of a file being edited stays where the next read of that text wants it.
+///
+/// Thread-local because everything here is — a module holds `Rc<Source>` spans. A one-shot compilation parses each file once already, except where the fold asks for a header twice, which discovery and the declared-module walk do; the language server's one analyst thread keeps the memo across every check it runs, which is where parsing an unchanged tree on every keystroke went. Nothing evicts: the bound is the file count, and a file deleted or renamed leaves one entry nothing asks for again.
+fn parsed(path: &Path, held: Option<&str>) -> Result<(Module, Rc<Source>), LoadError> {
+    let text = match held {
+        Some(text) => text.to_owned(),
+        None => fs::read_to_string(path).map_err(|error| LoadError::Read {
+            path: path.into(),
+            error,
+        })?,
+    };
+    let key = identity(path);
+
+    let hit = PARSED.with(|parsed| {
+        parsed
+            .borrow()
+            .get(&key)
+            .filter(|(source, _)| source.text == text)
+            .map(|(source, module)| (module.clone(), Rc::clone(source)))
+    });
+    if let Some(hit) = hit {
+        return Ok(hit);
+    }
+
+    let source = Source::held(path, text);
+    let module = Module::parse(&source).map_err(LoadError::Parse)?;
+    PARSED.with(|parsed| {
+        parsed
+            .borrow_mut()
+            .insert(key, (Rc::clone(&source), module.clone()));
+    });
+
+    Ok((module, source))
+}
+
 /// Text standing in for files: `path → text`, consulted before the disk by every [`RootSource`] it is handed to, and by the entry opened through [`Entrypoint::overlaid`](crate::Entrypoint::overlaid).
 ///
 /// **One door for every source.** An editor holds documents the disk does not have yet, and a program on standard input has no file at all; both reach the compiler as an overlay rather than as a second way to read, so the path a language server takes is the path the one-shot query is tested on. A read that misses the overlay falls through to the disk unchanged, and a read that hits is recorded exactly as a disk read is — under the path, with the text that was parsed — so what a compilation was verified against stays one list.
@@ -342,18 +385,6 @@ impl Overlay {
     /// The text held for `path`, if any.
     pub fn get(&self, path: &Path) -> Option<&str> {
         self.texts.get(&identity(path)).map(String::as_str)
-    }
-
-    /// The module held for `path`, parsed, or `None` to say the disk answers.
-    fn read(&self, path: &Path) -> Option<Result<(Module, Rc<Source>), LoadError>> {
-        let text = self.get(path)?;
-        let source = Source::held(path, text);
-
-        Some(
-            Module::parse(&source)
-                .map(|module| (module, source))
-                .map_err(LoadError::Parse),
-        )
     }
 }
 

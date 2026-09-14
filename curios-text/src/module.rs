@@ -282,14 +282,12 @@ impl Module {
         Ok((module, take_comments()))
     }
 
-    /// Read and parse a standalone module while retaining its source path for diagnostics. The prelude artifact builder uses this for `/std`; ordinary compilation reaches file-backed modules through [`RootSource`].
+    /// Read and parse a standalone module while retaining its source path for diagnostics. `curios-package` reads a library's header with it to learn what the library declares; ordinary compilation reaches file-backed modules through [`RootSource`], which parses each text once.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
         Self::read(path.as_ref()).map(|(module, _)| module)
     }
 
-    /// [`Module::from_path`], additionally handing back the [`Source`] it parsed.
-    ///
-    /// For [`RootSource`], which records what it read so a cache can verify a stored unit against the exact text that produced it. Handing the source back rather than the file's bytes is what keeps that record free: the parsed module's spans already hold this `Rc`, so retaining it costs a refcount.
+    /// [`Module::from_path`], additionally handing back the [`Source`] it parsed — which costs a refcount, since the module's spans already hold it.
     pub(crate) fn read(path: &Path) -> Result<(Self, Rc<Source>), LoadError> {
         let source = Source::read(path).map_err(|error| LoadError::Read {
             path: path.into(),

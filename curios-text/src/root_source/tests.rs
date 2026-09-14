@@ -1,11 +1,12 @@
-//! The one spelling two paths to a file share, and whether a `mod` chain reaches a module.
+//! The one spelling two paths to a file share, whether a `mod` chain reaches a module, and when a file is parsed again.
 
 use {
-    super::{Overlay, RootSource, identity},
-    curios_utilities::{Qualifier, RootKind},
+    super::{Error, Overlay, RootSource, identity},
+    curios_utilities::{Qualifier, RootKind, Source},
     std::{
         fs,
         path::{Path, PathBuf},
+        rc::Rc,
         time::{SystemTime, UNIX_EPOCH},
     },
 };
@@ -93,6 +94,119 @@ fn an_unsaved_mod_declares_its_module_through_the_overlay() {
         source
             .declares_module(&Qualifier::from(["json", "fresh"]))
             .unwrap()
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A source over the tree at `root`, mounted as `/json` with `lib.crs` as its header.
+fn json(root: &Path) -> RootSource {
+    RootSource::mounted("json", RootKind::Ordinary, root.join("lib.crs"), root)
+}
+
+/// The one source `source` has read, after loading `/json`'s header alone.
+fn header_read(source: &RootSource) -> Rc<Source> {
+    let mut reads = source.reads();
+    assert_eq!(reads.len(), 1, "the header alone was read");
+
+    reads.pop().expect("one read").1
+}
+
+/// The memo is keyed by the file's one spelling and validated by its text, so a second source over an unchanged file is handed the parse the first one took — the same `Rc<Source>`, which nothing but the memo could produce twice.
+#[test]
+fn an_unchanged_file_is_parsed_once_per_thread() {
+    let root = tree(
+        "memo-unchanged",
+        &[("lib.crs", "pub mod parse;\n"), ("parse.crs", "")],
+    );
+    let qualifier = Qualifier::from(["json"]);
+
+    let first = json(&root);
+    first.load(&qualifier).unwrap();
+    let second = json(&root);
+    second.load(&qualifier).unwrap();
+
+    assert!(
+        Rc::ptr_eq(&header_read(&first), &header_read(&second)),
+        "the second load was handed the first's parse"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_changed_file_is_parsed_again() {
+    let root = tree(
+        "memo-changed",
+        &[("lib.crs", "pub mod parse;\n"), ("parse.crs", "")],
+    );
+    let qualifier = Qualifier::from(["json"]);
+
+    let before = json(&root);
+    before.load(&qualifier).unwrap();
+
+    fs::write(root.join("lib.crs"), "pub mod parse;\npub mod more;\n").unwrap();
+    let after = json(&root);
+    let module = after.load(&qualifier).unwrap();
+
+    assert!(!Rc::ptr_eq(&header_read(&before), &header_read(&after)));
+    assert_eq!(header_read(&after).text, "pub mod parse;\npub mod more;\n");
+    assert_eq!(module.items.len(), 2, "and the new text is what was parsed");
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// An overlay holding exactly the disk's text is the same text at the same path, so it is the same parse.
+#[test]
+fn an_overlay_holding_the_disks_text_shares_the_disks_parse() {
+    let root = tree(
+        "memo-overlay",
+        &[("lib.crs", "pub mod parse;\n"), ("parse.crs", "")],
+    );
+    let qualifier = Qualifier::from(["json"]);
+
+    let disk = json(&root);
+    disk.load(&qualifier).unwrap();
+
+    let overlay = Overlay::of([(root.join("lib.crs"), "pub mod parse;\n".to_string())]);
+    let held = json(&root).with_overlay(overlay);
+    held.load(&qualifier).unwrap();
+
+    assert!(Rc::ptr_eq(&header_read(&disk), &header_read(&held)));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A parse failure is reported and records nothing, and it evicts nothing: the file's last good parse answers the next read of that text.
+#[test]
+fn a_parse_failure_is_reported_and_leaves_the_last_good_parse_in_place() {
+    let root = tree(
+        "memo-failure",
+        &[("lib.crs", "pub mod parse;\n"), ("parse.crs", "")],
+    );
+    let qualifier = Qualifier::from(["json"]);
+
+    let good = json(&root);
+    good.load(&qualifier).unwrap();
+
+    fs::write(root.join("lib.crs"), "pub mod ;\n").unwrap();
+    let broken = json(&root);
+    assert!(matches!(
+        broken.load(&qualifier),
+        Err(Error::ModuleLoadFailed { .. })
+    ));
+    assert!(
+        broken.reads().is_empty(),
+        "nothing is recorded for a read that did not parse"
+    );
+
+    fs::write(root.join("lib.crs"), "pub mod parse;\n").unwrap();
+    let restored = json(&root);
+    restored.load(&qualifier).unwrap();
+
+    assert!(
+        Rc::ptr_eq(&header_read(&good), &header_read(&restored)),
+        "the failure evicted nothing"
     );
 
     fs::remove_dir_all(root).unwrap();
