@@ -321,6 +321,39 @@ fn peel_symmetric_decides_a_swapped_comparison_equal() {
     );
 }
 
+// The bitwise lattice on ℕ commutes as `xor` on `Bool` does, and for the same reason it is a peel and not a spelling: a bitwise operand may be what a guard refines on, and its key is recorded as written.
+#[test]
+fn peel_symmetric_decides_a_swapped_bitwise_operation_equal() {
+    let (x, y) = (sym(0, "x"), sym(1, "y"));
+
+    for (this, that) in [
+        (
+            Intrinsic::NatAnd(x.clone(), y.clone()),
+            Intrinsic::NatAnd(y.clone(), x.clone()),
+        ),
+        (
+            Intrinsic::NatOr(x.clone(), y.clone()),
+            Intrinsic::NatOr(y.clone(), x.clone()),
+        ),
+        (
+            Intrinsic::NatXor(x.clone(), y.clone()),
+            Intrinsic::NatXor(y.clone(), x.clone()),
+        ),
+    ] {
+        assert!(
+            matches!(peel_symmetric(&this, &that), Some(Peel::Equal)),
+            "a bitwise operation is one value with its operands swapped"
+        );
+    }
+
+    let shifted = Intrinsic::NatShl(x.clone(), y.clone());
+    let reversed = Intrinsic::NatShl(y, x);
+    assert!(
+        peel_symmetric(&shifted, &reversed).is_none(),
+        "a shift is not symmetric and is not this peel's"
+    );
+}
+
 // The control the three above would be worthless without: the peel must not decide *everything* equal. Regrouping preserves the element order, so a genuine reordering has to clash rather than merge.
 #[test]
 fn peel_bin_still_clashes_a_reordered_run() {

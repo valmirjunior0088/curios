@@ -126,8 +126,11 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Nat bitwise and shifts",
-        binders: "x: Nat",
+        binders: "x: Nat, y: Nat",
         held: &[
+            "Eq(Nat/and(x, y), Nat/and(y, x))",
+            "Eq(Nat/or(x, y), Nat/or(y, x))",
+            "Eq(Nat/xor(x, y), Nat/xor(y, x))",
             "Eq(Nat/and(x, 0), 0)",
             "Eq(Nat/and(0, x), 0)",
             "Eq(Nat/and(x, x), x)",
