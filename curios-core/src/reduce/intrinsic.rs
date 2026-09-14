@@ -69,6 +69,107 @@ pub fn normalize_bool(
     reducer.reduce_forced(tree).map(Some)
 }
 
+/// Two stuck comparisons spelled across the family, aligned to one spelling so the congruence can compare them: a negated comparison — `Bool/not` is `xor(_, true)` once unfolded — becomes its dual, `not(a < b)` reading `b <= a` and `not(a == b)` reading `a != b`, and a `<=` meeting a `<` on the other side becomes `<` of the successor, since `a <= b` and `a < b + 1` are one relation on `Nat` and on `Int`. `None` when neither side moved.
+///
+/// Asked for by name in both converters beside [`normalize_bool`], and **probe-side only**, on the record `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md` keeps: a guard's refinement is keyed on the guard's written spelling, so a fold that respelled a comparison would take every later occurrence past it, where a probe respelled inside the judgment leaves every recorded key as written. Total orders only: on `Flt` every ordered comparison against the NaN is false in both directions, so its negation is not the mirror, and the negation of an `Flt` comparison stays a leaf.
+pub fn align_comparisons(
+    reducer: &mut impl Reducer,
+    this: &Intrinsic,
+    that: &Intrinsic,
+) -> Result<Option<(Intrinsic, Intrinsic)>, ReduceError> {
+    let this_dual = dual_of_negated(reducer, this)?;
+    let that_dual = dual_of_negated(reducer, that)?;
+    let moved = this_dual.is_some() || that_dual.is_some();
+    let this = this_dual.unwrap_or_else(|| this.clone());
+    let that = that_dual.unwrap_or_else(|| that.clone());
+
+    let one = || Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+    let plus_one = || Term::intrinsic(Intrinsic::Int(Integer::from(1i32)));
+    let aligned = match (&this, &that) {
+        (Intrinsic::NatLe(a, b), Intrinsic::NatLt(..)) => Some((
+            Intrinsic::nat_lt(
+                a.clone(),
+                Term::intrinsic(Intrinsic::nat_add(b.clone(), one())),
+            ),
+            that.clone(),
+        )),
+        (Intrinsic::NatLt(..), Intrinsic::NatLe(c, d)) => Some((
+            this.clone(),
+            Intrinsic::nat_lt(
+                c.clone(),
+                Term::intrinsic(Intrinsic::nat_add(d.clone(), one())),
+            ),
+        )),
+        (Intrinsic::IntLe(a, b), Intrinsic::IntLt(..)) => Some((
+            Intrinsic::IntLt(
+                a.clone(),
+                Term::intrinsic(Intrinsic::IntAdd(b.clone(), plus_one())),
+            ),
+            that.clone(),
+        )),
+        (Intrinsic::IntLt(..), Intrinsic::IntLe(c, d)) => Some((
+            this.clone(),
+            Intrinsic::IntLt(
+                c.clone(),
+                Term::intrinsic(Intrinsic::IntAdd(d.clone(), plus_one())),
+            ),
+        )),
+        _ => None,
+    };
+    match aligned {
+        Some(pair) => {
+            reducer.spend(Cost::term(2))?;
+            Ok(Some(pair))
+        }
+        None => Ok(moved.then_some((this, that))),
+    }
+}
+
+/// The dual of a negated comparison: an `xor` with a `true` operand whose other operand forces to an ordered or equality comparison on a total order, read as the comparison that is true exactly when it is false. `None` for anything else, the `Flt` comparisons included.
+fn dual_of_negated(
+    reducer: &mut impl Reducer,
+    intrinsic: &Intrinsic,
+) -> Result<Option<Intrinsic>, ReduceError> {
+    let Intrinsic::BoolXor(left, right) = intrinsic else {
+        return Ok(None);
+    };
+    let left = reducer.reduce_forced(left.clone())?;
+    let right = reducer.reduce_forced(right.clone())?;
+    let negated = match (left.as_bool(), right.as_bool()) {
+        (Some(true), _) => right,
+        (_, Some(true)) => left,
+        _ => return Ok(None),
+    };
+    let Subterm::Intrinsic(comparison) = &*negated else {
+        return Ok(None);
+    };
+    let dual = match comparison {
+        Intrinsic::NatLt(a, b) => Intrinsic::NatLe(b.clone(), a.clone()),
+        Intrinsic::NatLe(a, b) => Intrinsic::NatLt(b.clone(), a.clone()),
+        Intrinsic::NatEql(a, b) => Intrinsic::NatNeq(a.clone(), b.clone()),
+        Intrinsic::NatNeq(a, b) => Intrinsic::NatEql(a.clone(), b.clone()),
+        Intrinsic::IntLt(a, b) => Intrinsic::IntLe(b.clone(), a.clone()),
+        Intrinsic::IntLe(a, b) => Intrinsic::IntLt(b.clone(), a.clone()),
+        Intrinsic::IntEql(a, b) => Intrinsic::IntNeq(a.clone(), b.clone()),
+        Intrinsic::IntNeq(a, b) => Intrinsic::IntEql(a.clone(), b.clone()),
+        // `!=` on `Bool` lowers to `xor` at the `/sys` row, so the dual of an equality is the `xor` its inequality is, and a negated `xor` of two operands is their equality; a `xor` with a literal operand is a negation itself and not a comparison.
+        Intrinsic::BoolEql(a, b) | Intrinsic::BoolNeq(a, b)
+            if a.as_bool().is_none() && b.as_bool().is_none() =>
+        {
+            match comparison {
+                Intrinsic::BoolEql(..) => Intrinsic::BoolXor(a.clone(), b.clone()),
+                _ => Intrinsic::BoolEql(a.clone(), b.clone()),
+            }
+        }
+        Intrinsic::BoolXor(a, b) if a.as_bool().is_none() && b.as_bool().is_none() => {
+            Intrinsic::BoolEql(a.clone(), b.clone())
+        }
+        _ => return Ok(None),
+    };
+    reducer.spend(Cost::term(1))?;
+    Ok(Some(dual))
+}
+
 pub fn reduce_intrinsic(
     reducer: &mut impl Reducer,
     intrinsic: &Intrinsic,

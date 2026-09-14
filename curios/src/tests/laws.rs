@@ -105,6 +105,16 @@ const CARRIERS: &[Carrier] = &[
             // A stuck symmetric comparison is spelled with its operands in one order.
             "Eq(x == y, y == x)",
             "Eq(x != y, y != x)",
+            // The family is aligned probe-side: a negation reads as its dual, and `<=` as `<` of the successor.
+            "Eq(Bool/not(x < y), y <= x)",
+            "Eq(Bool/not(x <= y), y < x)",
+            "Eq(Bool/not(x == y), x != y)",
+            "Eq(Bool/not(x != y), x == y)",
+            "Eq(Bool/not(Bool/not(x < y)), x < y)",
+            "Eq(x <= y, x < y + 1)",
+            "Eq(x >= y, y < x + 1)",
+            "Eq(x <= 3, x < 4)",
+            "Eq(Bool/not(x < y) && Bool/not(y < x), y <= x && x <= y)",
         ],
         // Parity: not a law of any monoid here, and not one to take.
         refused: &["Eq(x * 2 + 1 == y * 2, false)"],
@@ -183,6 +193,11 @@ const CARRIERS: &[Carrier] = &[
             "Eq(i + 1 <= i, false)",
             "Eq(i == i + 1, false)",
             "Eq(i + j < i + k, j < k)",
+            // The family aligned, as on `Nat`.
+            "Eq(Bool/not(i < j), j <= i)",
+            "Eq(Bool/not(i <= j), j < i)",
+            "Eq(Bool/not(i == j), i != j)",
+            "Eq(i <= j, i < j + 1)",
         ],
         refused: &[],
     },
@@ -220,8 +235,15 @@ const CARRIERS: &[Carrier] = &[
             // A stuck symmetric comparison is spelled with its operands in one order.
             "Eq(b == c, c == b)",
             "Eq(b != c, c != b)",
+            // A negated equality reads as the inequality.
+            "Eq(Bool/not(b == c), b != c)",
+            "Eq(Bool/not(b != c), b == c)",
         ],
-        refused: &[],
+        // De Morgan and absorption need a normal form past the leaf set, and neither is taken.
+        refused: &[
+            "Eq(Bool/not(b && c), Bool/not(b) || Bool/not(c))",
+            "Eq(b || (b && c), b)",
+        ],
     },
     Carrier {
         name: "List, the free monoid",

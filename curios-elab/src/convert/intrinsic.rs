@@ -8,7 +8,7 @@ use {
     super::Convert,
     crate::Context,
     curios_core::{
-        Intrinsic, Nat, Operand, Peel, ReduceError, Subterm, Term, Var, Visit,
+        Intrinsic, Nat, Operand, Peel, ReduceError, Subterm, Term, Var, Visit, align_comparisons,
         int_has_stuck_product, int_normalize, normalize_bool, peel_bin, peel_bool, peel_int_pair,
         peel_list, peel_nat_pair, peel_symmetric,
     },
@@ -69,6 +69,11 @@ pub(crate) fn convert_intrinsic(
             }
         }
         _ => (this, that),
+    };
+    // A negated comparison, and a `<=` meeting a `<`, are aligned to one spelling of the family before the peels — probe-side, as the `&&`/`||` trees were, so no recorded refinement key is respelled.
+    let (this, that) = match align_comparisons(context, &this, &that)? {
+        Some(pair) => pair,
+        None => (this, that),
     };
     // `Nat`, `Bin`, and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off (`core::spine`), and `&&`/`||` are semilattices, so two of one are equal when they hold one set of leaves. This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Stuck` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
     if let Some(peel) = peel_nat_pair(&this, &that)
