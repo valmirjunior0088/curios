@@ -1,5 +1,4 @@
-use crate::*;
-use curios_core::*;
+use {crate::*, curios_core::*, curios_utilities::Qualifier};
 
 fn context() -> Context {
     Context::with_default_budget(crate::SYNTAX)
@@ -189,4 +188,31 @@ fn reports_an_unsolved_goal_as_undetermined() {
         &error,
         Error::Goal { scope, goal, solution: None } if **goal == nat() && scope.is_empty()
     ));
+}
+
+#[test]
+fn two_items_with_unsolved_holes_are_both_reported() {
+    let mut context = context();
+    context.birth_metavar(MetavarId(0), Vec::new(), nat());
+    context.birth_metavar(MetavarId(1), Vec::new(), nat());
+    let item = |path: &str, body: Term| {
+        Item::Let(Definition {
+            name: Global::Authored(Qualifier::from([path])),
+            kind: DefinitionKind::Authored,
+            universe_context: UniverseContext::empty(),
+            island: Qualifier::empty(),
+            totality: Totality::default(),
+            type_: nat(),
+            body,
+        })
+    };
+    let module = Module {
+        items: vec![item("a", Term::hole(0)), item("b", Term::hole(1))],
+        entry: None,
+        ..lowered_module(nat_lit(0), Vec::new())
+    };
+
+    let error = zonk_module(&context, &module).unwrap_err();
+
+    assert_eq!(error.each().count(), 2, "{error}");
 }

@@ -150,13 +150,21 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
 }
 
 /// Zonk a whole [`Module`]: substitute metavariable solutions throughout every top-level item plus the entrypoint body and annotation, yielding a meta-free module for `erase`.
+///
+/// Every item is zonked before any refusal is raised, so a program whose second item holds an unsolved hole is told about its fifth's in the same run; the entry and the registries are zonked only once every item has, since a refusal among the items stands on its own.
 pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> {
     curios_profile::profile!("zonk_module");
-    let items = module
-        .items
-        .iter()
-        .map(|item| zonk_item(context, item))
-        .collect::<Result<Vec<_>, Error>>()?;
+    let mut items = Vec::with_capacity(module.items.len());
+    let mut refusals = Vec::new();
+    for item in &module.items {
+        match zonk_item(context, item) {
+            Ok(item) => items.push(item),
+            Err(error) => refusals.push(error),
+        }
+    }
+    if !refusals.is_empty() {
+        return Err(Error::batch(refusals));
+    }
 
     let entry = module
         .entry
