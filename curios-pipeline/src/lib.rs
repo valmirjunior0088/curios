@@ -15,6 +15,9 @@ pub use stage::*;
 mod compile;
 pub use compile::*;
 
+mod recompile;
+pub use recompile::*;
+
 mod standard;
 pub use standard::*;
 

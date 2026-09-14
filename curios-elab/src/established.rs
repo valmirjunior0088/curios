@@ -33,6 +33,11 @@ impl<'a> Established<'a> {
         Self { modules }
     }
 
+    /// The modules in scope, in dependency order — for a caller extending the scope by one more module before elaborating against it.
+    pub(crate) fn modules(&self) -> &'a [&'a Module] {
+        self.modules
+    }
+
     /// The nominal registries and the recorded totality verdicts, before any item is checked.
     ///
     /// An inductive's type-constructor and value-constructor definitions reference their own registry entry, and `elaborate_struct`/`elaborate_proj` consult the struct registry — so these go in ahead of the unit's own. The totality flags were settled when this scope's archive was built, which is what lets a written type be refused against them before it reduces.

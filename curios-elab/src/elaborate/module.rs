@@ -1598,3 +1598,143 @@ pub fn elaborate_and_zonk_unit_reporting(
         obligations,
     })
 }
+
+/// What an item-level recompile hands elaboration: the baseline's items it reuses, replayed as one more predecessor; the closure it re-elaborates, restricted out of the new lowering and carrying the unit's whole seed table; and that lowering, whose item order the two are reassembled in.
+///
+/// The closure is closed under reverse reachability over the baseline's elaborated graph — the caller's obligation. The whole-module passes run over the reassembled module afterwards rather than believing it: every reused item's totality and every reused entry's polarities are recomputed over the whole and must come out as the baseline carried them.
+pub struct Recompile<'a> {
+    pub reused: &'a Module,
+    pub closure: &'a Module,
+    pub lowered: &'a Module,
+}
+
+/// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the closure alone is elaborated, against the scope with the reused items replayed as one more predecessor, and the result is reassembled with them into one module in the new lowering's order.
+///
+/// Zonk and the two erasure obligations narrow to the closure by construction, since `finalize_and_check` runs over the closure module and a reused item is zonked and stamped already. Positivity and totality classification then run over the reassembled whole, because a new declaration can reach an old one and both cost well under a second. The witness-cycle check stays the closure's: a cycle through a reused witness would need that witness to reach a closure item, which contradicts the closure being closed, and a cycle among reused witnesses was refused when the baseline compiled.
+pub fn elaborate_and_zonk_unit_over(
+    context: &mut Context,
+    established: Established<'_>,
+    recompile: Recompile<'_>,
+    metavar_floor: usize,
+    universe_floor: usize,
+    mode: Mode,
+    tail: Tail<'_>,
+) -> Result<(Module, Option<Term>), Error> {
+    curios_profile::profile!("elaborate_and_zonk_unit_over");
+    let mut scope = established.modules().to_vec();
+    scope.push(recompile.reused);
+    let extended = Established::over(&scope);
+
+    let elaborated = elaborate_module_suffix(
+        context,
+        extended,
+        recompile.closure,
+        metavar_floor,
+        universe_floor,
+        mode,
+        tail,
+    )?;
+    let inherited = extended.recorded_totality();
+    let FinalizedModule {
+        module: closure,
+        body_type,
+        obligations,
+    } = finalize_and_check(context, elaborated.module, elaborated.body_type, &inherited)?;
+
+    let mut module = reassemble(&recompile, closure, extended.binder_floor());
+    context.restore_budget();
+    check_positivity(context, &mut module)?;
+    record_totality(context, &mut module, &established.recorded_totality());
+    debug_assert!(
+        agrees_with(&module, recompile.reused),
+        "a reused item's verdict moved, so the closure was not closed"
+    );
+
+    raise(FinalizedModule {
+        module,
+        body_type,
+        obligations,
+    })
+}
+
+/// The reused items and the re-elaborated closure as one module, in the lowering's item order, over the union of their registries.
+fn reassemble(recompile: &Recompile<'_>, closure: Module, scope_floor: usize) -> Module {
+    let first = |item: &Item| {
+        item.declared_names()
+            .first()
+            .cloned()
+            .cloned()
+            .expect("an item declares a name")
+    };
+    let reused = recompile
+        .reused
+        .items
+        .iter()
+        .map(|item| (first(item), item))
+        .collect::<BTreeMap<_, _>>();
+    let mut elaborated = closure
+        .items
+        .into_iter()
+        .map(|item| (first(&item), item))
+        .collect::<BTreeMap<_, _>>();
+    let items = recompile
+        .lowered
+        .items
+        .iter()
+        .map(|item| {
+            let name = first(item);
+            elaborated
+                .remove(&name)
+                .or_else(|| reused.get(&name).map(|item| (*item).clone()))
+                .unwrap_or_else(|| panic!("{} is neither reused nor re-elaborated", name.symbol()))
+        })
+        .collect();
+
+    let mut induct_decls = recompile.reused.induct_decls.clone();
+    induct_decls.extend(closure.induct_decls);
+    let mut struct_decls = recompile.reused.struct_decls.clone();
+    struct_decls.extend(closure.struct_decls);
+    let mut concepts = recompile.reused.concepts.clone();
+    concepts.extend(closure.concepts);
+
+    Module {
+        items,
+        mounts: recompile.lowered.mounts.clone(),
+        universe_seeds: Vec::new(),
+        induct_decls,
+        struct_decls,
+        concepts,
+        witnesses: recompile.lowered.witnesses.clone(),
+        tests: recompile.lowered.tests.clone(),
+        binder_floor: scope_floor.max(closure.binder_floor),
+        entry: closure.entry,
+    }
+}
+
+/// Whether every verdict `reused` carried came out the same when recomputed over `module`: each reused item's totality, and each reused entry's polarities.
+fn agrees_with(module: &Module, reused: &Module) -> bool {
+    let stamps = module
+        .items
+        .iter()
+        .flat_map(Item::definitions)
+        .map(|definition| (definition.name, definition.totality))
+        .collect::<BTreeMap<_, _>>();
+
+    reused
+        .items
+        .iter()
+        .flat_map(Item::definitions)
+        .all(|definition| stamps.get(&definition.name) == Some(&definition.totality))
+        && reused.induct_decls.iter().all(|(name, declaration)| {
+            module
+                .induct_decls
+                .get(name)
+                .is_some_and(|whole| whole.polarities == declaration.polarities)
+        })
+        && reused.struct_decls.iter().all(|(name, declaration)| {
+            module
+                .struct_decls
+                .get(name)
+                .is_some_and(|whole| whole.polarities == declaration.polarities)
+        })
+}

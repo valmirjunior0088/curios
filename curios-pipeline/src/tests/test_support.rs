@@ -4,10 +4,12 @@
 
 use {
     crate::*,
+    curios_core::{Item, Module},
     curios_elab::{Context, Resumed, erase_unit},
     curios_prelude::{SYNTAX, with_prelude},
-    curios_text::{Entrypoint, RootSource},
-    curios_unit::Prefix,
+    curios_text::{Entrypoint, RootSource, UnitSource},
+    curios_unit::{Prefix, Unit},
+    curios_utilities::RootKind,
 };
 
 /// A fixture's entrypoint, stating its own type when the fixture is a bare *term* rather than a program.
@@ -170,4 +172,103 @@ pub(super) fn compile_with_units(
         .map(|(module, _foreigns)| module)
     })
     .map_err(String::from)
+}
+
+// --- A unit over a baseline ------------------------------------------------
+
+/// `source` as the modules of a unit mounted at `prefix`, supplied already parsed.
+fn mounted(prefix: &str, source: &str) -> RootSource {
+    let mut modules = RootSource::supplied();
+    modules.insert_root(
+        prefix,
+        RootKind::Ordinary,
+        source
+            .parse::<curios_text::Module>()
+            .expect("a unit parses"),
+    );
+
+    modules
+}
+
+/// `source` compiled whole as the unit `/lib`, against the prelude.
+pub(super) fn unit_of(source: &str) -> Unit {
+    let modules = mounted("lib", source);
+
+    with_prelude(|prelude| {
+        compile_units(
+            DEFAULT_STEP_BUDGET,
+            Prefix::over(prelude),
+            &SYNTAX,
+            &[UnitSource::mounted(&modules)],
+            None,
+            |_| {},
+        )
+    })
+    .expect("the unit compiles")
+    .pop()
+    .expect("one unit was compiled")
+}
+
+/// `source` compiled as the unit `/lib` over `baseline`, against the prelude.
+pub(super) fn recompile_over(source: &str, baseline: &Unit) -> Result<Unit, String> {
+    let modules = mounted("lib", source);
+
+    with_prelude(|prelude| {
+        compile_unit_over(
+            DEFAULT_STEP_BUDGET,
+            Prefix::over(prelude),
+            &SYNTAX,
+            &UnitSource::mounted(&modules),
+            baseline,
+        )
+    })
+    .map_err(String::from)
+}
+
+/// The differential predicate: the two elaborated modules agree item by item in order, on every registry entry, marker and the entry, with the incremental floor no lower than the whole compile's — a bound, so widening is the one difference allowed.
+pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
+    assert_eq!(
+        whole.items.len(),
+        incremental.items.len(),
+        "the two compiles hold different item counts"
+    );
+    for (expected, actual) in whole.items.iter().zip(&incremental.items) {
+        assert_eq!(
+            expected.describe(),
+            actual.describe(),
+            "the item order differs"
+        );
+        assert_eq!(expected, actual, "{} differs", expected.describe());
+    }
+    assert_eq!(whole.mounts, incremental.mounts);
+    assert_eq!(whole.universe_seeds, incremental.universe_seeds);
+    assert_eq!(whole.induct_decls, incremental.induct_decls);
+    assert_eq!(whole.struct_decls, incremental.struct_decls);
+    assert_eq!(whole.concepts, incremental.concepts);
+    assert_eq!(whole.witnesses, incremental.witnesses);
+    assert_eq!(whole.tests, incremental.tests);
+    assert_eq!(whole.entry, incremental.entry);
+    assert!(incremental.binder_floor >= whole.binder_floor);
+}
+
+/// Whether `unit` holds the very allocation `baseline` holds for the body of the `let` named `name` — which nothing but reuse can produce, since every elaboration builds its own terms.
+pub(super) fn reuses_body(baseline: &Unit, unit: &Unit, name: &str) -> bool {
+    let body = |unit: &Unit| {
+        unit.core()
+            .items
+            .iter()
+            .find(|item| {
+                item.declared_names()
+                    .first()
+                    .is_some_and(|declared| declared.symbol().ends_with(&format!("/{name}")))
+            })
+            .and_then(|item| match item {
+                Item::Let(definition) => Some(definition.body.clone()),
+                Item::Rec(_) => None,
+            })
+            .unwrap_or_else(|| panic!("{name} is a let item of the unit"))
+    };
+    let (before, after) = (body(baseline), body(unit));
+
+    std::ptr::eq(&*before, &*after)
 }

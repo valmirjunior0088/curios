@@ -9,6 +9,7 @@ mod erasure_tests;
 mod foreign_tests;
 mod goal_tests;
 mod implicit_tests;
+mod incremental_tests;
 mod inductive_tests;
 mod inference_tests;
 mod tuple_tests;

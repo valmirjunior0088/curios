@@ -64,7 +64,7 @@ pub enum CompileError {
 
 impl CompileError {
     /// Classify a front-end error by [`curios_elab::Error::is_incomplete`], pairing it with its already-located reports.
-    fn of(error: &curios_elab::Error, reports: Vec<Report>) -> Self {
+    pub(crate) fn of(error: &curios_elab::Error, reports: Vec<Report>) -> Self {
         match error.is_incomplete() {
             true => Self::Incomplete(reports),
             false => Self::Failure(reports),
@@ -119,13 +119,28 @@ pub fn recheck_measured(
 }
 
 /// The kernel's environment for `scope`: every unit mounted, at the binder floor its own walk derived.
-fn globals(scope: Prefix<'_>) -> Globals {
+pub(crate) fn globals(scope: Prefix<'_>) -> Globals {
     let mut globals = Globals::default();
     for unit in scope.units() {
         globals.mount(unit.core(), unit.binder_floor());
     }
 
     globals
+}
+
+/// The compile error a kernel verdict is reported as: the refusal, named for the item it is about where there is one.
+pub(crate) fn kernel_refusal(
+    verdict: &Verdict,
+    module: &curios_core::Module,
+    scope: &[&curios_core::Module],
+    syntax: &SyntaxRegistry,
+) -> CompileError {
+    let refusal = verdict.error.format_with(module, scope, syntax);
+
+    CompileError::failure(match &verdict.name {
+        Some(name) => format!("the kernel refused {name}: {refusal}"),
+        None => format!("the kernel refused a unit: {refusal}"),
+    })
 }
 
 /// Lower and type-check `entrypoint`, reporting the erasure obligations rather than raising them.
@@ -596,11 +611,7 @@ pub fn compile_unit(
         .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
     if let Some(verdict) = recheck(&core, budget, scope, syntax).into_iter().next() {
-        let refusal = verdict.error.format_with(core.as_module(), &cores, syntax);
-        return Err(CompileError::failure(match &verdict.name {
-            Some(name) => format!("the kernel refused {name}: {refusal}"),
-            None => format!("the kernel refused a unit: {refusal}"),
-        }));
+        return Err(kernel_refusal(&verdict, core.as_module(), &cores, syntax));
     }
 
     let ersd = erase_unit(
