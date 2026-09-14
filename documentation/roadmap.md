@@ -301,6 +301,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Code formatter (`curios format`, in-place with `--check`; verified by reparse)
   - [x] Package manager (exactly pinned dependencies, a content-addressed store, and a unit cache)
   - [x] [Payload reuse](soundness/admission-without-judgment/reused-payloads.md) (an unchanged target re-executes without recompiling)
+  - [ ] [A unit the store holds is a baseline, not a hit or a miss](roadmap/incremental-compilation-spec.md) (specified, not built)
   - [x] Project manifest & discovery (identity declared once; scope reached through artifacts)
   - [x] `curios new` scaffolding (a package named after its directory, with both halves written)
   - [x] One-line installer (`install.sh`, versioned by its URL and checksum-verified)
