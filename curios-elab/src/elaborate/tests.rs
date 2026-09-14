@@ -402,7 +402,7 @@ fn inductive_match_default_is_allowed_on_an_indexed_family() {
             "on",
             Vec::<Term>::new(),
         ),
-        motive: Scope::close(Many(2), &[&index, &motive], nat()),
+        result: MatchResult::Family(Scope::close(Many(2), &[&index, &motive], nat())),
         cases: Cases::Induct {
             cases: Vec::from([(
                 Atom::from("on"),
@@ -431,7 +431,10 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
             "on",
             Vec::<Term>::new(),
         ),
-        motive: Term::match_motive_written(Term::func([(motive, flag_type(nat_lit(1)))], nat())),
+        result: MatchResult::Family(Term::match_motive_written(Term::func(
+            [(motive, flag_type(nat_lit(1)))],
+            nat(),
+        ))),
         cases: Cases::Induct {
             cases: Vec::from([(
                 Atom::from("on"),

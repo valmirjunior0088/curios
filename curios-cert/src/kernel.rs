@@ -115,6 +115,10 @@ pub enum KernelError {
     NotASort(Term),
     /// An elimination's motive is not a well-typed function landing in a sort. The motive is a claim the term makes about its own result — `infer` reads the elimination's type off it and `Sort::of` classifies a type-valued `match` by it — so a motive stating one sort while its arms inhabit another would be believed by both.
     NotAMotive(Term),
+    /// An elimination at an ambient goal over a scrutinee that is not a variable. The goal is specialized per arm by substituting the case's value for the scrutinee, and an expression has nothing to substitute for: its occurrences in the goal would have to be read through a case equation, which is not a certification contract.
+    AmbientOverExpression(Term),
+    /// A free-monoid fold at an ambient goal. The fold's induction hypothesis is the fold itself at the tail, and its type is the goal at the tail — an instance only a family can state once the head has been substituted away.
+    AmbientFold(Term),
     /// A term arrived with a type other than the one required of it.
     Mismatch {
         inferred: Box<Term>,
@@ -249,6 +253,20 @@ impl fmt::Display for Displayed<'_> {
                 write!(
                     formatter,
                     "`{term}` is not a valid motive: it must be well-typed and land in a sort",
+                )
+            }
+            KernelError::AmbientOverExpression(head) => {
+                let head = head.spelled(spelling);
+                write!(
+                    formatter,
+                    "an elimination at an ambient goal needs a variable scrutinee, and `{head}` is not one",
+                )
+            }
+            KernelError::AmbientFold(goal) => {
+                let goal = goal.spelled(spelling);
+                write!(
+                    formatter,
+                    "a fold needs a motive for its induction hypothesis, and `{goal}` is an ambient goal",
                 )
             }
             KernelError::Mismatch { inferred, expected } => {

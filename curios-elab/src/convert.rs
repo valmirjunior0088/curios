@@ -32,9 +32,10 @@ use {
     },
     curios_core::{
         Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
-        Level, Match, Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, Variant, Visit, instantiate_universe_levels_scoped, strip_universe_levels,
+        Level, Match, MatchResult, Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType,
+        Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, Variant, Visit,
+        instantiate_universe_levels_scoped, strip_universe_levels,
     },
     curios_utilities::Plicity,
     std::{
@@ -703,20 +704,28 @@ impl Convert {
     ) -> Result<bool, ReduceError> {
         self.enqueue(Term::type_ground(), this.head, that.head);
 
-        // The motive's arity is 1 except for an annotated inductive-match motive (pattern binders then the scrutinee); different arities are structurally distinct.
-        if this.motive.arity() != that.motive.arity() {
-            return Ok(false);
-        }
+        // Two forms of result are two shapes, and a motive's arity is part of its shape — 1 except for an annotated inductive-match motive (pattern binders then the scrutinee); different arities are structurally distinct.
+        match (this.result, that.result) {
+            (MatchResult::Family(this_motive), MatchResult::Family(that_motive)) => {
+                if this_motive.arity() != that_motive.arity() {
+                    return Ok(false);
+                }
 
-        let labels = (0..this.motive.arity())
-            .map(|_| Term::free_var(&self.opening(context, None)))
-            .collect::<Vec<_>>();
-        let label_refs = labels.iter().collect::<Vec<_>>();
-        self.enqueue(
-            Term::type_ground(),
-            this.motive.open(&label_refs),
-            that.motive.open(&label_refs),
-        );
+                let labels = (0..this_motive.arity())
+                    .map(|_| Term::free_var(&self.opening(context, None)))
+                    .collect::<Vec<_>>();
+                let label_refs = labels.iter().collect::<Vec<_>>();
+                self.enqueue(
+                    Term::type_ground(),
+                    this_motive.open(&label_refs),
+                    that_motive.open(&label_refs),
+                );
+            }
+            (MatchResult::Ambient(this_goal), MatchResult::Ambient(that_goal)) => {
+                self.enqueue(Term::type_ground(), this_goal, that_goal);
+            }
+            _ => return Ok(false),
+        }
 
         match (this.cases, that.cases) {
             (
@@ -1690,7 +1699,7 @@ impl Convert {
                 (Subterm::Match(this), Subterm::Match(that))
                     if mem::discriminant(&this.cases) == mem::discriminant(&that.cases)
                         && ((!flex_scrutinee(&this.head) && !flex_scrutinee(&that.head))
-                            || (this.cases == that.cases && this.motive == that.motive)) =>
+                            || (this.cases == that.cases && this.result == that.result)) =>
                 {
                     self.compare_match(context, this, that)?
                 }

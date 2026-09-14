@@ -19,6 +19,10 @@
 //! "Already determined" is the load-bearing phrase, and [`pinned_by_targets`] is where it is decided. A component is determined when the constructor's index targets *pin* it — when matching the target against a value recovers the component. Occurring in a target is not the same thing: `mk(a : Nat) : (blur(a))` mentions `a` in its index, but `blur` is an arbitrary function and knowing `blur(a)` recovers nothing. Reading occurrence as determination is precisely how a proposition with a real payload gets eliminated into a relevant type, and from there `False` follows.
 
 #[cfg(test)]
+mod ambient_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
 mod tests;
 
 use {
@@ -26,32 +30,28 @@ use {
     crate::{Counted, InductAt, Kernel, KernelError, Sort, carries_information},
     curios_analysis::{Invert, invert_indices, invert_indices_outer, pinned_by_targets},
     curios_core::{
-        Atom, Bound, Free, InductArm, InductType, Many, Scope, Subterm, Telescope, Term, Variant,
+        Atom, Bound, Free, InductArm, InductType, MatchResult, Subterm, Telescope, Term, Variant,
         Visit,
     },
 };
 
-/// Check every arm of an elimination of `scrutinee_type` under `motive`.
+/// Check every arm of an elimination of `scrutinee_type` at `result`.
 pub(super) fn check_induct_arms(
     kernel: &mut Kernel,
     at: &InductAt,
     family: &InductType,
-    motive: &Scope<Many>,
+    result: &MatchResult,
     cases: &[(Atom, InductArm)],
     default: Option<&Term>,
     scrutinee: &Term,
 ) -> Result<(), KernelError> {
     for (tag, arm) in cases {
-        check_arm(kernel, at, family, motive, scrutinee, tag, arm)?;
+        check_arm(kernel, at, family, result, scrutinee, tag, arm)?;
     }
 
     // A catch-all binds nothing and stands for the scrutinee itself, so it is checked at the scrutinee's own indices *and at the scrutinee* — the one arm with no case value of its own, and therefore the one whose instance can only come from the term being eliminated. That is the instance `infer` reads the elimination's type off, so any other one proves something other than what the elimination hands its caller.
     if let Some(default) = default {
-        let mut arguments = family.indices.clone();
-        arguments.push(scrutinee.clone());
-        let refs = arguments.iter().collect::<Vec<_>>();
-
-        check(kernel, default, &motive.open(&refs))?;
+        check(kernel, default, &result.of(scrutinee, &family.indices))?;
 
         return Ok(());
     }
@@ -88,7 +88,7 @@ fn check_arm(
     kernel: &mut Kernel,
     at: &InductAt,
     family: &InductType,
-    motive: &Scope<Many>,
+    result: &MatchResult,
     scrutinee: &Term,
     tag: &Atom,
     arm: &InductArm,
@@ -125,10 +125,10 @@ fn check_arm(
             let refs = payload.iter().collect::<Vec<_>>();
             let body = substitute(&arm.open(&refs), &solutions);
 
-            let mut arguments = targets.clone();
-            arguments.push(value);
-            let refs = arguments.iter().collect::<Vec<_>>();
-            let expected = substitute(&motive.open(&refs), &solutions);
+            let expected = substitute(
+                &result.at(scrutinee, &family.indices, targets, &value),
+                &solutions,
+            );
 
             shadow(kernel, &solutions);
 

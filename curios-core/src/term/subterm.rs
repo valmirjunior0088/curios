@@ -241,11 +241,11 @@ impl Subterm {
             }
             Subterm::Match(Match {
                 head,
-                motive,
+                result,
                 cases,
             }) => {
                 head.collect_construction_names(names);
-                motive.body().collect_construction_names(names);
+                result.body().collect_construction_names(names);
                 match cases {
                     Cases::Bool {
                         false_case,
@@ -351,11 +351,11 @@ impl Subterm {
             }
             Subterm::Match(Match {
                 head,
-                motive,
+                result,
                 cases,
             }) => {
                 pred(head)
-                    || pred(motive.body())
+                    || pred(result.body())
                     || match cases {
                         Cases::Bool {
                             false_case,
@@ -653,11 +653,14 @@ impl Bound for Subterm {
             }),
             Subterm::Match(Match {
                 head,
-                motive,
+                result,
                 cases,
             }) => Subterm::Match(Match {
                 head: visit.visit_subterm(head),
-                motive: visit.visit_scope(motive),
+                result: match result {
+                    MatchResult::Family(motive) => MatchResult::Family(visit.visit_scope(motive)),
+                    MatchResult::Ambient(goal) => MatchResult::Ambient(visit.visit_subterm(goal)),
+                },
                 cases: match cases {
                     Cases::Bool {
                         false_case,
@@ -844,9 +847,9 @@ impl Bound for Subterm {
             }
             Subterm::Match(Match {
                 head,
-                motive,
+                result,
                 cases,
-            }) => head.reach().max(motive.reach()).max(match cases {
+            }) => head.reach().max(result.reach()).max(match cases {
                 Cases::Bool {
                     false_case,
                     true_case,

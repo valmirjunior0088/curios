@@ -11,7 +11,7 @@ use {
         Two, emitted, expect_intrinsic_head, infer, is_erasable, narrow_case_key, reduce_with,
         refine_head,
     },
-    curios_core::{Free, Level},
+    curios_core::{Free, Level, MatchResult},
     curios_num::Natural,
     curios_utilities::{Grain, PackedBin},
 };
@@ -81,10 +81,10 @@ impl SeqCarrier<'_> {
     }
 }
 
-/// The match-wide data an inductive elimination threads to each arm. The motive opens at the scrutinee's indices followed by the head — the case's target indices in an enumerated arm, the actual ones in the default.
+/// The match-wide data an inductive elimination threads to each arm. The result is taken at the scrutinee's indices and the head — the case's target indices and value in an enumerated arm, the actual ones in the default.
 struct InductMatch<'a> {
     head: &'a Term,
-    motive: &'a Scope<Many>,
+    result: &'a MatchResult,
     name: &'a curios_core::Global,
     universes: &'a [Level],
     params: &'a [Term],
@@ -101,19 +101,19 @@ impl Lowering {
     ) -> Result<Outcome, Error> {
         let Match {
             head,
-            motive,
+            result,
             cases,
         } = m;
         match cases {
             Cases::Bool {
                 false_case,
                 true_case,
-            } => self.erase_bool(context, head, motive, false_case, true_case, hint),
+            } => self.erase_bool(context, head, result, false_case, true_case, hint),
             Cases::Switch { cases, default } => {
-                self.erase_switch(context, head, motive, cases, default, hint)
+                self.erase_switch(context, head, result, cases, default, hint)
             }
             Cases::Induct { cases, default } => {
-                self.erase_induct(context, head, motive, cases, default.as_ref(), hint)
+                self.erase_induct(context, head, result, cases, default.as_ref(), hint)
             }
             Cases::FreeMonoid {
                 carrier:
@@ -121,7 +121,7 @@ impl Lowering {
                         empty_case,
                         cons_case,
                     },
-            } => self.erase_nat_fold(context, head, motive, empty_case, cons_case, hint),
+            } => self.erase_nat_fold(context, head, result, empty_case, cons_case, hint),
             Cases::FreeMonoid {
                 carrier:
                     Carrier::List {
@@ -132,7 +132,7 @@ impl Lowering {
             } => self.erase_seq_fold(
                 context,
                 head,
-                motive,
+                result,
                 SeqCarrier::List { element: elem },
                 empty_case,
                 cons_case,
@@ -148,7 +148,7 @@ impl Lowering {
             } => self.erase_seq_fold(
                 context,
                 head,
-                motive,
+                result,
                 SeqCarrier::Bin { grain: *grain },
                 empty_case,
                 cons_case,
@@ -177,16 +177,16 @@ impl Lowering {
         Ok(Ok((Term::free_var(&name), atom)))
     }
 
-    /// Open a fresh block, erase `body` as a tail refined by `head = value` and typed at `motive(value)`, and seal it — the leaf-arm shape with no payload binders.
+    /// Open a fresh block, erase `body` as a tail refined by `head = value` and typed at the result at `value`, and seal it — the leaf-arm shape with no payload binders.
     fn refined_arm(
         &mut self,
         context: &mut Context,
         head: &Term,
         value: &Term,
-        motive: &Scope<Many>,
+        result: &MatchResult,
         body: &Term,
     ) -> Result<curios_ersd::BlockId, Error> {
-        let expected = motive.open(&[value]);
+        let expected = result.at(head, &[], &[], value);
         self.builder.open_block();
         let outcome = context.with_frame(|context| {
             refine_head(context, head, value)?;
@@ -212,7 +212,7 @@ impl Lowering {
         &mut self,
         context: &mut Context,
         head: &Term,
-        motive: &Scope<Many>,
+        result: &MatchResult,
         false_case: &Term,
         true_case: &Term,
         hint: Option<&str>,
@@ -224,14 +224,14 @@ impl Lowering {
             context,
             head,
             &Term::intrinsic(Intrinsic::Bool(false)),
-            motive,
+            result,
             false_case,
         )?;
         let if_true = self.refined_arm(
             context,
             head,
             &Term::intrinsic(Intrinsic::Bool(true)),
-            motive,
+            result,
             true_case,
         )?;
 
@@ -250,7 +250,7 @@ impl Lowering {
         &mut self,
         context: &mut Context,
         head: &Term,
-        motive: &Scope<Many>,
+        result: &MatchResult,
         cases: &[(Natural, Term)],
         default: &Term,
         hint: Option<&str>,
@@ -268,11 +268,11 @@ impl Lowering {
                 None => error,
             })?;
             let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
-            let block = self.refined_arm(context, head, &literal, motive, body)?;
+            let block = self.refined_arm(context, head, &literal, result, body)?;
             nat_cases.push(curios_ersd::NatCase { key, block });
         }
 
-        let default_expected = motive.open(&[head]);
+        let default_expected = result.of(head, &[]);
         let default = self.open_arm(context, &default_expected, default)?;
 
         Ok(self.bind(
@@ -290,7 +290,7 @@ impl Lowering {
         &mut self,
         context: &mut Context,
         head: &Term,
-        motive: &Scope<Many>,
+        result: &MatchResult,
         empty_case: &Term,
         cons_case: &Scope<Two>,
         hint: Option<&str>,
@@ -305,7 +305,7 @@ impl Lowering {
             context,
             &head,
             &Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            motive,
+            result,
             empty_case,
         )?;
 
@@ -318,7 +318,7 @@ impl Lowering {
             // The hypothesis never appears, so any term serves its slot.
             let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
             let peeled = cons_case.open(&[&pred, &dead_hypothesis]);
-            let expected = motive.open(&[&head]);
+            let expected = result.of(&head, &[]);
             let default = self.open_arm(context, &expected, &peeled)?;
 
             return Ok(self.bind(
@@ -334,7 +334,7 @@ impl Lowering {
             ));
         }
 
-        // Induction: bind the predecessor and the hypothesis, then erase the successor arm at `motive(pred + 1)`.
+        // Induction: bind the predecessor and the hypothesis, then erase the successor arm at the result at `pred + 1`.
         let pred_hint = cons_case.first_hint().map(str::to_string);
         let hypothesis_hint = cons_case.second_hint().map(str::to_string);
         let pred_label = context.fresh(pred_hint.as_deref());
@@ -350,7 +350,7 @@ impl Lowering {
         let outcome = context.with_frame(|context| {
             let pred_var = Term::free_var(&pred_label);
             context.assume(&pred_label, &Term::intrinsic(Intrinsic::NatType));
-            context.assume(&hypothesis_label, &motive.open(&[&pred_var]));
+            context.assume(&hypothesis_label, &result.at(&head, &[], &[], &pred_var));
 
             let successor = Term::intrinsic(Intrinsic::nat_add(
                 pred_var.clone(),
@@ -359,7 +359,7 @@ impl Lowering {
             refine_head(context, &head, &successor)?;
 
             let body = cons_case.open(&[&pred_var, &Term::free_var(&hypothesis_label)]);
-            let expected = motive.open(&[&successor]);
+            let expected = result.at(&head, &[], &[], &successor);
             self.walk(context, &body, &expected, None)
         })?;
         let step = self.seal(outcome);
@@ -464,7 +464,7 @@ impl Lowering {
         &mut self,
         context: &mut Context,
         head: &Term,
-        motive: &Scope<Many>,
+        result: &MatchResult,
         carrier: SeqCarrier<'_>,
         empty_case: &Term,
         cons_case: &Scope<Three>,
@@ -477,7 +477,7 @@ impl Lowering {
             Err(diverged) => return Ok(diverged),
         };
 
-        let empty = self.refined_arm(context, &head, &carrier.empty_value(), motive, empty_case)?;
+        let empty = self.refined_arm(context, &head, &carrier.empty_value(), result, empty_case)?;
 
         // The hypothesis is dead: a case split over the length, peeling the cons arm at the head element and tail slice.
         //
@@ -512,7 +512,7 @@ impl Lowering {
                     &Term::free_var(&suffix_label),
                     &dead_hypothesis,
                 ]);
-                let expected = motive.open(&[&head]);
+                let expected = result.of(&head, &[]);
                 self.walk(context, &peeled, &expected, None)
             })?;
             let cons_block = self.seal(outcome);
@@ -554,7 +554,7 @@ impl Lowering {
             let suffix_var = Term::free_var(&suffix_label);
             context.assume(&element_label, &carrier.element_type());
             context.assume(&suffix_label, &head_type);
-            context.assume(&accumulator_label, &motive.open(&[&suffix_var]));
+            context.assume(&accumulator_label, &result.at(&head, &[], &[], &suffix_var));
 
             let cons_value = carrier.cons_value(&element_var, &suffix_var);
             refine_head(context, &head, &cons_value)?;
@@ -564,7 +564,7 @@ impl Lowering {
                 &suffix_var,
                 &Term::free_var(&accumulator_label),
             ]);
-            let expected = motive.open(&[&cons_value]);
+            let expected = result.at(&head, &[], &[], &cons_value);
             self.walk(context, &body, &expected, None)
         })?;
         let step = self.seal(outcome);
@@ -590,7 +590,7 @@ impl Lowering {
         &mut self,
         context: &mut Context,
         head: &Term,
-        motive: &Scope<Many>,
+        result: &MatchResult,
         cases: &[(Atom, InductArm)],
         default: Option<&Term>,
         hint: Option<&str>,
@@ -623,7 +623,7 @@ impl Lowering {
 
         let m = InductMatch {
             head,
-            motive,
+            result,
             name: &name,
             universes: &universes,
             params: &params,
@@ -746,15 +746,14 @@ impl Lowering {
         })
     }
 
-    /// The catch-all default: binds nothing and sees the unrefined head, so the motive opens at the match's actual parameters/indices and head.
+    /// The catch-all default: binds nothing and sees the unrefined head, so the result is taken at the match's actual indices and head.
     fn default_arm(
         &mut self,
         context: &mut Context,
         m: &InductMatch<'_>,
         default: &Term,
     ) -> Result<curios_ersd::BlockId, Error> {
-        let default_refs = m.actual_indices.iter().chain([m.head]).collect::<Vec<_>>();
-        let expected = m.motive.open(&default_refs);
+        let expected = m.result.of(m.head, m.actual_indices);
         self.open_arm(context, &expected, default)
     }
 
@@ -770,8 +769,7 @@ impl Lowering {
         // No enumerated arm — a bare `_` ladder over a subsingleton: the default is the single live result and binds nothing.
         let Some((tag, scope)) = cases.iter().next() else {
             let default = default.expect("erase: erasable match with no arms has a default");
-            let default_refs = m.actual_indices.iter().chain([m.head]).collect::<Vec<_>>();
-            let expected = m.motive.open(&default_refs);
+            let expected = m.result.of(m.head, m.actual_indices);
             return self.walk(context, default, &expected, None);
         };
 
@@ -834,9 +832,10 @@ fn refine_arm(
         refine_head(context, actual, target)?;
     }
 
-    let arm_refs = target_indices
-        .iter()
-        .chain([&constructor_value])
-        .collect::<Vec<_>>();
-    Ok(m.motive.open(&arm_refs))
+    Ok(m.result.at(
+        m.head,
+        m.actual_indices,
+        &target_indices,
+        &constructor_value,
+    ))
 }

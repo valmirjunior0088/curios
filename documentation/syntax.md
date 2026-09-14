@@ -560,7 +560,8 @@ A binder may be written bare, as `_`, or annotated. An annotation is an ordinary
 match p: (s, t, q: Eq(s, t)) => Eq(t, s)
 ```
 
-Omitting the motive asks the elaborator to infer it. Prefer omission wherever inference succeeds; a written motive is needed where there is nothing to infer from — a type-level match whose result appears in a signature, or an elimination in inference position.
+Omitting the motive asks the elaborator to infer it. Over a variable scrutinee in a position with an expected type, the result is that expected type as written, and each arm is checked against it with the scrutinee and its variable indices standing for the arm's case — so a hypothesis whose type mentions the scrutinee needs no convoy to ride along. Over an expression scrutinee the expected type is abstracted over the expression's occurrences instead. Prefer omission wherever inference succeeds; a written motive is needed where there is nothing to infer from — a type-level match whose result appears in a signature, or an elimination in inference position — and where an occurrence of an expression scrutinee is not there to abstract.
+
 
 A motive may only be written where the head dispatches directly: every arm's top-level pattern must be the same dispatchable shape. A tuple-scrutinee matrix, a struct-headed match, or a plain-binder match builds no core eliminator for the motive to attach to, and rejects one.
 

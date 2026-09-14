@@ -1,9 +1,9 @@
 use {
     super::{
         Apply, Arity, Atom, Bang, Bound, Carrier, Cases, Enter, Field, Free, Func, FuncType,
-        Global, InductType, Infix, Intrinsic, Let, Level, Match, Nat, NumLit, Proj, Rec, Scope,
-        Struct, StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var,
-        Variant,
+        Global, InductType, Infix, Intrinsic, Let, Level, Match, MatchResult, Nat, NumLit, Proj,
+        Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Transient, Tuple,
+        TupleType, Two, Var, Variant,
     },
     curios_abi::stdio,
     curios_num::Floating,
@@ -258,8 +258,10 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
                     }
                     scope_names(out, tail);
                 }
-                Subterm::Match(Match { motive, cases, .. }) => {
-                    scope_names(out, motive);
+                Subterm::Match(Match { result, cases, .. }) => {
+                    if let Some(motive) = result.family() {
+                        scope_names(out, motive);
+                    }
 
                     match cases {
                         Cases::Induct { cases, .. } => {
@@ -1298,21 +1300,32 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         },
         Subterm::Match(Match {
             head,
-            motive,
+            result,
             cases,
         }) => {
-            // Arity 1 everywhere except an annotated inductive-match motive, whose pattern binders precede the scrutinee binder.
-            let (motive_labels, motive_frame) = frame.labels(motive.binder_iter());
-            let motive_terms = label_terms(&motive_labels);
-            let motive_refs = motive_terms.iter().collect::<Vec<_>>();
-            let motive_label = motive_labels
-                .iter()
-                .map(|label| frame.spelling.label(label))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let motive = motive.open(&motive_refs);
+            // A family spells as `: labels => body`, arity 1 everywhere except an annotated inductive-match motive, whose pattern binders precede the scrutinee binder; an ambient goal spells as `~ goal`, with no binder to name.
+            let result = match result {
+                MatchResult::Family(motive) => {
+                    let (motive_labels, motive_frame) = frame.labels(motive.binder_iter());
+                    let motive_terms = label_terms(&motive_labels);
+                    let motive_refs = motive_terms.iter().collect::<Vec<_>>();
+                    let motive_label = motive_labels
+                        .iter()
+                        .map(|label| frame.spelling.label(label))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let motive = motive.open(&motive_refs);
+                    flat([
+                        pure(": "),
+                        pure(motive_label),
+                        pure(" => "),
+                        sub(motive, motive_frame),
+                    ])
+                }
+                MatchResult::Ambient(goal) => flat([pure(" ~ "), sub(goal.clone(), frame)]),
+            };
 
-            // Shared `<keyword> head : label => motive;` prefix; the keyword and arm bodies depend on the case kind.
+            // Shared `<keyword> head <result>;` prefix; the keyword and arm bodies depend on the case kind.
             let keyword = match &cases {
                 Cases::Bool { .. } => "Bool.match ",
                 Cases::Switch { .. } => "Nat.match ",
@@ -1324,15 +1337,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 },
             };
 
-            let prefix = flat([
-                pure(keyword),
-                sub(head, frame),
-                pure(": "),
-                pure(motive_label),
-                pure(" => "),
-                sub(motive, motive_frame),
-                pure(";"),
-            ]);
+            let prefix = flat([pure(keyword), sub(head, frame), result, pure(";")]);
 
             let arms = match cases {
                 Cases::Bool {

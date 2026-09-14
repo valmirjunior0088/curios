@@ -20,8 +20,9 @@ mod tests;
 use {
     super::{Counted, Kernel, KernelError, infer::infer_type, whnf::whnf},
     curios_core::{
-        Bound, Field, FuncType, Instance, InstanceHead, Intrinsic, Level, Proj, Reducer,
-        StructType, Subterm, Telescope, Term, TupleType, instantiate_universe_levels_scoped,
+        Bound, Field, FuncType, Instance, InstanceHead, Intrinsic, Level, MatchResult, Proj,
+        Reducer, StructType, Subterm, Telescope, Term, TupleType,
+        instantiate_universe_levels_scoped,
     },
 };
 
@@ -115,16 +116,19 @@ impl Sort {
 
             Subterm::Intrinsic(intrinsic) => sort_of_intrinsic(kernel, intrinsic),
 
-            // A type-valued `match` (`rec Lt = match n : Prop | ..`): its motive is the sort, which every arm shares.
-            Subterm::Match(m) => {
-                let binders = (0..m.motive.arity())
-                    .map(|_| Term::free_var(&kernel.fresh(None)))
-                    .collect::<Vec<_>>();
-                let refs = binders.iter().collect::<Vec<_>>();
-                let motive = m.motive.open(&refs);
+            // A type-valued `match` (`rec Lt = match n : Prop | ..`): its result is the sort, which every arm shares.
+            Subterm::Match(m) => match &m.result {
+                MatchResult::Family(motive) => {
+                    let binders = (0..motive.arity())
+                        .map(|_| Term::free_var(&kernel.fresh(None)))
+                        .collect::<Vec<_>>();
+                    let refs = binders.iter().collect::<Vec<_>>();
+                    let motive = motive.open(&refs);
 
-                as_sort(kernel, &motive)
-            }
+                    as_sort(kernel, &motive)
+                }
+                MatchResult::Ambient(goal) => as_sort(kernel, goal),
+            },
 
             // A neutral type — a `Prop` hypothesis, or a family application stuck on a variable.
             Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) => {

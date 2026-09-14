@@ -261,17 +261,114 @@ pub struct Struct {
     pub entries: Vec<StructEntry>,
 }
 
-/// The unified eliminator: every match form shares a scrutinee and a motive and differs only in its [`Cases`] payload.
-///
-/// An *elaborated* motive is closed at the eliminator's own arity: the scrutinee's indices in declaration order, then the scrutinee. That is 1 for every intrinsic carrier and for an unindexed inductive, and `n_indices + 1` for an indexed one. Parameters are never abstracted — they are uniform across constructors and fixed by the scrutinee's type, so the motive body refers to them through the ambient scope like any other term.
-///
-/// Before elaboration the motive is instead the *written term*, carried in an arity-0 scope — see `Term::match_motive_written`.
+/// The unified eliminator: every match form shares a scrutinee and a result and differs only in its [`Cases`] payload.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Match {
     pub head: Term,
-    pub motive: Scope<Many>,
+    pub result: MatchResult,
     pub cases: Cases,
+}
+
+/// What an elimination's arms inhabit, in one of two forms.
+///
+/// A **family** is a motive: a scope closed at the eliminator's own arity — the scrutinee's indices in declaration order, then the scrutinee — which is 1 for every intrinsic carrier and for an unindexed inductive, and `n_indices + 1` for an indexed one. Parameters are never abstracted, being uniform across constructors and fixed by the scrutinee's type, so the body refers to them through the ambient scope like any other term. Before elaboration a written motive is carried in an arity-0 scope instead — see `Term::match_motive_written`. A family is the only form that can state a result over an *expression* scrutinee, and the only one an induction hypothesis can be typed from, so it is what a written motive lowers to and what every free-monoid fold carries.
+///
+/// The **ambient** form is the expected type as it stood in the enclosing context, stated once there and inhabited by each arm under that case's specialization: the scrutinee variable replaced by the case's value and each variable index by the case's target. It exists because a family must typecheck under fresh binders *outside* any arm — where a hypothesis whose type mentions the scrutinee no longer matches the position it occupies in the goal — while the ambient goal was typed where it was written and needs no such check. That is the whole reason the convoy pattern existed, and this form retires it. It is only ever built over a *variable* scrutinee: a case can be substituted for a variable, while an expression's occurrences would have to be read through a case equation, which is not a certification contract (see `documentation/design/language/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum MatchResult {
+    Family(Scope<Many>),
+    Ambient(Term),
+}
+
+impl MatchResult {
+    /// The family, when the result is one.
+    pub fn family(&self) -> Option<&Scope<Many>> {
+        match self {
+            MatchResult::Family(motive) => Some(motive),
+            MatchResult::Ambient(_) => None,
+        }
+    }
+
+    /// The ambient goal, when the result is one.
+    pub fn ambient(&self) -> Option<&Term> {
+        match self {
+            MatchResult::Family(_) => None,
+            MatchResult::Ambient(goal) => Some(goal),
+        }
+    }
+
+    /// The term under the result's binders, for a walk that reads names or tests a predicate and needs no instance.
+    pub fn body(&self) -> &Term {
+        match self {
+            MatchResult::Family(motive) => motive.body(),
+            MatchResult::Ambient(goal) => goal,
+        }
+    }
+
+    /// The result at one case: the family opened at the case's index targets then its value, or the ambient goal with the scrutinee variable standing for the value and each variable actual index for its target. A repeated index variable takes its first target, exactly as an abstraction label binds it once; a non-variable scrutinee or index has nothing to substitute and the goal keeps its spelling.
+    pub fn at(
+        &self,
+        head: &Term,
+        actual_indices: &[Term],
+        case_indices: &[Term],
+        case_value: &Term,
+    ) -> Term {
+        match self {
+            MatchResult::Family(motive) => {
+                let refs = case_indices.iter().chain([case_value]).collect::<Vec<_>>();
+                motive.open(&refs)
+            }
+            MatchResult::Ambient(goal) => {
+                let mut binders: Vec<&Free> = Vec::new();
+                let mut values: Vec<&Term> = Vec::new();
+                for (actual, target) in actual_indices.iter().zip(case_indices) {
+                    if let Subterm::Var(var) = &**actual
+                        && let Some(name) = var.as_free()
+                        && !binders.contains(&name)
+                    {
+                        binders.push(name);
+                        values.push(target);
+                    }
+                }
+                if let Subterm::Var(var) = &**head
+                    && let Some(name) = var.as_free()
+                    && !binders.contains(&name)
+                {
+                    binders.push(name);
+                    values.push(case_value);
+                }
+                Scope::close(Many(binders.len()), &binders, goal.clone()).open(&values)
+            }
+        }
+    }
+
+    /// The result at the scrutinee itself — the elimination's own type: the family opened at the actual indices then the head, or the ambient goal as written.
+    pub fn of(&self, head: &Term, actual_indices: &[Term]) -> Term {
+        match self {
+            MatchResult::Family(motive) => {
+                let refs = actual_indices.iter().chain([head]).collect::<Vec<_>>();
+                motive.open(&refs)
+            }
+            MatchResult::Ambient(goal) => goal.clone(),
+        }
+    }
+
+    /// The same form with its one term rewritten in place — a family's body under its binders, or the ambient goal.
+    pub fn try_map<E>(&self, f: impl FnOnce(&Term) -> Result<Term, E>) -> Result<Self, E> {
+        Ok(match self {
+            MatchResult::Family(motive) => MatchResult::Family(motive.try_map_body(f)?),
+            MatchResult::Ambient(goal) => MatchResult::Ambient(f(goal)?),
+        })
+    }
+
+    pub(crate) fn reach(&self) -> usize {
+        match self {
+            MatchResult::Family(motive) => motive.reach(),
+            MatchResult::Ambient(goal) => goal.reach(),
+        }
+    }
 }
 
 /// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its payload binders, plus a plicity vector paralleling those binders one mark per slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks are the written constructor-pattern plicities; after elaboration they are the constructor's canonical payload plicities. Reduction and erasure open the body positionally and never read the marks; conversion compares them alongside the bodies. Kept beside the body (rather than in a second map) and sealed at the crate boundary behind [`InductArm::new`], so the two can never drift apart.

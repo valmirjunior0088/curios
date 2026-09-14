@@ -38,8 +38,8 @@ use {
     },
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, Free, FuncType, InductType, Instance, InstanceHead,
-        Intrinsic, Let, Many, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, Variant, wire_results_term, wire_term,
+        Intrinsic, Let, Many, MatchResult, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType,
+        Subterm, Telescope, Term, Tuple, TupleType, Variant, wire_results_term, wire_term,
     },
     curios_utilities::{Grain, PackedBin, recurse},
 };
@@ -322,9 +322,9 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
             .into())
         }
 
-        // An elimination's type is its motive at this scrutinee. The motive binds the family's indices and then the scrutinee itself, so opening it at those is the rule for the *type*.
+        // An elimination's type is its result at this scrutinee: a motive binds the family's indices and then the scrutinee itself, so opening it at those is the rule for the *type*; an ambient goal is that type as written.
         //
-        // Whether the term deserves that type is `eliminate`'s job: each arm must inhabit the motive at its own constructor's index targets, and a proposition may not be eliminated into a relevant result unless it carries nothing to extract.
+        // Whether the term deserves that type is `eliminate`'s job: each arm must inhabit the result at its own constructor's index targets, and a proposition may not be eliminated into a relevant result unless it carries nothing to extract.
         Subterm::Match(m) => {
             let scrutinee_type = infer(kernel, &m.head)?;
             let scrutinee_type = kernel.reduce_forced(scrutinee_type)?;
@@ -337,28 +337,26 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
                 .map(|family| family.indices.clone())
                 .unwrap_or_default();
 
-            if m.motive.arity() != indices.len() + 1 {
+            if let Some(motive) = m.result.family()
+                && motive.arity() != indices.len() + 1
+            {
                 return Err(KernelError::Arity {
                     counted: Counted::MotiveBinders,
                     expected: indices.len() + 1,
-                    actual: m.motive.arity(),
+                    actual: motive.arity(),
                 });
             }
 
             check_cases(
                 kernel,
                 family.as_ref(),
-                &m.motive,
+                &m.result,
                 &m.cases,
                 &m.head,
                 &scrutinee_type,
             )?;
 
-            let mut arguments = indices;
-            arguments.push(m.head.clone());
-            let refs = arguments.iter().collect::<Vec<_>>();
-
-            Ok(m.motive.open(&refs))
+            Ok(m.result.of(&m.head, &indices))
         }
 
         // `let` is checked binding by binding and then substituted away, which is the same rule reduction uses. Each binding sees exactly the values before it: a `let` is non-recursive, and self-reference is `rec`'s.
@@ -443,9 +441,22 @@ pub(super) fn infer_type(kernel: &mut Kernel, type_: &Term) -> Result<Sort, Kern
 fn check_motive(
     kernel: &mut Kernel,
     family: Option<&InductType>,
-    motive: &Scope<Many>,
+    result: &MatchResult,
     scrutinee_type: &Term,
 ) -> Result<Sort, KernelError> {
+    // An ambient goal was typed where it stands, so its well-formedness is asked in the ambient context and under no binder; what the guard needs is still its sort.
+    let motive = match result {
+        MatchResult::Family(motive) => motive,
+        MatchResult::Ambient(goal) => {
+            let type_ = match infer(kernel, goal) {
+                Ok(type_) => type_,
+                Err(error @ KernelError::Reduce(_)) => return Err(error),
+                Err(_) => return Err(KernelError::NotAMotive(goal.clone())),
+            };
+            return as_sort(kernel, &type_).map_err(|_| KernelError::NotAMotive(goal.clone()));
+        }
+    };
+
     kernel.scoped(|kernel| {
         let mut opened: Vec<Term> = Vec::new();
 
@@ -498,15 +509,28 @@ fn check_motive(
 fn check_cases(
     kernel: &mut Kernel,
     family: Option<&InductType>,
-    motive: &Scope<Many>,
+    result: &MatchResult,
     cases: &Cases,
     scrutinee: &Term,
     scrutinee_type: &Term,
 ) -> Result<(), KernelError> {
-    let motive_sort = check_motive(kernel, family, motive, scrutinee_type)?;
+    // The ambient form's precondition, stated rather than assumed: the goal is specialized by substituting the case's value for the scrutinee, so the scrutinee must be a variable with a binder to substitute at.
+    if result.ambient().is_some() {
+        let variable = match &**scrutinee {
+            Subterm::Var(var) => var
+                .as_free()
+                .is_some_and(|name| kernel.local_type(name).is_some()),
+            _ => false,
+        };
+        if !variable {
+            return Err(KernelError::AmbientOverExpression(scrutinee.clone()));
+        }
+    }
+
+    let motive_sort = check_motive(kernel, family, result, scrutinee_type)?;
 
     let at = |kernel: &mut Kernel, value: Term, body: &Term| {
-        let expected = motive.open(&[&value]);
+        let expected = result.at(scrutinee, &[], &[], &value);
 
         kernel.scoped(|kernel| {
             let mut solutions = Vec::new();
@@ -537,7 +561,7 @@ fn check_cases(
                 kernel,
                 &at,
                 family,
-                motive,
+                result,
                 cases,
                 default.as_ref(),
                 scrutinee,
@@ -567,14 +591,17 @@ fn check_cases(
                 at(kernel, literal, body)?;
             }
 
-            // The default stands for every value not enumerated, so the only instance of the motive it can be checked at is the scrutinee's — which refines nothing.
-            let expected = motive.open(&[scrutinee]);
+            // The default stands for every value not enumerated, so the only instance of the result it can be checked at is the scrutinee's — which refines nothing.
+            let expected = result.of(scrutinee, &[]);
             check(kernel, default, &expected)
         }
 
-        Cases::FreeMonoid { carrier } => {
-            check_free_monoid(kernel, motive, scrutinee, scrutinee_type, carrier, &at)
-        }
+        Cases::FreeMonoid { carrier } => match result {
+            MatchResult::Family(motive) => {
+                check_free_monoid(kernel, motive, scrutinee, scrutinee_type, carrier, &at)
+            }
+            MatchResult::Ambient(goal) => Err(KernelError::AmbientFold(goal.clone())),
+        },
     }
 }
 

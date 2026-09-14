@@ -23,8 +23,8 @@ use {
     super::Kernel,
     curios_core::{
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
-        Instance, InstanceHead, Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, ReduceError,
-        Reducer, Scope, Struct, Subterm, Term, Tuple, Var, Variant, Visit, accelerable,
+        Instance, InstanceHead, Layer, Let, Match, MatchResult, Nat, Proj, Rec, RecGroup,
+        ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit, accelerable,
         instantiate_universe_levels_scoped, reduce_closed, reduce_intrinsic,
     },
     curios_utilities::recurse,
@@ -144,12 +144,12 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
             // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine — the scan-state chain a string literal lowers to — costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for.
             Subterm::Match(Match {
                 head,
-                motive,
+                result,
                 cases,
             }) => {
                 let value = whnf(kernel, head)?;
 
-                step_match(force(kernel, value)?, motive, cases)
+                step_match(force(kernel, value)?, result, cases)
             }
             // `InductType`/`Variant`, `StructType`/`Struct`, `Tuple`, `FuncType`, `Type`/`Prop`, `Rec`, and a `Metavar` no kernel input should contain are all weak-head normal already: their sub-terms are not reduced in this position.
             other => Step::Stop(other.into()),
@@ -415,7 +415,7 @@ fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, Reduce
 /// An arm binds that value's payload components directly. They are themselves unreduced — a `Variant` is a weak-head normal form whose sub-terms this strategy never entered — so binding them is call-by-name, not call-by-value.
 ///
 /// The elaborator instead binds each arm to a *projection of the scrutinee as written*, because a reduced payload can carry annotation holes its zonker would then have to solve. The kernel has no zonker and no holes, so it takes the direct route.
-fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
+fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
     match cases {
         Cases::Bool {
             false_case,
@@ -425,7 +425,7 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
             Some(true) => Step::Continue(true_case),
             None => Step::Stop(Term::from(Subterm::Match(Match {
                 head: forced,
-                motive,
+                result,
                 cases: Cases::Bool {
                     false_case,
                     true_case,
@@ -448,7 +448,7 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
                 ),
                 false => Step::Stop(Term::from(Subterm::Match(Match {
                     head: forced,
-                    motive,
+                    result,
                     cases: Cases::Switch { cases, default },
                 }))),
             }
@@ -474,7 +474,7 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
 
             Step::Stop(Term::from(Subterm::Match(Match {
                 head: forced,
-                motive,
+                result,
                 cases: Cases::Induct { cases, default },
             })))
         }
@@ -497,7 +497,7 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
                 Layer::Cons { head: elem, tail } => {
                     let hypothesis: Term = Subterm::Match(Match {
                         head: tail.clone(),
-                        motive: motive.clone(),
+                        result: result.clone(),
                         cases: Cases::FreeMonoid {
                             carrier: carrier.clone(),
                         },
@@ -517,7 +517,7 @@ fn step_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Step {
                 }
                 Layer::Stuck(stuck) => Step::Stop(Term::from(Subterm::Match(Match {
                     head: stuck.into(),
-                    motive,
+                    result,
                     cases: Cases::FreeMonoid { carrier },
                 }))),
             }

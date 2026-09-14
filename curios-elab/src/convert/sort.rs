@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    curios_core::{Subterm, Term},
+    curios_core::{MatchResult, Subterm, Term},
 };
 
 /// The universe a type inhabits — `Prop` for a strict proposition, `Type` otherwise.
@@ -239,15 +239,17 @@ impl Sort {
                 opened.truncate(mark);
                 sort
             }
-            // A type-valued match (`Lt = match _ : Prop | ..`): its sort is the motive — a constant `Prop` when the result is a proposition.
-            Subterm::Match(m) => {
-                let motive = m.motive.clone();
-                let vars: Vec<Term> = (0..motive.arity())
-                    .map(|_| Term::free_var(&context.fresh(None)))
-                    .collect();
-                let refs: Vec<&Term> = vars.iter().collect();
-                Sort::from_universe(context, &motive.open(&refs))?
-            }
+            // A type-valued match (`Lt = match _ : Prop | ..`): its sort is its result — a constant `Prop` when the result is a proposition.
+            Subterm::Match(m) => match &m.result {
+                MatchResult::Family(motive) => {
+                    let vars: Vec<Term> = (0..motive.arity())
+                        .map(|_| Term::free_var(&context.fresh(None)))
+                        .collect();
+                    let refs: Vec<&Term> = vars.iter().collect();
+                    Sort::from_universe(context, &motive.open(&refs))?
+                }
+                MatchResult::Ambient(goal) => Sort::from_universe(context, goal)?,
+            },
             // A neutral type (a `Prop` hypothesis, or a stuck family application): its synthesized type is its sort.
             Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) => {
                 match synth_neutral(context, opened, &reduced)? {

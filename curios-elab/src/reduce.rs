@@ -14,9 +14,9 @@ use {
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid,
         Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Layer,
-        Let, Many, Match, Metavar, Nat, One, Proj, Rec, RecGroup, ReduceError, Reducer, Scope,
-        Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
-        Visit, accelerable, instantiate_universe_levels_scoped, project_erased_universes,
+        Let, Match, MatchResult, Metavar, Nat, One, Proj, Rec, RecGroup, ReduceError, Reducer,
+        Scope, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var,
+        Variant, Visit, accelerable, instantiate_universe_levels_scoped, project_erased_universes,
         reduce_closed, reduce_intrinsic,
     },
     curios_utilities::recurse,
@@ -449,7 +449,7 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
 /// Dispatch a `match` over its scrutinee's already-reduced-and-forced value, where `forced` is what `reduce_forced` produced for it.
 ///
 /// **Rejected — binding an arm to projections of the original scrutinee.** This took the unreduced scrutinee alongside `forced` and opened the arm at `head.(i + 1)`, the flat view in [`reduce_proj`], so that a reduced payload could not carry evaluated definition internals — local-`let` annotation holes elaboration never births — into types flowing on to `zonk`. It buys that at the cost of emitting a term Core cannot type: `Proj` has no rule for an inductive value, so the residual is well-formed only to the untyped reducer. One escaping into a metavariable solution candidate is refused by the re-validation in `convert`'s `solve` as `NotATuple`, which is a *hard* verdict — the goal fails outright instead of parking, and an ordinary program comparing a matched payload against its value is rejected. Binding the payload directly is also what the kernel does, so the two strategies no longer differ here.
-fn reduce_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Reduce {
+fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
     match cases {
         Cases::Bool {
             false_case,
@@ -459,7 +459,7 @@ fn reduce_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Reduce {
             Subterm::Intrinsic(Intrinsic::Bool(true)) => Reduce::Continue(true_case),
             forced => Reduce::Break(Term::from(Subterm::Match(Match {
                 head: forced.into(),
-                motive,
+                result,
                 cases: Cases::Bool {
                     false_case,
                     true_case,
@@ -484,7 +484,7 @@ fn reduce_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Reduce {
                 }
                 false => Reduce::Break(Term::from(Subterm::Match(Match {
                     head: scrutinee,
-                    motive,
+                    result,
                     cases: Cases::Switch { cases, default },
                 }))),
             }
@@ -507,7 +507,7 @@ fn reduce_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Reduce {
 
             Reduce::Break(Term::from(Subterm::Match(Match {
                 head: forced,
-                motive,
+                result,
                 cases: Cases::Induct { cases, default },
             })))
         }
@@ -532,7 +532,7 @@ fn reduce_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Reduce {
                 Layer::Cons { head, tail } => {
                     let ih: Term = Subterm::Match(Match {
                         head: tail.clone(),
-                        motive: motive.clone(),
+                        result: result.clone(),
                         cases: Cases::FreeMonoid {
                             carrier: carrier.clone(),
                         },
@@ -553,7 +553,7 @@ fn reduce_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Reduce {
                 }
                 Layer::Stuck(scrutinee) => Reduce::Break(Term::from(Subterm::Match(Match {
                     head: scrutinee.into(),
-                    motive,
+                    result,
                     cases: Cases::FreeMonoid { carrier },
                 }))),
             }
@@ -785,7 +785,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                 Subterm::Match(m) => {
                     let value = reduce(context, m.head)?;
 
-                    reduce_match(force_rec(context, value)?, m.motive, m.cases)
+                    reduce_match(force_rec(context, value)?, m.result, m.cases)
                 }
                 Subterm::Apply(apply) => reduce_apply(context, apply)?,
                 Subterm::Proj(proj) => reduce_proj(context, proj)?,

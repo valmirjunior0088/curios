@@ -4,7 +4,7 @@ use {
     curios_analysis::{Invert, case_target_indices, invert_indices, pinned_by_targets},
     curios_core::{
         Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic, IntrinsicHead,
-        Many, Match, Nat, Scope, Subterm, Telescope, Term, Three, Two,
+        Many, Match, MatchResult, Nat, Scope, Subterm, Telescope, Term, Three, Two,
     },
     curios_num::Natural,
     curios_utilities::{Grain, PackedBin},
@@ -116,7 +116,7 @@ fn elaborate_nat_match(
     let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        motive,
+        result: MatchResult::Family(motive),
         // `Nat` is the free monoid on one payload-less generator: its cons arm binds just (predecessor, ih), so the carrier is `Nat` and the head is absent.
         cases: Cases::FreeMonoid {
             carrier: Carrier::Nat {
@@ -203,7 +203,7 @@ fn elaborate_list_match(
     let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        motive,
+        result: MatchResult::Family(motive),
         cases: Cases::FreeMonoid {
             carrier: Carrier::List {
                 elem,
@@ -287,7 +287,7 @@ fn elaborate_bin_match(
     let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        motive,
+        result: MatchResult::Family(motive),
         cases: Cases::FreeMonoid {
             carrier: Carrier::Bin {
                 grain,
@@ -346,7 +346,7 @@ fn elaborate_switch(
     let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        motive,
+        result: MatchResult::Family(motive),
         cases: Cases::Switch {
             cases: cases_elaborated,
             default: default_elaborated,
@@ -365,9 +365,15 @@ pub(crate) fn elaborate_match(
 ) -> Result<(Term, Term), Error> {
     let Match {
         head,
-        motive,
+        result,
         cases,
     } = m;
+    let motive = match result {
+        MatchResult::Family(motive) => motive,
+        MatchResult::Ambient(_) => {
+            unreachable!("an ambient result is built by elaboration and never re-elaborated")
+        }
+    };
 
     match cases {
         Cases::Bool {
@@ -481,7 +487,7 @@ fn elaborate_bool_match(
     let result_type = motive.open(&[&head_elaborated]);
     let rebuilt = Subterm::Match(Match {
         head: head_elaborated,
-        motive,
+        result: MatchResult::Family(motive),
         cases: Cases::Bool {
             false_case: false_elaborated,
             true_case: true_elaborated,
@@ -802,7 +808,7 @@ fn elaborate_induct_match(
 
     let rebuilt_match: Term = Subterm::Match(Match {
         head: head_elaborated,
-        motive: motive_elaborated,
+        result: MatchResult::Family(motive_elaborated),
         cases: Cases::Induct {
             cases: cases_elaborated,
             default: default_elaborated,

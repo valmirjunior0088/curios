@@ -1205,11 +1205,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
 
         Subterm::Match(Match {
             head,
-            motive,
+            result,
             cases,
         }) => Subterm::Match(Match {
             head: zonk_term(context, head)?,
-            motive: motive.try_map_body(|b| zonk_term(context, b))?,
+            result: result.try_map(|b| zonk_term(context, b))?,
             cases: match cases {
                 Cases::Bool {
                     false_case,

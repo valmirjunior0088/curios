@@ -210,8 +210,8 @@ fn annotate_node(term: &Term, site: &Rc<str>, positions: &mut Vec<Position>) -> 
             entries(telescope, site, positions);
         }
 
-        Subterm::Match(Match { motive, .. }) => {
-            push(positions, site, motive.body());
+        Subterm::Match(Match { result, .. }) => {
+            push(positions, site, result.body());
         }
 
         Subterm::Let(Let { bindings, .. }) => {

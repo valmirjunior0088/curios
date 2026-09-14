@@ -63,6 +63,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Nested/tuple/struct match-arm patterns (the pattern-matrix compiler)
 - [x] Multi-scrutinee matrix matching (a tuple scrutinee matched column by column)
 - [x] Explicit match motives (a term checked against the eliminator's motive type)
+- [x] Dependent elimination at the ambient goal (an omitted motive over a variable scrutinee is the expected type, specialized per arm; no convoy)
 - [x] Intrinsic match families (Boolean, `Nat`, list, and packed `Bits`/`Bytes` arms)
 - [x] `choose` (an ordered guarded `Bool` ladder with a mandatory `_` default)
 - [x] Bind-arms (`| pattern = value =>` in `choose`, Rust's `if let`; refutable LHS)

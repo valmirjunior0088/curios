@@ -1065,7 +1065,20 @@ impl Term {
     fn match_scoped(head: Term, motive: Scope<Many>, cases: Cases) -> Self {
         Self::from(Subterm::Match(Match {
             head,
-            motive,
+            result: MatchResult::Family(motive),
+            cases,
+        }))
+    }
+
+    /// Build a match node at an ambient goal — the expected type as it stands where the match is written, inhabited by each arm under that case's specialization. The elaborator's entry point for an elided motive over a variable scrutinee; see [`MatchResult::Ambient`] for why the head must be a variable.
+    pub fn match_ambient<H, G>(head: H, goal: G, cases: Cases) -> Self
+    where
+        H: Into<Term>,
+        G: Into<Term>,
+    {
+        Self::from(Subterm::Match(Match {
+            head: head.into(),
+            result: MatchResult::Ambient(goal.into()),
             cases,
         }))
     }

@@ -36,8 +36,8 @@ use {
     super::{Kernel, KernelError, Sort, unfold_spelling},
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, FuncType, Global, InductType, Instance, Level, Many,
-        Proj, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
-        TupleType, Two, instantiate_universe_levels_scoped, strip_universe_levels,
+        MatchResult, Proj, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Three,
+        Tuple, TupleType, Two, instantiate_universe_levels_scoped, strip_universe_levels,
     },
     curios_utilities::recurse,
     std::collections::HashSet,
@@ -413,7 +413,16 @@ fn structural(
         // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape stays rigid: tags, plicities, arity, and default presence must agree exactly, because two eliminations enumerating different constructors compute differently on some input even where they agree on this one.
         (Subterm::Match(left), Subterm::Match(right)) => {
             Ok(ground(kernel, history, &left.head, &right.head)?
-                && ground_scope(kernel, history, &left.motive, &right.motive)?
+                && match (&left.result, &right.result) {
+                    (MatchResult::Family(this), MatchResult::Family(that)) => {
+                        ground_scope(kernel, history, this, that)?
+                    }
+                    (MatchResult::Ambient(this), MatchResult::Ambient(that)) => {
+                        ground(kernel, history, this, that)?
+                    }
+                    // Two forms of result are two shapes, and the shape stays rigid: refusing here is incomplete, never unsound.
+                    _ => false,
+                }
                 && ground_cases(kernel, history, &left.cases, &right.cases)?)
         }
 

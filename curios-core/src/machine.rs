@@ -25,8 +25,8 @@
 use {
     super::{
         Apply, Argument, Bound, Carrier, Cases, Cost, Field, Free, FreeMonoid, Func, InstanceHead,
-        Intrinsic, Layer, Let, LetBinding, Many, Match, Nat, Proj, Rec, RecGroup, ReduceError,
-        Reducer, Scope, Subterm, Telescope, Term, instantiate_universe_levels_scoped,
+        Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Nat, Proj, Rec, RecGroup,
+        ReduceError, Reducer, Scope, Subterm, Telescope, Term, instantiate_universe_levels_scoped,
         reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
@@ -135,7 +135,7 @@ enum Frame {
     },
     /// A match waiting for its scrutinee.
     MatchK {
-        motive: Scope<Many>,
+        result: MatchResult,
         cases: Cases,
         demand: Demand,
     },
@@ -333,7 +333,7 @@ impl Machine {
                 let key = Term::from(mtc);
                 let Subterm::Match(Match {
                     head,
-                    motive,
+                    result,
                     cases,
                 }) = Term::unwrap_or_clone(key.clone())
                 else {
@@ -343,7 +343,7 @@ impl Machine {
                 self.push(
                     host,
                     Frame::MatchK {
-                        motive,
+                        result,
                         cases,
                         demand,
                     },
@@ -618,10 +618,10 @@ impl Machine {
             }
 
             Frame::MatchK {
-                motive,
+                result,
                 cases,
                 demand,
-            } => self.dispatch(host, motive, cases, value, demand),
+            } => self.dispatch(host, result, cases, value, demand),
 
             Frame::ProjK { index, demand } => match Term::unwrap_or_clone(value) {
                 Subterm::Tuple(tuple) if index < tuple.fields.len() => Ok(Step::Eval(
@@ -800,7 +800,7 @@ impl Machine {
     fn dispatch<H: ClosedHost>(
         &mut self,
         host: &mut H,
-        motive: Scope<Many>,
+        result: MatchResult,
         cases: Cases,
         scrutinee: Term,
         demand: Demand,
@@ -814,7 +814,7 @@ impl Machine {
                 Some(true) => Ok(Step::Eval(true_case, demand)),
                 None => Ok(Step::Value(Term::from(Subterm::Match(Match {
                     head: scrutinee,
-                    motive,
+                    result,
                     cases: Cases::Bool {
                         false_case,
                         true_case,
@@ -837,7 +837,7 @@ impl Machine {
                     )),
                     false => Ok(Step::Value(Term::from(Subterm::Match(Match {
                         head: scrutinee,
-                        motive,
+                        result,
                         cases: Cases::Switch { cases, default },
                     })))),
                 }
@@ -873,7 +873,7 @@ impl Machine {
 
                 Ok(Step::Value(Term::from(Subterm::Match(Match {
                     head: scrutinee,
-                    motive,
+                    result,
                     cases: Cases::Induct { cases, default },
                 }))))
             }
@@ -899,7 +899,7 @@ impl Machine {
                         // The induction hypothesis is bound unreduced, exactly as the hosts bind it: evaluating it eagerly would run the whole tail fold whether or not the arm uses it. An arm that does use it demands it through a frame, at machine depth.
                         let hypothesis: Term = Subterm::Match(Match {
                             head: tail.clone(),
-                            motive: motive.clone(),
+                            result: result.clone(),
                             cases: Cases::FreeMonoid {
                                 carrier: carrier.clone(),
                             },
@@ -923,7 +923,7 @@ impl Machine {
                     }
                     Layer::Stuck(stuck) => Ok(Step::Value(Term::from(Subterm::Match(Match {
                         head: stuck.into(),
-                        motive,
+                        result,
                         cases: Cases::FreeMonoid { carrier },
                     })))),
                 }

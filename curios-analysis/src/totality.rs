@@ -30,8 +30,8 @@ use {
     crate::{Env, forceable},
     curios_core::{
         Arity, Bound, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType, Instance,
-        Intrinsic, Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
+        Intrinsic, Layer, Let, Many, Match, MatchResult, Nat, Proj, Rec, RecGroup, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
     curios_utilities::recurse,
@@ -754,11 +754,14 @@ impl<E: Env> Walk<'_, E> {
 
             Subterm::Match(Match {
                 head,
-                motive,
+                result,
                 cases,
             }) => {
                 self.walk_term(head);
-                self.open_many_walk(motive);
+                match result {
+                    MatchResult::Family(motive) => self.open_many_walk(motive),
+                    MatchResult::Ambient(goal) => self.walk_term(goal),
+                }
                 self.walk_arms(head, cases);
             }
 
