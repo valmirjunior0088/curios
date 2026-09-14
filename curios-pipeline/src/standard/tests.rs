@@ -2,12 +2,15 @@
 
 use {
     super::{Baselined, granted, withheld},
-    crate::{Cache, tests::test_support::compile_with_units},
-    curios_prelude::with_stored,
-    curios_text::{RootSource, UnitSource},
-    curios_unit::Unit,
+    crate::{
+        Cache, DEFAULT_STEP_BUDGET, compile_unit_over, invalidated,
+        tests::test_support::compile_with_units,
+    },
+    curios_prelude::{SYNTAX, with_stored},
+    curios_text::{Overlay, RootSource, UnitSource, into_core_unit},
+    curios_unit::{Prefix, Unit},
     curios_utilities::{Qualifier, RootKind},
-    std::{env, path::PathBuf},
+    std::{env, fs, path::PathBuf, time::Instant},
 };
 
 /// The standard library's own tree, as the package claiming `/std` from it.
@@ -33,6 +36,64 @@ fn std_from_elsewhere() -> RootSource {
         directory.join("lib.crs"),
         directory,
     )
+}
+
+/// What a question about the standard library costs after an edit to one declaration: the closure the edit reaches and the time each phase takes, for a leaf and for a hub. A measurement, so it reports rather than asserts, and its timings are the profile it was built under.
+#[test]
+#[ignore = "measurement: lowers the standard library and recompiles it over the archive, reporting closure sizes and per-phase timings"]
+fn std_recompile_closure_census() {
+    let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../curios-prelude-archive/std");
+    let edits: [(&str, &str, fn(&str) -> String); 2] = [
+        (
+            "a leaf: a declaration added to /std/Nat",
+            "Nat.crs",
+            |text| format!("{text}\npub let _census_probe(a: Nat) -> Nat =\n    a;\n"),
+        ),
+        (
+            "a hub: the body of /std/Bool/not respelled",
+            "Bool.crs",
+            |text| text.replacen("xor(b, true)", "xor(true, b)", 1),
+        ),
+    ];
+
+    with_stored(|stored| {
+        let sys = &stored[0].unit;
+        let std = &stored[1].unit;
+        let roots = [sys];
+        let scope = Prefix::over(&roots);
+
+        println!("\n=== recompiling /std over the archive ===");
+        for (label, file, edit) in edits {
+            let path = directory.join(file);
+            let text = edit(&fs::read_to_string(&path).expect("an authored source"));
+            let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
+            let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+
+            let start = Instant::now();
+            let lowered =
+                into_core_unit(&unit, &scope.text(), &SYNTAX).expect("the edited library lowers");
+            let lowered_in = start.elapsed();
+            let start = Instant::now();
+            let closure = invalidated(std, lowered.core());
+            let diffed_in = start.elapsed();
+            let start = Instant::now();
+            compile_unit_over(DEFAULT_STEP_BUDGET, scope, &SYNTAX, &unit, std)
+                .expect("the edited library recompiles");
+            let recompiled_in = start.elapsed();
+
+            println!("{label}");
+            println!(
+                "  closure     {:>6} names of {} items",
+                closure.len(),
+                std.core().items.len()
+            );
+            println!("  lower       {lowered_in:>10.1?}");
+            println!("  diff+close  {diffed_in:>10.1?}");
+            println!(
+                "  recompile   {recompiled_in:>10.1?}   (lower, diff, elaborate, judge, erase)"
+            );
+        }
+    });
 }
 
 /// A unit supplied whole under `prefix`, holding one declaration.
