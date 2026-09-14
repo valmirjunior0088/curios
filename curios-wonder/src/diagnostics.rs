@@ -282,6 +282,13 @@ impl Cache for ReadOnly<'_> {
         self.cache.get_overlaid(source, self.overlay)
     }
 
+    /// The slot this tree filed for the unit, however its files have moved since, ahead of whatever the scope offered — a unit this tree filed more recently than the compiler was built is nearer the text being asked about than the archived image, and the image is what is there when nothing was filed.
+    ///
+    /// A question is what takes a baseline. What it compiles over one is placed and never filed, which is the reading of this cache the method above already states; the store's own cache offers none, so a build compiles a moved unit whole and files what it compiled.
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<Unit>) -> Option<Unit> {
+        self.cache.earlier(source).or(offered)
+    }
+
     /// Placed, not filed — and this is why the store itself is held rather than a `dyn Cache`.
     ///
     /// Dropping the write is the whole of what read-only means. Dropping the *placement* with it is a second thing nobody asked for: a slot is addressed after the units placed before it, so a unit missing from that chain shifts every later address by one, and one declined hit becomes a miss for every unit after it. A `dyn Cache` has no way to say the first without the second.

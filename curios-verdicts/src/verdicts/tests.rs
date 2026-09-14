@@ -5,52 +5,63 @@
 use {
     super::*,
     crate::test_support::Temporary,
+    curios_package::{Governing, order},
     curios_pipeline::{Progress, compile_with_units},
     curios_text::Entrypoint,
-    std::collections::BTreeMap,
+    std::{collections::BTreeMap, path::Path},
 };
 
 /// The entry every project here compiles: it uses the dependency, so the dependency is a unit of the compilation.
 const ENTRY: &str = "use /std/{Fmt};\nuse /shape/{message};\n\nFmt/print(\"%\\n\")(message)\n";
 
 /// Whether the one mounted unit of a compilation came from the store.
-fn reused(root: &std::path::Path) -> bool {
+fn reused(root: &Path) -> bool {
     reused_from(root, &root.join("shape"))
 }
 
 /// The same, for a project whose dependency is mounted from somewhere other than beside it.
-fn reused_from(root: &std::path::Path, shape: &std::path::Path) -> bool {
+fn reused_from(root: &Path, shape: &Path) -> bool {
     let verdicts = Verdicts::at(root.to_path_buf());
 
     reused_through(root, shape, &verdicts)
 }
 
 /// The same, for a compilation reading through `overlay` — what the `wonder` engine asks, verified by [`Verdicts::get_overlaid`] and placed without filing.
-fn reused_overlaid(root: &std::path::Path, overlay: &Overlay) -> bool {
-    struct Overlaid<'a>(&'a Verdicts, &'a Overlay);
-
-    impl Cache for Overlaid<'_> {
-        fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
-            self.0.get_overlaid(source, self.1)
-        }
-
-        fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
-            self.0.place(source, unit);
-        }
-    }
-
+fn reused_overlaid(root: &Path, overlay: &Overlay) -> bool {
     let verdicts = Verdicts::at(root.to_path_buf());
 
     reused_through(root, &root.join("shape"), &Overlaid(&verdicts, overlay))
 }
 
-fn reused_through(root: &std::path::Path, shape: &std::path::Path, cache: &dyn Cache) -> bool {
-    let governing = curios_package::Governing::of(shape).expect("a governed package");
-    let library = curios_package::order(&governing).expect("a resolvable library");
+/// The `wonder` engine's reading of the store: verified through an overlay, placed rather than filed, and taking a disagreeing slot as a baseline.
+struct Overlaid<'a>(&'a Verdicts, &'a Overlay);
+
+impl Cache for Overlaid<'_> {
+    fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
+        self.0.get_overlaid(source, self.1)
+    }
+
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<Unit>) -> Option<Unit> {
+        self.0.earlier(source).or(offered)
+    }
+
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+        self.0.place(source, unit);
+    }
+}
+
+fn reused_through(root: &Path, shape: &Path, cache: &dyn Cache) -> bool {
+    folded_through(root, shape, cache).contains(&"reused /shape".to_string())
+}
+
+/// What the fold did to the one mounted unit, through `cache`: read off the progress events, as every test here reads its answer.
+fn folded_through(root: &Path, shape: &Path, cache: &dyn Cache) -> Vec<String> {
+    let governing = Governing::of(shape).expect("a governed package");
+    let library = order(&governing).expect("a resolvable library");
     let (entrypoint, loader, _source) =
         Entrypoint::opened(&root.join("exe.crs")).expect("an openable entrypoint");
 
-    let mut reused = false;
+    let mut events = Vec::new();
     compile_with_units(
         1_000_000,
         &library,
@@ -58,15 +69,32 @@ fn reused_through(root: &std::path::Path, shape: &std::path::Path, cache: &dyn C
         &loader,
         Some(cache),
         |_| {},
-        |progress| {
-            if matches!(progress, Progress::Reused(_)) {
-                reused = true;
+        |progress| match progress {
+            Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
+            Progress::Recompiling(prefix) => {
+                events.push(format!("recompiling {}", prefix.join()));
             }
+            Progress::Reused(prefix) => events.push(format!("reused {}", prefix.join())),
+            _ => {}
         },
     )
     .expect("a compiling program");
 
-    reused
+    events
+}
+
+/// What a build's fold did to the one unit, through the store itself.
+fn folded(root: &Path) -> Vec<String> {
+    let verdicts = Verdicts::at(root.to_path_buf());
+
+    folded_through(root, &root.join("shape"), &verdicts)
+}
+
+/// What a query's fold did to the one unit, through the store read as the `wonder` engine reads it.
+fn folded_overlaid(root: &Path, overlay: &Overlay) -> Vec<String> {
+    let verdicts = Verdicts::at(root.to_path_buf());
+
+    folded_through(root, &root.join("shape"), &Overlaid(&verdicts, overlay))
 }
 
 /// A directory of its own, in this file's family.
@@ -88,7 +116,7 @@ fn project(name: &str) -> Temporary {
 /// Copy every slot `from`'s store holds into `into`'s, replacing whatever was there.
 ///
 /// How both cross-project tests stage a shared store: by copying rather than by setting `CURIOS_CACHE`, since the store's own hermeticity rests on no test ever setting it, and what is under test is the verification, which cannot tell how a foreign slot arrived.
-fn stage(from: &std::path::Path, into: &std::path::Path) {
+fn stage(from: &Path, into: &Path) {
     let (from, into) = (from.join(".curios/verdicts"), into.join(".curios/verdicts"));
 
     let _ = fs::remove_dir_all(&into);
@@ -105,7 +133,7 @@ fn library(word: &str) -> String {
     format!("use /std/{{Str}};\n\npub let message: Str =\n    \"{word}\";\n")
 }
 
-fn write(root: &std::path::Path, path: &str, contents: &str) {
+fn write(root: &Path, path: &str, contents: &str) {
     let path = root.join(path);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, contents).unwrap();
@@ -271,5 +299,67 @@ fn opening_a_store_writes_nothing_until_a_slot_is_addressed() {
     assert!(
         root.join(".curios").join("compiler").is_file(),
         "asking for the identity did not write the memo"
+    );
+}
+
+/// The bytes of every slot the store at `root` holds.
+fn slots(root: &Path) -> Vec<Vec<u8>> {
+    let mut slots = fs::read_dir(root.join(".curios").join("verdicts"))
+        .expect("a store with units in it")
+        .map(|slot| fs::read(slot.unwrap().path()).unwrap())
+        .collect::<Vec<_>>();
+    slots.sort();
+
+    slots
+}
+
+/// A slot whose files were edited since it was filed is a baseline for a query, which compiles the unit over it, and a whole compile for a build, which compiles the unit from nothing and files it.
+#[test]
+fn an_edited_slot_is_a_baseline_for_a_query_and_a_whole_compile_for_a_build() {
+    let root = project("baseline-edited");
+    reused(&root);
+
+    write(&root, "shape/lib.crs", &library("second"));
+
+    assert_eq!(
+        folded_overlaid(&root, &Overlay::default()),
+        ["recompiling /shape"]
+    );
+    assert_eq!(folded(&root), ["compiling /shape"]);
+}
+
+/// What a query compiles over a baseline is placed and never filed, so the slot holds what it held; a build files what it compiled.
+#[test]
+fn a_unit_compiled_over_a_baseline_leaves_the_slot_as_it_was() {
+    let root = project("baseline-unfiled");
+    reused(&root);
+    let before = slots(&root);
+
+    write(&root, "shape/lib.crs", &library("second"));
+
+    assert_eq!(
+        folded_overlaid(&root, &Overlay::default()),
+        ["recompiling /shape"]
+    );
+    assert_eq!(slots(&root), before, "a query files nothing");
+
+    assert_eq!(folded(&root), ["compiling /shape"]);
+    assert_ne!(slots(&root), before, "a build files what it compiled");
+}
+
+/// Another project's slot names files this project could not have read, so it is no baseline either — the containment clause a hit is held to.
+#[test]
+fn another_projects_slot_is_no_baseline() {
+    let mine = project("baseline-mine");
+    let theirs = project("baseline-theirs");
+
+    write(&theirs, "shape/lib.crs", &library("theirs"));
+    reused(&theirs);
+
+    stage(&theirs, &mine);
+
+    assert_eq!(
+        folded_overlaid(&mine, &Overlay::default()),
+        ["compiling /shape"]
     );
 }

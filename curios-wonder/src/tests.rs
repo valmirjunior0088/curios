@@ -307,8 +307,28 @@ fn an_edited_unit_recompiles_the_units_after_it() {
 
     assert_eq!(
         folded(&root, &edited(&root, "a/lib.crs")),
-        ["compiling /alpha", "compiling /beta"],
-        "the overlay edits /alpha alone, and /beta's record vouched for the /alpha it was compiled after"
+        ["recompiling /alpha", "compiling /beta"],
+        "the overlay edits /alpha alone, which is compiled over its slot; /beta's record vouched for the /alpha it was compiled after, and its slot was filed after a chain that has moved, so it is neither a hit nor a baseline"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A unit whose slot disagrees with its files is compiled over that slot's unit rather than from nothing: the slot is a baseline, and every declaration the edit did not reach is reused. A query is what takes it; the disk is untouched either way.
+#[test]
+fn an_edited_document_recompiles_its_unit_over_the_stored_one() {
+    let root = mounted_project("read-only-baseline");
+    built(&root);
+
+    assert_eq!(
+        folded(&root, &edited(&root, "b/lib.crs")),
+        ["reused /alpha", "recompiling /beta"],
+        "an edited last unit is compiled over its own slot, after a predecessor that is the store's"
+    );
+    assert_eq!(
+        folded(&root, &Overlay::default()),
+        ["reused /alpha", "reused /beta"],
+        "and nothing was filed, so the disk's text is the store's still"
     );
 
     fs::remove_dir_all(root).unwrap();
@@ -401,6 +421,9 @@ fn folded(root: &Path, overlay: &Overlay) -> Vec<String> {
         Some(&read_only as &dyn Cache),
         |progress| match progress {
             Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
+            Progress::Recompiling(prefix) => {
+                events.push(format!("recompiling {}", prefix.join()));
+            }
             Progress::Reused(prefix) => events.push(format!("reused {}", prefix.join())),
             _ => {}
         },

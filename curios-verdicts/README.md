@@ -13,3 +13,11 @@ The store as a compilation sees it: the `Cache` the fold consults for units alre
 **Rejected.** Keeping the implementation in `curios` and handing the `wonder` engine a `dyn Cache`: a query must place a unit in the chain without filing it, and the trait cannot say the first without the second. Computing the engine fingerprint here behind a feature: a feature is additive and unifies across a workspace build, so any consumer enabling it would put Cranelift under every other.
 
 It is not about keeping `curios-package` free of the compiler. That crate depends on `curios-text` and so already links the elaborator — `curios new` included. The dependency the boundary buys is the driver's.
+
+### A disagreeing slot is a baseline for a question and a whole compile for a build
+
+**Decision.** `Verdicts::earlier` hands back a slot's unit when the slot is intact, filed after the current chain and read from files the asking source could have read — whatever those files hold now. Only the `wonder` engine's read-only cache offers it to the fold as a baseline; the store's own `Cache` implementation keeps the default and offers none, so `run`, `compile` and `test` compile a moved unit whole and file what they compiled, and nothing compiled over a baseline is ever filed.
+
+**Rationale.** A reused item rests on the verdict recorded when the baseline was judged, and the kernel skips it by name, so the whole guarantee rests on the recompile's closure being closed — an argument the differential gate checks on fixtures and has not yet earned for a filed unit. A question's answer is corrected by the next build; a filed unit would become the next baseline, and a mistake would compound. The chain clause is what keeps a baseline to the scope it was compiled in: an item mentioning a predecessor's name is outside the diff, so a slot filed after another chain would replay an item judged against a predecessor that has since changed.
+
+**Rejected.** Offering a baseline to every fold — the speedup for a build is bought with trust in the closure for an executed program. Filing what was compiled over a baseline — maximum reuse, and a closure mistake that persists until something recompiles whole.

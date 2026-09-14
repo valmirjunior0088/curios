@@ -160,6 +160,28 @@ impl Verdicts {
         Some(restored)
     }
 
+    /// The unit an earlier compilation of `source` filed under this address, whatever its files now hold: intact, filed after this chain, and read from files this source could itself have read. `None` is nothing filed, a slot that will not read back, a chain that moved, or another project's files.
+    ///
+    /// **A baseline is only as good as its chain.** An item that mentions a predecessor's name is outside the diff a recompile makes over the unit's own items, so a slot filed after a different chain would replay an item judged against a predecessor that has since changed; the chain clause is what keeps a baseline to the scope it was compiled in. The text clause is the one [`Cache::get`] makes and this does not: what the files hold now is exactly what the recompile diffs against.
+    ///
+    /// Not placed: the unit compiled over it is, through [`Verdicts::place`], as any unit the fold produces.
+    pub fn earlier(&self, source: &UnitSource<'_>) -> Option<Unit> {
+        let slot = self.slot(source, &self.placed.borrow())?;
+
+        let filed = fs::read(self.store.verdict(&slot)).ok()?;
+        let (recorded, bytes) = segments(&filed)?;
+        let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
+
+        if record.unit != digest(bytes)
+            || !chained(&record.predecessors, &self.placed.borrow())
+            || !read_within(&source.directories(), &record.reads)
+        {
+            return None;
+        }
+
+        curios_archive::from_bytes::<Unit>(bytes).ok()
+    }
+
     /// Place `unit` in the chain without filing it: what a caller that may read the store but not write it — the `wonder` engine, answering a question — does with a unit it had to compile.
     ///
     /// **Placing and filing are one call but not one decision, and only filing is optional.** A slot is addressed after the units placed before it, so a unit left out of the chain shifts every later unit's address by one — turning one declined hit into a miss for the whole tail, which is the cost declining it was supposed to avoid. Serializing without writing is what placing costs instead: the digest of those bytes is the fact the next unit's record is verified against, and nothing cheaper produces it.

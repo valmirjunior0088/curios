@@ -505,3 +505,25 @@ fn formatting_is_answered_while_a_check_is_running() {
 
     fs::remove_dir_all(root).unwrap();
 }
+
+/// The checkout that built this compiler is the tree its archive records `/std` came from, so a question about a standard-library module is answered rather than refused as a collision: the package claims `/std` from that directory, the fold withholds the archived root and compiles the package over it as a baseline. Every other checkout collides as before, which is the safe direction, and would fail this test loudly rather than pass it vacuously.
+///
+/// The costliest test in this file: it lowers the whole standard library once, over an empty diff, and erases it whole.
+#[test]
+fn a_module_of_the_standard_library_is_answered_against_the_prelude_it_is_part_of() {
+    let module = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../curios-prelude-archive/std/List.crs")
+        .canonicalize()
+        .expect("the standard library's tree");
+
+    let answered = curios(
+        module.parent().unwrap(),
+        &["wonder", "diagnostics", module.to_str().unwrap()],
+        "",
+    );
+
+    let stderr = String::from_utf8_lossy(&answered.stderr);
+    assert!(answered.status.success(), "{stderr}");
+    assert_eq!(stdout(&answered), "", "the standard library is clean");
+    assert!(!stderr.contains("collid"), "{stderr}");
+}
