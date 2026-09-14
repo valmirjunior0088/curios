@@ -13,14 +13,18 @@ use laws::*;
 mod nat;
 use nat::*;
 
+mod int;
+use int::*;
+
 mod scalar;
 use scalar::*;
 
 use {
     super::{ReduceError, Reducer},
     crate::{
-        Cost, FUSION_CAP, FreeMonoid, Intrinsic, Nat, Peel, Subterm, Term, normalize_concat,
-        peel_bin, peel_first_atom, peel_first_elem, project_erased_universes,
+        Cost, FUSION_CAP, FreeMonoid, Intrinsic, Nat, Peel, Subterm, Term, int_negate, int_product,
+        int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
+        project_erased_universes,
     },
     curios_num::{Floating, Integer, Natural},
     curios_utilities::{Grain, PackedBin},
@@ -296,56 +300,60 @@ pub fn reduce_intrinsic(
         )),
         Intrinsic::IntType => Ok(Subterm::Intrinsic(Intrinsic::IntType)),
         Intrinsic::Int(value) => Ok(Subterm::Intrinsic(Intrinsic::Int(value.clone()))),
-        Intrinsic::IntEql(left, right) => Ok(then_laws(
-            reduce_int_binary(
-                reducer,
-                left,
-                right,
-                |left, right| Some(Intrinsic::Bool(left == right)),
-                Intrinsic::IntEql,
-            )?,
-            |l, r| identity_laws(l, r, true),
-        )),
-        Intrinsic::IntNeq(left, right) => Ok(then_laws(
-            reduce_int_binary(
-                reducer,
-                left,
-                right,
-                |left, right| Some(Intrinsic::Bool(left != right)),
-                Intrinsic::IntNeq,
-            )?,
-            |l, r| identity_laws(l, r, false),
-        )),
-        Intrinsic::IntAdd(left, right) => Ok(then_laws(
-            reduce_int_binary(
-                reducer,
-                left,
-                right,
-                |left, right| Some(Intrinsic::Int(left + right)),
-                Intrinsic::IntAdd,
-            )?,
-            |l, r| int_ring_laws(l, r, intrinsic),
-        )),
-        Intrinsic::IntSub(left, right) => Ok(then_laws(
-            reduce_int_binary(
-                reducer,
-                left,
-                right,
-                |left, right| Some(Intrinsic::Int(left - right)),
-                Intrinsic::IntSub,
-            )?,
-            |l, r| int_ring_laws(l, r, intrinsic),
-        )),
-        Intrinsic::IntMul(left, right) => Ok(then_laws(
-            reduce_int_binary(
-                reducer,
-                left,
-                right,
-                |left, right| Some(Intrinsic::Int(left * right)),
-                Intrinsic::IntMul,
-            )?,
-            |l, r| int_ring_laws(l, r, intrinsic),
-        )),
+        // The signed comparisons read through the group's difference, as the `Nat` family reads through cancellation: `compare_int` moves what both sides share to one side by sign, and a pair whose residuals are two constants decides.
+        Intrinsic::IntEql(left, right) => reduce_int_compare(
+            reducer,
+            left,
+            right,
+            |c| match c {
+                Comparison::Eq => Some(true),
+                Comparison::Lt | Comparison::Gt => Some(false),
+                _ => None,
+            },
+            Intrinsic::IntEql,
+        ),
+        Intrinsic::IntNeq(left, right) => reduce_int_compare(
+            reducer,
+            left,
+            right,
+            |c| match c {
+                Comparison::Eq => Some(false),
+                Comparison::Lt | Comparison::Gt => Some(true),
+                _ => None,
+            },
+            Intrinsic::IntNeq,
+        ),
+        // Addition, subtraction and negation all land in the signed sum normal form (`int_sum`): constants fold, like monomials merge by coefficient, and a subtraction is the sum with the subtrahend's coefficients negated, so `i - i` is `0` and `(i + 1) - 1` is `i` for a symbolic `i`, as `Nat`'s form decides them for its own carrier.
+        Intrinsic::IntAdd(left, right) => {
+            let left = reducer.reduce_forced(left.clone())?;
+            let right = reducer.reduce_forced(right.clone())?;
+            if let (Some(l), Some(r)) = (left.as_int(), right.as_int()) {
+                reducer.spend(operand_bound(l.bits(), r.bits()))?;
+            }
+            Ok(Term::unwrap_or_clone(int_sum(&left, &right)))
+        }
+        Intrinsic::IntSub(left, right) => {
+            let left = reducer.reduce_forced(left.clone())?;
+            let right = reducer.reduce_forced(right.clone())?;
+            if let (Some(l), Some(r)) = (left.as_int(), right.as_int()) {
+                reducer.spend(operand_bound(l.bits(), r.bits()))?;
+            }
+            Ok(Term::unwrap_or_clone(int_sum(&left, &int_negate(&right))))
+        }
+        // Distributes past a constant or a single monomial and stays stuck between two symbolic sums, the line `NatMul` draws; `int_normalize` crosses it where a comparison asks.
+        Intrinsic::IntMul(left, right) => {
+            let left = reducer.reduce_forced(left.clone())?;
+            let right = reducer.reduce_forced(right.clone())?;
+            if let (Some(l), Some(r)) = (left.as_int(), right.as_int()) {
+                reducer.spend(operand_bound(l.bits(), r.bits()))?;
+            }
+            let (_, summands_left) = int_terms(&left);
+            let (_, summands_right) = int_terms(&right);
+            reducer.spend(Cost::collection(
+                (summands_left.len() as u64 + 1).saturating_mul(summands_right.len() as u64 + 1),
+            ))?;
+            Ok(Term::unwrap_or_clone(int_product(&left, &right)))
+        }
         Intrinsic::IntDiv {
             dividend,
             divisor,
@@ -378,18 +386,26 @@ pub fn reduce_intrinsic(
                 non_zero: non_zero.clone(),
             },
         ),
-        Intrinsic::IntLt(left, right) => reduce_int_binary(
+        Intrinsic::IntLt(left, right) => reduce_int_compare(
             reducer,
             left,
             right,
-            |left, right| Some(Intrinsic::Bool(left < right)),
+            |c| match c {
+                Comparison::Lt => Some(true),
+                Comparison::Eq | Comparison::Gt => Some(false),
+                _ => None,
+            },
             Intrinsic::IntLt,
         ),
-        Intrinsic::IntLe(left, right) => reduce_int_binary(
+        Intrinsic::IntLe(left, right) => reduce_int_compare(
             reducer,
             left,
             right,
-            |left, right| Some(Intrinsic::Bool(left <= right)),
+            |c| match c {
+                Comparison::Lt | Comparison::Eq => Some(true),
+                Comparison::Gt => Some(false),
+                _ => None,
+            },
             Intrinsic::IntLe,
         ),
         // Bitwise ops fold on the unbounded ℤ the type level pretends: `and`, `or`, `xor` on the infinite two's-complement expansion, `shl` as `· 2^n` and `shr` as the arithmetic `⌊·/2^n⌋`. The runtime's signed 31-bit carrier (truncating `shl`, `shr_s`) is imposed only in the backend, never here.

@@ -3,7 +3,7 @@
 //! `Nat` is the one whose gate is a *shape* rather than a carrier, because it is the one commutative member: its values are also spelled as `NatAdd` spines, which no `Intrinsic::Nat` arm can match. See [`peel_nat_terms`].
 
 use {
-    super::{Intrinsic, Nat, Subterm, Term},
+    super::{Intrinsic, Nat, Subterm, Term, int_cancel_common, int_shaped},
     curios_utilities::{Grain, PackedBin},
     std::collections::VecDeque,
 };
@@ -28,11 +28,28 @@ pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
         (Intrinsic::Int(actual), Intrinsic::Int(target)) => Some(decide(actual == target)),
         // `Nat` is the free commutative monoid on its summands, `Bin`/`List` the free monoids on their bytes/elements (each returns `None` for the other's shapes), and `&&`/`||` the semilattices on their leaves.
         _ => peel_nat_pair(left, right)
+            .or_else(|| peel_int_pair(left, right))
             .or_else(|| peel_bin(left, right))
             .or_else(|| peel_list(left, right))
             .or_else(|| peel_bool(left, right))
             .or_else(|| peel_symmetric(left, right)),
     }
+}
+
+/// The `Int` peel: ℤ under `+` is a group, so two reduced sums are one value exactly when their difference is zero, and [`int_cancel_common`] moves that difference to the two sides by sign. Two constant residuals decide `Equal` or `Clash`; a pair the cancellation changed carries on as `Continue` over its residuals, so `i + a ~ i + b` becomes `a ~ b` for the caller; and a pair it left untouched is `Stuck`, the stability [`classify_nat`] rests on for the same reason. `None` when neither side is a literal, a sum spine or a product, so the caller keeps its own handling.
+pub fn peel_int_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
+    let this = Term::intrinsic(left.clone());
+    let that = Term::intrinsic(right.clone());
+    (int_shaped(&this) || int_shaped(&that)).then(|| {
+        let (residual_left, residual_right) = int_cancel_common(&this, &that);
+        match (residual_left.as_int(), residual_right.as_int()) {
+            (Some(a), Some(b)) => decide(a == b),
+            _ => match residual_left != this || residual_right != that {
+                true => Peel::Continue(residual_left, residual_right),
+                false => Peel::Stuck,
+            },
+        }
+    })
 }
 
 /// A symmetric comparison — `==`, `!=`, and the `xor` that `!=` on `Bool` lowers through — denotes one value with its operands in either order, so two of one operation are `Equal` when their operand pairs are one pair swapped, and `Stuck` otherwise, never `Clash`. `None` for any other pair.

@@ -8,8 +8,9 @@ use {
     super::{History, compare, ground},
     crate::{Kernel, KernelError},
     curios_core::{
-        Intrinsic, Nat, Operand, Peel, Subterm, Term, Var, Visit, normalize_bool, peel_bin,
-        peel_bool, peel_list, peel_nat_pair, peel_symmetric,
+        Intrinsic, Nat, Operand, Peel, Subterm, Term, Var, Visit, int_has_stuck_product,
+        int_normalize, normalize_bool, peel_bin, peel_bool, peel_int_pair, peel_list,
+        peel_nat_pair, peel_symmetric,
     },
 };
 
@@ -26,14 +27,23 @@ pub(super) fn convert_intrinsic(
         Subterm::Intrinsic(intrinsic) => Some(intrinsic.clone()),
         _ => None,
     };
-    let stuck = |intrinsic: &Intrinsic| Nat::has_stuck_product(&Term::intrinsic(intrinsic.clone()));
+    // `Int` draws the same line at its own product, so the same demand serves both carriers: each normalizer leaves the other carrier's terms untouched.
+    let stuck = |intrinsic: &Intrinsic| {
+        let term = Term::intrinsic(intrinsic.clone());
+        Nat::has_stuck_product(&term) || int_has_stuck_product(&term)
+    };
     // A literal on either side is the peel's: sums and differences are merged and cancelled by the fold, so a side with a symbolic summand — and a stuck product is one — is never a literal, and distributing it would build the polynomial to answer what the first summand settles.
-    let literal = |intrinsic: &Intrinsic| matches!(intrinsic, Intrinsic::Nat(value) if value.to_natural().is_some());
+    let literal = |intrinsic: &Intrinsic| {
+        matches!(intrinsic, Intrinsic::Nat(value) if value.to_natural().is_some())
+            || matches!(intrinsic, Intrinsic::Int(_))
+    };
     let (this, that) = match !(literal(this) || literal(that)) && (stuck(this) || stuck(that)) {
         false => (this.clone(), that.clone()),
         true => {
             let this = Nat::normalize(kernel, Term::intrinsic(this.clone()))?;
             let that = Nat::normalize(kernel, Term::intrinsic(that.clone()))?;
+            let this = int_normalize(kernel, this)?;
+            let that = int_normalize(kernel, that)?;
             match (as_intrinsic(&this), as_intrinsic(&that)) {
                 (Some(this), Some(that)) => (this, that),
                 _ => return ground(kernel, history, &this, &that),
@@ -56,6 +66,7 @@ pub(super) fn convert_intrinsic(
     let (this, that) = (&this, &that);
     // `Nat`, `Bin`, and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off, and `&&`/`||` are semilattices, so two of one are equal when they hold one set of leaves. This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Stuck` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
     if let Some(peel) = peel_nat_pair(this, that)
+        .or_else(|| peel_int_pair(this, that))
         .or_else(|| peel_bin(this, that))
         .or_else(|| peel_list(this, that))
         .or_else(|| peel_bool(this, that))

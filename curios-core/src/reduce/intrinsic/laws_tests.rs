@@ -1,7 +1,10 @@
 //! Every peel verdict and open fold law, checked at every closed instantiation.
 
 use {
-    crate::{Free, Intrinsic, Nat, Peel, Subterm, Term, peel_bin, peel_list, peel_nat_terms},
+    crate::{
+        Free, Intrinsic, Nat, Peel, Subterm, Term, peel_bin, peel_int_pair, peel_list,
+        peel_nat_terms,
+    },
     curios_num::Integer,
     curios_utilities::Grain,
 };
@@ -320,6 +323,124 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
     );
 }
 
+// The `Int` peel's verdicts over values — the signed twin of the `Nat` grid, over a group rather than a cancellative monoid: a subtraction is a negative coefficient, so the difference of two sides cancels in full and a pair whose residuals are two constants decides. The obligations are the `Nat` grid's three, held at instantiations that include a negative, since a rule sound on ℕ and wrong below zero is the defect a signed carrier can have and its unsigned twin cannot.
+#[test]
+fn every_int_peel_verdict_holds_at_every_closed_instantiation() {
+    let (first, second, third) = (
+        Free::local(0, Some("i")),
+        Free::local(1, Some("j")),
+        Free::local(2, Some("k")),
+    );
+    let (i, j, k) = (
+        Term::free_var(&first),
+        Term::free_var(&second),
+        Term::free_var(&third),
+    );
+    let integer = |value: i32| Term::intrinsic(Intrinsic::Int(Integer::from(value)));
+    let add = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntAdd(left, right));
+    let sub = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntSub(left, right));
+    let mul = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntMul(left, right));
+
+    let value_at = |term: &Term, a: i32, b: i32, c: i32| {
+        let closed = at(term.clone(), &first, integer(a));
+        let closed = at(closed, &second, integer(b));
+        let closed = fold(at(closed, &third, integer(c)));
+        closed.as_int().expect("a closed Int folds to a literal")
+    };
+
+    let cases = [
+        (
+            "i + j ~ j + i",
+            fold(add(i.clone(), j.clone())),
+            fold(add(j.clone(), i.clone())),
+        ),
+        (
+            "i + 2 ~ i + 1",
+            fold(add(i.clone(), integer(2))),
+            fold(add(i.clone(), integer(1))),
+        ),
+        (
+            "i + 1 ~ j + 1",
+            fold(add(i.clone(), integer(1))),
+            fold(add(j.clone(), integer(1))),
+        ),
+        ("i - i ~ 0", fold(sub(i.clone(), i.clone())), integer(0)),
+        (
+            "(i + j) - j ~ i",
+            fold(sub(add(i.clone(), j.clone()), j.clone())),
+            i.clone(),
+        ),
+        (
+            "i + i ~ 2 * i",
+            fold(add(i.clone(), i.clone())),
+            fold(mul(integer(2), i.clone())),
+        ),
+        (
+            "i * j ~ j * i",
+            fold(mul(i.clone(), j.clone())),
+            fold(mul(j.clone(), i.clone())),
+        ),
+        // Nothing shared and one constant: the pair comes back untouched, and declining is the only answer that terminates.
+        ("i + 1 ~ k", fold(add(i.clone(), integer(1))), k.clone()),
+    ];
+
+    let (mut equal, mut clash, mut carried, mut stuck) = (0, 0, 0, 0);
+
+    for (label, left, right) in cases {
+        let peel = peel_int_pair(&as_intrinsic_int(&left), &as_intrinsic_int(&right))
+            .expect("an `Int`-shaped pair");
+
+        match &peel {
+            Peel::Equal => equal += 1,
+            Peel::Clash => clash += 1,
+            Peel::Continue(..) => carried += 1,
+            Peel::Stuck => stuck += 1,
+        }
+
+        for a in [-3i32, 0, 1, 5] {
+            for b in [-3i32, 0, 1, 5] {
+                for c in [-3i32, 0, 5] {
+                    let agree = value_at(&left, a, b, c) == value_at(&right, a, b, c);
+
+                    match &peel {
+                        Peel::Equal => assert!(
+                            agree,
+                            "`{label}` was decided equal but differs at i = {a}, j = {b}, k = {c}"
+                        ),
+                        Peel::Clash => assert!(
+                            !agree,
+                            "`{label}` was decided impossible but holds at i = {a}, j = {b}, k = {c}"
+                        ),
+                        Peel::Continue(residual_left, residual_right) => assert_eq!(
+                            value_at(residual_left, a, b, c) == value_at(residual_right, a, b, c),
+                            agree,
+                            "`{label}`'s residuals disagree with the pair they replaced at i = {a}, j = {b}, k = {c}",
+                        ),
+                        Peel::Stuck => {}
+                    }
+                }
+            }
+        }
+    }
+
+    assert_eq!(
+        (equal, clash, carried, stuck),
+        (5, 1, 1, 1),
+        "the grid stopped reaching every peel verdict",
+    );
+}
+
+/// A term as the intrinsic it is, or a bare variable as the intrinsic `0 + v` the peel's gate admits — the grid's `k` is a variable, and a variable against a sum is exactly the pair the gate is for.
+fn as_intrinsic_int(term: &Term) -> Intrinsic {
+    match &**term {
+        Subterm::Intrinsic(intrinsic) => intrinsic.clone(),
+        _ => Intrinsic::IntAdd(
+            term.clone(),
+            Term::intrinsic(Intrinsic::Int(Integer::from(0))),
+        ),
+    }
+}
+
 // The `List` half of the grid above, separate because the two carriers differ exactly where a copied rule would be wrong: `List` literals hold *terms*, so two leading runs whose heads differ syntactically are NOT a clash — the elements may still be convertible — while a leftover run against the exhausted identity is still a definite length clash whatever its elements are. The first shape pins that difference over values: `[a + b]` and `[b + a]` denote one list at every instantiation, so the `Bin` byte-disagreement rule applied here would be a false impossibility, which is the vacuous-elimination route to `False`. Mutation-checked: clashing two differing literal heads the way `peel_bin` does fails that shape at its first instantiation. The other shapes and the tally mirror the `Bin` grid's obligations: append-as-concatenation with a symbolic element, window fusion over the element carrier, a genuine length clash, and residual equi-satisfiability.
 #[test]
 fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
@@ -501,6 +622,11 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
     let int_i = Free::local(11, Some("i"));
     let nat_z = Free::local(12, Some("z"));
     let list_tail = Free::local(13, Some("ys"));
+    let int_j = Free::local(14, Some("j"));
+    let j = Term::free_var(&int_j);
+    let int_add = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntAdd(left, right));
+    let int_sub = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntSub(left, right));
+    let int_mul = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntMul(left, right));
     let x = Term::free_var(&nat_x);
     let z = Term::free_var(&nat_z);
     let p = Term::free_var(&bool_p);
@@ -1176,6 +1302,49 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
                     (&nat_end, lit(3)),
                 ],
             ],
+        ),
+        // The signed sum normal form: a subtraction is a negative coefficient, so a difference cancels in full, a constant folds to one trailing literal, and a single monomial distributes over a sum.
+        (
+            "i - i = 0",
+            int_sub(i.clone(), i.clone()),
+            integer(0),
+            ints(),
+        ),
+        (
+            "(i + 1) - 1 = i",
+            int_sub(int_add(i.clone(), integer(1)), integer(1)),
+            i.clone(),
+            ints(),
+        ),
+        (
+            "(i + j) - j = i",
+            int_sub(int_add(i.clone(), j.clone()), j.clone()),
+            i.clone(),
+            vec![
+                vec![(&int_i, integer(-3)), (&int_j, integer(5))],
+                vec![(&int_i, integer(0)), (&int_j, integer(-1))],
+            ],
+        ),
+        (
+            "i - (i + 1) = -1",
+            int_sub(i.clone(), int_add(i.clone(), integer(1))),
+            integer(-1),
+            ints(),
+        ),
+        (
+            "i * (j + 1) = i * j + i",
+            int_mul(i.clone(), int_add(j.clone(), integer(1))),
+            int_add(int_mul(i.clone(), j.clone()), i.clone()),
+            vec![
+                vec![(&int_i, integer(-3)), (&int_j, integer(5))],
+                vec![(&int_i, integer(2)), (&int_j, integer(-7))],
+            ],
+        ),
+        (
+            "0 - i = -1 * i",
+            int_sub(integer(0), i.clone()),
+            int_mul(integer(-1), i.clone()),
+            ints(),
         ),
         // The sum normal form as a linear combination: like terms merge by coefficient, and a literal distributes over a symbolic sum.
         (

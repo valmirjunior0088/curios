@@ -20,6 +20,9 @@ pub use module::*;
 mod nat;
 pub use nat::*;
 
+mod int;
+pub use int::*;
+
 mod universe;
 pub use universe::*;
 

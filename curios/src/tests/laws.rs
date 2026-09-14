@@ -151,7 +151,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Int",
-        binders: "i: Int, j: Int",
+        binders: "i: Int, j: Int, k: Int",
         held: &[
             "Eq(i + 0, i)",
             "Eq(0 + i, i)",
@@ -165,9 +165,26 @@ const CARRIERS: &[Carrier] = &[
             "Eq(i != i, false)",
             "Eq(i == j, j == i)",
             "Eq(i != j, j != i)",
+            // The signed sum normal form: a group, so a subtraction is a negative coefficient and every difference cancels in full.
+            "Eq(i + j, j + i)",
+            "Eq((i + j) + k, i + (j + k))",
+            "Eq((i + j) - j, i)",
+            "Eq((i + 1) - 1, i)",
+            "Eq(i - (i + 1), -1)",
+            "Eq((i - j) + j, i)",
+            "Eq(i + i, 2 * i)",
+            "Eq(0 - i, -1 * i)",
+            // Monomials: one factor order, and distribution past a single monomial in the fold, past two symbolic sums on demand.
+            "Eq(i * j, j * i)",
+            "Eq(i * (j + k), i * j + i * k)",
+            "Eq((i + 1) * (j + 1), i * j + i + j + 1)",
+            // Comparisons read through the difference.
+            "Eq(i < i + 1, true)",
+            "Eq(i + 1 <= i, false)",
+            "Eq(i == i + 1, false)",
+            "Eq(i + j < i + k, j < k)",
         ],
-        // Commutativity needs the summand normal form `Nat` has and `Int` does not.
-        refused: &["Eq(i + j, j + i)"],
+        refused: &[],
     },
     Carrier {
         name: "Bool",

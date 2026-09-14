@@ -2,10 +2,7 @@
 //!
 //! A total fold answers from values alone; these answer from *form* — an idempotent lattice operation on one operand, a ring identity, a self-comparison — so a term with a symbol in it still decides. Each is applied by [`then_laws`] only after the value fold declined, which is what keeps a law from ever contradicting arithmetic.
 
-use {
-    crate::{Intrinsic, Nat, Subterm, Term},
-    curios_num::Integer,
-};
+use crate::{Intrinsic, Nat, Subterm, Term};
 
 /// A binary fold's laws beside its two-literal case, tried on what that case left neutral: a literal unit on one side yields the other operand, a literal absorbing element yields itself, and two structurally identical operands yield what idempotence or self-cancellation says. Every one is an equation on the carrier's values that holds for every value of its symbolic side, which is what makes it admissible in a fold both checkers share — see `documentation/soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md`. Run after the fold rather than inside it because every binary helper already rebuilds its neutral from the operands it reduced, so the laws read them back off the neutral and the helpers keep one signature; a fold that produced a literal has no operands to read and passes through. `reduce_bool_binary` leaves its right operand as written under a stuck left — deliberately, see `a_stuck_left_operand_leaves_the_right_as_written` — so a `Bool` law sees that operand unreduced; a literal or a repeated binder is visible either way, and a law missed on an unreduced operand is a neutral the next demand reduces, never a wrong answer.
 pub(super) fn then_laws(
@@ -130,39 +127,4 @@ pub(super) fn nat_shift_laws(left: &Term, right: &Term) -> Option<Term> {
         return Some(left.clone());
     }
     None
-}
-
-/// The ring laws `Int` has literally: `0` is `+`'s unit and `-`'s right unit, `1` is `*`'s unit and `0` its absorber, and `i - i` is `0`. Commutativity is deliberately not here — it needs the summand normal form `Nat` has, which `Int` does not, and a law that fires on one operand order is not a law.
-pub(super) fn int_ring_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
-    let is = |term: &Term, value: i32| term.as_int() == Some(Integer::from(value));
-    let zero = || Term::intrinsic(Intrinsic::Int(Integer::from(0)));
-    match op {
-        Intrinsic::IntAdd(..) => {
-            if is(left, 0) {
-                return Some(right.clone());
-            }
-            is(right, 0).then(|| left.clone())
-        }
-        Intrinsic::IntSub(..) => {
-            if is(right, 0) {
-                return Some(left.clone());
-            }
-            (left == right).then(zero)
-        }
-        Intrinsic::IntMul(..) => {
-            if is(left, 0) || is(right, 0) {
-                return Some(zero());
-            }
-            if is(left, 1) {
-                return Some(right.clone());
-            }
-            is(right, 1).then(|| left.clone())
-        }
-        _ => None,
-    }
-}
-
-/// Identical operands decide `==` and `!=` on any carrier whose equality is the value's: two structurally identical reduced terms denote one value.
-pub(super) fn identity_laws(left: &Term, right: &Term, same: bool) -> Option<Term> {
-    (left == right).then(|| Term::intrinsic(Intrinsic::Bool(same)))
 }
