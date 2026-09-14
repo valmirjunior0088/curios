@@ -1130,7 +1130,12 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             } else {
                 format!("({})", marked.join(", "))
             };
-            flat([pure(param_str), pure(" =>\n"), indent(sub(body, minting))])
+            // The body sits on the arrow's line when it fits and indents on its own line when it does not; a body carrying a break of its own — a match — breaks the group and takes the line either way.
+            group(flat([
+                pure(param_str),
+                pure(" =>"),
+                indent(flat([line(), sub(body, minting)])),
+            ]))
         }
         Subterm::Apply(Apply { head, arguments }) => flat([
             sub(head, frame),

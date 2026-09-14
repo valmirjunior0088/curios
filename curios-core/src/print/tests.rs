@@ -102,3 +102,30 @@ fn a_labeled_tuple_type_keeps_its_labels_through_a_rebuild() {
     .into();
     assert_eq!(tuple.to_string(), "{fst: Nat, Bool}");
 }
+
+/// A lambda whose body fits stays on the arrow's line, so a diagnostic naming `x => x` does not split it in two.
+#[test]
+fn a_short_lambda_body_stays_on_the_arrows_line() {
+    let x = Free::local(0, Some("x"));
+    let identity = Term::func(
+        [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+        Term::free_var(&x),
+    );
+    assert_eq!(identity.to_string(), "x => x");
+}
+
+/// A body that carries a break of its own — a `match` — still takes the line after the arrow and indents, as it did before the group.
+#[test]
+fn a_lambda_body_with_a_match_breaks_after_the_arrow() {
+    let b = Free::local(0, Some("b"));
+    let body = Term::bool_match(
+        Term::free_var(&b),
+        None,
+        Term::intrinsic(Intrinsic::NatType),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+    );
+    let lambda = Term::func([(b.clone(), Term::intrinsic(Intrinsic::BoolType))], body);
+    let printed = lambda.to_string();
+    assert!(printed.starts_with("b =>\n"), "{printed}");
+}
