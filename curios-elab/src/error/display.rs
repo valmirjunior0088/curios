@@ -555,12 +555,17 @@ impl fmt::Display for Displayed<'_> {
                 under_refinements,
                 deferred_witnesses,
             } => {
-                let this = this.spelled(spelling);
-                let that = that.spelled(spelling);
-                write!(
-                    f,
-                    "cannot decide a postponed conversion\n  between: {this}\n      and: {that}"
-                )?;
+                let this = this.spelled(spelling).to_string();
+                let that = that.spelled(spelling).to_string();
+                // Two bare holes name nothing a reader can act on; the metavariables that never solved are then the whole message.
+                let both_bare = this == "?" && that == "?";
+                match both_bare && !watching.is_empty() {
+                    true => write!(f, "cannot decide a postponed conversion")?,
+                    false => write!(
+                        f,
+                        "cannot decide a postponed conversion\n  between: {this}\n      and: {that}"
+                    )?,
+                }
                 if !watching.is_empty() {
                     write!(f, "\n  never solved: {}", watching.join(", "))?;
                 }

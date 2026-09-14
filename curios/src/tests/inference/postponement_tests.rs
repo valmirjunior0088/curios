@@ -223,3 +223,20 @@ fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
         "the waiting goal should not be reported in place of its cause, got: {report}"
     );
 }
+
+// A conversion parked between two metavariables that never solve reports the metavariables and nothing else: `between: ?` and `and: ?` name nothing a reader can act on, so the report leads with the implicit that was never inferred, as the `List/len([])` report does.
+#[test]
+fn a_postponed_conversion_between_two_holes_names_only_what_never_solved() {
+    let report = error(
+        r#"
+        use /std/{Nat, Eq, Result};
+        pub let probe(f: (Nat) -> Nat, x: Nat) -> Eq(Result/map_success(Result/success(x), f), Result/success(f(x))) = Eq/refl();
+        /std/print("ok")
+        "#,
+    );
+    assert!(
+        !report.contains("between: ?")
+            && report.contains("never solved: the implicit argument 'E'"),
+        "unexpected report:\n{report}"
+    );
+}
