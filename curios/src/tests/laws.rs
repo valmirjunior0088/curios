@@ -195,7 +195,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "List, the free monoid",
-        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat",
+        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Nat/Le(s + l, List/len(xs)), first: Nat/Lt(0, l), at: Nat/Lt(s, List/len(xs))",
         held: &[
             "Eq([..xs, ..[]], xs)",
             "Eq([..[], ..xs], xs)",
@@ -223,10 +223,15 @@ const CARRIERS: &[Carrier] = &[
             // An index at a symbolic seam, where the operand beginning there carries exactly one element. The same walk that locates the window above, asked for a window of one.
             "Eq(List/get([..xs, a, ..ys], List/len(xs)), a)",
             "Eq(List/get([..xs, a], List/len(xs)), a)",
+            // A window's length is the count it was cut to, and a map moves inside a window with the same bound, since `len(map(xs, f))` is `len(xs)`. Both rest on `slice`'s own precondition, which the binder `ok` states.
+            "Eq(List/len(List/slice(@Nat, xs, s, l, @ok)), l)",
+            "Eq(List/map(List/slice(@Nat, xs, s, l, @ok), f), List/slice(@Nat, List/map(xs, f), s, l, @ok))",
         ],
         refused: &[
             // Function extensionality in disguise: not one to take.
             "Eq(List/map(xs, (v) => v), xs)",
+            // A position inside a window needs a bound on the base that no term in hand proves, and a reducer may not invent one — so these stay stuck, and are stated here so that taking them is a row moving.
+            "Eq(List/get(@Nat, List/slice(@Nat, xs, s, l, @ok), 0, @first), List/get(@Nat, xs, s, @at))",
         ],
     },
     Carrier {
@@ -255,15 +260,14 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bytes/get(x[..bs, k], Bytes/len(bs)), k)",
             // An append is the concatenation the peel's own law says it is, so a window at its seam locates like any other.
             "Eq(Bytes/slice(x[..bs, k], 0, Bytes/len(bs)), bs)",
-        ],
-        refused: &[
-            // A window's length is the count it was cut to. True at every well-typed instance — `slice` takes `s + l <= len(b)` and the node carries the proof — so this is a candidate rather than a bug, and stating it here is what would make taking it a row moving. Not taken: `free_monoid`'s measure reads literal runs and their concatenations and declines everything else, and admitting a window would be a new definitional equation bought for no caller, since an accumulation's spine is literals. It does not open the way to conversion's own decomposition either, which measures a window already but materializes its generators to compare them, where this one counts them without reading any.
+            // A window's length is the count it was cut to: `slice` takes `s + l <= len(b)`, so the count is the measure at every well-typed instance. Taken where the homomorphism reads the window rather than in `free_monoid`'s measure, which still counts only literal runs.
             "Eq(Bytes/len(Bytes/slice(bs, s, l, @ok)), l)",
         ],
+        refused: &[],
     },
     Carrier {
         name: "Bits, the free monoid",
-        binders: "ts: Bits, us: Bits, ws: Bits, v: Bool",
+        binders: "ts: Bits, us: Bits, ws: Bits, v: Bool, s: Nat, l: Nat, ok: Nat/Le(s + l, Bits/len(ts))",
         held: &[
             // The byte grain's laws, stated again here: one grain's fold arm is not evidence for the other's, and a law held at one grain and unstated at the other is a copy with nothing checking it. The explanations are the byte group's, above.
             "Eq(b[..ts, ..b[]], ts)",
@@ -286,6 +290,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bits/get(b[..ts, v, ..us], Bits/len(ts)), v)",
             "Eq(Bits/get(b[..ts, v], Bits/len(ts)), v)",
             "Eq(Bits/slice(b[..ts, v], 0, Bits/len(ts)), ts)",
+            "Eq(Bits/len(Bits/slice(ts, s, l, @ok)), l)",
         ],
         refused: &[],
     },

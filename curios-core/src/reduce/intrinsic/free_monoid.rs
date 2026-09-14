@@ -10,11 +10,19 @@ use {
     curios_utilities::{Grain, PackedBin},
 };
 
-/// The free-monoid product structure of a reduced carrier value, the view a monoid homomorphism (`len`/`map`) distributes over: a literal run of generators `L` (bytes for `Bin`, elements for `List`), an n-ary `Concat` of operands to recurse on, an `Append` of a base and one appended generator, or an `Opaque` node (a variable / slice) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
+/// The free-monoid product structure of a reduced carrier value, the view a monoid homomorphism (`len`/`map`) distributes over: a literal run of generators `L` (bytes for `Bin`, elements for `List`), an n-ary `Concat` of operands to recurse on, an `Append` of a base and one appended generator, a `Window` cut from a base with the bound that placed it, or an `Opaque` node (a variable) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
+///
+/// **A window is a shape, not an opaque node, because its length is known without its contents.** `slice` states `start + length <= len(base)` as its precondition, so a window's own `length` operand is its measure at every well-typed instance, and a homomorphism that reads only the count (`len`) or passes through elementwise (`map`) has a law over it — `len(slice(b, s, n)) = n` and `map(f, slice(b, s, n)) = slice(map(f, b), s, n)` — that filing the slice as opaque left stuck even at literal bounds. What a window does *not* give a reader is a bound on its base for a position inside it, which is why `get` and `slice` through a window are not laws here: the outer bound is a proposition no term in hand proves, and a reducer may not invent one.
 pub(super) enum Shape<L> {
     Literal(Vec<L>),
     Concat(Vec<Term>),
     Append(Term, Term),
+    Window {
+        base: Term,
+        start: Term,
+        length: Term,
+        within: Term,
+    },
     Opaque(Term),
 }
 
@@ -46,6 +54,18 @@ pub(super) fn bin_shape(
             bin: base,
             element: atom,
         }) if found == grain => Shape::Append(base, atom),
+        Subterm::Intrinsic(Intrinsic::BinSlice {
+            grain: found,
+            bin: base,
+            start,
+            length,
+            within,
+        }) if found == grain => Shape::Window {
+            base,
+            start,
+            length,
+            within,
+        },
         other => Shape::Opaque(other.into()),
     })
 }
@@ -68,23 +88,36 @@ pub(super) fn list_shape(value: Term) -> Shape<Term> {
             list: base,
             item: elem,
         }) => Shape::Append(base, elem),
+        Subterm::Intrinsic(Intrinsic::ListSlice {
+            element: _,
+            list: base,
+            start,
+            length,
+            within,
+        }) => Shape::Window {
+            base,
+            start,
+            length,
+            within,
+        },
         other => Shape::Opaque(other.into()),
     }
 }
 
-/// The shared driver for a free-monoid homomorphism `h` — the one place its distribution law lives, so a carrier physically cannot forget a case. A literal run maps via `literal`; a concatenation recurses `h` over its operands and folds the images with `combine`; an append combines `h(base)` with the appended generator via `append`; an opaque value stays neutral, rebuilt by `node` (which also builds `h(sub)` to recurse). `len` and `map` differ only in those four slots. The built image is reduced, so the homomorphism is eager.
+/// The shared driver for a free-monoid homomorphism `h` — the one place its distribution law lives, so a carrier physically cannot forget a case. A literal run maps via `literal`; a concatenation recurses `h` over its operands and folds the images with `combine`; an append combines `h(base)` with the appended generator via `append`; a window is answered by `window` from its base, bounds and proof, which is where `len` reads the count alone and `map` moves inside; an opaque value stays neutral, rebuilt by `node` (which also builds `h(sub)` to recurse). `len` and `map` differ only in those five slots. The built image is reduced, so the homomorphism is eager.
 pub(super) fn reduce_homomorphism<L>(
     reducer: &mut impl Reducer,
     shape: Shape<L>,
     literal: impl Fn(Vec<L>) -> Term,
     combine: impl Fn(Vec<Term>) -> Term,
     append: impl Fn(Term, Term) -> Term,
+    window: impl Fn(Term, Term, Term, Term) -> Term,
     node: impl Fn(Term) -> Term,
 ) -> Result<Subterm, ReduceError> {
     let built = match shape {
         Shape::Literal(run) => literal(run),
         Shape::Concat(operands) => {
-            // One rebuilt image node per operand, collected into one vector — the homomorphism's whole allocation, and the only arm of the four that scales with anything.
+            // One rebuilt image node per operand, collected into one vector — the homomorphism's whole allocation, and the only arm of the five that scales with anything.
             reducer.spend(
                 Cost::collection(operands.len() as u64)
                     .saturating_add(Cost::term(1).saturating_mul(operands.len() as u64)),
@@ -93,6 +126,12 @@ pub(super) fn reduce_homomorphism<L>(
             combine(operands.into_iter().map(node).collect())
         }
         Shape::Append(base, generator) => append(node(base), generator),
+        Shape::Window {
+            base,
+            start,
+            length,
+            within,
+        } => window(base, start, length, within),
         Shape::Opaque(value) => return Ok(Term::unwrap_or_clone(node(value))),
     };
 

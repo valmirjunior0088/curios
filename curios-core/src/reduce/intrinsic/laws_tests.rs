@@ -556,6 +556,15 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         Term::intrinsic(Intrinsic::list_append(elem.clone(), base, element))
     };
     let list_len = |base: Term| Term::intrinsic(Intrinsic::list_len(elem.clone(), base));
+    let list_slice = |base: Term, start: Term, count: Term| {
+        Term::intrinsic(Intrinsic::list_slice(
+            elem.clone(),
+            base,
+            start,
+            count,
+            qed(),
+        ))
+    };
     let list_map = |base: Term| {
         Term::intrinsic(Intrinsic::list_map(
             elem.clone(),
@@ -1026,6 +1035,63 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             vec![
                 vec![(&list_base, nat_list(&[]))],
                 vec![(&list_base, nat_list(&[1, 2, 3]))],
+            ],
+        ),
+        // A window's length is the count it was cut to, and a map moves inside a window. Both rest on `slice`'s own precondition, which is the domain the instantiations below keep to, and both were stuck at literal bounds while a slice was filed as opaque.
+        (
+            "len(slice(b, s, e)) = e",
+            bin_len(bin_slice(b.clone(), s.clone(), e.clone())),
+            e.clone(),
+            vec![
+                vec![
+                    (&bin_base, run_bytes(&[9, 8, 7])),
+                    (&nat_start, lit(1)),
+                    (&nat_end, lit(2)),
+                ],
+                vec![
+                    (&bin_base, run_bytes(&[9, 8, 7])),
+                    (&nat_start, lit(0)),
+                    (&nat_end, lit(0)),
+                ],
+                vec![
+                    (&bin_base, run_bytes(&[9, 8, 7])),
+                    (&nat_start, lit(0)),
+                    (&nat_end, lit(3)),
+                ],
+            ],
+        ),
+        (
+            "len(slice(xs, s, e)) = e",
+            list_len(list_slice(xs.clone(), s.clone(), e.clone())),
+            e.clone(),
+            vec![
+                vec![
+                    (&list_base, nat_list(&[1, 2, 3])),
+                    (&nat_start, lit(1)),
+                    (&nat_end, lit(2)),
+                ],
+                vec![
+                    (&list_base, nat_list(&[1, 2, 3])),
+                    (&nat_start, lit(3)),
+                    (&nat_end, lit(0)),
+                ],
+            ],
+        ),
+        (
+            "map(slice(xs, s, e), f) = slice(map(xs, f), s, e)",
+            list_map(list_slice(xs.clone(), s.clone(), e.clone())),
+            list_slice(list_map(xs.clone()), s.clone(), e.clone()),
+            vec![
+                vec![
+                    (&list_base, nat_list(&[1, 2, 3])),
+                    (&nat_start, lit(1)),
+                    (&nat_end, lit(2)),
+                ],
+                vec![
+                    (&list_base, nat_list(&[1, 2, 3])),
+                    (&nat_start, lit(0)),
+                    (&nat_end, lit(3)),
+                ],
             ],
         ),
         // The sum normal form as a linear combination: like terms merge by coefficient, and a literal distributes over a symbolic sum.

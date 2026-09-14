@@ -632,6 +632,8 @@ pub fn reduce_intrinsic(
                         base_len,
                     ))
                 },
+                // A window's length is the count it was cut to: `slice` carries `start + length <= len(base)`, so the count is the measure at every well-typed instance.
+                |_, _, length, _| length,
                 |sub| Term::intrinsic(Intrinsic::bin_len(grain, sub)),
             )
         }
@@ -991,6 +993,8 @@ pub fn reduce_intrinsic(
                         base_len,
                     ))
                 },
+                // The `List` twin of `BinLen`'s window law: the count a window was cut to is its length.
+                |_, _, length, _| length,
                 |sub| Term::intrinsic(Intrinsic::list_len(type_.clone(), sub)),
             )
         }
@@ -1304,6 +1308,16 @@ pub fn reduce_intrinsic(
                         b.clone(),
                         base_map,
                         Term::apply(f.clone(), [generator]),
+                    ))
+                },
+                // `map(f, slice(xs, s, n)) = slice(map(f, xs), s, n)`: a map is elementwise, so the window moves inside it unchanged, and so does its bound — `len(map(f, xs))` reduces to `len(xs)`, so the proof that placed the window on `xs` places it on the image, and nothing here derives one.
+                |base, start, length, within| {
+                    Term::intrinsic(Intrinsic::list_slice(
+                        b.clone(),
+                        Term::intrinsic(Intrinsic::list_map(a.clone(), b.clone(), base, f.clone())),
+                        start,
+                        length,
+                        within,
                     ))
                 },
                 |sub| Term::intrinsic(Intrinsic::list_map(a.clone(), b.clone(), sub, f.clone())),
