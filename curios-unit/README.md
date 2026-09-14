@@ -16,6 +16,14 @@ The compilation unit: what one unit hands its successors — one opaque artifact
 
 **Rationale.** Merging would copy the standard library into every compilation, the cost retiring the splice removed. Widening the stages' internals to `pub` so a struct here could hold them directly would export a resolver's internals for no consumer; each stage builds its own view instead.
 
+### The stored-unit format lives below the store
+
+**Decision.** What a stored unit *is* — the `Record` of what it was compiled from, the framing that puts that record ahead of the archived unit in one file, and the reading of the two back apart — is this crate's. What verifies a record, and where a slot is addressed, stay in `curios-verdicts` and `curios-package`.
+
+**Rationale.** Two producers write the format and neither may depend on the other: the store files a unit from above the pipeline, and `curios-prelude-archive`'s build script images the fixed prelude from below every store. Stating the format once below both is what lets the prelude image carry the same record a slot does, so a question about a standard-library module can take the archived unit as a baseline exactly as it takes a stored one, and lets `curios document` read a unit off either.
+
+**Rejected.** A crate of its own for the format: one struct and two functions do not carry a crate. The archive crate depending on `curios-verdicts`: that pulls `curios-package` and the pipeline under the build script that constructs the prelude, which is the regression the "below the kernel" decision exists to prevent, arriving through another door.
+
 ### The erased arena is the prefix's, not the unit's
 
 **Decision.** The arena a `Unit` carries is cumulative from the first unit forward — each unit's erasure resumes over the previous one's — and never an independent arena numbered from zero.

@@ -10,9 +10,10 @@
 mod tests;
 
 use {
-    crate::{Placed, Verdicts, chained, digested, read_within, replace, segments},
+    crate::{Placed, Verdicts, chained, replace, unchanged},
     curios_package::payload_slot,
     curios_text::{RootSource, UnitSource},
+    curios_unit::{digested, read_within, segments},
     curios_utilities::digest,
     std::{fs, io, path::Path},
 };
@@ -149,7 +150,8 @@ fn agrees(program: &Program<'_>, record: &Record, placed: &[Placed], bytes: &[u8
     record.payload == digest(bytes)
         && chained(&record.predecessors, placed)
         && record.entry == (canonical(program.entry), digest(program.text.as_bytes()))
-        && read_within(&program.loader.directories(), &record.reads, None)
+        && read_within(&program.loader.directories(), &record.reads)
+        && unchanged(&record.reads, None)
 }
 
 /// A path as a record spells it: canonical, so the same file reached through a relative invocation and an absolute one is one entry.

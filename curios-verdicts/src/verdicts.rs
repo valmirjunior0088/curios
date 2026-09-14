@@ -3,38 +3,25 @@
 //! **A slot is addressed, and a hit is verified.** The address (`unit_slot`) names a place — these mounts, this compiler, this predecessor chain — and holds no file contents at all, so a project has as many slots as it has units rather than one per compile. What the unit was compiled *from* rides in a [`Record`] ahead of it in the slot's one file and is checked when the slot is opened: every file the compilation read, by the text it read, plus what each predecessor contained, plus what the slot itself holds — so a record vouches for the bytes it was written with and for no others.
 //!
 //! That split is deliberate, and the previous scheme is why. It hashed the unit's whole source directory into the address — a directory that, for a package's own library, *contains this store*. Filing a unit therefore changed the address it would next be looked for under, so a package's own code never hit and `verdicts/` grew a directory per compile. The lesson is not "exclude the store from the walk": a key derived from a belief about what the inputs are goes wrong silently the day the belief does, and it goes wrong in the direction that hands back a stale unit. Here the inputs are not believed but recorded, at the one seam every module read passes through (`RootSource::reads`), so a compilation that reads something new records it without anything here being taught to expect it.
+//!
+//! What a record holds and how it is framed ahead of the unit are `curios-unit`'s, since the prelude image is written the same way by a build script below every store; what a record is *verified against* is here.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::{replace, segments},
+    crate::replace,
     curios_package::{Store, compiler, unit_slot},
     curios_pipeline::Cache,
     curios_text::{Overlay, UnitSource},
-    curios_unit::Unit,
-    curios_utilities::{Source, digest},
+    curios_unit::{Record, Unit, read_within, segments},
+    curios_utilities::digest,
     std::{
         cell::{OnceCell, RefCell},
         fs, io,
         path::{Path, PathBuf},
-        rc::Rc,
     },
 };
-
-/// What a stored unit must still be true of to be believed.
-///
-/// Every field is a fact the compilation depended on and the address deliberately does not carry. Verification is all of them or nothing: a record that cannot be read, or that disagrees anywhere, is a miss.
-// `always`: a product that reads and writes archives unconditionally has no `archive` feature for a `cfg_attr` to gate on.
-#[curios_archive::archived(always)]
-struct Record {
-    /// Each file the compilation read, by canonical path, with the digest of the text that was parsed from it. Sorted, because `RootSource::reads` collects its vector out of a `BTreeMap`.
-    reads: Vec<(String, String)>,
-    /// What each predecessor contained, in fold order — the digest of the bytes its own slot holds. Ordered for the same reason the address orders their slots: two orders of one set are two lowerings.
-    predecessors: Vec<String>,
-    /// The stored unit's own digest, so a damaged unit that still deserializes is a miss rather than a belief, as the payload family's own digest makes a damaged artifact. Bytecheck confirms a unit's structure and nothing about its contents: a flipped byte inside a string reads back as a different string. It no longer stands between two compilers filing one slot at once — a slot is one file renamed into place, so no write can leave a record beside a unit it was not made from.
-    unit: String,
-}
 
 /// One unit's place in the chain a compilation builds.
 ///
@@ -239,7 +226,7 @@ impl Cache for Verdicts {
 ///
 /// A file that has since vanished, changed, or become unreadable is a disagreement like any other. So is a shorter or longer read list, which is what catches a module added or removed — though that alone never has to catch it, since a module can only join a unit through a `mod` in a header that is itself on this list.
 ///
-/// **A recorded file must also be one `source` could itself have read**, and that clause is what keeps a *shared* store from admitting across projects. The address carries no file contents, so two projects that each hold a package of one name, compiled by one compiler after one chain, address the same slot; without this, the second opens the first's record, finds the first's files unchanged on disk because nothing touched them, and is handed a unit compiled from source it has never seen. Checking containment rather than re-deriving the read set keeps the check exact: a git dependency is materialized once under the shared store and read from that same path by every project, so genuine sharing survives.
+/// **A recorded file must also be one `source` could itself have read**, and that clause is what keeps a *shared* store from admitting across projects: `curios_unit::read_within` states why it is a containment check rather than a re-derivation of the read set.
 fn agrees(
     source: &UnitSource<'_>,
     record: &Record,
@@ -249,19 +236,20 @@ fn agrees(
 ) -> bool {
     record.unit == digest(bytes)
         && chained(&record.predecessors, placed)
-        && read_within(&source.directories(), &record.reads, overlay)
+        && read_within(&source.directories(), &record.reads)
+        && unchanged(&record.reads, overlay)
 }
 
 /// What `source` read after `placed`, as the record of it, ahead of a unit whose bytes digest to `contained`.
 fn recorded(source: &UnitSource<'_>, placed: &[Placed], contained: &str) -> Record {
-    Record {
-        reads: digested(source.reads()),
-        predecessors: placed
+    Record::of(
+        source.reads(),
+        placed
             .iter()
             .map(|placed| placed.contained.clone())
             .collect(),
-        unit: contained.to_string(),
-    }
+        contained.to_string(),
+    )
 }
 
 /// Whether `recorded` is what `placed` contains, position by position.
@@ -273,51 +261,16 @@ pub(crate) fn chained(recorded: &[String], placed: &[Placed]) -> bool {
             .all(|(recorded, placed)| recorded == &placed.contained)
 }
 
-/// Whether every file in `reads` lies under one of `directories` and still holds the text it was recorded as — the overlay's text for a file `overlay` holds, since that is what the compilation would read, and the disk's for every other.
+/// Whether every file in `reads` still holds the text it was recorded as — the overlay's text for a file `overlay` holds, since that is what the compilation would read, and the disk's for every other.
 ///
-/// The containment half is what keeps a shared store from admitting across projects; see [`agrees`] for why it is a containment check rather than a re-derivation of the read set.
-pub(crate) fn read_within(
-    directories: &[&Path],
-    reads: &[(String, String)],
-    overlay: Option<&Overlay>,
-) -> bool {
-    // Canonical on both sides, because a record's paths are canonical and a source's directories are however the manifest walk spelled them.
-    let within = directories
-        .iter()
-        .map(|directory| {
-            directory
-                .canonicalize()
-                .unwrap_or_else(|_| directory.to_path_buf())
-        })
-        .collect::<Vec<_>>();
+/// A file that has since vanished, changed, or become unreadable is a disagreement like any other.
+pub(crate) fn unchanged(reads: &[(String, String)], overlay: Option<&Overlay>) -> bool {
+    reads.iter().all(|(path, recorded)| {
+        let path = Path::new(path);
 
-    reads.iter().all(|read| {
-        within
-            .iter()
-            .any(|directory| holds(directory, read, overlay))
-    })
-}
-
-/// Whether `read`'s file lies under `directory` and still holds the text it was recorded as, read through `overlay` where there is one.
-fn holds(directory: &Path, (path, recorded): &(String, String), overlay: Option<&Overlay>) -> bool {
-    let path = Path::new(path);
-
-    path.starts_with(directory)
-        && match overlay.and_then(|overlay| overlay.get(path)) {
+        match overlay.and_then(|overlay| overlay.get(path)) {
             Some(text) => &digest(text.as_bytes()) == recorded,
             None => fs::read(path).is_ok_and(|bytes| &digest(&bytes) == recorded),
         }
-}
-
-/// A read log as it is recorded: each file by canonical path, with the digest of the text that was parsed from it.
-pub(crate) fn digested(reads: Vec<(PathBuf, Rc<Source>)>) -> Vec<(String, String)> {
-    reads
-        .into_iter()
-        .map(|(path, text)| {
-            (
-                path.to_string_lossy().into_owned(),
-                digest(text.text.as_bytes()),
-            )
-        })
-        .collect()
+    })
 }

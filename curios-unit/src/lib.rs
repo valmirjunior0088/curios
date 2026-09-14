@@ -2,6 +2,8 @@
 //!
 //! A compilation is a set of units folded over a dependency order. Each stage takes a *scope* — what earlier units established — and one unit, and a [`Unit`] is defined by what it hands the next one rather than by what it is. The standard library is a unit; a package is a unit; the program you asked for is the unit with no successors, which is what lets it own the empty prefix and carry the entrypoint.
 //!
+//! A unit's serialized form is a *stored unit*: a [`Record`] of what it was compiled from, framed ahead of the archived unit in one file. The store files one under a slot and the fixed prelude is imaged as one, and the format lives here because those two producers may not depend on each other — see `stored`.
+//!
 //! This crate sits below the kernel — the unit and the stages that do not judge live here, and judgment is interleaved by the driver above it — for the reason `README.md` states. The rule is checkable and is the same one `curios-prelude-archive` states for itself:
 //!
 //! ```sh
@@ -17,3 +19,6 @@ pub use prefix::*;
 
 mod unit;
 pub use unit::*;
+
+mod stored;
+pub use stored::*;

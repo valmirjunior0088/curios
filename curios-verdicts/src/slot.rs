@@ -1,14 +1,11 @@
-//! One slot, one file: the framing that puts a record ahead of an artifact, the rename that replaces a slot whole, and the reader that takes a unit back out of one — or out of a bare archive, which is what the prelude image is.
+//! One slot, one file: the rename that replaces a slot whole, and the reader that takes a unit back out of one — or out of a bare archive, which is what the prelude image is. The framing itself, a record ahead of an artifact, is `curios-unit`'s.
 //!
-//! **A slot is one file, and it is replaced by one rename.** The record and the artifact are framed together ([`framed`]), written beside the slot and renamed into place, so no interrupted or concurrent write can leave a record beside an artifact it was not made from: a reader sees the old slot, the new one, or none. The artifact segment is the same bytes the artifact is archived as on its own, which is what lets `curios document` read a unit off a slot exactly as it reads one off the prelude image.
+//! **A slot is one file, and it is replaced by one rename.** The record and the artifact are framed together (`curios_unit::framed`), written beside the slot and renamed into place, so no interrupted or concurrent write can leave a record beside an artifact it was not made from: a reader sees the old slot, the new one, or none. The artifact segment is the same bytes the artifact is archived as on its own, which is what lets `curios document` read a unit off a slot exactly as it reads one off the prelude image.
 
 use {
-    curios_unit::Unit,
+    curios_unit::{Unit, framed, segments},
     std::{fs, io, path::Path},
 };
-
-/// What a slot file opens with, so a slot is told from a bare archive by its first bytes rather than by guessing where a record might end. Versioned in the address's schema tag rather than here: a slot written under an older framing is not found rather than found and misread.
-const MAGIC: &[u8; 8] = b"crslot\0\0";
 
 /// File `record` and `artifact` as the slot at `slot`, replacing whatever it held.
 ///
@@ -35,30 +32,6 @@ pub(crate) fn replace(slot: &Path, record: &[u8], artifact: &[u8]) -> io::Result
         let _ = fs::remove_file(&staged);
         at(error)
     })
-}
-
-/// The bytes of one slot file: the magic, the record's length, the record, then the artifact.
-///
-/// The record goes first because it is the part every open decodes and the artifact is the part a payload probe never does; the length is ahead of it because an archive is read from its end and so does not know its own extent.
-fn framed(record: &[u8], artifact: &[u8]) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(MAGIC.len() + 8 + record.len() + artifact.len());
-    bytes.extend_from_slice(MAGIC);
-    bytes.extend_from_slice(&(record.len() as u64).to_le_bytes());
-    bytes.extend_from_slice(record);
-    bytes.extend_from_slice(artifact);
-
-    bytes
-}
-
-/// The record and the artifact of the slot file `bytes`, or `None` for bytes that are not one: something else entirely, or a slot truncated past its record.
-///
-/// The one place a slot's framing is read, shared with [`archived_unit`], which takes the artifact and nothing else.
-pub(crate) fn segments(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
-    let body = bytes.strip_prefix(MAGIC)?;
-    let (length, rest) = body.split_first_chunk::<8>()?;
-    let length = usize::try_from(u64::from_le_bytes(*length)).ok()?;
-
-    (length <= rest.len()).then(|| rest.split_at(length))
 }
 
 /// The unit archived at `path`: a verdict slot under a store, or the prelude image. A slot frames a record ahead of the unit and the image is the unit alone, and the unit is archived the same way in both, so the one difference is where it starts. Validated before it is read, so a file that is not a unit is an error rather than undefined behaviour.

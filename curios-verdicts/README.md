@@ -1,6 +1,6 @@
 # curios-verdicts
 
-The store as a compilation sees it: the `Cache` the fold consults for units already judged, and the payload family an invocation consults before compiling a program it has already compiled — both believed on a verified record rather than on an address. What the store's families and keys are belongs to `curios-package`; why believing a stored unit is sound belongs to [Cached verdicts](../documentation/soundness/admission-without-judgment/cached-verdicts.md) and [Reused payloads](../documentation/soundness/admission-without-judgment/reused-payloads.md); the mechanism belongs to the crate rustdoc.
+The store as a compilation sees it: the `Cache` the fold consults for units already judged, and the payload family an invocation consults before compiling a program it has already compiled — both believed on a verified record rather than on an address. What the store's families and keys are belongs to `curios-package`; what a stored unit *is* — its record and its framing — belongs to `curios-unit`, since the prelude image is written the same way by a build script below every store; why believing a stored unit is sound belongs to [Cached verdicts](../documentation/soundness/admission-without-judgment/cached-verdicts.md) and [Reused payloads](../documentation/soundness/admission-without-judgment/reused-payloads.md); the mechanism belongs to the crate rustdoc.
 
 ## Design
 
