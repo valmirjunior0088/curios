@@ -259,7 +259,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq(List/len([..xs, ..ys]), List/len(xs) + List/len(ys))",
             "Eq(List/len([1, 2, ..xs]), List/len(xs) + 2)",
             "Eq(List/map(@Nat, @Nat, [], f), [])",
-            "Eq(List/map(xs, (x) => x), xs)",
+            // The syntactic identity lambda is beta, not extensionality: `map` sends every element to itself and the list is returned whole.
+            "Eq(List/map(xs, (v) => v), xs)",
             "Eq(List/map([a, ..xs], f), [f(a), ..List/map(xs, f)])",
             "Eq(List/map([..xs, ..ys], f), [..List/map(xs, f), ..List/map(ys, f)])",
             "Eq(List/slice(xs, 0, List/len(xs)), xs)",
@@ -291,8 +292,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq(List/fold([..xs, a], z, g), g(a, List/fold(xs, z, g)))",
         ],
         refused: &[
-            // Function extensionality in disguise: not one to take.
-            "Eq(List/map(xs, (v) => v), xs)",
+            // Function extensionality in disguise, and not one to take: a function that is the identity pointwise is not the identity lambda, and `map` by it stays stuck.
+            "Eq(List/map(xs, (v) => v + 0), xs)",
             // A position inside a window needs a bound on the base that no term in hand proves, and a reducer may not invent one — so these stay stuck, and are stated here so that taking them is a row moving.
             "Eq(List/get(@Nat, List/slice(@Nat, xs, s, l, @ok), 0, @first), List/get(@Nat, xs, s, @at))",
         ],
