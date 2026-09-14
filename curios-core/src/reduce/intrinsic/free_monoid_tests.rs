@@ -1,4 +1,4 @@
-//! Lengths, windows and indices over a spine, which may not depend on how its run is grouped.
+//! Lengths, windows, indices and equality over a spine, which may not depend on how its run is grouped.
 
 use {
     super::reduce_intrinsic,
@@ -211,5 +211,33 @@ fn a_window_on_a_symbolic_seam_is_its_run_and_a_span_past_the_seam_declines() {
         Term::from(declined),
         right,
         "a span reaching past the last seam locates no run",
+    );
+}
+
+// A bare side is the one-chunk spine it is: the peel needs a head to read the grain off, and a variable has none, so the equality fold lends it the grain it carries. What that decides is the clash on a positive residual — `append(bs, k)` is one byte longer than `bs` whatever both take — and nothing more: a residual that may be empty stays neutral, as it would inside a concatenation.
+#[test]
+fn a_spine_against_a_bare_variable_clashes_on_a_positive_residual() {
+    let (bs, cs, k) = (sym(0, "bs"), sym(1, "cs"), sym(2, "k"));
+
+    let appended = Term::intrinsic(Intrinsic::bin_append(Grain::X, bs.clone(), k));
+    let folded = fold(Term::intrinsic(Intrinsic::bin_eql(
+        Grain::X,
+        appended,
+        bs.clone(),
+    )));
+    assert_eq!(
+        folded.as_bool(),
+        Some(false),
+        "`append(bs, k) == bs` is false for every `bs` and `k`"
+    );
+
+    let extended = Term::intrinsic(Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: vec![bs.clone(), cs],
+    });
+    let folded = fold(Term::intrinsic(Intrinsic::bin_eql(Grain::X, extended, bs)));
+    assert!(
+        matches!(&*folded, Subterm::Intrinsic(Intrinsic::BinEql(..))),
+        "`x[..bs, ..cs] == bs` is undecided while `cs` may be empty"
     );
 }

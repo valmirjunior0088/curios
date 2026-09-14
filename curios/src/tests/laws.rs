@@ -336,6 +336,8 @@ const CARRIERS: &[Carrier] = &[
             // A positive segment anywhere in a value decides it against the empty one, and against a value it extends.
             "Eq(x[..bs, k] == x[], false)",
             "Eq(x[..bs, 1] == x[], false)",
+            "Eq(x[..bs, k] == bs, false)",
+            "Eq(x[..bs, ..cs, 1] == bs, false)",
         ],
         refused: &[],
     },
@@ -371,6 +373,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bits/slice(b[..ts, ..us], Bits/len(ts), l, @fits), Bits/slice(us, 0, l, @fits))",
             "Eq(b[..ts, v] == b[], false)",
             "Eq(b[..ts, 1] == b[], false)",
+            "Eq(b[..ts, v] == ts, false)",
         ],
         refused: &[],
     },

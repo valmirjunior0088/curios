@@ -822,18 +822,25 @@ pub fn reduce_intrinsic(
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
 
-            // Reflexivity: any value equals itself. Catches a shared variable, which the peel below cannot — a bare variable is not a `Bin`-valued intrinsic.
+            // Reflexivity: any value equals itself. Catches a shared variable before the peel, which would otherwise read it as two identical chunks and say the same.
             if left == right {
                 return Ok(Subterm::Intrinsic(Intrinsic::Bool(true)));
             }
 
+            // A bare side — a variable, a projection, anything that is not an intrinsic — is read as the one-chunk spine it is, under the grain this arm already carries: `x[..bs]` is `bs` on values, so the peel's verdict on the wrapped pair is its verdict on the original. What the wrap decides is the clash on a positive residual, `append(bs, k) ~ bs`; the peel needs a head to read the grain off, and a variable has none. The fold's alone: conversion can only refuse such a pair, and inversion solves a bare side as a binder.
+            let spine = |side: &Term| match &**side {
+                Subterm::Intrinsic(intrinsic) => intrinsic.clone(),
+                _ => Intrinsic::BinConcat {
+                    grain,
+                    operands: vec![side.clone()],
+                },
+            };
+
             // Structural decision via the free-monoid peel (`core::spine`): a peeled-equal pair is `true`, a definite generator or length clash is `false` (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`). Anything the peel leaves undecided stays neutral — the same conservative seam conversion reads, so the fold only ever strengthens, never weakens.
-            if let (Subterm::Intrinsic(l), Subterm::Intrinsic(r)) = (&*left, &*right) {
-                match peel_bin(l, r) {
-                    Some(Peel::Equal) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(true))),
-                    Some(Peel::Clash) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(false))),
-                    Some(Peel::Continue(..)) | Some(Peel::Stuck) | None => {}
-                }
+            match peel_bin(&spine(&left), &spine(&right)) {
+                Some(Peel::Equal) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(true))),
+                Some(Peel::Clash) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(false))),
+                Some(Peel::Continue(..)) | Some(Peel::Stuck) | None => {}
             }
 
             Ok(Subterm::Intrinsic(Intrinsic::BinEql(grain, left, right)))
