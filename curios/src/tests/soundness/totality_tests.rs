@@ -534,3 +534,39 @@ fn the_library_well_founded_recursion_serves_a_proof() {
         "#;
     assert_eq!(run(source), b"b");
 }
+
+// A convoy written by hand around the recursive call: the arm generalizes the witness it descends on and applies the lambda back to it. The analysis grades the redex as its contractum, so `rest` is still read as the payload of `d` and the proof descends. Before that rule the same program was refused as a proof reaching a definition not known to terminate, which is what the elaborator's own synthesized convoys ran into.
+#[test]
+fn a_hand_written_convoy_keeps_its_descent_visible() {
+    let source = r#"
+        use /std/{Nat, Bytes, Eq, Str};
+        use /std/Str/{Scan, Utf8, step};
+
+        let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq(0, 0) =
+            match d
+            | stop() => Eq/refl()
+            | more(c, st, t, rest) => ((r: Utf8(step(c, st), t)) => dv(step(c, st), r))(rest)
+            end;
+
+        /std/print("ok")
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+// The same descent through a `let` alias of the payload, which is a redex by another spelling.
+#[test]
+fn a_let_alias_keeps_its_descent_visible() {
+    let source = r#"
+        use /std/{Nat, Bytes, Eq, Str};
+        use /std/Str/{Scan, Utf8, step};
+
+        let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq(0, 0) =
+            match d
+            | stop() => Eq/refl()
+            | more(c, st, t, rest) => let r = rest; dv(step(c, st), r)
+            end;
+
+        /std/print("ok")
+        "#;
+    assert_eq!(run(source), b"ok");
+}

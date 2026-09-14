@@ -29,9 +29,9 @@ mod tests;
 use {
     crate::{Env, forceable},
     curios_core::{
-        Arity, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType, Instance, Intrinsic,
-        Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
+        Arity, Bound, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType, Instance,
+        Intrinsic, Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, Scope, Struct, StructType,
+        Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
     curios_utilities::recurse,
@@ -561,6 +561,32 @@ impl<E: Env> Walk<'_, E> {
         self.walk_term(&body);
     }
 
+    /// Walk a lambda's telescope applied to `arguments`: each entry type, then the body with every binder standing for its argument. A binder past the last argument is minted fresh as `walk_terms` would; an argument past the last binder stays applied to the body, which may be a lambda in its turn.
+    fn walk_redex(&mut self, mut telescope: Telescope<Term>, arguments: &[Term]) {
+        let mut remaining = arguments.iter();
+        loop {
+            match telescope {
+                Telescope::Done(body) => {
+                    let leftover = remaining.cloned().collect::<Vec<_>>();
+                    return match leftover.is_empty() {
+                        true => self.walk_term(&body),
+                        false => self.walk_term(&Term::apply(*body, leftover)),
+                    };
+                }
+                Telescope::Cons(entry, rest) => {
+                    self.walk_term(&entry);
+                    telescope = match remaining.next() {
+                        Some(argument) => rest.open(&[argument]),
+                        None => {
+                            let binder = self.env.fresh(rest.first_hint());
+                            rest.open(&[&Term::free_var(&binder)])
+                        }
+                    };
+                }
+            }
+        }
+    }
+
     /// Walk a `Func`/`FuncType` telescope: each entry, then the terminal.
     ///
     /// A loop rather than a recursion, because a telescope is a list and this iterates it. Each binder is minted only after the entry before it has been walked, which is where the recursive walk minted it.
@@ -716,6 +742,12 @@ impl<E: Env> Walk<'_, E> {
                     self.walks(&arguments);
                     return;
                 }
+                // A lambda at the head of a spine is graded as its contractum: the body is walked with each binder standing for the argument it was applied to, so a call inside reads its arguments as what they are rather than as fresh binders nothing is below. This is what keeps a convoy — an arm generalized over a hypothesis and applied back to it — from hiding the descent it carries. The arguments are walked on their own first, because a binder the body never uses would otherwise drop a call from the walk.
+                if let Subterm::Func(Func { telescope, .. }) = &*spine_head {
+                    self.walks(&arguments);
+                    self.walk_redex(telescope.clone(), &arguments);
+                    return;
+                }
                 self.walk_term(&apply.head);
                 self.walks(apply.params());
             }
@@ -769,12 +801,17 @@ impl<E: Env> Walk<'_, E> {
 
             Subterm::Foreign(_, args) => self.walks(args),
 
+            // The tail is walked with each binder standing for its value, for the reason an applied lambda is: a `let` is a redex, and a binder aliasing an arm's payload is below the scrutinee exactly as the payload is. Binding `i` is stored under the `i` binders before it, so each value is released against the values already in hand.
             Subterm::Let(Let { bindings, tail }) => {
+                let mut values: Vec<Term> = Vec::with_capacity(bindings.len());
                 for binding in bindings {
                     self.walk_term(binding.type_());
                     self.walk_term(binding.value());
+                    let refs = values.iter().collect::<Vec<_>>();
+                    values.push(binding.value().release(&refs));
                 }
-                self.open_many_walk(tail);
+                let refs = values.iter().collect::<Vec<_>>();
+                self.walk_term(&tail.open(&refs));
             }
 
             // An inner group is classified on its own, but its bodies may still call *this* group, and such a call is a real edge of this group's call graph.

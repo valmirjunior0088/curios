@@ -818,3 +818,136 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
     };
     assert_eq!(group_totality(&mut kernel, group), Totality::Partial);
 }
+
+/// A lambda applied to an arm's payload is graded as its contractum: the call inside reads the payload, which is below the scrutinee. This is the shape a convoy takes — an arm generalized over a hypothesis and applied back to it — and without the rule a proof that descends through one closes to an all-unknown matrix. The control applies the same lambda to an unrelated parameter, which must stay unread: the rule reads a binder as what it stands for, never as a decrease of its own.
+#[test]
+fn a_lambda_applied_to_the_arm_payload_descends() {
+    let mut kernel = kernel();
+
+    let name = Global::Authored(Qualifier::from(["T"]));
+    let self_type = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    kernel.declare_induct(
+        &name,
+        &single_payload(self_type.clone(), Term::type_ground()),
+    );
+
+    let f = Free::local(2, Some("f"));
+    let a = Free::local(3, Some("a"));
+    let b = Free::local(4, Some("b"));
+    let t = Free::local(5, Some("t"));
+    let h = Free::local(6, Some("h"));
+
+    let group_over = |argument: Term| {
+        let redex = Term::apply(
+            Term::func(
+                [(h.clone(), self_type.clone())],
+                Term::apply(Term::free_var(&f), [Term::free_var(&h), Term::free_var(&b)]),
+            ),
+            [argument],
+        );
+        Term::rec(
+            vec![(
+                f.clone(),
+                Term::func_type(
+                    [
+                        (a.clone(), self_type.clone()),
+                        (b.clone(), self_type.clone()),
+                    ],
+                    nat(),
+                ),
+                Term::func(
+                    [
+                        (a.clone(), self_type.clone()),
+                        (b.clone(), self_type.clone()),
+                    ],
+                    Term::induct_match(
+                        Term::free_var(&a),
+                        None,
+                        nat(),
+                        [("c", vec![t.clone()], redex)],
+                    ),
+                ),
+            )],
+            Term::free_var(&f),
+        )
+    };
+
+    let descending = group_over(Term::free_var(&t));
+    let Subterm::Rec(Rec { group, .. }) = &*descending else {
+        panic!("the fixture changed shape");
+    };
+    assert_eq!(group_totality(&mut kernel, group), Totality::Total);
+
+    let control = group_over(Term::free_var(&b));
+    let Subterm::Rec(Rec { group, .. }) = &*control else {
+        panic!("the fixture changed shape");
+    };
+    assert_eq!(group_totality(&mut kernel, group), Totality::Partial);
+}
+
+/// The same pair through a `let`: a binder aliasing the payload is below the scrutinee exactly as the payload is, and one aliasing an unrelated parameter is not.
+#[test]
+fn a_let_alias_of_the_arm_payload_descends() {
+    let mut kernel = kernel();
+
+    let name = Global::Authored(Qualifier::from(["T"]));
+    let self_type = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    kernel.declare_induct(
+        &name,
+        &single_payload(self_type.clone(), Term::type_ground()),
+    );
+
+    let f = Free::local(2, Some("f"));
+    let a = Free::local(3, Some("a"));
+    let b = Free::local(4, Some("b"));
+    let t = Free::local(5, Some("t"));
+    let h = Free::local(6, Some("h"));
+
+    let group_over = |aliased: Term| {
+        let arm = Term::let_(
+            &h,
+            self_type.clone(),
+            aliased,
+            Term::apply(Term::free_var(&f), [Term::free_var(&h), Term::free_var(&b)]),
+        );
+        Term::rec(
+            vec![(
+                f.clone(),
+                Term::func_type(
+                    [
+                        (a.clone(), self_type.clone()),
+                        (b.clone(), self_type.clone()),
+                    ],
+                    nat(),
+                ),
+                Term::func(
+                    [
+                        (a.clone(), self_type.clone()),
+                        (b.clone(), self_type.clone()),
+                    ],
+                    Term::induct_match(
+                        Term::free_var(&a),
+                        None,
+                        nat(),
+                        [("c", vec![t.clone()], arm)],
+                    ),
+                ),
+            )],
+            Term::free_var(&f),
+        )
+    };
+
+    let descending = group_over(Term::free_var(&t));
+    let Subterm::Rec(Rec { group, .. }) = &*descending else {
+        panic!("the fixture changed shape");
+    };
+    assert_eq!(group_totality(&mut kernel, group), Totality::Total);
+
+    let control = group_over(Term::free_var(&b));
+    let Subterm::Rec(Rec { group, .. }) = &*control else {
+        panic!("the fixture changed shape");
+    };
+    assert_eq!(group_totality(&mut kernel, group), Totality::Partial);
+}
