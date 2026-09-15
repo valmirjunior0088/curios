@@ -350,7 +350,7 @@ compile TARGET --output out — Program (its own file), store Write, leaves Exec
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-document TARGET — Library, store Read, leaves Pages, options --archive --output --budget --manifest
+document TARGET — Library, store Write, leaves Pages, options --archive --output --budget --manifest
   work/app: (none) → library app
   work/app: serve → refused: `document` takes a library, and a program is not one
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"

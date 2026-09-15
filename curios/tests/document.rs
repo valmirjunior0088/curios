@@ -182,12 +182,12 @@ fn the_prelude_image_documents_the_standard_library_into_output() {
     );
 }
 
-/// A verdict slot frames a record ahead of its unit, and `document` reads the unit off it as it reads the image, so a library filed under a store documents without compiling again. `test` is what files it: `document` itself reads the store as every query does and never writes it.
+/// A verdict slot frames a record ahead of its unit, and `document --archive` reads the unit off it as it reads the image, so a library filed under a store documents without compiling again. `document` is itself what files it: it is a build, and keeps what it compiled as `run` and `test` keep theirs.
 #[test]
 fn a_verdict_slot_documents_the_unit_it_holds() {
     let root = project("slot");
 
-    let output = curios(&root, &["test"]);
+    let output = curios(&root, &["document"]);
     assert!(
         output.status.success(),
         "{}",

@@ -2,15 +2,16 @@
 //!
 //! **The answer goes to stdout, and nothing else does.** A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, and here there are none: a question is not a build.
 //!
-//! **Exit 0 means the question was answered, including when the answer is a list of errors.** Non-zero means it could not be asked: no such target, no such stage, a scope that cannot be assembled. `stage` is the one place the two meet — a program that stops before the rung has not answered the question, so its diagnostics go to stderr and the exit is 1, leaving stdout empty rather than holding text nothing downstream expected.
+//! **Exit 0 means the question was answered, including when the answer is a list of errors.** Non-zero means it could not be asked: no such target, no such stage, a scope that cannot be assembled. `stage`, `cost` and `tests` are where the two meet — a program that stops before the answer has not answered the question, so what stopped it goes to stderr, stdout stays empty rather than holding text nothing downstream expected, and the exit is a build's: 2 when written goals alone stopped it, and 1 when anything was refused.
 
 use {
     crate::{
-        Diagnosed, Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, cost,
+        Diagnosed, Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Severity, Subject, cost,
         declared_tests, diagnosed, diagnostics, stage,
     },
     curios_cont::Outcome,
     curios_package::{Entry, Library, Program, Selection},
+    curios_pipeline::CompileError,
     curios_text::{LoadError, Overlay},
     curios_verdicts::Verdicts,
     std::{collections::BTreeSet, fs, io, path::PathBuf},
@@ -101,12 +102,11 @@ pub fn wonder_diagnostics(budget: u64, selection: Selection) -> Result<(), Strin
 }
 
 /// `wonder tests [TARGET]`: every test `selection` declares, one path per line, in declaration order — the library's, then each executable's, when it is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0.
-pub fn wonder_tests(budget: u64, selection: Selection) -> Result<(), String> {
+pub fn wonder_tests(budget: u64, selection: Selection) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
-    for asked in Asked::every(selection)? {
-        let records = declared_tests(budget, asked.subject, &overlay, asked.store.as_ref())
-            .map_err(|error| error.to_string())?;
+    for asked in Asked::every(selection).map_err(CompileError::failure)? {
+        let records = declared_tests(budget, asked.subject, &overlay, asked.store.as_ref())?;
         for record in records {
             println!("{}", record.path);
         }
@@ -139,11 +139,11 @@ pub fn wonder_stage(
     name: &str,
     program: Program,
     finish: impl FnOnce(Box<curios_wasm::Module>),
-) -> Result<(), String> {
+) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
     let refusal = written_as_a_module(program.entry());
-    let Asked { subject, store } = Asked::about_program(program)?;
+    let Asked { subject, store } = Asked::about_program(program).map_err(CompileError::failure)?;
     let Subject::Entry {
         units,
         origin,
@@ -151,7 +151,7 @@ pub fn wonder_stage(
         ..
     } = subject.formed(&overlay)
     else {
-        return Err(refusal);
+        return Err(CompileError::failure(refusal));
     };
     let cache = store.as_ref();
 
@@ -165,18 +165,12 @@ pub fn wonder_stage(
         }
         Ok(Reached::Wasm(module)) => finish(module),
         Err(Refusal::NoSuchStage { asked }) => {
-            return Err(format!(
+            return Err(CompileError::failure(format!(
                 "no stage named {asked:?}; the stages are {}",
                 curios_pipeline::Stage::NAMES.join(", ")
-            ));
+            )));
         }
-        Err(Refusal::Diagnostics(diagnostics)) => {
-            let rendered = diagnostics
-                .iter()
-                .map(Diagnostic::render)
-                .collect::<Vec<_>>();
-            return Err(rendered.join("\n\n"));
-        }
+        Err(Refusal::Diagnostics(diagnostics)) => return Err(stopped(diagnostics)),
     }
 
     Ok(())
@@ -185,11 +179,11 @@ pub fn wonder_stage(
 /// What the optimizer did to each of `program`'s declarations, one tab-separated row per line.
 ///
 /// Two columns, because the analysis should not need this crate: `awk -F'\t' '$2 == "absorbed"'` is a whole question, and a diff of two runs is a diff of two files. The rows are ordered by name for the same reason — a report that reproduces is what makes a regression something to read rather than something to judge.
-pub fn wonder_cost(budget: u64, program: Program) -> Result<(), String> {
+pub fn wonder_cost(budget: u64, program: Program) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
     let refusal = written_as_a_module(program.entry());
-    let Asked { subject, store } = Asked::about_program(program)?;
+    let Asked { subject, store } = Asked::about_program(program).map_err(CompileError::failure)?;
     let Subject::Entry {
         units,
         origin,
@@ -197,7 +191,7 @@ pub fn wonder_cost(budget: u64, program: Program) -> Result<(), String> {
         ..
     } = subject.formed(&overlay)
     else {
-        return Err(refusal);
+        return Err(CompileError::failure(refusal));
     };
     let cache = store.as_ref();
 
@@ -214,16 +208,29 @@ pub fn wonder_cost(budget: u64, program: Program) -> Result<(), String> {
                 println!("{}\t{outcome}", fate.name);
             }
         }
-        Err(diagnostics) => {
-            let rendered = diagnostics
-                .iter()
-                .map(Diagnostic::render)
-                .collect::<Vec<_>>();
-            return Err(rendered.join("\n\n"));
-        }
+        Err(diagnostics) => return Err(stopped(diagnostics)),
     }
 
     Ok(())
+}
+
+/// What stopped a question before it could answer, classified as the compile path classifies a build's failure — so goals alone are the incomplete state that exits 2, and anything refused beside them the failure that exits 1. The refusals come first, which is how a mixed failure says which reports are which; it renders as the reports did, a blank line between each.
+fn stopped(diagnostics: Vec<Diagnostic>) -> CompileError {
+    let (refused, goals): (Vec<_>, Vec<_>) = diagnostics
+        .into_iter()
+        .partition(|diagnostic| diagnostic.severity != Severity::Goal);
+    let failures = refused.len();
+    let reports = refused
+        .into_iter()
+        .chain(goals)
+        .map(|diagnostic| diagnostic.report)
+        .collect::<Vec<_>>();
+
+    match failures {
+        0 => CompileError::Incomplete(reports),
+        failures if failures == reports.len() => CompileError::Failure(reports),
+        failures => CompileError::Mixed { reports, failures },
+    }
 }
 
 /// A file the question can be about: one the disk holds. A path that cannot be read is "no such target" — the question could not be asked, and the exit says so — refused by the command line before placement reads it, in the words the read would have failed with. The engine would otherwise answer it as one diagnostic and exit 0. The server never comes through here: a document an editor holds may not be on disk yet, which is why the check is the command line's and not `Asked`'s.

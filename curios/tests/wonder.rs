@@ -177,6 +177,33 @@ fn an_unreached_stage_leaves_stdout_empty() {
     assert!(String::from_utf8_lossy(&refused.stderr).contains("type mismatch"));
 }
 
+/// A question stopped before it could answer exits as a build would, so written goals alone are the incomplete state that exits 2 — for `stage`, `cost` and `tests` alike — while `diagnostics`, whose answer the goals are, exits 0.
+#[test]
+fn a_question_stopped_by_goals_alone_exits_two() {
+    let root = temporary("goals");
+    fs::create_dir_all(&root).unwrap();
+    let program = "let n : /std/Nat = ?;\n/std/print(\"\")\n";
+
+    for query in [
+        &["wonder", "stage", "wasm", "-"][..],
+        &["wonder", "cost", "-"],
+        &["wonder", "tests", "-"],
+    ] {
+        let stopped = curios(&root, query, program);
+        assert_eq!(
+            stopped.status.code(),
+            Some(2),
+            "{}: {}",
+            query.join(" "),
+            String::from_utf8_lossy(&stopped.stderr)
+        );
+        assert!(stopped.stdout.is_empty(), "{}", query.join(" "));
+    }
+
+    let answered = curios(&root, &["wonder", "diagnostics", "-"], program);
+    assert_eq!(answered.status.code(), Some(0));
+}
+
 /// One side of the wire: frame a JSON-RPC message, and read one back.
 struct Editor {
     child: Child,

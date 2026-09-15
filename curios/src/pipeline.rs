@@ -5,8 +5,9 @@
 use {
     crate::{Heading, Line, Subject, fact, processing},
     curios::{engine, to_cwasm},
+    curios_document::Documentation,
     curios_package::{Entry, Program},
-    curios_pipeline::{Cache, CompileError, Progress, compile_with_units},
+    curios_pipeline::{Cache, CompileError, Progress, compile_with_units, with_units},
     curios_text::{Entrypoint, Form, RootSource, UnitSource},
     curios_utilities::Source,
     curios_verdicts::Verdicts,
@@ -102,6 +103,42 @@ pub(crate) fn payload_of(
     }
 
     compiled
+}
+
+/// The interface of the last of `units` — a package's library, compiled against everything before it — read off the compilation that builds it, and filed into `store` when there is one.
+///
+/// **A build, where the `wonder` engine's reading of the same record is a question.** A library documented is a library compiled, and what was compiled is worth what `run` and `test` keep of theirs; the engine's `documentation` reads the store and never writes it, which is what a question may do and a build has no reason to. The compilation runs to completion first, the kernel included, so a library that does not check is not documented and reports what stopped it exactly as `run` would.
+pub(crate) fn documentation_of(
+    budget: u64,
+    units: &[RootSource],
+    store: Option<&Verdicts>,
+) -> Result<Documentation, CompileError> {
+    let documented = with_units(
+        budget,
+        units,
+        store.map(|store| store as &dyn Cache),
+        |_| {},
+        |_, produced| {
+            produced
+                .last()
+                .and_then(|unit| unit.text().documentation().cloned())
+                .ok_or_else(|| {
+                    CompileError::failure(
+                        "nothing to document: the scope's last unit carries no interface"
+                            .to_string(),
+                    )
+                })
+        },
+    );
+
+    if let Some(refusal) = store.and_then(Verdicts::refused) {
+        fact(
+            Heading::Skipped,
+            format!("storing what this built; {refusal}"),
+        );
+    }
+
+    documented
 }
 
 /// What a program is reported as — the name that was asked for, never the file it resolved to.

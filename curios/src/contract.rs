@@ -48,7 +48,7 @@ pub(crate) enum Access {
 }
 
 impl Access {
-    /// The store beside `root` for a build to file into — `None` for an access that files nothing. A question reads through [`Access::consulted`] instead, and it is the engine it hands the store to that keeps it from filing.
+    /// The store beside `root` for a build to file into — `None` for an access that files nothing. A question never opens one here: the `wonder` engine opens its own and wraps it so that nothing is filed.
     pub(crate) fn filed(self, root: &Path) -> Option<Verdicts> {
         debug_assert_ne!(
             self,
@@ -59,20 +59,6 @@ impl Access {
         match self {
             Self::Write => Some(Verdicts::at(root.to_path_buf())),
             Self::None | Self::Read => None,
-        }
-    }
-
-    /// The store beside `root` for a question to read, to be handed to the `wonder` engine, which files nothing into it — `None` for an access that does not read.
-    pub(crate) fn consulted(self, root: &Path) -> Option<Verdicts> {
-        debug_assert_ne!(
-            self,
-            Self::Write,
-            "a question files nothing, so it never asks for a store to file into"
-        );
-
-        match self {
-            Self::Read => Some(Verdicts::at(root.to_path_buf())),
-            Self::None | Self::Write => None,
         }
     }
 }
@@ -132,7 +118,7 @@ pub(crate) const DOCUMENT: Contract = Contract {
     command: "document",
     accepts: Accepts::Library,
     own_file_only: false,
-    access: Access::Read,
+    access: Access::Write,
     product: Product::Pages,
 };
 

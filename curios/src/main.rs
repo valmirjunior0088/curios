@@ -29,11 +29,11 @@ use {
     curios_package::{Entry, Spelling, Store, curate, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
-    curios_text::{Formatted, Overlay},
+    curios_text::Formatted,
     curios_utilities::Source,
     curios_wonder::{
-        Linted, STDIN_LABEL, archived_documentation, documentation, lint, serve, wonder_cost,
-        wonder_diagnostics, wonder_stage, wonder_tests,
+        Linted, STDIN_LABEL, archived_documentation, lint, serve, wonder_cost, wonder_diagnostics,
+        wonder_stage, wonder_tests,
     },
     std::{
         collections::BTreeSet,
@@ -249,13 +249,9 @@ fn dispatch() -> Result<(), Failure> {
                 }
                 None => {
                     let library = contract.admit_library(target, manifest, &here()?)?;
-                    let store = contract.access.consulted(&library.root);
-                    let record = documentation(
-                        elaboration.budget,
-                        library.units,
-                        &Overlay::default(),
-                        store.as_ref(),
-                    )?;
+                    let store = contract.access.filed(&library.root);
+                    let record =
+                        documentation_of(elaboration.budget, &library.units, store.as_ref())?;
                     let directory = output_path
                         .unwrap_or_else(|| Store::at(library.root).documentation(&library.package));
                     (record, directory)
