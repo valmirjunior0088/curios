@@ -358,6 +358,7 @@ h2 {
 .signature .line {
     white-space: pre;
 }
+/* A member and its notes are one block, so the indent is the block's and a note always sits under its own line. */
 .signature .member {
     padding-left: 2em;
 }
@@ -371,7 +372,7 @@ h2 {
     color: var(--ink-70);
 }
 .signature .note {
-    margin: 0 0 6px 2em;
+    margin: 0 0 6px;
     font-family: var(--sans);
     font-size: 14px;
     line-height: 1.6;
