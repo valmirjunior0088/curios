@@ -542,7 +542,7 @@ pub enum Error {
         name: String,
         error: Box<Error>,
     },
-    /// Several refusals reported together, in the order their items were elaborated: what a module holding more than one refused item raises, so one run reports every failure rather than the first. Never empty and never nested — [`Error::batch`] flattens, and a batch of one is that member — and never wrapped, since each member carries its own location and declaration.
+    /// Several refusals reported together, in the order their items were elaborated: what a module holding more than one refused item raises, so one run reports every failure rather than the first. Never empty and never nested — `Error::batch` flattens, and a batch of one is that member — and never wrapped, since each member carries its own location and declaration.
     Batch(Vec<Error>),
 }
 

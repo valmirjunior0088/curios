@@ -252,7 +252,7 @@ pub enum TopItem {
     Broken(TopBroken),
 }
 
-/// An item the parser could not read: what it reported, the text it skipped to resume past it, and the name its head declared where the head parsed that far. Kept in the list rather than beside it so the module is an honest record of the file — every consumer says what it does with one, lowering registers the name so a reference to it resolves and is withheld rather than reported unbound, and nothing that reaches erasure ever holds one. See [`Module::parse`] for what recovers, and what refuses instead.
+/// An item the parser could not read: what it reported, the text it skipped to resume past it, and the name its head declared where the head parsed that far. Kept in the list rather than beside it so the module is an honest record of the file — every consumer says what it does with one, lowering registers the name so a reference to it resolves and is withheld rather than reported unbound, and nothing that reaches erasure ever holds one. See `Module::parse` for what recovers, and what refuses instead.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopBroken {
     pub span: Span,
