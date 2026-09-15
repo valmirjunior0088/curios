@@ -1,4 +1,4 @@
-use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, True, False};
+use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, proc, True, False};
 
 -- | How an argument's text is read into a value: the placeholder shown in help, and the reader.
 pub struct Value: pub Type {
@@ -653,7 +653,7 @@ let decode(raw: List(Bytes)) -> Result(Nat, List(Str)) =
 
 let fail_with(text: Str) -> Io({}) =
     let _ = Io/write(Io/stderr, Str/to_bytes(text))!;
-    /std/proc/exit(2);
+    proc/exit(2);
 
 -- One line against the command reached through the commands `within`, descending while the command is a group. Each step consumes the token that named the subcommand, so the line strictly shortens and the descent ends whatever the declaration's depth.
 let drive(within: List(Str), cli: Cli, argv: List(Str)) -> Io({}) =
@@ -676,7 +676,7 @@ let drive(within: List(Str), cli: Cli, argv: List(Str)) -> Io({}) =
 
 -- | The entry a program hands its `Cli` to: arguments read, help and the version answered on standard output with exit 0, a refusal reported on standard error with exit 2, and otherwise the handler run. A group descends into the subcommand its first token names, to any depth, and each command answers help and its own version for itself.
 pub let main(cli: Cli) -> Io({}) =
-    let raw = /std/proc/args!;
+    let raw = proc/args!;
     let dropped = match raw | [] => [] | [_, ..more] => more end;
     match decode(dropped)
     | failure(at) =>
