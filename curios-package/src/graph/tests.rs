@@ -8,6 +8,8 @@ use {
 };
 
 /// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
+///
+/// **Canonical, because everything it is compared against is.** The walk canonicalizes every location it resolves, so an expectation built from the temporary directory as spelled would compare two spellings of one directory — equal only where that spelling happens to be canonical already.
 fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -21,7 +23,10 @@ fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
         fs::write(path, source).unwrap();
     }
 
-    root
+    fs::create_dir_all(&root).unwrap();
+
+    root.canonicalize()
+        .expect("the tree was just written, so it resolves")
 }
 
 /// The prefixes `directory`'s order mounts, in fold order.
