@@ -7,13 +7,9 @@ use curios_abi::host_ops;
 use curios_utilities::{
     CharacterSyntax, ConceptField, DerivationSyntax, EqlDerivation, HashDerivation, LiftSyntax,
     MonadSyntax, OperatorSyntax, OrdDerivation, ProofSyntax, Qualifier, RootKind, SpellDerivation,
-    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
+    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax, test_support::Temporary,
 };
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, path::Path};
 
 pub(super) const fn registry_name(segments: &'static [&'static str]) -> SyntaxName {
     SyntaxName::new(segments)
@@ -325,12 +321,9 @@ pub(super) fn lower_declaring(declared: &[&str], src: &str) -> Result<(), String
     .map_err(|error| error.to_string())
 }
 
-pub(super) fn temp_dir(name: &str) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()))
+/// A directory of its own, removed however the test that holds it ends.
+pub(super) fn temp_dir(name: &str) -> Temporary {
+    Temporary::new("into-core", name)
 }
 
 pub(super) fn write_module(base: &Path, path: &str, source: &str) {

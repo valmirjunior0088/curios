@@ -5,6 +5,7 @@ use {
     curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::test_support::Temporary,
 };
 
 /// One `call` to `example.com:80`, its reply written out or its failure printed by name.
@@ -54,7 +55,9 @@ fn a_pending_connect_is_awaited_before_the_request_is_sent() {
 #[test]
 #[ignore = "needs the network"]
 fn https_perform_reaches_a_public_host_over_the_real_host() {
-    let report = std::env::temp_dir().join(format!("curios-https-{}", std::process::id()));
+    let root = Temporary::new("host", "https-report");
+    std::fs::create_dir_all(&root).expect("a directory of its own");
+    let report = root.join("report");
     let path = report.to_str().expect("a UTF-8 temporary path");
     let source = format!(
         r#"
@@ -71,7 +74,6 @@ fn https_perform_reaches_a_public_host_over_the_real_host() {
     run_text(&source, curios_runtime::OsHost::with_args(vec![])).expect("expected result");
 
     let written = std::fs::read(&report).expect("the program wrote its report");
-    std::fs::remove_file(&report).expect("the report is removable");
     assert_eq!(written, b"200");
 }
 

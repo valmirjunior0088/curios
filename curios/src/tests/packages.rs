@@ -8,11 +8,11 @@ use {
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, compile_with_units},
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::test_support::Temporary,
     curios_verdicts::Verdicts,
     std::{
         fs,
         path::{Path, PathBuf},
-        time::{SystemTime, UNIX_EPOCH},
     },
 };
 
@@ -32,19 +32,17 @@ fn resolved(directory: &Path, target: Option<&str>) -> (PathBuf, Vec<RootSource>
     (entry, program.into_units())
 }
 
-/// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
-fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let root = std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()));
+/// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
+fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
+    let root = Temporary::new("packages", name);
 
     for (path, contents) in files {
         let path = root.join(path);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, contents).unwrap();
     }
+
+    fs::create_dir_all(&root).unwrap();
 
     root
 }
@@ -101,8 +99,6 @@ fn a_package_runs_its_sole_executable() {
     assert_eq!(run(&root, None), b"from the library");
     // Naming it explicitly is the same program: the two forms differ in dispatch, not in what they resolve to.
     assert_eq!(run(&root, Some("hello")), b"from the library");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// The layout rule, through a real compilation: `mod` in the library header reads a sibling of the manifest, and that module's own children stem-nest below it.
@@ -126,8 +122,6 @@ fn a_librarys_modules_read_from_the_manifests_directory() {
     );
 
     assert_eq!(run(&root, None), b"nested");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// One member reaching another through the umbrella that enumerates them both.
@@ -154,8 +148,6 @@ fn a_member_reaches_another_member_through_its_umbrella() {
     );
 
     assert_eq!(run(&root.join("app"), None), b"84");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A package of nothing but programs compiles them against its dependencies alone — no vestigial library, and nothing mounted for it.
@@ -176,8 +168,6 @@ fn a_package_with_no_library_still_runs_its_program() {
     );
 
     assert_eq!(run(&root.join("tool"), None), b"tool");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A file argument is captured by no manifest: standing inside a package, a `.crs` path compiles standalone, with the package's library *not* in scope.
@@ -223,8 +213,6 @@ fn a_file_argument_compiles_standalone_inside_a_package() {
         .is_err(),
         "the package's library is not in a bare file's scope"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A loose program is compiled against the prelude and nothing else: it names `/std`, and `/sys`, the root beneath it, stays the standard library's own.
@@ -264,8 +252,6 @@ fn a_loose_program_names_std_and_is_refused_sys() {
         refusal.contains("`sys` is internal to the standard library"),
         "{refusal}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// **A cached unit and a freshly elaborated one produce the same program**, and changing the terms invalidates.
@@ -287,7 +273,7 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
         ],
     );
     let app = root.join("app");
-    let store = Verdicts::at(root.clone());
+    let store = Verdicts::at(root.to_path_buf());
 
     let cold = cached(&app, None, Some(&store));
     assert_eq!(cold, b"42");
@@ -302,7 +288,10 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
         "pub let answer : /std/Nat = 7;\n",
     )
     .unwrap();
-    assert_eq!(cached(&app, None, Some(&Verdicts::at(root.clone()))), b"7");
+    assert_eq!(
+        cached(&app, None, Some(&Verdicts::at(root.to_path_buf()))),
+        b"7"
+    );
 
     // And restoring the content restores the verdict — the run this whole half exists for.
     fs::write(
@@ -310,9 +299,10 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
         "pub let answer : /std/Nat = 42;\n",
     )
     .unwrap();
-    assert_eq!(cached(&app, None, Some(&Verdicts::at(root.clone()))), cold);
-
-    fs::remove_dir_all(root).unwrap();
+    assert_eq!(
+        cached(&app, None, Some(&Verdicts::at(root.to_path_buf()))),
+        cold
+    );
 }
 
 /// Registration through a library unit and the store: a dependency's `test` declaration is an item of its unit, so the unit that carries it is filed on the cold compile and restored on the warm one — a schema the field broke would fail loudly here.
@@ -335,14 +325,15 @@ fn a_library_test_declaration_rides_through_the_store() {
         ],
     );
     let app = root.join("app");
-    let store = Verdicts::at(root.clone());
+    let store = Verdicts::at(root.to_path_buf());
 
     assert_eq!(cached(&app, None, Some(&store)), b"42");
     assert!(
         root.join(".curios/verdicts").is_dir(),
         "the dependency's verdict is recorded"
     );
-    assert_eq!(cached(&app, None, Some(&Verdicts::at(root.clone()))), b"42");
-
-    fs::remove_dir_all(root).unwrap();
+    assert_eq!(
+        cached(&app, None, Some(&Verdicts::at(root.to_path_buf()))),
+        b"42"
+    );
 }

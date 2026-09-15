@@ -2,6 +2,7 @@
 
 use {
     super::*,
+    curios_utilities::test_support::Temporary,
     std::{
         io::Read,
         sync::{Arc, Mutex as StdMutex},
@@ -145,8 +146,7 @@ fn a_boundary_carries_the_allocator_readings() {
 // The file that survives a rotation opens with the header and the whole callsite table, so it is readable without the one that was discarded. That is the property that makes rotation preferable to a cap: a hang's tail is what names the loop it is stuck in.
 #[test]
 fn a_rotation_restates_the_header_and_the_callsite_table() {
-    let directory =
-        std::env::temp_dir().join(format!("curios-profile-rotation-{}", std::process::id()));
+    let directory = Temporary::new("profile", "rotation");
     std::fs::create_dir_all(&directory).expect("a temporary directory");
     let path = directory.join("profile.tsv");
 
@@ -178,6 +178,4 @@ fn a_rotation_restates_the_header_and_the_callsite_table() {
         current.lines().any(|row| row.starts_with("D\t0\t")),
         "the table is restated: {current}"
     );
-
-    std::fs::remove_dir_all(&directory).expect("the temporary directory is removed");
 }

@@ -2,13 +2,8 @@
 
 use {
     super::{Error, Overlay, RootSource, identity},
-    curios_utilities::{Qualifier, RootKind, Source},
-    std::{
-        fs,
-        path::{Path, PathBuf},
-        rc::Rc,
-        time::{SystemTime, UNIX_EPOCH},
-    },
+    curios_utilities::{Qualifier, RootKind, Source, test_support::Temporary},
+    std::{fs, path::Path, rc::Rc},
 };
 
 /// A file that does not exist is spelled by its canonical parent and its name, and a bare name's parent is the current directory — not the empty path, which canonicalizes to nothing and left the relative name as given, so every caller read it as a path with no directory at all.
@@ -26,19 +21,17 @@ fn a_bare_name_the_disk_does_not_hold_is_spelled_under_the_current_directory() {
     );
 }
 
-/// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
-fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let root = std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()));
+/// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
+fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
+    let root = Temporary::new("root-source", name);
 
     for (path, source) in files {
         let path = root.join(path);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, source).unwrap();
     }
+
+    fs::create_dir_all(&root).unwrap();
 
     root
 }
@@ -60,7 +53,12 @@ fn a_module_is_declared_when_a_mod_chain_from_the_header_reaches_it() {
             ("parse/stray.crs", ""),
         ],
     );
-    let source = RootSource::mounted("json", RootKind::Ordinary, root.join("lib.crs"), &root);
+    let source = RootSource::mounted(
+        "json",
+        RootKind::Ordinary,
+        root.join("lib.crs"),
+        root.to_path_buf(),
+    );
 
     for (module, declared) in [
         ("/json", true),
@@ -78,8 +76,6 @@ fn a_module_is_declared_when_a_mod_chain_from_the_header_reaches_it() {
             "{module}"
         );
     }
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// The walk reads through the overlay as discovery does, so a `mod` an editor has written and not saved already declares its module.
@@ -87,16 +83,19 @@ fn a_module_is_declared_when_a_mod_chain_from_the_header_reaches_it() {
 fn an_unsaved_mod_declares_its_module_through_the_overlay() {
     let root = tree("declares-overlay", &[("lib.crs", ""), ("fresh.crs", "")]);
     let overlay = Overlay::of([(root.join("lib.crs"), "pub mod fresh;\n".to_string())]);
-    let source = RootSource::mounted("json", RootKind::Ordinary, root.join("lib.crs"), &root)
-        .with_overlay(overlay);
+    let source = RootSource::mounted(
+        "json",
+        RootKind::Ordinary,
+        root.join("lib.crs"),
+        root.to_path_buf(),
+    )
+    .with_overlay(overlay);
 
     assert!(
         source
             .declares_module(&Qualifier::from(["json", "fresh"]))
             .unwrap()
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A source over the tree at `root`, mounted as `/json` with `lib.crs` as its header.
@@ -130,8 +129,6 @@ fn an_unchanged_file_is_parsed_once_per_thread() {
         Rc::ptr_eq(&header_read(&first), &header_read(&second)),
         "the second load was handed the first's parse"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -152,8 +149,6 @@ fn a_changed_file_is_parsed_again() {
     assert!(!Rc::ptr_eq(&header_read(&before), &header_read(&after)));
     assert_eq!(header_read(&after).text, "pub mod parse;\npub mod more;\n");
     assert_eq!(module.items.len(), 2, "and the new text is what was parsed");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// An overlay holding exactly the disk's text is the same text at the same path, so it is the same parse.
@@ -173,8 +168,6 @@ fn an_overlay_holding_the_disks_text_shares_the_disks_parse() {
     held.load(&qualifier).unwrap();
 
     assert!(Rc::ptr_eq(&header_read(&disk), &header_read(&held)));
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A parse failure is reported and records nothing, and it evicts nothing: the file's last good parse answers the next read of that text.
@@ -208,6 +201,4 @@ fn a_parse_failure_is_reported_and_leaves_the_last_good_parse_in_place() {
         Rc::ptr_eq(&header_read(&good), &header_read(&restored)),
         "the failure evicted nothing"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }

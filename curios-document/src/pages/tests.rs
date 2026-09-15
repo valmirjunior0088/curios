@@ -3,7 +3,7 @@
 use {
     super::*,
     crate::{Declaration, Kind, Member, ModuleDocumentation, Signature},
-    std::time::{SystemTime, UNIX_EPOCH},
+    curios_utilities::test_support::Temporary,
 };
 
 fn signature(text: &str) -> Signature {
@@ -123,12 +123,7 @@ fn a_referent_is_found_where_the_record_shows_it() {
 #[test]
 fn the_index_lists_every_address_and_a_page_carries_the_field() {
     let record = record();
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let directory =
-        std::env::temp_dir().join(format!("curios-document-{}-{nanos}", std::process::id()));
+    let directory = Temporary::new("document-pages", "index");
     write_documentation(&record, &directory).unwrap();
 
     // The record's order, a member beneath its declaration by what its kind calls one, the facade under the name the page shows it by rather than the private module it was written in, and no row for the witness or the nameless constraint.
@@ -180,6 +175,4 @@ fn the_index_lists_every_address_and_a_page_carries_the_field() {
         !landing.contains("href=\"#satisfy-1\""),
         "a witness is anonymous and stays out of the rail: {landing}"
     );
-
-    fs::remove_dir_all(directory).unwrap();
 }

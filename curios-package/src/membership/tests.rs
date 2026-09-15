@@ -1,20 +1,10 @@
 //! Which unit a file is placed in for a question — and when none is.
 
-use {
-    super::*,
-    std::{
-        fs,
-        time::{SystemTime, UNIX_EPOCH},
-    },
-};
+use {super::*, curios_utilities::test_support::Temporary, std::fs};
 
-/// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
-fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let root = std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()));
+/// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
+fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
+    let root = Temporary::new("membership", name);
 
     for (path, source) in files {
         let path = root.join(path);
@@ -22,11 +12,13 @@ fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
         fs::write(path, source).unwrap();
     }
 
+    fs::create_dir_all(&root).unwrap();
+
     root
 }
 
 /// An umbrella enumerating one member, with a stray file at its root and another in a directory no member holds.
-fn umbrella(name: &str) -> PathBuf {
+fn umbrella(name: &str) -> Temporary {
     tree(
         name,
         &[
@@ -54,8 +46,6 @@ fn a_file_no_member_holds_under_an_umbrella_is_standalone() {
             "{stray}"
         );
     }
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A member's module is the member's library, under the umbrella's root — the nearest manifest is the member's, and the umbrella governs it.
@@ -69,13 +59,11 @@ fn a_members_module_is_placed_in_its_library_under_the_umbrella_root() {
             units,
             ..
         } => {
-            assert_eq!(governing, root.canonicalize().unwrap());
+            assert_eq!(governing, root.to_path_buf());
             assert_eq!(units.len(), 1);
         }
         _ => panic!("a module of the library is the library"),
     }
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A placed file carries the module its spelling names, by the layout rule and its exception: the header is the root, a `.crs` under the directory is its path, and a file no `mod` could declare — another extension, a segment no identifier — names none.
@@ -111,8 +99,6 @@ fn a_placed_file_carries_the_module_its_spelling_names() {
             "{file}"
         );
     }
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// Naming an umbrella outright with `--manifest` is the refusal it always was: nothing can be asked of a manifest that compiles nothing.
@@ -125,6 +111,4 @@ fn an_umbrella_named_outright_is_still_refused() {
         panic!("an umbrella named by hand is refused");
     };
     assert!(refusal.contains("declares an umbrella"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }

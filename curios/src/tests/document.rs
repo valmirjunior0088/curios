@@ -5,13 +5,9 @@ use {
     curios_package::{Governing, order},
     curios_pipeline::{CompileError, DEFAULT_STEP_BUDGET, with_units},
     curios_text::Overlay,
-    curios_utilities::Qualifier,
+    curios_utilities::{Qualifier, test_support::Temporary},
     curios_wonder::documentation,
-    std::{
-        fs,
-        path::PathBuf,
-        time::{SystemTime, UNIX_EPOCH},
-    },
+    std::fs,
 };
 
 /// The standard library's record, off the image the compiler was built with.
@@ -35,19 +31,17 @@ fn standard_library() -> curios_document::Documentation {
     .expect("the standard library documents")
 }
 
-/// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
-fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let root = std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()));
+/// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
+fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
+    let root = Temporary::new("document", name);
 
     for (path, contents) in files {
         let path = root.join(path);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, contents).unwrap();
     }
+
+    fs::create_dir_all(&root).unwrap();
 
     root
 }
@@ -303,18 +297,11 @@ fn every_intrinsic_carrier_reaches_a_page_through_its_std_module() {
 fn no_internal_root_reaches_a_rendered_page() {
     let documentation = standard_library();
 
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let directory = std::env::temp_dir().join(format!(
-        "curios-document-internal-{}-{millis}",
-        std::process::id()
-    ));
+    let directory = Temporary::new("document", "internal");
     curios_document::write_documentation(&documentation, &directory).expect("the pages render");
 
     let mut offenders = Vec::new();
-    let mut pending = vec![directory.clone()];
+    let mut pending = vec![directory.to_path_buf()];
     while let Some(path) = pending.pop() {
         for entry in fs::read_dir(&path).expect("a written directory") {
             let entry = entry.expect("a written entry").path();
@@ -343,8 +330,6 @@ fn no_internal_root_reaches_a_rendered_page() {
         offenders.len(),
         offenders.join("\n")
     );
-
-    fs::remove_dir_all(&directory).ok();
 }
 
 /// Every rule of the record on one package: a private module and a private definition are absent, an opaque representation shows no constructors, prose attaches where it was written, a module's prose is the `mod` declaration's, a re-export is a link — or, out of a private module, the declaration itself on the facade's page — and a signature's names resolve to where they were declared — within the unit or in the standard library.
@@ -396,7 +381,6 @@ fn a_package_documents_its_interface_for_its_consumers() {
 
     let documentation = documentation(DEFAULT_STEP_BUDGET, units, &Overlay::default(), None)
         .expect("the package documents");
-    fs::remove_dir_all(&root).unwrap();
 
     let paths = documentation
         .modules

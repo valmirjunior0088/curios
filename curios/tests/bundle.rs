@@ -7,16 +7,20 @@
 //! cargo test -p curios --test bundle -- --ignored
 //! ```
 
-use std::{fs, process::Command};
+use {
+    curios_utilities::test_support::Temporary,
+    std::{fs, process::Command},
+};
 
 #[test]
 #[ignore = "execs a produced executable; build the compiler with `cargo x runtime` first"]
 fn compile_produces_a_runnable_executable() {
     let compiler = env!("CARGO_BIN_EXE_curios");
 
-    // `compile` builds a declared executable, so the program is a package: a one-line manifest beside its `exe.crs`.
-    let package = std::env::temp_dir().join("curios_bundle_e2e");
-    let output = std::env::temp_dir().join("curios_bundle_e2e.out");
+    // `compile` builds a declared executable, so the program is a package: a one-line manifest beside its `exe.crs`, and the executable beside the package — both in a directory of their own that goes away with the test.
+    let root = Temporary::new("cli-bundle", "e2e");
+    let package = root.join("bundle");
+    let output = root.join("bundle.out");
     fs::create_dir_all(&package).expect("create the temp package");
     fs::write(package.join("curios.toml"), "name = \"bundle\"\n").expect("write the manifest");
     fs::write(package.join("exe.crs"), r#"/std/print("hello")"#).expect("write the temp source");

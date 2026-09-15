@@ -26,3 +26,7 @@ curios-verdicts = { workspace = true }
 lsp-server = "0.10.0"
 lsp-types = "0.97.0"
 serde_json = "1.0.151"
+
+[dev-dependencies]
+# The directory of its own every suite here works in, canonical and removed however the test ends.
+curios-utilities = { workspace = true, features = ["test-support"] }

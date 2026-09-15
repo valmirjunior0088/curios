@@ -1,21 +1,8 @@
-use {
-    super::*,
-    crate::TreeHash,
-    std::{
-        fs,
-        time::{SystemTime, UNIX_EPOCH},
-    },
-};
+use {super::*, crate::TreeHash, curios_utilities::test_support::Temporary, std::fs};
 
-/// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
-///
-/// **Canonical, because everything it is compared against is.** The walk canonicalizes every location it resolves, so an expectation built from the temporary directory as spelled would compare two spellings of one directory — equal only where that spelling happens to be canonical already.
-fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let root = std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()));
+/// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
+fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
+    let root = Temporary::new("graph", name);
 
     for (path, source) in files {
         let path = root.join(path);
@@ -25,8 +12,7 @@ fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
 
     fs::create_dir_all(&root).unwrap();
 
-    root.canonicalize()
-        .expect("the tree was just written, so it resolves")
+    root
 }
 
 /// The prefixes `directory`'s order mounts, in fold order.
@@ -49,8 +35,6 @@ fn a_lone_package_is_one_unit() {
     );
 
     assert_eq!(mounts(&root).unwrap(), vec!["/json".to_string()]);
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A path dependency is live and unpinned, and it lands before the package that names it.
@@ -73,8 +57,6 @@ fn a_path_dependency_lands_before_its_dependent() {
         mounts(&root.join("app")).unwrap(),
         vec!["/base".to_string(), "/app".to_string()]
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// **The diamond.** Two packages depending on one package compile it once, and it lands before both.
@@ -111,8 +93,6 @@ fn a_diamond_compiles_its_point_once() {
         mounts.iter().position(|at| at == "/base") < mounts.iter().position(|at| at == "/left"),
         "{mounts:?}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// **The conflict**, in the form a live source can take it: two dependents resolving one name to two places, refused naming both.
@@ -149,8 +129,6 @@ fn two_dependents_resolving_one_name_two_ways_is_refused() {
         refusal.contains("\"left\"") && refusal.contains("\"right\""),
         "{refusal}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A package of nothing but programs is nothing to depend *on*, and saying so beats every one of its names arriving unbound.
@@ -174,8 +152,6 @@ fn a_dependency_with_no_library_is_refused() {
 
     let refusal = mounts(&root.join("app")).expect_err("nothing to import");
     assert!(refusal.contains("has no library"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// **The conflict**, over exact pins: two dependents pinning one canonical name two ways is refused naming both dependents and both pins.
@@ -200,7 +176,7 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
     fs::write(delivered.join("lib.crs"), "").unwrap();
     let hash = TreeHash::of(&delivered).unwrap();
 
-    let placed = crate::Store::at(root.clone()).source(&hash);
+    let placed = crate::Store::at(root.to_path_buf()).source(&hash);
     fs::create_dir_all(placed.parent().unwrap()).unwrap();
     fs::rename(&delivered, &placed).unwrap();
 
@@ -252,8 +228,6 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
 
     let refusal = mounts(&root.join("app")).expect_err("one name, two hashes");
     assert!(refusal.contains("pinned two ways"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A pin reached through the catalog is a pin: a member drawing `http` from the umbrella's `[catalog]` and a member pinning it directly at another revision are refused naming both pins, before the direct one's tree exists — where reading the snapshot off the marker itself found none, sent the reader to `curate`, and after it reported two store paths.
@@ -282,7 +256,7 @@ fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
     fs::write(delivered.join("curios.toml"), "name = \"http\"\n").unwrap();
     fs::write(delivered.join("lib.crs"), "").unwrap();
     let hash = TreeHash::of(&delivered).unwrap();
-    let placed = crate::Store::at(root.clone()).source(&hash);
+    let placed = crate::Store::at(root.to_path_buf()).source(&hash);
     fs::create_dir_all(placed.parent().unwrap()).unwrap();
     fs::rename(&delivered, &placed).unwrap();
     let absent = TreeHash::parse(&format!("c1:{}", "e".repeat(64))).unwrap();
@@ -320,8 +294,6 @@ fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
         refusal.contains("\"left\"") && refusal.contains("\"right\""),
         "both dependents are named: {refusal}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// **The cycle.** A dependency cycle is refused naming the chain.
@@ -349,8 +321,6 @@ fn a_dependency_cycle_is_refused() {
         refusal.contains("\"a\"") && refusal.contains("\"b\""),
         "{refusal}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A cycle *through an already-placed name* is still a cycle.
@@ -385,8 +355,6 @@ fn a_cycle_reached_through_a_placed_name_is_refused() {
         refusal.contains("\"b\"") && refusal.contains("\"c\""),
         "{refusal}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A package is referred to by the name it declares, so a row keyed by anything else is refused.
@@ -407,8 +375,6 @@ fn a_row_keyed_by_the_wrong_name_is_refused() {
 
     let refusal = mounts(&root.join("app")).expect_err("a consumer cannot rename a package");
     assert!(refusal.contains("declares itself \"base\""), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A pin and a live row for one name are refused as a pin against a live row, in either order: the store's directory for the pinned side is the right directory and the wrong fact, and a reader sent there would be looking for a path nobody wrote.
@@ -470,8 +436,6 @@ fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
         );
         assert!(!refusal.contains("resolves two ways"), "{name}: {refusal}");
         assert!(!refusal.contains(".curios"), "{name}: {refusal}");
-
-        fs::remove_dir_all(root).unwrap();
     }
 }
 
@@ -524,8 +488,6 @@ fn the_four_marker_mismatches_are_four_refusals() {
 
         let refusal = mounts(&root.join("app")).expect_err(name);
         assert!(refusal.contains(expected), "{name}: {refusal}");
-
-        fs::remove_dir_all(root).unwrap();
     }
 }
 
@@ -556,8 +518,6 @@ fn a_catalog_row_pointing_nowhere_is_refused_against_the_umbrella() {
         )),
         "{refusal}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A row pointing at a directory that is not a package is refused against the row: the dependency, its dependent and where it resolved, never the operating system's word for a manifest the reader did not name.
@@ -582,8 +542,6 @@ fn a_dependency_with_no_manifest_is_refused_against_the_row() {
     );
     assert!(refusal.contains("holds no `curios.toml`"), "{refusal}");
     assert!(!refusal.contains("os error"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A marker in a package no umbrella governs is refused for that, not for the name: the umbrella above may list the name asked for and omit the package asking, and a reader told the list lacks the name would check the entry that is there.
@@ -621,8 +579,6 @@ fn a_marker_in_an_ungoverned_package_is_refused_for_the_missing_governance() {
             !refusal.contains("declaring that name"),
             "{name}: {refusal}"
         );
-
-        fs::remove_dir_all(root).unwrap();
     }
 }
 
@@ -653,8 +609,6 @@ fn the_markers_resolve_through_the_lists_that_answer_them() {
     assert_eq!(mounts.last().map(String::as_str), Some("/app"));
     assert!(mounts.contains(&"/base".to_string()), "{mounts:?}");
     assert!(mounts.contains(&"/vendored".to_string()), "{mounts:?}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A fetchable row states what it needs and where it goes, and says so rather than guessing while nothing has delivered it.
@@ -676,6 +630,4 @@ fn an_unmaterialized_fetchable_row_names_curate() {
 
     let refusal = mounts(&root).expect_err("nothing has materialized it");
     assert!(refusal.contains("curios curate"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }

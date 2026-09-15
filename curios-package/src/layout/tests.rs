@@ -1,26 +1,12 @@
 use {
     super::*,
-    curios_utilities::Qualifier,
-    std::{
-        fs,
-        path::PathBuf,
-        time::{SystemTime, UNIX_EPOCH},
-    },
+    curios_utilities::{Qualifier, test_support::Temporary},
+    std::fs,
 };
 
-/// A fresh directory nothing else is using.
-fn temp_dir(name: &str) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-
-    std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()))
-}
-
-/// A package directory holding `manifest` and the files `files` names, relative to it.
-fn package(name: &str, manifest: &str, files: &[(&str, &str)]) -> PathBuf {
-    let directory = temp_dir(name);
+/// A package in a directory of its own that goes away with the test, holding `manifest` and the files `files` names, relative to it.
+fn package(name: &str, manifest: &str, files: &[(&str, &str)]) -> Temporary {
+    let directory = Temporary::new("layout", name);
     fs::create_dir_all(&directory).unwrap();
     fs::write(directory.join(MANIFEST), manifest).unwrap();
 
@@ -57,8 +43,6 @@ fn a_package_mounts_its_declared_name_over_its_manifest_directory() {
             .map(|mount| mount.prefix.clone()),
         Some(Qualifier::from(["json"]))
     );
-
-    fs::remove_dir_all(directory).unwrap();
 }
 
 /// A package of nothing but programs has no body, and no vestigial file to write saying so.
@@ -74,8 +58,6 @@ fn a_package_with_no_library_header_has_no_library() {
 
     assert!(source.is_none());
     assert_eq!(package.executables.len(), 1);
-
-    fs::remove_dir_all(directory).unwrap();
 }
 
 /// Only the header's *absence* is an answer: one that fails to parse is still mounted, and the refusal is discovery's to raise — located at the line that failed, rather than text raised here.
@@ -89,8 +71,6 @@ fn an_unparsable_library_header_is_mounted_for_discovery_to_refuse() {
 
     let (_, source) = package_at(&directory).expect("the layout is not what is wrong");
     assert!(source.is_some(), "the header is there to be read");
-
-    fs::remove_dir_all(directory).unwrap();
 }
 
 /// One stem space: an executable beside a module of the same name is a refusal naming both.
@@ -111,8 +91,6 @@ fn a_stem_claimed_twice_is_refused() {
     );
     assert!(refusal.contains("mod parse"), "{refusal}");
     assert!(refusal.contains("the executable \"parse\""), "{refusal}");
-
-    fs::remove_dir_all(directory).unwrap();
 }
 
 /// The stem space is the package root's, not the library's: a package of nothing but programs has one too.
@@ -138,8 +116,6 @@ fn a_stem_claimed_twice_is_refused_without_a_library() {
         ),
         "{refusal}"
     );
-
-    fs::remove_dir_all(directory).unwrap();
 }
 
 /// A header that does not parse is discovery's refusal to report, and what the executables claim does not wait on it.
@@ -155,8 +131,6 @@ fn an_unparseable_header_still_leaves_the_executables_checked() {
         .map(|_| ())
         .expect_err("a stem claimed twice");
     assert!(refusal.contains("claims the stem `exe` twice"), "{refusal}");
-
-    fs::remove_dir_all(directory).unwrap();
 }
 
 /// An executable whose path leaves the package root claims its stem somewhere else, so it does not collide here.
@@ -169,8 +143,6 @@ fn an_executable_outside_the_root_claims_no_stem_in_it() {
     );
 
     package_at(&directory).expect("an executable outside the package root");
-
-    fs::remove_dir_all(directory).unwrap();
 }
 
 /// An umbrella compiles nothing of its own, and saying so beats an absent-library refusal about a file it never wanted.
@@ -195,8 +167,6 @@ fn an_executable_the_library_declares_as_a_module_is_refused() {
         refusal.contains("declares as the module `/nested/app/main`"),
         "{refusal}"
     );
-
-    fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
@@ -207,6 +177,4 @@ fn an_umbrella_is_not_a_unit() {
         .map(|_| ())
         .expect_err("an umbrella is not a unit");
     assert!(refusal.contains("compiles nothing of its own"), "{refusal}");
-
-    fs::remove_dir_all(directory).unwrap();
 }

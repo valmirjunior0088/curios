@@ -1,23 +1,19 @@
 //! What `curios test` does at the command line: the governing package compiled as test programs, one instantiation per test, the guest's outcome lines joined by what only the runner knows — the failing body, the count line, the exit code — plus the filter, the store round trip, and `run`'s indifference to it all.
 
-use std::{
-    env,
-    ffi::OsStr,
-    fs,
-    os::unix::ffi::OsStrExt,
-    path::{Path, PathBuf},
-    process::{self, Command, Output},
-    time::{SystemTime, UNIX_EPOCH},
+use {
+    curios_utilities::test_support::Temporary,
+    std::{
+        ffi::OsStr,
+        fs,
+        os::unix::ffi::OsStrExt,
+        path::Path,
+        process::{Command, Output},
+    },
 };
 
-/// A directory of its own, shared with no other test.
-fn temporary(name: &str) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-
-    env::temp_dir().join(format!("curios-cli-test-{name}-{}-{millis}", process::id()))
+/// A directory of its own, shared with no other test and gone with it.
+fn temporary(name: &str) -> Temporary {
+    Temporary::new("cli-test", name)
 }
 
 fn write(root: &Path, path: &str, contents: &str) {
@@ -29,7 +25,7 @@ fn write(root: &Path, path: &str, contents: &str) {
 /// The six-outcome package: every rung the report can print, declared in the library, beside an executable with no tests of its own.
 ///
 /// **The trapping row needs a value the folder cannot see, and that is why it reads an unset environment variable.** It was `Test/assert(Nat/shl(1, 40) == 0)` while the erased carriers were `u32`: the fold refused past the width, so the shift survived to the backend and the i31 envelope trapped on it. Unbounded, the whole expression folds to `false` and the row reports *failed* — a passing suite that no longer exercises `trapped` at all. A closed computation never traps now (`numeric::envelope_tests::a_closed_computation_folds_at_the_theory_s_width`), so the row taints its operand the way `numeric::test_support::table` does, and keeps the shift closed with the taint added after it so the trap is the envelope's rather than a declined fold's. An unset variable rather than stdin because the harness inherits the test runner's stdin, and a read on a terminal would hang.
-fn project(name: &str) -> PathBuf {
+fn project(name: &str) -> Temporary {
     let root = temporary(name);
     write(
         &root,
@@ -130,8 +126,6 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
         stderr(&output)
     );
     assert_eq!(output.status.code(), Some(1));
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -161,8 +155,6 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
             "↳ Compiling    app; reused\n",
         ],
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -176,8 +168,6 @@ fn a_filter_matching_nothing_exits_one_naming_it() {
         "stderr: {}",
         stderr(&output)
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// `/std/proc/args` promises opaque byte strings, so an argument that is not UTF-8 reaches the program as its bytes rather than being refused at the command line; the program spells each argument in hex through `Show` on `Bytes`.
@@ -203,8 +193,6 @@ fn run_forwards_an_argument_that_is_not_utf8_as_its_bytes() {
         stderr(&output)
     );
     assert_eq!(output.status.code(), Some(0));
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -223,8 +211,6 @@ fn run_neither_runs_nor_reports_a_test() {
         ],
     );
     assert_eq!(output.status.code(), Some(0));
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -265,8 +251,6 @@ fn wonder_tests_lists_declared_paths_per_target_form() {
     let file = curios(&root, &["wonder", "tests", "lib.crs"]);
     assert_eq!(stdout(&file), "/app/lib_first\n/app/lib_second\n");
     assert_eq!(file.status.code(), Some(0));
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -283,8 +267,6 @@ fn wonder_tests_on_a_testless_package_lists_nothing_and_exits_zero() {
     let output = curios(&root, &["wonder", "tests"]);
     assert_eq!(stdout(&output), "", "stderr: {}", stderr(&output));
     assert_eq!(output.status.code(), Some(0));
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -324,8 +306,6 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
             "↳ Compiling    other; reused\n",
         ],
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A unit holding a written goal beside a refused declaration could not be built, and the exit says so: the goal is reported beside the refusal, and the code is the refusal's rather than the goal's.
@@ -350,6 +330,4 @@ fn a_goal_beside_a_refusal_exits_one_with_both_reported() {
     let report = stderr(&output);
     assert!(report.contains("broken:"), "{report}");
     assert!(report.contains("goal `?`"), "{report}");
-
-    fs::remove_dir_all(root).unwrap();
 }

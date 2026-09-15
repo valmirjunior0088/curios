@@ -1,23 +1,18 @@
 //! What `curios lint` does at the command line: the report on stdout, the exit code it turns on, and the one lint decided over a package rather than a unit.
 
-use std::{
-    env, fs,
-    io::Write,
-    path::{Path, PathBuf},
-    process::{self, Command, Output, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
+use {
+    curios_utilities::test_support::Temporary,
+    std::{
+        fs,
+        io::Write,
+        path::Path,
+        process::{Command, Output, Stdio},
+    },
 };
 
-/// A directory of its own, shared with no other test.
-fn temporary(name: &str) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    env::temp_dir()
-        .canonicalize()
-        .unwrap()
-        .join(format!("curios-cli-lint-{name}-{}-{millis}", process::id()))
+/// A directory of its own, shared with no other test and gone with it.
+fn temporary(name: &str) -> Temporary {
+    Temporary::new("cli-lint", name)
 }
 
 fn write(root: &Path, path: &str, contents: &str) {
@@ -72,8 +67,6 @@ fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {
     let clean = curios(&root, &["lint", "-"], "/std/print(\"\")\n");
     assert!(clean.status.success());
     assert!(clean.stdout.is_empty());
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// Goals alone are the incomplete state every subcommand exits 2 on; a goal beside a lint is 1, since the lint is what there is to act on.
@@ -98,8 +91,6 @@ fn goals_alone_exit_two_and_a_lint_beside_one_exits_one() {
     let text = stdout(&both);
     assert!(text.starts_with("goal `?`"), "{text}");
     assert!(text.contains("unused declaration `m`"), "{text}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A dependency nothing in the package reached is reported by the package-entire form alone, against the manifest, and one the library reaches is not.
@@ -136,6 +127,4 @@ fn an_unused_dependency_is_reported_for_the_package_entire() {
     let one = curios(&app, &["lint", "lib.crs"], "");
     assert!(one.status.success(), "{}", stdout(&one));
     assert!(one.stdout.is_empty());
-
-    fs::remove_dir_all(root).unwrap();
 }

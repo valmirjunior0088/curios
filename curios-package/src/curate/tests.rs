@@ -1,24 +1,16 @@
-use {
-    super::*,
-    std::{
-        path::PathBuf,
-        time::{SystemTime, UNIX_EPOCH},
-    },
-};
+use {super::*, curios_utilities::test_support::Temporary};
 
-/// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
-fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let root = std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()));
+/// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
+fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
+    let root = Temporary::new("curate", name);
 
     for (path, contents) in files {
         let path = root.join(path);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, contents).unwrap();
     }
+
+    fs::create_dir_all(&root).unwrap();
 
     root
 }
@@ -41,13 +33,12 @@ fn a_delivery_matching_its_pin_is_placed() {
         },
     };
 
-    accept(&scratch, &Store::at(root.clone()), &acquisition).expect("a delivery matching its pin");
+    accept(&scratch, &Store::at(root.to_path_buf()), &acquisition)
+        .expect("a delivery matching its pin");
 
-    let placed = Store::at(root.clone()).source(&hash);
+    let placed = Store::at(root.to_path_buf()).source(&hash);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
     assert!(!scratch.exists(), "the scratch directory is consumed");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// **The hash.** A delivery that is not what it was pinned to is refused, and the refusal states what actually arrived — because nobody writes a hash by hand, so the only way to fix a wrong one is to be told the right one.
@@ -68,19 +59,17 @@ fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
         },
     };
 
-    let refusal =
-        accept(&scratch, &Store::at(root.clone()), &acquisition).expect_err("a tampered delivery");
+    let refusal = accept(&scratch, &Store::at(root.to_path_buf()), &acquisition)
+        .expect_err("a tampered delivery");
 
     assert!(refusal.contains("not what it is pinned to"), "{refusal}");
     assert!(refusal.contains(&delivered.to_string()), "{refusal}");
     assert!(
-        !Store::at(root.clone())
+        !Store::at(root.to_path_buf())
             .source(&acquisition.snapshot.hash)
             .exists(),
         "nothing is placed under a hash it does not have"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A project whose every dependency is live has nothing to fetch, so `curate` reaches its fixed point without asking `git` anything.
@@ -102,8 +91,6 @@ fn a_live_project_acquires_nothing() {
     let governing = Governing::of(&root.join("app")).unwrap();
 
     assert!(curate(&governing).unwrap().is_empty());
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A pin of a name the umbrella enumerates is refused by `order` as a direct pin of a live member; the walk declines to fetch on its behalf first, so a refused row costs no network round trip.
@@ -126,8 +113,6 @@ fn a_pin_of_a_live_member_is_not_acquired() {
     let governing = Governing::of(&root.join("app")).unwrap();
 
     assert!(curate(&governing).unwrap().is_empty());
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// **A fetchable catalog row is acquired, and this is the regression.** The marker used to be resolved *after* the dispatch that decides what to fetch, so it landed in the store at a hash nothing had put there: `curate` acquired nothing, `order` then refused the dependency naming `curate`, and running it changed nothing. A dead end whose error message named the command that could not escape it.
@@ -158,8 +143,6 @@ fn a_fetchable_catalog_row_is_acquired() {
     assert_eq!(acquired.name, "http");
     assert_eq!(acquired.url, "https://example/http");
     assert_eq!(acquired.snapshot.rev, "abc123");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// The other half of the same dispatch: a `path` catalog row resolves against the *umbrella's* root rather than the depending package's directory, because a relative path is relative to whoever wrote it.
@@ -192,8 +175,6 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
     // The catalog row itself fetches nothing, but the walk descended into it and found what it depends on.
     assert_eq!(wanted.len(), 1, "{wanted:?}");
     assert_eq!(wanted.iter().next().unwrap().name, "http");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A revision this machine is serving, fetched end to end.
@@ -227,24 +208,21 @@ fn a_fetched_revision_is_verified_and_placed() {
         },
     };
 
-    fetch(&Store::at(root.clone()), &acquisition).expect("a revision this machine is serving");
+    fetch(&Store::at(root.to_path_buf()), &acquisition)
+        .expect("a revision this machine is serving");
 
-    let placed = Store::at(root.clone()).source(&expected);
+    let placed = Store::at(root.to_path_buf()).source(&expected);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
     assert!(
         !placed.join(".git").exists(),
         "source is what was delivered; the object store is how it arrived"
     );
-
-    fs::remove_dir_all(measured).unwrap();
-    fs::remove_dir_all(origin).unwrap();
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A repository on this machine holding `files`, on a branch and at a tag, with the object name of its one commit.
 ///
 /// The remote every fetching test serves from: local, so none of them needs a network.
-fn origin(name: &str, files: &[(&str, &str)]) -> (PathBuf, String) {
+fn origin(name: &str, files: &[(&str, &str)]) -> (Temporary, String) {
     let origin = tree(name, files);
 
     for arguments in [
@@ -303,7 +281,7 @@ fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
     let absent = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
     let refusal = fetch(
-        &Store::at(root.clone()),
+        &Store::at(root.to_path_buf()),
         &pinned(&origin, absent, &expected),
     )
     .expect_err("a revision this remote does not hold");
@@ -313,10 +291,6 @@ fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
         !refusal.contains("not what it is pinned to"),
         "the fault is the revision, not the hash: {refusal}"
     );
-
-    fs::remove_dir_all(measured).unwrap();
-    fs::remove_dir_all(origin).unwrap();
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A pin may name a branch or a tag, not only an object, and both still deliver.
@@ -335,13 +309,12 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
 
     for rev in [revision.as_str(), "v1", "master", "main"] {
         let root = tree("curate-refs", &[("curios.toml", "name = \"app\"\n")]);
-        let store = Store::at(root.clone());
+        let store = Store::at(root.to_path_buf());
 
         // Whichever name `git init` gave the branch is the one that exists; the other is simply absent from this remote.
         if rev == "master" || rev == "main" {
             let held = git(&origin, &["rev-parse", "--verify", rev]).is_ok();
             if !held {
-                fs::remove_dir_all(root).unwrap();
                 continue;
             }
         }
@@ -350,12 +323,7 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
             panic!("{rev} names a revision this remote holds: {refusal}")
         });
         assert!(store.source(&expected).join("lib.crs").is_file(), "{rev}");
-
-        fs::remove_dir_all(root).unwrap();
     }
-
-    fs::remove_dir_all(measured).unwrap();
-    fs::remove_dir_all(origin).unwrap();
 }
 
 /// A tree pinned through two mirrors is one acquisition: `app` pins `shape` through its origin and `app`'s path dependency `mid` pins the same snapshot through a bare clone of it, and `curate` fetches it once and reports it once. The set of acquisitions tells the two apart by `url`, so this is the loop's own dedup under test, not the set's.
@@ -369,7 +337,8 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
     let measured = tree("curate-mirrors-expected", files);
     let expected = TreeHash::of(&measured).unwrap();
     let (origin, revision) = origin("curate-mirrors-origin", files);
-    let mirror = origin.with_extension("mirror");
+    // A directory nothing has created yet, which the bare clone creates.
+    let mirror = Temporary::new("curate", "curate-mirrors-mirror");
     git(
         &origin,
         &[
@@ -418,9 +387,4 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
             .join("lib.crs")
             .is_file()
     );
-
-    fs::remove_dir_all(measured).unwrap();
-    fs::remove_dir_all(origin).unwrap();
-    fs::remove_dir_all(mirror).unwrap();
-    fs::remove_dir_all(root).unwrap();
 }

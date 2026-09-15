@@ -9,8 +9,8 @@ use {
     curios_prelude::{SYNTAX, with_stored},
     curios_text::{Overlay, RootSource, UnitSource, into_core_unit},
     curios_unit::{Prefix, Unit},
-    curios_utilities::{Qualifier, RootKind},
-    std::{env, fs, path::PathBuf, time::Instant},
+    curios_utilities::{Qualifier, RootKind, test_support::Temporary},
+    std::{fs, path::PathBuf, time::Instant},
 };
 
 /// The standard library's own tree, as the package claiming `/std` from it.
@@ -26,15 +26,15 @@ fn std_from_its_tree() -> RootSource {
     .declaring([Qualifier::from(["sys"])])
 }
 
-/// The same claim from a directory that is not the archive's tree.
+/// The same claim from a directory that is not the archive's tree — one nothing creates, so its guard has nothing to remove.
 fn std_from_elsewhere() -> RootSource {
-    let directory = env::temp_dir().join("curios-standard-elsewhere");
+    let directory = Temporary::new("standard", "elsewhere");
 
     RootSource::mounted(
         "std",
         RootKind::Ordinary,
         directory.join("lib.crs"),
-        directory,
+        directory.to_path_buf(),
     )
 }
 

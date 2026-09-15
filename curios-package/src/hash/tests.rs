@@ -1,21 +1,16 @@
 use {
     super::*,
+    curios_utilities::test_support::Temporary,
     std::{
         ffi::OsStr,
         fs,
         os::unix::{self, ffi::OsStrExt},
-        path::PathBuf,
-        time::{SystemTime, UNIX_EPOCH},
     },
 };
 
-/// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
-fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let root = std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()));
+/// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
+fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
+    let root = Temporary::new("hash", name);
 
     for (path, contents) in files {
         let path = root.join(path);
@@ -85,9 +80,6 @@ fn one_tree_hashes_one_way() {
 
     assert_eq!(hash, TreeHash::of(&right).expect("the same tree elsewhere"));
     assert_eq!(TreeHash::parse(&hash.to_string()), Ok(hash));
-
-    fs::remove_dir_all(left).unwrap();
-    fs::remove_dir_all(right).unwrap();
 }
 
 /// A tampered byte is a different tree, which is the whole point of accepting by hash.
@@ -100,9 +92,6 @@ fn a_tampered_byte_is_a_different_hash() {
         TreeHash::of(&before).unwrap(),
         TreeHash::of(&after).unwrap()
     );
-
-    fs::remove_dir_all(before).unwrap();
-    fs::remove_dir_all(after).unwrap();
 }
 
 /// Both halves are length-framed, so moving a boundary between a path and its contents is a different tree.
@@ -114,9 +103,6 @@ fn a_moved_boundary_is_a_different_hash() {
     let right = tree("hash-frame-right", &[("a", "bc")]);
 
     assert_ne!(TreeHash::of(&left).unwrap(), TreeHash::of(&right).unwrap());
-
-    fs::remove_dir_all(left).unwrap();
-    fs::remove_dir_all(right).unwrap();
 }
 
 /// A tree is its files: an empty directory leaves no trace, because nothing about it could be delivered.
@@ -127,9 +113,6 @@ fn an_empty_directory_leaves_no_trace() {
     fs::create_dir_all(padded.join("empty/deeper")).unwrap();
 
     assert_eq!(TreeHash::of(&bare).unwrap(), TreeHash::of(&padded).unwrap());
-
-    fs::remove_dir_all(bare).unwrap();
-    fs::remove_dir_all(padded).unwrap();
 }
 
 /// A name that is not UTF-8 is refused: the scheme spells paths in UTF-8, and a name it could only spell by replacing bytes is one two different files could share. Asked of the name alone, so no filesystem has to agree to hold such a name first.
@@ -152,6 +135,4 @@ fn a_symlink_in_a_delivered_tree_is_refused() {
         .map(|_| ())
         .expect_err("a delivered tree may hold no symlink");
     assert!(refusal.contains("is a symlink"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }

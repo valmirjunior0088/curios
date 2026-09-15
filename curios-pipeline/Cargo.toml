@@ -35,3 +35,7 @@ curios-wasm = { workspace = true }
 # The standard prefix, for `standard.rs` alone: the fold itself never names it, and the boundary this
 # crate keeps is against Binaryen, Wasmtime, the runtime and the CLI — none of which this is.
 curios-prelude = { workspace = true }
+
+[dev-dependencies]
+# The directory of its own every suite here works in, canonical and removed however the test ends.
+curios-utilities = { workspace = true, features = ["test-support"] }

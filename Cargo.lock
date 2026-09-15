@@ -785,6 +785,7 @@ version = "0.14.0"
 name = "curios-profile"
 version = "0.14.0"
 dependencies = [
+ "curios-utilities",
  "tracing",
  "tracing-log",
  "tracing-subscriber",
@@ -795,6 +796,7 @@ name = "curios-runtime"
 version = "0.14.0"
 dependencies = [
  "curios-abi",
+ "curios-utilities",
  "getrandom 0.4.3",
  "rustix",
  "rustls",

@@ -1,30 +1,16 @@
-use {
-    super::*,
-    std::{
-        fs,
-        time::{SystemTime, UNIX_EPOCH},
-    },
-};
+use {super::*, curios_utilities::test_support::Temporary, std::fs};
 
-/// A fresh directory nothing else is using.
-fn temp_dir(name: &str) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-
-    std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()))
-}
-
-/// A tree of `(relative path, contents)` pairs, rooted at a fresh directory.
-fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root = temp_dir(name);
+/// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
+fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
+    let root = Temporary::new("govern", name);
 
     for (path, source) in files {
         let path = root.join(path);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, source).unwrap();
     }
+
+    fs::create_dir_all(&root).unwrap();
 
     root
 }
@@ -42,8 +28,6 @@ fn a_lone_package_governs_itself() {
     assert_eq!(governing.package.name, "json");
     assert!(governing.umbrella.is_none());
     assert!(same_directory(&governing.root, &root));
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// **A subdirectory of a package is not that package.** There is no search above the working directory, so a directory holding modules rather than a manifest is governed by nothing — the refusal names the directory looked in, since the fix is a `cd` and the reader has to know where to.
@@ -69,8 +53,6 @@ fn a_subdirectory_of_a_package_is_governed_by_nothing() {
     // The package it sits in still governs its own directory, which is where the manifest is.
     let governing = Governing::of(&root).expect("the directory the manifest is in");
     assert_eq!(governing.package.name, "json");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// An umbrella governs what it enumerates, and its directory is where the store goes.
@@ -95,8 +77,6 @@ fn an_umbrella_governs_a_member_it_enumerates() {
         assert!(governing.umbrella.is_some(), "{member} is enumerated");
         assert!(same_directory(&governing.root, &root), "{member}");
     }
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// Enumeration bounds the walk: a package sitting inside an umbrella's tree that the umbrella does not list is governed by nothing above it.
@@ -117,8 +97,6 @@ fn an_umbrella_governs_nothing_it_does_not_enumerate() {
 
     assert!(governing.umbrella.is_none());
     assert!(same_directory(&governing.root, &root.join("scratch")));
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// An umbrella is not a package, so standing in its root there is nothing for `run` to compile.
@@ -138,8 +116,6 @@ fn an_umbrella_root_is_governed_by_no_package() {
         .expect_err("an umbrella root declares no package");
     // A manifest *is* there, so the refusal names what it declares rather than reporting one missing.
     assert!(refusal.contains("declares an umbrella"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// An entry in `members` that no manifest answers is the umbrella's fault, and the refusal says so: the umbrella's manifest, the entry as written, and where it looked — never the operating system's word for a file the reader did not spell.
@@ -168,8 +144,6 @@ fn a_member_with_no_manifest_is_refused_against_the_umbrella() {
     );
     assert!(refusal.contains("no `curios.toml` sits in"), "{refusal}");
     assert!(!refusal.contains("os error"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// One member listed twice is one member, whatever the two spellings, and the refusal says the umbrella listed it twice — never that two members declare the name, which would send the reader after a second package that does not exist.
@@ -197,6 +171,4 @@ fn a_member_listed_twice_is_refused_as_listed_twice() {
         "{refusal}"
     );
     assert!(!refusal.contains("two members"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }

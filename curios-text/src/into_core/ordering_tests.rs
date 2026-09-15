@@ -2,7 +2,6 @@
 
 use crate::{Entrypoint, Error, RootSource};
 use curios_utilities::{Qualifier, RootKind};
-use std::fs;
 
 use super::test_support::*;
 
@@ -113,8 +112,6 @@ fn the_entry_reads_its_modules_from_its_stem_directory() {
     let loader = RootSource::entry(&base.join("main.crs"));
 
     super::into_core(&entrypoint, &loader, syntax()).unwrap();
-
-    fs::remove_dir_all(base).unwrap();
 }
 
 #[test]
@@ -167,8 +164,6 @@ fn a_supplied_source_and_a_directory_resolve_alike() {
 
     assert_eq!(names(&supplied), vec!["/pkg/Inner/x".to_string()]);
     assert_eq!(names(&supplied), names(&disk));
-
-    fs::remove_dir_all(base).unwrap();
 }
 
 /// A body-less witness lowers to a `Derive` transient, which carries no `Var` — so the scheduler cannot see the renderers and method wrapper the written body would have named, and `derived_vocabulary` supplies them as hard edges instead. This is what those edges buy: the vocabulary is declared *after* the witness here and must still be emitted before it.

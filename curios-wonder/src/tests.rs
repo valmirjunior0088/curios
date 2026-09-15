@@ -3,13 +3,9 @@ use {
     crate::{Origin, ReadOnly, Severity, Subject, diagnostics, rendered},
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Progress, check_units_with_prelude},
     curios_text::Overlay,
+    curios_utilities::test_support::Temporary,
     curios_verdicts::Verdicts,
-    std::{
-        collections::BTreeMap,
-        fs,
-        path::{Path, PathBuf},
-        time::{SystemTime, UNIX_EPOCH},
-    },
+    std::{collections::BTreeMap, fs, path::Path},
 };
 
 fn of(text: &str) -> Vec<crate::Diagnostic> {
@@ -246,7 +242,6 @@ fn a_library_reports_its_own_lints() {
         "{}",
         report.render()
     );
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A unit whose record still agrees comes from the store, however many units before it missed.
@@ -295,8 +290,6 @@ fn a_miss_does_not_refuse_the_units_after_it() {
         ],
         "the unit after a missing one is still the store's, since the recompiled one was placed before it"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// An edited predecessor recompiles the units after it: a unit's arena is the whole prefix's, so its record vouches for the bytes every unit before it contained, and a predecessor that no longer contains them is a disagreement whether or not anything is imported from it.
@@ -310,8 +303,6 @@ fn an_edited_unit_recompiles_the_units_after_it() {
         ["recompiling /alpha", "compiling /beta"],
         "the overlay edits /alpha alone, which is compiled over its slot; /beta's record vouched for the /alpha it was compiled after, and its slot was filed after a chain that has moved, so it is neither a hit nor a baseline"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A unit whose slot disagrees with its files is compiled over that slot's unit rather than from nothing: the slot is a baseline, and every declaration the edit did not reach is reused. A query is what takes it; the disk is untouched either way.
@@ -330,8 +321,6 @@ fn an_edited_document_recompiles_its_unit_over_the_stored_one() {
         ["reused /alpha", "reused /beta"],
         "and nothing was filed, so the disk's text is the store's still"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A hit is verified against the text the compilation would read, so an open document refuses it only when its text differs from what the unit was compiled from — and a document the unit never read, wherever it lies, refuses nothing. The containment rule this replaced refused a package's library whenever any document under its directory was open, which is where every executable of the package lives.
@@ -355,20 +344,11 @@ fn an_open_document_refuses_a_hit_only_when_it_is_edited() {
         ["reused /alpha", "reused /beta"],
         "a document the unit never read leaves the hit standing"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
-/// Two packages at a directory of its own, the second declaring the first — which is what makes them a scope of two, in that order.
-fn mounted_project(name: &str) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let root = std::env::temp_dir().join(format!(
-        "curios-wonder-{name}-{}-{millis}",
-        std::process::id()
-    ));
+/// Two packages in a directory of their own that goes away with the test, the second declaring the first — which is what makes them a scope of two, in that order.
+fn mounted_project(name: &str) -> Temporary {
+    let root = Temporary::new("wonder", name);
 
     for (directory, package, declares) in [("a", "alpha", ""), ("b", "beta", "alpha")] {
         let dependency = match declares.is_empty() {
@@ -507,19 +487,20 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
 /// A file target the disk does not hold could not be asked about: the one-shot transport refuses it before membership places it, in `run`'s words, rather than answering with the read failure as a diagnostic and exit 0 — or, under a package, placing the missing file as a library module and answering about the library.
 #[test]
 fn a_file_target_the_disk_does_not_hold_is_refused_before_it_is_placed() {
-    let missing = std::env::temp_dir()
-        .join("curios-wonder-missing")
-        .join("nothing.crs");
+    // Asked of a file inside a directory nothing has created yet, and then of that directory once it exists.
+    let root = Temporary::new("wonder", "unheld");
+
+    let missing = root.join("nothing.crs");
     let refusal = crate::file_target(missing.clone()).unwrap_err();
     assert!(
         refusal.starts_with(&format!("failed to read {}: ", missing.display())),
         "{refusal}"
     );
 
-    let directory = std::env::temp_dir();
-    let refusal = crate::file_target(directory.clone()).unwrap_err();
+    fs::create_dir_all(&root).unwrap();
+    let refusal = crate::file_target(root.to_path_buf()).unwrap_err();
     assert!(
-        refusal.starts_with(&format!("failed to read {}: ", directory.display())),
+        refusal.starts_with(&format!("failed to read {}: ", root.display())),
         "{refusal}"
     );
 }

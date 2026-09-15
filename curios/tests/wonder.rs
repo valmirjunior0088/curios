@@ -2,26 +2,19 @@
 //!
 //! The engine's own behaviour — which records a program yields — is covered beside it in `wonder/tests.rs`; these decide what the transports do with them: that an answer is stdout and exit 0 whatever it says, that a file is placed in its unit, and that the server publishes the same records where the editor is looking and clears them when they go.
 
-use std::{
-    env, fs,
-    io::{BufRead, BufReader, Read, Write},
-    path::{Path, PathBuf},
-    process::{self, Child, ChildStdout, Command, Output, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
+use {
+    curios_utilities::test_support::Temporary,
+    std::{
+        fs,
+        io::{BufRead, BufReader, Read, Write},
+        path::Path,
+        process::{Child, ChildStdout, Command, Output, Stdio},
+    },
 };
 
-/// A directory of its own, shared with no other test.
-fn temporary(name: &str) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-
-    // Canonical, because the server publishes the root the governance walk canonicalizes, and macOS's temporary directory sits behind a symlink (`/var` → `/private/var`): a URI computed from the raw path would never match the one published.
-    env::temp_dir().canonicalize().unwrap().join(format!(
-        "curios-cli-wonder-{name}-{}-{millis}",
-        process::id()
-    ))
+/// A directory of its own, shared with no other test and gone with it — canonical, which matters here because the server publishes the root the governance walk canonicalizes, and a URI computed from any other spelling would never match the one published.
+fn temporary(name: &str) -> Temporary {
+    Temporary::new("cli-wonder", name)
 }
 
 fn write(root: &Path, path: &str, contents: &str) {
@@ -31,7 +24,7 @@ fn write(root: &Path, path: &str, contents: &str) {
 }
 
 /// A package whose library spreads over two files and whose executable uses it.
-fn project(name: &str) -> PathBuf {
+fn project(name: &str) -> Temporary {
     let root = temporary(name);
     write(
         &root,
@@ -89,8 +82,6 @@ fn a_goal_is_answered_on_stdout_with_exit_zero() {
     assert!(text.starts_with("goal `?`"), "{text}");
     assert!(text.contains("--> <stdin>:1:20"), "{text}");
     assert!(answered.stderr.is_empty(), "nothing is narrated");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// `--manifest` takes the file as it is spelled, and a bare `curios.toml` names the one in the working directory: its parent is the empty path, which is no directory to resolve on its own.
@@ -110,8 +101,6 @@ fn a_bare_manifest_override_names_the_working_directory() {
         String::from_utf8_lossy(&answered.stderr)
     );
     assert!(stdout(&answered).is_empty(), "{}", stdout(&answered));
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A file is placed in the unit that declares it: the executable compiles against its library, so `/app/util/word` resolves — which it would not standalone — and a module of the library is checked as the library, reporting at the module's own path.
@@ -129,8 +118,6 @@ fn a_file_is_placed_in_its_unit() {
     let text = stdout(&module);
     assert!(text.contains("type mismatch"), "{text}");
     assert!(text.contains("util.crs:1:27"), "{text}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A file under a package that no `mod` reaches is in no unit, and the answer says so rather than reporting the library's verdicts as if they were about it — on a cold store and on a warm one alike, since the walk asks the loader and not the record of a compile. Declaring it is what makes the file's own contents the answer.
@@ -168,8 +155,6 @@ fn a_file_no_mod_declares_is_reported_as_not_part_of_its_unit() {
         text.contains("stray.crs:1:24"),
         "its own error, now read: {text}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A stage that the program does not reach is not an answer: diagnostics on stderr, exit 1, stdout empty.
@@ -187,8 +172,6 @@ fn an_unreached_stage_leaves_stdout_empty() {
     assert_eq!(refused.status.code(), Some(1));
     assert!(refused.stdout.is_empty());
     assert!(String::from_utf8_lossy(&refused.stderr).contains("type mismatch"));
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// One side of the wire: frame a JSON-RPC message, and read one back.
@@ -292,8 +275,6 @@ fn the_server_publishes_from_the_buffer_and_clears() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A lint reaches the editor as a warning, at the word it is about: the severity the protocol has for a finding that stops nothing.
@@ -330,8 +311,6 @@ fn a_lint_is_published_as_a_warning() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A store a build already filled answers about the disk, so it does not answer here: the library's unit is in the store, the editor holds a module of it that does not type-check, and the record is published anyway. A stored unit is believed on a re-read of the files it was compiled from, which still hold what was built — so a hit taken here would report on the file rather than on the document that was asked about.
@@ -377,8 +356,6 @@ fn a_warm_store_does_not_answer_for_the_buffer() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A library header that does not parse is a located record like any other: published on the header, underlining the item head the parser refused, with a message that holds no snippet — the editor draws the location, and a caret drawn in text cannot line up in a proportional font.
@@ -418,8 +395,6 @@ fn a_header_that_does_not_parse_is_located_without_a_snippet() {
 
     let output = editor.finish();
     assert!(output.status.success());
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// Formatting is `curios format` over what the editor holds: one whole-document edit to the canonical form, and none once it is canonical.
@@ -462,8 +437,6 @@ fn formatting_answers_with_the_canonical_text() {
 
     let output = editor.finish();
     assert!(output.status.success());
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A request is never behind a compile: a formatting request sent right after an edit is answered before the edit's diagnostics are published, because the protocol thread answers it while the analyst is still checking.
@@ -502,8 +475,6 @@ fn formatting_is_answered_while_a_check_is_running() {
 
     let output = editor.finish();
     assert!(output.status.success());
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A package named `std` is the standard library, so a question about one of its modules is answered rather than refused as a collision: the fold withholds the archived root and compiles the package over the archived unit as a baseline. This checkout's tree is the archive's own, so the diff is empty and everything is reused.
@@ -549,6 +520,4 @@ fn diagnostics_on_a_broken_file_lists_every_refusal() {
     assert!(text.contains("--> <stdin>:1:21"), "{text}");
     assert!(text.contains("--> <stdin>:3:21"), "{text}");
     assert!(!text.contains("_b"), "{text}");
-
-    fs::remove_dir_all(root).unwrap();
 }

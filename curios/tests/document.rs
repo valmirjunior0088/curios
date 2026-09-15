@@ -2,24 +2,18 @@
 //!
 //! The record itself is covered in `curios/src/tests/document.rs`; this decides what the *subcommand* does with it — where the pages land, that a link from one page reaches another, that the prelude image documents the standard library through the file form, and that a package without a library is refused by name.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    process::{Command, Output},
-    time::{SystemTime, UNIX_EPOCH},
+use {
+    curios_utilities::test_support::Temporary,
+    std::{
+        fs,
+        path::Path,
+        process::{Command, Output},
+    },
 };
 
-/// A directory of its own, shared with no other test.
-fn temporary(name: &str) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-
-    std::env::temp_dir().join(format!(
-        "curios-cli-document-{name}-{}-{millis}",
-        std::process::id()
-    ))
+/// A directory of its own, shared with no other test and gone with it.
+fn temporary(name: &str) -> Temporary {
+    Temporary::new("cli-document", name)
 }
 
 fn write(root: &Path, path: &str, contents: &str) {
@@ -29,7 +23,7 @@ fn write(root: &Path, path: &str, contents: &str) {
 }
 
 /// A package with a described library of two modules, the child documented on its `mod`.
-fn project(name: &str) -> PathBuf {
+fn project(name: &str) -> Temporary {
     let root = temporary(name);
 
     write(
@@ -121,8 +115,6 @@ fn document_writes_the_bundle_under_the_store() {
         index.contains("\"/shapes/Shape/circle\",\"index.html#Shape/circle\"]"),
         "a member is indexed at its anchor: {index}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -142,8 +134,6 @@ fn output_names_another_directory() {
         !root.join(".curios/documentation").exists(),
         "the store holds nothing when the pages went elsewhere"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// The image the compiler was built with, where its build script filed it: the `/std` half of the prelude, which is the half that carries a record — every checkout that built `curios` has it.
@@ -190,8 +180,6 @@ fn the_prelude_image_documents_the_standard_library_into_output() {
         !root.join(".curios").exists(),
         "a file has no package, so nothing is filed under a store"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A verdict slot frames a record ahead of its unit, and `document` reads the unit off it as it reads the image, so a library filed under a store documents without compiling again. `test` is what files it: `document` itself reads the store as every query does and never writes it.
@@ -222,8 +210,6 @@ fn a_verdict_slot_documents_the_unit_it_holds() {
         landing.contains(r#"<h1><span class="sep">/</span>shapes</h1>"#),
         "{landing}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -235,8 +221,6 @@ fn a_file_without_output_is_refused_before_it_is_read() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("--output"), "{stderr}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -250,6 +234,4 @@ fn a_package_without_a_library_is_refused_by_name() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("declares no library"), "{stderr}");
     assert!(!root.join(".curios/documentation").exists());
-
-    fs::remove_dir_all(root).unwrap();
 }

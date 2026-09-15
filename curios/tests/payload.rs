@@ -4,24 +4,18 @@
 //!
 //! Not `#[ignore]`d, unlike `bundle`: nothing here execs a produced executable. `curios run` runs its program in-process.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    process::{Command, Output},
-    time::{SystemTime, UNIX_EPOCH},
+use {
+    curios_utilities::test_support::Temporary,
+    std::{
+        fs,
+        path::Path,
+        process::{Command, Output},
+    },
 };
 
-/// A directory of its own, shared with no other test.
-fn temporary(name: &str) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-
-    std::env::temp_dir().join(format!(
-        "curios-cli-payload-{name}-{}-{millis}",
-        std::process::id()
-    ))
+/// A directory of its own, shared with no other test and gone with it.
+fn temporary(name: &str) -> Temporary {
+    Temporary::new("cli-payload", name)
 }
 
 fn write(root: &Path, path: &str, contents: &str) {
@@ -31,7 +25,7 @@ fn write(root: &Path, path: &str, contents: &str) {
 }
 
 /// A package declaring one executable that prints and then exits with a code of its own.
-fn project(name: &str) -> PathBuf {
+fn project(name: &str) -> Temporary {
     let root = temporary(name);
 
     write(
@@ -97,8 +91,6 @@ fn running_twice_reuses_and_behaves_identically() {
         Some(7),
         "which is the program's own code"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// One slot serves both subcommands, which is what makes `compile` after `run` a file write.
@@ -121,8 +113,6 @@ fn one_slot_serves_run_and_compile() {
         root.join(".curios/executables/app/app").exists(),
         "and the bundle was written from it"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A stage is a question, and a question never writes the store: `wonder stage` compiles to answer and files nothing, so the plain invocation after it still compiles — where `--print`, which it replaced, filed what it built.
@@ -146,8 +136,6 @@ fn asking_for_a_stage_compiles_and_files_nothing() {
         !reused(&curios(&root, &["run"])),
         "and nothing was filed, so the next plain invocation compiles"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A bare file has no project, hence no store and no slot — the declared-versus-bare split, unchanged.
@@ -170,6 +158,4 @@ fn a_bare_file_files_nothing() {
         !root.join(".curios").exists(),
         "and nothing was written beside it"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }

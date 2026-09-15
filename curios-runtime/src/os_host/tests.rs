@@ -1,6 +1,7 @@
 use {
     super::*,
     curios_abi::{serial_flow, serial_parity},
+    curios_utilities::test_support::Temporary,
     rustix::{
         pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt},
         termios::LocalModes,
@@ -407,7 +408,7 @@ fn open_takes_a_listed_name_back_as_the_bytes_it_was_given() {
     const NAME: &[u8] = "café.txt".as_bytes();
 
     let host = OsHost::with_args(vec![]);
-    let dir = std::env::temp_dir().join(format!("curios-open-{}", std::process::id()));
+    let dir = Temporary::new("runtime-open", "listed-name");
     fs::create_dir(&dir).expect("a fresh temporary directory");
     let name = NAME;
     fs::write(dir.join(OsStr::from_bytes(name)), b"x").expect("a file under the raw name");
@@ -426,7 +427,6 @@ fn open_takes_a_listed_name_back_as_the_bytes_it_was_given() {
     assert!(matches!(host.handle_read(handle.clone(), 8), (Status::Ok, bytes) if bytes == b"x"));
 
     host.handle_close(handle);
-    fs::remove_dir_all(&dir).expect("the temporary directory is removed");
 }
 
 /// A serial port opened on the far end of a pseudo-terminal: a frame outside the row's ranges opens nothing, the open takes the raw frame and the exclusive hold, a byte the near end writes arrives through `handle_read` once `handle_poll` has reported it, the input discard is served, and a closed port misses loudly. A pty forces its own character size and keeps no modem lines, so what is under test is the open's shape rather than a wire: Linux refuses the lines through the errno lane, and the speed is never exercised. The hold is asserted only for a process without `CAP_SYS_ADMIN`, which the kernel lets past it, and a reopen after the close is not asserted at all: the near end keeps the far end's tty alive, so on Linux the hold outlives the port's close, where a real device's last close frees its tty and the hold with it.
