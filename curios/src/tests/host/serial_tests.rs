@@ -1,10 +1,10 @@
-//! A serial port through `/std/Serial`, against scripted devices: the frame an open asks for, a command written and a line read under the bracket, the lines and the input discard, the refusals and the exclusive hold, and the devices the host lists.
+//! A serial port through `/std/Serial`, against scripted devices: the frame an open asks for, a command written and a line read under the bracket, the lines and the input discard, the refusals, and the devices the host lists.
 //!
 //! The host's tags are spelled as numbers, since this crate names no `curios-abi` constant: parity none is 0 and even 1, flow control none is 0 and hardware 1, and the controls DTR, RTS and the input discard are 0, 1 and 2.
 
 use {crate::tests::run_text, curios_runtime::MockHost};
 
-// `config` asks for the frame nearly every device speaks, and a written `Config` reaches the host setting for setting. The second open succeeds only because the first closed its port.
+// `config` asks for the frame nearly every device speaks, and a written `Config` reaches the host setting for setting.
 #[test]
 fn an_open_asks_the_host_for_the_configured_speed_and_frame() {
     let source = r#"
@@ -45,22 +45,19 @@ fn an_open_asks_the_host_for_the_configured_speed_and_frame() {
     );
 }
 
-// Under `with`, a command lands on the device whole and the reply is read as one line across two arrivals: the fiber parks between the carriage return and the newline, `poll` brings the second, and the line ending is dropped whole. The port is closed after the body, so it opens again.
+// Under `with`, a command lands on the device whole and the reply is read as one line across two arrivals: the fiber parks between the carriage return and the newline, `poll` brings the second, and the line ending is dropped whole.
 #[test]
 fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
     let source = r#"
         use /std/{Str, Bytes, Option, Show, Try, Async, Io, Path, Serial};
-        let port: Path = Path/of_str("/dev/ttyUSB0");
         let exchange(s: Serial) -> Try(Async, Io/Error, Bytes) =
             let _ = Try/attempt(Serial/write(s, Str/to_bytes("AT\r\n")))!;
             let line = Try/attempt(Async/read_line(s))!;
             Try/pure(Option/unwrap_or(line, x[]));
         let fiber: Async({}) =
-            let r = Try/run(Serial/with(port, Serial/config(115200), exchange))!;
-            let again = Try/run(Serial/open(port, Serial/config(115200)))!;
-            let reopened = match again | success(_) => "|reopened" | failure(e) => Show/show(e) end;
+            let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), exchange))!;
             match r
-            | success(line) => Io/write(Io/stdout, x[..line, ..Str/to_bytes(reopened)])
+            | success(line) => Io/write(Io/stdout, line)
             | failure(e) => /std/print(Show/show(e))
             end;
         Async/run(fiber)
@@ -70,7 +67,7 @@ fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
         .serial([("/dev/ttyUSB0", vec!["OK\r", "\n"])])
         .build();
     run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"OK|reopened");
+    assert_eq!(io.output(), b"OK");
     assert_eq!(io.serial_written(b"/dev/ttyUSB0"), b"AT\r\n");
 }
 
@@ -106,24 +103,18 @@ fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
     );
 }
 
-// An unscripted device is `not_found`, a frame outside the row's ranges is `other(22)` before any device is looked for, and a second open of a held port is `other(16)`. A body failing that way still closes its port, its failure the bracket's answer, so the port opens again after it.
+// An unscripted device is `not_found`, and a frame outside the row's ranges is `other(22)` before any device is looked for.
 #[test]
-fn opens_are_refused_by_name_and_a_failing_body_still_closes_its_port() {
+fn opens_are_refused_by_name() {
     let source = r#"
         use /std/{Str, Result, Show, Try, Async, Io, Path, Serial};
-        let port: Path = Path/of_str("/dev/ttyUSB0");
         let elsewhere: Path = Path/of_str("/dev/ttyACM9");
         let shown(@A: Type, r: Result(Io/Error, A)) -> Str =
             match r | success(_) => "ok" | failure(e) => Show/show(e) end;
-        let reopen(_s: Serial) -> Try(Async, Io/Error, {}) =
-            let _ = Serial/open(port, Serial/config(9600))!;
-            Try/pure(());
         let fiber: Async({}) =
             let missing = Try/run(Serial/open(elsewhere, Serial/config(9600)))!;
             let framed = Try/run(Serial/open(elsewhere, Serial/Config { ..Serial/config(9600), data_bits = 5 }))!;
-            let held = Try/run(Serial/with(port, Serial/config(9600), reopen))!;
-            let after = Try/run(Serial/open(port, Serial/config(9600)))!;
-            /std/print(Str/join(" ", [shown(missing), shown(framed), shown(held), shown(after)]));
+            /std/print(Str/join(" ", [shown(missing), shown(framed)]));
         Async/run(fiber)
         "#;
 
@@ -131,7 +122,7 @@ fn opens_are_refused_by_name_and_a_failing_body_still_closes_its_port() {
         .serial([("/dev/ttyUSB0", Vec::<&str>::new())])
         .build();
     run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"not_found other(22) other(16) ok");
+    assert_eq!(io.output(), b"not_found other(22)");
 }
 
 // `list` names every entry of `/dev/serial/by-id` under the directory, in byte order, and a host with no such directory has no devices rather than a failure.

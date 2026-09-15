@@ -17,7 +17,7 @@ struct MockDisk {
 /// The root directory as a path names it. Its children have the empty parent, since the separator before them is the whole of it.
 const ROOT: &[u8] = b"/";
 
-/// `EBUSY`, the errno `rmdir(2)` reports on the root and an open reports on a serial port another open holds — `16` on both release targets, Linux and macOS.
+/// `EBUSY`, the errno `rmdir(2)` reports on the root — `16` on both release targets, Linux and macOS.
 const EBUSY: u32 = 16;
 
 /// `EINVAL`, the errno a serial open reports for a frame outside the row's ranges and a serial control for an op it does not know — `22` on both release targets.
@@ -340,7 +340,7 @@ struct MockChild {
     streams: [Handle; 3],
 }
 
-/// A live scripted serial port minted by `serial_open`: `handle_read` serves the device's scripted chunks, and `handle_write` appends to the capture filed under `path`, which is also what the port holds exclusively until it is closed.
+/// A live scripted serial port minted by `serial_open`: `handle_read` serves the device's scripted chunks, and `handle_write` appends to the capture filed under `path`.
 struct MockSerial {
     path: Vec<u8>,
     bytes: Chunked,
@@ -413,8 +413,6 @@ pub struct MockHost {
     kills: Arc<Mutex<Vec<Vec<u8>>>>,
     /// Scripted serial devices by path: the chunks a port serves while it is open. Opening an unscripted path is `NotFound`.
     serial_devices: HashMap<Vec<u8>, Vec<Vec<u8>>>,
-    /// The paths of the serial ports open now, each held exclusively as `TIOCEXCL` holds a real one.
-    serial_held: Mutex<BTreeSet<Vec<u8>>>,
     /// Every serial open that reached a scripted device, in order: its path and `[baud, data_bits, parity, stop_bits, flow]`. Shared with [`MockIo::serial_opens`].
     serial_opens: Arc<Mutex<Vec<SerialOpen>>>,
     /// Every control applied to an open serial port, in order: the op tag and the level. Shared with [`MockIo::serial_controls`].
@@ -689,12 +687,7 @@ impl HostOps for MockHost {
     }
 
     fn handle_close(&self, io: Handle) {
-        let removed = self.table.lock().unwrap().remove(&io);
-
-        // A closed port releases its exclusive hold, so the next open of it succeeds as it does on a real device.
-        if let Some(MockResource::Serial(port)) = removed {
-            self.serial_held.lock().unwrap().remove(&port.path);
-        }
+        self.table.lock().unwrap().remove(&io);
     }
 
     fn handle_read(&self, io: Handle, count: u32) -> (Status, Vec<u8>) {
@@ -856,7 +849,7 @@ impl HostOps for MockHost {
         stop_bits: u32,
         flow: u32,
     ) -> (Status, Handle) {
-        // Refused in the native host's order: a frame outside the row's ranges before the device is looked for, and a port another open holds after it is found.
+        // Refused in the native host's order: a frame outside the row's ranges before the device is looked for.
         if serial_frame(data_bits, parity, stop_bits, flow).is_none() {
             return (Status::Other(EINVAL), Handle::none());
         }
@@ -864,10 +857,6 @@ impl HostOps for MockHost {
         let Some(chunks) = self.serial_devices.get(path) else {
             return (Status::NotFound, Handle::none());
         };
-
-        if !self.serial_held.lock().unwrap().insert(path.to_vec()) {
-            return (Status::Other(EBUSY), Handle::none());
-        }
 
         self.serial_opens
             .lock()
@@ -1236,7 +1225,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Script the serial devices `serial_open` finds: `(path, chunks)`, each port serving its chunks as `net_chunks` serves a response — the first arrived by the open, each later one once a `handle_poll` arms it. Opening an unscripted path is `NotFound`, and an open port is held until it is closed, so a second open of it is `EBUSY`.
+    /// Script the serial devices `serial_open` finds: `(path, chunks)`, each port serving its chunks as `net_chunks` serves a response — the first arrived by the open, each later one once a `handle_poll` arms it. Opening an unscripted path is `NotFound`.
     pub fn serial<P, C, I>(mut self, devices: I) -> Self
     where
         P: AsRef<[u8]>,
@@ -1356,7 +1345,6 @@ impl MockHostBuilder {
             children: self.children,
             kills,
             serial_devices: self.serial_devices,
-            serial_held: Mutex::new(BTreeSet::new()),
             serial_opens,
             serial_controls,
             serial_written,

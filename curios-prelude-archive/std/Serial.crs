@@ -52,7 +52,7 @@ let of_parity(parity: Parity) -> Nat =
 let of_flow(flow: Flow) -> Nat =
     match flow | none() => /sys/serial_flow/none | hardware() => /sys/serial_flow/hardware end;
 
---- The port at `path`, opened raw at `c`'s speed and frame and held exclusively until it is closed.
+--- The port at `path`, opened raw at `c`'s speed and frame. Nothing holds it exclusively, so whether another open of the same device is refused is the device's to say.
 ---
 --- Linux raises DTR as a port opens whatever the program wants, so a board that resets on DTR resets here; `discard_input` once it has booted drops the banner it printed.
 pub let open(path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
@@ -69,7 +69,7 @@ pub let open(path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
     | none() => Try/pure(Serial { r.handle })
     end;
 
---- Close `s`, releasing its hold.
+--- Close `s`.
 pub let close(s: Serial) -> Io({}) =
     Handle/close(s.0);
 

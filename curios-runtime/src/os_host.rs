@@ -7,8 +7,8 @@ use {
         io::Errno,
         ioctl::{Opcode, Setter, ioctl},
         termios::{
-            ControlModes, OptionalActions, QueueSelector, Termios, ioctl_tiocexcl, tcflush,
-            tcgetattr, tcgetwinsize, tcsetattr,
+            ControlModes, OptionalActions, QueueSelector, Termios, tcflush, tcgetattr,
+            tcgetwinsize, tcsetattr,
         },
     },
     rustls::{
@@ -786,15 +786,13 @@ impl HostOps for OsHost {
             );
         };
 
-        // Non-blocking from the open rather than switched after it, because opening a port whose carrier line is down waits for carrier until `CLOCAL` is set, and `CLOCAL` is set on a descriptor already open. `NOCTTY` keeps the port from becoming this process's controlling terminal, and `CLOEXEC` keeps a spawned child from holding it, and its exclusive hold, past the program's own close.
+        // Non-blocking from the open rather than switched after it, because opening a port whose carrier line is down waits for carrier until `CLOCAL` is set, and `CLOCAL` is set on a descriptor already open. `NOCTTY` keeps the port from becoming this process's controlling terminal, and `CLOEXEC` keeps a spawned child from holding it past the program's own close. No exclusive hold is taken: whether `TIOCEXCL` refuses a second open differs by kernel, by device and by privilege, so the row promises only what every kernel does.
         let opened = rustix::fs::open(
             path,
             OFlags::RDWR | OFlags::NOCTTY | OFlags::NONBLOCK | OFlags::CLOEXEC,
             rustix::fs::Mode::empty(),
         )
         .and_then(|fd| {
-            ioctl_tiocexcl(&fd)?;
-
             let mut termios = tcgetattr(&fd)?;
 
             termios.make_raw();

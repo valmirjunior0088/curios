@@ -429,10 +429,9 @@ fn open_takes_a_listed_name_back_as_the_bytes_it_was_given() {
     host.handle_close(handle);
 }
 
-/// A serial port opened on the far end of a pseudo-terminal: a frame outside the row's ranges opens nothing, the open takes the raw frame and the exclusive hold, a byte the near end writes arrives through `handle_read` once `handle_poll` has reported it, the input discard is served, and a closed port misses loudly. A pty forces its own character size and keeps no modem lines, so what is under test is the open's shape rather than a wire: Linux refuses the lines through the errno lane, and the speed is never exercised. The hold is asserted only for a process without `CAP_SYS_ADMIN`, which the kernel lets past it, and a reopen after the close is not asserted at all: the near end keeps the far end's tty alive, so on Linux the hold outlives the port's close, where a real device's last close frees its tty and the hold with it.
+/// A serial port opened on the far end of a pseudo-terminal: a frame outside the row's ranges opens nothing, the open takes the raw frame, a byte the near end writes arrives through `handle_read` once `handle_poll` has reported it, the input discard is served, and a closed port misses loudly. A pty forces its own character size and keeps no modem lines, so what is under test is the open's shape rather than a wire: Linux refuses the lines through the errno lane, and the speed is never exercised.
 #[test]
-fn a_serial_port_opens_raw_and_exclusive_on_a_pseudo_terminal() {
-    const EBUSY: u32 = 16;
+fn a_serial_port_opens_raw_on_a_pseudo_terminal() {
     const EINVAL: u32 = 22;
 
     let near = openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY).expect("a pseudo-terminal");
@@ -471,10 +470,6 @@ fn a_serial_port_opens_raw_and_exclusive_on_a_pseudo_terminal() {
             .local_modes
             .intersects(LocalModes::ICANON | LocalModes::ECHO)
     );
-
-    if !rustix::process::geteuid().is_root() {
-        assert!(matches!(open(8), (Status::Other(EBUSY), _)));
-    }
 
     assert!(matches!(
         host.handle_read(port.clone(), 8),

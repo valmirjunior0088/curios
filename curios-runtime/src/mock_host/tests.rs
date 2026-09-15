@@ -253,26 +253,22 @@ fn stderr_is_readable_apart_from_the_concatenation_of_both_streams() {
     assert_eq!(io.errors(), b"err ");
 }
 
-// A scripted serial port holds its path until it is closed, and an input discard drops the chunk that has arrived while the one still to come survives it.
+// An input discard on a scripted serial port drops the chunk that has arrived, while the one still to come survives it.
 #[test]
-fn a_serial_port_is_held_until_closed_and_a_discard_drops_only_what_arrived() {
-    let (host, io) = MockHost::builder()
+fn a_serial_discard_drops_only_what_arrived() {
+    let (host, _io) = MockHost::builder()
         .serial([("/dev/ttyUSB0", vec!["banner", "ready"])])
         .build();
-    let open = || {
-        host.serial_open(
-            b"/dev/ttyUSB0",
-            9600,
-            8,
-            serial_parity::NONE,
-            1,
-            serial_flow::NONE,
-        )
-    };
 
-    let (status, port) = open();
+    let (status, port) = host.serial_open(
+        b"/dev/ttyUSB0",
+        9600,
+        8,
+        serial_parity::NONE,
+        1,
+        serial_flow::NONE,
+    );
     assert!(matches!(status, Status::Ok));
-    assert!(matches!(open(), (Status::Other(EBUSY), _)));
 
     assert!(matches!(
         host.serial_control(port.clone(), serial_op::DISCARD_INPUT, 0),
@@ -288,11 +284,7 @@ fn a_serial_port_is_held_until_closed_and_a_discard_drops_only_what_arrived() {
         0,
     );
     assert!(matches!(
-        host.handle_read(port.clone(), 16),
+        host.handle_read(port, 16),
         (Status::Ok, bytes) if bytes == b"ready"
     ));
-
-    host.handle_close(port);
-    assert!(matches!(open(), (Status::Ok, _)));
-    assert_eq!(io.serial_opens().len(), 2);
 }

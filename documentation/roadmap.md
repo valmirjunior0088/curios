@@ -195,7 +195,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Terminal raw mode and window size (`/sys/tty`, wrapped by `std/Tty` with a restoring bracket)
 - [x] Filesystem over `Path` (`std/fs` in `Try` over `Io`; the browser denies every row)
 - [x] Subprocesses (`std/Command`: `spawn`, `run` and `status`, a child's pipes as streams)
-- [x] Serial ports (`/sys/serial`, wrapped by `std/Serial`: opened raw and exclusive at a required speed and frame, DTR, RTS and the input discard, Linux enumeration)
+- [x] Serial ports (`/sys/serial`, wrapped by `std/Serial`: opened raw at a required speed and frame, DTR, RTS and the input discard, Linux enumeration)
 
 ## Host Interface (FFI)
 
