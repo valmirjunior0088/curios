@@ -6,10 +6,9 @@
 
 use {
     super::*,
-    crate::test_support::Temporary,
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, compile_with_units},
     curios_text::{Entrypoint, Module},
-    curios_utilities::RootKind,
+    curios_utilities::{RootKind, test_support::Temporary},
     curios_wasm::to_bytes,
     std::path::PathBuf,
 };

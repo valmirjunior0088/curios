@@ -14,11 +14,11 @@ use std::{
 /// A directory of its own, shared with no other test, removed when dropped.
 ///
 /// Removed by `Drop` rather than by a line at the end of the test, because a failing assertion never reaches that line: unwinding runs destructors, so a test that fails leaves nothing behind either.
-pub(crate) struct Temporary(PathBuf);
+pub struct Temporary(PathBuf);
 
 impl Temporary {
     /// A fresh path under the system's temporary directory, named for the `family` of tests and the `name` of this one, unique per process and millisecond.
-    pub(crate) fn new(family: &str, name: &str) -> Self {
+    pub fn new(family: &str, name: &str) -> Self {
         Self(env::temp_dir().join(format!(
             "curios-{family}-{name}-{}-{}",
             process::id(),

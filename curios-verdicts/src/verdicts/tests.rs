@@ -4,10 +4,10 @@
 
 use {
     super::*,
-    crate::test_support::Temporary,
     curios_package::{Governing, order},
     curios_pipeline::{Progress, compile_with_units},
     curios_text::Entrypoint,
+    curios_utilities::test_support::Temporary,
     std::{collections::BTreeMap, path::Path},
 };
 
