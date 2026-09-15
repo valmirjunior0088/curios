@@ -54,6 +54,7 @@ fn names_a_file(argument: &str) -> bool {
 }
 
 /// Where a file argument is compiled.
+#[derive(Debug, Clone, Copy)]
 pub enum Placement {
     /// Alone, against the prelude and nothing else, wherever it sits: how `run` and `compile` take a file.
     Standalone,
@@ -97,26 +98,17 @@ impl Selection {
         })
     }
 
-    /// What `spelling` selects, standing where the process is.
-    pub fn here(
-        spelling: Spelling,
-        manifest: Option<&Path>,
-        placement: Placement,
-    ) -> Result<Self, String> {
-        let directory = std::env::current_dir().map_err(|error| error.to_string())?;
-
-        Self::of(spelling, manifest, &directory, placement)
-    }
-
     /// `file`, placed in the unit that declares it.
     fn contained(file: PathBuf, manifest: Option<&Path>) -> Result<Self, String> {
         Ok(match Membership::of(&file, manifest)? {
             Membership::Standalone => Self::Program(Program::loose(Entry::File(file))),
             Membership::Library {
+                package,
                 root,
                 units,
                 module,
             } => Self::Library(Library {
+                package,
                 root,
                 units,
                 through: Some(file),
@@ -164,6 +156,7 @@ impl Entire {
         }
 
         Ok(Some(Library {
+            package: self.governing.package.name.clone(),
             root: self.governing.root.clone(),
             units: order(&self.governing)?,
             through: None,
@@ -189,6 +182,8 @@ impl Entire {
 
 /// A package's library, compiled against everything it depends on.
 pub struct Library {
+    /// The package whose library it is, which is what its pages are filed under.
+    pub package: String,
     /// The governing root, which is where the store sits.
     pub root: PathBuf,
     /// The whole scope in dependency order, the library last.

@@ -1,11 +1,11 @@
-//! Driving the compile pipeline for the CLI, from a resolved target to the `.cwasm` payload both subcommands consume — including the store consultation that can skip the whole thing. Observing a stage is not here: that is a question about a program, and questions are `wonder`'s.
+//! Driving the compile pipeline for the CLI, from an admitted program to the `.cwasm` payload both subcommands consume — including the store consultation that can skip the whole thing. Observing a stage is not here: that is a question about a program, and questions are `wonder`'s.
 //!
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
     crate::{Heading, Line, Subject, fact},
     curios::{engine, to_cwasm},
-    curios_package::{Entire, Entry, Placement, Program, Selection, Spelling},
+    curios_package::{Entry, Program},
     curios_pipeline::{Cache, CompileError, Progress, compile_with_units},
     curios_text::{Entrypoint, RootSource, UnitSource},
     curios_utilities::Source,
@@ -15,31 +15,14 @@ use {
     std::{io, path::Path, rc::Rc},
 };
 
-/// The program `run` and `compile` take: a file or standard input standalone, a declared executable by name, or — for no argument — the governing package's sole or `default` executable.
-pub(crate) fn program_of(target: Option<&str>, manifest: Option<&Path>) -> Result<Program, String> {
-    Ok(
-        match Selection::here(Spelling::of(target), manifest, Placement::Standalone)? {
-            Selection::Program(program) => program,
-            Selection::Entire(entire) => entire.default_program()?,
-            Selection::Library(_) => unreachable!("a standalone file is never placed in a library"),
-        },
-    )
-}
-
-/// The governing package entire, which is what no argument selects.
-pub(crate) fn entire(manifest: Option<&Path>) -> Result<Entire, String> {
-    match Selection::here(Spelling::Nothing, manifest, Placement::Contained)? {
-        Selection::Entire(entire) => Ok(entire),
-        Selection::Library(_) | Selection::Program(_) => {
-            unreachable!("no argument selects the governing package entire")
-        }
-    }
-}
-
-/// The precompiled payload for `program`, taken from the store when nothing it was made from has changed and compiled otherwise.
+/// The precompiled payload for `program`, taken from `cache` when nothing it was made from has changed, and compiled — and filed there — otherwise. `cache` is the store its command opened for it to file into, and `None` compiles everything and files nothing.
 ///
 /// The scope is the program's own dependency graph and nothing else: a manifest is the only thing that says what a unit is compiled against. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
-pub(crate) fn payload_of(budget: u64, program: Program) -> Result<Vec<u8>, CompileError> {
+pub(crate) fn payload_of(
+    budget: u64,
+    program: Program,
+    cache: Option<Verdicts>,
+) -> Result<Vec<u8>, CompileError> {
     let subject = subject_of(&program);
 
     // A loose program has no project, so it has no store to consult: what a compilation may reuse is a fact about the project it is in, and a loose program is in none.
@@ -51,7 +34,6 @@ pub(crate) fn payload_of(budget: u64, program: Program) -> Result<Vec<u8>, Compi
         .home()
         .map(|home| (home.package.clone(), home.executable.clone()));
     let declares = program.declares();
-    let cache = program.home().map(|home| Verdicts::at(home.root.clone()));
     let scope = program.into_units();
 
     // Opened before the store is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.

@@ -3,11 +3,11 @@
 //! The same subjects, the same records, the same rendering: a lint is a diagnostic the compilation reports and nothing stops on, and this subcommand is where it turns into an exit code. What it adds is the one lint no unit can decide alone — a declared dependency nothing in the package wrote, read off the union of the prefixes every unit spelled — and it adds it only when the target is the package entire, because a dependency is a fact of the package and a file asked about alone reaches what it reaches.
 
 use {
-    crate::{Asked, Diagnosed, Severity, selected},
+    crate::{Asked, Diagnosed, Severity},
     curios_package::Selection,
     curios_text::Overlay,
     curios_utilities::{Qualifier, Report},
-    std::{collections::BTreeSet, path::Path},
+    std::collections::BTreeSet,
 };
 
 /// What `curios lint` found, in the order its exit code ranks them.
@@ -21,10 +21,9 @@ pub enum Linted {
     Findings,
 }
 
-/// `curios lint [TARGET]`: every diagnostic, goal and lint of the target rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached.
-pub fn lint(budget: u64, manifest: Option<&Path>, target: Option<&str>) -> Result<Linted, String> {
+/// `curios lint [TARGET]`: every diagnostic, goal and lint of what `selection` selects rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached.
+pub fn lint(budget: u64, selection: Selection) -> Result<Linted, String> {
     let overlay = Overlay::default();
-    let selection = selected(manifest, target)?;
     // A dependency is a fact of the package, so only the package entire is asked which of its dependencies nothing reached.
     let dependencies = match &selection {
         Selection::Entire(entire) => Some(

@@ -232,6 +232,9 @@ fn a_package_without_a_library_is_refused_by_name() {
     let output = curios(&root, &["document"]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("declares no library"), "{stderr}");
+    assert!(
+        stderr.contains("`document` takes a library, and \"tool\" declares none"),
+        "{stderr}"
+    );
     assert!(!root.join(".curios/documentation").exists());
 }

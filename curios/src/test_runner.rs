@@ -3,9 +3,9 @@
 //! The store is consulted exactly as `run` consults it: one payload per target, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records beside the machine code so a warm run recompiles nothing and still reports everything.
 
 use {
-    crate::{Heading, Line, Subject, entire, fact, report, step},
+    crate::{Access, Heading, Line, Subject, fact, report, step},
     curios::{engine, to_cwasm},
-    curios_package::{LIBRARY, order},
+    curios_package::{Entire, LIBRARY, order},
     curios_pipeline::{Cache, CompileError, EntryTail, TestRecord, compile_tests_with_units},
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::{Entrypoint, RootSource, UnitSource},
@@ -53,13 +53,14 @@ impl Totals {
     }
 }
 
-/// Run the governing package's tests, optionally narrowed to paths starting with `filter`. `Ok(true)` when every selected test passed or proved.
+/// Run the tests `entire` declares, optionally narrowed to paths starting with `filter`, each target filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed or proved.
 pub(crate) fn run_tests(
     budget: u64,
-    manifest: Option<&Path>,
+    entire: Entire,
+    access: Access,
     filter: Option<&str>,
 ) -> Result<bool, CompileError> {
-    let governing = entire(manifest).map_err(CompileError::failure)?.governing;
+    let governing = entire.governing;
 
     // The same scope for every target: the dependency graph, with the governing package's own library last — the order `wonder` walks and `run` compiles.
     let units = order(&governing).map_err(CompileError::failure)?;
@@ -72,7 +73,7 @@ pub(crate) fn run_tests(
     // The library first, when there is one, then every executable in declaration order — each a test program of its own, scheduling only its own unit's tests.
     let library = governing.directory.join(LIBRARY);
     if library.is_file() {
-        let store = Verdicts::at(governing.root.clone());
+        let store = access.filed(&governing.root);
         let subject = Subject::package(&governing.package.name);
         // A library has no written entry, so it is compiled through the trivial one: the subject is the scope's final unit, and `EntryTail::LastUnitTests` replaces that entry with the tail scheduling the unit's tests. `LIBRARY_KEY` stands in for the entry text the payload is keyed on — a built entry has none, and the library's own content rides in through the unit chain regardless.
         let entrypoint = Entrypoint::trivial();
@@ -84,13 +85,13 @@ pub(crate) fn run_tests(
             &loader,
             LIBRARY_KEY,
             &library,
-            &store,
+            store.as_ref(),
             &governing.package.name,
             "tests/",
             EntryTail::LastUnitTests,
             &subject,
         )?;
-        refusal = refusal.or_else(|| store.refused());
+        refusal = refusal.or_else(|| store.as_ref().and_then(Verdicts::refused));
         run_selected(
             &records,
             &cwasm,
@@ -103,7 +104,7 @@ pub(crate) fn run_tests(
     }
 
     for executable in &governing.package.executables {
-        let store = Verdicts::at(governing.root.clone());
+        let store = access.filed(&governing.root);
         let subject = Subject::Executable(executable.name.clone());
         let entry = governing.directory.join(&executable.path);
         let (entrypoint, loader, source) = Entrypoint::opened(&entry)
@@ -115,13 +116,13 @@ pub(crate) fn run_tests(
             &loader,
             &source.text,
             &entry,
-            &store,
+            store.as_ref(),
             &governing.package.name,
             &format!("tests/{}", executable.name),
             EntryTail::Tests,
             &subject,
         )?;
-        refusal = refusal.or_else(|| store.refused());
+        refusal = refusal.or_else(|| store.as_ref().and_then(Verdicts::refused));
         run_selected(
             &records,
             &cwasm,
@@ -151,7 +152,7 @@ pub(crate) fn run_tests(
     Ok(totals.all_green())
 }
 
-/// The records and machine code of one target compiled as a test program — from the store when nothing it was made from has changed, and compiled and filed otherwise.
+/// The records and machine code of one target compiled as a test program — from `store` when nothing it was made from has changed, and compiled and filed there otherwise. Without a store, compiled and filed nowhere.
 #[allow(clippy::too_many_arguments)]
 fn tests_payload(
     budget: u64,
@@ -160,7 +161,7 @@ fn tests_payload(
     loader: &RootSource,
     text: &str,
     entry: &Path,
-    store: &Verdicts,
+    store: Option<&Verdicts>,
     package: &str,
     reserved: &str,
     tail: EntryTail,
@@ -175,7 +176,7 @@ fn tests_payload(
         loader,
     };
 
-    if let Some(bytes) = store.payload_get(&program, &sources, engine())
+    if let Some(bytes) = store.and_then(|store| store.payload_get(&program, &sources, engine()))
         && let Some(decoded) = decode(&bytes)
     {
         fact(Heading::Processing, subject);
@@ -193,7 +194,7 @@ fn tests_payload(
         units,
         entrypoint,
         loader,
-        Some(store as &dyn Cache),
+        store.map(|store| store as &dyn Cache),
         tail,
         |_| {},
         |progress| report(&mut line, subject, true, progress),
@@ -204,7 +205,9 @@ fn tests_payload(
     let (module, _foreigns, records) = compiled?;
     let cwasm = to_cwasm(&module).map_err(CompileError::failure)?;
 
-    if let Some(bytes) = encode(&records, &cwasm) {
+    if let Some(store) = store
+        && let Some(bytes) = encode(&records, &cwasm)
+    {
         store.payload_put(&program, &sources, bytes.as_ref(), engine());
     }
 

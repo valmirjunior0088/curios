@@ -1,4 +1,4 @@
-//! The one-shot transport: resolve what was asked about, ask, render the answer for a reader.
+//! The one-shot transport: ask about what the command line admitted, and render the answer for a reader.
 //!
 //! **The answer goes to stdout, and nothing else does.** A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, and here there are none: a question is not a build.
 //!
@@ -10,14 +10,10 @@ use {
         declared_tests, diagnosed, diagnostics, stage,
     },
     curios_cont::Outcome,
-    curios_package::{Entry, Library, Placement, Program, Selection, Spelling},
+    curios_package::{Entry, Library, Program, Selection},
     curios_text::{LoadError, Overlay},
     curios_verdicts::Verdicts,
-    std::{
-        collections::BTreeSet,
-        fs, io,
-        path::{Path, PathBuf},
-    },
+    std::{collections::BTreeSet, fs, io, path::PathBuf},
 };
 
 /// One thing a question can be about, resolved: the subject, and the store it may read.
@@ -100,25 +96,11 @@ impl Asked {
     }
 }
 
-/// What `target` selects for a question: a file refused when the disk does not hold it, and otherwise placed in the unit that declares it.
-pub(crate) fn selected(manifest: Option<&Path>, target: Option<&str>) -> Result<Selection, String> {
-    let spelling = match Spelling::of(target) {
-        Spelling::File(path) => Spelling::File(file_target(path)?),
-        spelling => spelling,
-    };
-
-    Selection::here(spelling, manifest, Placement::Contained)
-}
-
-/// `wonder diagnostics [TARGET]`: render every diagnostic to stdout, a blank line between each.
-pub fn wonder_diagnostics(
-    budget: u64,
-    manifest: Option<&Path>,
-    target: Option<&str>,
-) -> Result<(), String> {
+/// `wonder diagnostics [TARGET]`: render every diagnostic of what `selection` selects to stdout, a blank line between each.
+pub fn wonder_diagnostics(budget: u64, selection: Selection) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    let answers = Asked::every(selected(manifest, target)?)?;
+    let answers = Asked::every(selection)?;
 
     let reports = rendered(answers, budget, &overlay);
     if !reports.is_empty() {
@@ -128,15 +110,11 @@ pub fn wonder_diagnostics(
     Ok(())
 }
 
-/// `wonder tests [TARGET]`: every test the target declares, one path per line, in declaration order — the library's, then each executable's, when the target is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0.
-pub fn wonder_tests(
-    budget: u64,
-    manifest: Option<&Path>,
-    target: Option<&str>,
-) -> Result<(), String> {
+/// `wonder tests [TARGET]`: every test `selection` declares, one path per line, in declaration order — the library's, then each executable's, when it is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0.
+pub fn wonder_tests(budget: u64, selection: Selection) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    for asked in Asked::every(selected(manifest, target)?)? {
+    for asked in Asked::every(selection)? {
         let records = declared_tests(budget, asked.subject, &overlay, asked.store.as_ref())
             .map_err(|error| error.to_string())?;
         for record in records {
@@ -163,28 +141,17 @@ pub(crate) fn rendered(answers: Vec<Asked>, budget: u64, overlay: &Overlay) -> V
         .collect()
 }
 
-/// `wonder stage STAGE [TARGET]`: the rung, reprinted, to stdout.
+/// `wonder stage STAGE [TARGET]`: `program`'s rung, reprinted, to stdout.
 ///
 /// `finish` renders the one rung the driver cannot: `wasm-optm` is the module after Binaryen, which this crate does not link, so the engine hands the emitted module back and the product that owns Binaryen prints it. Every other rung is printed here, from the driver's own rendering.
 pub fn wonder_stage(
     budget: u64,
-    manifest: Option<&Path>,
     name: &str,
-    target: Option<&str>,
+    program: Program,
     finish: impl FnOnce(Box<curios_wasm::Module>),
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    let program = match selected(manifest, target)? {
-        Selection::Program(program) => program,
-        Selection::Entire(entire) => entire.default_program()?,
-        Selection::Library(_) => {
-            return Err(
-                "a library has no stages of its own — name an executable or a program file"
-                    .to_string(),
-            );
-        }
-    };
     let Asked {
         subject:
             Subject::Entry {
@@ -226,26 +193,12 @@ pub fn wonder_stage(
     Ok(())
 }
 
-/// What the optimizer did to each declaration, one tab-separated row per line.
+/// What the optimizer did to each of `program`'s declarations, one tab-separated row per line.
 ///
 /// Two columns, because the analysis should not need this crate: `awk -F'\t' '$2 == "absorbed"'` is a whole question, and a diff of two runs is a diff of two files. The rows are ordered by name for the same reason — a report that reproduces is what makes a regression something to read rather than something to judge.
-pub fn wonder_cost(
-    budget: u64,
-    manifest: Option<&Path>,
-    target: Option<&str>,
-) -> Result<(), String> {
+pub fn wonder_cost(budget: u64, program: Program) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    let program = match selected(manifest, target)? {
-        Selection::Program(program) => program,
-        Selection::Entire(entire) => entire.default_program()?,
-        Selection::Library(_) => {
-            return Err(
-                "a library is not compiled to a program — name an executable or a program file"
-                    .to_string(),
-            );
-        }
-    };
     let Asked {
         subject:
             Subject::Entry {
@@ -285,8 +238,8 @@ pub fn wonder_cost(
     Ok(())
 }
 
-/// A file the question can be about: one the disk holds. A path that cannot be read is "no such target" — the question could not be asked, and the exit says so — refused here, before membership places it, in the words `run` uses for the same fault. The engine would otherwise answer it as one diagnostic and exit 0, and under a package directory would place the missing file as a library module and answer about the library. The server never comes through here: a document an editor holds may not be on disk yet, which is why the check is this transport's and not `Asked`'s.
-pub(crate) fn file_target(path: PathBuf) -> Result<PathBuf, String> {
+/// A file the question can be about: one the disk holds. A path that cannot be read is "no such target" — the question could not be asked, and the exit says so — refused by the command line before membership places it, in the words `run` uses for the same fault. The engine would otherwise answer it as one diagnostic and exit 0, and under a package directory would place the missing file as a library module and answer about the library. The server never comes through here: a document an editor holds may not be on disk yet, which is why the check is the command line's and not `Asked`'s.
+pub fn file_target(path: PathBuf) -> Result<PathBuf, String> {
     let readable = fs::metadata(&path).and_then(|metadata| match metadata.is_dir() {
         true => Err(io::Error::from(io::ErrorKind::IsADirectory)),
         false => Ok(()),

@@ -20,6 +20,7 @@ pub(crate) enum Membership {
     Standalone,
     /// The library of the package whose directory holds it. `units` is the whole scope in dependency order, that library last, so asking about the last unit is asking about the file.
     Library {
+        package: String,
         root: PathBuf,
         units: Vec<RootSource>,
         /// The module the file would be, by the layout rule — what to ask the library whether a `mod` declares, since a file under its directory that none does is in no unit at all. `None` when the file's spelling is no module's.
@@ -85,6 +86,7 @@ impl Membership {
         }
 
         Ok(Self::Library {
+            package: governing.package.name.clone(),
             root: governing.root.clone(),
             module: module_of(&governing.package, &directory, &file),
             units: order(&governing)?,

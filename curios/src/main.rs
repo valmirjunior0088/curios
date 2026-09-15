@@ -2,13 +2,16 @@
 //!
 //! **Neither subcommand compiles unconditionally.** A manifest target's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. Neither standalone form has a project, so neither consults anything. `pipeline` owns that decision and everything downstream of it.
 //!
-//! Argument parsing lives in `cli`, target resolution, compilation and payload reuse in `pipeline`, executable emission in `bundle` — this file only dispatches, mapping any error to stderr and a failure exit.
+//! Argument parsing lives in `cli`, what each command accepts and the admission of its argument in `contract`, compilation and payload reuse in `pipeline`, executable emission in `bundle` — this file only dispatches, mapping any error to stderr and a failure exit.
 
 mod bundle;
 use bundle::*;
 
 mod cli;
 use cli::*;
+
+mod contract;
+use contract::*;
 
 mod pipeline;
 use pipeline::*;
@@ -23,11 +26,10 @@ use {
     clap::Parser,
     curios::wasm_optm,
     curios_document::write_documentation,
-    curios_package::{Entry, LIBRARY, Spelling, curate, order, scaffold},
+    curios_package::{Entry, Spelling, Store, curate, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::{Formatted, Overlay},
-    curios_verdicts::Verdicts,
     curios_wonder::{
         Linted, archived_documentation, documentation, lint, serve, wonder_cost,
         wonder_diagnostics, wonder_stage, wonder_tests,
@@ -114,17 +116,26 @@ fn dispatch() -> Result<(), Failure> {
         mode,
         ..
     } = cli;
+    let manifest = manifest.as_deref();
+
+    // Read before the match takes the command apart, so every arm admits its argument through the one contract its command has.
+    let contract = mode.contract();
+    let target = mode.target().map(str::to_owned);
+    let target = target.as_deref();
 
     match mode {
-        Mode::Run { target, args } => {
-            let program = program_of(target.as_deref(), manifest.as_deref())?;
+        Mode::Run { args, .. } => {
+            let program = contract.admit_program(target, manifest, &here()?)?;
             // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by. Every argument crosses as the bytes the OS holds, since `/std/proc/args` promises opaque byte strings and a path or an argument need not be UTF-8.
             let entry = match program.entry() {
                 Entry::Stdin => Spelling::STDIN.as_bytes().to_vec(),
                 Entry::File(path) => path.as_os_str().as_encoded_bytes().to_vec(),
             };
             let subject = subject_of(&program);
-            let cwasm = payload_of(budget, program)?;
+            let store = program
+                .home()
+                .and_then(|home| contract.access.filed(&home.root));
+            let cwasm = payload_of(budget, program, store)?;
 
             step(Heading::Running, &subject);
 
@@ -147,30 +158,28 @@ fn dispatch() -> Result<(), Failure> {
         }
         // Exit 1 on any failing, trapping or exiting test, exactly as a failing compile exits 1 and a goal batch exits 2 — 0 means every selected test passed or proved.
         Mode::Test { filter } => {
-            if !run_tests(budget, manifest.as_deref(), filter.as_deref())? {
+            let entire = contract.admit_entire(target, manifest, &here()?)?;
+
+            if !run_tests(budget, entire, contract.access, filter.as_deref())? {
                 process::exit(1);
             }
         }
         // The tri-state `run` exits with, read off what was reported: a lint is as much a finding as an error, and a goal batch alone is the incomplete state it is everywhere else.
-        Mode::Lint { target } => match lint(budget, manifest.as_deref(), target.as_deref())? {
+        Mode::Lint { .. } => match lint(budget, contract.admit_any(target, manifest, &here()?)?)? {
             Linted::Clean => {}
             Linted::Goals => process::exit(2),
             Linted::Findings => process::exit(1),
         },
-        Mode::Compile {
-            target,
-            output_path,
-        } => {
-            let program = program_of(target.as_deref(), manifest.as_deref())?;
+        Mode::Compile { output_path, .. } => {
+            let program = contract.admit_program(target, manifest, &here()?)?;
 
-            // A product written to disk needs a package to be filed under and a name to be filed as, and only a declared executable has both. A loose file or standard input is `run`'s to take: trying a theory leaves nothing behind.
+            // Admission refuses a program no package declares, since the executable is filed under the package that declares it — so this one has an entry file and a home.
             let (Entry::File(entry), Some(home)) = (program.entry(), program.home()) else {
-                return Err(Failure::Error(
-                    "`compile` builds a declared executable of the governing package; `run` is what takes a file or standard input".to_string(),
-                ));
+                unreachable!("`compile` admits only a declared executable");
             };
             let entry = entry.clone();
             let output = output_path.unwrap_or_else(|| home.output.clone());
+            let store = contract.access.filed(&home.root);
 
             // `-o` can name the entry itself. Refuse before compiling rather than destroy the source.
             if let (Ok(input), Ok(written)) = (entry.canonicalize(), output.canonicalize())
@@ -183,7 +192,7 @@ fn dispatch() -> Result<(), Failure> {
             }
 
             let started = Instant::now();
-            let cwasm = payload_of(budget, program)?;
+            let cwasm = payload_of(budget, program, store)?;
 
             emit_exe(&cwasm, &output)?;
 
@@ -193,10 +202,10 @@ fn dispatch() -> Result<(), Failure> {
             eprintln!();
         }
         Mode::Document {
-            target,
+            target: archive,
             output_path,
         } => {
-            let (record, directory) = match target {
+            let (record, directory) = match archive {
                 // A unit already archived has no package to file its pages under, so the directory is asked for rather than guessed.
                 Some(path) => {
                     let Some(directory) = output_path else {
@@ -208,21 +217,12 @@ fn dispatch() -> Result<(), Failure> {
                     (archived_documentation(&path)?, directory)
                 }
                 None => {
-                    let governing = entire(manifest.as_deref())?.governing;
-                    if !governing.directory.join(LIBRARY).is_file() {
-                        return Err(Failure::Error(format!(
-                            "{:?} declares no library, and a library is the one thing with an interface to document",
-                            governing.package.name
-                        )));
-                    }
-
-                    // The same scope `test` and `wonder` assemble: the dependency graph, with the governing package's own library last.
-                    let scope = order(&governing)?;
-                    let store = Verdicts::at(governing.root.clone());
-                    let record = documentation(budget, scope, &Overlay::default(), Some(&store))?;
-                    let directory = output_path.unwrap_or_else(|| {
-                        governing.store().documentation(&governing.package.name)
-                    });
+                    let library = contract.admit_library(target, manifest, &here()?)?;
+                    let store = contract.access.consulted(&library.root);
+                    let record =
+                        documentation(budget, library.units, &Overlay::default(), store.as_ref())?;
+                    let directory = output_path
+                        .unwrap_or_else(|| Store::at(library.root).documentation(&library.package));
                     (record, directory)
                 }
             };
@@ -245,10 +245,10 @@ fn dispatch() -> Result<(), Failure> {
             );
         }
         Mode::Curate => {
-            let governing = entire(manifest.as_deref())?.governing;
+            let entire = contract.admit_entire(target, manifest, &here()?)?;
 
             // Past tense because it is: every round has fetched before the acquisitions come back to be reported.
-            for acquisition in curate(&governing)? {
+            for acquisition in curate(&entire.governing)? {
                 fact(Heading::Fetched, Subject::package(&acquisition.name));
             }
         }
@@ -273,22 +273,23 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         Mode::Wonder { query } => match query {
-            Query::Diagnostics { target } => {
-                wonder_diagnostics(budget, manifest.as_deref(), target.as_deref())?
+            Query::Diagnostics { .. } => {
+                wonder_diagnostics(budget, contract.admit_any(target, manifest, &here()?)?)?
             }
-            Query::Tests { target } => {
-                wonder_tests(budget, manifest.as_deref(), target.as_deref())?
+            Query::Tests { .. } => {
+                wonder_tests(budget, contract.admit_any(target, manifest, &here()?)?)?
             }
-            Query::Cost { target } => wonder_cost(budget, manifest.as_deref(), target.as_deref())?,
+            Query::Cost { .. } => {
+                wonder_cost(budget, contract.admit_program(target, manifest, &here()?)?)?
+            }
             // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
-            Query::Stage { name, target } => wonder_stage(
+            Query::Stage { name, .. } => wonder_stage(
                 budget,
-                manifest.as_deref(),
                 &name,
-                target.as_deref(),
+                contract.admit_program(target, manifest, &here()?)?,
                 |module| wasm_optm(&module, |stage| println!("{stage}")),
             )?,
-            Query::Server => serve(budget, manifest.as_deref())?,
+            Query::Server => serve(budget, manifest)?,
         },
     }
 
