@@ -17,7 +17,7 @@ pub(crate) struct ManifestFlag {
     #[arg(
         long = "manifest",
         value_name = "PATH",
-        help = "Use this curios.toml as the governing package's, instead of the working directory's"
+        help = "Use this curios.toml as the governing package's, instead of the nearest one"
     )]
     pub(crate) manifest: Option<PathBuf>,
 }

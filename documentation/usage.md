@@ -269,9 +269,9 @@ An umbrella governs a package **only if it enumerates it**, so a directory nothi
 
 ## Which manifest governs
 
-The governing package is the one whose `curios.toml` sits in the working directory. There is no search above it, so what a command compiles is whatever an `ls` shows — and a subdirectory that holds modules rather than a manifest is not a package at all.
+The governing package is the one whose `curios.toml` is nearest: in the working directory, or the first directory above it that holds one. A command run anywhere inside a package — in the directory of one of its modules, say — means that package, and a build names the manifest on its `Processing` line whenever it is not in the working directory: `Processing serve (../curios.toml)`. The walk stops at the first manifest it finds, so a package nested in another's directory is its own, and an umbrella found first is refused, since it declares no package to compile.
 
-Only the umbrella is looked for further up, and only one that enumerates you governs you. When it does, the umbrella's directory is the governing root: that is where the store goes, and it is shared with your sibling members.
+Above the package, only the umbrella is looked for, and only one that enumerates you governs you. When it does, the umbrella's directory is the governing root: that is where the store goes, and it is shared with your sibling members.
 
 ## Where things go
 
@@ -303,7 +303,7 @@ Payloads are native code for the machine that built them, so an entry is found o
 
 | Flag | Taken by | Effect |
 | --- | --- | --- |
-| `--manifest <PATH>` | every command that resolves against a package: `run`, `compile`, `test`, `document`, `lint`, `curate` and every `wonder` query | use this `curios.toml` as the governing package's, instead of the working directory's |
+| `--manifest <PATH>` | every command that resolves against a package: `run`, `compile`, `test`, `document`, `lint`, `curate` and every `wonder` query | use this `curios.toml` as the governing package's, instead of the nearest one |
 | `--budget <UNITS>` | every command that elaborates: `run`, `compile`, `test`, `document`, `lint` and every `wonder` query | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
 | `--version` | `curios` itself | the build's version, so a bug report can say which compiler produced the output |
 | `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`, rotating at 512 MiB — present only in a compiler built with the `profile` feature, and inert without it |

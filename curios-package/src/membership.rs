@@ -8,7 +8,9 @@
 mod tests;
 
 use {
-    crate::{Governing, LIBRARY, MANIFEST, Manifest, module_of, order, reachable},
+    crate::{
+        Governing, LIBRARY, MANIFEST, Manifest, module_of, nearest_manifest, order, reachable,
+    },
     curios_text::{RootSource, identity},
     curios_utilities::Qualifier,
     std::path::{Path, PathBuf},
@@ -30,6 +32,8 @@ pub(crate) enum Membership {
     Executable {
         name: String,
         package: String,
+        /// The manifest that declares it.
+        manifest: PathBuf,
         entry: PathBuf,
         output: PathBuf,
         root: PathBuf,
@@ -46,7 +50,7 @@ impl Membership {
 
         let governing = match manifest {
             Some(manifest) => Governing::at(manifest)?,
-            None => match nearest_manifest(&file) {
+            None => match file.parent().and_then(nearest_manifest) {
                 // The nearest manifest is read before anything is asked to govern, because an umbrella is the one manifest `Governing::of` refuses and the one answer a question has for it: an umbrella declares no units, and being the nearest means no package's directory lies between it and the file — so nothing declares the file, and it is standalone exactly as a file under no manifest at all is.
                 Some(directory) => match Manifest::from_path(&directory.join(MANIFEST))? {
                     Manifest::Umbrella(_) => return Ok(Self::Standalone),
@@ -69,6 +73,7 @@ impl Membership {
                 return Ok(Self::Executable {
                     name: executable.name.clone(),
                     package: governing.package.name.clone(),
+                    manifest: governing.manifest.clone(),
                     entry,
                     output: governing
                         .store()
@@ -92,12 +97,4 @@ impl Membership {
             units: order(&governing)?,
         })
     }
-}
-
-/// The directory of the nearest manifest at or above `file`'s own.
-fn nearest_manifest(file: &Path) -> Option<PathBuf> {
-    file.ancestors()
-        .skip(1)
-        .find(|directory| directory.join(MANIFEST).is_file())
-        .map(Path::to_path_buf)
 }

@@ -28,13 +28,12 @@ fn a_lone_package_governs_itself() {
     assert_eq!(governing.package.name, "json");
     assert!(governing.umbrella.is_none());
     assert!(same_directory(&governing.root, &root));
+    assert_eq!(governing.manifest, root.join("curios.toml"));
 }
 
-/// **A subdirectory of a package is not that package.** There is no search above the working directory, so a directory holding modules rather than a manifest is governed by nothing — the refusal names the directory looked in, since the fix is a `cd` and the reader has to know where to.
-///
-/// This is the one thing the rule costs, and it is deliberate: a walk would make a directory's meaning depend on what sits above it, which is exactly the ambiguity the umbrella rule refuses one level up.
+/// **A subdirectory of a package is that package.** The nearest manifest governs, so a command run in a directory holding modules rather than a manifest means the package whose directory holds it — and names the manifest it found there.
 #[test]
-fn a_subdirectory_of_a_package_is_governed_by_nothing() {
+fn a_subdirectory_of_a_package_is_governed_by_that_package() {
     let root = tree(
         "govern-subdirectory",
         &[
@@ -44,15 +43,51 @@ fn a_subdirectory_of_a_package_is_governed_by_nothing() {
         ],
     );
 
-    let refusal = Governing::of(&root.join("parse"))
-        .map(|_| ())
-        .expect_err("a subdirectory holds no manifest of its own");
-    assert!(refusal.contains("no `curios.toml` in"), "{refusal}");
-    assert!(refusal.contains("parse"), "{refusal}");
+    for directory in ["parse", "."] {
+        let governing = Governing::of(&root.join(directory)).expect("the package above");
 
-    // The package it sits in still governs its own directory, which is where the manifest is.
-    let governing = Governing::of(&root).expect("the directory the manifest is in");
-    assert_eq!(governing.package.name, "json");
+        assert_eq!(governing.package.name, "json", "{directory}");
+        assert!(same_directory(&governing.directory, &root), "{directory}");
+        assert_eq!(governing.manifest, root.join("curios.toml"), "{directory}");
+    }
+}
+
+/// The first manifest found decides, so a package nested in another's directory governs its own directory and everything under it.
+#[test]
+fn a_nested_package_governs_its_own_directory() {
+    let root = tree(
+        "govern-nested",
+        &[
+            ("curios.toml", "name = \"json\"\n"),
+            ("lib.crs", ""),
+            ("tools/curios.toml", "name = \"tools\"\n"),
+            ("tools/lib.crs", ""),
+            ("tools/src/extra.crs", ""),
+        ],
+    );
+
+    for directory in ["tools", "tools/src"] {
+        let governing = Governing::of(&root.join(directory)).expect("the nearer package");
+
+        assert_eq!(governing.package.name, "tools", "{directory}");
+    }
+}
+
+/// A directory with no manifest at or above it is governed by nothing, and the refusal names where the walk began, since that is where the reader stood.
+#[test]
+fn a_directory_no_manifest_is_above_is_governed_by_nothing() {
+    let root = tree("govern-nowhere", &[("scratch.crs", "")]);
+
+    let refusal = Governing::of(&root)
+        .map(|_| ())
+        .expect_err("no manifest at or above the tree");
+    assert!(
+        refusal.contains(&format!(
+            "no `curios.toml` in {} or any directory above it",
+            root.display()
+        )),
+        "{refusal}"
+    );
 }
 
 /// An umbrella governs what it enumerates, and its directory is where the store goes.
@@ -99,7 +134,7 @@ fn an_umbrella_governs_nothing_it_does_not_enumerate() {
     assert!(same_directory(&governing.root, &root.join("scratch")));
 }
 
-/// An umbrella is not a package, so standing in its root there is nothing for `run` to compile.
+/// An umbrella is not a package, so standing in its tree outside every member there is nothing for `run` to compile — the walk stops at the umbrella rather than passing it.
 #[test]
 fn an_umbrella_root_is_governed_by_no_package() {
     let root = tree(
@@ -108,14 +143,20 @@ fn an_umbrella_root_is_governed_by_no_package() {
             ("curios.toml", "members = [\"json\"]\n"),
             ("json/curios.toml", "name = \"json\"\n"),
             ("json/lib.crs", ""),
+            ("notes/plan.md", ""),
         ],
     );
 
-    let refusal = Governing::of(&root)
-        .map(|_| ())
-        .expect_err("an umbrella root declares no package");
-    // A manifest *is* there, so the refusal names what it declares rather than reporting one missing.
-    assert!(refusal.contains("declares an umbrella"), "{refusal}");
+    for directory in [".", "notes"] {
+        let refusal = Governing::of(&root.join(directory))
+            .map(|_| ())
+            .expect_err("an umbrella declares no package");
+        // A manifest *is* there, so the refusal names what it declares rather than reporting one missing.
+        assert!(
+            refusal.contains("declares an umbrella"),
+            "{directory}: {refusal}"
+        );
+    }
 }
 
 /// An entry in `members` that no manifest answers is the umbrella's fault, and the refusal says so: the umbrella's manifest, the entry as written, and where it looked — never the operating system's word for a file the reader did not spell.

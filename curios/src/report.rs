@@ -15,10 +15,17 @@
 //!
 //! **A header is the one line terminated before its work is done.** Nesting costs that much of the rule above: `Processing hello` has to close so the `↳` lines can follow it, and the group ends by dedent rather than by a closing line of its own. What the rule protects survives and sharpens — the unterminated line is now the innermost one, so an interrupted compile names the step it died in rather than the target around it. A header carries no outcome of its own: what became of the target is what its steps say.
 
+#[cfg(test)]
+mod tests;
+
 use {
     curios_utilities::Qualifier,
     curios_wonder::STDIN_LABEL,
-    std::{fmt, path::PathBuf, time::Instant},
+    std::{
+        env, fmt,
+        path::{Path, PathBuf},
+        time::Instant,
+    },
 };
 
 /// What a status line is about.
@@ -140,6 +147,37 @@ pub(crate) fn fact(heading: Heading, detail: impl fmt::Display) {
 /// One complete step of the header above, on a line of its own — `↳ Running hello`, whose consequence is what follows on stdout rather than an outcome of its own.
 pub(crate) fn step(heading: Heading, subject: &Subject) {
     eprintln!("{}{subject}", head(NESTED, heading));
+}
+
+/// The header a build takes `subject` on with — `Processing serve` — naming `manifest` beside it when the invocation does not stand in the manifest's directory, which is the one case where what governs could otherwise be a guess.
+pub(crate) fn processing(subject: &Subject, manifest: Option<&Path>) {
+    let here = env::current_dir().and_then(|here| here.canonicalize());
+    let spelled = manifest
+        .zip(here.ok())
+        .and_then(|(manifest, here)| spelled_from(manifest, &here));
+
+    match spelled {
+        Some(manifest) => fact(Heading::Processing, format!("{subject} ({manifest})")),
+        None => fact(Heading::Processing, subject),
+    }
+}
+
+/// `manifest` as a reader standing in `here` would spell it: nothing when it sits right there, a climb of `../` when it sits above, and the path itself anywhere else — `--manifest` can name a file off to the side.
+fn spelled_from(manifest: &Path, here: &Path) -> Option<String> {
+    let directory = manifest.parent()?;
+
+    if directory == here {
+        return None;
+    }
+
+    Some(match here.strip_prefix(directory) {
+        Ok(below) => format!(
+            "{}{}",
+            "../".repeat(below.components().count()),
+            manifest.file_name()?.to_string_lossy()
+        ),
+        Err(_) => manifest.display().to_string(),
+    })
 }
 
 /// A subject being worked on, whose outcome arrives when the work is done.

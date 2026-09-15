@@ -117,6 +117,7 @@ impl Selection {
             Membership::Executable {
                 name,
                 package,
+                manifest: declaring,
                 entry,
                 output,
                 root,
@@ -129,6 +130,7 @@ impl Selection {
                     scope: Scope::Declared {
                         home: Home {
                             root,
+                            manifest: declaring,
                             package,
                             executable: name,
                             output,
@@ -228,6 +230,8 @@ enum Scope {
 pub struct Home {
     /// The governing root, which is where the store sits. Carried because what a compilation may reuse is a fact about the project it is in, and only the walk knows which project that is.
     pub root: PathBuf,
+    /// The manifest that declares it, for a report to name when the invocation stands somewhere else.
+    pub manifest: PathBuf,
     /// The package that declares it. Carried beside `executable` because the two together are the one identity in a compilation that cannot collide, which is what the store addresses a built artifact by; neither alone will do, since an umbrella's members may each declare a `serve`.
     pub package: String,
     /// The executable's declared name.
@@ -288,6 +292,7 @@ fn program(governing: &Governing, executable: &Executable) -> Result<Program, St
         scope: Scope::Declared {
             home: Home {
                 root: governing.root.clone(),
+                manifest: governing.manifest.clone(),
                 package: governing.package.name.clone(),
                 executable: executable.name.clone(),
                 output: governing

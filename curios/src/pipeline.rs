@@ -3,7 +3,7 @@
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
-    crate::{Heading, Line, Subject, fact},
+    crate::{Heading, Line, Subject, fact, processing},
     curios::{engine, to_cwasm},
     curios_package::{Entry, Program},
     curios_pipeline::{Cache, CompileError, Progress, compile_with_units},
@@ -34,6 +34,7 @@ pub(crate) fn payload_of(
         .home()
         .map(|home| (home.package.clone(), home.executable.clone()));
     let declares = program.declares();
+    let manifest = program.home().map(|home| home.manifest.clone());
     let scope = program.into_units();
 
     // Opened before the store is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.
@@ -69,7 +70,7 @@ pub(crate) fn payload_of(
         && let Some(payload) = cache.payload_get(program, &sources, engine())
     {
         // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened. The step names the target rather than a unit, because what came back is the whole program's machine code.
-        fact(Heading::Processing, &subject);
+        processing(&subject, manifest.as_deref());
         let mut line = Line::nested(Heading::Compiling, &subject);
         line.outcome("reused");
         eprintln!();
@@ -83,6 +84,7 @@ pub(crate) fn payload_of(
         &entrypoint,
         &loader,
         &subject,
+        manifest.as_deref(),
         cache.as_ref().map(|cache| cache as &dyn Cache),
     )
     .and_then(|module| to_cwasm(&module).map_err(CompileError::failure));
@@ -129,18 +131,19 @@ fn open(entry: Option<&Path>) -> Result<(Entrypoint, RootSource, Rc<Source>), Co
     Entrypoint::opened(path).map_err(|error| CompileError::Failure(vec![error.report()]))
 }
 
-/// Compile `entrypoint` against `units` in the order given, narrating each step.
+/// Compile `entrypoint` against `units` in the order given, narrating each step under a header that names `manifest` when it is not where the invocation stands.
 pub(crate) fn compile_entry(
     budget: u64,
     units: &[RootSource],
     entrypoint: &Entrypoint,
     loader: &RootSource,
     subject: &Subject,
+    manifest: Option<&Path>,
     cache: Option<&dyn Cache>,
 ) -> Result<Module, CompileError> {
     // Every target heads a group, since a compile and a handover always follow it. What the scope decides is whether the entry's own compile is a step of its own: with units to fold, those are the steps and the entry finishes among them unannounced; with none, the entry's compile is the one step there is.
     let has_units = !units.is_empty();
-    fact(Heading::Processing, subject);
+    processing(subject, manifest);
 
     // The entry is the one subject the fold cannot name — it owns the empty prefix — so it is reported under the name the caller was asked for.
     let mut line: Option<Line> = None;

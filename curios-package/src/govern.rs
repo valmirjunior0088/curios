@@ -1,8 +1,8 @@
 //! Which manifest governs an invocation.
 //!
-//! **The package is the one whose manifest sits in the working directory**, never one found by searching above it. Then the walk goes upward exactly once more, for an umbrella — **which governs only if it enumerates that package** (law 1). Enumeration is what bounds *that* walk, and the bound is the whole point: Cargo's is unconditional, and the ambiguity of "which workspace am I in" is what it never resolved.
+//! **The package is the one whose manifest is nearest**: in the directory the invocation stands in, or the first directory above it that holds one. Then the walk goes upward exactly once more, for an umbrella — **which governs only if it enumerates that package** (law 1). Enumeration is what bounds *that* walk, and the bound is the whole point: Cargo's is unconditional, and the ambiguity of "which workspace am I in" is what it never resolved.
 //!
-//! So there are two questions and only the second is answered by looking around: *which package* is answered by one directory, and *what governs it* by an enumeration somebody wrote. A directory nothing enumerates is governed by nothing above it however deep it sits, and a directory with no manifest is not a package at all — a subdirectory that wants to be one declares itself one. The cost is that `curios run` deep inside a package no longer finds it; the gain is that what an invocation compiles is visible in one `ls`.
+//! So there are two questions, and neither is answered by a guess: *which package* is the nearest manifest, which is where a command run anywhere inside a package — in a module's directory, say — means to land, and *what governs it* is an enumeration somebody wrote. The first walk stops at the first manifest it finds, so a package nested in another's directory is its own, and an umbrella found first governs no package, since it declares none. A walk makes a directory's meaning depend on what sits above it, and that is paid for by saying so: a build names the manifest when it is not in the working directory.
 //!
 //! Only the declared-artifact forms of `run` reach any of this. A file argument triggers no lookup, so project scope stays reachable only through something a manifest declares — the scratch-file hazard is not mitigated but unconstructible.
 
@@ -24,6 +24,8 @@ pub struct Governing {
     pub package: Package,
     /// Where that package's manifest sits, which is its namespace directory.
     pub directory: PathBuf,
+    /// The manifest that was read: the `curios.toml` the walk found, or the file `--manifest` named — what a report names when the invocation does not stand beside it.
+    pub manifest: PathBuf,
     /// The umbrella that enumerates it, if any. Membership organizes and dependency compiles (law 3), so this decides where the store goes and what a `member` row can resolve to — never what is compiled.
     pub umbrella: Option<Umbrella>,
     /// The umbrella's members by declared name, each with the directory its manifest sits in — empty when no umbrella governs, which is what makes every marker a mismatch there.
@@ -40,7 +42,7 @@ impl Governing {
         Store::at(self.root.clone())
     }
 
-    /// What governs an invocation, by the manifest it named when it named one and by the working directory's otherwise.
+    /// What governs an invocation, by the manifest it named when it named one and by the one nearest `directory` otherwise.
     pub fn found(manifest: Option<&Path>, directory: &Path) -> Result<Self, String> {
         match manifest {
             Some(path) => Self::at(path),
@@ -57,15 +59,15 @@ impl Governing {
         Self::found(manifest, &directory)
     }
 
-    /// What governs an invocation started in `directory`, whose own manifest is the package.
+    /// What governs an invocation started in `directory`: the package whose manifest is nearest, at `directory` or above it.
     pub fn of(directory: &Path) -> Result<Self, String> {
         let directory = directory
             .canonicalize()
             .map_err(|error| format!("{}: {error}", directory.display()))?;
 
-        let (package, at) = package_here(&directory)?;
+        let (package, at) = nearest_package(&directory)?;
 
-        Self::rooted(package, at)
+        Self::rooted(package, at.join(MANIFEST), at)
     }
 
     /// What governs an invocation whose manifest was named outright, walking upward only for the umbrella.
@@ -88,23 +90,25 @@ impl Governing {
             .expect("a manifest that was read sits in a directory")
             .to_path_buf();
 
-        Self::rooted(package, directory)
+        Self::rooted(package, manifest, directory)
     }
 
-    /// `package` at `directory`, under whichever umbrella enumerates it.
-    fn rooted(package: Package, at: PathBuf) -> Result<Self, String> {
+    /// `package`, read from `manifest` at `at`, under whichever umbrella enumerates it.
+    fn rooted(package: Package, manifest: PathBuf, at: PathBuf) -> Result<Self, String> {
         let umbrella = umbrella_over(&at)?;
 
         Ok(match umbrella {
             Some((umbrella, root)) => Self {
                 package,
                 directory: at,
+                manifest,
                 members: members(&root, &umbrella)?,
                 umbrella: Some(umbrella),
                 root,
             },
             None => Self {
                 package,
+                manifest,
                 umbrella: None,
                 members: BTreeMap::new(),
                 root: at.clone(),
@@ -172,20 +176,19 @@ fn members(root: &Path, umbrella: &Umbrella) -> Result<BTreeMap<String, PathBuf>
     Ok(members)
 }
 
-/// The package `directory` itself declares, and the directory it sits in — which is `directory`.
+/// The package whose manifest is nearest `directory`, and the directory that manifest sits in.
 ///
-/// **A package governs the directory its manifest is in, and no other.** Deciding that by a walk would mean a directory's meaning depends on what sits above it, which is the ambiguity the umbrella rule below already refuses to inherit; the same objection applies one level down, and answering it with "the manifest is here or there is none" costs a `cd` and buys an invocation whose scope is visible in one `ls`. A subdirectory that wants to be a package declares itself one — and a package declared *inside* an umbrella's tree still needs that umbrella to enumerate it before anything above governs it at all.
-fn package_here(directory: &Path) -> Result<(Package, PathBuf), String> {
-    let path = directory.join(MANIFEST);
-
-    if !path.is_file() {
+/// **The first manifest found decides.** A package nested in another's directory is its own, since its manifest is nearer; and an umbrella found first governs no package, since it declares none, so standing in its tree outside every member is refused for what it is rather than walked past to something further up.
+fn nearest_package(directory: &Path) -> Result<(Package, PathBuf), String> {
+    let Some(at) = nearest_manifest(directory) else {
         return Err(format!(
-            "no `{MANIFEST}` in {}; a package governs the directory its manifest is in, so run a `.crs` file by name, or work in a package's own directory",
+            "no `{MANIFEST}` in {} or any directory above it; run a `.crs` file by name, or work inside a package",
             directory.display()
         ));
-    }
+    };
+    let path = at.join(MANIFEST);
 
-    // An umbrella declares no definitions, so standing in its root there is nothing to compile — and unlike a missing manifest, this one is worth naming for what it is.
+    // An umbrella declares no definitions, so standing in its tree there is nothing to compile — and unlike a missing manifest, this one is worth naming for what it is.
     let Manifest::Package(package) = Manifest::from_path(&path)? else {
         return Err(format!(
             "{} declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead",
@@ -193,7 +196,15 @@ fn package_here(directory: &Path) -> Result<(Package, PathBuf), String> {
         ));
     };
 
-    Ok((package, directory.to_path_buf()))
+    Ok((package, at))
+}
+
+/// The nearest directory at or above `directory` that holds a manifest — the one walk both an invocation's directory and a file's own are placed by.
+pub(crate) fn nearest_manifest(directory: &Path) -> Option<PathBuf> {
+    directory
+        .ancestors()
+        .find(|at| at.join(MANIFEST).is_file())
+        .map(Path::to_path_buf)
 }
 
 /// The umbrella above `directory` that enumerates it, and the directory that umbrella's manifest sits in.

@@ -3,7 +3,7 @@
 //! The store is consulted exactly as `run` consults it: one payload per target, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records beside the machine code so a warm run recompiles nothing and still reports everything.
 
 use {
-    crate::{Access, Heading, Line, Subject, fact, report, step},
+    crate::{Access, Heading, Line, Subject, fact, processing, report, step},
     curios::{engine, to_cwasm},
     curios_package::{Entire, LIBRARY, order},
     curios_pipeline::{Cache, CompileError, EntryTail, TestRecord, compile_tests_with_units},
@@ -90,6 +90,7 @@ pub(crate) fn run_tests(
             "tests/",
             EntryTail::LastUnitTests,
             &subject,
+            &governing.manifest,
         )?;
         refusal = refusal.or_else(|| store.as_ref().and_then(Verdicts::refused));
         run_selected(
@@ -121,6 +122,7 @@ pub(crate) fn run_tests(
             &format!("tests/{}", executable.name),
             EntryTail::Tests,
             &subject,
+            &governing.manifest,
         )?;
         refusal = refusal.or_else(|| store.as_ref().and_then(Verdicts::refused));
         run_selected(
@@ -166,6 +168,7 @@ fn tests_payload(
     reserved: &str,
     tail: EntryTail,
     subject: &Subject,
+    manifest: &Path,
 ) -> Result<(Vec<TestRecord>, Vec<u8>), CompileError> {
     let sources = units.iter().map(UnitSource::mounted).collect::<Vec<_>>();
     let program = Program {
@@ -179,7 +182,7 @@ fn tests_payload(
     if let Some(bytes) = store.and_then(|store| store.payload_get(&program, &sources, engine()))
         && let Some(decoded) = decode(&bytes)
     {
-        fact(Heading::Processing, subject);
+        processing(subject, Some(manifest));
         let mut line = Line::nested(Heading::Compiling, subject);
         line.outcome("reused");
         eprintln!();
@@ -187,7 +190,7 @@ fn tests_payload(
         return Ok(decoded);
     }
 
-    fact(Heading::Processing, subject);
+    processing(subject, Some(manifest));
     let mut line: Option<Line> = None;
     let compiled = compile_tests_with_units(
         budget,
