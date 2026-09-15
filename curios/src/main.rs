@@ -30,13 +30,15 @@ use {
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::{Formatted, Overlay},
+    curios_utilities::Source,
     curios_wonder::{
-        Linted, archived_documentation, documentation, lint, serve, wonder_cost,
+        Linted, STDIN_LABEL, archived_documentation, documentation, lint, serve, wonder_cost,
         wonder_diagnostics, wonder_stage, wonder_tests,
     },
     std::{
+        collections::BTreeSet,
         ffi::OsString,
-        fs, iter,
+        fs, io, iter,
         path::Path,
         process::{self, ExitCode},
         time::Instant,
@@ -166,12 +168,13 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Test {
             filter,
             elaboration,
+            ..
         } => {
-            let entire = contract.admit_entire(target, manifest, &here()?)?;
+            let selection = contract.admit_any(target, manifest, &here()?)?;
 
             if !run_tests(
                 elaboration.budget,
-                entire,
+                selection,
                 contract.access,
                 filter.as_deref(),
             )? {
@@ -228,9 +231,10 @@ fn dispatch() -> Result<(), Failure> {
             eprintln!();
         }
         Mode::Document {
-            target: archive,
+            archive,
             output_path,
             elaboration,
+            ..
         } => {
             let (record, directory) = match archive {
                 // A unit already archived has no package to file its pages under, so the directory is asked for rather than guessed.
@@ -283,17 +287,49 @@ fn dispatch() -> Result<(), Failure> {
                 fact(Heading::Fetched, Subject::package(&acquisition.name));
             }
         }
-        Mode::Format { paths, check } => {
+        Mode::Format { targets, check, .. } => {
+            let directory = here()?;
+            // No target is every file the governing package declares, as no target is the package entire for every command that takes one.
+            let targets = match targets.is_empty() {
+                true => vec![None],
+                false => targets.iter().map(|target| Some(target.as_str())).collect(),
+            };
+
             // The formatter is pure and reports changedness in its result; whether a `Changed` verdict fails the run (`--check`) or rewrites the file is this loop's policy. The formatter refuses internally when its output would not reparse to the same program, so nothing corrupt is ever written.
             let mut dirty = Vec::new();
-            for path in &paths {
-                match Formatted::from_path(path)? {
-                    Formatted::Unchanged(_) => {}
-                    Formatted::Changed(text) => match check {
-                        true => dirty.push(path.display().to_string()),
-                        false => fs::write(path, text)
-                            .map_err(|error| format!("{}: {error}", path.display()))?,
-                    },
+            let mut rewritten = BTreeSet::new();
+            for target in targets {
+                match contract.admit_files(target, manifest, &directory)? {
+                    // Standard input is answered on standard output, whole, so a pipe gets the canonical text whether or not anything moved.
+                    Rewritten::Stdin => {
+                        let text = io::read_to_string(io::stdin())
+                            .map_err(|error| format!("failed to read standard input: {error}"))?;
+                        match Formatted::from_source(&Source::labelled(STDIN_LABEL, &text))? {
+                            Formatted::Changed(_) if check => {
+                                dirty.push(Spelling::STDIN.to_string())
+                            }
+                            Formatted::Unchanged(_) if check => {}
+                            Formatted::Changed(text) | Formatted::Unchanged(text) => {
+                                print!("{text}")
+                            }
+                        }
+                    }
+                    Rewritten::Files(paths) => {
+                        // Two targets naming one file rewrite it once.
+                        for path in paths
+                            .into_iter()
+                            .filter(|path| rewritten.insert(path.clone()))
+                        {
+                            match Formatted::from_path(&path)? {
+                                Formatted::Unchanged(_) => {}
+                                Formatted::Changed(text) => match check {
+                                    true => dirty.push(path.display().to_string()),
+                                    false => fs::write(&path, text)
+                                        .map_err(|error| format!("{}: {error}", path.display()))?,
+                                },
+                            }
+                        }
+                    }
                 }
             }
             if !dirty.is_empty() {

@@ -1,7 +1,7 @@
 //! The clap command-line surface: the `Cli` root and its `Mode` subcommands. Parsing only — the dispatch on the parsed value lives in `main.rs`, and what a TARGET's help says is computed from its command's contract, so the help cannot describe an argument its command admits another way.
 
 use {
-    crate::{COMPILE, COST, DIAGNOSTICS, LINT, RUN, STAGE, TESTS},
+    crate::{COMPILE, COST, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, RUN, STAGE, TEST, TESTS},
     clap::{Args, Parser, Subcommand},
     curios_pipeline::Stage,
     std::{ffi::OsString, path::PathBuf, sync::LazyLock},
@@ -75,20 +75,25 @@ pub(crate) enum Mode {
         elaboration: Elaboration,
     },
 
-    /// No target, or a file: a library is the one thing with an interface, and the governing package has at most one — the file form reads a unit already archived, a verdict slot's or the prelude image, which is how the standard library is documented without a package. Where the pages go is `documentation/usage.md`'s Documenting.
+    /// A library is the one thing with an interface, so the target names one — none for the governing package's, or a file its library declares — and `--archive` reads a unit already archived, a verdict slot's or the prelude image, which is how the standard library is documented without a package. Where the pages go is `documentation/usage.md`'s Documenting.
     #[command(about = "Write a library's interface as pages")]
     Document {
+        #[arg(value_name = "TARGET", help = DOCUMENT.target_help())]
+        target: Option<String>,
+
         #[arg(
+            long,
             value_name = "FILE",
-            help = "A file holding an archived unit: a verdict slot under a store, or the prelude image (default: the governing package's library)"
+            conflicts_with = "target",
+            help = "Document the unit archived in FILE, a verdict slot under a store or the prelude image, rather than a package's library (requires --output)"
         )]
-        target: Option<PathBuf>,
+        archive: Option<PathBuf>,
 
         #[arg(
             short = 'o',
             long = "output",
             value_name = "DIR",
-            help = "Write the pages under DIR (default: under the store, beside the governing manifest; required for a file)"
+            help = "Write the pages under DIR (default: under the store, beside the governing manifest; required with --archive)"
         )]
         output_path: Option<PathBuf>,
 
@@ -96,12 +101,16 @@ pub(crate) enum Mode {
         elaboration: Elaboration,
     },
 
-    /// Always the governing package entire, and the optional argument is a filter rather than a target — the reasoning is `documentation/usage.md`'s Testing.
-    #[command(about = "Run the governing package's declared tests")]
+    /// The target is placed as every command places one, and narrows the run to what it selects; the reasoning is `documentation/usage.md`'s Testing.
+    #[command(about = "Run the declared tests of a package, a program, a library or a file")]
     Test {
+        #[arg(value_name = "TARGET", help = TEST.target_help())]
+        target: Option<String>,
+
         #[arg(
-            value_name = "FILTER",
-            help = "A path prefix selecting which tests run, e.g. /app/Map (default: every test)"
+            long,
+            value_name = "PREFIX",
+            help = "Run only the tests whose path starts with PREFIX, e.g. /app/Map"
         )]
         filter: Option<String>,
 
@@ -138,20 +147,20 @@ pub(crate) enum Mode {
         elaboration: Elaboration,
     },
 
+    /// Each target is admitted alone, and what they name is rewritten once however many of them name it; the reasoning is `documentation/usage.md`'s Formatting.
     #[command(about = "Format .crs files canonically, in place")]
     Format {
-        #[arg(
-            value_name = "PATHS",
-            required = true,
-            help = "The .crs files to format"
-        )]
-        paths: Vec<PathBuf>,
+        #[arg(value_name = "TARGET", help = FORMAT.target_help())]
+        targets: Vec<String>,
 
         #[arg(
             long,
             help = "Write nothing; exit nonzero when any file would change (for CI)"
         )]
         check: bool,
+
+        #[command(flatten)]
+        manifest: ManifestFlag,
     },
 
     /// Questions about a program, answered by the compilation that would build it. The query is first and the target last, so `wonder diagnostics app` and `wonder stage core app` read as the sentence they are; `server` sits in the query position because it is the same questions asked over a protocol.

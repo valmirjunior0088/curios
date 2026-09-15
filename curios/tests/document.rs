@@ -1,6 +1,6 @@
 //! What the `document` subcommand writes, end to end: the bundle under the store, its layout, and the override.
 //!
-//! The record itself is covered in `curios/src/tests/document.rs`; this decides what the *subcommand* does with it — where the pages land, that a link from one page reaches another, that the prelude image documents the standard library through the file form, and that a package without a library is refused by name.
+//! The record itself is covered in `curios/src/tests/document.rs`; this decides what the *subcommand* does with it — where the pages land, that a link from one page reaches another, that the prelude image documents the standard library through `--archive`, and that a package without a library is refused by name.
 
 use {
     curios_utilities::test_support::Temporary,
@@ -147,7 +147,7 @@ fn the_prelude_image_documents_the_standard_library_into_output() {
     let root = temporary("image");
     fs::create_dir_all(&root).unwrap();
 
-    let output = curios(&root, &["document", IMAGE, "-o", "site"]);
+    let output = curios(&root, &["document", "--archive", IMAGE, "-o", "site"]);
     assert!(
         output.status.success(),
         "{}",
@@ -199,7 +199,16 @@ fn a_verdict_slot_documents_the_unit_it_holds() {
         .next()
         .expect("the library's slot");
 
-    let output = curios(&root, &["document", slot.to_str().unwrap(), "-o", "site"]);
+    let output = curios(
+        &root,
+        &[
+            "document",
+            "--archive",
+            slot.to_str().unwrap(),
+            "-o",
+            "site",
+        ],
+    );
     assert!(
         output.status.success(),
         "{}",
@@ -217,7 +226,7 @@ fn a_file_without_output_is_refused_before_it_is_read() {
     let root = temporary("image-no-output");
     fs::create_dir_all(&root).unwrap();
 
-    let output = curios(&root, &["document", IMAGE]);
+    let output = curios(&root, &["document", "--archive", IMAGE]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("--output"), "{stderr}");

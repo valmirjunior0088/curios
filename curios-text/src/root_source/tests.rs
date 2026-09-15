@@ -32,6 +32,46 @@ fn an_entry_declares_what_its_mod_chain_reaches() {
     assert!(!declares(Qualifier::from(["stray"])));
 }
 
+/// The files a unit is written in are its header and every file module a `mod` chain reaches from it, in declaration order — a file beside them that nothing declares is none of them — and an entry's are the modules its own `mod` chain reaches.
+#[test]
+fn the_declared_files_are_what_the_mod_chains_reach() {
+    let root = tree(
+        "declared-files",
+        &[
+            ("lib.crs", "pub mod parse;\n"),
+            ("parse.crs", "pub mod lexer;\n"),
+            ("parse/lexer.crs", ""),
+            ("stray.crs", ""),
+            ("serve.crs", "mod helper;\n/std/print(\"\")\n"),
+            ("serve/helper.crs", ""),
+        ],
+    );
+
+    let library = RootSource::mounted(
+        "json",
+        RootKind::Ordinary,
+        root.join("lib.crs"),
+        root.to_path_buf(),
+    );
+    assert_eq!(
+        library.declared_files().expect("every header reads"),
+        vec![
+            root.join("lib.crs"),
+            root.join("parse.crs"),
+            root.join("parse/lexer.crs"),
+        ]
+    );
+
+    let (entrypoint, loader, _) =
+        Entrypoint::opened(&root.join("serve.crs")).expect("the entry parses");
+    assert_eq!(
+        loader
+            .entry_declared_files(&entrypoint.module.items)
+            .expect("every header reads"),
+        vec![root.join("serve/helper.crs")]
+    );
+}
+
 /// A file that does not exist is spelled by its canonical parent and its name, and a bare name's parent is the current directory — not the empty path, which canonicalizes to nothing and left the relative name as given, so every caller read it as a path with no directory at all.
 #[test]
 fn a_bare_name_the_disk_does_not_hold_is_spelled_under_the_current_directory() {

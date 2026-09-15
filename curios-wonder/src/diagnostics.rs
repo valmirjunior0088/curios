@@ -4,11 +4,11 @@ use {
     crate::{Diagnostic, Severity},
     curios_package::Unlinked,
     curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, check_with_units},
-    curios_text::{Entrypoint, Form, Overlay, RootSource, UnitSource},
+    curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
-    curios_utilities::{Qualifier, Report, RootKind, Source, Span, is_identifier},
+    curios_utilities::{Qualifier, Report, Source, Span},
     curios_verdicts::Verdicts,
-    std::{collections::BTreeSet, fs, path::Path, path::PathBuf},
+    std::{collections::BTreeSet, path::PathBuf},
 };
 
 /// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject was *written* under — what `curios lint` reads a package's unused dependencies off.
@@ -70,7 +70,7 @@ impl Subject {
                 origin: Origin::File(path),
                 declares: None,
                 unlinked,
-            } if units.is_empty() => match loose_module(&path, overlay) {
+            } if units.is_empty() => match RootSource::loose_module(&path, overlay) {
                 Some(unit) => Subject::Unit { units: vec![unit] },
                 None => Subject::Entry {
                     units,
@@ -82,22 +82,6 @@ impl Subject {
             subject => subject,
         }
     }
-}
-
-/// `path` mounted as a unit of its own at its stem, when its text is written as a module and its stem is a name a mount can take.
-fn loose_module(path: &Path, overlay: &Overlay) -> Option<RootSource> {
-    let text = match overlay.get(path) {
-        Some(text) => text.to_string(),
-        None => fs::read_to_string(path).ok()?,
-    };
-    if Form::of(path, &text) != Form::Module {
-        return None;
-    }
-
-    let stem = path.file_stem()?.to_str()?;
-
-    is_identifier(stem)
-        .then(|| RootSource::mounted(stem, RootKind::Ordinary, path, path.with_extension("")))
 }
 
 /// Where the program a question is about comes from: a file, or text standing in for one.

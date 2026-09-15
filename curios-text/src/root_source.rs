@@ -7,7 +7,7 @@
 //! Every file a source reads passes through one seam, [`RootSource::load`], and that seam parses each distinct text once per thread: see [`parsed`].
 
 use {
-    super::{Error, LoadError, Module, TopItem},
+    super::{Error, Form, LoadError, Module, TopItem},
     curios_utilities::{Mount, Qualifier, RootKind, Source, is_identifier},
     std::{
         cell::RefCell,
@@ -86,6 +86,22 @@ impl RootSource {
                 directory: directory.into(),
             },
         )])
+    }
+
+    /// `path` mounted as a unit of its own at its stem, when its text — `overlay`'s where it holds one — is written as a module and its stem is a name a mount can take: how a file no unit declares is checked item by item, rather than refused at its end for lacking the term a program would end in.
+    pub fn loose_module(path: &Path, overlay: &Overlay) -> Option<Self> {
+        let text = match overlay.get(path) {
+            Some(text) => text.to_string(),
+            None => fs::read_to_string(path).ok()?,
+        };
+        if Form::of(path, &text) != Form::Module {
+            return None;
+        }
+
+        let stem = path.file_stem()?.to_str()?;
+
+        is_identifier(stem)
+            .then(|| Self::mounted(stem, RootKind::Ordinary, path, path.with_extension("")))
     }
 
     /// A unit's modules supplied already parsed, claiming nothing until [`insert_root`](Self::insert_root) says so. Nothing is read, which is what lets a build script or an embedder hand a whole unit over.
@@ -309,6 +325,63 @@ impl RootSource {
         }
 
         Ok(true)
+    }
+
+    /// Every file a unit mounted from disk is written in: each mount's header, then every file module a `mod` chain from it reaches, in declaration order. A walk of the headers is the one thing that can list them, since a file joins a unit only by being declared; a supplied mount has none, and the entry's header is its caller's to name.
+    pub fn declared_files(&self) -> Result<Vec<PathBuf>, Error> {
+        let mut files = Vec::new();
+
+        for (mount, base) in &self.bases {
+            let Base::Disk {
+                header: Some(header),
+                ..
+            } = base
+            else {
+                continue;
+            };
+
+            files.push(header.clone());
+            let items = self.load(&mount.prefix)?.items;
+            self.files_below(items, &mount.prefix, &mut files)?;
+        }
+
+        Ok(files)
+    }
+
+    /// [`declared_files`](Self::declared_files) for the entry program whose items are `items`: every file its `mod` chain reaches, the header itself not among them.
+    pub fn entry_declared_files(&self, items: &[TopItem]) -> Result<Vec<PathBuf>, Error> {
+        let mut files = Vec::new();
+        self.files_below(items.to_vec(), &Qualifier::empty(), &mut files)?;
+
+        Ok(files)
+    }
+
+    /// The files below `items`, the header of `prefix`, appended to `files`: a file module's own file before the files below it, and an inline module walked as the body it carries.
+    fn files_below(
+        &self,
+        items: Vec<TopItem>,
+        prefix: &Qualifier,
+        files: &mut Vec<PathBuf>,
+    ) -> Result<(), Error> {
+        for item in items {
+            let TopItem::Mod(declaration) = item else {
+                continue;
+            };
+            let path = prefix.with(&declaration.label.to_string());
+
+            match declaration.module {
+                Some(module) => self.files_below(module.items, &path, files)?,
+                None => {
+                    if let Some((mount, Base::Disk { directory, .. })) = self.owning(&path) {
+                        files.push(file(directory, &path, mount.prefix.segments().len()));
+                    }
+                    let items = self.load(&path)?.items;
+                    self.files_below(items, &path, files)?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// The base whose prefix `qualifier` most specifically lies within.

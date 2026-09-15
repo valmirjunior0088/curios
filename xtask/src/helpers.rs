@@ -358,6 +358,7 @@ pub(crate) fn std_docs() -> Result<(), String> {
         Command::new(&compiler),
         &[
             "document",
+            "--archive",
             &image.to_string_lossy(),
             "--output",
             &pages.to_string_lossy(),

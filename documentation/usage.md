@@ -52,25 +52,26 @@ A loose file brings no project with it — no dependencies, not even the library
 
 ## Testing
 
-`curios test` runs the governing package's declared tests — the `test name = body;` declarations of its library and of each executable, always the package entire, because a test's identity is its path and a path means the same thing whichever subcommand asks. The optional argument is a **filter**, not a target: a path prefix selecting which tests run.
+`curios test` runs declared tests — the `test name = body;` declarations. With no target it runs the governing package's: its library's, then each executable's. A target narrows the run to what it selects, placed as every command places one: an executable, by name, by its entry or by a module its entry declares, runs that executable's tests; `lib.crs` or a module its `mod` lines reach runs the library's; a file no unit declares runs its own against the standard library alone, as a module of its own when it has no final term; and `-` runs the program on standard input. `--filter` narrows whatever was selected to the tests whose path starts with a prefix.
 
 ```sh
-curios test              # every test the package declares
-curios test /app/Map     # only tests whose path starts with /app/Map
+curios test                      # every test the package declares
+curios test serve                # only the executable `serve`'s
+curios test --filter /app/Map    # only tests whose path starts with /app/Map
 ```
 
 Each unit is compiled as its own test program — the same compilation `run` performs, with the final term replaced by a synthesized scheduler over that unit's tests — and every selected test runs in an instantiation of its own, so one test's effects, traps and exits never reach another. The report is one line per test, path then outcome — `passed`, `failed`, `trapped`, `exited N` — with a failure's report indented beneath it followed by the test's body as written, and a final line counting outcomes: `N passed, N failed` always, since that pair is what the exit code turns on, then `trapped` and `exited` when they happened. On stderr each unit is taken on as `run` takes on a target — `Processing`, then its `↳ Compiling` step — and a unit with tests to run brackets their lines between a `↳ Testing` step and a `↳ Tested` step carrying that unit's own tally; a unit with nothing selected reports its compile and nothing more. A test takes no parameters, so every verdict is a fact about the one description the author wrote, and unchanged sources report identically. A claim about every instantiation is a proposition rather than a description: it is a `let` whose type states it, checked by the kernel wherever its unit is checked, and a broken one fails the build rather than a run. The exit code is the tri-state below: 0 when every selected test passed, 1 when any failed, trapped, exited or could not be built — and 1 when the filter matched nothing, naming it — 2 when a unit under test holds a written goal.
 
-Test programs are filed in the project's store exactly as `run`'s payloads are, so an invocation whose sources are all unchanged recompiles nothing; the test *verdicts* are never cached — every invocation runs every selected test.
+Test programs are filed in the project's store exactly as `run`'s payloads are, so an invocation whose sources are all unchanged recompiles nothing; a loose file has no store, so its test program is compiled every time. The test *verdicts* are never cached — every invocation runs every selected test.
 
 ## Documenting
 
-`curios document` writes a library's interface as pages, read off the compilation that builds it: what each module exports, each declaration's head printed as written with every name in it linked to where it was declared, and the `---` documentation comments attached to each. Bare, it documents the governing package's library — a library is the one thing with an interface, and the governing package has at most one — and `--manifest` overrides which package governs as everywhere. Its one other form takes a file holding an archived unit, a verdict slot under a store or the prelude image the compiler was built with, and reads the record that unit already carries: that is how the standard library is documented, since it has no package to be compiled from. A file has no store to file pages under, so that form requires `--output`.
+`curios document` writes a library's interface as pages, read off the compilation that builds it: what each module exports, each declaration's head printed as written with every name in it linked to where it was declared, and the `---` documentation comments attached to each. A target names the library — none for the governing package's, or `lib.crs` or a module its `mod` lines reach — since a library is the one thing with an interface, and a program, a loose file or standard input is refused; `--manifest` overrides which package governs as everywhere. `--archive FILE` reads a unit already archived instead, a verdict slot under a store or the prelude image the compiler was built with, and renders the record that unit carries: that is how the standard library is documented, since it has no package to be compiled from. An archived unit has no store to file pages under, so `--archive` requires `--output`.
 
 ```sh
 curios document              # .curios/documentation/<name>/
 curios document -o site      # somewhere else
-curios document curios-prelude-archive/.artifacts/std.rkyv -o site   # the standard library, from a checkout that built the compiler
+curios document --archive curios-prelude-archive/.artifacts/std.rkyv -o site   # the standard library, from a checkout that built the compiler
 ```
 
 The pages are the library's consumers' view: a private declaration or module is absent rather than hidden, a type whose representation is private shows no constructors and is marked opaque, a test never appears, and a `pub use` is a link to the declaration it re-exports — unless that declaration's own module is private and so has no page, in which case the declaration is documented on the re-exporting module's page, the facade being the only way it reaches a consumer. A reference into a dependency or the standard library renders as its qualified name in plain text, since nothing hosts their pages yet. The landing page is the root module's page: it opens with the manifest's `description`, lists the modules, then the root's own declarations; every other module's page opens with the `---` block above the `mod` that declares it, whose first paragraph is also the module's gloss on its parent's page. In prose, a pair of backticks encloses a code span.
@@ -207,9 +208,13 @@ A running program's own exit code passes through untouched, so `0` never hides a
 ## Formatting
 
 ```sh
-curios format <files…>        # rewrite in place
-curios format --check <files…>  # write nothing, exit nonzero if anything would change
+curios format                   # every file the governing package declares, rewritten in place
+curios format serve util.crs    # an executable's files, and one file
+curios format --check           # write nothing, exit nonzero if anything would change
+curios format - < draft.crs     # standard input, written canonically to standard output
 ```
+
+Each target names files, and what several targets name is rewritten once: no target is every file the governing package declares — its library's header and the modules its `mod` lines reach, then each executable's entry and the modules the entry reaches — an executable's name is its own, a file is itself whatever declares it, and `-` is standard input, written back to standard output. A file nothing declares is formatted only when it is named.
 
 There is one canonical style and no options to configure it. Formatting is verified before anything is written — the output must reparse to exactly the same program, with every comment preserved — so a formatter defect refuses rather than corrupts.
 

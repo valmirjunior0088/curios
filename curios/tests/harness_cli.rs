@@ -132,7 +132,7 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
 fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     let root = project("filter");
 
-    let cold = curios(&root, &["test", "/app/addition"]);
+    let cold = curios(&root, &["test", "--filter", "/app/addition"]);
     assert_eq!(
         stdout(&cold),
         "/app/addition_passes: passed\n1 passed, 0 failed\n",
@@ -141,7 +141,7 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     );
     assert_eq!(cold.status.code(), Some(0));
 
-    let warm = curios(&root, &["test", "/app/addition"]);
+    let warm = curios(&root, &["test", "--filter", "/app/addition"]);
     assert_eq!(stdout(&warm), stdout(&cold));
     // Each payload comes back whole, so each target's one step names the target rather than a unit.
     in_order(
@@ -160,13 +160,55 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
 #[test]
 fn a_filter_matching_nothing_exits_one_naming_it() {
     let root = project("nomatch");
-    let output = curios(&root, &["test", "/nope"]);
+    let output = curios(&root, &["test", "--filter", "/nope"]);
 
     assert_eq!(output.status.code(), Some(1));
     assert!(
         stderr(&output).contains("no test matches '/nope'"),
         "stderr: {}",
         stderr(&output)
+    );
+}
+
+/// A target narrows the run to what it selects, placed as every command places one: an executable by name runs its own tests and not its library's, and a file no unit declares runs its own against the prelude alone — as a module of its own when it has no final term.
+#[test]
+fn a_target_runs_only_the_tests_of_what_it_selects() {
+    let root = temporary("targets");
+    write(
+        &root,
+        "curios.toml",
+        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+    );
+    write(
+        &root,
+        "lib.crs",
+        "use /std/{Test};\n\ntest in_library =\n    Test/assert(true);\n",
+    );
+    write(
+        &root,
+        "app.crs",
+        "use /std/{Test};\n\ntest in_app =\n    Test/assert(true);\n\n/std/print(\"ran\\n\")\n",
+    );
+    write(
+        &root,
+        "scratch/loose.crs",
+        "use /std/{Test};\n\ntest in_loose =\n    Test/assert(true);\n",
+    );
+
+    let executable = curios(&root, &["test", "app"]);
+    assert_eq!(
+        stdout(&executable),
+        "/in_app: passed\n1 passed, 0 failed\n",
+        "stderr: {}",
+        stderr(&executable)
+    );
+
+    let loose = curios(&root, &["test", "scratch/loose.crs"]);
+    assert_eq!(
+        stdout(&loose),
+        "/loose/in_loose: passed\n1 passed, 0 failed\n",
+        "stderr: {}",
+        stderr(&loose)
     );
 }
 

@@ -30,6 +30,8 @@ pub(crate) enum Accepts {
     Any,
     /// The governing package entire and nothing else: the command's argument, when it has one, is not a target.
     Entire,
+    /// Files to rewrite: every file what the argument selects declares, a file itself, or standard input.
+    Files,
     /// No subject: nothing the command is given is resolved against a package.
     Nothing,
 }
@@ -144,7 +146,7 @@ pub(crate) const DOCUMENT_ARCHIVE: Contract = Contract {
 
 pub(crate) const TEST: Contract = Contract {
     command: "test",
-    accepts: Accepts::Entire,
+    accepts: Accepts::Any,
     own_file_only: false,
     access: Access::Write,
     product: Product::Nothing,
@@ -176,7 +178,7 @@ pub(crate) const LINT: Contract = Contract {
 
 pub(crate) const FORMAT: Contract = Contract {
     command: "format",
-    accepts: Accepts::Nothing,
+    accepts: Accepts::Files,
     own_file_only: false,
     access: Access::None,
     product: Product::Rewritten,
@@ -228,11 +230,11 @@ impl Mode {
         match self {
             Mode::Run { .. } => &RUN,
             Mode::Compile { .. } => &COMPILE,
-            // A file here holds an archived unit, which is read rather than resolved against a package.
+            // An archived unit is read rather than resolved against a package.
             Mode::Document {
-                target: Some(_), ..
+                archive: Some(_), ..
             } => &DOCUMENT_ARCHIVE,
-            Mode::Document { target: None, .. } => &DOCUMENT,
+            Mode::Document { archive: None, .. } => &DOCUMENT,
             Mode::Test { .. } => &TEST,
             Mode::Curate { .. } => &CURATE,
             Mode::New { .. } => &NEW,
@@ -248,12 +250,15 @@ impl Mode {
         }
     }
 
-    /// The argument the contract resolves: the target, for a command that takes one.
+    /// The argument the contract resolves: the target, for a command that takes one — for `format`, the first of its targets, each of which is admitted alone the same way.
     pub(crate) fn target(&self) -> Option<&str> {
         match self {
-            Mode::Run { target, .. } | Mode::Compile { target, .. } | Mode::Lint { target, .. } => {
-                target.as_deref()
-            }
+            Mode::Run { target, .. }
+            | Mode::Compile { target, .. }
+            | Mode::Document { target, .. }
+            | Mode::Test { target, .. }
+            | Mode::Lint { target, .. } => target.as_deref(),
+            Mode::Format { targets, .. } => targets.first().map(String::as_str),
             Mode::Wonder { query } => match query {
                 Query::Diagnostics { target, .. }
                 | Query::Tests { target, .. }
@@ -261,12 +266,8 @@ impl Mode {
                 | Query::Stage { target, .. } => target.as_deref(),
                 Query::Server { .. } => None,
             },
-            // A filter, an archive, a directory to create and files to rewrite: arguments, and none of them a target.
-            Mode::Document { .. }
-            | Mode::Test { .. }
-            | Mode::Curate { .. }
-            | Mode::New { .. }
-            | Mode::Format { .. } => None,
+            // A directory to create is an argument, and no target.
+            Mode::Curate { .. } | Mode::New { .. } => None,
         }
     }
 
@@ -294,7 +295,7 @@ impl Mode {
     /// The `--manifest` flag, for a command that resolves against a package.
     fn manifest_flag(&self) -> Option<&ManifestFlag> {
         match self {
-            Mode::Curate { manifest } => Some(manifest),
+            Mode::Curate { manifest } | Mode::Format { manifest, .. } => Some(manifest),
             _ => self.elaboration().map(|elaboration| &elaboration.manifest),
         }
     }
@@ -346,14 +347,23 @@ impl Cli {
     }
 }
 
+/// What `format` rewrites for one target.
+pub(crate) enum Rewritten {
+    /// Files on disk, rewritten in place.
+    Files(Vec<PathBuf>),
+    /// Standard input, written back to standard output.
+    Stdin,
+}
+
 impl Contract {
     /// What a TARGET's help says for this command: the forms its argument takes, and what none means.
     pub(crate) fn target_help(&self) -> String {
-        let forms = match self.own_file_only {
-            true => {
+        let forms = match (self.accepts, self.own_file_only) {
+            (Accepts::Library, _) => "A .crs file a library declares",
+            (_, true) => {
                 "A declared executable's name, a program's own .crs file, or `-` for standard input"
             }
-            false => {
+            (_, false) => {
                 "A declared executable's name, a path to a .crs file, or `-` for standard input"
             }
         };
@@ -361,6 +371,7 @@ impl Contract {
             Accepts::Program => "the governing package's sole or `default` executable",
             Accepts::Library => "the governing package's library",
             Accepts::Any | Accepts::Entire => "the governing package entire",
+            Accepts::Files => "every file the governing package declares",
             Accepts::Nothing => "nothing",
         };
 
@@ -474,6 +485,26 @@ impl Contract {
                 self.command
             )),
         }
+    }
+
+    /// What `target` rewrites: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or standard input.
+    pub(crate) fn admit_files(
+        &self,
+        target: Option<&str>,
+        manifest: Option<&Path>,
+        directory: &Path,
+    ) -> Result<Rewritten, String> {
+        debug_assert_eq!(self.accepts, Accepts::Files, "{}", self.command);
+
+        Ok(match Spelling::of(target) {
+            Spelling::File(path) => Rewritten::Files(vec![file_target(path)?]),
+            spelling => match Self::selection(target, manifest, directory)? {
+                Selection::Entire(entire) => Rewritten::Files(entire.declared_files()?),
+                Selection::Library(library) => Rewritten::Files(library.declared_files()?),
+                Selection::Program(_) if spelling == Spelling::Stdin => Rewritten::Stdin,
+                Selection::Program(program) => Rewritten::Files(program.declared_files()?),
+            },
+        })
     }
 }
 

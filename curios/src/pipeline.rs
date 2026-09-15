@@ -118,7 +118,9 @@ pub(crate) fn subject_of(program: &Program) -> Subject {
 /// The entry program, what its own modules resolve against, and the text it was parsed from: a file when there is one, and otherwise standard input, drained to end.
 ///
 /// Draining is why this is worth naming rather than inlining. The program's own standard input is gone once the compiler has read the source out of it, so `/std/read()` reports end-of-input — unavoidable when both want one descriptor, and the reason a program that reads its input belongs in a file.
-fn open(entry: Option<&Path>) -> Result<(Entrypoint, RootSource, Rc<Source>), CompileError> {
+pub(crate) fn open(
+    entry: Option<&Path>,
+) -> Result<(Entrypoint, RootSource, Rc<Source>), CompileError> {
     let Some(path) = entry else {
         let text = io::read_to_string(io::stdin()).map_err(|error| {
             CompileError::failure(format!("failed to read standard input: {error}"))

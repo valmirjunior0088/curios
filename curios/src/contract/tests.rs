@@ -16,13 +16,13 @@ const COMMANDS: &[&[&str]] = &[
     &["run", TARGET],
     &["compile", TARGET],
     &["compile", TARGET, "--output", "out"],
-    &["document"],
-    &["document", "unit.rkyv", "--output", "site"],
-    &["test"],
+    &["document", TARGET],
+    &["document", "--archive", "unit.rkyv", "--output", "site"],
+    &["test", TARGET],
     &["curate"],
     &["new", "fresh"],
     &["lint", TARGET],
-    &["format", "a.crs"],
+    &["format", TARGET],
     &["wonder", "diagnostics", TARGET],
     &["wonder", "tests", TARGET],
     &["wonder", "cost", TARGET],
@@ -68,7 +68,7 @@ fn tree() -> Temporary {
         ("work/app/stray.crs", ""),
         ("work/app/serve.crs", "mod helper;\n/std/print(\"\")\n"),
         ("work/app/serve/helper.crs", ""),
-        ("work/app/bench.crs", ""),
+        ("work/app/bench.crs", "/std/print(\"\")\n"),
         ("work/app/nested/curios.toml", "name = \"nested\"\n"),
         ("work/app/nested/lib.crs", ""),
         ("scratch.crs", ""),
@@ -183,6 +183,20 @@ impl Standing<'_> {
         )
     }
 
+    fn rewritten(&self, rewritten: &Rewritten) -> String {
+        match rewritten {
+            Rewritten::Files(paths) => format!(
+                "files {}",
+                paths
+                    .iter()
+                    .map(|path| self.path(path))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+            Rewritten::Stdin => "standard input".to_string(),
+        }
+    }
+
     /// What `mode` admits its argument as, standing here, or the refusal it earns.
     fn admitted(&self, mode: &Mode) -> String {
         let contract = mode.contract();
@@ -206,6 +220,9 @@ impl Standing<'_> {
             Accepts::Entire => contract
                 .admit_entire(target, None, directory)
                 .map(|entire| package_entire(&entire)),
+            Accepts::Files => contract
+                .admit_files(target, None, directory)
+                .map(|rewritten| self.rewritten(&rewritten)),
             Accepts::Nothing => Ok("takes no subject".to_string()),
         };
 
@@ -333,18 +350,46 @@ compile TARGET --output out — Program (its own file), store Write, leaves Exec
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-document — Library, store Read, leaves Pages, options --output --budget --manifest
+document TARGET — Library, store Read, leaves Pages, options --archive --output --budget --manifest
   work/app: (none) → library app
+  work/app: serve → refused: `document` takes a library, and a program is not one
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: - → refused: `document` takes a library, and a program is not one
+  work/app: serve.crs → refused: `document` takes a library, and a program is not one
+  work/app: serve/helper.crs → refused: `document` takes a library, and a program is not one
+  work/app: bench.crs → refused: `document` takes a library, and a program is not one
+  work/app: lib.crs → library app through lib.crs
+  work/app: util.crs → library app through util.crs
+  work/app: stray.crs → refused: `document` takes a library, and a program is not one
+  work/app: nested/lib.crs → library nested through nested/lib.crs
+  work/app: <root>/scratch.crs → refused: `document` takes a library, and a program is not one
+  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
+  work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → library app
+  work/app/serve: bench → refused: `document` takes a library, and a program is not one
   work/app/nested: (none) → library nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-document unit.rkyv --output site — Nothing, store None, leaves Pages, options --output --budget --manifest
+document --archive unit.rkyv --output site — Nothing, store None, leaves Pages, options --archive --output --budget --manifest
   takes no subject
-test — Entire, store Write, leaves Nothing, options --budget --manifest
+test TARGET — Any, store Write, leaves Nothing, options --filter --budget --manifest
   work/app: (none) → entire app
+  work/app: serve → program serve
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: - → loose -
+  work/app: serve.crs → program serve
+  work/app: serve/helper.crs → program serve through serve/helper.crs
+  work/app: bench.crs → program bench
+  work/app: lib.crs → library app through lib.crs
+  work/app: util.crs → library app through util.crs
+  work/app: stray.crs → loose stray.crs unlinked
+  work/app: nested/lib.crs → library nested through nested/lib.crs
+  work/app: <root>/scratch.crs → loose <root>/scratch.crs
+  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
+  work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → entire app
+  work/app/serve: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 curate — Entire, store None, leaves Sources, options --manifest
@@ -375,8 +420,26 @@ lint TARGET — Any, store Read, leaves Nothing, options --budget --manifest
   work/app/serve: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-format a.crs — Nothing, store None, leaves Rewritten, options --check
-  takes no subject
+format TARGET — Files, store None, leaves Rewritten, options --check --manifest
+  work/app: (none) → files lib.crs util.crs serve.crs serve/helper.crs bench.crs
+  work/app: serve → files serve.crs serve/helper.crs
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: - → standard input
+  work/app: serve.crs → files serve.crs
+  work/app: serve/helper.crs → files serve/helper.crs
+  work/app: bench.crs → files bench.crs
+  work/app: lib.crs → files lib.crs
+  work/app: util.crs → files util.crs
+  work/app: stray.crs → files stray.crs
+  work/app: nested/lib.crs → files nested/lib.crs
+  work/app: <root>/scratch.crs → files <root>/scratch.crs
+  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
+  work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
+  work/app/serve: (none) → files <root>/work/app/lib.crs <root>/work/app/util.crs <root>/work/app/serve.crs helper.crs <root>/work/app/bench.crs
+  work/app/serve: bench → files <root>/work/app/bench.crs
+  work/app/nested: (none) → files lib.crs
+  .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 wonder diagnostics TARGET — Any, store Read, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
@@ -499,8 +562,8 @@ fn a_flag_written_before_its_command_is_refused_with_where_it_goes() {
         Some("`new` elaborates nothing, so it takes no `--budget`")
     );
     assert_eq!(
-        refusal(&["--manifest", "curios.toml", "format", "a.crs"]).as_deref(),
-        Some("`format` reads no manifest, so it takes no `--manifest`")
+        refusal(&["--manifest", "curios.toml", "new", "fresh"]).as_deref(),
+        Some("`new` reads no manifest, so it takes no `--manifest`")
     );
 }
 

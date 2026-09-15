@@ -113,6 +113,7 @@ impl Entire {
         Ok(Some(Library {
             package: self.governing.package.name.clone(),
             root: self.governing.root.clone(),
+            manifest: self.governing.manifest.clone(),
             units: order(&self.governing)?,
             through: None,
         }))
@@ -132,6 +133,20 @@ impl Entire {
     pub fn default_program(&self) -> Result<Program, String> {
         program(&self.governing, sole(&self.governing.package)?)
     }
+
+    /// Every file the package is written in: its library's, then each program's, in declaration order.
+    pub fn declared_files(&self) -> Result<Vec<PathBuf>, String> {
+        let mut files = match self.library()? {
+            Some(library) => library.declared_files()?,
+            None => Vec::new(),
+        };
+
+        for program in self.programs()? {
+            files.extend(program.declared_files()?);
+        }
+
+        Ok(files)
+    }
 }
 
 /// A package's library, compiled against everything it depends on.
@@ -140,10 +155,21 @@ pub struct Library {
     pub package: String,
     /// The governing root, which is where the store sits.
     pub root: PathBuf,
+    /// The manifest that declares it, beside which its header sits — and what a report names when the invocation stands somewhere else.
+    pub manifest: PathBuf,
     /// The whole scope in dependency order, the library last.
     pub units: Vec<RootSource>,
     /// The file the library was selected through, when it was selected through one.
     pub through: Option<PathBuf>,
+}
+
+impl Library {
+    /// Every file the library is written in: its header, and every file module its `mod` lines reach.
+    pub fn declared_files(&self) -> Result<Vec<PathBuf>, String> {
+        self.units.last().map_or(Ok(Vec::new()), |unit| {
+            unit.declared_files().map_err(|error| error.to_string())
+        })
+    }
 }
 
 /// Where a program's text comes from.
@@ -257,6 +283,23 @@ impl Program {
             Scope::Declared { units, .. } => units,
         }
     }
+
+    /// Every file the program is written in: its entry, and every file module its entry's `mod` lines reach — none for a program on standard input.
+    pub fn declared_files(&self) -> Result<Vec<PathBuf>, String> {
+        let Entry::File(entry) = &self.entry else {
+            return Ok(Vec::new());
+        };
+        let (entrypoint, loader, _) = Entrypoint::opened(entry).map_err(|error| error.format())?;
+
+        let mut files = vec![entry.clone()];
+        files.extend(
+            loader
+                .entry_declared_files(&entrypoint.module.items)
+                .map_err(|error| error.to_string())?,
+        );
+
+        Ok(files)
+    }
 }
 
 /// `executable`, declared by the package `governing` governs, and everything needed to compile it.
@@ -368,6 +411,7 @@ fn placed(file: PathBuf, manifest: Option<&Path>, overlay: &Overlay) -> Result<S
     Ok(Selection::Library(Library {
         package: governing.package.name.clone(),
         root: governing.root.clone(),
+        manifest: governing.manifest.clone(),
         units,
         through: Some(file),
     }))
