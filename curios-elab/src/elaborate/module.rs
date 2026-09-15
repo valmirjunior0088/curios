@@ -1317,15 +1317,14 @@ fn elaborate_module_suffix(
     context.set_island(Qualifier::empty());
     // The entrypoint expression is not an item, so it gets its own budget on the same footing as one.
     context.restore_budget();
-    // A test program's tail is synthesized here rather than handed in: it is built over the elaborated definitions the items just produced, in the scope they were defined into, so the discharge it chooses for each test can consult them — and over the tests that survived, since a test of a refused declaration is that refusal's dependent and is no longer in the module to schedule. The unit's own written entry — the ordinary program — is not part of a test program and is neither checked nor kept.
+    // A test program's tail is synthesized here rather than handed in: it is built over the elaborated definitions the items just produced, in the scope they were defined into, so the discharge it chooses for each test can consult them — and over the tests no refusal poisoned, since a test of a refused declaration is that refusal's dependent and is no longer in the module to schedule. The filter asks the poison rather than the survivors because a unit's tests are scheduled into the tail of the program compiled after it, whose own module declares none of them, so a filter over this module's survivors would drop every one. The unit's own written entry — the ordinary program — is not part of a test program and is neither checked nor kept.
     let synthesized;
     let entry = match tail {
         Tail::Written => module.entry.as_ref(),
         Tail::Tests(scheduled) => {
-            let names = survivors.names();
             let scheduled = scheduled
                 .iter()
-                .filter(|test| names.contains(&test.name))
+                .filter(|test| !poison.holds(&test.name))
                 .cloned()
                 .collect::<Vec<_>>();
             synthesized = Entrypoint {

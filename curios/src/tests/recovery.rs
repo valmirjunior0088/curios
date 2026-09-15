@@ -2,9 +2,11 @@
 
 use {
     super::{error, run_entrypoint},
+    crate::to_cwasm,
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, compile_tests_with_units},
-    curios_runtime::MockHost,
+    curios_runtime::{ForeignBindings, MockHost, run_bytes},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::RootKind,
 };
 
 /// Run `source` as standard input is run — the reading that recovers past a broken item — expecting a refusal, and return its report.
@@ -150,7 +152,7 @@ fn a_witness_refused_before_it_registered_leaves_its_user_reporting_no_witness()
     assert!(report.contains("no witness"), "{report}");
 }
 
-/// A test is an item like any other: one naming a refused declaration is withheld, and the synthesized tail schedules what survived rather than naming a test the module no longer holds.
+/// A test is an item like any other: one naming a refused declaration is withheld, and the synthesized tail leaves out what the refusal poisoned rather than naming a test the module no longer holds.
 #[test]
 fn a_test_of_a_refused_declaration_is_left_out_of_the_synthesized_tail() {
     let report = tests_error(
@@ -168,6 +170,43 @@ fn a_test_of_a_refused_declaration_is_left_out_of_the_synthesized_tail() {
 
     assert!(report.contains("while elaborating /_a:"), "{report}");
     assert!(!report.contains("uses_a"), "{report}");
+}
+
+/// The boundary of that omission: a unit's tests are scheduled into the tail of the program compiled after it, whose own module declares none of them and refuses nothing, so every test the unit declares is in the tail and runs. A filter over the entry module's survivors once dropped them all, and each test exited without a word.
+#[test]
+fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
+    let mut unit = RootSource::supplied();
+    unit.insert_root(
+        "lib",
+        RootKind::Ordinary,
+        "use /std/{Nat, Test};\n\ntest addition_passes =\n    Test/assert(1 + 1 == 2);\n"
+            .parse()
+            .expect("the unit parses"),
+    );
+
+    let (module, _foreigns, records) = compile_tests_with_units(
+        DEFAULT_STEP_BUDGET,
+        &[unit],
+        &Entrypoint::trivial(),
+        &RootSource::none(),
+        None,
+        EntryTail::LastUnitTests,
+        |_| {},
+        |_| {},
+    )
+    .expect("the unit's test program compiles");
+    let cwasm = to_cwasm(&module).expect("the test program precompiles");
+    assert_eq!(records.len(), 1);
+
+    let (system, io) = MockHost::builder().args(["test", "0"]).build();
+    // SAFETY: `cwasm` was precompiled in this process, immediately above.
+    let outcome = unsafe { run_bytes(&cwasm, system, ForeignBindings::empty()) };
+
+    assert!(matches!(outcome, Ok(0)), "the test ran to {outcome:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&io.output()).trim_end(),
+        format!("{}: passed", records[0].path)
+    );
 }
 
 /// The two obligations are decided independently and reported together, so a reader fixing one is told about the other in the same run.

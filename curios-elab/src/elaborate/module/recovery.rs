@@ -45,6 +45,11 @@ impl Poison {
             || self.any(&module.reaches(item))
     }
 
+    /// Whether `name` itself is poisoned — asked of a test the tail would schedule, by name, because a test a predecessor unit declared is no item of this module to reach.
+    pub(super) fn holds(&self, name: &Global) -> bool {
+        self.names.contains(name)
+    }
+
     /// Whether the entry reaches a poisoned name, through its body or its annotation.
     pub(super) fn reaches_entry(&self, entry: &Entrypoint) -> bool {
         !self.names.is_empty() && self.any(&entry.reaches())
