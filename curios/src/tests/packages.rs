@@ -1,13 +1,13 @@
 //! A package, compiled and run the way the CLI does it.
 //!
-//! Everything below `Target::of` is already covered where it lives — the manifest's refusals in `curios-package`, the layout rule in `curios-text`, the fold in `curios-pipeline`. What no other test reaches is the whole chain at once: a manifest on disk deciding what to compile, a governance walk deciding what governs it, a dependency graph deciding the order, and a program that actually runs at the end of it. A wiring mistake anywhere in that chain passes every unit test and fails here.
+//! Everything below `Selection::of` is already covered where it lives — the manifest's refusals in `curios-package`, the layout rule in `curios-text`, the fold in `curios-pipeline`. What no other test reaches is the whole chain at once: a manifest on disk deciding what to compile, a governance walk deciding what governs it, a dependency graph deciding the order, and a program that actually runs at the end of it. A wiring mistake anywhere in that chain passes every unit test and fails here.
 
 use {
     crate::run_wasm,
-    curios_package::Target,
+    curios_package::{Entry, Placement, Selection, Spelling},
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, compile_with_units},
     curios_runtime::{ForeignBindings, MockHost},
-    curios_text::Entrypoint,
+    curios_text::{Entrypoint, RootSource},
     curios_verdicts::Verdicts,
     std::{
         fs,
@@ -15,6 +15,22 @@ use {
         time::{SystemTime, UNIX_EPOCH},
     },
 };
+
+/// The entry file and the units `target` resolves to as `run` resolves it, standing in `directory`.
+fn resolved(directory: &Path, target: Option<&str>) -> (PathBuf, Vec<RootSource>) {
+    let program = match Selection::of(Spelling::of(target), None, directory, Placement::Standalone)
+        .expect("a governed package")
+    {
+        Selection::Program(program) => program,
+        Selection::Entire(entire) => entire.default_program().expect("a governed package"),
+        Selection::Library(_) => panic!("a standalone argument never selects a library"),
+    };
+    let Entry::File(entry) = program.entry().clone() else {
+        panic!("these fixtures name a target on disk");
+    };
+
+    (entry, program.into_units())
+}
 
 /// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
 fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
@@ -42,11 +58,7 @@ fn run(directory: &Path, target: Option<&str>) -> Vec<u8> {
 
 /// The same, consulting `cache` — which is what the command line does inside a project.
 fn cached(directory: &Path, target: Option<&str>, cache: Option<&dyn Cache>) -> Vec<u8> {
-    let (entry, units) = match Target::of(target, None, directory).expect("a governed package") {
-        Target::Executable { entry, units, .. } => (entry, units),
-        Target::File(path) => (path, Vec::new()),
-        Target::Stdin => panic!("these fixtures name a target on disk"),
-    };
+    let (entry, units) = resolved(directory, target);
 
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
     let (module, _foreigns) = compile_with_units(
@@ -194,11 +206,7 @@ fn a_file_argument_compiles_standalone_inside_a_package() {
     // And the proof that it brought none: the same file naming the library does not compile.
     let orphan = root.join("orphan.crs");
     fs::write(&orphan, "/std/print(/hello/greeting)\n").unwrap();
-    let (entry, units) = match Target::of(Some(orphan.to_str().unwrap()), None, &root).unwrap() {
-        Target::Executable { entry, units, .. } => (entry, units),
-        Target::File(path) => (path, Vec::new()),
-        Target::Stdin => panic!("these fixtures name a target on disk"),
-    };
+    let (entry, units) = resolved(&root, Some(orphan.to_str().unwrap()));
     assert!(units.is_empty(), "a file argument mounts nothing");
 
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
@@ -214,6 +222,47 @@ fn a_file_argument_compiles_standalone_inside_a_package() {
         )
         .is_err(),
         "the package's library is not in a bare file's scope"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A loose program is compiled against the prelude and nothing else: it names `/std`, and `/sys`, the root beneath it, stays the standard library's own.
+#[test]
+fn a_loose_program_names_std_and_is_refused_sys() {
+    let root = tree(
+        "e2e-loose-scope",
+        &[
+            ("std.crs", "/std/print(\"std\")\n"),
+            (
+                "sys.crs",
+                "let _mode = /sys/open_mode/read;\n\n/std/print(\"sys\")\n",
+            ),
+        ],
+    );
+
+    assert_eq!(
+        run(&root, Some(root.join("std.crs").to_str().unwrap())),
+        b"std"
+    );
+
+    let (entry, units) = resolved(&root, Some(root.join("sys.crs").to_str().unwrap()));
+    let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
+    let refusal = compile_with_units(
+        DEFAULT_STEP_BUDGET,
+        &units,
+        &entrypoint,
+        &loader,
+        None,
+        |_| {},
+        |_| {},
+    )
+    .map(|_| ())
+    .expect_err("a loose program cannot name /sys")
+    .to_string();
+    assert!(
+        refusal.contains("`sys` is internal to the standard library"),
+        "{refusal}"
     );
 
     fs::remove_dir_all(root).unwrap();

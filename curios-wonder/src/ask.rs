@@ -10,7 +10,7 @@ use {
         declared_tests, diagnosed, diagnostics, stage,
     },
     curios_cont::Outcome,
-    curios_package::{Form, Governing, LIBRARY, Membership, Target, order},
+    curios_package::{Entry, Library, Placement, Program, Selection, Spelling},
     curios_text::{LoadError, Overlay},
     curios_verdicts::Verdicts,
     std::{
@@ -27,89 +27,66 @@ pub struct Asked {
 }
 
 impl Asked {
-    /// What `file` is part of, placed by [`Membership`] — which is the whole answer, where it used to be the half a hand-mounted scope was prepended to.
-    pub fn about_file(file: &Path, manifest: Option<&Path>) -> Result<Self, String> {
-        Ok(match Membership::of(file, manifest)? {
-            Membership::Standalone => Self {
-                subject: Subject::Entry {
-                    units: Vec::new(),
-                    origin: Origin::File(file.to_path_buf()),
-                    declares: None,
-                },
-                store: None,
-            },
-            Membership::Library {
-                root,
-                units,
-                module,
-            } => Self {
-                subject: Subject::Unit {
-                    file: Some(FileAsked {
-                        path: file.to_path_buf(),
-                        prefix: units
-                            .last()
-                            .and_then(|unit| unit.mounts().into_iter().next())
-                            .map(|mount| mount.prefix)
-                            .unwrap_or_default(),
-                        module,
-                    }),
-                    units,
-                },
-                store: Some(Verdicts::at(root)),
-            },
-            Membership::Executable {
-                entry,
-                root,
-                units,
-                declares,
-                ..
-            } => Self {
-                subject: Subject::Entry {
-                    units,
-                    origin: Origin::File(entry),
-                    declares: Some(declares),
-                },
-                store: Some(Verdicts::at(root)),
-            },
+    /// Every subject `selection` is asked about: one for a program or a library, and for the governing package entire its library and then every program it declares, each a subject of its own.
+    pub fn every(selection: Selection) -> Result<Vec<Self>, String> {
+        Ok(match selection {
+            Selection::Program(program) => vec![Self::about_program(program)?],
+            Selection::Library(library) => vec![Self::about_library(library)],
+            Selection::Entire(entire) => {
+                let mut asked = Vec::new();
+                if let Some(library) = entire.library()? {
+                    asked.push(Self::about_library(library));
+                }
+                for program in entire.programs()? {
+                    asked.push(Self::about_program(program)?);
+                }
+                asked
+            }
         })
     }
 
-    /// The declared executable `target` names, or the sole one.
-    fn about_executable(target: Option<&str>, manifest: Option<&Path>) -> Result<Self, String> {
-        let Target::Executable {
-            entry,
-            root,
-            units,
-            declares,
-            ..
-        } = Target::here(target, manifest)?
-        else {
-            unreachable!("neither `-` nor a path reaches here");
+    /// A program, asked about as its entry — the one place the transport drains standard input on the engine's behalf.
+    fn about_program(program: Program) -> Result<Self, String> {
+        let origin = match program.entry() {
+            Entry::Stdin => Origin::Text {
+                label: STDIN_LABEL.to_string(),
+                text: read_stdin()?,
+            },
+            Entry::File(path) => Origin::File(path.clone()),
         };
+        let store = program.home().map(|home| Verdicts::at(home.root.clone()));
+        let declares = program.declares();
 
         Ok(Self {
             subject: Subject::Entry {
-                units,
-                origin: Origin::File(entry),
-                declares: Some(declares),
+                units: program.into_units(),
+                origin,
+                declares,
             },
-            store: Some(Verdicts::at(root)),
+            store,
         })
     }
 
-    /// The program on standard input, drained.
-    fn about_stdin(text: String) -> Result<Self, String> {
-        Ok(Self {
-            subject: Subject::Entry {
-                units: Vec::new(),
-                declares: None,
-                origin: Origin::Text {
-                    label: STDIN_LABEL.to_string(),
-                    text,
-                },
+    /// A library, asked about as the unit entire — through the file it was selected by, when it was, so a file the unit never reads is said to be one.
+    fn about_library(library: Library) -> Self {
+        let prefix = library
+            .units
+            .last()
+            .and_then(|unit| unit.mounts().into_iter().next())
+            .map(|mount| mount.prefix)
+            .unwrap_or_default();
+
+        Self {
+            subject: Subject::Unit {
+                file: library.through.map(|path| FileAsked {
+                    path,
+                    prefix,
+                    module: library.module,
+                }),
+                units: library.units,
             },
-            store: None,
-        })
+            store: Some(Verdicts::at(library.root)),
+        }
     }
 
     /// Every diagnostic, goal and lint the subject reports.
@@ -123,6 +100,16 @@ impl Asked {
     }
 }
 
+/// What `target` selects for a question: a file refused when the disk does not hold it, and otherwise placed in the unit that declares it.
+pub(crate) fn selected(manifest: Option<&Path>, target: Option<&str>) -> Result<Selection, String> {
+    let spelling = match Spelling::of(target) {
+        Spelling::File(path) => Spelling::File(file_target(path)?),
+        spelling => spelling,
+    };
+
+    Selection::here(spelling, manifest, Placement::Contained)
+}
+
 /// `wonder diagnostics [TARGET]`: render every diagnostic to stdout, a blank line between each.
 pub fn wonder_diagnostics(
     budget: u64,
@@ -131,7 +118,7 @@ pub fn wonder_diagnostics(
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    let answers = resolve(manifest, target)?;
+    let answers = Asked::every(selected(manifest, target)?)?;
 
     let reports = rendered(answers, budget, &overlay);
     if !reports.is_empty() {
@@ -139,34 +126,6 @@ pub fn wonder_diagnostics(
     }
 
     Ok(())
-}
-
-/// The subjects `target` names, resolved the way `diagnostics`, `tests` and `curios lint` share it: one for a file, an executable or standard input, and the governing package entire — its library, then every executable it declares, each a subject of its own — for none.
-pub(crate) fn resolve(manifest: Option<&Path>, target: Option<&str>) -> Result<Vec<Asked>, String> {
-    Ok(match Form::of(target) {
-        Form::Stdin => vec![Asked::about_stdin(read_stdin()?)?],
-        Form::File(path) => vec![Asked::about_file(&file_target(path)?, manifest)?],
-        Form::Named(Some(name)) => {
-            vec![Asked::about_executable(Some(&name), manifest)?]
-        }
-        Form::Named(None) => {
-            let governing = Governing::here(manifest)?;
-            let mut asked = Vec::new();
-            if governing.directory.join(LIBRARY).is_file() {
-                asked.push(Asked {
-                    subject: Subject::Unit {
-                        units: order(&governing)?,
-                        file: None,
-                    },
-                    store: Some(Verdicts::at(governing.root.clone())),
-                });
-            }
-            for executable in &governing.package.executables {
-                asked.push(Asked::about_executable(Some(&executable.name), manifest)?);
-            }
-            asked
-        }
-    })
 }
 
 /// `wonder tests [TARGET]`: every test the target declares, one path per line, in declaration order — the library's, then each executable's, when the target is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0.
@@ -177,7 +136,7 @@ pub fn wonder_tests(
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    for asked in resolve(manifest, target)? {
+    for asked in Asked::every(selected(manifest, target)?)? {
         let records = declared_tests(budget, asked.subject, &overlay, asked.store.as_ref())
             .map_err(|error| error.to_string())?;
         for record in records {
@@ -216,23 +175,29 @@ pub fn wonder_stage(
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    let asked = match Form::of(target) {
-        Form::Stdin => Asked::about_stdin(read_stdin()?)?,
-        Form::File(path) => Asked::about_file(&file_target(path)?, manifest)?,
-        Form::Named(name) => Asked::about_executable(name.as_deref(), manifest)?,
+    let program = match selected(manifest, target)? {
+        Selection::Program(program) => program,
+        Selection::Entire(entire) => entire.default_program()?,
+        Selection::Library(_) => {
+            return Err(
+                "a library has no stages of its own — name an executable or a program file"
+                    .to_string(),
+            );
+        }
     };
-
-    let Subject::Entry {
-        units,
-        origin,
-        declares,
-    } = asked.subject
+    let Asked {
+        subject:
+            Subject::Entry {
+                units,
+                origin,
+                declares,
+            },
+        store,
+    } = Asked::about_program(program)?
     else {
-        return Err(
-            "a library has no stages of its own — name an executable or a program file".to_string(),
-        );
+        unreachable!("a program is asked about as its entry");
     };
-    let cache = asked.store.as_ref();
+    let cache = store.as_ref();
 
     match stage(budget, units, origin, declares, &overlay, cache, name) {
         Ok(Reached::Rendered(rendering)) => {
@@ -271,24 +236,29 @@ pub fn wonder_cost(
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    let asked = match Form::of(target) {
-        Form::Stdin => Asked::about_stdin(read_stdin()?)?,
-        Form::File(path) => Asked::about_file(&file_target(path)?, manifest)?,
-        Form::Named(name) => Asked::about_executable(name.as_deref(), manifest)?,
+    let program = match selected(manifest, target)? {
+        Selection::Program(program) => program,
+        Selection::Entire(entire) => entire.default_program()?,
+        Selection::Library(_) => {
+            return Err(
+                "a library is not compiled to a program — name an executable or a program file"
+                    .to_string(),
+            );
+        }
     };
-
-    let Subject::Entry {
-        units,
-        origin,
-        declares,
-    } = asked.subject
+    let Asked {
+        subject:
+            Subject::Entry {
+                units,
+                origin,
+                declares,
+            },
+        store,
+    } = Asked::about_program(program)?
     else {
-        return Err(
-            "a library is not compiled to a program — name an executable or a program file"
-                .to_string(),
-        );
+        unreachable!("a program is asked about as its entry");
     };
-    let cache = asked.store.as_ref();
+    let cache = store.as_ref();
 
     match cost(budget, units, origin, declares, &overlay, cache) {
         Ok(fates) => {

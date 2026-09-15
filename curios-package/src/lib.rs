@@ -28,13 +28,13 @@ mod manifest;
 pub use manifest::*;
 
 mod membership;
-pub use membership::*;
+use membership::*;
 
 mod new;
 pub use new::*;
 
-mod run;
-pub use run::*;
+mod selection;
+pub use selection::*;
 
 mod store;
 pub use store::*;

@@ -1,20 +1,10 @@
-use {
-    super::*,
-    std::{
-        fs,
-        time::{SystemTime, UNIX_EPOCH},
-    },
-};
+//! What an argument selects: how it is spelled, the program `run` means by it, and where a question places a file.
 
-/// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
-///
-/// **Canonical, because everything it is compared against is.** `Governing::of` canonicalizes the directory it walks from and `Walk::locate` canonicalizes every resolution it returns — deliberately, since a location is compared and two spellings of one directory would compile a diamond's point twice. So an expectation built from an *uncanonical* root tests the platform's symlinks rather than anything this crate decided: on macOS `std::env::temp_dir()` is `/var/…`, which is really `/private/var/…`, and every path assertion here failed on that difference alone.
-fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let root = std::env::temp_dir().join(format!("curios-{name}-{}-{millis}", std::process::id()));
+use {super::*, curios_utilities::test_support::Temporary, std::fs};
+
+/// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
+fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
+    let root = Temporary::new("selection", name);
 
     for (path, source) in files {
         let path = root.join(path);
@@ -22,17 +12,58 @@ fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
         fs::write(path, source).unwrap();
     }
 
-    root.canonicalize()
-        .expect("the tree was just written, so it resolves")
+    fs::create_dir_all(&root).unwrap();
+
+    root
+}
+
+/// The program `argument` means to `run`, standing in `directory`, or the refusal it earns.
+fn selected(argument: Option<&str>, directory: &Path) -> Result<Program, String> {
+    match Selection::of(
+        Spelling::of(argument),
+        None,
+        directory,
+        Placement::Standalone,
+    )? {
+        Selection::Program(program) => Ok(program),
+        Selection::Entire(entire) => entire.default_program(),
+        Selection::Library(_) => panic!("a standalone argument never selects a library"),
+    }
 }
 
 /// The entry file `argument` resolves to inside `directory`, or the refusal it earns.
 fn entry(argument: Option<&str>, directory: &Path) -> Result<PathBuf, String> {
-    match Target::of(argument, None, directory)? {
-        Target::Stdin => panic!("standard input has no entry file"),
-        Target::File(path) => Ok(path),
-        Target::Executable { entry, .. } => Ok(entry),
+    match selected(argument, directory)?.entry() {
+        Entry::Stdin => panic!("standard input has no entry file"),
+        Entry::File(path) => Ok(path.clone()),
     }
+}
+
+/// The prefixes `units` mount, in order.
+fn prefixes(units: Vec<RootSource>) -> Vec<String> {
+    units
+        .iter()
+        .flat_map(|source| source.mounts())
+        .map(|mount| mount.prefix.join())
+        .collect()
+}
+
+/// **The dispatch.** A spelling is decided by its text alone — `-`, anything path-shaped, and every other word — before anything looks at the disk.
+#[test]
+fn a_spelling_is_decided_by_its_text_alone() {
+    assert_eq!(Spelling::of(None), Spelling::Nothing);
+    assert_eq!(Spelling::of(Some("-")), Spelling::Stdin);
+    for file in ["scratch.crs", "./serve", "sub/dir/x", "sub\\dir\\x"] {
+        assert_eq!(
+            Spelling::of(Some(file)),
+            Spelling::File(PathBuf::from(file)),
+            "{file}"
+        );
+    }
+    assert_eq!(
+        Spelling::of(Some("serve")),
+        Spelling::Name("serve".to_string())
+    );
 }
 
 /// A package declaring exactly one executable is what a bare `run` means.
@@ -51,8 +82,6 @@ fn a_bare_run_means_the_sole_executable() {
     );
 
     assert_eq!(entry(None, &root).unwrap(), root.join("serve.crs"));
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// With more than one, `default` decides — and without a `default`, a bare run refuses listing the candidates rather than picking.
@@ -77,7 +106,6 @@ fn a_bare_run_needs_a_default_when_there_is_a_choice() {
     );
     // `compile` and `wonder stage` resolve a bare target through the same call, so the refusal names no subcommand.
     assert!(!refusal.contains("`run`"), "{refusal}");
-    fs::remove_dir_all(ambiguous).unwrap();
 
     let decided = tree("run-default", &{
         let mut files = files.to_vec();
@@ -89,7 +117,6 @@ fn a_bare_run_needs_a_default_when_there_is_a_choice() {
     });
 
     assert_eq!(entry(None, &decided).unwrap(), decided.join("bench.crs"));
-    fs::remove_dir_all(decided).unwrap();
 }
 
 /// `run <name>` names a declared executable, and an undeclared one is refused listing what there is.
@@ -119,8 +146,6 @@ fn a_name_selects_a_declared_executable() {
         "{refusal}"
     );
     assert!(refusal.contains("\"serve\""), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// **The dispatch.** A file argument is never captured by a manifest — not even standing inside a package that declares an executable of a colliding name.
@@ -140,14 +165,12 @@ fn a_file_argument_is_never_captured_by_a_manifest() {
     );
 
     for argument in ["scratch.crs", "serve.crs", "./serve", "sub/dir/x.crs"] {
-        let target = Target::of(Some(argument), None, &root).expect("a file argument");
+        let program = selected(Some(argument), &root).expect("a file argument");
         assert!(
-            matches!(&target, Target::File(path) if path == Path::new(argument)),
+            program.entry() == &Entry::File(PathBuf::from(argument)) && program.home().is_none(),
             "{argument} should dispatch as a file"
         );
     }
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A file argument compiles standalone *everywhere*, so it works where no manifest governs at all.
@@ -159,8 +182,6 @@ fn a_file_argument_needs_no_project() {
         entry(Some("scratch.crs"), &root).unwrap(),
         PathBuf::from("scratch.crs")
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A declared executable's binary lands in the governing root's store, nested under the package that declares it.
@@ -179,19 +200,17 @@ fn a_declared_executable_builds_into_the_store() {
         ],
     );
 
-    let target = Target::of(None, None, &root.join("json")).expect("an enumerated member");
+    let program = selected(None, &root.join("json")).expect("an enumerated member");
 
     // The umbrella governs, so the store is its own — but the path *within* the store names the package, so it would not move if the member left.
-    let Target::Executable { output, .. } = &target else {
-        panic!("an enumerated member is a declared executable");
-    };
+    let home = program
+        .home()
+        .expect("an enumerated member is a declared executable");
     assert!(
-        output.ends_with(".curios/executables/json/serve"),
+        home.output.ends_with(".curios/executables/json/serve"),
         "{}",
-        output.display()
+        home.output.display()
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// `-` is standard input, and it answers before anything looks for a manifest — so it means the same thing in a package as outside one, which is the whole point of dispatching lexically.
@@ -209,26 +228,22 @@ fn a_dash_is_standard_input_everywhere() {
         ],
     );
 
-    for directory in [root.as_path(), Path::new(".")] {
+    for directory in [&*root, Path::new(".")] {
+        let program = selected(Some("-"), directory).expect("standard input needs no project");
         assert!(
-            matches!(
-                Target::of(Some("-"), None, directory).expect("standard input needs no project"),
-                Target::Stdin
-            ),
+            program.entry() == &Entry::Stdin && program.home().is_none(),
             "`-` should dispatch as standard input in {}",
             directory.display()
         );
     }
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// An anonymous program has no file to read, so the answer is absent rather than invented.
 #[test]
-fn standard_input_has_no_entry() {
-    let target = Target::of(Some("-"), None, Path::new(".")).expect("standard input");
+fn standard_input_has_no_entry_file() {
+    let program = selected(Some("-"), Path::new(".")).expect("standard input");
 
-    assert_eq!(target.entry(), None);
+    assert_eq!(program.entry(), &Entry::Stdin);
 }
 
 /// A package of nothing but programs compiles them against its dependencies alone — there is no library of its own to put last.
@@ -247,23 +262,10 @@ fn a_package_of_programs_alone_runs_them() {
         ],
     );
 
-    let Target::Executable { entry, units, .. } =
-        Target::of(None, None, &root.join("app")).expect("a package with no library")
-    else {
-        panic!("a declared name is not a file");
-    };
+    let program = selected(None, &root.join("app")).expect("a package with no library");
 
-    assert_eq!(entry, root.join("app/serve.crs"));
-    assert_eq!(
-        units
-            .iter()
-            .flat_map(|source| source.mounts())
-            .map(|mount| mount.prefix.join())
-            .collect::<Vec<_>>(),
-        vec!["/base".to_string()]
-    );
-
-    fs::remove_dir_all(root).unwrap();
+    assert_eq!(program.entry(), &Entry::File(root.join("app/serve.crs")));
+    assert_eq!(prefixes(program.into_units()), vec!["/base".to_string()]);
 }
 
 /// An executable compiles against its package's full scope: its own library last, everything it depends on before that.
@@ -283,23 +285,16 @@ fn an_executable_compiles_against_its_package_and_its_dependencies() {
         ],
     );
 
-    let Target::Executable { name, units, .. } =
-        Target::of(None, None, &root.join("app")).expect("a sole executable")
-    else {
-        panic!("a declared name is not a file");
-    };
+    let program = selected(None, &root.join("app")).expect("a sole executable");
 
-    assert_eq!(name, "serve");
     assert_eq!(
-        units
-            .iter()
-            .flat_map(|source| source.mounts())
-            .map(|mount| mount.prefix.join())
-            .collect::<Vec<_>>(),
+        program.home().expect("a declared executable").executable,
+        "serve"
+    );
+    assert_eq!(
+        prefixes(program.into_units()),
         vec!["/base".to_string(), "/app".to_string()]
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// The package's own executable is found rather than declared, so a refusal listing it says what declared it: a reader who wrote one row and is told the package declares two would otherwise look for the second in the manifest.
@@ -324,8 +319,6 @@ fn a_found_executable_is_listed_with_the_file_that_declares_it() {
         ),
         "{refusal}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A `default` naming the package itself is the one the parser lets through without a row, on the promise that a run says what is missing: so the refusal names `exe.crs`, the file whose presence would have declared it.
@@ -355,8 +348,6 @@ fn a_default_naming_the_absent_own_executable_names_the_file_that_would_declare_
         refusal.starts_with("\"app\" has no executable of its own"),
         "{refusal}"
     );
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A package declaring no executable refuses a bare target naming the two ways to declare one — and no subcommand, since `compile` and `wonder stage` reach the same refusal and `compile` takes no loose file.
@@ -372,5 +363,136 @@ fn a_bare_target_on_a_package_of_a_library_alone_says_how_to_declare_one() {
         refusal,
         "\"app\" declares no executable: add `exe.crs`, or declare one with `[[executables]]`"
     );
-    fs::remove_dir_all(root).unwrap();
+}
+
+/// No argument selects the package entire: its library, and then every program it declares, in order.
+#[test]
+fn no_argument_selects_the_package_entire() {
+    let root = tree(
+        "entire",
+        &[
+            (
+                "curios.toml",
+                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n",
+            ),
+            ("lib.crs", ""),
+            ("serve.crs", ""),
+            ("bench.crs", ""),
+        ],
+    );
+
+    let Selection::Entire(entire) =
+        Selection::of(Spelling::Nothing, None, &root, Placement::Contained)
+            .expect("a governed package")
+    else {
+        panic!("no argument is the package entire");
+    };
+
+    let library = entire.library().expect("a scope").expect("a library");
+    assert_eq!(prefixes(library.units), vec!["/app".to_string()]);
+
+    let programs = entire.programs().expect("every program");
+    let names = programs
+        .iter()
+        .map(|program| {
+            program
+                .home()
+                .expect("a declared program")
+                .executable
+                .as_str()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(names, vec!["serve", "bench"]);
+}
+
+/// A question places a module of the library in the library, selected through that file and carrying the module its spelling names.
+#[test]
+fn a_placed_library_module_selects_the_library_through_it() {
+    let root = tree(
+        "placed-library",
+        &[
+            ("curios.toml", "name = \"app\"\n"),
+            ("lib.crs", "pub mod util;\n"),
+            ("util.crs", ""),
+        ],
+    );
+    let file = root.join("util.crs");
+
+    let Selection::Library(library) = Selection::of(
+        Spelling::File(file.clone()),
+        None,
+        &root,
+        Placement::Contained,
+    )
+    .expect("a placed file") else {
+        panic!("a module of the library is the library");
+    };
+
+    assert_eq!(library.through, Some(file));
+    assert_eq!(
+        library.module.map(|module| module.join()),
+        Some("/app/util".to_string())
+    );
+    assert_eq!(library.units.len(), 1);
+}
+
+/// A question places an executable's entry in its program, and a module under the entry's stem directory in the same program, selected through that module.
+#[test]
+fn a_placed_entry_selects_its_program_and_a_placed_module_of_it_selects_it_through_that_module() {
+    let root = tree(
+        "placed-program",
+        &[
+            (
+                "curios.toml",
+                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+            ),
+            ("serve.crs", "mod helper;\n"),
+            ("serve/helper.crs", ""),
+        ],
+    );
+    let placed = |file: &str| match Selection::of(
+        Spelling::File(root.join(file)),
+        None,
+        &root,
+        Placement::Contained,
+    )
+    .expect("a placed file")
+    {
+        Selection::Program(program) => program,
+        _ => panic!("{file} belongs to the program"),
+    };
+
+    let entry = placed("serve.crs");
+    assert_eq!(
+        entry.home().expect("a declared program").executable,
+        "serve"
+    );
+    assert_eq!(entry.through(), None);
+
+    let module = placed("serve/helper.crs");
+    assert_eq!(module.entry(), &Entry::File(root.join("serve.crs")));
+    assert_eq!(
+        module.through(),
+        Some(root.join("serve/helper.crs").as_path())
+    );
+}
+
+/// A question about a file no manifest governs selects it loose, exactly as `run` does.
+#[test]
+fn a_placed_file_no_manifest_governs_is_loose() {
+    let root = tree("placed-loose", &[("scratch.crs", "")]);
+    let file = root.join("scratch.crs");
+
+    let Selection::Program(program) = Selection::of(
+        Spelling::File(file.clone()),
+        None,
+        &root,
+        Placement::Contained,
+    )
+    .expect("an answer, not a refusal") else {
+        panic!("a file no unit declares is a program of its own");
+    };
+
+    assert_eq!(program.entry(), &Entry::File(file));
+    assert!(program.home().is_none() && program.declares().is_none());
 }

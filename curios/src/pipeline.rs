@@ -5,46 +5,54 @@
 use {
     crate::{Heading, Line, Subject, fact},
     curios::{engine, to_cwasm},
-    curios_package::Target,
+    curios_package::{Entire, Entry, Placement, Program, Selection, Spelling},
     curios_pipeline::{Cache, CompileError, Progress, compile_with_units},
     curios_text::{Entrypoint, RootSource, UnitSource},
     curios_utilities::Source,
-    curios_verdicts::{Program, Verdicts},
+    curios_verdicts::Verdicts,
     curios_wasm::Module,
     curios_wonder::STDIN_LABEL,
     std::{io, path::Path, rc::Rc},
 };
 
-/// The precompiled payload for `target`, taken from the store when nothing it was made from has changed and compiled otherwise.
-///
-/// The scope is the target's own dependency graph and nothing else: a manifest is the only thing that says what a unit is compiled against. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
-pub(crate) fn payload_of(budget: u64, target: Target) -> Result<Vec<u8>, CompileError> {
-    let mut scope = Vec::new();
-    let subject = subject_of(&target);
+/// The program `run` and `compile` take: a file or standard input standalone, a declared executable by name, or — for no argument — the governing package's sole or `default` executable.
+pub(crate) fn program_of(target: Option<&str>, manifest: Option<&Path>) -> Result<Program, String> {
+    Ok(
+        match Selection::here(Spelling::of(target), manifest, Placement::Standalone)? {
+            Selection::Program(program) => program,
+            Selection::Entire(entire) => entire.default_program()?,
+            Selection::Library(_) => unreachable!("a standalone file is never placed in a library"),
+        },
+    )
+}
 
-    // Neither standalone form has a project, so neither has a store to consult: what a compilation may reuse is a fact about the project it is in, and these are in none.
-    let (entry, declared, declares, cache) = match target {
-        Target::Stdin => (None, None, None, None),
-        Target::File(path) => (Some(path), None, None, None),
-        Target::Executable {
-            entry,
-            units,
-            root,
-            package,
-            name,
-            declares,
-            ..
-        } => {
-            scope.extend(units);
-
-            (
-                Some(entry),
-                Some((package, name)),
-                Some(declares),
-                Some(Verdicts::at(root)),
-            )
+/// The governing package entire, which is what no argument selects.
+pub(crate) fn entire(manifest: Option<&Path>) -> Result<Entire, String> {
+    match Selection::here(Spelling::Nothing, manifest, Placement::Contained)? {
+        Selection::Entire(entire) => Ok(entire),
+        Selection::Library(_) | Selection::Program(_) => {
+            unreachable!("no argument selects the governing package entire")
         }
+    }
+}
+
+/// The precompiled payload for `program`, taken from the store when nothing it was made from has changed and compiled otherwise.
+///
+/// The scope is the program's own dependency graph and nothing else: a manifest is the only thing that says what a unit is compiled against. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
+pub(crate) fn payload_of(budget: u64, program: Program) -> Result<Vec<u8>, CompileError> {
+    let subject = subject_of(&program);
+
+    // A loose program has no project, so it has no store to consult: what a compilation may reuse is a fact about the project it is in, and a loose program is in none.
+    let entry = match program.entry() {
+        Entry::Stdin => None,
+        Entry::File(path) => Some(path.clone()),
     };
+    let declared = program
+        .home()
+        .map(|home| (home.package.clone(), home.executable.clone()));
+    let declares = program.declares();
+    let cache = program.home().map(|home| Verdicts::at(home.root.clone()));
+    let scope = program.into_units();
 
     // Opened before the store is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.
     let (entrypoint, loader, source) = open(entry.as_deref())?;
@@ -62,7 +70,7 @@ pub(crate) fn payload_of(budget: u64, target: Target) -> Result<Vec<u8>, Compile
         .map(|((cache, name), path)| {
             (
                 cache,
-                Program {
+                curios_verdicts::Program {
                     package: &name.0,
                     executable: &name.1,
                     entry: path,
@@ -112,14 +120,14 @@ pub(crate) fn payload_of(budget: u64, target: Target) -> Result<Vec<u8>, Compile
     compiled
 }
 
-/// What a target is reported as — the name that was asked for, never the file it resolved to.
+/// What a program is reported as — the name that was asked for, never the file it resolved to.
 ///
-/// A declared executable resolves to an absolute path somewhere under the governing root, and echoing that back fills a status line with what the reader already knew. A bare file *is* what was asked for, so it reports as written. Standard input was asked for as `-`, which reports as nothing a reader can act on, so it is the one subject named rather than echoed.
-pub(crate) fn subject_of(target: &Target) -> Subject {
-    match target {
-        Target::Stdin => Subject::Stdin,
-        Target::File(path) => Subject::File(path.clone()),
-        Target::Executable { name, .. } => Subject::Executable(name.clone()),
+/// A declared executable resolves to an absolute path somewhere under the governing root, and echoing that back fills a status line with what the reader already knew. A loose file *is* what was asked for, so it reports as written. Standard input was asked for as `-`, which reports as nothing a reader can act on, so it is the one subject named rather than echoed.
+pub(crate) fn subject_of(program: &Program) -> Subject {
+    match (program.entry(), program.home()) {
+        (_, Some(home)) => Subject::Executable(home.executable.clone()),
+        (Entry::File(path), None) => Subject::File(path.clone()),
+        (Entry::Stdin, None) => Subject::Stdin,
     }
 }
 

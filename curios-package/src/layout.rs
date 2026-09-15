@@ -53,7 +53,7 @@ pub(crate) fn declared(package: &Package) -> Vec<Qualifier> {
 
 /// The prefixes one of `package`'s executables may name: everything its library may, and the library itself.
 ///
-/// An executable is part of its package, so it reaches the package's own library without declaring it — a program does not depend on itself. Spelled once, here, because two products ask it: `run` and `compile` through `Target`, the editor through `Membership`, and an executable that resolves a prefix under one and not the other is a disagreement no test crosses.
+/// An executable is part of its package, so it reaches the package's own library without declaring it — a program does not depend on itself. Spelled once, here, because every way of selecting a declared program asks it — by name, as the package's default, or through a file a question placed — and an executable that resolves a prefix under one and not another is a disagreement no test crosses.
 pub(crate) fn reachable(package: &Package) -> Vec<Qualifier> {
     declared(package)
         .into_iter()

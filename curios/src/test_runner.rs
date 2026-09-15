@@ -3,9 +3,9 @@
 //! The store is consulted exactly as `run` consults it: one payload per target, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records beside the machine code so a warm run recompiles nothing and still reports everything.
 
 use {
-    crate::{Heading, Line, Subject, fact, report, step},
+    crate::{Heading, Line, Subject, entire, fact, report, step},
     curios::{engine, to_cwasm},
-    curios_package::{Governing, LIBRARY, order},
+    curios_package::{LIBRARY, order},
     curios_pipeline::{Cache, CompileError, EntryTail, TestRecord, compile_tests_with_units},
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::{Entrypoint, RootSource, UnitSource},
@@ -59,7 +59,7 @@ pub(crate) fn run_tests(
     manifest: Option<&Path>,
     filter: Option<&str>,
 ) -> Result<bool, CompileError> {
-    let governing = Governing::here(manifest).map_err(CompileError::failure)?;
+    let governing = entire(manifest).map_err(CompileError::failure)?.governing;
 
     // The same scope for every target: the dependency graph, with the governing package's own library last — the order `wonder` walks and `run` compiles.
     let units = order(&governing).map_err(CompileError::failure)?;

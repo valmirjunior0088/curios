@@ -35,24 +35,33 @@ fn invoke(directory: &Path, target: Option<&str>) -> Invocation {
 
 /// [`invoke`] over a scope whose front is already built, for the one unit a directory cannot supply.
 fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource>) -> Invocation {
-    let (entry, package, name, root) =
-        match curios_package::Target::of(target, None, directory).expect("a governed package") {
-            curios_package::Target::Executable {
-                entry,
-                units,
-                package,
-                name,
-                root,
-                ..
-            } => {
-                scope.extend(units);
-
-                (entry, package, name, root)
-            }
-            curios_package::Target::File(_) | curios_package::Target::Stdin => {
-                panic!("these fixtures declare their executables")
-            }
-        };
+    let program = match curios_package::Selection::of(
+        curios_package::Spelling::of(target),
+        None,
+        directory,
+        curios_package::Placement::Standalone,
+    )
+    .expect("a governed package")
+    {
+        curios_package::Selection::Program(program) => program,
+        curios_package::Selection::Entire(entire) => {
+            entire.default_program().expect("a governed package")
+        }
+        curios_package::Selection::Library(_) => {
+            panic!("these fixtures declare their executables")
+        }
+    };
+    let Some(home) = program.home() else {
+        panic!("these fixtures declare their executables");
+    };
+    let curios_package::Entry::File(entry) = program.entry() else {
+        panic!("these fixtures declare their executables");
+    };
+    let entry = entry.clone();
+    let package = home.package.clone();
+    let name = home.executable.clone();
+    let root = home.root.clone();
+    scope.extend(program.into_units());
 
     let verdicts = Verdicts::at(root);
     let (entrypoint, loader, source) = Entrypoint::opened(&entry).expect("the entry parses");

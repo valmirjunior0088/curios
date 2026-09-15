@@ -3,8 +3,8 @@
 //! The same subjects, the same records, the same rendering: a lint is a diagnostic the compilation reports and nothing stops on, and this subcommand is where it turns into an exit code. What it adds is the one lint no unit can decide alone — a declared dependency nothing in the package wrote, read off the union of the prefixes every unit spelled — and it adds it only when the target is the package entire, because a dependency is a fact of the package and a file asked about alone reaches what it reaches.
 
 use {
-    crate::{Diagnosed, Severity, resolve},
-    curios_package::{Form, Governing},
+    crate::{Asked, Diagnosed, Severity, selected},
+    curios_package::Selection,
     curios_text::Overlay,
     curios_utilities::{Qualifier, Report},
     std::{collections::BTreeSet, path::Path},
@@ -24,12 +24,25 @@ pub enum Linted {
 /// `curios lint [TARGET]`: every diagnostic, goal and lint of the target rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached.
 pub fn lint(budget: u64, manifest: Option<&Path>, target: Option<&str>) -> Result<Linted, String> {
     let overlay = Overlay::default();
-    let package_entire = matches!(Form::of(target), Form::Named(None));
+    let selection = selected(manifest, target)?;
+    // A dependency is a fact of the package, so only the package entire is asked which of its dependencies nothing reached.
+    let dependencies = match &selection {
+        Selection::Entire(entire) => Some(
+            entire
+                .governing
+                .package
+                .dependencies
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+        ),
+        Selection::Library(_) | Selection::Program(_) => None,
+    };
 
     let mut seen = Renderings::default();
     let mut reached = BTreeSet::new();
     let mut linted = Linted::Clean;
-    for asked in resolve(manifest, target)? {
+    for asked in Asked::every(selection)? {
         let Diagnosed {
             diagnostics,
             reached: unit_reached,
@@ -44,9 +57,8 @@ pub fn lint(budget: u64, manifest: Option<&Path>, target: Option<&str>) -> Resul
         }
     }
 
-    if package_entire {
-        let governing = Governing::here(manifest)?;
-        for name in unused_dependencies(governing.package.dependencies.keys(), &reached) {
+    if let Some(dependencies) = dependencies {
+        for name in unused_dependencies(&dependencies, &reached) {
             linted = Linted::Findings;
             seen.insert_rendered(
                 Report::unlocated(format!("unused dependency `{name}`; delete its row")).render(),

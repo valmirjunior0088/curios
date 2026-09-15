@@ -9,7 +9,7 @@ use {
 /// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder stage`'s help text.
 static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));
 
-/// What a TARGET names, for every subcommand that takes one and means the governing package's sole or `default` executable by none. The lexical rule is `curios_package::Form`'s; the sentence is written once so five subcommands cannot describe it five ways.
+/// What a TARGET names, for every subcommand that takes one and means the governing package's sole or `default` executable by none. The lexical rule is `curios_package::Spelling`'s; the sentence is written once so five subcommands cannot describe it five ways.
 const TARGET_HELP: &str = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package's sole or `default` executable)";
 
 /// The same, for a query that takes the governing package entire when nothing is named.
@@ -134,7 +134,7 @@ pub(crate) enum Mode {
     },
 }
 
-/// One question each, of fixed arity. A target takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Membership`.
+/// One question each, of fixed arity. A target takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Selection`'s.
 #[derive(Debug, Subcommand)]
 pub(crate) enum Query {
     #[command(

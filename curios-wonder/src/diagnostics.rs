@@ -18,7 +18,7 @@ pub struct Diagnosed {
 
 /// What a question is about.
 ///
-/// The transport decides this and the engine only compiles it: a file declared by a package's library is asked about as that whole unit, one declared as an executable's entry is asked about as that origin, and a file no unit declares is asked about standalone — see `curios-package`'s `Membership` for the rule. The engine never probes for a manifest of its own.
+/// The transport decides this and the engine only compiles it: a file declared by a package's library is asked about as that whole unit, one declared as an executable's entry is asked about as that origin, and a file no unit declares is asked about standalone — see `curios-package`'s `Selection` for the rule. The engine never probes for a manifest of its own.
 pub enum Subject {
     /// A program: the entry compiled against `units`, in the order given.
     Entry {

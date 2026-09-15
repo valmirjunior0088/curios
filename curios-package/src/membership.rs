@@ -15,7 +15,7 @@ use {
 };
 
 /// The unit a file belongs to.
-pub enum Membership {
+pub(crate) enum Membership {
     /// No package declares it: compiled alone, against nothing but the prelude.
     Standalone,
     /// The library of the package whose directory holds it. `units` is the whole scope in dependency order, that library last, so asking about the last unit is asking about the file.
@@ -28,17 +28,19 @@ pub enum Membership {
     /// An executable's entry, or a module under its stem directory: `entry` compiled against `units`.
     Executable {
         name: String,
+        package: String,
         entry: PathBuf,
+        output: PathBuf,
         root: PathBuf,
         units: Vec<RootSource>,
-        /// The prefixes the entry may name, as its manifest declares them — see `Target::Executable`'s own field.
+        /// The prefixes the entry may name, as its manifest declares them — see [`Program::declares`](crate::Program::declares).
         declares: Vec<Qualifier>,
     },
 }
 
 impl Membership {
     /// What `file` is part of, under the nearest manifest above it or the one `manifest` names.
-    pub fn of(file: &Path, manifest: Option<&Path>) -> Result<Self, String> {
+    pub(crate) fn of(file: &Path, manifest: Option<&Path>) -> Result<Self, String> {
         let file = identity(file);
 
         let governing = match manifest {
@@ -65,7 +67,11 @@ impl Membership {
             if file == entry || file.starts_with(&stem) {
                 return Ok(Self::Executable {
                     name: executable.name.clone(),
+                    package: governing.package.name.clone(),
                     entry,
+                    output: governing
+                        .store()
+                        .executable(&governing.package.name, &executable.name),
                     root: governing.root.clone(),
                     declares: reachable(&governing.package),
                     units: order(&governing)?,

@@ -23,7 +23,7 @@ use {
     clap::Parser,
     curios::wasm_optm,
     curios_document::write_documentation,
-    curios_package::{Governing, LIBRARY, Target, curate, order, scaffold},
+    curios_package::{Entry, LIBRARY, Spelling, curate, order, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::{Formatted, Overlay},
@@ -117,14 +117,14 @@ fn dispatch() -> Result<(), Failure> {
 
     match mode {
         Mode::Run { target, args } => {
-            let target = Target::here(target.as_deref(), manifest.as_deref())?;
+            let program = program_of(target.as_deref(), manifest.as_deref())?;
             // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by. Every argument crosses as the bytes the OS holds, since `/std/proc/args` promises opaque byte strings and a path or an argument need not be UTF-8.
-            let entry = target.entry().map_or_else(
-                || Target::STDIN.as_bytes().to_vec(),
-                |path| path.as_os_str().as_encoded_bytes().to_vec(),
-            );
-            let subject = subject_of(&target);
-            let cwasm = payload_of(budget, target)?;
+            let entry = match program.entry() {
+                Entry::Stdin => Spelling::STDIN.as_bytes().to_vec(),
+                Entry::File(path) => path.as_os_str().as_encoded_bytes().to_vec(),
+            };
+            let subject = subject_of(&program);
+            let cwasm = payload_of(budget, program)?;
 
             step(Heading::Running, &subject);
 
@@ -161,21 +161,16 @@ fn dispatch() -> Result<(), Failure> {
             target,
             output_path,
         } => {
-            let target = Target::here(target.as_deref(), manifest.as_deref())?;
+            let program = program_of(target.as_deref(), manifest.as_deref())?;
 
             // A product written to disk needs a package to be filed under and a name to be filed as, and only a declared executable has both. A loose file or standard input is `run`'s to take: trying a theory leaves nothing behind.
-            let Target::Executable {
-                entry,
-                output: filed,
-                ..
-            } = &target
-            else {
+            let (Entry::File(entry), Some(home)) = (program.entry(), program.home()) else {
                 return Err(Failure::Error(
                     "`compile` builds a declared executable of the governing package; `run` is what takes a file or standard input".to_string(),
                 ));
             };
             let entry = entry.clone();
-            let output = output_path.unwrap_or_else(|| filed.clone());
+            let output = output_path.unwrap_or_else(|| home.output.clone());
 
             // `-o` can name the entry itself. Refuse before compiling rather than destroy the source.
             if let (Ok(input), Ok(written)) = (entry.canonicalize(), output.canonicalize())
@@ -188,7 +183,7 @@ fn dispatch() -> Result<(), Failure> {
             }
 
             let started = Instant::now();
-            let cwasm = payload_of(budget, target)?;
+            let cwasm = payload_of(budget, program)?;
 
             emit_exe(&cwasm, &output)?;
 
@@ -213,7 +208,7 @@ fn dispatch() -> Result<(), Failure> {
                     (archived_documentation(&path)?, directory)
                 }
                 None => {
-                    let governing = Governing::here(manifest.as_deref())?;
+                    let governing = entire(manifest.as_deref())?.governing;
                     if !governing.directory.join(LIBRARY).is_file() {
                         return Err(Failure::Error(format!(
                             "{:?} declares no library, and a library is the one thing with an interface to document",
@@ -250,7 +245,7 @@ fn dispatch() -> Result<(), Failure> {
             );
         }
         Mode::Curate => {
-            let governing = Governing::here(manifest.as_deref())?;
+            let governing = entire(manifest.as_deref())?.governing;
 
             // Past tense because it is: every round has fetched before the acquisitions come back to be reported.
             for acquisition in curate(&governing)? {
