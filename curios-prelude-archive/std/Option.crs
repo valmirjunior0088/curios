@@ -1,70 +1,70 @@
 use /std/{Bool, Show, Spell, Str, Monad, Result, True, False, Ordering, Ord};
 use /std/ops/{Eql, Cmp};
 
--- | A value that may be absent.
+--- A value that may be absent.
 pub induct Option(A: Type): pub Type
--- | The value is there.
+--- The value is there.
 | some(A)
--- | There is none.
+--- There is none.
 | none()
 end
 
 pub use Option/*;
 
--- | `f` on the value, or `none`.
+--- `f` on the value, or `none`.
 pub let bind(@A: Type, @B: Type, m: Option(A), f: (A) -> Option(B)) -> Option(B) =
     match m | some(a) => f(a) | none() => Option/none() end;
 
--- | `f` on the value, kept as an option.
+--- `f` on the value, kept as an option.
 pub let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) =
     match m | some(a) => Option/some(f(a)) | none() => Option/none() end;
 
--- | The value, or `default` when there is none.
+--- The value, or `default` when there is none.
 pub let unwrap_or(@A: Type, m: Option(A), default: A) -> A =
     match m | some(a) => a | none() => default end;
 
--- | Whether a value is present.
+--- Whether a value is present.
 pub let is_some(@A: Type, m: Option(A)) -> Bool =
     match m | some(_) => true | none() => false end;
 
--- | Whether no value is present.
+--- Whether no value is present.
 pub let is_none(@A: Type, m: Option(A)) -> Bool =
     match m | some(_) => false | none() => true end;
 
--- | `m` when it holds a value, `other` otherwise.
+--- `m` when it holds a value, `other` otherwise.
 pub let or(@A: Type, m: Option(A), other: Option(A)) -> Option(A) =
     match m | some(a) => Option/some(a) | none() => other end;
 
--- | `m` when it holds a value, otherwise what `other` answers.
+--- `m` when it holds a value, otherwise what `other` answers.
 pub let or_else(@A: Type, m: Option(A), other: () -> Option(A)) -> Option(A) =
     match m | some(a) => Option/some(a) | none() => other() end;
 
--- | The value when `pred` accepts it, `none` otherwise or when there is none.
+--- The value when `pred` accepts it, `none` otherwise or when there is none.
 pub let filter(@A: Type, m: Option(A), pred: (A) -> Bool) -> Option(A) =
     match m
     | some(a) => match pred(a) | true => Option/some(a) | false => Option/none() end
     | none() => Option/none()
     end;
 
--- | An option of an option collapsed to one.
+--- An option of an option collapsed to one.
 pub let flatten(@A: Type, m: Option(Option(A))) -> Option(A) =
     match m | some(inner) => inner | none() => Option/none() end;
 
--- | The value as a success, or `e` as the failure.
+--- The value as a success, or `e` as the failure.
 pub let to_result(@A: Type, @E: Type, m: Option(A), e: E) -> Result(E, A) =
     match m | some(a) => Result/success(a) | none() => Result/failure(e) end;
 
--- | The value, or what `default` answers when there is none.
+--- The value, or what `default` answers when there is none.
 pub let unwrap_or_else(@A: Type, m: Option(A), default: () -> A) -> A =
     match m | some(a) => a | none() => default() end;
 
--- | Whether `m` holds a value, as a decided proposition: `True` at `some` and `False` at `none`.
--- |
--- | A literal discharges it by reduction, and an option a guard has refined discharges it with nothing written.
+--- Whether `m` holds a value, as a decided proposition: `True` at `some` and `False` at `none`.
+---
+--- A literal discharges it by reduction, and an option a guard has refined discharges it with nothing written.
 pub let IsSome(@A: Type, m: Option(A)) -> Prop =
     match m | some(_) => True | none() => False end;
 
--- | The value, under the evidence that there is one.
+--- The value, under the evidence that there is one.
 pub let get(@A: Type, m: Option(A), @ok: IsSome(m)) -> A =
     match m
     | some(a) => a
@@ -88,7 +88,7 @@ satisfy Monad(Option) {
     bind = bind,
 }
 
--- | `none` below `some`, and two values by `A`'s order.
+--- `none` below `some`, and two values by `A`'s order.
 pub let cmp(@A: Type, use Ord(A), a: Option(A), b: Option(A)) -> Ordering =
     match a
     | none() => match b | none() => Ordering/eq() | some(_) => Ordering/lt() end

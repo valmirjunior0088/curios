@@ -36,7 +36,7 @@ let encode_str(s: Str) -> Str =
     let body = Bytes/fold(Str/to_bytes(s), x[], (byte, acc) => x[..acc, ..escape_byte(byte)]);
     Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bytes(body), "")), "\"");
 
--- | `v` as a document on one line. A non-finite number is written as `null`.
+--- `v` as a document on one line. A non-finite number is written as `null`.
 pub let encode(v: Json) -> Str =
     match v
     | null() => "null"

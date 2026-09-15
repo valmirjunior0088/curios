@@ -7,11 +7,11 @@ let seq(@s: Scan, @a: Bytes, @b: Bytes, va: Utf8(s, a), vb: Valid(b)) -> Utf8(s,
     | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
     end;
 
--- | Valid bytes concatenate to valid bytes.
+--- Valid bytes concatenate to valid bytes.
 pub let concat_closed(@a: Bytes, @b: Bytes, va: Valid(a), vb: Valid(b)) -> Valid(x[..a, ..b]) =
     seq(va, vb);
 
--- | The procedure that decides whether `b` scans from `s`: the witness when it does, `none` otherwise.
+--- The procedure that decides whether `b` scans from `s`: the witness when it does, `none` otherwise.
 pub let check(s: Scan, b: Bytes) -> Option(Utf8(s, b)) =
     match b
     | x[] =>
@@ -27,7 +27,7 @@ pub let check(s: Scan, b: Bytes) -> Option(Utf8(s, b)) =
         end
     end;
 
--- | How many bytes the first `n` characters take from scan state `s`.
+--- How many bytes the first `n` characters take from scan state `s`.
 pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
     match b
     | x[] => 0
@@ -39,7 +39,7 @@ pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
         end
     end;
 
--- | `drop_width` never passes the end.
+--- `drop_width` never passes the end.
 pub let drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, b), Bytes/len(b)) =
     match b
     | x[] => True/qed()
@@ -55,7 +55,7 @@ pub let drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, 
         end
     end;
 
--- | The witness carried past the first `n` characters.
+--- The witness carried past the first `n` characters.
 pub let drop_valid(
     n: Nat,
     s: Scan,
@@ -76,7 +76,7 @@ pub let drop_valid(
     | bad() => match d | more(c, _, _, rest) => drop_valid(n, step(c, Scan/bad()), rest) end
     end;
 
--- | The witness carried onto the first `n` characters.
+--- The witness carried onto the first `n` characters.
 pub let take_valid(
     n: Nat,
     s: Scan,
@@ -130,11 +130,11 @@ pub let take_valid(
         end
     end;
 
--- | Nothing scans from the bad state.
+--- Nothing scans from the bad state.
 pub let bad_uninhabited(@x: Bytes, w: Utf8(Scan/bad(), x)) -> False =
     match w | more(_, _, _, rest) => bad_uninhabited(rest) end;
 
--- | Inside a sequence, at least the remaining continuation bytes follow.
+--- Inside a sequence, at least the remaining continuation bytes follow.
 pub let cont_len(
     k: Nat,
     @lo: Nat,
@@ -159,7 +159,7 @@ pub let cont_len(
         end
     end;
 
--- | A sequence never waits on zero continuation bytes.
+--- A sequence never waits on zero continuation bytes.
 pub let cont0_uninhabited(
     @lo: Nat,
     @hi: Nat,
@@ -174,7 +174,7 @@ pub let cont0_uninhabited(
         end
     end;
 
--- | The continuation bytes from `off`, folded into `acc`.
+--- The continuation bytes from `off`, folded into `acc`.
 pub let take_continuations(
     b: Bytes,
     off: Nat,
@@ -200,7 +200,7 @@ pub let take_continuations(
             bound)
     end;
 
--- | The witness advanced past the first byte.
+--- The witness advanced past the first byte.
 pub let peel_byte(
     @s: Scan,
     @b: Bytes,
@@ -212,7 +212,7 @@ pub let peel_byte(
     | more(_, _, _, rest) => rest
     end;
 
--- | How many characters `b` holds from scan state `s`.
+--- How many characters `b` holds from scan state `s`.
 pub let count_scalars(s: Scan, b: Bytes) -> Nat =
     match b
     | x[] => 0
@@ -234,7 +234,7 @@ let scan_of_class(cl: Class) -> Scan =
 let step_scans(c: Byte) -> Eq(step(c, Scan/lead()), scan_of_class(classify(c))) =
     Eq/refl();
 
--- | The code point of the first character, as a number.
+--- The code point of the first character, as a number.
 pub let decode_head_raw(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> Nat =
     let peeled = Eq/subst((sc: Scan) => Utf8(sc, t), step_scans(c), peel_byte(True/qed(), w));
     (match classify(c): (cl) => (w2: Utf8(scan_of_class(cl), t)) -> Nat
@@ -243,10 +243,10 @@ pub let decode_head_raw(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> 
     | bad() => (w2) => match bad_uninhabited(w2) end
     end)(peeled);
 
--- | A decoded code point as a character.
+--- A decoded code point as a character.
 pub let certify_decoded(code: Nat) -> Char =
     Option/unwrap_or(Char/of_nat(code), '?');
 
--- | The first character.
+--- The first character.
 pub let decode_head(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> Char =
     certify_decoded(decode_head_raw(c, w));

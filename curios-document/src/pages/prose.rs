@@ -1,4 +1,4 @@
-//! A documentation comment as a page shows it: paragraphs, separated in the source by an empty `-- |` line, each a run of text and code spans. A code span is what a pair of backticks encloses, the one piece of notation the prose grammar has; a backtick with no partner is text, so a comment is never refused for its punctuation.
+//! A documentation comment as a page shows it: paragraphs, separated in the source by an empty `---` line, each a run of text and code spans. A code span is what a pair of backticks encloses, the one piece of notation the prose grammar has; a backtick with no partner is text, so a comment is never refused for its punctuation.
 
 /// One paragraph of a comment.
 pub(super) struct Paragraph {

@@ -5,7 +5,7 @@ use /std/BigNat/{BigNat, cong_bits, cong_cons2, cong_is_trimmed, cons_inj_head, 
     is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, nonempty, of_trimmed_bits, refl_at,
     tail_is_trimmed, xor3, mod succ};
 
--- | The ripple-carry sum of two words with a carry in, untrimmed.
+--- The ripple-carry sum of two words with a carry in, untrimmed.
 pub let raw(x: Bits, y: Bits, carry: Bool) -> Bits =
     match x
     | b[] =>
@@ -30,7 +30,7 @@ let raw_zero_r(x: Bits) -> Eq(raw(x, b[], false), x) =
         end
     end;
 
--- | The empty word with no carry is a left identity.
+--- The empty word with no carry is a left identity.
 pub let raw_zero_l(y: Bits) -> Eq(raw(b[], y, false), y) =
     match y
     | b[] => Eq/refl()
@@ -77,7 +77,7 @@ let raw_nonempty_r(
 ) -> Eq(nonempty(raw(x, b[yh, ..yt], c)), true) =
     match x | b[] => Eq/refl() | b[_, .._] => Eq/refl() end;
 
--- | The sum of two trimmed words is trimmed.
+--- The sum of two trimmed words is trimmed.
 pub let raw_trimmed(
     x: Bits,
     y: Bits,
@@ -140,7 +140,7 @@ pub let raw_trimmed(
         end
     end;
 
--- | The sum.
+--- The sum.
 pub let add(a: BigNat, b: BigNat) -> BigNat =
     of_trimmed_bits(
         raw(a.bits, b.bits, false),
@@ -259,7 +259,7 @@ let cong_raw_c(
 ) -> Eq(raw(x, y, c1), raw(x, y, c2)) =
     Eq/cong((c) => raw(x, y, c), p);
 
--- | `raw` is commutative.
+--- `raw` is commutative.
 pub let raw_comm(x: Bits, y: Bits, c: Bool) -> Eq(raw(x, y, c), raw(y, x, c)) =
     match x
     | b[] =>
@@ -286,7 +286,7 @@ and raw_swap_step(
         xor3_comm(h1, h2, c),
         Eq/trans(raw_comm(x, y, maj3(h1, h2, c)), cong_raw_c(y, x, maj3_comm(h1, h2, c))));
 
--- | Congruence of `raw` in its left operand.
+--- Congruence of `raw` in its left operand.
 pub let cong_raw_l(
     @s: Bits,
     @t: Bits,
@@ -296,7 +296,7 @@ pub let cong_raw_l(
 ) -> Eq(raw(s, y, c), raw(t, y, c)) =
     Eq/cong((w) => raw(w, y, c), p);
 
--- | Congruence of `raw` in its right operand.
+--- Congruence of `raw` in its right operand.
 pub let cong_raw_r(
     x: Bits,
     @s: Bits,
@@ -306,7 +306,7 @@ pub let cong_raw_r(
 ) -> Eq(raw(x, s, c), raw(x, t, c)) =
     Eq/cong((w) => raw(x, w, c), p);
 
--- | A carry in is the successor of the sum without it.
+--- A carry in is the successor of the sum without it.
 pub let raw_carry_spec(x: Bits, y: Bits) -> Eq(raw(x, y, true), succ/raw(raw(x, y, false))) =
     match x
     | b[] =>
@@ -341,7 +341,7 @@ pub let raw_carry_spec(x: Bits, y: Bits) -> Eq(raw(x, y, true), succ/raw(raw(x, 
         end
     end;
 
--- | A successor on the left operand is a successor of the sum.
+--- A successor on the left operand is a successor of the sum.
 pub let raw_succ_out_l(
     u: Bits,
     v: Bits,
@@ -421,7 +421,7 @@ pub let raw_succ_out_l(
         end
     end;
 
--- | A successor on the right operand is a successor of the sum.
+--- A successor on the right operand is a successor of the sum.
 pub let raw_succ_out_r(
     u: Bits,
     v: Bits,
@@ -515,7 +515,7 @@ let carry_shift(
                 Eq/sym(raw_succ_out_r(x, raw(y, z, false), false)),
                 cong_raw_r(x, Eq/sym(raw_carry_spec(y, z)), false))));
 
--- | `raw` is associative.
+--- `raw` is associative.
 pub let raw_assoc(
     x: Bits,
     y: Bits,
@@ -1107,7 +1107,7 @@ pub let raw_assoc(
         end
     end;
 
--- | Adding one is the successor.
+--- Adding one is the successor.
 pub let raw_one_r(x: Bits) -> Eq(raw(x, b[1], false), succ/raw(x)) =
     match x
     | b[] => Eq/refl()
@@ -1118,15 +1118,15 @@ pub let raw_one_r(x: Bits) -> Eq(raw(x, b[1], false), succ/raw(x)) =
         end
     end;
 
--- | Commutativity.
+--- Commutativity.
 pub let comm(a: BigNat, b: BigNat) -> Eq(add(a, b), add(b, a)) =
     eq(add(a, b), add(b, a), raw_comm(a.bits, b.bits, false));
 
--- | Associativity.
+--- Associativity.
 pub let assoc(a: BigNat, b: BigNat, c: BigNat) -> Eq(add(add(a, b), c), add(a, add(b, c))) =
     eq(add(add(a, b), c), add(a, add(b, c)), raw_assoc(a.bits, b.bits, c.bits, false, false));
 
--- | Cancellation of `raw` on the left.
+--- Cancellation of `raw` on the left.
 pub let raw_cancel_l(
     x: Bits,
     y: Bits,
@@ -1208,7 +1208,7 @@ and raw_cancel_absurd(
             pz);
     false_neq_true(shifted);
 
--- | Cancellation of `raw` on the right.
+--- Cancellation of `raw` on the right.
 pub let raw_cancel_r(
     x: Bits,
     y: Bits,
@@ -1220,7 +1220,7 @@ pub let raw_cancel_r(
 ) -> Eq(y, z) =
     raw_cancel_l(x, y, z, c, py, pz, Eq/trans(raw_comm(x, y, c), Eq/trans(p, raw_comm(z, x, c))));
 
--- | Cancellation on the left.
+--- Cancellation on the left.
 pub let cancel_l(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(a, b), add(a, c))) -> Eq(b, c) =
     eq(
         b,
@@ -1234,7 +1234,7 @@ pub let cancel_l(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(a, b), add(a, c))) -
             is_trimmed_of_canonical(c.bits, c.canonical),
             cong_bits(p)));
 
--- | Cancellation on the right.
+--- Cancellation on the right.
 pub let cancel_r(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(b, a), add(c, a))) -> Eq(b, c) =
     cancel_l(a, b, c, Eq/trans(comm(a, b), Eq/trans(p, comm(c, a))));
 

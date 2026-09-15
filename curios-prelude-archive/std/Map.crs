@@ -6,32 +6,32 @@ induct Node(V: Type): Type
 | fork(crit: Nat, zero: Node(V), one: Node(V))
 end
 
--- | A map from encoded keys to values.
+--- A map from encoded keys to values.
 pub struct Map(V: Type): Type {
     size: Nat,
     root: Option(Node(V)),
 }
 
--- | How a key type encodes to the byte string that identifies it, with the proof that distinct keys encode distinctly.
--- |
--- | The encoding is `/std/Hash`'s by the edge rather than by convention: there is no second field to disagree with it, so a type has one identity as bytes by construction. What this concept adds is the proof `Hash` does not carry — that the encoding is injective, so the trie cannot silently merge two keys into one entry.
+--- How a key type encodes to the byte string that identifies it, with the proof that distinct keys encode distinctly.
+---
+--- The encoding is `/std/Hash`'s by the edge rather than by convention: there is no second field to disagree with it, so a type has one identity as bytes by construction. What this concept adds is the proof `Hash` does not carry — that the encoding is injective, so the trie cannot silently merge two keys into one entry.
 pub concept Key(K: Type): pub Type {
     use Hash(K),
-    -- | Distinct keys encode distinctly.
+    --- Distinct keys encode distinctly.
     injective(a: K, b: K, same: Eq(Hash/hash(a), Hash/hash(b))) -> Eq(a, b),
 }
 
--- | The identity encoding.
+--- The identity encoding.
 satisfy Key(Bytes) {
     injective(_, _, same) = same,
 }
 
--- | The UTF-8 bytes.
+--- The UTF-8 bytes.
 satisfy Key(Str) {
     injective(a, b, same) = Str/eq_of_bytes(a, b, same),
 }
 
--- | The minimal big-endian encoding, whose injectivity is `/std/Bytes`'s to prove.
+--- The minimal big-endian encoding, whose injectivity is `/std/Bytes`'s to prove.
 satisfy Key(Nat) {
     injective = Bytes/of_nat_injective,
 }
@@ -123,15 +123,15 @@ let remove1(@V: Type, t: Node(V), k: Bytes) -> {Node(V), Nat} =
         end
     end;
 
--- | The empty map.
+--- The empty map.
 pub let empty(@V: Type) -> Map(V) =
     Map { size = 0, root = Option/none() };
 
--- | How many entries.
+--- How many entries.
 pub let len(@V: Type, m: Map(V)) -> Nat =
     m.size;
 
--- | The value at `key`, or `none`.
+--- The value at `key`, or `none`.
 pub let get(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Option(V) =
     let k = Hash/hash(key);
     match m.root
@@ -141,11 +141,11 @@ pub let get(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Option(V) =
         match Bytes/eql(k0, k) | true => Option/some(v0) | false => Option/none() end
     end;
 
--- | Whether `key` has an entry.
+--- Whether `key` has an entry.
 pub let has(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Bool =
     Option/is_some(get(m, key));
 
--- | `m` with `key` at `v`, replacing an entry under the same key.
+--- `m` with `key` at `v`, replacing an entry under the same key.
 pub let insert(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, v: V) -> Map(V) =
     let k = Hash/hash(key);
     match m.root
@@ -159,7 +159,7 @@ pub let insert(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, v: V) -> Map(V
         end
     end;
 
--- | `m` without `key`; unchanged when absent.
+--- `m` without `key`; unchanged when absent.
 pub let remove(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Map(V) =
     let k = Hash/hash(key);
     match m.root
@@ -173,7 +173,7 @@ pub let remove(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Map(V) =
         end
     end;
 
--- | Over the entries in key order with `f(key, value, acc)`, the keys as encoded.
+--- Over the entries in key order with `f(key, value, acc)`, the keys as encoded.
 pub let fold(@V: Type, @A: Type, m: Map(V), init: A, f: (Bytes, V, A) -> A) -> A =
     match m.root
     | none() => init
@@ -183,27 +183,27 @@ pub let fold(@V: Type, @A: Type, m: Map(V), init: A, f: (Bytes, V, A) -> A) -> A
         go(n, init)
     end;
 
--- | The entries in key order, the keys as encoded.
+--- The entries in key order, the keys as encoded.
 pub let entries(@V: Type, m: Map(V)) -> List({Bytes, V}) =
     fold(m, [], (k, v, acc) => [..acc, (k, v)]);
 
--- | The keys in order, as encoded.
+--- The keys in order, as encoded.
 pub let keys(@V: Type, m: Map(V)) -> List(Bytes) =
     fold(m, [], (k, _, acc) => [..acc, k]);
 
--- | The values in key order.
+--- The values in key order.
 pub let values(@V: Type, m: Map(V)) -> List(V) =
     fold(m, [], (_, v, acc) => [..acc, v]);
 
--- | The map of the pairs, a later pair replacing an earlier one under the same key.
+--- The map of the pairs, a later pair replacing an earlier one under the same key.
 pub let of(@K: Type, @V: Type, use Key(K), l: List({K, V})) -> Map(V) =
     List/fold(l, empty(), ((k, v), acc) => insert(acc, k, v));
 
--- | The value at `key`, or `default`.
+--- The value at `key`, or `default`.
 pub let get_or(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, default: V) -> V =
     Option/unwrap_or(get(m, key), default);
 
--- | The entry at `key` rewritten by `f`, which sees the current value or `none` and answers the value to keep or `none` to remove.
+--- The entry at `key` rewritten by `f`, which sees the current value or `none` and answers the value to keep or `none` to remove.
 pub let update(
     @K: Type,
     @V: Type,
@@ -220,18 +220,18 @@ let map_node(@V: Type, @W: Type, t: Node(V), f: (V) -> W) -> Node(W) =
     | fork(c, z, o) => Node/fork(c, map_node(z, f), map_node(o, f))
     end;
 
--- | `f` on every value.
+--- `f` on every value.
 pub let map(@V: Type, @W: Type, m: Map(V), f: (V) -> W) -> Map(W) =
     Map { size = m.size, root = Option/map(m.root, (n: Node(V)) => map_node(n, f)) };
 
--- | The entries `pred` accepts.
+--- The entries `pred` accepts.
 pub let filter(@V: Type, m: Map(V), pred: (Bytes, V) -> Bool) -> Map(V) =
     fold(
         m,
         empty(),
         (k, v, acc) => match pred(k, v) | true => insert(acc, k, v) | false => acc end);
 
--- | Every entry of either, `b`'s winning under a shared key.
+--- Every entry of either, `b`'s winning under a shared key.
 pub let union(@V: Type, a: Map(V), b: Map(V)) -> Map(V) =
     fold(b, a, (k, v, acc) => insert(acc, k, v));
 
@@ -245,7 +245,7 @@ let same_entries(@V: Type, use Eql(V), xs: List({Bytes, V}), ys: List({Bytes, V}
         end
     end;
 
--- | Entry by entry.
+--- Entry by entry.
 satisfy (@V: Type, use Eql(V)) => Eql(Map(V)) {
     eql(a, b) = same_entries(entries(a), entries(b)),
     neq(a, b) = Bool/not(same_entries(entries(a), entries(b))),
@@ -261,7 +261,7 @@ satisfy (@V: Type, use Show(V)) => Show(Map(V)) {
             "}"]),
 }
 
--- | As `Map/of` over the encoded keys.
+--- As `Map/of` over the encoded keys.
 satisfy (@V: Type, use Spell(V)) => Spell(Map(V)) {
     spell(m) =
         Str/flatten([

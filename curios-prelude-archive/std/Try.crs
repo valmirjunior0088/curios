@@ -1,19 +1,19 @@
 use /std/{Monad, Lift, Result, Io, Async};
 
--- | An `M(Result(E, A))` sequenced so that a failure stops the region.
+--- An `M(Result(E, A))` sequenced so that a failure stops the region.
 pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type {
     M(Result(E, A)),
 }
 
--- | `a` as a success.
+--- `a` as a success.
 pub let pure(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), a: A) -> Try(M, E, A) =
     Try { Monad/pure(Result/success(a)) };
 
--- | `e` as a failure, which stops the region.
+--- `e` as a failure, which stops the region.
 pub let raise(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), e: E) -> Try(M, E, A) =
     Try { Monad/pure(Result/failure(e)) };
 
--- | `f` on the value of a success; a failure passes through.
+--- `f` on the value of a success; a failure passes through.
 pub let bind(
     @M: (Type) -> Type,
     @E: Type,
@@ -28,15 +28,15 @@ pub let bind(
             match r | success(a) => f(a).0 | failure(e) => Monad/pure(Result/failure(e)) end),
     };
 
--- | An `M(Result(E, A))` as a `Try`.
+--- An `M(Result(E, A))` as a `Try`.
 pub let attempt(@M: (Type) -> Type, @E: Type, @A: Type, m: M(Result(E, A))) -> Try(M, E, A) =
     Try { m };
 
--- | The base action with its outcome as data.
+--- The base action with its outcome as data.
 pub let run(@M: (Type) -> Type, @E: Type, @A: Type, m: Try(M, E, A)) -> M(Result(E, A)) =
     m.0;
 
--- | A failure handed to `handler`; a success passes through.
+--- A failure handed to `handler`; a success passes through.
 pub let rescue(
     @M: (Type) -> Type,
     @E: Type,
@@ -50,7 +50,7 @@ pub let rescue(
             match r | success(_) => Monad/pure(r) | failure(e) => handler(e).0 end),
     };
 
--- | `f` on the error of a failure.
+--- `f` on the error of a failure.
 pub let map_error(
     @M: (Type) -> Type,
     @E: Type,
@@ -67,28 +67,28 @@ satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Monad((A: Type) => Try(M
     bind(@_, @_, m, f) = bind(m, f),
 }
 
--- | A bare `Result` in a `Try` region is early return.
+--- A bare `Result` in a `Try` region is early return.
 satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Lift(
     (A: Type) => Result(E, A),
     (A: Type) => Try(M, E, A)) {
     lift(@_, r) = Try { Monad/pure(r) },
 }
 
--- | An `Io` action in a `Try` region over any base that admits one.
+--- An `Io` action in a `Try` region over any base that admits one.
 satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Io, M)) => Lift(
     Io,
     (A: Type) => Try(M, E, A)) {
     lift(@A, m) = Try { Monad/bind(Lift/lift(m), (a: A) => Monad/pure(Result/success(a))) },
 }
 
--- | An `Async` action in a `Try` region over `Async`, or over any base `Async` embeds in.
+--- An `Async` action in a `Try` region over `Async`, or over any base `Async` embeds in.
 satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Async, M)) => Lift(
     Async,
     (A: Type) => Try(M, E, A)) {
     lift(@A, m) = Try { Monad/bind(Lift/lift(m), (a: A) => Monad/pure(Result/success(a))) },
 }
 
--- | A `Try` over one base in a `Try` over another the first embeds in.
+--- A `Try` over one base in a `Try` over another the first embeds in.
 satisfy (
     @M: (Type) -> Type,
     @N: (Type) -> Type,

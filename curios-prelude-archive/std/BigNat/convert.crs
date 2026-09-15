@@ -3,7 +3,7 @@ use /std/ops/{Eql, Cmp, Sub, Mul};
 use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, of_nat, view, zero, mod add, mod cmp, mod mul,
     mod sub};
 
--- | How many bits `a` takes, `0` at zero.
+--- How many bits `a` takes, `0` at zero.
 pub let bit_len(a: BigNat) -> Nat =
     match view(a) | zero() => 0 | succ(_, tail) => bit_len(tail) + 1 end;
 
@@ -24,26 +24,26 @@ let to_str_go(a: BigNat, acc: Str) -> Str =
         to_str_go(q, Str/concat(Nat/to_str(r), acc))
     end;
 
--- | The decimal digits.
+--- The decimal digits.
 pub let to_str(a: BigNat) -> Str =
     match is_zero(a) | true => "0" | false => to_str_go(a, "") end;
 
--- | Whether `s` is a nonempty run of decimal digits.
+--- Whether `s` is a nonempty run of decimal digits.
 pub let is_decimal(s: Str) -> Bool =
     match Str/is_empty(s)
     | true => false
     | false => Str/fold(s, true, (cp, acc) => acc && Char/is_digit(cp))
     end;
 
--- | The decided proposition that `s` is a nonempty run of decimal digits.
+--- The decided proposition that `s` is a nonempty run of decimal digits.
 pub let Decimal(s: Str) -> Prop =
     Bool/Holds(is_decimal(s));
 
--- | The number `s` spells, under the evidence that it is decimal.
+--- The number `s` spells, under the evidence that it is decimal.
 pub let of_decimal(s: Str, @_: Decimal(s)) -> BigNat =
     Str/fold(s, zero, (cp, acc) => add/add(mul/small(acc, 10), of_nat(Char/to_nat(cp) - 0x30)));
 
--- | The number `s` spells, or `none` for any other text.
+--- The number `s` spells, or `none` for any other text.
 pub let of_str(s: Str) -> Option(BigNat) =
     match is_decimal(s) | true => Option/some(of_decimal(s)) | false => Option/none() end;
 

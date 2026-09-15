@@ -1,6 +1,6 @@
--- | Subtraction, which `-` dispatches through.
+--- Subtraction, which `-` dispatches through.
 pub concept Sub(A: Type): pub Type {
-    -- | The second taken from the first.
+    --- The second taken from the first.
     sub(A, A) -> A,
 }
 

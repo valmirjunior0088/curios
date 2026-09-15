@@ -1,6 +1,6 @@
--- | Addition, which `+` dispatches through.
+--- Addition, which `+` dispatches through.
 pub concept Add(A: Type): pub Type {
-    -- | The sum of the two.
+    --- The sum of the two.
     add(A, A) -> A,
 }
 

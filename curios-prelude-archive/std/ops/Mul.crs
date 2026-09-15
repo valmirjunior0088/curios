@@ -1,6 +1,6 @@
--- | Multiplication, which `*` dispatches through.
+--- Multiplication, which `*` dispatches through.
 pub concept Mul(A: Type): pub Type {
-    -- | The product of the two.
+    --- The product of the two.
     mul(A, A) -> A,
 }
 

@@ -88,7 +88,7 @@ fn the_standard_library_documents_from_the_archive() {
             .prose
             .as_ref()
             .is_some_and(|lines| lines[0].starts_with("Success or failure")),
-        "the type's prose is the `-- |` block written above it: {:?}",
+        "the type's prose is the `---` block written above it: {:?}",
         induct.prose
     );
     assert_eq!(
@@ -361,30 +361,30 @@ fn a_package_documents_its_interface_for_its_consumers() {
                 "lib.crs",
                 concat!(
                     "use /std/{Nat, Option};\n\n",
-                    "-- | Geometry.\npub mod geometry;\n\n",
+                    "--- Geometry.\npub mod geometry;\n\n",
                     "mod hidden;\n",
                     "pub use hidden/{unseen, Token};\n\n",
-                    "-- | A shape.\n-- |\n-- | Round or square.\n",
-                    "pub induct Shape: pub Type\n-- | Round.\n| circle(Nat)\n| square(Nat)\nend\n\n",
+                    "--- A shape.\n---\n--- Round or square.\n",
+                    "pub induct Shape: pub Type\n--- Round.\n| circle(Nat)\n| square(Nat)\nend\n\n",
                     "pub induct Secret: Type\n| hidden(Nat)\nend\n\n",
-                    "-- | The area.\n",
+                    "--- The area.\n",
                     "pub let area(@A: Type, s: Shape, fallback: Option(A)) -> Nat =\n",
                     "    match s | circle(r) => r * r | square(w) => w * w end;\n\n",
                     "let helper: Nat =\n    1;\n\n",
-                    "-- | Mint one.\n",
+                    "--- Mint one.\n",
                     "pub let mint(t: Token) -> Nat =\n    1;\n\n",
                     "pub use geometry/{origin};\n",
                 ),
             ),
             (
                 "geometry.crs",
-                "use /std/{Nat};\n\n-- | Where it starts.\npub let origin: Nat =\n    0;\n",
+                "use /std/{Nat};\n\n--- Where it starts.\npub let origin: Nat =\n    0;\n",
             ),
             (
                 "hidden.crs",
                 concat!(
                     "pub let unseen: /std/Nat =\n    2;\n\n",
-                    "-- | A token.\n",
+                    "--- A token.\n",
                     "pub induct Token: pub Type\n| token(/std/Nat)\nend\n\n",
                     "pub let kept: /std/Nat =\n    3;\n",
                 ),

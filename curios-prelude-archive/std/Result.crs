@@ -1,37 +1,37 @@
 use /std/{Bool, Show, Spell, Str, Option, Ordering, Ord, Monad};
 use /std/ops/{Eql, Cmp};
 
--- | Success or failure, the failure's type first.
+--- Success or failure, the failure's type first.
 pub induct Result(E: Type, A: Type): pub Type
--- | It worked, carrying the value.
+--- It worked, carrying the value.
 | success(A)
--- | It did not, carrying the error.
+--- It did not, carrying the error.
 | failure(E)
 end
 
 pub use Result/*;
 
--- | `a` as a success.
+--- `a` as a success.
 pub let pure(@E: Type, @A: Type, a: A) -> Result(E, A) =
     Result/success(a);
 
--- | `e` as a failure: in a `Result` region, the early return.
+--- `e` as a failure: in a `Result` region, the early return.
 pub let raise(@E: Type, @A: Type, e: E) -> Result(E, A) =
     Result/failure(e);
 
--- | A failure handed to `handler`; a success passes through.
+--- A failure handed to `handler`; a success passes through.
 pub let rescue(@E: Type, @A: Type, r: Result(E, A), handler: (E) -> Result(E, A)) -> Result(E, A) =
     match r | success(_) => r | failure(e) => handler(e) end;
 
--- | `f` on the value of a success.
+--- `f` on the value of a success.
 pub let map_success(@A: Type, @B: Type, @E: Type, r: Result(E, A), f: (A) -> B) -> Result(E, B) =
     match r | success(a) => Result/success(f(a)) | failure(e) => Result/failure(e) end;
 
--- | `f` on the error of a failure.
+--- `f` on the error of a failure.
 pub let map_failure(@A: Type, @E: Type, @F: Type, r: Result(E, A), f: (E) -> F) -> Result(F, A) =
     match r | success(a) => Result/success(a) | failure(e) => Result/failure(f(e)) end;
 
--- | `f` on the value of a success; a failure passes through.
+--- `f` on the value of a success; a failure passes through.
 pub let bind(
     @A: Type,
     @B: Type,
@@ -41,27 +41,27 @@ pub let bind(
 ) -> Result(E, B) =
     match m | success(a) => f(a) | failure(e) => Result/failure(e) end;
 
--- | A result of a result collapsed to one.
+--- A result of a result collapsed to one.
 pub let flatten(@A: Type, @E: Type, r: Result(E, Result(E, A))) -> Result(E, A) =
     match r | success(inner) => inner | failure(e) => Result/failure(e) end;
 
--- | The value, or `default` on a failure.
+--- The value, or `default` on a failure.
 pub let unwrap_or(@A: Type, @E: Type, r: Result(E, A), default: A) -> A =
     match r | success(a) => a | failure(_) => default end;
 
--- | Whether `r` is a success.
+--- Whether `r` is a success.
 pub let is_success(@A: Type, @E: Type, r: Result(E, A)) -> Bool =
     match r | success(_) => true | failure(_) => false end;
 
--- | Whether `r` is a failure.
+--- Whether `r` is a failure.
 pub let is_failure(@A: Type, @E: Type, r: Result(E, A)) -> Bool =
     match r | success(_) => false | failure(_) => true end;
 
--- | The value of a success; a failure is `none`, its error dropped.
+--- The value of a success; a failure is `none`, its error dropped.
 pub let to_option(@A: Type, @E: Type, r: Result(E, A)) -> Option(A) =
     match r | success(a) => Option/some(a) | failure(_) => Option/none() end;
 
--- | The value, or what `default` answers to the error.
+--- The value, or what `default` answers to the error.
 pub let unwrap_or_else(@A: Type, @E: Type, r: Result(E, A), default: (E) -> A) -> A =
     match r | success(a) => a | failure(e) => default(e) end;
 
@@ -82,7 +82,7 @@ satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(E, A)) {
 
 satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(E, A));
 
--- | `failure` below `success`; two failures by `E`'s order and two successes by `A`'s.
+--- `failure` below `success`; two failures by `E`'s order and two successes by `A`'s.
 pub let cmp(
     @A: Type,
     @E: Type,

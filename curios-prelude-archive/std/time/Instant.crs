@@ -1,20 +1,20 @@
 use /std/{Bool, Io};
 use /std/time/{Duration};
 
--- | A reading of the monotonic clock.
+--- A reading of the monotonic clock.
 pub struct Instant: Type {
     elapsed: Duration,
 }
 
--- | The clock now.
+--- The clock now.
 pub let now() -> Io(Instant) =
     let e = Duration/now()!;
     Io/pure(Instant { elapsed = e });
 
--- | `a - b`, and zero when `a` is not after `b`.
+--- `a - b`, and zero when `a` is not after `b`.
 pub let diff(a: Instant, b: Instant) -> Duration =
     Duration/sub(a.elapsed, b.elapsed);
 
--- | Whether `a` was read before `b`.
+--- Whether `a` was read before `b`.
 pub let before(a: Instant, b: Instant) -> Bool =
     Duration/before(a.elapsed, b.elapsed);

@@ -2,25 +2,25 @@ use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, Try, Async, Io, Parse};
 use /std/tcp/{Socket, Listener};
 use /std/http/{Request, Response};
 
--- | A bound server: the listener its connections arrive on.
+--- A bound server: the listener its connections arrive on.
 pub struct Server: Type {
     Listener,
 }
 
--- | The handler a server runs per request: given the request, it answers with the response to send. The server writes it and closes the connection.
+--- The handler a server runs per request: given the request, it answers with the response to send. The server writes it and closes the connection.
 pub let Handler: Type =
     (Request) -> Try(Async, Io/Error, Response);
 
--- | A server bound to `host` at `port`.
+--- A server bound to `host` at `port`.
 pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Server) =
     let l = Listener/listen(host, port)!;
     Try/pure(Server { l });
 
--- | Close `s`.
+--- Close `s`.
 pub let close(s: Server) -> Io({}) =
     Listener/close(s.0);
 
--- | Where the blank line ending the headers begins in `b`, if it has arrived.
+--- Where the blank line ending the headers begins in `b`, if it has arrived.
 let blank_line(b: Bytes) -> Option(Nat) =
     let n = Bytes/len(b);
     let at(i: Nat, byte: Nat) -> Bool =
@@ -40,7 +40,7 @@ let blank_line(b: Bytes) -> Option(Nat) =
         end;
     go(0, n + 1);
 
--- | How many bytes the request needs in all once its headers are in hand: the head, then `Content-Length` bytes.
+--- How many bytes the request needs in all once its headers are in hand: the head, then `Content-Length` bytes.
 let needed(acc: Bytes, head_end: Nat) -> Option(Nat) =
     let head_len = head_end + 4;
     match Nat/Le/try(head_len, Bytes/len(acc))
@@ -58,7 +58,7 @@ let needed(acc: Bytes, head_end: Nat) -> Option(Nat) =
         end
     end;
 
--- | The bytes `c` sends, read until the headers and the body they state have arrived, or the peer closes.
+--- The bytes `c` sends, read until the headers and the body they state have arrived, or the peer closes.
 let request_bytes(c: Socket) -> Async(Result(Io/Error, Bytes)) =
     let go(acc: Bytes, fuel: Nat) -> Async(Result(Io/Error, Bytes)) =
         let complete =
@@ -82,7 +82,7 @@ let request_bytes(c: Socket) -> Async(Result(Io/Error, Bytes)) =
         end;
     go(x[], 1024);
 
--- | The request `c` sent, or `none` where its bytes do not read as one. A wire failure is raised, and `c` is left open either way for the caller to answer and close.
+--- The request `c` sent, or `none` where its bytes do not read as one. A wire failure is raised, and `c` is left open either way for the caller to answer and close.
 pub let read_request(c: Socket) -> Try(Async, Io/Error, Option(Request)) =
     let bytes = Try/attempt(request_bytes(c))!;
     Try/pure(
@@ -114,6 +114,6 @@ let answer(c: Socket, handler: Handler) -> Async({}) =
         end
     end;
 
--- | Every connection to `host` at `port` answered by `handler`, one request per connection in a fiber of its own, the connection closed whichever way the handler ends, until an accept fails. Written over `Listener/serve`, so a slow request holds up no other connection.
+--- Every connection to `host` at `port` answered by `handler`, one request per connection in a fiber of its own, the connection closed whichever way the handler ends, until an accept fails. Written over `Listener/serve`, so a slow request holds up no other connection.
 pub let serve(host: Str, port: Nat, handler: Handler) -> Try(Async, Io/Error, {}) =
     Listener/serve(host, port, (c) => answer(c, handler));

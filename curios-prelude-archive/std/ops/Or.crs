@@ -1,6 +1,6 @@
--- | Disjunction, which `||` dispatches through.
+--- Disjunction, which `||` dispatches through.
 pub concept Or(A: Type): pub Type {
-    -- | Either.
+    --- Either.
     or(A, A) -> A,
 }
 

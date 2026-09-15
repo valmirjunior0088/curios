@@ -1,23 +1,23 @@
--- | Propositional equality: `x` and `y` are one value.
+--- Propositional equality: `x` and `y` are one value.
 pub induct Eq(@A: Type): (A, A) -> pub Prop
--- | A value equals itself, which is the only way an equality is made.
+--- A value equals itself, which is the only way an equality is made.
 | refl(@z: A): (z, z)
 end
 
 pub use Eq/*;
 
--- | Symmetry.
+--- Symmetry.
 pub let sym(@A: Type, @x: A, @y: A, p: Eq(x, y)) -> Eq(y, x) =
     match p | refl(@_) => Eq/refl() end;
 
--- | Transitivity.
+--- Transitivity.
 pub let trans(@A: Type, @x: A, @y: A, @z: A, p: Eq(x, y), q: Eq(y, z)) -> Eq(x, z) =
     match q | refl(@_) => p end;
 
--- | Eql arguments give equal results under any `f`.
+--- Eql arguments give equal results under any `f`.
 pub let cong(@A: Type, @B: Type, @x: A, @y: A, f: (A) -> B, p: Eq(x, y)) -> Eq(f(x), f(y)) =
     match p | refl(@_) => Eq/refl() end;
 
--- | A `P(x)` carried to `P(y)` along an equality.
+--- A `P(x)` carried to `P(y)` along an equality.
 pub let subst(@A: Type, @x: A, @y: A, P: (A) -> Type, p: Eq(x, y), v: P(x)) -> P(y) =
     match p | refl(@_) => v end;

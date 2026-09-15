@@ -1,11 +1,11 @@
 use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Spell, True, False};
 use /std/ops/{Eql};
 
--- | The scheme, which decides the port when none is written and whether the connection is under TLS.
+--- The scheme, which decides the port when none is written and whether the connection is under TLS.
 pub induct Scheme: pub Type
--- | `http`: port 80 where none is written, and in the clear.
+--- `http`: port 80 where none is written, and in the clear.
 | http()
--- | `https`: port 443 where none is written, and under TLS.
+--- `https`: port 443 where none is written, and under TLS.
 | https()
 end
 
@@ -15,7 +15,7 @@ satisfy Eql(Scheme);
 
 satisfy Spell(Scheme);
 
--- | Where a request goes: the scheme, the host, the port, the path, and the query as written after `?`, if any. A fragment is the client's and is dropped.
+--- Where a request goes: the scheme, the host, the port, the path, and the query as written after `?`, if any. A fragment is the client's and is dropped.
 pub struct Url: pub Type {
     scheme: Scheme,
     host: Str,
@@ -28,7 +28,7 @@ satisfy Eql(Url);
 
 satisfy Spell(Url);
 
--- | The port a scheme implies.
+--- The port a scheme implies.
 pub let default_port(s: Scheme) -> Nat =
     match s | http() => 80 | https() => 443 end;
 
@@ -98,19 +98,19 @@ let url: Parse(Url) =
     | false => Parse/pure(Url { scheme = s, host = host, port = p, path = pa, query = q })
     end;
 
--- | `s` read as a URL, or why it is not: a scheme other than `http` and `https`, a missing host, or a port that is not a number.
+--- `s` read as a URL, or why it is not: a scheme other than `http` and `https`, a missing host, or a port that is not a number.
 pub let of_str(s: Str) -> Result(Parse/Error, Url) =
     Parse/run(url, Str/to_bytes(s));
 
--- | That `r` is a URL that read.
+--- That `r` is a URL that read.
 pub let Read(r: Result(Parse/Error, Url)) -> Prop =
     match r | success(_) => True | failure(_) => False end;
 
--- | That `s` reads as a URL, decided by reduction: a literal that does not is refused where it is written.
+--- That `s` reads as a URL, decided by reduction: a literal that does not is refused where it is written.
 pub let Valid(s: Str) -> Prop =
     Read(of_str(s));
 
--- | The URL the literal `s` spells, at no cost at run time beyond the read.
+--- The URL the literal `s` spells, at no cost at run time beyond the read.
 pub let lit(s: Str, @ok: Valid(s)) -> Url =
     (match of_str(s): (r) => (Read(r)) -> Url
     | success(u) => (_) => u
@@ -129,11 +129,11 @@ let port_str(u: Url) -> Str =
 let query_str(q: Option(Str)) -> Str =
     match q | some(s) => Str/concat("?", s) | none() => "" end;
 
--- | The URL as text.
+--- The URL as text.
 pub let to_str(u: Url) -> Str =
     Str/flatten([scheme_str(u.scheme), "://", u.host, port_str(u), u.path, query_str(u.query)]);
 
--- | The path's segments, for a server to match on: `/a/b/` is `["a", "b"]`.
+--- The path's segments, for a server to match on: `/a/b/` is `["a", "b"]`.
 pub let segments(u: Url) -> List(Str) =
     List/filter(Str/split(u.path, "/"), (s) => Bool/not(Str/is_empty(s)));
 
@@ -147,7 +147,7 @@ let unreserved(n: Nat) -> Bool =
         || n == '.'
         || n == '~';
 
--- | `component` percent-encoded: every byte but the unreserved ones as `%XX`.
+--- `component` percent-encoded: every byte but the unreserved ones as `%XX`.
 pub let encode(component: Str) -> Str =
     let empty: List(Str) = [];
     Str/flatten(
@@ -208,12 +208,12 @@ let decode_at(b: Bytes, i: Nat, acc: Bytes, fuel: Nat) -> Option(Bytes) =
         end
     end;
 
--- | `component` percent-decoded, `+` read as a space, or `none` when an escape is malformed or the result is not text.
+--- `component` percent-decoded, `+` read as a space, or `none` when an escape is malformed or the result is not text.
 pub let decode(component: Str) -> Option(Str) =
     let b = Str/to_bytes(component);
     Option/bind(decode_at(b, 0, x[], Bytes/len(b) + 1), Str/of_bytes);
 
--- | The query as decoded pairs: `a=1&b=x+y` is `[("a", "1"), ("b", "x y")]`. A pair that does not decode is dropped.
+--- The query as decoded pairs: `a=1&b=x+y` is `[("a", "1"), ("b", "x y")]`. A pair that does not decode is dropped.
 pub let query_pairs(u: Url) -> List({Str, Str}) =
     match u.query
     | none() => []
@@ -229,7 +229,7 @@ pub let query_pairs(u: Url) -> List({Str, Str}) =
                 end)
     end;
 
--- | `u` with `pairs` as its query, each name and value encoded.
+--- `u` with `pairs` as its query, each name and value encoded.
 pub let with_query(u: Url, pairs: List({Str, Str})) -> Url =
     match pairs
     | [] => Url { ..u, query = Option/none() }

@@ -21,7 +21,7 @@ pub struct Documentation {
 #[curios_archive::archived]
 pub struct ModuleDocumentation {
     pub path: Qualifier,
-    /// The `-- |` block above the `mod` declaration that declares it; `None` for the root, whose prose is the manifest's.
+    /// The `---` block above the `mod` declaration that declares it; `None` for the root, whose prose is the manifest's.
     pub prose: Option<Vec<String>>,
     /// The public child modules, in declaration order.
     pub children: Vec<Qualifier>,

@@ -1,15 +1,15 @@
 use /std/{Nat, List, Bool, Eq, Str, Show, Spell, True, False};
 use /std/ops/{Eql};
 
--- | That `l` holds exactly `n` elements.
+--- That `l` holds exactly `n` elements.
 pub let Counted(@T: Type, l: List(T), n: Nat) -> Prop =
     Eq(List/len(l), n);
 
--- | A list of exactly `n` elements.
+--- A list of exactly `n` elements.
 pub struct Vec(T: Type, n: Nat): pub Type {
-    -- | The elements themselves.
+    --- The elements themselves.
     list: List(T),
-    -- | Why there are exactly `n` of them.
+    --- Why there are exactly `n` of them.
     counted: Counted(list, n),
 }
 
@@ -21,19 +21,19 @@ let zero_not_succ(@n: Nat, e: Eq(0, n + 1)) -> False =
 let succ_cancel(@a: Nat, @b: Nat, e: Eq(a + 1, b + 1)) -> Eq(a, b) =
     Eq/cong((w: Nat) => w - 1, e);
 
--- | The length, read off the type.
+--- The length, read off the type.
 pub let len(@T: Type, @n: Nat, _: Vec(T, n)) -> Nat =
     n;
 
--- | The elements as a list.
+--- The elements as a list.
 pub let to_list(@T: Type, @n: Nat, v: Vec(T, n)) -> List(T) =
     v.list;
 
--- | The list as a vector, at the length it turns out to have.
+--- The list as a vector, at the length it turns out to have.
 pub let of_list(@T: Type, l: List(T)) -> Vec(T, List/len(l)) =
     Vec { list = l, counted = Eq/refl() };
 
--- | Equal elements are equal vectors, since the count is a proof and proofs do not differ.
+--- Equal elements are equal vectors, since the count is a proof and proofs do not differ.
 pub let eq_of_list(
     @T: Type,
     @n: Nat,
@@ -46,30 +46,30 @@ pub let eq_of_list(
         p,
         (_: Counted(v.list, n)) => Eq/refl())(w.counted);
 
--- | No elements.
+--- No elements.
 pub let nil(@T: Type) -> Vec(T, 0) =
     Vec { list = [], counted = Eq/refl() };
 
--- | `x` in front of a vector one shorter.
+--- `x` in front of a vector one shorter.
 pub let cons(@T: Type, @n: Nat, x: T, v: Vec(T, n)) -> Vec(T, n + 1) =
     Vec { list = [x, ..v.list], counted = Eq/cong((w: Nat) => w + 1, v.counted) };
 
--- | The element at `i`, under the evidence that `i < n`.
+--- The element at `i`, under the evidence that `i < n`.
 pub let get(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, @ok: Nat/Lt(i, n)) -> T =
     List/get(@T, v.list, i, @Eq/subst((x: Nat) => Nat/Lt(i, x), Eq/sym(v.counted), ok));
 
--- | The first element of a nonempty vector.
+--- The first element of a nonempty vector.
 pub let first(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> T =
     get(v, 0);
 
--- | Everything after the first element.
+--- Everything after the first element.
 pub let rest(@T: Type, @n: Nat, v: Vec(T, n + 1)) -> Vec(T, n) =
     (match v.list: (l) => (Counted(l, n + 1)) -> Vec(T, n)
     | [] => (c) => match zero_not_succ(c) end
     | [_, ..t] => (c) => Vec { list = t, counted = succ_cancel(c) }
     end)(v.counted);
 
--- | `v` then `w`.
+--- `v` then `w`.
 pub let append(@T: Type, @n: Nat, @m: Nat, v: Vec(T, n), w: Vec(T, m)) -> Vec(T, n + m) =
     Vec {
         list = [..v.list, ..w.list],
@@ -80,7 +80,7 @@ pub let append(@T: Type, @n: Nat, @m: Nat, v: Vec(T, n), w: Vec(T, m)) -> Vec(T,
                 Eq/subst((y: Nat) => Eq(n + y, n + m), Eq/sym(w.counted), Eq/refl())),
     };
 
--- | `f` on every element.
+--- `f` on every element.
 pub let map(@A: Type, @B: Type, @n: Nat, f: (A) -> B, v: Vec(A, n)) -> Vec(B, n) =
     Vec { list = List/map(v.list, f), counted = v.counted };
 
@@ -88,15 +88,15 @@ pub let map(@A: Type, @B: Type, @n: Nat, f: (A) -> B, v: Vec(A, n)) -> Vec(B, n)
 let replicate_len(@T: Type, n: Nat, x: T) -> Counted(List/replicate(n, x), n) =
     match n | 0 => Eq/refl() | _ + 1; ih => Eq/cong((w: Nat) => w + 1, ih) end;
 
--- | `n` copies of `x`.
+--- `n` copies of `x`.
 pub let replicate(@T: Type, n: Nat, x: T) -> Vec(T, n) =
     Vec { list = List/replicate(n, x), counted = replicate_len(n, x) };
 
--- | Pairs, position by position.
+--- Pairs, position by position.
 pub let zip(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), w: Vec(B, n)) -> Vec({A, B}, n) =
     match n | 0 => nil() | _ + 1 => cons((first(v), first(w)), zip(rest(v), rest(w))) end;
 
--- | Left to right with `f(elem, acc)`.
+--- Left to right with `f(elem, acc)`.
 pub let fold(@T: Type, @A: Type, @n: Nat, v: Vec(T, n), init: A, f: (T, A) -> A) -> A =
     List/fold(v.list, init, f);
 

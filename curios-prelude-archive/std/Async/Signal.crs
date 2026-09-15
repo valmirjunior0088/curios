@@ -6,12 +6,12 @@ induct Phase: Type
 | raised()
 end
 
--- | A flag one fiber raises and another parks on.
+--- A flag one fiber raises and another parks on.
 pub struct Signal: Type {
     Cell(Phase),
 }
 
--- | A lowered flag.
+--- A lowered flag.
 pub let new() -> Io(Signal) =
     let cell = Cell/new(Phase/idle([]))!;
     Io/pure(Signal { cell });
@@ -24,7 +24,7 @@ let wake_all(ws: List(Waker)) -> Io({}) =
         wake_all(more)
     end;
 
--- | Raise the flag and wake every fiber parked on it. A raised flag stays raised until a `wait` lowers it, so a burst of notifications is one wake.
+--- Raise the flag and wake every fiber parked on it. A raised flag stays raised until a `wait` lowers it, so a burst of notifications is one wake.
 pub let notify(s: Signal) -> Io({}) =
     let state = Cell/get(s.0)!;
     match state
@@ -47,10 +47,10 @@ let lower(s: Signal) -> Io(Option({})) =
     | idle(_) => Io/pure(Option/none())
     end;
 
--- | An offer that yields once the flag is raised, lowering it.
+--- An offer that yields once the flag is raised, lowering it.
 pub let offer(s: Signal) -> Async/Offer({}) =
     Async/Offer/new(lower(s), Io/pure(Async/Wait/woken((w) => listen(s, w))));
 
--- | Park until the flag is raised, then lower it. A flag already raised is lowered at once.
+--- Park until the flag is raised, then lower it. A flag already raised is lowered at once.
 pub let wait(s: Signal) -> Async({}) =
     Async/map(Async/select([offer(s)]), (_) => ());

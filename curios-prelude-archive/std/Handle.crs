@@ -2,11 +2,11 @@ pub use /sys/{Handle};
 pub use /sys/Handle/{close, stdin, stdout, stderr};
 use /std/{Bool, Bytes, Nat, Int, List, Result, Io, Async, True};
 
--- | What a park asks to be woken for.
+--- What a park asks to be woken for.
 pub mod Interest;
 pub use Interest/{let Interest};
 
--- | What a poll reports for one handle.
+--- What a poll reports for one handle.
 pub mod Readiness;
 pub use Readiness/{let Readiness};
 
@@ -35,7 +35,7 @@ let to_masks(interests: List(Interest)) -> List(Nat) =
 let of_masks(masks: List(Nat)) -> List(Readiness) =
     match masks | [] => [] | [m, ..rest] => [of_mask(m), ..of_masks(rest)] end;
 
--- | Wait until a handle is ready for the interest beside it, or until `timeout` milliseconds pass; a negative timeout waits forever and zero answers at once.
+--- Wait until a handle is ready for the interest beside it, or until `timeout` milliseconds pass; a negative timeout waits forever and zero answers at once.
 pub let poll(
     handles: List(Handle),
     interests: List(Interest),
@@ -44,7 +44,7 @@ pub let poll(
     let masks = /sys/Handle/poll(handles, to_masks(interests), timeout)!;
     Io/pure(of_masks(masks));
 
--- | Up to `n` bytes, waited for on this program's own behalf: a host that would block is polled until it would not.
+--- Up to `n` bytes, waited for on this program's own behalf: a host that would block is polled until it would not.
 let read_waiting(h: Handle, n: Nat) -> Io(Io/Chunk) =
     let r = /sys/Handle/read(h, n)!;
     choose
@@ -54,7 +54,7 @@ let read_waiting(h: Handle, n: Nat) -> Io(Io/Chunk) =
     | _ => Io/pure(Io/Chunk/of(r.status, r.bytes))
     end;
 
--- | The whole of `b`, waited for on this program's own behalf: a host that would block is polled until it would not, and a short write is resent; the first failure is the answer.
+--- The whole of `b`, waited for on this program's own behalf: a host that would block is polled until it would not, and a short write is resent; the first failure is the answer.
 let write_waiting(h: Handle, b: Bytes) -> Io(Result(Io/Error, {})) =
     let r = /sys/Handle/write(h, b)!;
     choose
@@ -77,7 +77,7 @@ let write_waiting(h: Handle, b: Bytes) -> Io(Result(Io/Error, {})) =
 let park_on(h: Handle, interest: Interest) -> Async({}) =
     Async/park([Async/Wait/ready(h, interest)]);
 
--- | Up to `n` bytes, parking the fiber while the host would block.
+--- Up to `n` bytes, parking the fiber while the host would block.
 let read_parking(h: Handle, n: Nat) -> Async(Io/Chunk) =
     let r = /sys/Handle/read(h, n)!;
     choose
@@ -87,7 +87,7 @@ let read_parking(h: Handle, n: Nat) -> Async(Io/Chunk) =
     | _ => Async/pure(Io/Chunk/of(r.status, r.bytes))
     end;
 
--- | The whole of `b`, parking while the host would block and resending a short write.
+--- The whole of `b`, parking while the host would block and resending a short write.
 let write_parking(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
     let r = /sys/Handle/write(h, b)!;
     choose

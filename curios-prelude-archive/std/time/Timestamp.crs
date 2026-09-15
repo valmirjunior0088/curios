@@ -2,14 +2,14 @@ use /std/{Nat, Bool, Str, Io, Show};
 use /std/ops/{Eql};
 use /std/time/{Duration};
 
--- | A moment, as seconds since the Unix epoch.
+--- A moment, as seconds since the Unix epoch.
 pub struct Timestamp: Type {
     secs_hi: Nat,
     secs_lo: Nat,
     nanos: Nat,
 }
 
--- | The moment at `secs_hi` billion plus `secs_lo` seconds and `nanos` nanoseconds since the epoch, with overflowing limbs carried.
+--- The moment at `secs_hi` billion plus `secs_lo` seconds and `nanos` nanoseconds since the epoch, with overflowing limbs carried.
 pub let of_unix(secs_hi: Nat, secs_lo: Nat, nanos: Nat) -> Timestamp =
     let lo = secs_lo + nanos / 1000000000;
     Timestamp {
@@ -18,16 +18,16 @@ pub let of_unix(secs_hi: Nat, secs_lo: Nat, nanos: Nat) -> Timestamp =
         nanos = nanos % 1000000000,
     };
 
--- | The wall clock now.
+--- The wall clock now.
 pub let now() -> Io(Timestamp) =
     let r = /sys/clock/wall!;
     Io/pure(of_unix(r.secs_hi, r.secs_lo, r.nanos));
 
--- | The seconds since the epoch, as two base-billion limbs, and the nanoseconds within the second.
+--- The seconds since the epoch, as two base-billion limbs, and the nanoseconds within the second.
 pub let to_unix(t: Timestamp) -> {secs_hi: Nat, secs_lo: Nat, nanos: Nat} =
     (secs_hi = t.secs_hi, secs_lo = t.secs_lo, nanos = t.nanos);
 
--- | Whether `a` is earlier than `b`.
+--- Whether `a` is earlier than `b`.
 pub let before(a: Timestamp, b: Timestamp) -> Bool =
     choose
     | a.secs_hi < b.secs_hi => true
@@ -43,7 +43,7 @@ let sub_digit(x: Nat, y: Nat) -> {digit: Nat, borrow: Nat} =
     | false => (digit = x - y, borrow = 0)
     end;
 
--- | `a - b` as a duration, and zero when `a` is not after `b`.
+--- `a - b` as a duration, and zero when `a` is not after `b`.
 pub let diff(a: Timestamp, b: Timestamp) -> Duration =
     match before(a, b)
     | true => Duration/zero
@@ -56,7 +56,7 @@ pub let diff(a: Timestamp, b: Timestamp) -> Duration =
 
 satisfy Eql(Timestamp);
 
--- | `secs.nanos`, the nanoseconds padded to nine digits.
+--- `secs.nanos`, the nanoseconds padded to nine digits.
 satisfy Show(Timestamp) {
     show(t) =
         let secs =

@@ -2,29 +2,29 @@ use /std/{Nat, Bool, Option, True};
 use /std/Nat/{Le, Lt};
 use /std/Nat/Le/{Ind};
 
--- | The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
+--- The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
     match a < b: (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
--- | `0 < n` gives `1 <= n`.
+--- `0 < n` gives `1 <= n`.
 pub let le_one_of_positive(@n: Nat, p: Lt(0, n)) -> Nat/Le(1, n) =
     match n
     | 0 => match p end
     | _ + 1 => True/qed()
     end;
 
--- | `a <= b` by induction gives `a < b + 1`.
+--- `a <= b` by induction gives `a < b + 1`.
 pub let succ_of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Lt(a, b + 1) =
     match p | z(@_) => True/qed() | s(@_, @_, prev) => succ_of_ind(prev) end;
 
--- | `a + 1 <= b` by induction gives `a < b`.
+--- `a + 1 <= b` by induction gives `a < b`.
 pub let of_ind_succ(@a: Nat, @b: Nat, p: Ind(a + 1, b)) -> Lt(a, b) =
     match p | s(@_, @_, prev) => succ_of_ind(prev) end;
 
--- | `a < b` as the inductive `Ind(a, b)`: the strict bound weakened into the family a proof can recurse over.
+--- `a < b` as the inductive `Ind(a, b)`: the strict bound weakened into the family a proof can recurse over.
 pub let ind_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Ind(a, b) =
     match a
     | 0 => Ind/z()
@@ -35,24 +35,24 @@ pub let ind_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Ind(a, b) =
         end
     end;
 
--- | `a < b` gives `a <= b`.
+--- `a < b` gives `a <= b`.
 pub let le_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Nat/Le(a, b) =
     Le/of_ind(ind_of_lt(a, b, p));
 
--- | `i < n` gives `i + 1 <= n` by induction.
+--- `i < n` gives `i + 1 <= n` by induction.
 pub let ind_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Ind(i + 1, n) =
     match n
     | 0 => match p end
     | np + 1 => match i | 0 => Ind/s(Ind/z()) | ip + 1 => Ind/s(ind_succ_of_lt(ip, np, p)) end
     end;
 
--- | `i < n` gives `i + 1 <= n`, decided: what a window opened just past a checked index demands.
+--- `i < n` gives `i + 1 <= n`, decided: what a window opened just past a checked index demands.
 pub let le_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Nat/Le(i + 1, n) =
     Le/of_ind(ind_succ_of_lt(i, n, p));
 
--- | A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
--- |
--- | The decided pair is total, so refuting one settles the other — but only a proof can say so, because reduction reads terms and a guard's `false` arm is a fact about the scope. This is the bridge out of such an arm, where `True/qed()` inhabits the hypothesis and the conclusion is what the arm actually needed.
+--- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
+---
+--- The decided pair is total, so refuting one settles the other — but only a proof can say so, because reduction reads terms and a guard's `false` arm is a fact about the scope. This is the bridge out of such an arm, where `True/qed()` inhabits the hypothesis and the conclusion is what the arm actually needed.
 pub let le_of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Nat/Le(b, a) =
     match a
     | 0 =>
@@ -63,13 +63,13 @@ pub let le_of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Nat/Le(b
     | ap + 1 => match b | 0 => True/qed() | bp + 1 => le_of_not_lt(ap, bp, p) end
     end;
 
--- | A strict bound composed with a loose one stays strict.
+--- A strict bound composed with a loose one stays strict.
 pub let lt_of_lt_le(a: Nat, b: Nat, c: Nat, p: Lt(a, b), q: Nat/Le(b, c)) -> Lt(a, c) =
     of_ind_succ(Ind/trans(ind_succ_of_lt(a, b, p), Le/to_ind(b, c, q)));
 
--- | Two bounded digits in adjacent places stay under the product of their radices: `a < m` and `b < n` give `a * n + b < m * n`.
--- |
--- | The bound every positional encoding wants, and the one shape reduction cannot reach on its own — `a` and `b` arrive as binders carrying their bounds in proofs, where the oracle reads terms and finds nothing. `a * n + b < a * n + n` *is* `b < n` after cancellation, so the hypothesis inhabits the first step unchanged; what the second step needs is that `a + 1 <= m` scales, which is [`Ind/mul_mono_r`].
+--- Two bounded digits in adjacent places stay under the product of their radices: `a < m` and `b < n` give `a * n + b < m * n`.
+---
+--- The bound every positional encoding wants, and the one shape reduction cannot reach on its own — `a` and `b` arrive as binders carrying their bounds in proofs, where the oracle reads terms and finds nothing. `a * n + b < a * n + n` *is* `b < n` after cancellation, so the hypothesis inhabits the first step unchanged; what the second step needs is that `a + 1 <= m` scales, which is [`Ind/mul_mono_r`].
 pub let add_mul_lt(
     a: Nat,
     b: Nat,
@@ -85,7 +85,7 @@ pub let add_mul_lt(
         pb,
         Le/of_ind(Ind/mul_mono_r(n, ind_succ_of_lt(a, m, pa))));
 
--- | Course-of-values induction: the step may assume `P` at every `m` below `n`, not only at the predecessor.
+--- Course-of-values induction: the step may assume `P` at every `m` below `n`, not only at the predecessor.
 pub let strong(
     P: (Nat) -> Type,
     step: (n: Nat, ih: (m: Nat, lt: Lt(m, n)) -> P(m)) -> P(n),

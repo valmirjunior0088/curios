@@ -2,6 +2,9 @@
 use /std/{Nat, Option, mod Syntax, let parse};
 pub use Option/*;
 
+--- Nothing yet.
+---
+--- The additive identity.
 pub let zero: Nat = 0;
 
 pub let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) =

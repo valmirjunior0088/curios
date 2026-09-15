@@ -708,10 +708,10 @@ fn every_declaration_label_spans_its_word_alone() {
     assert_eq!(spelled, ["x", "Inner", "Foo", "Pt", "Sh", "it", "clock"]);
 }
 
-/// A `-- |` block attaches to the declaration below it, line by line, with a bare `-- |` as a paragraph break; blank lines and plain comments between the block and the declaration are insignificant, and the plain comment stays a comment.
+/// A `---` block attaches to the declaration below it, line by line, with a bare `---` as a paragraph break; blank lines and plain comments between the block and the declaration are insignificant, and the plain comment stays a comment.
 #[test]
 fn a_documentation_comment_attaches_to_the_declaration_below_it() {
-    let source = "-- | Doubles.\n-- |\n-- | Twice, that is.\n\n-- plain\npub let double(n: Nat) -> Nat = n + n;";
+    let source = "--- Doubles.\n---\n--- Twice, that is.\n\n-- plain\npub let double(n: Nat) -> Nat = n + n;";
     let module = source.parse::<Module>().unwrap();
     let TopItem::Let(members) = &module.items[0] else {
         panic!("expected a let item");
@@ -725,9 +725,9 @@ fn a_documentation_comment_attaches_to_the_declaration_below_it() {
 #[test]
 fn a_documentation_comment_attaches_to_a_constructor_a_field_and_a_method() {
     let source = concat!(
-        "induct Shape: pub Type\n-- | Round.\n| circle(Nat)\n| square(Nat)\nend\n",
-        "struct Point: pub Type {\n    -- | Across.\n    x: Nat,\n    y: Nat,\n}\n",
-        "concept Show(A: Type): pub Type {\n    -- | Renders.\n    show(A) -> Str,\n}\n",
+        "induct Shape: pub Type\n--- Round.\n| circle(Nat)\n| square(Nat)\nend\n",
+        "struct Point: pub Type {\n    --- Across.\n    x: Nat,\n    y: Nat,\n}\n",
+        "concept Show(A: Type): pub Type {\n    --- Renders.\n    show(A) -> Str,\n}\n",
     );
     let module = source.parse::<Module>().unwrap();
 
@@ -759,10 +759,10 @@ fn a_documentation_comment_attaches_to_a_constructor_a_field_and_a_method() {
 #[test]
 fn a_documentation_comment_attaches_to_a_module_a_witness_a_foreign_and_a_later_member() {
     let source = concat!(
-        "-- | Numbers.\nmod nat;\n",
-        "-- | Structural.\nsatisfy Equal(Nat);\n",
-        "-- | Ticks.\nforeign clock: Nat;\n",
-        "let a: Nat = 1\n-- | The other.\nand b: Nat = 2;\n",
+        "--- Numbers.\nmod nat;\n",
+        "--- Structural.\nsatisfy Equal(Nat);\n",
+        "--- Ticks.\nforeign clock: Nat;\n",
+        "let a: Nat = 1\n--- The other.\nand b: Nat = 2;\n",
     );
     let module = source.parse::<Module>().unwrap();
 
@@ -789,11 +789,11 @@ fn a_documentation_comment_attaches_to_a_module_a_witness_a_foreign_and_a_later_
 #[test]
 fn a_documentation_comment_before_nothing_is_refused() {
     for source in [
-        "-- | lost\n",
-        "let x: Nat = 1;\n-- | lost\n\n",
-        "induct T: Type\n| a()\n-- | lost\nend",
-        "struct P: Type {\n    x: Nat,\n    -- | lost\n}",
-        "concept C(A: Type): Type {\n    -- | lost\n}",
+        "--- lost\n",
+        "let x: Nat = 1;\n--- lost\n\n",
+        "induct T: Type\n| a()\n--- lost\nend",
+        "struct P: Type {\n    x: Nat,\n    --- lost\n}",
+        "concept C(A: Type): Type {\n    --- lost\n}",
     ] {
         let error = source.parse::<Module>().unwrap_err().format();
         assert!(
@@ -802,7 +802,7 @@ fn a_documentation_comment_before_nothing_is_refused() {
         );
     }
 
-    let error = "let x: Nat = 1;\n-- | lost\nx"
+    let error = "let x: Nat = 1;\n--- lost\nx"
         .parse::<Entrypoint>()
         .unwrap_err()
         .format();
@@ -812,13 +812,13 @@ fn a_documentation_comment_before_nothing_is_refused() {
 /// An import has no page and a test is not part of the interface, so a block before either is refused by name.
 #[test]
 fn a_documentation_comment_before_use_or_test_is_refused() {
-    let error = "-- | lost\nuse /std/{Nat};"
+    let error = "--- lost\nuse /std/{Nat};"
         .parse::<Module>()
         .unwrap_err()
         .format();
     assert!(error.contains("cannot precede `use`"), "{error}");
 
-    let error = "-- | lost\ntest t = Test/assert(true);"
+    let error = "--- lost\ntest t = Test/assert(true);"
         .parse::<Module>()
         .unwrap_err()
         .format();
@@ -829,8 +829,8 @@ fn a_documentation_comment_before_use_or_test_is_refused() {
 #[test]
 fn two_documentation_comments_before_one_declaration_are_refused() {
     for source in [
-        "-- | one\n\n-- | two\nlet x: Nat = 1;",
-        "-- | one\n-- plain\n-- | two\nlet x: Nat = 1;",
+        "--- one\n\n--- two\nlet x: Nat = 1;",
+        "--- one\n-- plain\n--- two\nlet x: Nat = 1;",
     ] {
         let error = source.parse::<Module>().unwrap_err().format();
         assert!(
@@ -840,20 +840,19 @@ fn two_documentation_comments_before_one_declaration_are_refused() {
     }
 }
 
-/// A block takes lines of its own: `-- |` after code is refused, and so is `-- |` glued to its text.
+/// A block takes lines of its own: `---` after code is refused, and so is `---` glued to its text, a fourth dash included.
 #[test]
 fn a_documentation_comment_takes_a_line_of_its_own_and_its_space() {
-    let error = "let x: Nat = 1; -- | trailing\nlet y: Nat = 2;"
+    let error = "let x: Nat = 1; --- trailing\nlet y: Nat = 2;"
         .parse::<Module>()
         .unwrap_err()
         .format();
     assert!(error.contains("line of its own"), "{error}");
 
-    let error = "-- |glued\nlet x: Nat = 1;"
-        .parse::<Module>()
-        .unwrap_err()
-        .format();
-    assert!(error.contains("with the space"), "{error}");
+    for source in ["---glued\nlet x: Nat = 1;", "----\nlet x: Nat = 1;"] {
+        let error = source.parse::<Module>().unwrap_err().format();
+        assert!(error.contains("with the space"), "{source}: {error}");
+    }
 }
 
 /// A block after a group's last member belongs to whatever follows it: `pub and` opens a member, while `pub let`, `pub induct` and a bare `satisfy` open the next item and end the group. The look-ahead reads past the `pub`, since a `pub` alone says nothing about which it is.
@@ -861,10 +860,10 @@ fn a_documentation_comment_takes_a_line_of_its_own_and_its_space() {
 fn a_documentation_comment_after_a_group_may_open_the_next_item() {
     let source = concat!(
         "satisfy Show(Nat) {\n    show = f,\n}\n",
-        "-- | Next.\npub let x: Nat = 1;\n",
-        "let a: Nat = 1\n-- | Member.\npub and b: Nat = 2;\n",
-        "-- | Type.\npub induct T: Type\nend\n",
-        "-- | Witness.\nsatisfy Spell(T);\n",
+        "--- Next.\npub let x: Nat = 1;\n",
+        "let a: Nat = 1\n--- Member.\npub and b: Nat = 2;\n",
+        "--- Type.\npub induct T: Type\nend\n",
+        "--- Witness.\nsatisfy Spell(T);\n",
     );
     let module = source.parse::<Module>().unwrap();
     assert_eq!(module.items.len(), 5);

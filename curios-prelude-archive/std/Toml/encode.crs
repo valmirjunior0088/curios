@@ -194,6 +194,6 @@ let encode_table(prefix: List(Str), m: Map(Toml)) -> Result(Error, Str) =
         end
     end;
 
--- | `m` as one deterministic document: the root's plain values first, then its tables. A key that is not UTF-8 or an invalid calendar value is refused rather than written.
+--- `m` as one deterministic document: the root's plain values first, then its tables. A key that is not UTF-8 or an invalid calendar value is refused rather than written.
 pub let encode(m: Map(Toml)) -> Result(Error, Str) =
     encode_table([], m);

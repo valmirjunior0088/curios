@@ -1,19 +1,19 @@
 use /std/{Nat, Bool, Option, True, Eq};
 use /std/Nat/{Le};
 
--- | `a <= b` as an inductive proposition: `z` proves `0 <= n` and `s` lifts `a <= b` to `a + 1 <= b + 1`, so a proof can recurse over the evidence.
+--- `a <= b` as an inductive proposition: `z` proves `0 <= n` and `s` lifts `a <= b` to `a + 1 <= b + 1`, so a proof can recurse over the evidence.
 pub mod Ind;
 pub use Ind/{let Ind};
 
--- | `n <= n`.
+--- `n <= n`.
 pub let refl(n: Nat) -> Le(n, n) =
     True/qed();
 
--- | The inductive form as the decided one.
+--- The inductive form as the decided one.
 pub let of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Le(a, b) =
     match p | z(@_) => True/qed() | s(@_, @_, prev) => of_ind(prev) end;
 
--- | The decided form as the inductive one.
+--- The decided form as the inductive one.
 pub let to_ind(a: Nat, b: Nat, p: Le(a, b)) -> Ind(a, b) =
     match a
     | 0 => Ind/z()
@@ -24,22 +24,22 @@ pub let to_ind(a: Nat, b: Nat, p: Le(a, b)) -> Ind(a, b) =
         end
     end;
 
--- | `a <= b` gives `a <= b + 1`.
+--- `a <= b` gives `a <= b + 1`.
 pub let succ_r(a: Nat, b: Nat, p: Le(a, b)) -> Le(a, b + 1) =
     of_ind(Ind/succ_r(to_ind(a, b, p)));
 
--- | The procedure that decides `a <= b`: the evidence when it holds, `none` otherwise.
+--- The procedure that decides `a <= b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Nat, b: Nat) -> Option(Le(a, b)) =
     match a <= b: (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
--- | Transitivity.
+--- Transitivity.
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
     of_ind(Ind/trans(to_ind(a, b, p), to_ind(b, c, q)));
 
--- | Two bounds facing each other pin one value.
+--- Two bounds facing each other pin one value.
 pub let antisym(a: Nat, b: Nat, p: Le(a, b), q: Le(b, a)) -> Eq(a, b) =
     match a
     | 0 =>
@@ -54,7 +54,7 @@ pub let antisym(a: Nat, b: Nat, p: Le(a, b), q: Le(b, a)) -> Eq(a, b) =
         end
     end;
 
--- | `a + (b - a) = b` under `a <= b`, which is what makes it true, since `Nat` subtraction truncates.
+--- `a + (b - a) = b` under `a <= b`, which is what makes it true, since `Nat` subtraction truncates.
 pub let add_sub_cancel(a: Nat, b: Nat, p: Le(a, b)) -> Eq(a + (b - a), b) =
     match a
     | 0 => Eq/refl()

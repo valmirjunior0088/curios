@@ -37,7 +37,7 @@ let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Tile, w), before: Option(Vec(T
         pen,
         (entry, acc) => paint(acc, entry.0.0, y, entry.0.1, entry.1));
 
--- | The bytes that take the terminal from `previous` to `next`, tiles written only where they differ, and the cursor placed at `cursor` or hidden. With no previous frame the screen is cleared and every tile written.
+--- The bytes that take the terminal from `previous` to `next`, tiles written only where they differ, and the cursor placed at `cursor` or hidden. With no previous frame the screen is cleared and every tile written.
 pub let render(
     @w: Nat,
     @h: Nat,

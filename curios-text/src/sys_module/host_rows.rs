@@ -87,7 +87,7 @@ pub(crate) fn foreign_signature(
         subject: None,
         label: declaration.label.to_string(),
         signature: declaration.signature.clone(),
-        // A user's `foreign` carries its own `-- |` on the declaration they wrote, which is what a page reads; the row has nothing to add.
+        // A user's `foreign` carries its own `---` on the declaration they wrote, which is what a page reads; the row has nothing to add.
         description: String::new(),
     };
 

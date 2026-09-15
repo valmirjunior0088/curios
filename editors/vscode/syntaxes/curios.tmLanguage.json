@@ -49,7 +49,7 @@
   "repository": {
     "comment": {
       "name": "comment.line.double-dash.curios",
-      "match": "--(?: .*)?$"
+      "match": "(?<!-)---?(?: .*)?$"
     },
     "block_string": {
       "name": "string.quoted.triple.curios",

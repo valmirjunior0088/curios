@@ -1,8 +1,8 @@
--- | Sequencing, which postfix `!` dispatches through.
+--- Sequencing, which postfix `!` dispatches through.
 pub concept Monad(M: (Type) -> Type): pub Type {
-    -- | The description that performs nothing and yields the value.
+    --- The description that performs nothing and yields the value.
     pure(@A: Type, A) -> M(A),
-    -- | The description that performs the first, then whatever the continuation makes of its result.
+    --- The description that performs the first, then whatever the continuation makes of its result.
     bind(@A: Type, @B: Type, M(A), (A) -> M(B)) -> M(B),
 }
 

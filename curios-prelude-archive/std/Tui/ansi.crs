@@ -1,59 +1,59 @@
 use /std/{Nat, Bool, Str, Bytes, List, Byte};
 use /std/Tui/{Color, Style};
 
--- | `ESC [` and `body`.
+--- `ESC [` and `body`.
 pub let csi(body: Str) -> Bytes =
     x[0x1B, '[', ..Str/to_bytes(body)];
 
--- | The cursor to column `x` of row `y`, both from zero.
+--- The cursor to column `x` of row `y`, both from zero.
 pub let move_to(x: Nat, y: Nat) -> Bytes =
     csi(Str/flatten([Nat/to_str(y + 1), ";", Nat/to_str(x + 1), "H"]));
 
--- | Clear the screen.
+--- Clear the screen.
 pub let clear: Bytes =
     csi("2J");
 
--- | Begin synchronized output.
+--- Begin synchronized output.
 pub let sync_begin: Bytes =
     csi("?2026h");
 
--- | End synchronized output.
+--- End synchronized output.
 pub let sync_end: Bytes =
     csi("?2026l");
 
--- | Show the cursor.
+--- Show the cursor.
 pub let cursor_show: Bytes =
     csi("?25h");
 
--- | Hide the cursor.
+--- Hide the cursor.
 pub let cursor_hide: Bytes =
     csi("?25l");
 
--- | Switch to the alternate screen.
+--- Switch to the alternate screen.
 pub let alternate_on: Bytes =
     csi("?1049h");
 
--- | Switch back from the alternate screen.
+--- Switch back from the alternate screen.
 pub let alternate_off: Bytes =
     csi("?1049l");
 
--- | Ask for bracketed paste.
+--- Ask for bracketed paste.
 pub let paste_on: Bytes =
     csi("?2004h");
 
--- | Stop bracketed paste.
+--- Stop bracketed paste.
 pub let paste_off: Bytes =
     csi("?2004l");
 
--- | Ask for the kitty keyboard protocol.
+--- Ask for the kitty keyboard protocol.
 pub let kitty_push: Bytes =
     csi(">1u");
 
--- | Give the kitty keyboard protocol back.
+--- Give the kitty keyboard protocol back.
 pub let kitty_pop: Bytes =
     csi("<u");
 
--- | Every attribute off.
+--- Every attribute off.
 pub let reset: Bytes =
     csi("0m");
 
@@ -75,7 +75,7 @@ let color_params(c: Color, base: Nat) -> List(Str) =
             Nat/to_str(Byte/to_nat(b))]
     end;
 
--- | The whole of `s` as one attribute sequence, from a reset.
+--- The whole of `s` as one attribute sequence, from a reset.
 pub let sgr(s: Style) -> Bytes =
     let flag(on: Bool, code: Str) -> List(Str) = match on | true => [code] | false => [] end;
     csi(

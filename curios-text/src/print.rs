@@ -252,7 +252,7 @@ fn listed_hard(
     if items.is_empty() {
         return pure(format!("{open}{close}"));
     }
-    // Every break comes before the mark of the member it opens, so a comment riding the line the break ends is reported here and paid onto that line — see `reached_before`. Each member carries where it begins, which for a documented one is where its documentation does, so the comment never lands on a `-- |` line.
+    // Every break comes before the mark of the member it opens, so a comment riding the line the break ends is reported here and paid onto that line — see `reached_before`. Each member carries where it begins, which for a documented one is where its documentation does, so the comment never lands on a `---` line.
     let opens_at = items.first().and_then(|(start, _)| *start);
     let mut members = Vec::with_capacity(items.len() * 3);
     for (index, (start, item)) in items.into_iter().enumerate() {
@@ -1000,8 +1000,8 @@ fn past_trailing(span: &Span) -> usize {
         let rest = &text[end..];
         let trimmed = rest.trim_start();
         end += rest.len() - trimmed.len();
-        // A `-- |` is syntax rather than a comment, so a term's reach stops before it exactly as the parser's whitespace does.
-        if trimmed.starts_with("--") && !trimmed.starts_with("-- |") {
+        // A `---` is syntax rather than a comment, so a term's reach stops before it exactly as the parser's whitespace does.
+        if trimmed.starts_with("--") && !trimmed.starts_with("---") {
             end += trimmed.find('\n').unwrap_or(trimmed.len());
         } else if !separated && (trimmed.starts_with(',') || trimmed.starts_with(';')) {
             separated = true;
@@ -1036,8 +1036,8 @@ fn print_doc(doc: Option<Doc>) -> Printer {
         .into_iter()
         .map(|line| {
             let spelled = match line.is_empty() {
-                true => "-- |".to_string(),
-                false => format!("-- | {line}"),
+                true => "---".to_string(),
+                false => format!("--- {line}"),
             };
             flat([pure(spelled), hard_line()])
         })

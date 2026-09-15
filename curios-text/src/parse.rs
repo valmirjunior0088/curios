@@ -112,28 +112,28 @@ pub(crate) fn parse_optional_term<'a>() -> Parser<'a, Option<Term>> {
 /// What refuses a `--` glued to what follows it: the plain comment is `-- `, with the space, or a bare `--` ending its line.
 const COMMENT_SPACING: &str = "a comment opens with `-- `, with the space, or ends its line";
 
-/// What refuses a `-- |` glued to what follows it.
+/// What refuses a `---` glued to what follows it.
 const DOC_SPACING: &str =
-    "a documentation comment opens with `-- | `, with the space, or ends its line";
+    "a documentation comment opens with `--- `, with the space, or ends its line";
 
-/// What refuses a `-- |` after code on its line.
+/// What refuses a `---` after code on its line.
 const DOC_TRAILING: &str =
-    "a documentation comment takes a line of its own; `-- |` cannot follow code";
+    "a documentation comment takes a line of its own; `---` cannot follow code";
 
-/// What refuses two `-- |` blocks with a blank line or a plain comment between them and nothing declared in between.
-const DOC_TWICE: &str = "two documentation comments precede one declaration; join them, since an empty `-- |` line is a paragraph break";
+/// What refuses two `---` blocks with a blank line or a plain comment between them and nothing declared in between.
+const DOC_TWICE: &str = "two documentation comments precede one declaration; join them, since an empty `---` line is a paragraph break";
 
-/// What refuses a `-- |` block followed by anything but what it may document.
-pub(crate) const DOC_BEFORE_NOTHING: &str = "a documentation comment `-- |` must immediately precede what it documents: a declaration, a constructor, a field or a concept method";
+/// What refuses a `---` block followed by anything but what it may document.
+pub(crate) const DOC_BEFORE_NOTHING: &str = "a documentation comment `---` must immediately precede what it documents: a declaration, a constructor, a field or a concept method";
 
 pub(crate) fn parse_whitespace<'a>() -> Parser<'a, ()> {
     // A `many0` loop over comment-then-whitespace runs, not recursion per comment line: an N-line comment banner used to nest N native frames.
     take_while(|char| char.is_whitespace())
         .and(many0(|| {
-            // The head is recoverable, because the absence of a comment is how the loop ends and a `-- |` is not a comment but the documentation syntax the caller reads next. Everything after the head is not: a `--` glued to a word is a mistake nothing else can diagnose.
+            // The head is recoverable, because the absence of a comment is how the loop ends and a `---` is not a comment but the documentation syntax the caller reads next. Everything after the head is not: a `--` glued to a word is a mistake nothing else can diagnose.
             //
             // The span covers `--` through the end of the line, newline excluded. Recording is sound here because this parser never runs inside a string or character literal — literal interiors are consumed atomically by their own parsers — so every recorded span is a genuine comment of the winning parse.
-            spanned(take_exact("--").and_drop(not_ahead(" |")).and_drop(commit(
+            spanned(take_exact("--").and_drop(not_ahead("-")).and_drop(commit(
                 comment_spacing(COMMENT_SPACING).and_drop(take_while(|char| char != '\n')),
             )))
             .map(|(span, _)| record_comment(span))
@@ -154,9 +154,9 @@ fn comment_spacing<'a>(message: &'static str) -> Parser<'a, ()> {
     })
 }
 
-/// One line of a documentation comment: `-- |` at the start of its line, its separator, the text to the line's end, and the line break with the indentation of the next line — so the next `-- |` is read as the same block only when it is on the very next line.
+/// One line of a documentation comment: `---` at the start of its line, its separator, the text to the line's end, and the line break with the indentation of the next line — so the next `---` is read as the same block only when it is on the very next line.
 fn parse_doc_line<'a>() -> Parser<'a, String> {
-    spanned(take_exact("-- |"))
+    spanned(take_exact("---"))
         .flat_map(|(span, ())| {
             let text = &span.source.text;
             let line_start = text[..span.start].rfind('\n').map_or(0, |index| index + 1);
@@ -205,7 +205,7 @@ fn word_at(text: &str) -> (&str, &str) {
     text.split_at(length)
 }
 
-/// The documentation comment above what comes next, or `None` when there is none: consecutive `-- |` lines, then the whitespace and plain comments up to the documented head. A second block before that head is refused, so a stray block far above can never be silently absorbed into a declaration's prose.
+/// The documentation comment above what comes next, or `None` when there is none: consecutive `---` lines, then the whitespace and plain comments up to the documented head. A second block before that head is refused, so a stray block far above can never be silently absorbed into a declaration's prose.
 ///
 /// The head itself is not parsed here. Every caller reads it next and decides what a block may precede, committing the failure when there was a block: a documentation comment followed by nothing it may document is the diagnosis, never a reason to backtrack.
 pub(crate) fn parse_doc<'a>() -> Parser<'a, Option<Doc>> {
@@ -214,7 +214,7 @@ pub(crate) fn parse_doc<'a>() -> Parser<'a, Option<Doc>> {
         .flat_map(|(start, lines)| match lines.is_empty() {
             true => pure(None),
             false => parse_whitespace()
-                .and_keep(not_ahead("-- |").map_err(DOC_TWICE))
+                .and_keep(not_ahead("---").map_err(DOC_TWICE))
                 .and_keep(mark())
                 .map(move |end| {
                     Some(Doc {

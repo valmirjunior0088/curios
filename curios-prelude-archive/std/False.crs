@@ -1,7 +1,7 @@
 pub use /sys/{False};
 
--- | The refutation of `P`.
--- |
--- | A value of it turns any `P` into a contradiction, so a type with one is uninhabited.
+--- The refutation of `P`.
+---
+--- A value of it turns any `P` into a contradiction, so a type with one is uninhabited.
 pub let Not(P: Type) -> Type =
     (P) -> False;

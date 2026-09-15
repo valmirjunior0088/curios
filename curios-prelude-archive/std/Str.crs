@@ -1,17 +1,17 @@
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Show, Spell, Ordering, Ord, True};
 use /std/ops/{Eql, Cmp};
 
--- | What a byte begins, as UTF-8 reads it.
+--- What a byte begins, as UTF-8 reads it.
 pub induct Class: pub Type
--- | A character of one byte.
+--- A character of one byte.
 | ascii()
--- | The first of a character whose remaining `count` bytes must each lie between `lo` and `hi`.
+--- The first of a character whose remaining `count` bytes must each lie between `lo` and `hi`.
 | lead(count: Nat, lo: Nat, hi: Nat, payload: Nat)
--- | A byte no character may begin with.
+--- A byte no character may begin with.
 | bad()
 end
 
--- | What `c` begins.
+--- What `c` begins.
 pub let classify(c: Byte) -> Class =
     let n = Byte/to_nat(c);
     choose
@@ -28,17 +28,17 @@ pub let classify(c: Byte) -> Class =
     | _ => Class/bad()
     end;
 
--- | How far through a character a walk over bytes has come.
+--- How far through a character a walk over bytes has come.
 pub induct Scan: pub Type
--- | Between characters, where a new one may begin.
+--- Between characters, where a new one may begin.
 | lead()
--- | Inside a character, with `remaining` bytes still owed, each between `lo` and `hi`.
+--- Inside a character, with `remaining` bytes still owed, each between `lo` and `hi`.
 | cont(remaining: Nat, lo: Nat, hi: Nat)
--- | Past a byte the encoding does not admit, which nothing recovers from.
+--- Past a byte the encoding does not admit, which nothing recovers from.
 | bad()
 end
 
--- | The state reading `c` leaves the scan in.
+--- The state reading `c` leaves the scan in.
 pub let step(c: Byte, s: Scan) -> Scan =
     let n = Byte/to_nat(c);
     match s
@@ -57,73 +57,73 @@ pub let step(c: Byte, s: Scan) -> Scan =
         end
     end;
 
--- | That `b` is well-formed UTF-8 read from the state `s`.
+--- That `b` is well-formed UTF-8 read from the state `s`.
 pub induct Utf8: (Scan, Bytes) -> pub Prop
--- | Nothing left to read, and no character left half-read.
+--- Nothing left to read, and no character left half-read.
 | stop(): (Scan/lead(), x[])
--- | One byte, and then the rest under the state it leaves.
+--- One byte, and then the rest under the state it leaves.
 | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
 end
 
--- | That `b` is well-formed UTF-8 read from its first byte, which is what `Str` carries.
+--- That `b` is well-formed UTF-8 read from its first byte, which is what `Str` carries.
 pub let Valid(b: Bytes) -> Prop =
     Utf8(Scan/lead(), b);
 
--- | The state reading all of `b` leaves the scan in.
+--- The state reading all of `b` leaves the scan in.
 pub let scan_from(s: Scan, b: Bytes) -> Scan =
     match b | x[] => s | x[h, ..t] => scan_from(step(h, s), t) end;
 
--- | The proof that `b` is UTF-8 from `s`, out of the equation that reading it lands back between characters.
+--- The proof that `b` is UTF-8 from `s`, out of the equation that reading it lands back between characters.
 pub let of_scan_eq_from(s: Scan, b: Bytes, p: Eq(scan_from(s, b), Scan/lead())) -> Utf8(s, b) =
     match b
     | x[] => Eq/subst((q) => Utf8(q, x[]), Eq/sym(p), Utf8/stop())
     | x[h, ..t] => Utf8/more(h, s, t, of_scan_eq_from(step(h, s), t, p))
     end;
 
--- | The same from the first byte, which is what certifies a string literal.
+--- The same from the first byte, which is what certifies a string literal.
 pub let of_scan_eq(b: Bytes, p: Eq(scan_from(Scan/lead(), b), Scan/lead())) -> Valid(b) =
     of_scan_eq_from(Scan/lead(), b, p);
 
--- | That reading `b` from the start equals itself, which a literal discharges by reduction.
+--- That reading `b` from the start equals itself, which a literal discharges by reduction.
 pub let refl_scan(b: Bytes) -> Eq(scan_from(Scan/lead(), b), scan_from(Scan/lead(), b)) =
     Eq/refl();
 
--- | Text: bytes certified as UTF-8.
+--- Text: bytes certified as UTF-8.
 pub struct Str: pub Type {
-    -- | The bytes themselves.
+    --- The bytes themselves.
     bytes: Bytes,
-    -- | Why they are well-formed UTF-8.
+    --- Why they are well-formed UTF-8.
     valid: Valid(bytes),
 }
 
--- | The scan witness a string carries, and the lemmas the operations rest on.
+--- The scan witness a string carries, and the lemmas the operations rest on.
 pub mod utf8;
 use utf8/{check, concat_closed, drop_width, drop_width_within, drop_valid, take_valid, peel_byte,
     certify_decoded, decode_head, count_scalars};
 
--- | The UTF-8 bytes.
+--- The UTF-8 bytes.
 pub let to_bytes(s: Str) -> Bytes =
     s.bytes;
 
--- | The text the bytes encode, or `none` unless they are UTF-8.
+--- The text the bytes encode, or `none` unless they are UTF-8.
 pub let of_bytes(b: Bytes) -> Option(Str) =
     match check(Scan/lead(), b)
     | some(v) => Option/some(Str { bytes = b, valid = v })
     | none() => Option/none()
     end;
 
--- | The one-character string.
+--- The one-character string.
 pub let of_char(c: Char) -> Str =
     Option/unwrap_or(of_bytes(Char/to_utf8(c)), "");
 
--- | Eql bytes are equal strings.
+--- Eql bytes are equal strings.
 pub let eq_of_bytes(a: Str, b: Str, p: Eq(a.bytes, b.bytes)) -> Eq(a, b) =
     Eq/subst(
         (bytes: Bytes) => (valid: Valid(bytes)) -> Eq(a, Str { bytes = bytes, valid = valid }),
         p,
         (_: Valid(a.bytes)) => Eq/refl())(b.valid);
 
--- | `a` then `b`.
+--- `a` then `b`.
 pub let concat(a: Str, b: Str) -> Str =
     Str { bytes = x[..a.bytes, ..b.bytes], valid = concat_closed(a.valid, b.valid) };
 
@@ -148,15 +148,15 @@ let take_n(n: Nat, s: Str) -> Str =
         valid = take_valid(n, Scan/lead(), s.valid),
     };
 
--- | The `n` characters from `x`, stopping at either end, so a window past the end is what is there.
+--- The `n` characters from `x`, stopping at either end, so a window past the end is what is there.
 pub let slice(s: Str, x: Nat, n: Nat) -> Str =
     take_n(n, drop_n(x, s));
 
--- | The concatenation, in order.
+--- The concatenation, in order.
 pub let flatten(parts: List(Str)) -> Str =
     List/fold(parts, "", (p, acc) => concat(acc, p));
 
--- | Whether the two are equal.
+--- Whether the two are equal.
 pub let eql(a: Str, b: Str) -> Bool =
     Bytes/eql(to_bytes(a), to_bytes(b));
 
@@ -167,15 +167,15 @@ let lower_ascii_byte(byte: Byte) -> Byte =
 let lower_ascii_bytes(b: Bytes) -> Bytes =
     Bytes/fold(b, x[], (byte, acc) => x[..acc, lower_ascii_byte(byte)]);
 
--- | Equality with ASCII letters compared regardless of case; every other character exactly.
+--- Equality with ASCII letters compared regardless of case; every other character exactly.
 pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
     Bytes/eql(lower_ascii_bytes(to_bytes(a)), lower_ascii_bytes(to_bytes(b)));
 
--- | `s` written `n` times.
+--- `s` written `n` times.
 pub let repeat(s: Str, n: Nat) -> Str =
     List/balanced(n, "", (_) => s, (l, r) => concat(l, r));
 
--- | Left to right over the characters with `f(char, acc)`.
+--- Left to right over the characters with `f(char, acc)`.
 pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
     let go(sc: Scan, b: Bytes, valid: Utf8(sc, b), acc: {A, Nat}) -> {A, Nat} =
         match b
@@ -207,19 +207,19 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
         end;
     go(Scan/lead(), s.bytes, s.valid, (init, 0)).0;
 
--- | The characters.
+--- The characters.
 pub let to_list(s: Str) -> List(Char) =
     fold(s, [], (c, acc) => [..acc, c]);
 
--- | How many characters, not bytes.
+--- How many characters, not bytes.
 pub let len(s: Str) -> Nat =
     count_scalars(Scan/lead(), s.bytes);
 
--- | The characters of a concatenation are those of its halves. Not a law of the bytes: it holds because a valid string reads the scan back to `lead` at its end, which is what the witness says and what the count restarts on.
+--- The characters of a concatenation are those of its halves. Not a law of the bytes: it holds because a valid string reads the scan back to `lead` at its end, which is what the witness says and what the count restarts on.
 pub let len_concat(a: Str, b: Str) -> Eq(len(concat(a, b)), len(a) + len(b)) =
     count_concat(a.bytes, b.bytes, a.valid);
 
--- | `count_scalars` splits at the seam of a concatenation whose first half the witness reads to the end, from whatever state the witness starts in — the strengthening `len_concat` needs to descend through `more`, where the state has moved.
+--- `count_scalars` splits at the seam of a concatenation whose first half the witness reads to the end, from whatever state the witness starts in — the strengthening `len_concat` needs to descend through `more`, where the state has moved.
 let count_concat(
     a: Bytes,
     b: Bytes,
@@ -236,11 +236,11 @@ let count_concat(
         end
     end;
 
--- | Whether there are no characters.
+--- Whether there are no characters.
 pub let is_empty(s: Str) -> Bool =
     Bytes/len(to_bytes(s)) == 0;
 
--- | The index of the first character `pred` accepts, or `none`.
+--- The index of the first character `pred` accepts, or `none`.
 pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(Nat) =
     let (_, found): {Nat, Option(Nat)} =
         fold(
@@ -256,11 +256,11 @@ pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(Nat) =
                 end);
     found;
 
--- | The index of the first `target`, or `none`.
+--- The index of the first `target`, or `none`.
 pub let find(s: Str, target: Char) -> Option(Nat) =
     find_index(s, (codepoint) => codepoint == target);
 
--- | The character at `i`, or `none` past the end.
+--- The character at `i`, or `none` past the end.
 pub let try_get(s: Str, i: Nat) -> Option(Char) =
     let (_, found): {Nat, Option(Char)} =
         fold(
@@ -277,7 +277,7 @@ pub let try_get(s: Str, i: Nat) -> Option(Char) =
                 end);
     found;
 
--- | The character at `i`, under the evidence that `i` is within the length.
+--- The character at `i`, under the evidence that `i` is within the length.
 pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
     let go(
         sc: Scan,
@@ -312,7 +312,7 @@ pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
         i,
         Nat/Lt/ind_succ_of_lt(i, count_scalars(Scan/lead(), s.bytes), ok));
 
--- | `parts` with `sep` between each pair.
+--- `parts` with `sep` between each pair.
 pub let join(sep: Str, parts: List(Str)) -> Str =
     List/balanced(
         List/len(parts),
@@ -335,28 +335,28 @@ let trim_bounds(s: Str) -> {Nat, Nat} =
                 end);
     (start, stop);
 
--- | Without leading and trailing whitespace.
+--- Without leading and trailing whitespace.
 pub let trim(s: Str) -> Str =
     let (lo, hi) = trim_bounds(s);
     match lo < hi | true => slice(s, lo, hi - lo) | false => "" end;
 
--- | Without leading whitespace.
+--- Without leading whitespace.
 pub let trim_start(s: Str) -> Str =
     drop_n(trim_bounds(s).0, s);
 
--- | Without trailing whitespace.
+--- Without trailing whitespace.
 pub let trim_end(s: Str) -> Str =
     take_n(trim_bounds(s).1, s);
 
--- | Whether `s` begins with `prefix`.
+--- Whether `s` begins with `prefix`.
 pub let starts_with(s: Str, prefix: Str) -> Bool =
     eql(take_n(len(prefix), s), prefix);
 
--- | Whether `s` ends with `suffix`.
+--- Whether `s` ends with `suffix`.
 pub let ends_with(s: Str, suffix: Str) -> Bool =
     eql(drop_n(len(s) - len(suffix), s), suffix);
 
--- | The text before the first `sep` and the text after it, or `none` when `sep` does not occur.
+--- The text before the first `sep` and the text after it, or `none` when `sep` does not occur.
 pub let split_once(s: Str, sep: Str) -> Option({Str, Str}) =
     let m = len(sep);
     let go(i: Nat, rest: Str) -> Option({Str, Str}) =
@@ -367,11 +367,11 @@ pub let split_once(s: Str, sep: Str) -> Option({Str, Str}) =
         end;
     go(0, s);
 
--- | Whether `needle` occurs in `s`.
+--- Whether `needle` occurs in `s`.
 pub let contains(s: Str, needle: Str) -> Bool =
     Option/is_some(split_once(s, needle));
 
--- | The pieces between occurrences of `sep`, the separators dropped; an empty separator splits into characters.
+--- The pieces between occurrences of `sep`, the separators dropped; an empty separator splits into characters.
 pub let split(s: Str, sep: Str) -> List(Str) =
     match is_empty(sep)
     | true => List/map(to_list(s), of_char)
@@ -382,7 +382,7 @@ pub let split(s: Str, sep: Str) -> List(Str) =
         end
     end;
 
--- | Every occurrence of `from` replaced by `to`, left to right; an empty `from` changes nothing.
+--- Every occurrence of `from` replaced by `to`, left to right; an empty `from` changes nothing.
 pub let replace(s: Str, from: Str, to: Str) -> Str =
     match is_empty(from)
     | true => s
@@ -393,7 +393,7 @@ pub let replace(s: Str, from: Str, to: Str) -> Str =
         end
     end;
 
--- | The lines: split on newlines, one trailing carriage return dropped from each, and a final newline closing the last line rather than opening an empty one.
+--- The lines: split on newlines, one trailing carriage return dropped from each, and a final newline closing the last line rather than opening an empty one.
 pub let lines(s: Str) -> List(Str) =
     let strip(line: Str) -> Str =
         match ends_with(line, "\r") | true => take_n(len(line) - 1, line) | false => line end;
@@ -402,11 +402,11 @@ pub let lines(s: Str) -> List(Str) =
     | none() => match is_empty(s) | true => [] | false => [strip(s)] end
     end;
 
--- | `s` widened to `n` characters with `c` at the front; a string already that wide is unchanged.
+--- `s` widened to `n` characters with `c` at the front; a string already that wide is unchanged.
 pub let pad_start(s: Str, n: Nat, c: Char) -> Str =
     concat(repeat(of_char(c), n - len(s)), s);
 
--- | `s` widened to `n` characters with `c` at the end; a string already that wide is unchanged.
+--- `s` widened to `n` characters with `c` at the end; a string already that wide is unchanged.
 pub let pad_end(s: Str, n: Nat, c: Char) -> Str =
     concat(s, repeat(of_char(c), n - len(s)));
 
@@ -419,7 +419,7 @@ satisfy Show(Str) {
     show(s) = s,
 }
 
--- | A string literal, escaped where the literal grammar needs it.
+--- A string literal, escaped where the literal grammar needs it.
 satisfy Spell(Str) {
     spell(s) =
         let body =
@@ -437,7 +437,7 @@ satisfy Spell(Str) {
         concat("\"", concat(body, "\"")),
 }
 
--- | Code-point order.
+--- Code-point order.
 pub let cmp(a: Str, b: Str) -> Ordering =
     Bytes/cmp(to_bytes(a), to_bytes(b));
 

@@ -1,41 +1,41 @@
 use /std/{Nat, Try, Async, Io, Parse};
 
--- | The request's method.
+--- The request's method.
 pub mod Method;
 pub use Method/{let Method};
 
--- | Where a request goes, read from text and refused at a literal that does not read.
+--- Where a request goes, read from text and refused at a literal that does not read.
 pub mod Url;
 pub use Url/{let Url};
 
--- | What is sent, as data, and the bytes it goes out as.
+--- What is sent, as data, and the bytes it goes out as.
 pub mod Request;
 pub use Request/{let Request, get, post};
 
--- | What comes back, as data, with the readers and makers an exchange ends in.
+--- What comes back, as data, with the readers and makers an exchange ends in.
 pub mod Response;
 pub use Response/{let Response};
 
--- | How an exchange is performed: the deadline and the redirect limit.
+--- How an exchange is performed: the deadline and the redirect limit.
 pub mod Client;
 pub use Client/{let Client};
 
--- | A bound server: every connection answered by a handler that takes the request and returns the response, which the server writes.
+--- A bound server: every connection answered by a handler that takes the request and returns the response, which the server writes.
 pub mod Server;
 pub use Server/{let Server};
 
--- | Why an exchange failed: the wire, a reply the decoder refuses, the deadline, or a redirect chain past the client's limit.
+--- Why an exchange failed: the wire, a reply the decoder refuses, the deadline, or a redirect chain past the client's limit.
 pub induct Error: pub Type
--- | The wire failed.
+--- The wire failed.
 | net(Io/Error)
--- | A reply the decoder refuses.
+--- A reply the decoder refuses.
 | malformed(Parse/Error)
--- | The deadline passed.
+--- The deadline passed.
 | timeout()
--- | The redirect chain ran past the client's limit, after this many.
+--- The redirect chain ran past the client's limit, after this many.
 | redirected(Nat)
 end
 
--- | One exchange under the default client.
+--- One exchange under the default client.
 pub let perform(request: Request) -> Try(Async, Error, Response) =
     Client/perform(Client/default, request);

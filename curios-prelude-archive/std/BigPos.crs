@@ -1,24 +1,24 @@
 use /std/{Bool, Bits, Eq, False, True, BigNat, Show};
 use /std/BigNat/{of_trimmed_bits, is_trimmed, is_trimmed_of_canonical, trim, view, combine};
 
--- | The proposition that a word is nonempty.
+--- The proposition that a word is nonempty.
 pub let is_cons(bits: Bits) -> Prop =
     match bits | b[] => False | b[_, .._] => True end;
 
--- | A natural beside the proof that its word is nonempty.
+--- A natural beside the proof that its word is nonempty.
 pub struct BigPos: pub Type {
     value: BigNat,
     non_zero: is_cons(value.bits),
 }
 
--- | Equal magnitudes are equal.
+--- Equal magnitudes are equal.
 pub let eq(a: BigPos, b: BigPos, p: Eq(a.value, b.value)) -> Eq(a, b) =
     Eq/subst(
         (m: BigNat) => (nz: is_cons(m.bits)) -> Eq(a, BigPos { value = m, non_zero = nz }),
         p,
         (_: is_cons(a.value.bits)) => Eq/refl())(b.non_zero);
 
--- | The magnitude's word is trimmed.
+--- The magnitude's word is trimmed.
 pub let nz_trimmed(t: BigPos) -> Eq(is_trimmed(t.value.bits), true) =
     is_trimmed_of_canonical(t.value.bits, t.value.canonical);
 
@@ -48,11 +48,11 @@ let trim_head_non_zero(h: Bool, r: Bits, ne: is_cons(trim(r))) -> is_cons(trim(b
 let trim_head_true(r: Bits) -> is_cons(trim(b[1, ..r])) =
     combine_true_non_zero(trim(r));
 
--- | One.
+--- One.
 pub let one: BigPos =
     BigPos { value = of_trimmed_bits(b[1], Eq/refl()), non_zero = True/qed() };
 
--- | Twice `t`.
+--- Twice `t`.
 pub let dbl(t: BigPos) -> BigPos =
     BigPos {
         value =
@@ -62,7 +62,7 @@ pub let dbl(t: BigPos) -> BigPos =
         non_zero = True/qed(),
     };
 
--- | Twice `t` plus one.
+--- Twice `t` plus one.
 pub let dbl_succ(t: BigPos) -> BigPos =
     BigPos {
         value =
@@ -72,15 +72,15 @@ pub let dbl_succ(t: BigPos) -> BigPos =
         non_zero = True/qed(),
     };
 
--- | A natural as zero or a positive.
+--- A natural as zero or a positive.
 pub induct Split: pub Type
--- | Zero.
+--- Zero.
 | zero()
--- | A positive, which is what `BigPos` holds.
+--- A positive, which is what `BigPos` holds.
 | pos(BigPos)
 end
 
--- | `a` split into zero or a positive.
+--- `a` split into zero or a positive.
 pub let of_big_nat(a: BigNat) -> Split =
     match view(a)
     | zero() => Split/zero()
@@ -91,19 +91,19 @@ pub let of_big_nat(a: BigNat) -> Split =
         end
     end;
 
--- | Addition, with its laws beneath.
+--- Addition, with its laws beneath.
 pub mod add;
 pub use add/{let add};
 
--- | The successor.
+--- The successor.
 pub mod succ;
 pub use succ/{let succ};
 
--- | Multiplication, with its laws beneath.
+--- Multiplication, with its laws beneath.
 pub mod mul;
 pub use mul/{let mul};
 
--- | Comparison, with its laws beneath.
+--- Comparison, with its laws beneath.
 pub mod cmp;
 pub use cmp/{let cmp};
 

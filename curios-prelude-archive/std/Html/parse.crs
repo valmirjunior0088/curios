@@ -21,14 +21,14 @@ let is_name_byte(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
     Bool/not(is_ws(b) || n == '<' || n == '>' || n == '/' || n == '=' || n == '"' || n == '\'');
 
--- | A tag or attribute name: everything up to whitespace or a delimiter, empty when there is none.
+--- A tag or attribute name: everything up to whitespace or a delimiter, empty when there is none.
 let name: Parse(Str) =
     Parse/map(Parse/take_while(is_name_byte), text);
 
 let until_byte(stop: Byte) -> Parse(Bytes) =
     Parse/take_while((b) => Bool/not(b == stop));
 
--- | Everything before the next `lit`, or to the end of the input, `lit` itself left unconsumed.
+--- Everything before the next `lit`, or to the end of the input, `lit` itself left unconsumed.
 let until_literal(lit: Str) -> Parse(Bytes) =
     let first = Option/unwrap_or(Bytes/try_get(Str/to_bytes(lit), 0), 0);
     let go(acc: Bytes, fuel: Nat) -> Parse(Bytes) =
@@ -78,14 +78,14 @@ let numeric_reference(digits: Str) -> Option(Str) =
         end;
     Option/bind(code, (n) => Option/map(Char/of_nat(n), Str/of_char));
 
--- | What the reference `&body;` stands for, or `none` when it names nothing known.
+--- What the reference `&body;` stands for, or `none` when it names nothing known.
 let reference(body: Str) -> Option(Str) =
     match Str/starts_with(body, "#")
     | true => numeric_reference(Str/slice(body, 1, Str/len(body) - 1))
     | false => named_reference(body)
     end;
 
--- | A piece that followed an `&`: the reference at its start decoded when it is one, the `&` kept otherwise.
+--- A piece that followed an `&`: the reference at its start decoded when it is one, the `&` kept otherwise.
 let decode_piece(piece: Str) -> Str =
     match Str/split_once(piece, ";")
     | some((body, rest)) =>
@@ -100,7 +100,7 @@ let decode_piece(piece: Str) -> Str =
     | none() => Str/concat("&", piece)
     end;
 
--- | `s` with its character references decoded — the five markup needs, `nbsp`, and numbers in decimal or hex; one that names nothing known is kept as written.
+--- `s` with its character references decoded — the five markup needs, `nbsp`, and numbers in decimal or hex; one that names nothing known is kept as written.
 pub let decode(s: Str) -> Str =
     match Str/split(s, "&")
     | [] => s
@@ -122,7 +122,7 @@ let attr_value: Parse(Str) =
     let _ = ws!;
     Parse/or(quoted('"'), Parse/or(quoted('\''), unquoted));
 
--- | One attribute: a name, then `=` and a value, quoted or bare, when there is one. Declines at anything but a name, which ends the run.
+--- One attribute: a name, then `=` and a value, quoted or bare, when there is one. Declines at anything but a name, which ends the run.
 let attribute: Parse(Attr) =
     let _ = ws!;
     let n = name!;
@@ -146,7 +146,7 @@ let comment: Parse(Html) =
     let _ = Parse/optional(Parse/take_literal("-->"))!;
     Parse/pure(Html/comment(text(body)));
 
--- | A doctype or any other `<!…>` declaration, skipped as an empty run.
+--- A doctype or any other `<!…>` declaration, skipped as an empty run.
 let declaration: Parse(Html) =
     let _ = Parse/take_literal("<!")!;
     let _ = until_byte('>')!;
@@ -160,7 +160,7 @@ let text_run: Parse(Html) =
 let lone_bracket: Parse(Html) =
     Parse/map(Parse/any_byte, (_) => Html/text("<"));
 
--- | An element from its opening tag: one closed with `/>` is `void`; `script` and `style` hold their text as written up to their closing tag; any other holds the trees up to the next closing tag, whichever name it bears, or the end of the input — so `<br>` written without the slash holds what follows it, since no element name is consulted.
+--- An element from its opening tag: one closed with `/>` is `void`; `script` and `style` hold their text as written up to their closing tag; any other holds the trees up to the next closing tag, whichever name it bears, or the end of the input — so `<br>` written without the slash holds what follows it, since no element name is consulted.
 let element: Parse(Html) =
     let _ = Parse/take_byte('<')!;
     let n = name!;
@@ -226,6 +226,6 @@ let content: Parse(Html) =
         | [one, ..rest] => match rest | [] => one | _ => Html/fragment(read) end
         end);
 
--- | The tree `s` spells, read as a browser reads it: an unclosed element ends where its parent does, a stray closing tag is skipped, a declaration is dropped, and a reference that names nothing known is kept. A single tree is returned as itself, several as a fragment, so what `render` writes reads back equal. The grammar declines nothing today; the refusal is the parser's to report should it ever.
+--- The tree `s` spells, read as a browser reads it: an unclosed element ends where its parent does, a stray closing tag is skipped, a declaration is dropped, and a reference that names nothing known is kept. A single tree is returned as itself, several as a fragment, so what `render` writes reads back equal. The grammar declines nothing today; the refusal is the parser's to report should it ever.
 pub let of_str(s: Str) -> Result(Parse/Error, Html) =
     Parse/run(content, Str/to_bytes(s));

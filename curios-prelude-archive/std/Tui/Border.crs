@@ -8,7 +8,7 @@ let edge(style: Style, left: Str, middle: Str, right: Str, w: Nat) -> Frame(w + 
             Frame/fit(Frame/text(style, middle).frame, w, 1)),
         Frame/filled(Tile/of_str(style, right), 1, 1));
 
--- | `inner` in a box one tile wide on every side, with `title` in the top edge where there is room.
+--- `inner` in a box one tile wide on every side, with `title` in the top edge where there is room.
 pub let around(
     @w: Nat,
     @h: Nat,

@@ -1,14 +1,14 @@
 use /std/{Bool};
 
--- | The order comparisons, which `<`, `<=`, `>` and `>=` dispatch through.
+--- The order comparisons, which `<`, `<=`, `>` and `>=` dispatch through.
 pub concept Cmp(A: Type): pub Type {
-    -- | Whether the first is below the second.
+    --- Whether the first is below the second.
     lt(A, A) -> Bool,
-    -- | Whether the first is below the second or equal to it.
+    --- Whether the first is below the second or equal to it.
     le(A, A) -> Bool,
-    -- | Whether the first is above the second.
+    --- Whether the first is above the second.
     gt(A, A) -> Bool,
-    -- | Whether the first is above the second or equal to it.
+    --- Whether the first is above the second or equal to it.
     ge(A, A) -> Bool,
 }
 

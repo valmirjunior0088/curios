@@ -1,18 +1,18 @@
 use /std/{Bytes, Byte, Str, Nat, Show, Spell, Io};
 
--- | A parsed format string: literal pieces, and the places an argument goes — shown at a `%`, spelled at a `#`.
+--- A parsed format string: literal pieces, and the places an argument goes — shown at a `%`, spelled at a `#`.
 pub induct Fmt: pub Type
--- | Nothing left of the string.
+--- Nothing left of the string.
 | nil()
--- | A literal piece, then the rest.
+--- A literal piece, then the rest.
 | lit(piece: Str, rest: Fmt)
--- | A place a `Show`-able argument goes, written `%`.
+--- A place a `Show`-able argument goes, written `%`.
 | show(Fmt)
--- | A place a `Spell`-able argument goes, written `#`.
+--- A place a `Spell`-able argument goes, written `#`.
 | spell(Fmt)
 end
 
--- | The type of a function taking one argument per place in `f` — a `Show`-able one at a `%`, a `Spell`-able one at a `#` — and answering a `T`.
+--- The type of a function taking one argument per place in `f` — a `Show`-able one at a `%`, a `Spell`-able one at a `#` — and answering a `T`.
 pub let format_type_with(T: Type, f: Fmt) -> Type =
     match f
     | nil() => T
@@ -77,7 +77,7 @@ and parse_esc_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
         end
     end;
 
--- | The format `s` spells: `%` is a place an argument is shown at and `#` one it is spelled at; `\%` and `\#` are the literal characters.
+--- The format `s` spells: `%` is a place an argument is shown at and `#` one it is spelled at; `\%` and `\#` are the literal characters.
 pub let parse(s: Str) -> Fmt =
     let bytes = Str/to_bytes(s);
     parse_at(bytes, 0, 3 * Bytes/len(bytes) + 3);
@@ -90,14 +90,14 @@ let go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T
     | spell(rest) => (use w, a) => go_with(T, finish, rest, Str/concat(acc, Spell/spell(a)))
     end;
 
--- | The text of `s` with its places filled by the arguments that follow.
+--- The text of `s` with its places filled by the arguments that follow.
 pub let render(s: Str) -> format_type_with(Str, parse(s)) =
     go_with(Str, (x) => x, parse(s), "");
 
--- | The text of `s` with its places filled, written to standard output.
+--- The text of `s` with its places filled, written to standard output.
 pub let print(s: Str) -> format_type_with(Io({}), parse(s)) =
     go_with(Io({}), (x) => /std/print(x), parse(s), "");
 
--- | The text of `s` with its places filled, written to standard error.
+--- The text of `s` with its places filled, written to standard error.
 pub let print_err(s: Str) -> format_type_with(Io({}), parse(s)) =
     go_with(Io({}), (x) => /std/print_err(x), parse(s), "");

@@ -1,17 +1,17 @@
 use /std/{Handle};
 
--- | A host and a port as the address the socket operations take.
+--- A host and a port as the address the socket operations take.
 pub mod resolve;
 pub use resolve/{let resolve};
 
--- | A connected socket, read and written as a stream.
+--- A connected socket, read and written as a stream.
 pub struct Socket: Type {
     Handle,
 }
 
--- | Connecting a socket, reading and writing it, and the brackets that close it.
+--- Connecting a socket, reading and writing it, and the brackets that close it.
 pub mod Socket;
 
--- | A bound, listening socket, and the accept loop written over it.
+--- A bound, listening socket, and the accept loop written over it.
 pub mod Listener;
 pub use Listener/{let Listener};

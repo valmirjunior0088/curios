@@ -2,15 +2,15 @@ use /std/{Nat, Bool, List, Option, Path, Try, Io, Show};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
 
--- | What is at a path.
+--- What is at a path.
 pub induct Kind: pub Type
--- | A regular file.
+--- A regular file.
 | file()
--- | A directory.
+--- A directory.
 | directory()
--- | A symbolic link.
+--- A symbolic link.
 | symlink()
--- | Anything else the host holds at a path.
+--- Anything else the host holds at a path.
 | other()
 end
 
@@ -34,23 +34,23 @@ let kind_of(code: Nat) -> Kind =
     | _ => Kind/other()
     end;
 
--- | What `stat` reports.
+--- What `stat` reports.
 pub struct Metadata: pub Type {
     kind: Kind,
-    -- | The size in bytes, as two base-billion limbs.
+    --- The size in bytes, as two base-billion limbs.
     size: {hi: Nat, lo: Nat},
-    -- | When the contents last changed.
+    --- When the contents last changed.
     mtime: Timestamp,
 }
 
--- | The size as one number, or `none` past the carrier.
+--- The size as one number, or `none` past the carrier.
 pub let size_nat(m: Metadata) -> Option(Nat) =
     match m.size.hi == 0 | true => Option/some(m.size.lo) | false => Option/none() end;
 
 let outcome(status: Nat) -> Try(Io, Io/Error, {}) =
     match Io/Error/of(status) | some(e) => Try/raise(e) | none() => Try/pure(()) end;
 
--- | What is at `path`.
+--- What is at `path`.
 pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
     let r = /sys/file/stat(Path/to_bytes(path))!;
     match Io/Error/of(r.status)
@@ -71,19 +71,19 @@ let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
     | failure(e) => match e | not_found() => Try/pure(false) | _ => Try/raise(e) end
     end;
 
--- | Whether anything is at `path`.
+--- Whether anything is at `path`.
 pub let exists(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (_) => true);
 
--- | Whether a regular file is at `path`.
+--- Whether a regular file is at `path`.
 pub let is_file(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (k) => k == Kind/file());
 
--- | Whether a directory is at `path`.
+--- Whether a directory is at `path`.
 pub let is_dir(path: Path) -> Try(Io, Io/Error, Bool) =
     kind_is(path, (k) => k == Kind/directory());
 
--- | The entries' names, each a `Path` that `Path/join` puts back under `path`.
+--- The entries' names, each a `Path` that `Path/join` puts back under `path`.
 pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
     let r = /sys/dir/list(Path/to_bytes(path))!;
     match Io/Error/of(r.status)
@@ -91,27 +91,27 @@ pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
     | none() => Try/pure(List/map(r.names, Path/of_bytes))
     end;
 
--- | A directory at `path`, whose parent must exist.
+--- A directory at `path`, whose parent must exist.
 pub let create_dir(path: Path) -> Try(Io, Io/Error, {}) =
     let status = /sys/dir/create(Path/to_bytes(path))!;
     outcome(status);
 
--- | Remove the empty directory at `path`.
+--- Remove the empty directory at `path`.
 pub let remove_dir(path: Path) -> Try(Io, Io/Error, {}) =
     let status = /sys/dir/remove(Path/to_bytes(path))!;
     outcome(status);
 
--- | Remove the file at `path`.
+--- Remove the file at `path`.
 pub let remove_file(path: Path) -> Try(Io, Io/Error, {}) =
     let status = /sys/file/remove(Path/to_bytes(path))!;
     outcome(status);
 
--- | Move what is at `from` to `to`.
+--- Move what is at `from` to `to`.
 pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
     let status = /sys/file/rename(Path/to_bytes(from), Path/to_bytes(to))!;
     outcome(status);
 
--- | The working directory.
+--- The working directory.
 pub let cwd: Try(Io, Io/Error, Path) =
     let r = /sys/proc/cwd!;
     match Io/Error/of(r.status)
@@ -119,7 +119,7 @@ pub let cwd: Try(Io, Io/Error, Path) =
     | none() => Try/pure(Path/of_bytes(r.path))
     end;
 
--- | A directory at `path` and every missing parent; one that already exists is left as it is.
+--- A directory at `path` and every missing parent; one that already exists is left as it is.
 pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =
     let r = Try/run(create_dir(path))!;
     match r
@@ -138,7 +138,7 @@ pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =
         end
     end;
 
--- | Remove what is at `path`, a directory's entries first.
+--- Remove what is at `path`, a directory's entries first.
 pub let remove_all(path: Path) -> Try(Io, Io/Error, {}) =
     let m = stat(path)!;
     match m.kind

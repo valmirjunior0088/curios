@@ -1,19 +1,19 @@
 use /std/{Str, Option, Spell, Show};
 use /std/ops/{Eql};
 
--- | The request's method.
+--- The request's method.
 pub induct Method: pub Type
--- | `GET`.
+--- `GET`.
 | get()
--- | `HEAD`.
+--- `HEAD`.
 | head()
--- | `POST`.
+--- `POST`.
 | post()
--- | `PUT`.
+--- `PUT`.
 | put()
--- | `DELETE`.
+--- `DELETE`.
 | delete()
--- | `PATCH`.
+--- `PATCH`.
 | patch()
 end
 
@@ -23,7 +23,7 @@ satisfy Eql(Method);
 
 satisfy Spell(Method);
 
--- | The method as the wire spells it.
+--- The method as the wire spells it.
 pub let to_str(m: Method) -> Str =
     match m
     | get() => "GET"
@@ -34,12 +34,12 @@ pub let to_str(m: Method) -> Str =
     | patch() => "PATCH"
     end;
 
--- | Shown as the wire spells it.
+--- Shown as the wire spells it.
 satisfy Show(Method) {
     show = to_str,
 }
 
--- | The method `s` spells, or `none`.
+--- The method `s` spells, or `none`.
 pub let of_str(s: Str) -> Option(Method) =
     choose
     | Str/eql(s, "GET") => Option/some(Method/get())

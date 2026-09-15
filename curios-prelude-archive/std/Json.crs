@@ -1,18 +1,18 @@
 use /std/{Bool, Flt, Str, List};
 
--- | A JSON value.
+--- A JSON value.
 pub induct Json: pub Type
--- | `null`.
+--- `null`.
 | null()
--- | `true` or `false`.
+--- `true` or `false`.
 | bool(Bool)
--- | A number.
+--- A number.
 | num(Flt)
--- | A string.
+--- A string.
 | str(Str)
--- | An array, in order.
+--- An array, in order.
 | arr(List(Json))
--- | An object: its members, in the order they were written.
+--- An object: its members, in the order they were written.
 | obj(List({Str, Json}))
 end
 

@@ -1,18 +1,18 @@
 use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, proc, True,
     False};
 
--- | How an argument's text is read into a value: the placeholder shown in help, and the reader.
+--- How an argument's text is read into a value: the placeholder shown in help, and the reader.
 pub struct Value: pub Type {
     A: Type,
     metavar: Str,
     read: (Str) -> Result(Str, A),
 }
 
--- | A string, as written.
+--- A string, as written.
 pub let str: Value =
     Value { A = Str, metavar = "S", read = (s) => Result/success(s) };
 
--- | A natural number in decimal.
+--- A natural number in decimal.
 pub let nat: Value =
     Value {
         A = Nat,
@@ -25,7 +25,7 @@ pub let nat: Value =
                 end,
     };
 
--- | An integer in decimal, with an optional sign.
+--- An integer in decimal, with an optional sign.
 pub let int: Value =
     Value {
         A = Int,
@@ -38,7 +38,7 @@ pub let int: Value =
                 end,
     };
 
--- | A floating-point number.
+--- A floating-point number.
 pub let flt: Value =
     Value {
         A = Flt,
@@ -51,35 +51,35 @@ pub let flt: Value =
                 end,
     };
 
--- | A reader of a program's own type, shown as `metavar` in help.
+--- A reader of a program's own type, shown as `metavar` in help.
 pub let reader(@A: Type, metavar: Str, f: (Str) -> Result(Str, A)) -> Value =
     Value { A = A, metavar = metavar, read = f };
 
--- | Whether an option must appear, may be absent, or stands for `a` when absent.
+--- Whether an option must appear, may be absent, or stands for `a` when absent.
 pub induct Presence(A: Type): pub Type
--- | It must appear.
+--- It must appear.
 | required()
--- | It may be absent.
+--- It may be absent.
 | optional()
--- | It stands for `a` when absent.
+--- It stands for `a` when absent.
 | default(a: A)
 end
 
--- | What an argument is: a flag, an option taking a value, an option taking every value it is given, a positional, or the collector of every remaining positional.
+--- What an argument is: a flag, an option taking a value, an option taking every value it is given, a positional, or the collector of every remaining positional.
 pub induct Kind: pub Type
--- | A name alone, present or not.
+--- A name alone, present or not.
 | flag()
--- | A name taking one value.
+--- A name taking one value.
 | option(v: Value, presence: Presence(v.A))
--- | A name taking every value it is given.
+--- A name taking every value it is given.
 | many(v: Value)
--- | A value taken by its place rather than by name.
+--- A value taken by its place rather than by name.
 | positional(v: Value)
--- | The collector of every positional after the ones declared.
+--- The collector of every positional after the ones declared.
 | rest(v: Value)
 end
 
--- | One argument a program declares: its long name, an optional short one, its help line and its kind.
+--- One argument a program declares: its long name, an optional short one, its help line and its kind.
 pub struct Arg: pub Type {
     long: Str,
     short: Option(Char),
@@ -87,11 +87,11 @@ pub struct Arg: pub Type {
     kind: Kind,
 }
 
--- | A flag `--long`.
+--- A flag `--long`.
 pub let flag(long: Str, help: Str) -> Arg =
     Arg { long = long, short = Option/none(), help = help, kind = Kind/flag() };
 
--- | A required option `--long VALUE`.
+--- A required option `--long VALUE`.
 pub let option(long: Str, v: Value, help: Str) -> Arg =
     Arg {
         long = long,
@@ -100,7 +100,7 @@ pub let option(long: Str, v: Value, help: Str) -> Arg =
         kind = Kind/option(v, Presence/required()),
     };
 
--- | An option that may be absent, read as an `Option`.
+--- An option that may be absent, read as an `Option`.
 pub let optional(long: Str, v: Value, help: Str) -> Arg =
     Arg {
         long = long,
@@ -109,7 +109,7 @@ pub let optional(long: Str, v: Value, help: Str) -> Arg =
         kind = Kind/option(v, Presence/optional()),
     };
 
--- | An option that stands for `fallback` when absent.
+--- An option that stands for `fallback` when absent.
 pub let default(long: Str, v: Value, fallback: v.A, help: Str) -> Arg =
     Arg {
         long = long,
@@ -118,15 +118,15 @@ pub let default(long: Str, v: Value, fallback: v.A, help: Str) -> Arg =
         kind = Kind/option(v, Presence/default(fallback)),
     };
 
--- | An option that keeps every value it is given.
+--- An option that keeps every value it is given.
 pub let many(long: Str, v: Value, help: Str) -> Arg =
     Arg { long = long, short = Option/none(), help = help, kind = Kind/many(v) };
 
--- | A required positional, filled in declaration order.
+--- A required positional, filled in declaration order.
 pub let positional(long: Str, v: Value, help: Str) -> Arg =
     Arg { long = long, short = Option/none(), help = help, kind = Kind/positional(v) };
 
--- | The collector of every positional after the declared ones. At most one, and after every positional.
+--- The collector of every positional after the declared ones. At most one, and after every positional.
 pub let rest(long: Str, v: Value, help: Str) -> Arg =
     Arg { long = long, short = Option/none(), help = help, kind = Kind/rest(v) };
 
@@ -140,7 +140,7 @@ let KindCarrier(k: Kind) -> Type =
     | rest(v) => List(v.A)
     end;
 
--- | The type a parsed argument has in the record: `Bool` for a flag, the reader's type for a required or defaulted option and a positional, an `Option` for an optional one, and a list for `many` and `rest`.
+--- The type a parsed argument has in the record: `Bool` for a flag, the reader's type for a required or defaulted option and a positional, an `Option` for an optional one, and a list for `many` and `rest`.
 pub let Carrier(a: Arg) -> Type =
     KindCarrier(a.kind);
 
@@ -150,15 +150,15 @@ let is_positional(k: Kind) -> Bool =
 let is_rest(k: Kind) -> Bool =
     match k | rest(_) => true | _ => false end;
 
--- | The record a line parsed into, indexed by the arguments it was parsed against.
+--- The record a line parsed into, indexed by the arguments it was parsed against.
 pub induct Values: (List(Arg)) -> pub Type
--- | No arguments were declared, so nothing was parsed.
+--- No arguments were declared, so nothing was parsed.
 | nil(): ([])
--- | One argument's value, then the rest.
+--- One argument's value, then the rest.
 | cons(@a: Arg, @rest: List(Arg), head: Carrier(a), tail: Values(rest)): ([a, ..rest])
 end
 
--- | The type `get` answers for `name` in `spec`.
+--- The type `get` answers for `name` in `spec`.
 pub let Lookup(spec: List(Arg), name: Str) -> Type =
     match spec
     | [] => {}
@@ -166,14 +166,14 @@ pub let Lookup(spec: List(Arg), name: Str) -> Type =
         match Str/eql(a.long, name) | true => Carrier(a) | false => Lookup(rest, name) end
     end;
 
--- | That `name` is one of `spec`'s long names, decided by reduction: a name the declaration lacks is refused where it is written.
+--- That `name` is one of `spec`'s long names, decided by reduction: a name the declaration lacks is refused where it is written.
 pub let Has(spec: List(Arg), name: Str) -> Prop =
     match spec
     | [] => False
     | [a, ..rest] => match Str/eql(a.long, name) | true => True | false => Has(rest, name) end
     end;
 
--- | The field named `name`, at the type its argument decides.
+--- The field named `name`, at the type its argument decides.
 pub let get(
     @spec: List(Arg),
     v: Values(spec),
@@ -195,57 +195,57 @@ pub let get(
         pick(ok)
     end;
 
--- | What a program declares, in one of two shapes.
--- |
--- | A group takes no arguments of its own: its line names one of its subcommands, so a global option is repeated in each leaf it applies to.
+--- What a program declares, in one of two shapes.
+---
+--- A group takes no arguments of its own: its line names one of its subcommands, so a global option is repeated in each leaf it applies to.
 pub induct Cli: pub Type
--- | A command that reads a line into a record and runs its handler on it.
+--- A command that reads a line into a record and runs its handler on it.
 | leaf(name: Str, about: Str, version: Option(Str), args: List(Arg), run: (Values(args)) -> Io({}))
--- | A command whose first token names one of its subcommands, to any depth.
+--- A command whose first token names one of its subcommands, to any depth.
 | group(name: Str, about: Str, version: Option(Str), commands: List(Cli))
 end
 
 pub use Cli/*;
 
--- | The command's own name, which is the token that selects it under a parent.
+--- The command's own name, which is the token that selects it under a parent.
 pub let name(cli: Cli) -> Str =
     match cli | leaf(n, _, _, _, _) => n | group(n, _, _, _) => n end;
 
--- | The one-line description, shown in help and in a parent's command list.
+--- The one-line description, shown in help and in a parent's command list.
 pub let about(cli: Cli) -> Str =
     match cli | leaf(_, a, _, _, _) => a | group(_, a, _, _) => a end;
 
--- | The version `--version` answers here, when this command declares one.
+--- The version `--version` answers here, when this command declares one.
 pub let version(cli: Cli) -> Option(Str) =
     match cli | leaf(_, _, v, _, _) => v | group(_, _, v, _) => v end;
 
--- | Why a line was refused.
+--- Why a line was refused.
 pub induct Failure: pub Type
--- | A token no declared name matches.
+--- A token no declared name matches.
 | unknown_option(token: Str)
--- | An option was given without the value it takes.
+--- An option was given without the value it takes.
 | missing_value(name: Str)
--- | A required argument never appeared.
+--- A required argument never appeared.
 | missing_required(name: Str)
--- | A token nothing was left to take.
+--- A token nothing was left to take.
 | unexpected(token: Str)
--- | The value was read and refused, for this reason.
+--- The value was read and refused, for this reason.
 | bad_value(name: Str, reason: Str)
--- | A subcommand no declaration names, beside those that do.
+--- A subcommand no declaration names, beside those that do.
 | unknown_command(name: Str, known: List(Str))
--- | A subcommand was owed and none was given, beside those that would do.
+--- A subcommand was owed and none was given, beside those that would do.
 | missing_command(known: List(Str))
 end
 
--- | What a line came to: a parsed record, a request for help or the version, or a refusal.
+--- What a line came to: a parsed record, a request for help or the version, or a refusal.
 pub induct Outcome(spec: List(Arg)): pub Type
--- | The line was read into the record.
+--- The line was read into the record.
 | parsed(Values(spec))
--- | The line asked for the help text.
+--- The line asked for the help text.
 | help()
--- | The line asked for the version.
+--- The line asked for the version.
 | version()
--- | The line was refused.
+--- The line was refused.
 | failure(Failure)
 end
 
@@ -457,7 +457,7 @@ let fill(spec: List(Arg), slots: List(List(Str))) -> Result(Failure, Values(spec
             (head) => Result/map_success(fill(more, later), (tail) => Values/cons(head, tail)))
     end;
 
--- | A line read against `spec`, performing nothing. Help wins over every other reading of the line, and a version is answered only when `versioned`.
+--- A line read against `spec`, performing nothing. Help wins over every other reading of the line, and a version is answered only when `versioned`.
 pub let parse(spec: List(Arg), argv: List(Str), versioned: Bool) -> Outcome(spec) =
     match wants_help(argv)
     | true => Outcome/help()
@@ -514,9 +514,9 @@ let command_rows(subs: List(Cli)) -> List({Str, Str}) =
 let has_options(spec: List(Arg)) -> Bool =
     List/any(spec, (a) => Bool/not(is_positional(a.kind) || is_rest(a.kind)));
 
--- | The one-line usage, naming the command after the commands `within` that lead to it, outermost first.
--- |
--- | A command run directly is within nothing, so its usage is `usage([], cli)`.
+--- The one-line usage, naming the command after the commands `within` that lead to it, outermost first.
+---
+--- A command run directly is within nothing, so its usage is `usage([], cli)`.
 pub let usage(within: List(Str), cli: Cli) -> Str =
     let invoked = [..within, name(cli)];
     match cli
@@ -554,7 +554,7 @@ let builtin_rows(cli: Cli) -> List({Str, Str}) =
     | some(_) => [help_row, ("    --version", "Print version")]
     end;
 
--- | The help screen: usage, then the positionals and options a leaf declares, or the subcommands a group does, each with its help line. `within` is as `usage` takes it.
+--- The help screen: usage, then the positionals and options a leaf declares, or the subcommands a group does, each with its help line. `within` is as `usage` takes it.
 pub let help(within: List(Str), cli: Cli) -> Str =
     let sections =
         match cli
@@ -582,7 +582,7 @@ let complaint(f: Failure) -> Str =
         Str/flatten(["a subcommand is required\n  available: ", Str/join(", ", known)])
     end;
 
--- | A refusal rendered for standard error, with the usage of the command reached through `within`.
+--- A refusal rendered for standard error, with the usage of the command reached through `within`.
 pub let report(within: List(Str), cli: Cli, f: Failure) -> Str =
     Str/flatten([
         "error: ",
@@ -591,15 +591,15 @@ pub let report(within: List(Str), cli: Cli, f: Failure) -> Str =
         usage(within, cli),
         "\n\nFor more information, try '--help'.\n"]);
 
--- | What choosing a subcommand came to: the subcommand and its line, a request for help or the version, or a refusal.
+--- What choosing a subcommand came to: the subcommand and its line, a request for help or the version, or a refusal.
 pub induct Chosen: pub Type
--- | This subcommand, and the line left for it.
+--- This subcommand, and the line left for it.
 | chose(sub: Cli, rest: List(Str))
--- | The line asked for the help text.
+--- The line asked for the help text.
 | wanted_help()
--- | The line asked for the version.
+--- The line asked for the version.
 | wanted_version()
--- | The choice was refused.
+--- The choice was refused.
 | refused(f: Failure)
 end
 
@@ -614,9 +614,9 @@ let named(subs: List(Cli), wanted: Str) -> Option(Cli) =
         match Str/eql(name(c), wanted) | true => Option/some(c) | false => named(more, wanted) end
     end;
 
--- | The subcommand the first token names, and the rest of the line as its own.
--- |
--- | A group owns exactly its first token, so `--help` and `--version` are answered here only when they *are* that token: anything past the subcommand's name belongs to the subcommand, which answers for itself. A leaf owns no subcommand and refuses.
+--- The subcommand the first token names, and the rest of the line as its own.
+---
+--- A group owns exactly its first token, so `--help` and `--version` are answered here only when they *are* that token: anything past the subcommand's name belongs to the subcommand, which answers for itself. A leaf owns no subcommand and refuses.
 pub let select(cli: Cli, argv: List(Str)) -> Chosen =
     match cli
     | leaf(_, _, _, _, _) => Chosen/refused(Failure/missing_command([]))
@@ -675,7 +675,7 @@ let drive(within: List(Str), cli: Cli, argv: List(Str)) -> Io({}) =
         end
     end;
 
--- | The entry a program hands its `Cli` to: arguments read, help and the version answered on standard output with exit 0, a refusal reported on standard error with exit 2, and otherwise the handler run. A group descends into the subcommand its first token names, to any depth, and each command answers help and its own version for itself.
+--- The entry a program hands its `Cli` to: arguments read, help and the version answered on standard output with exit 0, a refusal reported on standard error with exit 2, and otherwise the handler run. A group descends into the subcommand its first token names, to any depth, and each command answers help and its own version for itself.
 pub let main(cli: Cli) -> Io({}) =
     let raw = proc/args!;
     let dropped = match raw | [] => [] | [_, ..more] => more end;

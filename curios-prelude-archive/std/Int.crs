@@ -4,24 +4,24 @@ pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xo
 use /std/{Nat, Bool, Str, Option, Ordering, Show, Spell, Ord, True};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
--- | That `a` is not zero, decided as `Nat/Lt` is — what `/` and `%` on `Int` ask of a divisor.
+--- That `a` is not zero, decided as `Nat/Lt` is — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =
     Bool/Holds(neq(a, 0));
 
--- | That `a` is zero or above, decided.
+--- That `a` is zero or above, decided.
 pub let NonNeg(a: Int) -> Prop =
     Bool/Holds(ge(a, 0));
 
--- | The value with its sign written, `+3` or `-3`, so the text re-parses as an `Int` without context.
+--- The value with its sign written, `+3` or `-3`, so the text re-parses as an `Int` without context.
 pub let to_str(n: Int) -> Str =
     let mag = Nat/to_str(abs(n));
     match n >= +0 | true => Str/concat("+", mag) | false => Str/concat("-", mag) end;
 
--- | The bitwise complement.
+--- The bitwise complement.
 pub let not(x: Int) -> Int =
     xor(x, -1);
 
--- | The number an optional sign and a nonempty run of decimal digits spell, or `none` for any other text.
+--- The number an optional sign and a nonempty run of decimal digits spell, or `none` for any other text.
 pub let of_str(s: Str) -> Option(Int) =
     match Str/is_empty(s)
     | true => Option/none()
@@ -40,33 +40,33 @@ pub let of_str(s: Str) -> Option(Int) =
         end
     end;
 
--- | The procedure that decides `0 <= n`: the evidence when it holds, `none` otherwise.
+--- The procedure that decides `0 <= n`: the evidence when it holds, `none` otherwise.
 pub let non_neg(n: Int) -> Option(NonNeg(n)) =
     match n >= +0: (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
--- | The magnitude, as a `Nat`.
+--- The magnitude, as a `Nat`.
 pub let abs(n: Int) -> Nat =
     match non_neg(n)
     | some(ok) => to_nat(n, @ok)
     | none() => match non_neg(+0 - n) | some(ok) => to_nat(+0 - n, @ok) | none() => 0 end
     end;
 
--- | The order of the two.
+--- The order of the two.
 pub let cmp(x: Int, y: Int) -> Ordering =
     choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
--- | The smaller of the two.
+--- The smaller of the two.
 pub let min(a: Int, b: Int) -> Int =
     match a < b | true => a | false => b end;
 
--- | The larger of the two.
+--- The larger of the two.
 pub let max(a: Int, b: Int) -> Int =
     match a < b | true => b | false => a end;
 
--- | `-1`, `+0` or `+1` by the sign of `n`.
+--- `-1`, `+0` or `+1` by the sign of `n`.
 pub let sign(n: Int) -> Int =
     choose | n < +0 => -1 | n == +0 => +0 | _ => +1 end;
 
@@ -94,13 +94,13 @@ satisfy Mul(Int) {
     mul = mul,
 }
 
--- | The divisor must be nonzero.
+--- The divisor must be nonzero.
 satisfy Div(Int) {
     Ok(b) = NonZero(b),
     div = div,
 }
 
--- | The divisor must be nonzero.
+--- The divisor must be nonzero.
 satisfy Rem(Int) {
     Ok(b) = NonZero(b),
     rem = rem,

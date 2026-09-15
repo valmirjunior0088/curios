@@ -2,11 +2,11 @@ use /std/{Bytes, Str, Nat, Bool, Result, Try, Async, Io, Handle};
 use /std/tcp/{resolve, let Socket};
 use /std/Handle/{Interest};
 
--- | Up to `n` bytes, parking until some arrive.
+--- Up to `n` bytes, parking until some arrive.
 pub let read(c: Socket, n: Nat) -> Async(Io/Chunk) =
     Async/Read/read(c.0, n);
 
--- | The whole of `b`, parking while the peer cannot take more.
+--- The whole of `b`, parking while the peer cannot take more.
 pub let write(c: Socket, b: Bytes) -> Async(Result(Io/Error, {})) =
     Async/Write/write(c.0, b);
 
@@ -18,7 +18,7 @@ satisfy Async/Write(Async, Socket) {
     write(c, b) = write(c, b),
 }
 
--- | Close `c`.
+--- Close `c`.
 pub let close(c: Socket) -> Io({}) =
     Handle/close(c.0);
 
@@ -67,17 +67,17 @@ let connect_addr(host: Str, addr: Bytes, tls: Bool) -> Try(Async, Io/Error, Sock
     let _ = Try/rescue(upgrade(h, host, tls), (e) => close_raising(h, e))!;
     Try/pure(Socket { h });
 
--- | A connection to `host` at `port`, in the clear. Nothing guards it: `with` is the bracket that closes it.
+--- A connection to `host` at `port`, in the clear. Nothing guards it: `with` is the bracket that closes it.
 pub let connect(host: Str, port: Nat) -> Try(Async, Io/Error, Socket) =
     let addr = resolve(host, port)!;
     connect_addr(host, addr, false);
 
--- | A connection to `host` at `port` under TLS, the certificate checked against `host`.
+--- A connection to `host` at `port` under TLS, the certificate checked against `host`.
 pub let connect_tls(host: Str, port: Nat) -> Try(Async, Io/Error, Socket) =
     let addr = resolve(host, port)!;
     connect_addr(host, addr, true);
 
--- | `body` over the socket `open` connects, closed whichever way the task ends.
+--- `body` over the socket `open` connects, closed whichever way the task ends.
 pub let with(
     @A: Type,
     open: Try(Async, Io/Error, Socket),
@@ -88,7 +88,7 @@ pub let with(
     let a = outcome!;
     Try/pure(a);
 
--- | `request` written whole and the reply read to its end, over the socket `open` connects, closed after. One exchange with a peer that closes when it has answered.
+--- `request` written whole and the reply read to its end, over the socket `open` connects, closed after. One exchange with a peer that closes when it has answered.
 pub let call(open: Try(Async, Io/Error, Socket), request: Bytes) -> Try(Async, Io/Error, Bytes) =
     with(open, (c) =>
         let _ = Try/attempt(write(c, request))!;

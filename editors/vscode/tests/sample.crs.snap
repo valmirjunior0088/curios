@@ -32,6 +32,12 @@
 #              ^^ source.curios
 #                ^ source.curios punctuation.separator.curios
 >
+>--- Nothing yet.
+#^^^^^^^^^^^^^^^^ source.curios comment.line.double-dash.curios
+>---
+#^^^ source.curios comment.line.double-dash.curios
+>--- The additive identity.
+#^^^^^^^^^^^^^^^^^^^^^^^^^^ source.curios comment.line.double-dash.curios
 >pub let zero: Nat = 0;
 #^^^ source.curios keyword.other.curios
 #   ^ source.curios

@@ -171,7 +171,7 @@ and member_value(key: Str) -> Parse({Str, Json}) =
     let val = value!;
     Parse/pure((key, val));
 
--- | A whole document, surrounding whitespace included; anything after the value is refused.
+--- A whole document, surrounding whitespace included; anything after the value is refused.
 pub let decode: Parse(Json) =
     let parsed = value!;
     let _ = ws!;

@@ -1,35 +1,35 @@
 use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, False, True, Str, Show, Spell, Ord};
 use /std/ops/{Eql, Cmp};
 
--- | That `code` is below `bound`, decided.
+--- That `code` is below `bound`, decided.
 pub let Below(code: Nat, bound: Nat) -> Prop =
     Bool/Holds(code < bound);
 
--- | That `code` lies between `lo` and `hi`, both ends included, decided.
+--- That `code` lies between `lo` and `hi`, both ends included, decided.
 pub let InRange(code: Nat, lo: Nat, hi: Nat) -> Prop =
     match code >= lo | true => Bool/Holds(code <= hi) | false => False end;
 
--- | That `code` is a Unicode scalar value, which is every code point but the surrogates.
+--- That `code` is a Unicode scalar value, which is every code point but the surrogates.
 pub induct Scalar: (Nat) -> pub Prop
--- | Below the surrogate range.
+--- Below the surrogate range.
 | below(@code: Nat, proof: Below(code, 0xD800)): (code)
--- | Above the surrogate range, up to the last code point.
+--- Above the surrogate range, up to the last code point.
 | above(@code: Nat, proof: InRange(code, 0xE000, 0x10FFFF)): (code)
 end
 
--- | One Unicode scalar value.
+--- One Unicode scalar value.
 pub struct Char: pub Type {
-    -- | Its code point.
+    --- Its code point.
     code: Nat,
-    -- | Why that code point is a scalar value rather than a surrogate.
+    --- Why that code point is a scalar value rather than a surrogate.
     scalar: Scalar(code),
 }
 
--- | The code point.
+--- The code point.
 pub let to_nat(c: Char) -> Nat =
     c.code;
 
--- | The character with code point `code`, or `none` for a surrogate or a value past `U+10FFFF`.
+--- The character with code point `code`, or `none` for a surrogate or a value past `U+10FFFF`.
 pub let of_nat(code: Nat) -> Option(Char) =
     match code < 0xD800
     | true => Option/some(Char { code = code, scalar = Scalar/below(True/qed()) })
@@ -44,83 +44,83 @@ pub let of_nat(code: Nat) -> Option(Char) =
         end
     end;
 
--- | Eql code points are equal characters.
+--- Eql code points are equal characters.
 pub let eq_of_code(a: Char, b: Char, proof: Eq(a.code, b.code)) -> Eq(a, b) =
     Eq/subst(
         (code: Nat) => (scalar: Scalar(code)) -> Eq(a, Char { code = code, scalar = scalar }),
         proof,
         (_: Scalar(a.code)) => Eq/refl())(b.scalar);
 
--- | Whether the two are equal.
+--- Whether the two are equal.
 pub let eql(a: Char, b: Char) -> Bool =
     a.code == b.code;
 
--- | Code-point order.
+--- Code-point order.
 pub let cmp(a: Char, b: Char) -> Ordering =
     Nat/cmp(a.code, b.code);
 
--- | Whether `a` is below `b` in code-point order.
--- |
--- | Stated on the code points directly, as `Byte`'s order is on its values, so that a comparison of characters is a comparison of naturals once unfolded and reduces as one — its negation is its dual, and swapping its operands is the mirrored comparison. Read through `cmp` it would be a stuck match on an `Ordering`, which no law relates to another.
+--- Whether `a` is below `b` in code-point order.
+---
+--- Stated on the code points directly, as `Byte`'s order is on its values, so that a comparison of characters is a comparison of naturals once unfolded and reduces as one — its negation is its dual, and swapping its operands is the mirrored comparison. Read through `cmp` it would be a stuck match on an `Ordering`, which no law relates to another.
 pub let lt(a: Char, b: Char) -> Bool =
     a.code < b.code;
 
--- | Whether `a` is at most `b` in code-point order.
+--- Whether `a` is at most `b` in code-point order.
 pub let le(a: Char, b: Char) -> Bool =
     a.code <= b.code;
 
--- | Whether `a` is above `b` in code-point order.
+--- Whether `a` is above `b` in code-point order.
 pub let gt(a: Char, b: Char) -> Bool =
     a.code > b.code;
 
--- | Whether `a` is at least `b` in code-point order.
+--- Whether `a` is at least `b` in code-point order.
 pub let ge(a: Char, b: Char) -> Bool =
     a.code >= b.code;
 
--- | That `a` is below `b` in code-point order, decided as `Nat/Lt` is.
+--- That `a` is below `b` in code-point order, decided as `Nat/Lt` is.
 pub let Lt(a: Char, b: Char) -> Prop =
     Bool/Holds(lt(a, b));
 
--- | That `a` is at most `b` in code-point order, decided as `Nat/Le` is.
+--- That `a` is at most `b` in code-point order, decided as `Nat/Le` is.
 pub let Le(a: Char, b: Char) -> Prop =
     Bool/Holds(le(a, b));
 
--- | Space, tab, newline, vertical tab, form feed or carriage return.
+--- Space, tab, newline, vertical tab, form feed or carriage return.
 pub let is_whitespace(c: Char) -> Bool =
     c.code == 0x20 || Nat/in_range(c.code, 0x9, 0xD);
 
--- | `0` through `9`.
+--- `0` through `9`.
 pub let is_digit(c: Char) -> Bool =
     Nat/in_range(c.code, 0x30, 0x39);
 
--- | `a` through `z`.
+--- `a` through `z`.
 pub let is_lower(c: Char) -> Bool =
     Nat/in_range(c.code, 0x61, 0x7A);
 
--- | `A` through `Z`.
+--- `A` through `Z`.
 pub let is_upper(c: Char) -> Bool =
     Nat/in_range(c.code, 0x41, 0x5A);
 
--- | An ASCII letter.
+--- An ASCII letter.
 pub let is_alpha(c: Char) -> Bool =
     is_lower(c) || is_upper(c);
 
--- | An ASCII letter or digit.
+--- An ASCII letter or digit.
 pub let is_alphanumeric(c: Char) -> Bool =
     is_alpha(c) || is_digit(c);
 
--- | An ASCII uppercase letter lowered; anything else unchanged.
+--- An ASCII uppercase letter lowered; anything else unchanged.
 pub let to_ascii_lower(c: Char) -> Char =
     match is_upper(c) | true => Option/unwrap_or(of_nat(c.code + 0x20), c) | false => c end;
 
--- | An ASCII lowercase letter raised; anything else unchanged.
+--- An ASCII lowercase letter raised; anything else unchanged.
 pub let to_ascii_upper(c: Char) -> Char =
     match is_lower(c) | true => Option/unwrap_or(of_nat(c.code - 0x20), c) | false => c end;
 
 let ascii_zero: Char =
     Char { code = 0x30, scalar = Scalar/below(True/qed()) };
 
--- | The lowercase hexadecimal digit for `nibble` modulo sixteen.
+--- The lowercase hexadecimal digit for `nibble` modulo sixteen.
 pub let hex_digit(nibble: Nat) -> Char =
     let digit =
         match nibble % 0x10 < 10
@@ -129,7 +129,7 @@ pub let hex_digit(nibble: Nat) -> Char =
         end;
     Option/unwrap_or(of_nat(digit), ascii_zero);
 
--- | The value of a hexadecimal digit in either case, or `none`.
+--- The value of a hexadecimal digit in either case, or `none`.
 pub let of_hex_digit(c: Char) -> Option(Nat) =
     choose
     | is_digit(c) => Option/some(c.code - 0x30)
@@ -138,11 +138,11 @@ pub let of_hex_digit(c: Char) -> Option(Nat) =
     | _ => Option/none()
     end;
 
--- | The character a byte below 128 encodes, or `none`.
+--- The character a byte below 128 encodes, or `none`.
 pub let of_ascii(byte: Byte) -> Option(Char) =
     match Byte/to_nat(byte) < 0x80 | true => of_nat(Byte/to_nat(byte)) | false => Option/none() end;
 
--- | The byte a character below 128 encodes, or `none`.
+--- The byte a character below 128 encodes, or `none`.
 pub let to_ascii(c: Char) -> Option(Byte) =
     match c.code < 0x80
     | true => Option/some(Nat/to_byte(c.code % 0x80))
@@ -157,9 +157,9 @@ let emit_continuations(acc: Bytes, codepoint: Nat, shift: Nat) -> Bytes =
         emit_continuations(x[..acc, Nat/to_byte(0x80 + group)], codepoint, Nat/div(shift, 0x40))
     end;
 
--- | The UTF-8 encoding, one to four bytes.
--- |
--- | Each lead byte masks to the payload width its own form declares — seven bits for ASCII, five for the two-byte lead, four for the three-byte, three for the four-byte — so the value is in range on its face rather than because a guard three lines up says so. Three of the four arms are guarded and the mask is an identity under the guard; the fourth has no guard at all, and its width is the only thing standing between `0x10FFFF` and a lead byte that means something else.
+--- The UTF-8 encoding, one to four bytes.
+---
+--- Each lead byte masks to the payload width its own form declares — seven bits for ASCII, five for the two-byte lead, four for the three-byte, three for the four-byte — so the value is in range on its face rather than because a guard three lines up says so. Three of the four arms are guarded and the mask is an identity under the guard; the fourth has no guard at all, and its width is the only thing standing between `0x10FFFF` and a lead byte that means something else.
 pub let to_utf8(c: Char) -> Bytes =
     let codepoint = c.code;
     choose
@@ -187,7 +187,7 @@ satisfy Show(Char) {
     show(c) = Str/of_char(c),
 }
 
--- | A character literal, escaped where the literal grammar needs it.
+--- A character literal, escaped where the literal grammar needs it.
 satisfy Spell(Char) {
     spell(c) =
         let body =

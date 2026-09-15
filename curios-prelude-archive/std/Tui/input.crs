@@ -124,7 +124,7 @@ end
 let paste_end: Bytes =
     x[0x1B, '[', '2', '0', '1', '~'];
 
--- | `input` as the events it encodes, up to the first sequence the chunk ends inside; that tail is `rest`, for the next chunk to complete.
+--- `input` as the events it encodes, up to the first sequence the chunk ends inside; that tail is `rest`, for the next chunk to complete.
 pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} =
     let key(k: Key) -> Option(Event(E)) = Option/some(Event/key(k));
     let scalar(i: Nat, n: Nat) -> Step(E) =
@@ -237,7 +237,7 @@ pub let decode(@E: Type, input: Bytes) -> {events: List(Event(E)), rest: Bytes} 
         end;
     go(0, []);
 
--- | `rest` once nothing more came: a leading Escape is the Escape key, and what follows is read again on its own.
+--- `rest` once nothing more came: a leading Escape is the Escape key, and what follows is read again on its own.
 pub let flush(@E: Type, rest: Bytes) -> List(Event(E)) =
     match rest
     | x[] => []

@@ -2,23 +2,23 @@ use /std/{Bytes, Byte, Nat, Int, Bool, Str, List, Option, Result, Cell, Monad, L
 use /std/time/{Duration};
 use /std/Handle/{Interest, Readiness};
 
--- | The handle a parked fiber is resumed through: a primitive registers one while it parks and wakes it when its own event arrives.
+--- The handle a parked fiber is resumed through: a primitive registers one while it parks and wakes it when its own event arrives.
 pub mod Waker;
 pub use Waker/{let Waker};
 
--- | A value fulfilled once, which a fiber parks on until it is. What `await` waits on, and what a primitive of its own hands out.
+--- A value fulfilled once, which a fiber parks on until it is. What `await` waits on, and what a primitive of its own hands out.
 pub mod Future;
 pub use Future/{let Future};
 
--- | A flag one fiber raises and another parks on: the one park a program takes that waits on no handle and no timer.
+--- A flag one fiber raises and another parks on: the one park a program takes that waits on no handle and no timer.
 pub mod Signal;
 pub use Signal/{let Signal};
 
--- | What a selection is written against: a non-committing attempt at a value and what to wait on while it declines.
+--- What a selection is written against: a non-committing attempt at a value and what to wait on while it declines.
 pub mod Offer;
 pub use Offer/{let Offer};
 
--- | A bounded queue two fibers hand values through.
+--- A bounded queue two fibers hand values through.
 pub mod Channel;
 pub use Channel/{let Channel};
 
@@ -37,13 +37,13 @@ struct Guard: Type {
     release: Io({}),
 }
 
--- | One thing a parked fiber waits for. A park names a list of them and resumes on whichever fires first.
+--- One thing a parked fiber waits for. A park names a list of them and resumes on whichever fires first.
 pub induct Wait: pub Type
--- | Until the handle is ready for what the interest names.
+--- Until the handle is ready for what the interest names.
 | ready(handle: Handle, interest: Interest)
--- | Until this much time has passed.
+--- Until this much time has passed.
 | elapsed(Duration)
--- | Until whoever holds the waker this hands out fires it.
+--- Until whoever holds the waker this hands out fires it.
 | woken(register: (Waker) -> Io({}))
 end
 
@@ -57,16 +57,16 @@ and Step(A: Type): Type
 | step(pause: Pause, next: Io(Step(A)))
 end
 
--- | A fiber: a computation that may park and resume.
+--- A fiber: a computation that may park and resume.
 pub struct Async(A: Type): Type {
     Io(Step(A)),
 }
 
--- | A fiber that answers nothing.
+--- A fiber that answers nothing.
 pub let Fiber: Type =
     Async({});
 
--- | `a`, with no suspension.
+--- `a`, with no suspension.
 pub let pure(@A: Type, a: A) -> Async(A) =
     Async { Io/pure(Step/done(a)) };
 
@@ -74,36 +74,36 @@ let bind_raw(@A: Type, @B: Type, m: Io(Step(A)), f: (A) -> Io(Step(B))) -> Io(St
     let s = m!;
     match s | done(a) => f(a) | step(p, k) => Io/pure(Step/step(p, bind_raw(k, f))) end;
 
--- | `m`, then `f` on its answer.
+--- `m`, then `f` on its answer.
 pub let bind(@A: Type, @B: Type, m: Async(A), f: (A) -> Async(B)) -> Async(B) =
     Async { bind_raw(m.0, (a) => f(a).0) };
 
--- | `f` on the answer.
+--- `f` on the answer.
 pub let map(@A: Type, @B: Type, m: Async(A), f: (A) -> B) -> Async(B) =
     bind(m, (a) => pure(f(a)));
 
--- | An `Io` action as one step that never parks.
+--- An `Io` action as one step that never parks.
 pub let lift(@A: Type, action: Io(A)) -> Async(A) =
     Async { Io/bind(action, (a) => Io/pure(Step/done(a))) };
 
 let suspend(p: Pause) -> Async({}) =
     Async { Io/pure(Step/step(p, Io/pure(Step/done(())))) };
 
--- | Park until one of `waits` fires, whichever is first.
--- |
--- | Readiness is advisory: an operation retried after a park may still answer `would_block`, so a caller parks in a loop rather than assuming the wait was truthful.
+--- Park until one of `waits` fires, whichever is first.
+---
+--- Readiness is advisory: an operation retried after a park may still answer `would_block`, so a caller parks in a loop rather than assuming the wait was truthful.
 pub let park(waits: List(Wait)) -> Async({}) =
     suspend(Pause/park(waits));
 
--- | Park for `d`.
+--- Park for `d`.
 pub let sleep(d: Duration) -> Async({}) =
     park([Wait/elapsed(d)]);
 
--- | Park until the `Waker` handed to `register` is woken: how a primitive that waits on neither a handle nor a timer joins the scheduler.
+--- Park until the `Waker` handed to `register` is woken: how a primitive that waits on neither a handle nor a timer joins the scheduler.
 pub let on_waker(register: (Waker) -> Io({})) -> Async({}) =
     park([Wait/woken(register)]);
 
--- | Park once, letting every other runnable fiber take a turn.
+--- Park once, letting every other runnable fiber take a turn.
 pub let yield_now: Async({}) =
     suspend(Pause/yield_now());
 
@@ -113,7 +113,7 @@ let acquire(g: Guard) -> Async({}) =
 let fork_with(child: Fiber, t: Token) -> Async({}) =
     suspend(Pause/fork(child.0, t));
 
--- | `body` with `fin` run when it is over: on the way out, or by the scheduler when the task is cancelled, dropped at the root's end, or found parked at a deadlock. Both exits, exactly once.
+--- `body` with `fin` run when it is over: on the way out, or by the scheduler when the task is cancelled, dropped at the root's end, or found parked at a deadlock. Both exits, exactly once.
 pub let using(@A: Type, fin: Io({}), body: Async(A)) -> Async(A) =
     let done = Cell/new(false)!;
     let g = Guard { done = done, release = fin };
@@ -122,12 +122,12 @@ pub let using(@A: Type, fin: Io({}), body: Async(A)) -> Async(A) =
     let _ = run_guard(g)!;
     pure(a);
 
--- | Fork `body` as a fiber of its own, which runs before the forker takes another step.
+--- Fork `body` as a fiber of its own, which runs before the forker takes another step.
 pub let go(body: Fiber) -> Async({}) =
     let c = Cell/new(false)!;
     fork_with(body, Token { c });
 
--- | Everything `read` yields up to the end of the stream; a failure before the end drops what was read.
+--- Everything `read` yields up to the end of the stream; a failure before the end drops what was read.
 pub let drain(
     @M: (Type) -> Type,
     use Monad(M),
@@ -142,19 +142,19 @@ pub let drain(
         end;
     go(x[]);
 
--- | What a stream is read through, in the monad the region is written in: `Async` parks the fiber until bytes arrive, `Io` waits on this program's own behalf.
--- |
--- | A carrier whose progress a peer decides declares only the `Async` witness, so reading it in an `Io` region is refused where it is written.
+--- What a stream is read through, in the monad the region is written in: `Async` parks the fiber until bytes arrive, `Io` waits on this program's own behalf.
+---
+--- A carrier whose progress a peer decides declares only the `Async` witness, so reading it in an `Io` region is refused where it is written.
 pub concept Read(M: (Type) -> Type, S: Type): pub Type {
     read(S, Nat) -> M(Io/Chunk),
 }
 
--- | What a stream is written through: the whole of the bytes, a short write resent.
+--- What a stream is written through: the whole of the bytes, a short write resent.
 pub concept Write(M: (Type) -> Type, S: Type): pub Type {
     write(S, Bytes) -> M(Result(Io/Error, {})),
 }
 
--- | Everything up to the end of the stream; a failure before the end drops what was read.
+--- Everything up to the end of the stream; a failure before the end drops what was read.
 pub let read_all(
     @M: (Type) -> Type,
     @S: Type,
@@ -164,7 +164,7 @@ pub let read_all(
 ) -> M(Result(Io/Error, Bytes)) =
     drain((n) => Read/read(s, n));
 
--- | The bytes before the first `delimiter`, which is consumed and dropped, or everything read when the stream ends first.
+--- The bytes before the first `delimiter`, which is consumed and dropped, or everything read when the stream ends first.
 pub let read_until(
     @M: (Type) -> Type,
     @S: Type,
@@ -186,7 +186,7 @@ pub let read_until(
         end;
     go(x[]);
 
--- | One line without its line ending — a newline, or a carriage return and a newline — or `none` when the stream ends with nothing read; what is read before the end is the last line, and a failure drops what was read.
+--- One line without its line ending — a newline, or a carriage return and a newline — or `none` when the stream ends with nothing read; what is read before the end is the last line, and a failure drops what was read.
 pub let read_line(
     @M: (Type) -> Type,
     @S: Type,
@@ -220,7 +220,7 @@ pub let read_line(
         end;
     go(x[], false);
 
--- | Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer.
+--- Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer.
 pub let copy(
     @M: (Type) -> Type,
     @S: Type,
@@ -242,7 +242,7 @@ pub let copy(
         end;
     go();
 
--- | The value `f` is fulfilled with, parking until it is.
+--- The value `f` is fulfilled with, parking until it is.
 pub let await(@A: Type, f: Future(A)) -> Async(A) =
     let polled = Future/poll(f)!;
     match polled
@@ -258,7 +258,7 @@ struct Job: Type {
     guards: List(Guard),
 }
 
--- | Where a parked job waits to be claimed. Every registration one park makes points at the same slot, so the first wait to fire takes the job and every other finds it gone.
+--- Where a parked job waits to be claimed. Every registration one park makes points at the same slot, so the first wait to fire takes the job and every other finds it gone.
 let Slot: Type =
     Cell(Option(Job));
 
@@ -452,7 +452,7 @@ let expire_sleepers(sleeping: List(Sleeper)) -> Io({List(Job), List(Sleeper)}) =
         end;
     walk(sleeping, [], []);
 
--- | No runnable fiber, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. `parked` is how many fibers wait on a waker nothing will fire.
+--- No runnable fiber, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. `parked` is how many fibers wait on a waker nothing will fire.
 pub struct Deadlock: pub Type {
     parked: Nat,
 }
@@ -553,7 +553,7 @@ let live_sleeping(ss: List(Sleeper)) -> Io(List(Sleeper)) =
         Io/pure(match held | none() => rest | some(_) => [s, ..rest] end)
     end;
 
--- | Forget the registrations of a job some other wait already claimed, so one park over several waits leaves nothing behind it.
+--- Forget the registrations of a job some other wait already claimed, so one park over several waits leaves nothing behind it.
 let prune(q: Queues) -> Io({}) =
     let blocked = Cell/get(q.blocked)!;
     let kept_blocked = live_blocked(blocked)!;
@@ -613,7 +613,7 @@ let drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(Deadlock, A
         end
     end;
 
--- | Drive `root` to its answer, or to the deadlock that stops it.
+--- Drive `root` to its answer, or to the deadlock that stops it.
 pub let block_on(@A: Type, root: Async(A)) -> Io(Result(Deadlock, A)) =
     let runq: Cell(List(Job)) = Cell/new([])!;
     let blocked: Cell(List(Parked)) = Cell/new([])!;
@@ -625,7 +625,7 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(Deadlock, A)) =
     let _ = enqueue(q, root_job(root, answer, Token { root_cancelled }))!;
     drive(q, answer);
 
--- | Drive `main` to its end; a deadlock is reported on standard error and exits with 1.
+--- Drive `main` to its end; a deadlock is reported on standard error and exits with 1.
 pub let run(main: Async({})) -> Io({}) =
     let outcome = block_on(main)!;
     match outcome
@@ -640,13 +640,13 @@ pub let run(main: Async({})) -> Io({}) =
         /sys/proc/exit(1)
     end;
 
--- | A spawned fiber: its answer, and the means to cancel it.
+--- A spawned fiber: its answer, and the means to cancel it.
 pub struct Task(A: Type): Type {
     result: Future(A),
     token: Token,
 }
 
--- | Fork `body` as a task whose answer `join` waits for.
+--- Fork `body` as a task whose answer `join` waits for.
 pub let spawn(@A: Type, body: Async(A)) -> Async(Task(A)) =
     let f = Future/new()!;
     let c = Cell/new(false)!;
@@ -658,11 +658,11 @@ pub let spawn(@A: Type, body: Async(A)) -> Async(Task(A)) =
             t)!;
     pure(task);
 
--- | The task's answer, parking until it has one.
+--- The task's answer, parking until it has one.
 pub let join(@A: Type, task: Task(A)) -> Async(A) =
     await(task.result);
 
--- | Ask the task to stop; its guards are released when the scheduler finds it cancelled.
+--- Ask the task to stop; its guards are released when the scheduler finds it cancelled.
 pub let cancel(@A: Type, task: Task(A)) -> Io({}) =
     cancel_token(task.token);
 
@@ -674,7 +674,7 @@ let cancel_all(ts: List(Token)) -> Io({}) =
         cancel_all(more)
     end;
 
--- | Every task's answer, in order, each spawned before the next is waited for.
+--- Every task's answer, in order, each spawned before the next is waited for.
 pub let join_all(@A: Type, tasks: List(Async(A))) -> Async(List(A)) =
     let go(i: Nat) -> Async(List(A)) =
         match Nat/Lt/try(i, List/len(tasks))
@@ -704,7 +704,7 @@ let waits_of(@A: Type, offers: List(Offer(A))) -> Io(List(Wait)) =
         Io/pure([w, ..ws])
     end;
 
--- | The first offer to yield a value, with its index, parking on all of them while every one declines. Offers are tried in list order, so a selection is not fair, and nothing leaves a source until it is the answer, so an offer that loses has consumed nothing.
+--- The first offer to yield a value, with its index, parking on all of them while every one declines. Offers are tried in list order, so a selection is not fair, and nothing leaves a source until it is the answer, so an offer that loses has consumed nothing.
 pub let select(@A: Type, offers: List(Offer(A))) -> Async({Nat, A}) =
     let taken = attempt(offers, 0)!;
     match taken
@@ -715,7 +715,7 @@ pub let select(@A: Type, offers: List(Offer(A))) -> Async({Nat, A}) =
         select(offers)
     end;
 
--- | An offer that yields once `d` has passed.
+--- An offer that yields once `d` has passed.
 pub let after(d: Duration) -> Io(Offer({})) =
     let start = Duration/now()!;
     let due = Duration/add(start, d);
@@ -731,7 +731,7 @@ pub let after(d: Duration) -> Io(Offer({})) =
                         end)),
             Io/bind(Duration/now(), (t) => Io/pure(Wait/elapsed(Duration/sub(due, t))))));
 
--- | An offer that yields the task's answer once it has one.
+--- An offer that yields the task's answer once it has one.
 pub let joined(@A: Type, task: Task(A)) -> Offer(A) =
     Offer/new(
         Future/poll(task.result),
@@ -746,18 +746,18 @@ let spawn_all(@A: Type, tasks: List(Async(A))) -> Async(List(Task(A))) =
         pure([h, ..rest])
     end;
 
--- | The first of `tasks` to answer, with its index; the others are cancelled. A task abandoned part-way loses whatever it had taken and not yet answered with, which is what abandoning a running computation costs — a selection over `Offer`s takes nothing until it keeps it, and is the way to choose without paying that.
+--- The first of `tasks` to answer, with its index; the others are cancelled. A task abandoned part-way loses whatever it had taken and not yet answered with, which is what abandoning a running computation costs — a selection over `Offer`s takes nothing until it keeps it, and is the way to choose without paying that.
 pub let first(@A: Type, tasks: List(Async(A))) -> Async({Nat, A}) =
     let running = spawn_all(tasks)!;
     let w = select(List/map(running, (t: Task(A)) => joined(t)))!;
     let _ = lift(cancel_all(List/map(running, (t: Task(A)) => t.token)))!;
     pure(w);
 
--- | The first of `tasks` to answer; the others are cancelled.
+--- The first of `tasks` to answer; the others are cancelled.
 pub let race(@A: Type, tasks: List(Async(A))) -> Async(A) =
     map(first(tasks), (w) => w.1);
 
--- | `body`'s answer, or `none` when `d` passes first, in which case `body` is cancelled. An answer that lands after `d` is dropped, which is what a timeout means.
+--- `body`'s answer, or `none` when `d` passes first, in which case `body` is cancelled. An answer that lands after `d` is dropped, which is what a timeout means.
 pub let timeout(@A: Type, d: Duration, body: Async(A)) -> Async(Option(A)) =
     let running = spawn(body)!;
     let timer = lift(after(d))!;

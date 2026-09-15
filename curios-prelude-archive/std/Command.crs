@@ -1,15 +1,15 @@
 use /std/{Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Async, Handle};
 
--- | How a child's standard stream is wired.
+--- How a child's standard stream is wired.
 pub mod Stdio;
 pub use Stdio/{let Stdio};
 
--- | One end of a pipe to the child, read and written as a stream.
+--- One end of a pipe to the child, read and written as a stream.
 pub struct Pipe: Type {
     Handle,
 }
 
--- | A running child, and whichever of its streams were piped.
+--- A running child, and whichever of its streams were piped.
 pub struct Child: Type {
     handle: Handle,
     stdin: Option(Pipe),
@@ -17,23 +17,23 @@ pub struct Child: Type {
     stderr: Option(Pipe),
 }
 
--- | Waiting for a child, ending it, and how it ended.
+--- Waiting for a child, ending it, and how it ended.
 pub mod Child;
 
--- | A program to run, and how to run it.
+--- A program to run, and how to run it.
 pub struct Command: pub Type {
     program: Str,
     args: List(Str),
-    -- | The working directory, or the parent's.
+    --- The working directory, or the parent's.
     cwd: Option(Path),
-    -- | Entries laid over the inherited environment.
+    --- Entries laid over the inherited environment.
     env: List({Str, Str}),
     stdin: Stdio,
     stdout: Stdio,
     stderr: Stdio,
 }
 
--- | `program` with `args`, inheriting the working directory, the environment and every stream.
+--- `program` with `args`, inheriting the working directory, the environment and every stream.
 pub let new(program: Str, args: List(Str)) -> Command =
     Command {
         program = program,
@@ -66,7 +66,7 @@ let pipe(child: Handle, which: Nat, mode: Stdio) -> Try(Io, Io/Error, Option(Han
     | _ => Try/pure(Option/none())
     end;
 
--- | Start `cmd`. Nothing guards the child: `Child/with` is the bracket that kills it when the task around it ends.
+--- Start `cmd`. Nothing guards the child: `Child/with` is the bracket that kills it when the task around it ends.
 pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =
     let r =
         /sys/proc/spawn(
@@ -106,14 +106,14 @@ let capture(
     let exit = Child/wait(child)!;
     Try/pure((exit = exit, stdout = stdout, stderr = stderr));
 
--- | `cmd` run to its end with both outputs captured, and how it ended.
+--- `cmd` run to its end with both outputs captured, and how it ended.
 pub let run(
     cmd: Command,
 ) -> Try(Async, Io/Error, {exit: Child/Exit, stdout: Bytes, stderr: Bytes}) =
     let child = spawn(Command { ..cmd, stdout = Stdio/piped(), stderr = Stdio/piped() })!;
     Child/with(child, capture(child));
 
--- | `cmd` run with its streams as wired, and how it ended.
+--- `cmd` run with its streams as wired, and how it ended.
 pub let status(cmd: Command) -> Try(Async, Io/Error, Child/Exit) =
     let child = spawn(cmd)!;
     Child/with(child, Child/wait(child));

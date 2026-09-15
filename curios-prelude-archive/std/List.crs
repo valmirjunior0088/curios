@@ -3,11 +3,11 @@ pub use /sys/List/{get, len, slice, map, fold};
 use /std/{Nat, Bool, Option, Eq, Str, Show, Spell, Monad, Ordering, Ord};
 use /std/ops/{Eql, Cmp};
 
--- | The element at `i`, or `none` past the end.
+--- The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;
 
--- | Everything from `k` on, under the evidence that `k` is within the length.
+--- Everything from `k` on, under the evidence that `k` is within the length.
 pub let drop(@T: Type, a: List(T), k: Nat, @ok: Nat/Le(k, len(a))) -> List(T) =
     slice(
         @T,
@@ -19,18 +19,18 @@ pub let drop(@T: Type, a: List(T), k: Nat, @ok: Nat/Le(k, len(a))) -> List(T) =
             Eq/sym(Nat/Le/add_sub_cancel(k, len(a), ok)),
             Nat/Le/refl(len(a))));
 
--- | The concatenation, in order.
+--- The concatenation, in order.
 pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
     fold(parts, [], (a, acc) => [..acc, ..a]);
 
--- | The first element `pred` accepts, or `none`.
+--- The first element `pred` accepts, or `none`.
 pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =
     match l
     | [] => Option/none()
     | [h, ..t] => match pred(h) | true => Option/some(h) | false => find(t, pred) end
     end;
 
--- | The index of the first element `pred` accepts, or `none`.
+--- The index of the first element `pred` accepts, or `none`.
 pub let find_index(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(Nat) =
     let go(i: Nat, rest: List(T)) -> Option(Nat) =
         match rest
@@ -39,104 +39,104 @@ pub let find_index(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(Nat) =
         end;
     go(0, l);
 
--- | Whether `pred` accepts some element.
+--- Whether `pred` accepts some element.
 pub let any(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
     match l
     | [] => false
     | [h, ..t] => match pred(h) | true => true | false => any(t, pred) end
     end;
 
--- | Whether `pred` accepts every element.
+--- Whether `pred` accepts every element.
 pub let all(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
     match l
     | [] => true
     | [h, ..t] => match pred(h) | true => all(t, pred) | false => false end
     end;
 
--- | Whether `x` is an element.
+--- Whether `x` is an element.
 pub let contains(@T: Type, use Eql(T), l: List(T), x: T) -> Bool =
     any(l, (y) => y == x);
 
--- | The index of the first `x`, or `none`.
+--- The index of the first `x`, or `none`.
 pub let index_of(@T: Type, use Eql(T), l: List(T), x: T) -> Option(Nat) =
     find_index(l, (y) => y == x);
 
--- | The last element, or `none` of an empty list.
+--- The last element, or `none` of an empty list.
 pub let last(@T: Type, l: List(T)) -> Option(T) =
     match l
     | [] => Option/none()
     | [h, ..t] => match t | [] => Option/some(h) | _ => last(t) end
     end;
 
--- | The longest prefix `pred` accepts.
+--- The longest prefix `pred` accepts.
 pub let take_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
     match l
     | [] => []
     | [h, ..t] => match pred(h) | true => [h, ..take_while(t, pred)] | false => [] end
     end;
 
--- | Everything after the longest prefix `pred` accepts.
+--- Everything after the longest prefix `pred` accepts.
 pub let drop_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
     match l
     | [] => []
     | [h, ..t] => match pred(h) | true => drop_while(t, pred) | false => l end
     end;
 
--- | The first `n` elements, or all of them when there are fewer.
+--- The first `n` elements, or all of them when there are fewer.
 pub let take(@T: Type, l: List(T), n: Nat) -> List(T) =
     match n
     | 0 => []
     | k + 1 => match l | [] => [] | [h, ..t] => [h, ..take(t, k)] end
     end;
 
--- | Pairs, position by position, as long as the shorter list.
+--- Pairs, position by position, as long as the shorter list.
 pub let zip(@A: Type, @B: Type, a: List(A), b: List(B)) -> List({A, B}) =
     match a
     | [] => []
     | [x, ..xs] => match b | [] => [] | [y, ..ys] => [(x, y), ..zip(xs, ys)] end
     end;
 
--- | The elements in reverse order.
+--- The elements in reverse order.
 pub let reverse(@T: Type, l: List(T)) -> List(T) =
     fold(l, [], (x, acc) => [x, ..acc]);
 
--- | The elements `pred` accepts.
+--- The elements `pred` accepts.
 pub let filter(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
     fold(l, [], (x, acc) => match pred(x) | true => [..acc, x] | false => acc end);
 
--- | `f` on every element, keeping the values it answers.
+--- `f` on every element, keeping the values it answers.
 pub let filter_map(@T: Type, @B: Type, l: List(T), f: (T) -> Option(B)) -> List(B) =
     fold(l, [], (x, acc) => match f(x) | some(y) => [..acc, y] | none() => acc end);
 
--- | The elements `pred` accepts, and the rest.
+--- The elements `pred` accepts, and the rest.
 pub let partition(@T: Type, l: List(T), pred: (T) -> Bool) -> {List(T), List(T)} =
     let empty: {List(T), List(T)} = ([], []);
     fold(l, empty, (x, (yes, no)) =>
         match pred(x) | true => ([..yes, x], no) | false => (yes, [..no, x]) end);
 
--- | The firsts and the seconds.
+--- The firsts and the seconds.
 pub let unzip(@A: Type, @B: Type, l: List({A, B})) -> {List(A), List(B)} =
     let empty: {List(A), List(B)} = ([], []);
     fold(l, empty, ((x, y), (xs, ys)) => ([..xs, x], [..ys, y]));
 
--- | `lo` up to and excluding `hi`; empty when `hi` is not above `lo`.
+--- `lo` up to and excluding `hi`; empty when `hi` is not above `lo`.
 pub let range(lo: Nat, hi: Nat) -> List(Nat) =
     let go(k: Nat, i: Nat) -> List(Nat) = match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;
     go(hi - lo, lo);
 
--- | `n` copies of `x`.
+--- `n` copies of `x`.
 pub let replicate(@T: Type, n: Nat, x: T) -> List(T) =
     match n | 0 => [] | _ + 1; acc => [x, ..acc] end;
 
--- | `f` on every element, the results concatenated.
+--- `f` on every element, the results concatenated.
 pub let concat_map(@T: Type, @B: Type, l: List(T), f: (T) -> List(B)) -> List(B) =
     fold(l, [], (x, acc) => [..acc, ..f(x)]);
 
--- | `sep` between each pair of elements.
+--- `sep` between each pair of elements.
 pub let intersperse(@T: Type, l: List(T), sep: T) -> List(T) =
     match l | [] => [] | [h, ..t] => [h, ..fold(t, [], (x, acc) => [..acc, sep, x])] end;
 
--- | `f` on every element in order under the monad, the results collected.
+--- `f` on every element in order under the monad, the results collected.
 pub let traverse(
     @M: (Type) -> Type,
     @T: Type,
@@ -153,7 +153,7 @@ pub let traverse(
         Monad/pure([b, ..bs])
     end;
 
--- | `f` on every element in order under the monad, for its effect.
+--- `f` on every element in order under the monad, for its effect.
 pub let each(@M: (Type) -> Type, @T: Type, use Monad(M), l: List(T), f: (T) -> M({})) -> M({}) =
     match l
     | [] => Monad/pure(())
@@ -168,17 +168,17 @@ let insert_by(@T: Type, x: T, sorted: List(T), cmp: (T, T) -> Ordering) -> List(
     | [h, ..t] => match cmp(x, h) | gt() => [h, ..insert_by(x, t, cmp)] | _ => [x, h, ..t] end
     end;
 
--- | A stable sort by `cmp`.
+--- A stable sort by `cmp`.
 pub let sort_by(@T: Type, l: List(T), cmp: (T, T) -> Ordering) -> List(T) =
     match l | [] => [] | [h, .._]; sorted => insert_by(h, sorted, cmp) end;
 
--- | A stable sort by `T`'s order.
+--- A stable sort by `T`'s order.
 pub let sort(@T: Type, use Ord(T), l: List(T)) -> List(T) =
     sort_by(l, (a, b) => Ord/ord(a, b));
 
--- | `n` singles combined as a balanced tree, so `combine` nests to a depth of `log2(n)` rather than `n`.
--- |
--- | The walk halves an interval, which no structural descent shows, so it descends on a fuel instead: `n` levels, of which a logarithmic number are ever spent, so the count changes no answer and is what lets the function stand in a type.
+--- `n` singles combined as a balanced tree, so `combine` nests to a depth of `log2(n)` rather than `n`.
+---
+--- The walk halves an interval, which no structural descent shows, so it descends on a fuel instead: `n` levels, of which a logarithmic number are ever spent, so the count changes no answer and is what lets the function stand in a type.
 pub let balanced(@A: Type, n: Nat, empty: A, single: (Nat) -> A, combine: (A, A) -> A) -> A =
     let go(fuel: Nat, lo: Nat, hi: Nat) -> A =
         match fuel
@@ -216,7 +216,7 @@ satisfy Monad(List) {
     bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)]),
 }
 
--- | Lexicographic, a proper prefix first.
+--- Lexicographic, a proper prefix first.
 pub let cmp(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Ordering =
     match a
     | [] => match b | [] => Ordering/eq() | _ => Ordering/lt() end

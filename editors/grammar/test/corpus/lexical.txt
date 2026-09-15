@@ -182,6 +182,28 @@ x -- trailing
   (comment))
 
 ================================================================================
+A documentation comment is a comment to the grammar
+================================================================================
+
+--- Nothing yet.
+---
+--- The additive identity.
+pub let zero: Nat = 0;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (comment)
+  (comment)
+  (comment)
+  (let_item
+    (let_member
+      (identifier)
+      (path
+        (identifier))
+      (number))))
+
+================================================================================
 Contextual words stay identifiers outside their positions
 ================================================================================
 

@@ -6,52 +6,52 @@ use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat
     True};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
--- | That `b` is eight bytes long, decided.
+--- That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
     Bool/Holds(Nat/eql(Bytes/len(b), 8));
 
--- | Positive infinity.
+--- Positive infinity.
 pub let pos_inf: Flt =
     div(+1.0, +0.0);
 
--- | Negative infinity.
+--- Negative infinity.
 pub let neg_inf: Flt =
     div(-1.0, +0.0);
 
--- | The one NaN, with a fixed bit pattern.
+--- The one NaN, with a fixed bit pattern.
 pub let nan: Flt =
     of_le_bytes(x[0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xF8, 0x7F]);
 
--- | Whether `f` is a number: neither infinity nor the NaN.
+--- Whether `f` is a number: neither infinity nor the NaN.
 pub let is_finite(f: Flt) -> Bool =
     f > neg_inf && f < pos_inf;
 
--- | The float whose little-endian bytes these are, or `none` unless there are exactly eight.
+--- The float whose little-endian bytes these are, or `none` unless there are exactly eight.
 pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
     match Nat/eql(Bytes/len(b), 8): (_) => Option(Flt)
     | true => Option/some(of_le_bytes(b, @True/qed()))
     | false => Option/none()
     end;
 
--- | The procedure that decides `Finite(f)`: the evidence when `f` is a number, `none` otherwise.
+--- The procedure that decides `Finite(f)`: the evidence when `f` is a number, `none` otherwise.
 pub let finite(f: Flt) -> Option(Finite(f)) =
     match neg_inf < f && f < pos_inf: (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
--- | The procedure that decides `NonNeg(f)`: the evidence when `f` is a non-negative number, `none` otherwise. `-0.0` qualifies.
+--- The procedure that decides `NonNeg(f)`: the evidence when `f` is a non-negative number, `none` otherwise. `-0.0` qualifies.
 pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
     match f >= +0.0 && f < pos_inf: (r) => Option(Bool/Holds(r))
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
--- | `f` truncated toward zero, or `none` unless it is a non-negative number.
+--- `f` truncated toward zero, or `none` unless it is a non-negative number.
 pub let try_to_nat(f: Flt) -> Option(Nat) =
     match non_neg(f) | some(ok) => Option/some(to_nat(f, @ok)) | none() => Option/none() end;
 
--- | `f` truncated toward zero, or `none` unless it is a number.
+--- `f` truncated toward zero, or `none` unless it is a number.
 pub let try_to_int(f: Flt) -> Option(Int) =
     match finite(f) | some(ok) => Option/some(to_int(f, @ok)) | none() => Option/none() end;
 
@@ -170,11 +170,11 @@ let render(f_mant: BigNat, exp_field: Nat, even: Bool) -> Str =
     | false => layout(digits_to_str(norm), k2)
     end;
 
--- | The order of the two, with a NaN answering `gt` against everything.
+--- The order of the two, with a NaN answering `gt` against everything.
 pub let cmp(x: Flt, y: Flt) -> Ordering =
     choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
--- | The shortest decimal that reads back as `f`, always signed: `+2.5`, `-0`, `+inf`, `-inf` or `NaN`.
+--- The shortest decimal that reads back as `f`, always signed: `+2.5`, `-0`, `+inf`, `-inf` or `NaN`.
 pub let to_str(f: Flt) -> Str =
     let b = to_le_bytes(f);
     let at = (i: Nat) => Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, i), 0));
@@ -200,7 +200,7 @@ pub let to_str(f: Flt) -> Str =
         Str/concat(sign, render(f_mant, exp_field, even))
     end;
 
--- | Ten to the power `n`, as a float.
+--- Ten to the power `n`, as a float.
 pub let pow10(n: Nat) -> Flt =
     match n | 0 => +1.0 | _ + 1; ih => ih * +10.0 end;
 
@@ -218,7 +218,7 @@ let digits_big(s: Str) -> Option(BigNat) =
             | false => Option/none()
             end);
 
--- | `base` to the `n`, by squaring. Linear repetition would cost up to 1074 multiplications per call at this format's exponent range, and each step here is exact: every power of two below the overflow threshold is representable, so no intermediate rounds.
+--- `base` to the `n`, by squaring. Linear repetition would cost up to 1074 multiplications per call at this format's exponent range, and each step here is exact: every power of two below the overflow threshold is representable, so no intermediate rounds.
 let pow_by_squaring(base: Flt, n: Nat) -> Flt =
     match n == 0
     | true => +1.0
@@ -228,16 +228,16 @@ let pow_by_squaring(base: Flt, n: Nat) -> Flt =
         match n % 2 == 1 | true => square * base | false => square end
     end;
 
--- | Two to the `e`. A negative exponent halves rather than taking a reciprocal, because `1.0 / two_pow(1074)` divides by an infinity and answers zero.
+--- Two to the `e`. A negative exponent halves rather than taking a reciprocal, because `1.0 / two_pow(1074)` divides by an infinity and answers zero.
 let two_pow(e: Int) -> Flt =
     let mag = Int/abs(e);
     match e >= +0 | true => pow_by_squaring(+2.0, mag) | false => pow_by_squaring(+0.5, mag) end;
 
--- | `x` shifted right `k` places.
+--- `x` shifted right `k` places.
 let shr_big(x: BigNat, k: Nat) -> BigNat =
     match k | 0 => x | _ + 1; ih => BigNat/div2(ih) end;
 
--- | The low `width` bits of `m`, as a `Nat`. Every caller keeps `width` under the carrier's own, so the answer always fits.
+--- The low `width` bits of `m`, as a `Nat`. Every caller keeps `width` under the carrier's own, so the answer always fits.
 let low_bits(m: BigNat, width: Nat) -> Nat =
     match width
     | 0 => 0
@@ -246,7 +246,7 @@ let low_bits(m: BigNat, width: Nat) -> Nat =
         head + 2 * low_bits(BigNat/div2(m), w)
     end;
 
--- | A significand of at most 53 bits as a float, in three limbs no wider than the `Nat` carrier. Each limb converts exactly and each scale is a power of two, so the sum is exact whenever the significand is.
+--- A significand of at most 53 bits as a float, in three limbs no wider than the `Nat` carrier. Each limb converts exactly and each scale is a power of two, so the sum is exact whenever the significand is.
 let big_to_flt(m: BigNat) -> Flt =
     let above18 = shr_big(m, 18);
     Nat/to_flt(low_bits(shr_big(above18, 18), 17)) * two_pow(+36)
@@ -297,7 +297,7 @@ let assemble(q: BigNat, sticky: Bool, s: Int) -> Flt =
         end
     end;
 
--- | The float nearest to `d` times ten to the `e`, correctly rounded with ties to even, negated when `negative`. `digits` is how many decimal digits spelled `d`, leading zeros included.
+--- The float nearest to `d` times ten to the `e`, correctly rounded with ties to even, negated when `negative`. `digits` is how many decimal digits spelled `d`, leading zeros included.
 pub let of_decimal(negative: Bool, d: BigNat, e: Int, digits: Nat) -> Flt =
     let magnitude =
         choose
@@ -333,7 +333,7 @@ let exponent_of(s: Str, e_pos: Nat, len: Nat) -> Option(Int) =
     | false => Option/some(+0)
     end;
 
--- | The float a decimal spells: an optional sign, digits with an optional point, and an optional `e` exponent, correctly rounded. `none` for any other text.
+--- The float a decimal spells: an optional sign, digits with an optional point, and an optional `e` exponent, correctly rounded. `none` for any other text.
 pub let of_str(s: Str) -> Option(Flt) =
     match Str/is_empty(s)
     | true => Option/none()
@@ -389,13 +389,13 @@ satisfy Mul(Flt) {
     mul = mul,
 }
 
--- | No precondition: IEEE division is total.
+--- No precondition: IEEE division is total.
 satisfy Div(Flt) {
     Ok(_) = True,
     div(a, b) = div(a, b),
 }
 
--- | No precondition: IEEE remainder is total.
+--- No precondition: IEEE remainder is total.
 satisfy Rem(Flt) {
     Ok(_) = True,
     rem(a, b) = rem(a, b),
@@ -405,7 +405,7 @@ satisfy Show(Flt) {
     show = to_str,
 }
 
--- | A finite value spells as a literal, the sign dropped and a point added where `to_str` wrote none; the non-finite values spell as their names here.
+--- A finite value spells as a literal, the sign dropped and a point added where `to_str` wrote none; the non-finite values spell as their names here.
 satisfy Spell(Flt) {
     spell(f) =
         choose

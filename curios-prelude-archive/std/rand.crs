@@ -1,5 +1,5 @@
 use /std/{Nat, Bytes, Io};
 
--- | `n` bytes from the operating system's generator.
+--- `n` bytes from the operating system's generator.
 pub let bytes(n: Nat) -> Io(Bytes) =
     /sys/rand/bytes(n);

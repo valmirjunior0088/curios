@@ -1,44 +1,44 @@
 use /std/{Nat, Int, Flt, Bool, Str, List, Map};
 
--- | A calendar date, and the bound its fields carry.
+--- A calendar date, and the bound its fields carry.
 pub mod Date;
 pub use Date/{let Date};
 
--- | A time of day, and the bound its fields carry.
+--- A time of day, and the bound its fields carry.
 pub mod Time;
 pub use Time/{let Time};
 
--- | A moment at an offset from UTC, and the bound that offset carries.
+--- A moment at an offset from UTC, and the bound that offset carries.
 pub mod OffsetDateTime;
 pub use OffsetDateTime/{let OffsetDateTime};
 
--- | A date and time with no offset.
+--- A date and time with no offset.
 pub struct LocalDateTime: pub Type {
     date: Date,
     time: Time,
 }
 
--- | A TOML value.
+--- A TOML value.
 pub induct Toml: pub Type
--- | A string.
+--- A string.
 | str(Str)
--- | An integer.
+--- An integer.
 | int(Int)
--- | A float.
+--- A float.
 | flt(Flt)
--- | `true` or `false`.
+--- `true` or `false`.
 | bool(Bool)
--- | A date and time with an offset from UTC.
+--- A date and time with an offset from UTC.
 | offset_date_time(OffsetDateTime)
--- | A date and time with no offset.
+--- A date and time with no offset.
 | local_date_time(LocalDateTime)
--- | A date alone.
+--- A date alone.
 | local_date(Date)
--- | A time of day alone.
+--- A time of day alone.
 | local_time(Time)
--- | An array, in order.
+--- An array, in order.
 | arr(List(Toml))
--- | A table, by key.
+--- A table, by key.
 | table(Map(Toml))
 end
 
@@ -63,7 +63,7 @@ struct Build: Type {
     scope: List(Seg),
 }
 
--- | Why a document did not decode or a table did not encode.
+--- Why a document did not decode or a table did not encode.
 pub mod Error;
 pub use Error/{let Error};
 

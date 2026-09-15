@@ -9,7 +9,7 @@ let resolved_address(h: Handle) -> Async(Result(Io/Error, Bytes)) =
     | none() => Async/pure(Result/success(Option/unwrap_or(List/try_get(a.addresses, 0), x[])))
     end;
 
--- | The first address `host` resolves to, with `port`, as the socket operations take it. The lookup parks the fiber.
+--- The first address `host` resolves to, with `port`, as the socket operations take it. The lookup parks the fiber.
 pub let resolve(host: Str, port: Nat) -> Try(Async, Io/Error, Bytes) =
     let r = /sys/dns/lookup(Str/to_bytes(host), port)!;
     match Io/Error/of(r.status)

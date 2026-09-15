@@ -42,8 +42,8 @@ fn project(name: &str) -> PathBuf {
         "lib.crs",
         concat!(
             "use /std/{Nat};\n\n",
-            "-- | Points.\npub mod geometry;\n\n",
-            "-- | A shape.\npub induct Shape: pub Type\n| circle(Nat)\nend\n\n",
+            "--- Points.\npub mod geometry;\n\n",
+            "--- A shape.\npub induct Shape: pub Type\n| circle(Nat)\nend\n\n",
             "pub let area(s: Shape) -> Nat =\n    match s | circle(r) => r * r end;\n",
         ),
     );

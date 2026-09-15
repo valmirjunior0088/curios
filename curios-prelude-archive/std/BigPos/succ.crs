@@ -7,6 +7,6 @@ let raw_cons(x: Bits) -> is_cons(BigNat/succ/raw(x)) =
     | b[xh, .._] => match xh | true => True/qed() | false => True/qed() end
     end;
 
--- | The successor.
+--- The successor.
 pub let succ(p: BigPos) -> BigPos =
     BigPos { value = BigNat/succ/succ(p.value), non_zero = raw_cons(p.value.bits) };

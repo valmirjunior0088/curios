@@ -28,7 +28,7 @@ let raw_trim_cons(
         end
     end;
 
--- | The product.
+--- The product.
 pub let mul(p: BigPos, q: BigPos) -> BigPos =
     BigPos {
         value = p.value * q.value,
@@ -42,15 +42,15 @@ pub let mul(p: BigPos, q: BigPos) -> BigPos =
                 q.non_zero),
     };
 
--- | Commutativity.
+--- Commutativity.
 pub let comm(p: BigPos, q: BigPos) -> Eq(mul(p, q), mul(q, p)) =
     BigPos/eq(mul(p, q), mul(q, p), BigNat/mul/comm(p.value, q.value));
 
--- | Associativity.
+--- Associativity.
 pub let assoc(p: BigPos, q: BigPos, r: BigPos) -> Eq(mul(mul(p, q), r), mul(p, mul(q, r))) =
     BigPos/eq(mul(mul(p, q), r), mul(p, mul(q, r)), BigNat/mul/assoc(p.value, q.value, r.value));
 
--- | Left distributivity over addition.
+--- Left distributivity over addition.
 pub let distrib_l(
     p: BigPos,
     q: BigPos,

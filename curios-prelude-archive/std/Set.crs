@@ -2,44 +2,44 @@ use /std/{Nat, Bool, Str, List, Map, Show, Spell};
 use /std/ops/{Eql};
 use /std/Map/{Key};
 
--- | A set of keys.
+--- A set of keys.
 pub struct Set(K: Type): Type {
     map: Map(K),
 }
 
--- | The empty set.
+--- The empty set.
 pub let empty(@K: Type) -> Set(K) =
     Set { map = Map/empty() };
 
--- | How many elements.
+--- How many elements.
 pub let len(@K: Type, s: Set(K)) -> Nat =
     Map/len(s.map);
 
--- | Whether `k` is an element.
+--- Whether `k` is an element.
 pub let has(@K: Type, use Key(K), s: Set(K), k: K) -> Bool =
     Map/has(s.map, k);
 
--- | `s` with `k`.
+--- `s` with `k`.
 pub let insert(@K: Type, use Key(K), s: Set(K), k: K) -> Set(K) =
     Set { map = Map/insert(s.map, k, k) };
 
--- | `s` without `k`; unchanged when absent.
+--- `s` without `k`; unchanged when absent.
 pub let remove(@K: Type, use Key(K), s: Set(K), k: K) -> Set(K) =
     Set { map = Map/remove(s.map, k) };
 
--- | Over the elements in the order of their encoded keys, with `f(elem, acc)`.
+--- Over the elements in the order of their encoded keys, with `f(elem, acc)`.
 pub let fold(@K: Type, @A: Type, s: Set(K), init: A, f: (K, A) -> A) -> A =
     Map/fold(s.map, init, (_, k, acc) => f(k, acc));
 
--- | The elements, in the order of their encoded keys.
+--- The elements, in the order of their encoded keys.
 pub let to_list(@K: Type, s: Set(K)) -> List(K) =
     Map/values(s.map);
 
--- | The set of the elements of `l`.
+--- The set of the elements of `l`.
 pub let of(@K: Type, use Key(K), l: List(K)) -> Set(K) =
     List/fold(l, empty(), (k, acc) => insert(acc, k));
 
--- | Every element of either.
+--- Every element of either.
 pub let union(@K: Type, a: Set(K), b: Set(K)) -> Set(K) =
     Set { map = Map/union(a.map, b.map) };
 

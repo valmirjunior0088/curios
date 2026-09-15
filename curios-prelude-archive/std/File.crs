@@ -1,21 +1,21 @@
 use /std/{Bytes, Nat, Path, Try, Async, Io, Handle};
 
--- | An open file.
+--- An open file.
 pub struct File: Type {
     Handle,
 }
 
--- | How a file is opened: to read, to write from the start, or to append.
+--- How a file is opened: to read, to write from the start, or to append.
 pub induct Mode: pub Type
--- | Opened to read.
+--- Opened to read.
 | read()
--- | Opened to write from the start.
+--- Opened to write from the start.
 | write()
--- | Opened to write after what is there.
+--- Opened to write after what is there.
 | append()
 end
 
--- | The host's code for `mode`.
+--- The host's code for `mode`.
 pub let of_mode(mode: Mode) -> Nat =
     match mode
     | read() => /sys/open_mode/read
@@ -23,7 +23,7 @@ pub let of_mode(mode: Mode) -> Nat =
     | append() => /sys/open_mode/append
     end;
 
--- | The file at `path`, opened in `mode`.
+--- The file at `path`, opened in `mode`.
 pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
     let r = /sys/file/open(Path/to_bytes(path), of_mode(mode))!;
     match Io/Error/of(r.status)
@@ -31,15 +31,15 @@ pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
     | none() => Try/pure(File { r.handle })
     end;
 
--- | Close `f`.
+--- Close `f`.
 pub let close(f: File) -> Io({}) =
     Handle/close(f.0);
 
--- | Up to `n` bytes.
+--- Up to `n` bytes.
 pub let read(f: File, n: Nat) -> Io(Io/Chunk) =
     Async/Read/read(f.0, n);
 
--- | The whole of `b`, a short write resent.
+--- The whole of `b`, a short write resent.
 pub let write(f: File, b: Bytes) -> Try(Io, Io/Error, {}) =
     Try/attempt(Async/Write/write(f.0, b));
 
@@ -59,7 +59,7 @@ satisfy Async/Write(Async, File) {
     write(f, b) = Async/lift(Try/run(write(f, b))),
 }
 
--- | `body` over the file at `path`, closed whichever way the body ends; the body's own failure is the answer after the close.
+--- `body` over the file at `path`, closed whichever way the body ends; the body's own failure is the answer after the close.
 pub let with(
     @A: Type,
     path: Path,
@@ -76,7 +76,7 @@ pub let with(
     let _ = close(f)!;
     Try/pure(a);
 
--- | The same bracket inside a fiber, registered with the scheduler, so a cancelled task closes the file.
+--- The same bracket inside a fiber, registered with the scheduler, so a cancelled task closes the file.
 pub let with_async(
     @A: Type,
     path: Path,
@@ -98,10 +98,10 @@ let read_to_end(f: File) -> Try(Io, Io/Error, Bytes) =
         end;
     go(x[]);
 
--- | The whole file at `path`.
+--- The whole file at `path`.
 pub let read_all(path: Path) -> Try(Io, Io/Error, Bytes) =
     with(path, Mode/read(), read_to_end);
 
--- | `b` as the whole file at `path`: created if absent, replaced if present.
+--- `b` as the whole file at `path`: created if absent, replaced if present.
 pub let write_all(path: Path, b: Bytes) -> Try(Io, Io/Error, {}) =
     with(path, Mode/write(), (f) => write(f, b));

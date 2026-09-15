@@ -21,11 +21,11 @@ let days_in(year: Nat, month: Nat) -> Nat =
 let sound(year: Nat, month: Nat, day: Nat) -> Bool =
     year <= 9999 && Nat/in_range(month, 1, 12) && Nat/in_range(day, 1, days_in(year, month));
 
--- | That the three spell a day: a year of at most four digits, a month of the year, and a day the month has.
+--- That the three spell a day: a year of at most four digits, a month of the year, and a day the month has.
 pub let Valid(year: Nat, month: Nat, day: Nat) -> Prop =
     Bool/Holds(sound(year, month, day));
 
--- | A calendar date.
+--- A calendar date.
 pub struct Date: pub Type {
     year: Nat,
     month: Nat,
@@ -33,7 +33,7 @@ pub struct Date: pub Type {
     ok: Valid(year, month, day),
 }
 
--- | The date, under the evidence that the three spell one.
+--- The date, under the evidence that the three spell one.
 pub let of(year: Nat, month: Nat, day: Nat, @ok: Valid(year, month, day)) -> Date =
     Date { year = year, month = month, day = day, ok = ok };
 
@@ -43,7 +43,7 @@ let try_valid(year: Nat, month: Nat, day: Nat) -> Option(Valid(year, month, day)
     | false => Option/none()
     end;
 
--- | The date, decided: `none` where the three spell no day.
+--- The date, decided: `none` where the three spell no day.
 pub let try_of(year: Nat, month: Nat, day: Nat) -> Option(Date) =
     match try_valid(year, month, day)
     | some(ok) => Option/some(of(year, month, day, @ok))

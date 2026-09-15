@@ -4,15 +4,15 @@ pub use /sys/{Holds};
 use /std/{Str, Option, Eq, False, True, Show, Spell, Ordering, Ord};
 use /std/ops/{Eql, Or, And, Cmp};
 
--- | The other value.
+--- The other value.
 pub let not(b: Bool) -> Bool =
     xor(b, true);
 
--- | `true` or `false`, as written.
+--- `true` or `false`, as written.
 pub let to_str(b: Bool) -> Str =
     match b | true => "true" | false => "false" end;
 
--- | The value `to_str` writes, or `none` for any other text.
+--- The value `to_str` writes, or `none` for any other text.
 pub let of_str(s: Str) -> Option(Bool) =
     choose
     | s == "true" => Option/some(true)
@@ -20,18 +20,18 @@ pub let of_str(s: Str) -> Option(Bool) =
     | _ => Option/none()
     end;
 
--- | `false` and `true` are distinct: the absurdity every decision procedure over a `Bool` discharges its impossible arm with.
+--- `false` and `true` are distinct: the absurdity every decision procedure over a `Bool` discharges its impossible arm with.
 pub let false_neq_true(p: Eq(false, true)) -> False =
     Eq/subst((b: Bool) => match b | true => False | false => True end, p, True/qed());
 
--- | The decision as an equation: `Holds(b)` says `b` is `true`, and this says it the way `Eq/subst` rewrites with. By cases on `b`, since `Holds` reduces at each.
+--- The decision as an equation: `Holds(b)` says `b` is `true`, and this says it the way `Eq/subst` rewrites with. By cases on `b`, since `Holds` reduces at each.
 pub let eq_of_holds(b: Bool, h: Holds(b)) -> Eq(b, true) =
     match b
     | true => Eq/refl()
     | false => match h end
     end;
 
--- | The equation as the decision, back: `True/qed()` carried along the equation read the other way.
+--- The equation as the decision, back: `True/qed()` carried along the equation read the other way.
 pub let holds_of_eq(b: Bool, p: Eq(b, true)) -> Holds(b) =
     Eq/subst((x: Bool) => Holds(x), Eq/sym(p), True/qed());
 
@@ -56,7 +56,7 @@ satisfy Spell(Bool) {
     spell = to_str,
 }
 
--- | `false` below `true`.
+--- `false` below `true`.
 pub let cmp(a: Bool, b: Bool) -> Ordering =
     match a
     | false => match b | false => Ordering/eq() | true => Ordering/lt() end

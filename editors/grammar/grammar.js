@@ -49,8 +49,8 @@ module.exports = grammar({
     // An entrypoint is items then one final term; a module file is items only.
     source_file: ($) => seq(repeat($._item), optional($._term)),
 
-    // A comment opens with `-- `, with the space, or is a bare `--` ending its line, as the compiler reads it; `--glued` is not one, so a line the compiler refuses is not painted as a comment.
-    comment: (_) => token(choice(seq("-- ", /.*/), "--")),
+    // A comment opens with `-- `, with the space, or is a bare `--` ending its line, as the compiler reads it; `--glued` is not one, so a line the compiler refuses is not painted as a comment. A documentation comment opens with `--- ` or is a bare `---`.
+    comment: (_) => token(choice(seq("--- ", /.*/), "---", seq("-- ", /.*/), "--")),
 
     // ---- Items ----
 

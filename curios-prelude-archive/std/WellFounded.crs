@@ -1,17 +1,17 @@
 use /std/{Nat};
 use /std/Nat/{Le};
 
--- | `x` is accessible under `R`: everything below it is.
+--- `x` is accessible under `R`: everything below it is.
 pub induct Accessible(@A: Type, R: (A, A) -> Prop): (A) -> pub Prop
--- | Everything below `x` is accessible, so `x` is.
+--- Everything below `x` is accessible, so `x` is.
 | intro(@x: A, below: (y: A, r: R(y, x)) -> Accessible(R, y)): (x)
 end
 
--- | Every element is accessible under `R`.
+--- Every element is accessible under `R`.
 pub let WellFounded(@A: Type, R: (A, A) -> Prop) -> Prop =
     (x: A) -> Accessible(R, x);
 
--- | The fixpoint over accessibility: the step may assume `P` at every `y` below `x`.
+--- The fixpoint over accessibility: the step may assume `P` at every `y` below `x`.
 pub let recurse(
     @A: Type,
     @R: (A, A) -> Prop,
@@ -34,6 +34,6 @@ let lt_below(k: Nat, n: Nat, le: Le(n, k)) -> Accessible((a: Nat, b: Nat) => Nat
         Accessible/intro((m, lt) => lt_below(kp, m, Le/trans(Nat/Lt/le_succ_of_lt(m, n, lt), le)))
     end;
 
--- | `<` on `Nat` is well-founded.
+--- `<` on `Nat` is well-founded.
 pub let lt: WellFounded((a: Nat, b: Nat) => Nat/Lt(a, b)) =
     (n) => lt_below(n, n, Le/refl(n));

@@ -1,39 +1,39 @@
 use /std/{Nat, Bool, Char, Spell};
 use /std/ops/{Eql};
 
--- | A character, or a named key. The End key is `end_key`, since `end` is a reserved word.
+--- A character, or a named key. The End key is `end_key`, since `end` is a reserved word.
 pub induct Code: pub Type
--- | A character key.
+--- A character key.
 | char(Char)
--- | Enter.
+--- Enter.
 | enter()
--- | Escape.
+--- Escape.
 | escape()
--- | Backspace.
+--- Backspace.
 | backspace()
--- | Tab.
+--- Tab.
 | tab()
--- | Delete.
+--- Delete.
 | delete()
--- | Insert.
+--- Insert.
 | insert()
--- | The up arrow.
+--- The up arrow.
 | up()
--- | The down arrow.
+--- The down arrow.
 | down()
--- | The left arrow.
+--- The left arrow.
 | left()
--- | The right arrow.
+--- The right arrow.
 | right()
--- | Home.
+--- Home.
 | home()
--- | End.
+--- End.
 | end_key()
--- | Page Up.
+--- Page Up.
 | page_up()
--- | Page Down.
+--- Page Down.
 | page_down()
--- | A function key, by its number.
+--- A function key, by its number.
 | f(Nat)
 end
 
@@ -43,7 +43,7 @@ satisfy Eql(Code);
 
 satisfy Spell(Code);
 
--- | A code and its modifiers.
+--- A code and its modifiers.
 pub struct Key: pub Type {
     code: Code,
     shift: Bool,
@@ -55,14 +55,14 @@ satisfy Eql(Key);
 
 satisfy Spell(Key);
 
--- | `code` with no modifier.
+--- `code` with no modifier.
 pub let plain(code: Code) -> Key =
     Key { code = code, shift = false, alt = false, ctrl = false };
 
--- | `code` with Ctrl.
+--- `code` with Ctrl.
 pub let with_ctrl(code: Code) -> Key =
     Key { code = code, shift = false, alt = false, ctrl = true };
 
--- | `code` with Alt.
+--- `code` with Alt.
 pub let with_alt(code: Code) -> Key =
     Key { code = code, shift = false, alt = true, ctrl = false };

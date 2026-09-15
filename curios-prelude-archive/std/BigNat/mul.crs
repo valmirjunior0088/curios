@@ -2,7 +2,7 @@ use /std/{Nat, Bool, Bits, Eq};
 use /std/BigNat/{BigNat, combine, cong_combine, dbl, dbl_raw, eq, is_trimmed_of_canonical, maj3,
     of_bits, of_nat, refl_at, trim, trim_is_trimmed, trim_of_trimmed, xor3, mod add};
 
--- | The product of two words, untrimmed.
+--- The product of two words, untrimmed.
 pub let raw(x: Bits, y: Bits) -> Bits =
     match x
     | b[] => b[]
@@ -10,15 +10,15 @@ pub let raw(x: Bits, y: Bits) -> Bits =
         match xh | true => add/raw(y, b[0, ..raw(xt, y)], false) | false => b[0, ..raw(xt, y)] end
     end;
 
--- | The product.
+--- The product.
 pub let mul(a: BigNat, b: BigNat) -> BigNat =
     of_bits(raw(a.bits, b.bits));
 
--- | `a` times two to the `k`.
+--- `a` times two to the `k`.
 pub let pow2(a: BigNat, k: Nat) -> BigNat =
     match k | 0 => a | _ + 1; ih => dbl(ih) end;
 
--- | `a` times the machine natural `c`.
+--- `a` times the machine natural `c`.
 pub let small(a: BigNat, c: Nat) -> BigNat =
     mul(a, of_nat(c));
 
@@ -166,7 +166,7 @@ let trim_zero_r(y: Bits) -> Eq(trim(raw(y, b[])), b[]) =
         end
     end;
 
--- | Multiplying by one trims to the same word.
+--- Multiplying by one trims to the same word.
 pub let trim_one_r(x: Bits) -> Eq(trim(raw(x, b[1])), trim(x)) =
     match x
     | b[] => Eq/refl()
@@ -178,7 +178,7 @@ pub let trim_one_r(x: Bits) -> Eq(trim(raw(x, b[1])), trim(x)) =
         end
     end;
 
--- | A zero low bit on the right shifts the product.
+--- A zero low bit on the right shifts the product.
 pub let trim_bit0_r(x: Bits, y: Bits) -> Eq(trim(raw(x, b[0, ..y])), trim(b[0, ..raw(x, y)])) =
     match x
     | b[] => Eq/refl()
@@ -189,7 +189,7 @@ pub let trim_bit0_r(x: Bits, y: Bits) -> Eq(trim(raw(x, b[0, ..y])), trim(b[0, .
         end
     end;
 
--- | A one low bit on the right adds the left operand to the shifted product.
+--- A one low bit on the right adds the left operand to the shifted product.
 pub let trim_bit1_r(
     x: Bits,
     y: Bits,
@@ -216,7 +216,7 @@ pub let trim_bit1_r(
         end
     end;
 
--- | `raw` is commutative up to trim.
+--- `raw` is commutative up to trim.
 pub let trim_comm(x: Bits, y: Bits) -> Eq(trim(raw(x, y)), trim(raw(y, x))) =
     match x
     | b[] => Eq/sym(trim_zero_r(y))
@@ -248,7 +248,7 @@ let add_raw_medial(
                     add/cong_raw_r(a, add/raw_assoc(c, b, d, false, false), false),
                     Eq/sym(add/raw_assoc(a, c, add/raw(b, d, false), false, false))))));
 
--- | Left distributivity up to trim.
+--- Left distributivity up to trim.
 pub let trim_distrib_l(
     x: Bits,
     y: Bits,
@@ -269,7 +269,7 @@ pub let trim_distrib_l(
         end
     end;
 
--- | Right distributivity up to trim.
+--- Right distributivity up to trim.
 pub let trim_distrib_r(
     x: Bits,
     y: Bits,
@@ -283,7 +283,7 @@ pub let trim_distrib_r(
                 trim_add_raw_l_cong(trim_comm(x, y), raw(x, z), false),
                 trim_add_raw_r_cong(raw(y, x), trim_comm(x, z), false))));
 
--- | Associativity up to trim.
+--- Associativity up to trim.
 pub let trim_assoc(
     x: Bits,
     y: Bits,
@@ -301,11 +301,11 @@ pub let trim_assoc(
         end
     end;
 
--- | Commutativity.
+--- Commutativity.
 pub let comm(a: BigNat, b: BigNat) -> Eq(mul(a, b), mul(b, a)) =
     of_bits_eq(raw(a.bits, b.bits), raw(b.bits, a.bits), trim_comm(a.bits, b.bits));
 
--- | Associativity.
+--- Associativity.
 pub let assoc(a: BigNat, b: BigNat, c: BigNat) -> Eq(mul(mul(a, b), c), mul(a, mul(b, c))) =
     of_bits_eq(
         raw(trim(raw(a.bits, b.bits)), c.bits),
@@ -316,7 +316,7 @@ pub let assoc(a: BigNat, b: BigNat, c: BigNat) -> Eq(mul(mul(a, b), c), mul(a, m
                 trim_assoc(a.bits, b.bits, c.bits),
                 Eq/sym(trim_raw_trim_r(a.bits, raw(b.bits, c.bits))))));
 
--- | Left distributivity over addition.
+--- Left distributivity over addition.
 pub let distrib_l(
     a: BigNat,
     b: BigNat,
@@ -341,7 +341,7 @@ pub let distrib_l(
                             trim_is_trimmed(raw(a.bits, b.bits)),
                             trim_is_trimmed(raw(a.bits, c.bits))))))));
 
--- | Right distributivity over addition.
+--- Right distributivity over addition.
 pub let distrib_r(
     a: BigNat,
     b: BigNat,
@@ -394,7 +394,7 @@ let dbl_mul_l(a: BigNat, b: BigNat) -> Eq(dbl(mul(a, b)), mul(dbl(a), b)) =
             Eq/sym(trim_raw_trim_l(dbl_raw(a.bits), b.bits)),
             Eq/cong((w) => trim(raw(w, b.bits)), trim_dbl_raw(a))));
 
--- | `pow2` distributes over addition.
+--- `pow2` distributes over addition.
 pub let pow2_add(
     a: BigNat,
     b: BigNat,
@@ -405,13 +405,13 @@ pub let pow2_add(
     | pred + 1; ih => Eq/trans(cong_dbl(ih), dbl_add(pow2(a, pred), pow2(b, pred)))
     end;
 
--- | `pow2` of a product moves onto the left factor.
+--- `pow2` of a product moves onto the left factor.
 pub let pow2_mul_l(a: BigNat, b: BigNat, k: Nat) -> Eq(pow2(mul(a, b), k), mul(pow2(a, k), b)) =
     match k
     | 0 => refl_at(mul(a, b))
     | pred + 1; ih => Eq/trans(cong_dbl(ih), dbl_mul_l(pow2(a, pred), b))
     end;
 
--- | Two `pow2`s compose by adding their exponents.
+--- Two `pow2`s compose by adding their exponents.
 pub let pow2_compose(a: BigNat, j: Nat, k: Nat) -> Eq(pow2(pow2(a, j), k), pow2(a, j + k)) =
     match k | 0 => refl_at(pow2(a, j)) | _ + 1; ih => cong_dbl(ih) end;

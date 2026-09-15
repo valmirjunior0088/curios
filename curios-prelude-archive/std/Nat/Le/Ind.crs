@@ -1,40 +1,40 @@
 use /std/{Nat};
 
--- | `a <= b`, built from `0 <= n` and `a <= b` gives `a + 1 <= b + 1`.
+--- `a <= b`, built from `0 <= n` and `a <= b` gives `a + 1 <= b + 1`.
 pub induct Ind: (Nat, Nat) -> pub Prop
--- | Zero is below or equal to anything.
+--- Zero is below or equal to anything.
 | z(@n: Nat): (0, n)
--- | One more on each side keeps it.
+--- One more on each side keeps it.
 | s(@a: Nat, @b: Nat, prev: Ind(a, b)): (a + 1, b + 1)
 end
 
 pub use Ind/*;
 
--- | `n <= n`.
+--- `n <= n`.
 pub let refl(n: Nat) -> Ind(n, n) =
     match n | 0 => Ind/z() | _ + 1; ih => Ind/s(ih) end;
 
--- | `a <= b` gives `a <= b + 1`.
+--- `a <= b` gives `a <= b + 1`.
 pub let succ_r(@a: Nat, @b: Nat, p: Ind(a, b)) -> Ind(a, b + 1) =
     match p | z(@_) => Ind/z() | s(@_, @_, prev) => Ind/s(succ_r(prev)) end;
 
--- | `a <= a + k`.
+--- `a <= a + k`.
 pub let add_r(a: Nat, k: Nat) -> Ind(a, a + k) =
     match k | 0 => refl(a) | _ + 1; ih => succ_r(ih) end;
 
--- | Transitivity.
+--- Transitivity.
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Ind(a, b), q: Ind(b, c)) -> Ind(a, c) =
     match p
     | z(@_) => Ind/z()
     | s(@_, @_, prev) => match q | s(@_, @_, q2) => Ind/s(trans(prev, q2)) end
     end;
 
--- | `a <= b` gives `n + a <= n + b`.
+--- `a <= b` gives `n + a <= n + b`.
 pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Ind(a, b)) -> Ind(n + a, n + b) =
     match n | 0 => p | _ + 1; ih => Ind/s(ih) end;
 
--- | `a <= b` gives `a * k <= b * k`.
--- |
--- | Recursion is over the evidence rather than over `k`, so the step is one application of [`add_mono_l`]: `(a + 1) * k` is `k + a * k`, which is what the successor case has to produce.
+--- `a <= b` gives `a * k <= b * k`.
+---
+--- Recursion is over the evidence rather than over `k`, so the step is one application of [`add_mono_l`]: `(a + 1) * k` is `k + a * k`, which is what the successor case has to produce.
 pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Ind(a, b)) -> Ind(a * k, b * k) =
     match p | z(@_) => Ind/z() | s(@_, @_, prev) => add_mono_l(k, mul_mono_r(k, prev)) end;

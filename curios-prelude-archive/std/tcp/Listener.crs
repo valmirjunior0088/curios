@@ -2,7 +2,7 @@ use /std/{Bytes, Str, Nat, Result, Try, Async, Io, Handle};
 use /std/tcp/{resolve, let Socket};
 use /std/Handle/{Interest};
 
--- | A bound, listening socket.
+--- A bound, listening socket.
 pub struct Listener: Type {
     Handle,
 }
@@ -24,12 +24,12 @@ let bind_listen(addr: Bytes) -> Try(Io, Io/Error, Listener) =
     let _ = Try/rescue(ok(listening), (e) => close_raising(s.handle, e))!;
     Try/pure(Listener { s.handle });
 
--- | A listener bound to `host` at `port`, the address reusable so a restart does not wait out the previous socket.
+--- A listener bound to `host` at `port`, the address reusable so a restart does not wait out the previous socket.
 pub let listen(host: Str, port: Nat) -> Try(Async, Io/Error, Listener) =
     let addr = resolve(host, port)!;
     bind_listen(addr);
 
--- | The next connection on `l`, parking until a peer arrives; the handle is the library's, so this stays private and `accept` hands out a `Socket`.
+--- The next connection on `l`, parking until a peer arrives; the handle is the library's, so this stays private and `accept` hands out a `Socket`.
 let accepted(l: Listener) -> Async(Result(Io/Error, Handle)) =
     let go() -> Async(Result(Io/Error, Handle)) =
         let r = /sys/socket/accept(l.0)!;
@@ -45,12 +45,12 @@ let accepted(l: Listener) -> Async(Result(Io/Error, Handle)) =
         end;
     go();
 
--- | The next connection, parking until a peer arrives.
+--- The next connection, parking until a peer arrives.
 pub let accept(l: Listener) -> Try(Async, Io/Error, Socket) =
     let h = Try/attempt(accepted(l))!;
     Try/pure(Socket { h });
 
--- | Close `l`.
+--- Close `l`.
 pub let close(l: Listener) -> Io({}) =
     Handle/close(l.0);
 
@@ -68,7 +68,7 @@ let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
 let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
     Async/go(Async/using(Handle/close(h), handler(Socket { h })));
 
--- | Every connection to `host` at `port` handed to `handler` in a fiber of its own, until an accept fails; the listener is closed whichever way the task ends.
+--- Every connection to `host` at `port` handed to `handler` in a fiber of its own, until an accept fails; the listener is closed whichever way the task ends.
 pub let serve(host: Str, port: Nat, handler: (Socket) -> Async({})) -> Try(Async, Io/Error, {}) =
     let l = listen(host, port)!;
     Async/using(close(l), accept_loop(l, (h) => serve_conn(h, handler)));
@@ -80,7 +80,7 @@ let serve_tls_conn(h: Handle, cfg: Handle, handler: (Socket) -> Async({})) -> As
     | false => Async/lift(Handle/close(h))
     end;
 
--- | `serve` under TLS, every connection upgraded with `cert` and `key` before `handler` sees it.
+--- `serve` under TLS, every connection upgraded with `cert` and `key` before `handler` sees it.
 pub let serve_tls(
     host: Str,
     port: Nat,

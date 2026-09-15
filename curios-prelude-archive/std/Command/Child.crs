@@ -2,16 +2,16 @@ use /std/{Option, Try, Async, Io, Handle};
 use /std/Command/{let Child, let Pipe};
 use /std/Handle/{Interest};
 
--- | How a child ended: with an exit code, or by a signal.
+--- How a child ended: with an exit code, or by a signal.
 pub mod Exit
     use /std/{Nat, Str, Show};
     use /std/ops/{Eql};
 
-    -- | An exit code, or the signal that ended the child.
+    --- An exit code, or the signal that ended the child.
     pub induct Exit: pub Type
-    -- | It returned, with this code.
+    --- It returned, with this code.
     | exited(Nat)
-    -- | A signal ended it, this one.
+    --- A signal ended it, this one.
     | signaled(Nat)
     end
 
@@ -38,15 +38,15 @@ satisfy Async/Write(Async, Pipe) {
     write(p, b) = Async/Write/write(p.0, b),
 }
 
--- | The pipe to the child's standard input, when it was piped.
+--- The pipe to the child's standard input, when it was piped.
 pub let stdin(c: Child) -> Option(Pipe) =
     c.stdin;
 
--- | The pipe from the child's standard output, when it was piped.
+--- The pipe from the child's standard output, when it was piped.
 pub let stdout(c: Child) -> Option(Pipe) =
     c.stdout;
 
--- | The pipe from the child's standard error, when it was piped.
+--- The pipe from the child's standard error, when it was piped.
 pub let stderr(c: Child) -> Option(Pipe) =
     c.stderr;
 
@@ -58,12 +58,12 @@ let close_pipes(c: Child) -> Io({}) =
     let _ = close_pipe(c.stdout)!;
     close_pipe(c.stderr);
 
--- | End the child if it still runs, and close its pipes.
+--- End the child if it still runs, and close its pipes.
 pub let kill(c: Child) -> Io({}) =
     let _ = /sys/proc/kill(c.handle)!;
     close_pipes(c);
 
--- | How the child ended, parking until it does. The pipes are closed with it, so read what it wrote before waiting for it.
+--- How the child ended, parking until it does. The pipes are closed with it, so read what it wrote before waiting for it.
 pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
     let _ = Async/park([Async/Wait/ready(c.handle, Interest/readable)])!;
     let r = /sys/proc/wait(c.handle)!;
@@ -78,7 +78,7 @@ pub let wait(c: Child) -> Try(Async, Io/Error, Exit) =
             end)
     end;
 
--- | `body` with the child killed whichever way the task ends, so a child never outlives the bracket it was started in.
+--- `body` with the child killed whichever way the task ends, so a child never outlives the bracket it was started in.
 pub let with(@A: Type, c: Child, body: Try(Async, Io/Error, A)) -> Try(Async, Io/Error, A) =
     let outcome = Async/using(kill(c), Try/run(body))!;
     let a = outcome!;

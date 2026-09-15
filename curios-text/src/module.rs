@@ -18,12 +18,12 @@ use {
     std::{fmt, path::Path, rc::Rc, str::FromStr},
 };
 
-/// A documentation comment: the `-- |` block written on the lines immediately above a declaration, a constructor, a field or a concept method, attached by the parser to what it documents. A plain `-- ` comment is not syntax and lives beside the module; this is syntax and lives in it, which is what lets the formatter print it back where it was written and a generator read it off the tree.
+/// A documentation comment: the `---` block written on the lines immediately above a declaration, a constructor, a field or a concept method, attached by the parser to what it documents. A plain `-- ` comment is not syntax and lives beside the module; this is syntax and lives in it, which is what lets the formatter print it back where it was written and a generator read it off the tree.
 ///
-/// The span runs from the block's first `-- |` to where the documented head begins, past the whitespace and plain comments between — two positions the formatter marks, so a plain comment written above the block is paid above it and one written between the block and its declaration is paid between them. Like every span it is excluded from equality, and `None` on a tree built without source.
+/// The span runs from the block's first `---` to where the documented head begins, past the whitespace and plain comments between — two positions the formatter marks, so a plain comment written above the block is paid above it and one written between the block and its declaration is paid between them. Like every span it is excluded from equality, and `None` on a tree built without source.
 #[derive(Debug, Clone)]
 pub struct Doc {
-    /// One entry per `-- |` line, holding the text after `-- | ` verbatim; an empty entry is a paragraph break, written as a bare `-- |`.
+    /// One entry per `---` line, holding the text after `--- ` verbatim; an empty entry is a paragraph break, written as a bare `---`.
     pub lines: Vec<String>,
     pub span: Option<Span>,
 }
@@ -268,7 +268,7 @@ impl TopBroken {
     }
 }
 
-/// Where an item could next begin after a failure reported at `from`: the start of the next line that begins at column 0 with `pub`, a `-- |` documentation comment, or an item's head word, followed by whitespace. Column 0 is the formatter's convention rather than the grammar's, so code that ignores it only recovers less; a wrong candidate cannot produce a wrong tree, since the item parser runs at it and a failure that does not commit only ends the loop. `None` past the last line.
+/// Where an item could next begin after a failure reported at `from`: the start of the next line that begins at column 0 with `pub`, a `---` documentation comment, or an item's head word, followed by whitespace. Column 0 is the formatter's convention rather than the grammar's, so code that ignores it only recovers less; a wrong candidate cannot produce a wrong tree, since the item parser runs at it and a failure that does not commit only ends the loop. `None` past the last line.
 fn next_item_anchor(text: &str, from: usize) -> Option<usize> {
     let mut at = match from == 0 || text[..from].ends_with('\n') {
         true => from,
@@ -288,7 +288,7 @@ fn next_item_anchor(text: &str, from: usize) -> Option<usize> {
 }
 
 fn begins_item(line: &str) -> bool {
-    if line.starts_with("-- |") {
+    if line.starts_with("---") {
         return true;
     }
     let word = line

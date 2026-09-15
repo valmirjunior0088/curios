@@ -2,7 +2,7 @@ use /std/{Nat, Str, List, Vec, Eq, Tui};
 use /std/Nat/{Lt};
 use /std/Tui/{Style, Tile};
 
--- | `h` rows of `w` tiles.
+--- `h` rows of `w` tiles.
 pub let Frame(w: Nat, h: Nat) -> Type =
     Vec(Vec(Tile, w), h);
 
@@ -35,30 +35,30 @@ let drop_upto(@T: Type, l: List(T), k: Nat) -> List(T) =
     | _ + 1; ih => match ih | [] => [] | [_, ..rest] => rest end
     end;
 
--- | `w` by `h` of blank tiles.
+--- `w` by `h` of blank tiles.
 pub let blank(w: Nat, h: Nat) -> Frame(w, h) =
     Vec/replicate(h, Vec/replicate(w, Tile/blank));
 
--- | `w` by `h` of `c`.
+--- `w` by `h` of `c`.
 pub let filled(c: Tile, w: Nat, h: Nat) -> Frame(w, h) =
     Vec/replicate(h, Vec/replicate(w, c));
 
--- | `a` then `b`, left to right. The heights agree in the type.
+--- `a` then `b`, left to right. The heights agree in the type.
 pub let beside(@w1: Nat, @w2: Nat, @h: Nat, a: Frame(w1, h), b: Frame(w2, h)) -> Frame(w1 + w2, h) =
     Vec/map((r) => Vec/append(r.0, r.1), Vec/zip(a, b));
 
--- | `a` then `b`, top to bottom. The widths agree in the type.
+--- `a` then `b`, top to bottom. The widths agree in the type.
 pub let above(@w: Nat, @h1: Nat, @h2: Nat, a: Frame(w, h1), b: Frame(w, h2)) -> Frame(w, h1 + h2) =
     Vec/append(a, b);
 
--- | `frame` at `w` by `h`: cropped where it overflows, padded with blanks where it falls short.
+--- `frame` at `w` by `h`: cropped where it overflows, padded with blanks where it falls short.
 pub let fit(@w0: Nat, @h0: Nat, frame: Frame(w0, h0), w: Nat, h: Nat) -> Frame(w, h) =
     resize(
         Vec/replicate(w, Tile/blank),
         h,
         List/map(Vec/to_list(frame), (row) => resize(Tile/blank, w, Vec/to_list(row))));
 
--- | `f` on every tile's style.
+--- `f` on every tile's style.
 pub let restyle(@w: Nat, @h: Nat, f: (Style) -> Style, frame: Frame(w, h)) -> Frame(w, h) =
     Vec/map((row) => Vec/map((c) => Tile { ..c, style = f(c.style) }, row), frame);
 
@@ -81,25 +81,25 @@ let tiles_of(style: Style, s: Str) -> List(Tile) =
                 end);
     List/reverse(reversed);
 
--- | One row of `s` in `style`, at whatever width it turns out to be.
+--- One row of `s` in `style`, at whatever width it turns out to be.
 pub let text(style: Style, s: Str) -> {w: Nat, frame: Frame(w, 1)} =
     let tiles = tiles_of(style, s);
     (w = List/len(tiles), frame = Vec/cons(Vec/of_list(tiles), Vec/nil()));
 
--- | A frame of `w` by `h` from `lines`, one per row, each fitted to `w` and the whole fitted to `h`.
+--- A frame of `w` by `h` from `lines`, one per row, each fitted to `w` and the whole fitted to `h`.
 pub let of_lines(style: Style, lines: List(Str), w: Nat, h: Nat) -> Frame(w, h) =
     let row_of(l: Str) -> Vec(Tile, w) = resize(Tile/blank, w, tiles_of(style, l));
     resize(Vec/replicate(w, Tile/blank), h, List/map(lines, row_of));
 
--- | The frame as text, one string per row. A continuation tile contributes nothing.
+--- The frame as text, one string per row. A continuation tile contributes nothing.
 pub let to_lines(@w: Nat, @h: Nat, frame: Frame(w, h)) -> List(Str) =
     List/map(Vec/to_list(frame), (r) => Str/flatten(List/map(Vec/to_list(r), (c) => c.symbol)));
 
--- | Row `y`, under the evidence that it is within the height.
+--- Row `y`, under the evidence that it is within the height.
 pub let row(@w: Nat, @h: Nat, frame: Frame(w, h), y: Nat, ok: Lt(y, h)) -> Vec(Tile, w) =
     Vec/get(@Vec(Tile, w), @h, frame, y, @ok);
 
--- | The tile at `x`, `y`, under the evidence that both are within the frame.
+--- The tile at `x`, `y`, under the evidence that both are within the frame.
 pub let get(
     @w: Nat,
     @h: Nat,
@@ -111,7 +111,7 @@ pub let get(
 ) -> Tile =
     Vec/get(@Tile, @w, Vec/get(@Vec(Tile, w), @h, frame, y, @ok_y), x, @ok_x);
 
--- | `top` painted onto `base` with its upper-left corner at `x`, `y`, clipped to `base`. Nothing is required to fit.
+--- `top` painted onto `base` with its upper-left corner at `x`, `y`, clipped to `base`. Nothing is required to fit.
 pub let overlay(
     @w: Nat,
     @h: Nat,
@@ -140,7 +140,7 @@ pub let overlay(
         h,
         List/map(List/zip(List/range(0, h), Vec/to_list(base)), row_of));
 
--- | The rows from `y` and the columns from `x` on, at whatever size is left.
+--- The rows from `y` and the columns from `x` on, at whatever size is left.
 pub let crop(
     @w: Nat,
     @h: Nat,

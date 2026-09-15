@@ -1,50 +1,50 @@
 use /std/{Nat, Str, List};
 use /std/Tui/{Frame};
 
--- | How a child claims its share of an axis: an exact length, a floor a fill may grow past, a percentage of the whole, or a weighted share of what the others leave.
+--- How a child claims its share of an axis: an exact length, a floor a fill may grow past, a percentage of the whole, or a weighted share of what the others leave.
 pub induct Constraint: pub Type
--- | Exactly this many cells.
+--- Exactly this many cells.
 | length(Nat)
--- | At least this many, which a fill may grow past.
+--- At least this many, which a fill may grow past.
 | min(Nat)
--- | This percentage of the whole axis.
+--- This percentage of the whole axis.
 | percent(Nat)
--- | A weighted share of whatever the others leave.
+--- A weighted share of whatever the others leave.
 | fill(Nat)
 end
 
 pub use Constraint/*;
 
--- | A named pane, or children stacked as rows or as columns, each under a constraint.
+--- A named pane, or children stacked as rows or as columns, each under a constraint.
 pub induct Layout: pub Type
--- | A leaf, under the name the frame draws into.
+--- A leaf, under the name the frame draws into.
 | pane(name: Str)
--- | Children stacked down the axis, each under its constraint.
+--- Children stacked down the axis, each under its constraint.
 | rows(List({Constraint, Layout}))
--- | Children laid across the axis, each under its constraint.
+--- Children laid across the axis, each under its constraint.
 | cols(List({Constraint, Layout}))
 end
 
 pub use Layout/*;
 
--- | The sizes a layout was split into, indexed by the layout, the width and the height. `fitted` is the coercion: a subtree at one size shown at another.
+--- The sizes a layout was split into, indexed by the layout, the width and the height. `fitted` is the coercion: a subtree at one size shown at another.
 pub induct Sizes: (Layout, Nat, Nat) -> pub Type
--- | A pane at the width and height it was given.
+--- A pane at the width and height it was given.
 | leaf(@name: Str, w: Nat, h: Nat): (pane(name), w, h)
--- | A `rows` layout, split into its children's heights.
+--- A `rows` layout, split into its children's heights.
 | stacked(@ps: List({Constraint, Layout}), @w: Nat, @h: Nat, col: Column(ps, w, h)): (
     rows(ps),
     w,
     h)
--- | A `cols` layout, split into its children's widths.
+--- A `cols` layout, split into its children's widths.
 | ranged(@ps: List({Constraint, Layout}), @w: Nat, @h: Nat, row: Row(ps, w, h)): (cols(ps), w, h)
--- | A subtree sized for one box, shown in another.
+--- A subtree sized for one box, shown in another.
 | fitted(@l: Layout, @w0: Nat, @h0: Nat, w: Nat, h: Nat, inner: Sizes(l, w0, h0)): (l, w, h)
--- | The children of a `rows` layout at one width, their heights summing to the whole.
+--- The children of a `rows` layout at one width, their heights summing to the whole.
 pub and Column: (List({Constraint, Layout}), Nat, Nat) -> pub Type
--- | No children left, so no height is claimed.
+--- No children left, so no height is claimed.
 | col_stop(@w: Nat): ([], w, 0)
--- | One child at its height, then the rest below it.
+--- One child at its height, then the rest below it.
 | col_part(
     @c: Constraint,
     @l: Layout,
@@ -54,11 +54,11 @@ pub and Column: (List({Constraint, Layout}), Nat, Nat) -> pub Type
     @h2: Nat,
     head: Sizes(l, w, h1),
     tail: Column(rest, w, h2)): ([(c, l), ..rest], w, h1 + h2)
--- | The children of a `cols` layout at one height, their widths summing to the whole.
+--- The children of a `cols` layout at one height, their widths summing to the whole.
 pub and Row: (List({Constraint, Layout}), Nat, Nat) -> pub Type
--- | No children left, so no width is claimed.
+--- No children left, so no width is claimed.
 | row_stop(@h: Nat): ([], 0, h)
--- | One child at its width, then the rest beside it.
+--- One child at its width, then the rest beside it.
 | row_part(
     @c: Constraint,
     @l: Layout,
@@ -80,7 +80,7 @@ let share_head(shares: List(Nat)) -> Nat =
 let share_tail(shares: List(Nat)) -> List(Nat) =
     match shares | [] => [] | [_, ..rest] => rest end;
 
--- | `avail` shared among `cs` in one deterministic pass: lengths and floors first, percentages next, the rest to the fills by weight, the rounding shortfall to the last fill. An over-committed axis answers the claims as written.
+--- `avail` shared among `cs` in one deterministic pass: lengths and floors first, percentages next, the rest to the fills by weight, the rounding shortfall to the last fill. An over-committed axis answers the claims as written.
 pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
     let fixed(c: Constraint) -> Nat =
         match c
@@ -116,7 +116,7 @@ pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
                 end);
     settled.out;
 
--- | Every pane painted at its size and the results joined as the tree says. `paint` answers one pane by name at the size the split gave it, typed at that size.
+--- Every pane painted at its size and the results joined as the tree says. `paint` answers one pane by name at the size the split gave it, typed at that size.
 pub let render(
     @l: Layout,
     @w: Nat,
@@ -155,7 +155,7 @@ and render_row(
         Frame/beside(render(head, paint), render_row(tail, paint))
     end;
 
--- | `w` by `h` shared along the tree, each child at its share and the whole fitted to the size asked for.
+--- `w` by `h` shared along the tree, each child at its share and the whole fitted to the size asked for.
 pub let split(l: Layout, w: Nat, h: Nat) -> Sizes(l, w, h) =
     match l
     | pane(_) => leaf(w, h)
@@ -191,7 +191,7 @@ and split_row(
         (tw = mine + alongside.tw, row = row_part(split(entry.1, mine, h), alongside.row))
     end;
 
--- | Split and render in one step.
+--- Split and render in one step.
 pub let draw(
     l: Layout,
     w: Nat,
