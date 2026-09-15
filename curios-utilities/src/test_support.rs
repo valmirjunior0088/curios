@@ -18,8 +18,13 @@ pub struct Temporary(PathBuf);
 
 impl Temporary {
     /// A fresh path under the system's temporary directory, named for the `family` of tests and the `name` of this one, unique per process and millisecond.
+    ///
+    /// **Canonical by construction.** The code under test canonicalizes the locations it compares — the governance walk, the dependency walk, the roots the server publishes — so a path built under the temporary directory as spelled would compare two spellings of one directory, equal only on a host whose temporary directory already happens to be canonical. Resolving it here, once, is what keeps every fixture from having to remember to.
     pub fn new(family: &str, name: &str) -> Self {
-        Self(env::temp_dir().join(format!(
+        let base = env::temp_dir();
+        let base = base.canonicalize().unwrap_or(base);
+
+        Self(base.join(format!(
             "curios-{family}-{name}-{}-{}",
             process::id(),
             SystemTime::now()
