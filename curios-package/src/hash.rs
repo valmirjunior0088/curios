@@ -5,7 +5,7 @@ mod tests;
 
 use {
     curios_utilities::Fingerprint,
-    std::{fmt, fs, path::Path},
+    std::{ffi::OsStr, fmt, fs, path::Path},
 };
 
 /// The scheme this compiler computes and verifies.
@@ -100,13 +100,7 @@ fn collect(
             ));
         }
 
-        let Some(segment) = entry.file_name().to_str().map(str::to_string) else {
-            return Err(format!(
-                "{} is named by bytes that spell no UTF-8, and a delivered tree may hold none: the hash spells every path in UTF-8 whatever the platform, so a name it cannot spell is one it cannot verify",
-                path.display()
-            ));
-        };
-        at.push(segment);
+        at.push(spelled(&entry.file_name(), &path)?);
 
         match kind.is_dir() {
             true => collect(&path, at, files)?,
@@ -120,6 +114,18 @@ fn collect(
     }
 
     Ok(())
+}
+
+/// The UTF-8 spelling of `name`, the entry at `path`, or the refusal a delivered tree earns for a name the scheme cannot spell.
+///
+/// Decided apart from the walk, because it is a question about the name alone: whether a filesystem will even hold a name that spells no UTF-8 is that filesystem's business, and a check that needed one to exist first could not be exercised on a filesystem that refuses to create it.
+fn spelled(name: &OsStr, path: &Path) -> Result<String, String> {
+    name.to_str().map(str::to_string).ok_or_else(|| {
+        format!(
+            "{} is named by bytes that spell no UTF-8, and a delivered tree may hold none: the hash spells every path in UTF-8 whatever the platform, so a name it cannot spell is one it cannot verify",
+            path.display()
+        )
+    })
 }
 
 impl fmt::Display for TreeHash {

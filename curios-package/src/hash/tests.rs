@@ -132,18 +132,14 @@ fn an_empty_directory_leaves_no_trace() {
     fs::remove_dir_all(padded).unwrap();
 }
 
-/// A name that is not UTF-8 is refused: the scheme spells paths in UTF-8, and a name it could only spell by replacing bytes is one two different files could share.
+/// A name that is not UTF-8 is refused: the scheme spells paths in UTF-8, and a name it could only spell by replacing bytes is one two different files could share. Asked of the name alone, so no filesystem has to agree to hold such a name first.
 #[test]
 fn a_name_that_is_not_utf8_is_refused() {
-    let root = tree("hash-not-utf8", &[("lib.crs", "")]);
-    fs::write(root.join(OsStr::from_bytes(b"\xff.crs")), "").unwrap();
+    let name = OsStr::from_bytes(b"\xff.crs");
 
-    let refusal = TreeHash::of(&root)
-        .map(|_| ())
+    let refusal = spelled(name, &Path::new("tree").join(name))
         .expect_err("a delivered tree may hold no name that is not UTF-8");
     assert!(refusal.contains("spell no UTF-8"), "{refusal}");
-
-    fs::remove_dir_all(root).unwrap();
 }
 
 /// A symlink in a delivered tree is refused: followed it reaches outside the tree, recorded it hashes a path whose meaning depends on where it is unpacked.
