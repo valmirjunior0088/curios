@@ -34,7 +34,13 @@ pub struct Config: pub Type {
 
 -- | `baud` with the frame nearly every device speaks: 8 data bits, no parity, 1 stop bit, and no flow control. The speed has no default, since only the device knows it.
 pub let config(baud: Nat) -> Config =
-    Config { baud = baud, data_bits = 8, parity = Parity/none(), stop_bits = 1, flow = Flow/none() };
+    Config {
+        baud = baud,
+        data_bits = 8,
+        parity = Parity/none(),
+        stop_bits = 1,
+        flow = Flow/none(),
+    };
 
 let of_parity(parity: Parity) -> Nat =
     match parity
@@ -44,10 +50,7 @@ let of_parity(parity: Parity) -> Nat =
     end;
 
 let of_flow(flow: Flow) -> Nat =
-    match flow
-    | none() => /sys/serial_flow/none
-    | hardware() => /sys/serial_flow/hardware
-    end;
+    match flow | none() => /sys/serial_flow/none | hardware() => /sys/serial_flow/hardware end;
 
 -- | The port at `path`, opened raw at `c`'s speed and frame and held exclusively until it is closed.
 -- |
@@ -123,8 +126,4 @@ let entries: Try(Io, Io/Error, List(Path)) =
 
 -- | The serial devices the host names by what they are: on Linux, every entry of `/dev/serial/by-id`, whose names carry each device's vendor, product and serial number and which `open` follows to the port. Empty where there is no such directory — no device plugged in, or a host that keeps none.
 pub let list: Try(Io, Io/Error, List(Path)) =
-    Try/rescue(entries, (e) =>
-        match e
-        | not_found() => Try/pure([])
-        | _ => Try/raise(e)
-        end);
+    Try/rescue(entries, (e) => match e | not_found() => Try/pure([]) | _ => Try/raise(e) end);
