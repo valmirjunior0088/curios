@@ -120,20 +120,23 @@ fn a_file_is_placed_in_its_unit() {
     assert!(text.contains("util.crs:1:27"), "{text}");
 }
 
-/// A file under a package that no `mod` reaches is in no unit, and the answer says so rather than reporting the library's verdicts as if they were about it — on a cold store and on a warm one alike, since the walk asks the loader and not the record of a compile. Declaring it is what makes the file's own contents the answer.
+/// A file under a package that no `mod` reaches is in no unit, so it is checked on its own — written as a module, as a unit of its own — behind a note saying so and what would declare it, on a cold store and on a warm one alike, since placement walks the headers and not the record of a compile. Declaring it puts it in the library, and the note goes.
 #[test]
-fn a_file_no_mod_declares_is_reported_as_not_part_of_its_unit() {
+fn a_file_no_mod_declares_is_checked_on_its_own_behind_a_note() {
     let root = project("undeclared");
     write(&root, "stray.crs", "pub let w : /std/Str = 1;\n");
 
     let cold = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
     assert!(cold.status.success());
     let text = stdout(&cold);
-    assert!(text.contains("stray.crs is not part of `/app`"), "{text}");
-    assert!(text.contains("declares `/app/stray`"), "{text}");
-    assert!(!text.contains("type mismatch"), "never read: {text}");
+    assert!(text.contains("stray.crs is in no unit of `/app`"), "{text}");
+    assert!(
+        text.contains("declare it with `mod stray;` in lib.crs"),
+        "{text}"
+    );
+    assert!(text.contains("type mismatch"), "checked on its own: {text}");
 
-    // Warm: the library is served from the store, and the walk still answers.
+    // Warm: the library is served from the store, and placement still walks the headers.
     let built = curios(&root, &["run", "app"], "");
     assert!(
         built.status.success(),
@@ -142,7 +145,7 @@ fn a_file_no_mod_declares_is_reported_as_not_part_of_its_unit() {
     );
     let warm = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
     assert!(
-        stdout(&warm).contains("is not part of `/app`"),
+        stdout(&warm).contains("is in no unit of `/app`"),
         "{}",
         stdout(&warm)
     );
@@ -150,10 +153,10 @@ fn a_file_no_mod_declares_is_reported_as_not_part_of_its_unit() {
     write(&root, "lib.crs", "pub mod util;\npub mod stray;\n");
     let declared = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
     let text = stdout(&declared);
-    assert!(!text.contains("is not part of"), "{text}");
+    assert!(!text.contains("is in no unit"), "{text}");
     assert!(
         text.contains("stray.crs:1:24"),
-        "its own error, now read: {text}"
+        "its own error, read as the library's: {text}"
     );
 }
 

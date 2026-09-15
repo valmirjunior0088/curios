@@ -6,7 +6,7 @@
 
 use {
     crate::{
-        Diagnosed, Diagnostic, FileAsked, Origin, Reached, Refusal, STDIN_LABEL, Subject, cost,
+        Diagnosed, Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, cost,
         declared_tests, diagnosed, diagnostics, stage,
     },
     curios_cont::Outcome,
@@ -52,33 +52,23 @@ impl Asked {
         };
         let store = program.home().map(|home| Verdicts::at(home.root.clone()));
         let declares = program.declares();
+        let unlinked = program.unlinked().cloned();
 
         Ok(Self {
             subject: Subject::Entry {
                 units: program.into_units(),
                 origin,
                 declares,
+                unlinked,
             },
             store,
         })
     }
 
-    /// A library, asked about as the unit entire — through the file it was selected by, when it was, so a file the unit never reads is said to be one.
+    /// A library, asked about as the unit entire.
     fn about_library(library: Library) -> Self {
-        let prefix = library
-            .units
-            .last()
-            .and_then(|unit| unit.mounts().into_iter().next())
-            .map(|mount| mount.prefix)
-            .unwrap_or_default();
-
         Self {
             subject: Subject::Unit {
-                file: library.through.map(|path| FileAsked {
-                    path,
-                    prefix,
-                    module: library.module,
-                }),
                 units: library.units,
             },
             store: Some(Verdicts::at(library.root)),
@@ -152,17 +142,16 @@ pub fn wonder_stage(
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    let Asked {
-        subject:
-            Subject::Entry {
-                units,
-                origin,
-                declares,
-            },
-        store,
-    } = Asked::about_program(program)?
+    let refusal = written_as_a_module(program.entry());
+    let Asked { subject, store } = Asked::about_program(program)?;
+    let Subject::Entry {
+        units,
+        origin,
+        declares,
+        ..
+    } = subject.formed(&overlay)
     else {
-        unreachable!("a program is asked about as its entry");
+        return Err(refusal);
     };
     let cache = store.as_ref();
 
@@ -199,17 +188,16 @@ pub fn wonder_stage(
 pub fn wonder_cost(budget: u64, program: Program) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    let Asked {
-        subject:
-            Subject::Entry {
-                units,
-                origin,
-                declares,
-            },
-        store,
-    } = Asked::about_program(program)?
+    let refusal = written_as_a_module(program.entry());
+    let Asked { subject, store } = Asked::about_program(program)?;
+    let Subject::Entry {
+        units,
+        origin,
+        declares,
+        ..
+    } = subject.formed(&overlay)
     else {
-        unreachable!("a program is asked about as its entry");
+        return Err(refusal);
     };
     let cache = store.as_ref();
 
@@ -238,7 +226,7 @@ pub fn wonder_cost(budget: u64, program: Program) -> Result<(), String> {
     Ok(())
 }
 
-/// A file the question can be about: one the disk holds. A path that cannot be read is "no such target" — the question could not be asked, and the exit says so — refused by the command line before membership places it, in the words `run` uses for the same fault. The engine would otherwise answer it as one diagnostic and exit 0, and under a package directory would place the missing file as a library module and answer about the library. The server never comes through here: a document an editor holds may not be on disk yet, which is why the check is the command line's and not `Asked`'s.
+/// A file the question can be about: one the disk holds. A path that cannot be read is "no such target" — the question could not be asked, and the exit says so — refused by the command line before placement reads it, in the words the read would have failed with. The engine would otherwise answer it as one diagnostic and exit 0. The server never comes through here: a document an editor holds may not be on disk yet, which is why the check is the command line's and not `Asked`'s.
 pub fn file_target(path: PathBuf) -> Result<PathBuf, String> {
     let readable = fs::metadata(&path).and_then(|metadata| match metadata.is_dir() {
         true => Err(io::Error::from(io::ErrorKind::IsADirectory)),
@@ -249,6 +237,16 @@ pub fn file_target(path: PathBuf) -> Result<PathBuf, String> {
         Ok(()) => Ok(path),
         Err(error) => Err(LoadError::Read { path, error }.format()),
     }
+}
+
+/// What a question that needs a program says about a file written as a module: it has no final term, so there is no program to compile.
+fn written_as_a_module(entry: &Entry) -> String {
+    let label = match entry {
+        Entry::File(path) => path.display().to_string(),
+        Entry::Stdin => STDIN_LABEL.to_string(),
+    };
+
+    format!("{label} is written as a module, with no final term to compile a program from")
 }
 
 /// Standard input, drained to end.

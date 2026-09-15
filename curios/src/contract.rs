@@ -1,6 +1,6 @@
 //! What each command accepts, stated once, and the one place a command's argument is admitted as its subject.
 //!
-//! **A contract is data, and dispatch reads it.** Every command's [`Contract`] says what its argument may select, where a file argument is compiled, how the command reaches the store and what it leaves on disk, and [`Mode::contract`] is an exhaustive match, so no command exists without one. What a command refuses is decided here too — a library where a program is needed, a file where a product must be filed under a package, a flag written before the command that reads it — so a refusal is one sentence per kind naming the command, never a sentence each command words for itself. A TARGET's help is read off the same contract, so the help cannot describe an argument its command admits another way.
+//! **A contract is data, and dispatch reads it.** Every command's [`Contract`] says what its argument may select, whether a program must be named by its own file, how the command reaches the store and what it leaves on disk, and [`Mode::contract`] is an exhaustive match, so no command exists without one. What a command refuses is decided here too — a library where a program is needed, a module where a program's own file is, a build with nowhere to be filed, a flag written before the command that reads it — so a refusal is one sentence per kind naming the command, never a sentence each command words for itself. A TARGET's help is read off the same contract, so the help cannot describe an argument its command admits another way.
 //!
 //! **A question's access is stated here and enforced below.** A command that asks the `wonder` engine reads the store and files nothing because the engine wraps whatever store it is handed so that nothing can be filed, and no contract can relax that. What dispatch chooses from a contract is a build's store: whether one is opened for it to file into.
 
@@ -9,7 +9,8 @@ mod tests;
 
 use {
     crate::{Cli, Elaboration, ManifestFlag, Mode, Query},
-    curios_package::{Entire, Library, Placement, Program, Selection, Spelling},
+    curios_package::{Entire, Entry, Library, Program, Selection, Spelling},
+    curios_text::Overlay,
     curios_verdicts::Verdicts,
     curios_wonder::file_target,
     std::{
@@ -79,7 +80,7 @@ impl Access {
 pub(crate) enum Product {
     /// Nothing beyond what the store keeps.
     Nothing,
-    /// A native executable, under the store beside the package that declares it unless `--output` says elsewhere.
+    /// A native executable, under the store beside the package that declares it, or wherever `--output` says — the one place a program no package declares can go.
     Executable,
     /// A library's pages, under the store beside its package unless `--output` says elsewhere.
     Pages,
@@ -92,7 +93,7 @@ pub(crate) enum Product {
 }
 
 impl Product {
-    /// Whether what is left is filed under the package that declared its subject, so a subject no package declares has nowhere to put it.
+    /// Whether what is left is filed under the package that declared its subject unless the command is told where else, so a subject no package declares has to be told.
     fn filed_under_a_package(self) -> bool {
         matches!(self, Self::Executable | Self::Pages | Self::Sources)
     }
@@ -103,8 +104,8 @@ pub(crate) struct Contract {
     /// The command as it is typed, for a refusal to name.
     pub(crate) command: &'static str,
     pub(crate) accepts: Accepts,
-    /// Where a file argument is compiled.
-    pub(crate) placement: Placement,
+    /// Whether a program must be named by its own file rather than through one of its modules: a command that runs or builds a program performs it, and a module is not what performs.
+    pub(crate) own_file_only: bool,
     pub(crate) access: Access,
     pub(crate) product: Product,
 }
@@ -112,7 +113,7 @@ pub(crate) struct Contract {
 pub(crate) const RUN: Contract = Contract {
     command: "run",
     accepts: Accepts::Program,
-    placement: Placement::Standalone,
+    own_file_only: true,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -120,7 +121,7 @@ pub(crate) const RUN: Contract = Contract {
 pub(crate) const COMPILE: Contract = Contract {
     command: "compile",
     accepts: Accepts::Program,
-    placement: Placement::Standalone,
+    own_file_only: true,
     access: Access::Write,
     product: Product::Executable,
 };
@@ -128,7 +129,7 @@ pub(crate) const COMPILE: Contract = Contract {
 pub(crate) const DOCUMENT: Contract = Contract {
     command: "document",
     accepts: Accepts::Library,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::Read,
     product: Product::Pages,
 };
@@ -136,7 +137,7 @@ pub(crate) const DOCUMENT: Contract = Contract {
 pub(crate) const DOCUMENT_ARCHIVE: Contract = Contract {
     command: "document",
     accepts: Accepts::Nothing,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::None,
     product: Product::Pages,
 };
@@ -144,7 +145,7 @@ pub(crate) const DOCUMENT_ARCHIVE: Contract = Contract {
 pub(crate) const TEST: Contract = Contract {
     command: "test",
     accepts: Accepts::Entire,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::Write,
     product: Product::Nothing,
 };
@@ -152,7 +153,7 @@ pub(crate) const TEST: Contract = Contract {
 pub(crate) const CURATE: Contract = Contract {
     command: "curate",
     accepts: Accepts::Entire,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::None,
     product: Product::Sources,
 };
@@ -160,7 +161,7 @@ pub(crate) const CURATE: Contract = Contract {
 pub(crate) const NEW: Contract = Contract {
     command: "new",
     accepts: Accepts::Nothing,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::None,
     product: Product::Package,
 };
@@ -168,7 +169,7 @@ pub(crate) const NEW: Contract = Contract {
 pub(crate) const LINT: Contract = Contract {
     command: "lint",
     accepts: Accepts::Any,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::Read,
     product: Product::Nothing,
 };
@@ -176,7 +177,7 @@ pub(crate) const LINT: Contract = Contract {
 pub(crate) const FORMAT: Contract = Contract {
     command: "format",
     accepts: Accepts::Nothing,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::None,
     product: Product::Rewritten,
 };
@@ -184,7 +185,7 @@ pub(crate) const FORMAT: Contract = Contract {
 pub(crate) const DIAGNOSTICS: Contract = Contract {
     command: "wonder diagnostics",
     accepts: Accepts::Any,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::Read,
     product: Product::Nothing,
 };
@@ -192,7 +193,7 @@ pub(crate) const DIAGNOSTICS: Contract = Contract {
 pub(crate) const TESTS: Contract = Contract {
     command: "wonder tests",
     accepts: Accepts::Any,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::Read,
     product: Product::Nothing,
 };
@@ -200,7 +201,7 @@ pub(crate) const TESTS: Contract = Contract {
 pub(crate) const COST: Contract = Contract {
     command: "wonder cost",
     accepts: Accepts::Program,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::Read,
     product: Product::Nothing,
 };
@@ -208,7 +209,7 @@ pub(crate) const COST: Contract = Contract {
 pub(crate) const STAGE: Contract = Contract {
     command: "wonder stage",
     accepts: Accepts::Program,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::Read,
     product: Product::Nothing,
 };
@@ -216,7 +217,7 @@ pub(crate) const STAGE: Contract = Contract {
 pub(crate) const SERVER: Contract = Contract {
     command: "wonder server",
     accepts: Accepts::Nothing,
-    placement: Placement::Contained,
+    own_file_only: false,
     access: Access::Read,
     product: Product::Nothing,
 };
@@ -272,6 +273,22 @@ impl Mode {
     /// The manifest the command was told governs — `None` when it was told none, or reads no manifest.
     pub(crate) fn manifest(&self) -> Option<&Path> {
         self.manifest_flag()?.manifest.as_deref()
+    }
+
+    /// Where the command was told to write what it builds — `None` when it was told nowhere, or builds nothing it could be told about.
+    pub(crate) fn output(&self) -> Option<&Path> {
+        match self {
+            Mode::Compile { output_path, .. } | Mode::Document { output_path, .. } => {
+                output_path.as_deref()
+            }
+            Mode::Run { .. }
+            | Mode::Test { .. }
+            | Mode::Curate { .. }
+            | Mode::New { .. }
+            | Mode::Lint { .. }
+            | Mode::Format { .. }
+            | Mode::Wonder { .. } => None,
+        }
     }
 
     /// The `--manifest` flag, for a command that resolves against a package.
@@ -332,8 +349,10 @@ impl Cli {
 impl Contract {
     /// What a TARGET's help says for this command: the forms its argument takes, and what none means.
     pub(crate) fn target_help(&self) -> String {
-        let forms = match self.product.filed_under_a_package() {
-            true => "A declared executable's name",
+        let forms = match self.own_file_only {
+            true => {
+                "A declared executable's name, a program's own .crs file, or `-` for standard input"
+            }
             false => {
                 "A declared executable's name, a path to a .crs file, or `-` for standard input"
             }
@@ -348,32 +367,32 @@ impl Contract {
         format!("{forms} (default: {none})")
     }
 
-    /// What `target` selects under this contract, standing in `directory`, before any kind of subject is refused.
+    /// What `target` selects standing in `directory`, before any kind of subject is refused — the same for every contract, since a file is placed one way whichever command asks.
     fn selection(
-        &self,
         target: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
     ) -> Result<Selection, String> {
-        let spelling = match (self.placement, Spelling::of(target)) {
-            // A file placed in its unit is first a file the disk holds, where a standalone compile reads the file and fails on the read.
-            (Placement::Contained, Spelling::File(path)) => Spelling::File(file_target(path)?),
-            (_, spelling) => spelling,
+        let spelling = match Spelling::of(target) {
+            // A file is placed by what declares it, which starts from a file the disk holds: a path it does not hold is refused here, in the words the read would have failed with.
+            Spelling::File(path) => Spelling::File(file_target(path)?),
+            spelling => spelling,
         };
 
-        Selection::of(spelling, manifest, directory, self.placement)
+        Selection::of(spelling, manifest, directory, &Overlay::default())
     }
 
-    /// The program `target` selects: a program, or the package entire's sole or `default` one.
+    /// The program `target` selects: a program, or the package entire's sole or `default` one — named by its own file where the contract says so, and with somewhere to put what is built, `output` included.
     pub(crate) fn admit_program(
         &self,
         target: Option<&str>,
         manifest: Option<&Path>,
+        output: Option<&Path>,
         directory: &Path,
     ) -> Result<Program, String> {
         debug_assert_eq!(self.accepts, Accepts::Program, "{}", self.command);
 
-        let program = match self.selection(target, manifest, directory)? {
+        let program = match Self::selection(target, manifest, directory)? {
             Selection::Program(program) => program,
             Selection::Entire(entire) => entire.default_program()?,
             Selection::Library(_) => {
@@ -384,11 +403,20 @@ impl Contract {
             }
         };
 
-        if self.product.filed_under_a_package() && program.home().is_none() {
+        if self.own_file_only
+            && let (Some(module), Some(home)) = (program.through(), program.home())
+        {
             return Err(format!(
-                "`{}` files what it builds under the package that declares it, and a file or standard input has none: `run` is what takes one",
-                self.command
+                "`{}` takes a program's own file, and {} is a module of `{}`: name `{}` instead",
+                self.command,
+                module.display(),
+                home.executable,
+                home.executable
             ));
+        }
+
+        if self.product.filed_under_a_package() && program.home().is_none() && output.is_none() {
+            return Err(homeless(self.command, program.entry()));
         }
 
         Ok(program)
@@ -403,7 +431,7 @@ impl Contract {
     ) -> Result<Library, String> {
         debug_assert_eq!(self.accepts, Accepts::Library, "{}", self.command);
 
-        match self.selection(target, manifest, directory)? {
+        match Self::selection(target, manifest, directory)? {
             Selection::Library(library) => Ok(library),
             Selection::Entire(entire) => entire.library()?.ok_or_else(|| {
                 format!(
@@ -427,7 +455,7 @@ impl Contract {
     ) -> Result<Selection, String> {
         debug_assert_eq!(self.accepts, Accepts::Any, "{}", self.command);
 
-        self.selection(target, manifest, directory)
+        Self::selection(target, manifest, directory)
     }
 
     /// The governing package entire, which is all a command taking no target selects.
@@ -439,12 +467,31 @@ impl Contract {
     ) -> Result<Entire, String> {
         debug_assert_eq!(self.accepts, Accepts::Entire, "{}", self.command);
 
-        match self.selection(target, manifest, directory)? {
+        match Self::selection(target, manifest, directory)? {
             Selection::Entire(entire) => Ok(entire),
             Selection::Library(_) | Selection::Program(_) => Err(format!(
                 "`{}` takes the governing package entire, and no target",
                 self.command
             )),
+        }
+    }
+}
+
+/// What a command that builds says about a program no package declares and nothing said where to put: that it has nowhere, and the command line that gives it somewhere.
+fn homeless(command: &str, entry: &Entry) -> String {
+    match entry {
+        Entry::Stdin => format!(
+            "`{command}` files what it builds under the package that declares it, and standard input has none: say where, as in `curios {command} - --output program`"
+        ),
+        Entry::File(path) => {
+            let named = path
+                .file_stem()
+                .map_or_else(|| "program".into(), |stem| stem.to_string_lossy());
+            format!(
+                "`{command}` files what it builds under the package that declares it, and {} has none: say where, as in `curios {command} {} --output {named}`",
+                path.display(),
+                path.display()
+            )
         }
     }
 }

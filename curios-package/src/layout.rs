@@ -69,12 +69,27 @@ pub(crate) fn module_of(package: &Package, directory: &Path, file: &Path) -> Opt
         return Some(Qualifier::from([package.name.as_str()]));
     }
 
-    let relative = file.strip_prefix(directory).ok()?;
+    let mut segments = vec![package.name.clone()];
+    segments.extend(spelled_segments(file.strip_prefix(directory).ok()?)?);
+
+    segments
+        .iter()
+        .all(|segment| is_identifier(segment))
+        .then(|| Qualifier::from(segments))
+}
+
+/// The module `file` would be under an entry whose stem directory is `stem`, by the layout rule every header obeys: `helper/deep.crs` is `/helper/deep` below the entry's own mount. `None` when the spelling is no module's.
+pub(crate) fn stem_module_of(stem: &Path, file: &Path) -> Option<Qualifier> {
+    spelled_segments(file.strip_prefix(stem).ok()?).map(Qualifier::from)
+}
+
+/// The segments `relative` spells as a module path — `parse/lexer.crs` is `parse`, `lexer` — or `None` for another extension or a segment no identifier.
+fn spelled_segments(relative: &Path) -> Option<Vec<String>> {
     if relative.extension()? != EXTENSION {
         return None;
     }
 
-    let mut segments = vec![package.name.clone()];
+    let mut segments = Vec::new();
     for component in relative.parent()?.components() {
         let Component::Normal(segment) = component else {
             return None;
@@ -86,7 +101,7 @@ pub(crate) fn module_of(package: &Package, directory: &Path, file: &Path) -> Opt
     segments
         .iter()
         .all(|segment| is_identifier(segment))
-        .then(|| Qualifier::from(segments))
+        .then_some(segments)
 }
 
 /// The resolver `package`'s library is lowered from, its header beside the manifest in `directory`, or `None` when there is no header there.

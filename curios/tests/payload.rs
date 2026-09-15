@@ -159,3 +159,30 @@ fn a_bare_file_files_nothing() {
         "and nothing was written beside it"
     );
 }
+
+/// A program no package declares has no store to be filed under, so it builds only where `--output` says — and files nothing in a store either way.
+#[test]
+fn a_loose_file_compiles_only_where_output_says() {
+    let root = temporary("loose-compile");
+    write(&root, "scratch.crs", "/std/print(\"loose\")\n");
+
+    let refused = curios(&root, &["compile", "scratch.crs"]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("`curios compile scratch.crs --output scratch`"),
+        "{stderr}"
+    );
+
+    let built = curios(&root, &["compile", "scratch.crs", "--output", "scratch"]);
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    assert!(root.join("scratch").is_file());
+    assert!(
+        !root.join(".curios").exists(),
+        "a loose program has no store to file into"
+    );
+}

@@ -39,7 +39,7 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
         curios_package::Spelling::of(target),
         None,
         directory,
-        curios_package::Placement::Standalone,
+        &curios_text::Overlay::default(),
     )
     .expect("a governed package")
     {

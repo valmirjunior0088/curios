@@ -51,6 +51,8 @@ pub fn lint(budget: u64, selection: Selection) -> Result<Linted, String> {
             linted = linted.max(match diagnostic.severity {
                 Severity::Goal => Linted::Goals,
                 Severity::Error | Severity::Lint => Linted::Findings,
+                // A note says how the question was answered, which is nothing to fix.
+                Severity::Note => Linted::Clean,
             });
             seen.insert_rendered(diagnostic.render());
         }

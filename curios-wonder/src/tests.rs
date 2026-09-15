@@ -18,6 +18,7 @@ fn of(text: &str) -> Vec<crate::Diagnostic> {
                 label: "<stdin>".to_string(),
                 text: text.to_string(),
             },
+            unlinked: None,
         },
         &Overlay::default(),
         None,
@@ -228,7 +229,6 @@ fn a_library_reports_its_own_lints() {
         DEFAULT_STEP_BUDGET,
         Subject::Unit {
             units: mounted(&root),
-            file: None,
         },
         &Overlay::default(),
         None,
@@ -458,6 +458,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
                 label: "<stdin>".to_string(),
                 text: text.to_string(),
             },
+            unlinked: None,
         },
         store: None,
     };

@@ -1,6 +1,6 @@
-//! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path, or `-`, as argv[0]) and its exit code as the process's; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable. Both take the same target four ways — no argument for the governing package's default executable, an identifier for one it declares, a path for a bare `.crs` file, and `-` for the program on standard input — because what a bare invocation means inside a package should not depend on which subcommand asked.
+//! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path, or `-`, as argv[0]) and its exit code as the process's; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable. Both take the same target four ways — no argument for the governing package's default executable, an identifier for one it declares, a path for a `.crs` file placed by what declares it, and `-` for the program on standard input — because what a bare invocation means inside a package should not depend on which subcommand asked.
 //!
-//! **Neither subcommand compiles unconditionally.** A manifest target's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. Neither standalone form has a project, so neither consults anything. `pipeline` owns that decision and everything downstream of it.
+//! **Neither subcommand compiles unconditionally.** A manifest target's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. A loose program has no project, so it consults nothing. `pipeline` owns that decision and everything downstream of it.
 //!
 //! Argument parsing lives in `cli`, what each command accepts and the admission of its argument in `contract`, compilation and payload reuse in `pipeline`, executable emission in `bundle` — this file only dispatches, mapping any error to stderr and a failure exit.
 
@@ -124,12 +124,14 @@ fn dispatch() -> Result<(), Failure> {
     let target = target.as_deref();
     let manifest = mode.manifest().map(Path::to_path_buf);
     let manifest = manifest.as_deref();
+    let destination = mode.output().map(Path::to_path_buf);
+    let destination = destination.as_deref();
 
     match mode {
         Mode::Run {
             elaboration, args, ..
         } => {
-            let program = contract.admit_program(target, manifest, &here()?)?;
+            let program = contract.admit_program(target, manifest, None, &here()?)?;
             // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by. Every argument crosses as the bytes the OS holds, since `/std/proc/args` promises opaque byte strings and a path or an argument need not be UTF-8.
             let entry = match program.entry() {
                 Entry::Stdin => Spelling::STDIN.as_bytes().to_vec(),
@@ -190,18 +192,23 @@ fn dispatch() -> Result<(), Failure> {
             elaboration,
             ..
         } => {
-            let program = contract.admit_program(target, manifest, &here()?)?;
+            let program = contract.admit_program(target, manifest, destination, &here()?)?;
 
-            // Admission refuses a program no package declares, since the executable is filed under the package that declares it — so this one has an entry file and a home.
-            let (Entry::File(entry), Some(home)) = (program.entry(), program.home()) else {
-                unreachable!("`compile` admits only a declared executable");
+            // Admission refuses a program with nowhere to go, so one no package declares came with `--output`.
+            let output = match (output_path, program.home()) {
+                (Some(output), _) => output,
+                (None, Some(home)) => home.output.clone(),
+                (None, None) => unreachable!(
+                    "`compile` admits a program no package declares only with `--output`"
+                ),
             };
-            let entry = entry.clone();
-            let output = output_path.unwrap_or_else(|| home.output.clone());
-            let store = contract.access.filed(&home.root);
+            let store = program
+                .home()
+                .and_then(|home| contract.access.filed(&home.root));
 
             // `-o` can name the entry itself. Refuse before compiling rather than destroy the source.
-            if let (Ok(input), Ok(written)) = (entry.canonicalize(), output.canonicalize())
+            if let Entry::File(entry) = program.entry()
+                && let (Ok(input), Ok(written)) = (entry.canonicalize(), output.canonicalize())
                 && input == written
             {
                 return Err(Failure::Error(format!(
@@ -307,7 +314,7 @@ fn dispatch() -> Result<(), Failure> {
             )?,
             Query::Cost { elaboration, .. } => wonder_cost(
                 elaboration.budget,
-                contract.admit_program(target, manifest, &here()?)?,
+                contract.admit_program(target, manifest, None, &here()?)?,
             )?,
             // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
             Query::Stage {
@@ -315,7 +322,7 @@ fn dispatch() -> Result<(), Failure> {
             } => wonder_stage(
                 elaboration.budget,
                 &name,
-                contract.admit_program(target, manifest, &here()?)?,
+                contract.admit_program(target, manifest, None, &here()?)?,
                 |module| wasm_optm(&module, |stage| println!("{stage}")),
             )?,
             Query::Server { elaboration } => serve(elaboration.budget, manifest)?,

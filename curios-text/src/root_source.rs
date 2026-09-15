@@ -262,9 +262,27 @@ impl RootSource {
             return Ok(false);
         };
 
-        let mut items = self.load(&mount.prefix)?.items;
-        let mut path = mount.prefix.clone();
-        let mut segments = qualifier.segments()[mount.prefix.segments().len()..]
+        let items = self.load(&mount.prefix)?.items;
+
+        self.declared_below(items, &mount.prefix, qualifier)
+    }
+
+    /// [`declares_module`](Self::declares_module) for the one header this source never reads: whether a `mod` chain from the entry program whose items are `items` reaches `qualifier`, a module under the entry's own mount.
+    ///
+    /// An entry's header ends in a term, so no module loader could parse it; whoever opened the entry parsed it once as the program it is, and hands its items over. Everything below them is read through this source, so a module under the entry's stem directory is loaded exactly as the compilation would load it.
+    pub fn entry_declares(&self, items: &[TopItem], qualifier: &Qualifier) -> Result<bool, Error> {
+        self.declared_below(items.to_vec(), &Qualifier::empty(), qualifier)
+    }
+
+    /// Whether a `mod` chain from `items`, the header of `prefix`, reaches `qualifier`: each segment below `prefix` declared by the header before it, an inline module walked as the body it carries and a file module loaded.
+    fn declared_below(
+        &self,
+        mut items: Vec<TopItem>,
+        prefix: &Qualifier,
+        qualifier: &Qualifier,
+    ) -> Result<bool, Error> {
+        let mut path = prefix.clone();
+        let mut segments = qualifier.segments()[prefix.segments().len()..]
             .iter()
             .peekable();
 

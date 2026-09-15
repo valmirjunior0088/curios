@@ -4,10 +4,10 @@
 
 use {
     crate::run_wasm,
-    curios_package::{Entry, Placement, Selection, Spelling},
+    curios_package::{Entry, Selection, Spelling},
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, compile_with_units},
     curios_runtime::{ForeignBindings, MockHost},
-    curios_text::{Entrypoint, RootSource},
+    curios_text::{Entrypoint, Overlay, RootSource},
     curios_utilities::test_support::Temporary,
     curios_verdicts::Verdicts,
     std::{
@@ -18,12 +18,12 @@ use {
 
 /// The entry file and the units `target` resolves to as `run` resolves it, standing in `directory`.
 fn resolved(directory: &Path, target: Option<&str>) -> (PathBuf, Vec<RootSource>) {
-    let program = match Selection::of(Spelling::of(target), None, directory, Placement::Standalone)
+    let program = match Selection::of(Spelling::of(target), None, directory, &Overlay::default())
         .expect("a governed package")
     {
         Selection::Program(program) => program,
         Selection::Entire(entire) => entire.default_program().expect("a governed package"),
-        Selection::Library(_) => panic!("a standalone argument never selects a library"),
+        Selection::Library(_) => panic!("these fixtures name their executables, never a library"),
     };
     let Entry::File(entry) = program.entry().clone() else {
         panic!("these fixtures name a target on disk");
@@ -170,9 +170,9 @@ fn a_package_with_no_library_still_runs_its_program() {
     assert_eq!(run(&root.join("tool"), None), b"tool");
 }
 
-/// A file argument is captured by no manifest: standing inside a package, a `.crs` path compiles standalone, with the package's library *not* in scope.
+/// A file no unit declares is loose: standing inside a package, a `.crs` path the library's `mod` lines do not reach compiles on its own, with the package's library *not* in scope.
 #[test]
-fn a_file_argument_compiles_standalone_inside_a_package() {
+fn a_file_no_unit_declares_compiles_loose_inside_a_package() {
     let root = tree(
         "e2e-file",
         &[

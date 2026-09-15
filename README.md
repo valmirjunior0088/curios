@@ -88,7 +88,7 @@ curios run hello.crs
 
 ## When one file is not enough
 
-A `.crs` file is standalone wherever it sits: it needs no manifest, and no manifest above it captures it. A package is what you write once a program outgrows that.
+A `.crs` file needs no manifest: one no package declares runs on its own, against the standard library alone. A package is what you write once a program outgrows that.
 
 ```sh
 curios new hello

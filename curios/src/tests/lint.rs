@@ -1,4 +1,4 @@
-//! The programs this tree ships lint clean: every instrument under `programs/`, standalone as `curios lint` would place it, and every corpus unit under `tests/corpus/`, as its library. A lint is exact and always on, so a finding here is fixed in the program rather than excused.
+//! The programs this tree ships lint clean: every instrument under `programs/`, loose as `curios lint` places a file no unit declares, and every corpus unit under `tests/corpus/`, as its library. A lint is exact and always on, so a finding here is fixed in the program rather than excused.
 
 use {
     curios_pipeline::DEFAULT_STEP_BUDGET,
@@ -50,6 +50,7 @@ fn every_program_lints_clean() {
             units: Vec::new(),
             origin: Origin::File(path),
             declares: None,
+            unlinked: None,
         }));
     }
     assert!(
@@ -79,7 +80,6 @@ fn every_corpus_unit_lints_clean() {
         let mounted = RootSource::mounted(&unit, RootKind::Ordinary, &header, root.join(&unit));
         wrong.extend(findings(Subject::Unit {
             units: vec![mounted],
-            file: None,
         }));
     }
     assert!(

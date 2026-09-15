@@ -21,18 +21,20 @@ The complete command-line and package reference. The [README](../README.md) cove
 
 ## Running and compiling
 
-`run` takes four forms, and `compile` the first two of them, so what a bare invocation means never depends on which one you asked.
+`run` and `compile` take one argument four ways, so what a bare invocation means never depends on which one you asked.
 
 | Argument | Means |
 | --- | --- |
 | *(none)* | the governing package's sole executable, or the one `default` names when it declares several |
 | an identifier | the executable declared under that name |
-| anything ending in `.crs`, or holding a path separator | that file, standalone — `run` only |
-| `-` | the program on standard input, standalone — `run` only |
+| anything ending in `.crs`, or holding a path separator | that file, placed by what declares it: an executable's entry is that executable, and a file no unit declares is a loose program, compiled against the standard library alone |
+| `-` | the program on standard input, loose |
 
 The dispatch is lexical and never probes the disk: an executable's name is a single identifier, so it can hold neither `.crs` nor a path separator nor be `-`, and the spaces cannot overlap. `curios run scratch.crs` therefore means the file even when the package declares an executable called `scratch`.
 
-`compile` refuses the two standalone forms by name. A product written to disk needs a package to be filed under and a name to be filed as, and only a declared executable has both; a loose file is for trying a theory, which `run` serves and which leaves nothing behind.
+A file is placed the same way by every command: it is an executable's when it is that executable's entry or a module the entry's `mod` lines reach, a library's when the `mod` lines of `lib.crs` reach it, and loose otherwise. `run` and `compile` perform a program, so they take its own file — a module of it is refused, naming the executable to run instead — and refuse a library; a file written as a module, items with no final term, has no program in it to run.
+
+A product written to disk is filed under the package that declares it, and a loose program has no package: `compile` builds one only where `-o`/`--output` says, and without it is refused naming the command that would build it.
 
 Everything after the target belongs to the program, not to `curios`, and reaches it through `/std/proc/args`:
 
@@ -44,9 +46,9 @@ Everything from the target onward is collected verbatim, hyphens included, so a 
 
 A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` past its carrier and where larger values live, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running — followed by the wasm frames where the build kept their names.
 
-`compile` writes its executable under the store beside the governing manifest, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead.
+`compile` writes a declared executable under the store beside the governing manifest, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead, and is the only place a loose program can go.
 
-A file argument brings no project with it — no manifest, no dependencies, not even the library of the package you are standing in. That is deliberate: project scope is reachable only through something a manifest declares, so a scratch file cannot quietly acquire one. When a scratch program does want the library, one `[[executables]]` line gives it one.
+A loose file brings no project with it — no dependencies, not even the library of the package it sits in. That is deliberate: project scope is reachable only through something a manifest declares, so a scratch file cannot quietly acquire one. When a scratch program does want the library, one `[[executables]]` line gives it one.
 
 ## Testing
 
@@ -87,7 +89,7 @@ curios run - <<'EOF'
 EOF
 ```
 
-It is standalone in the same sense a file argument is, and answers before anything looks for a manifest — so `-` means the same thing inside a package as outside one, and never the package's default executable.
+It is loose in the same sense a file no unit declares is, and answers before anything looks for a manifest — so `-` means the same thing inside a package as outside one, never the package's default executable, and no `--manifest` can govern it. `compile -` builds it where `--output` says.
 
 Standard input is asked for rather than assumed. A bare `curios run` already means the governing package's default executable, so reading a pipe when one happens to be attached would decide between the two by whether a terminal is present — making one command line mean different things in a shell and in a pipeline, and leaving `curios run < input.txt` compiling the input it was meant to be fed. The spelling costs one character and removes the question.
 
@@ -170,7 +172,7 @@ It writes every part a package has: the manifest, `lib.crs`, and `exe.crs`, plus
 | `stage <STAGE> [TARGET]` | the program's representation at one rung of the pipeline, reprinted. A rung the compilation reached is answered even when a later stage refuses: the rendering goes to stdout, what stopped the program goes to stderr, and the exit is 0. Only a program that stops *before* the rung has not answered, and exits 1 |
 | `server` | the same questions over the language server protocol, on standard input and output — what an editor integration launches |
 
-The target takes the four forms `run` takes, dispatched the same way, with one deliberate difference: **a file is placed in the unit that declares it** rather than compiled alone. Nothing executes, so nothing is escalated by supplying context, and a library module analysed without its library reports every import unresolved. A file under a package's directory is analysed as that package's library — and one there that no `mod` reaches is reported as not part of it, ahead of the library's own answer, since a file nothing declares is in no unit; one that is an executable's entry, or sits under its stem directory, as that executable; one no manifest above it claims, standalone. That holds for the standard library's own modules: `/std` is a package like any other, and the package named `std` is compiled over the archived unit as a baseline — reusing every declaration the edit did not reach — standing where the archived unit stood rather than beside it, so a question about `curios-prelude-archive/std/List.crs` is answered against the prelude it is part of and costs the closure of the edit rather than the library. The project is decided from the file's own location, not the working directory, and `--manifest` overrides it. No target at all is the governing package entire for `diagnostics` — its library, then every executable — and the sole or `default` executable for `stage` and `cost`, which both need a program.
+The target takes the four forms `run` takes, placed the same way: a module a library's `mod` lines reach is analysed as that library, and a module an executable's entry reaches as that executable — which, unlike `run`, a question takes through the module as readily as through the entry. A file a package holds that no `mod` reaches is in no unit, so it is checked on its own — as a program when a final term follows its items, and as a module of its own otherwise — behind a note saying so and naming the `mod` line that would declare it; a note is no finding, and no exit code counts it. A file no manifest above it claims is loose, with nothing to note. That holds for the standard library's own modules: `/std` is a package like any other, and the package named `std` is compiled over the archived unit as a baseline — reusing every declaration the edit did not reach — standing where the archived unit stood rather than beside it, so a question about `curios-prelude-archive/std/List.crs` is answered against the prelude it is part of and costs the closure of the edit rather than the library. The project is decided from the file's own location, not the working directory, and `--manifest` overrides it. No target at all is the governing package entire for `diagnostics` — its library, then every executable — and the sole or `default` executable for `stage` and `cost`, which both need a program and so refuse a file written as a module.
 
 `cost` answers the first of the questions [a profile is a fact about the program, not about the machine](roadmap/profiling-spec.md) separates: *which cliff am I on*. A declaration is `absorbed` when nothing in the compiled program bears its name — it was inlined into its callers, or pruned once something else was — which is the row saying it costs nothing of its own; `specialized <n>` when a pass cloned it, so `n` functions stand where one was written. The two counts are read off the continuation graph before and after optimization, so no pass is instrumented and the program measured is the program that ships. Ordering is by name because the report is meant to be committed and diffed: a regression is then something to read rather than something to judge.
 
@@ -228,7 +230,7 @@ A lint is an exact finding the compilation already has and nothing stops on: `ru
 | `unused-declaration` | a non-`pub` `let`, `foreign`, `induct`, `struct` or `concept` unreachable from the unit's roots — its exported surface, its tests, its witnesses and its program's tail; a private `mod` none of whose declarations is reached is reported once, at the `mod` | naming it `_x`, or `pub` |
 | `unused-dependency` | a `[dependencies]` row whose package no reference in the library or any executable resolved into; decided over the package, so reported only by the package-entire form | deleting the row |
 
-The target takes `wonder`'s four forms and is placed the same way, so a library module is linted as its library. Output is what `wonder diagnostics` prints — each diagnostic, goal and lint rendered as `run` reports it, a blank line between — and the exit is the tri-state: 1 when a lint or an error was reported, 2 when only goals were, 0 when nothing. A program that does not lower reports its error alone, since the lints are read off the lowering; one that lowers and is then refused reports its lints beside the refusal.
+The target takes `wonder`'s four forms and is placed the same way, so a library module is linted as its library. Output is what `wonder diagnostics` prints — each diagnostic, goal and lint rendered as `run` reports it, a blank line between — and the exit is the tri-state: 1 when a lint or an error was reported, 2 when only goals were, 0 when nothing but a note was. A program that does not lower reports its error alone, since the lints are read off the lowering; one that lowers and is then refused reports its lints beside the refusal.
 
 ## Dependencies
 
@@ -293,7 +295,7 @@ Set `CURIOS_CACHE` to share the content-addressed half across projects; unset, e
 
 Neither `run` nor `compile` recompiles a declared executable nothing has changed. The precompiled payload is filed in the store beside the units, and an invocation whose entry file, whose entry's own modules and whose dependencies all still hold what they held is served from it — reported as `↳ Compiling hello; reused` in place of the unit steps a compile would show. One slot serves both subcommands, so `compile` after `run` only writes the executable, and `run` after `compile` compiles nothing.
 
-An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again. A question about a program (`wonder`) reads the store and never writes it, and a unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, reusing every declaration the edit did not reach — which is what keeps a question about one declaration from costing the whole library it sits in. A bare `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-bare split as everywhere else.
+An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again. A question about a program (`wonder`) reads the store and never writes it, and a unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, reusing every declaration the edit did not reach — which is what keeps a question about one declaration from costing the whole library it sits in. A loose `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-loose split as everywhere else.
 
 Payloads are native code for the machine that built them, so an entry is found only by an engine that can run it; two machines share one only when their engines agree. Nothing has to be cleaned up by hand as sources change: each executable occupies one slot per dependency chain, overwritten in place.
 

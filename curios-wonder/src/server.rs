@@ -2,7 +2,7 @@
 //!
 //! **Two threads, and the compiler is on the one that never reads the protocol.** The compiler is single-threaded by construction — `Rc` spans, a thread-local prelude, a `RootSource` that is deliberately not `Send` — so exactly one thread, the *analyst*, owns it; the protocol thread reads messages, keeps the overlay, answers what needs no compilation, and hands the analyst check jobs over a channel. What this buys is that a request is never behind a compile: a formatting request arriving during a two-second check is answered by the protocol thread at once, where one thread doing both would have answered it after the check, past the editor's timeout. This was first written as one thread on the reading that `lsp-server`'s synchronous loop was the whole design, and the timeout is what that reading cost. Beyond two the channel is indifferent — more analysts would be a loop around `thread::spawn`, each with its own prelude — but a second compile of the same document is what coalescing makes unnecessary, and edits to two documents at once are rare enough that the second waits one check.
 //!
-//! **The editor's documents are the overlay.** Every open document's text is consulted before the disk by every unit the check assembles (`RootSource::with_overlay`), so a diagnostic reflects the buffer rather than the file, and an unsaved new module is still found by the `mod` that declares it. Placement is `curios_package::Selection`'s, unchanged from the one-shot query — the library whose directory holds the document, the executable whose entry or stem tree it is, or no unit at all.
+//! **The editor's documents are the overlay.** Every open document's text is consulted before the disk by every unit the check assembles (`RootSource::with_overlay`), so a diagnostic reflects the buffer rather than the file, and an unsaved new module is still found by the `mod` that declares it. Placement is `curios_package::Selection`'s, exactly as the one-shot query's, and it walks the overlay too — the unit whose `mod` chain declares the document, so an unsaved `mod` line counts, or no unit at all.
 //!
 //! **Edits coalesce on the analyst.** A job carries the whole overlay as it stood when the edit arrived; before compiling, the analyst drains every job queued behind it and keeps the latest overlay and the union of the documents to check, so a burst of keystrokes during one check costs one more check from the newest text rather than one per keystroke. Incrementality inside a unit is not here either, because it is the fold's: a unit the store holds from an earlier text is a baseline the edited unit is compiled over (`curios-pipeline`), so a check after a keystroke re-elaborates the closure of the edit rather than the unit, and this module only hands the fold the overlay.
 //!
@@ -12,7 +12,7 @@
 
 use {
     crate::{Asked, Diagnostic as Record, Severity},
-    curios_package::{Placement, Selection, Spelling},
+    curios_package::{Selection, Spelling},
     curios_text::{Formatted, Overlay},
     curios_utilities::{Report, Source, Span},
     lsp_server::{Connection, Message, Notification, Request, RequestId, Response},
@@ -282,7 +282,7 @@ impl Analyst {
             Spelling::File(document.to_path_buf()),
             self.manifest.as_deref(),
             document.parent().unwrap_or(document),
-            Placement::Contained,
+            overlay,
         )
         .and_then(Asked::every);
         let records = match asked {
@@ -327,6 +327,7 @@ fn adapt(document: &Path, record: &Record) -> (PathBuf, Diagnostic) {
         Severity::Error => DiagnosticSeverity::ERROR,
         Severity::Goal => DiagnosticSeverity::INFORMATION,
         Severity::Lint => DiagnosticSeverity::WARNING,
+        Severity::Note => DiagnosticSeverity::HINT,
     };
 
     let (path, range) = match &record.report.span {

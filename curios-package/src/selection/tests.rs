@@ -1,4 +1,4 @@
-//! What an argument selects: how it is spelled, the program `run` means by it, and where a question places a file.
+//! What an argument selects: how it is spelled, the program a name or no argument means, and the unit that declares a file.
 
 use {super::*, curios_utilities::test_support::Temporary, std::fs};
 
@@ -17,17 +17,22 @@ fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
     root
 }
 
-/// The program `argument` means to `run`, standing in `directory`, or the refusal it earns.
+/// What `argument` selects standing in `directory` — a file argument made whole under `directory`, since placement reads a file where it is and a test cannot move the process there.
+fn selection(argument: Option<&str>, directory: &Path) -> Result<Selection, String> {
+    let spelling = match Spelling::of(argument) {
+        Spelling::File(path) => Spelling::File(directory.join(path)),
+        spelling => spelling,
+    };
+
+    Selection::of(spelling, None, directory, &Overlay::default())
+}
+
+/// The program `argument` means to a command that needs one, standing in `directory`, or the refusal it earns.
 fn selected(argument: Option<&str>, directory: &Path) -> Result<Program, String> {
-    match Selection::of(
-        Spelling::of(argument),
-        None,
-        directory,
-        Placement::Standalone,
-    )? {
+    match selection(argument, directory)? {
         Selection::Program(program) => Ok(program),
         Selection::Entire(entire) => entire.default_program(),
-        Selection::Library(_) => panic!("a standalone argument never selects a library"),
+        Selection::Library(_) => panic!("{argument:?} selects a library"),
     }
 }
 
@@ -148,40 +153,50 @@ fn a_name_selects_a_declared_executable() {
     assert!(refusal.contains("\"serve\""), "{refusal}");
 }
 
-/// **The dispatch.** A file argument is never captured by a manifest — not even standing inside a package that declares an executable of a colliding name.
+/// **The placement.** A file is placed by what declares it, whichever command asks: an executable's entry is that executable, and a file beside it that no `mod` declares is loose, told what would declare it.
 #[test]
-fn a_file_argument_is_never_captured_by_a_manifest() {
+fn a_file_is_placed_by_what_declares_it_not_by_where_it_sits() {
     let root = tree(
-        "run-file",
+        "placed-by-declaration",
         &[
             (
                 "curios.toml",
                 "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
             ),
             ("lib.crs", ""),
-            ("serve.crs", ""),
+            ("serve.crs", "/std/print(\"\")\n"),
             ("scratch.crs", ""),
         ],
     );
 
-    for argument in ["scratch.crs", "serve.crs", "./serve", "sub/dir/x.crs"] {
-        let program = selected(Some(argument), &root).expect("a file argument");
-        assert!(
-            program.entry() == &Entry::File(PathBuf::from(argument)) && program.home().is_none(),
-            "{argument} should dispatch as a file"
-        );
-    }
+    let entry = selected(Some("serve.crs"), &root).expect("the entry");
+    assert_eq!(
+        entry.home().expect("a declared program").executable,
+        "serve"
+    );
+
+    let scratch = selected(Some("scratch.crs"), &root).expect("a loose file");
+    assert!(scratch.home().is_none());
+    let unlinked = scratch
+        .unlinked()
+        .expect("the package holds it, and says why it is in no unit");
+    assert_eq!(
+        unlinked.message,
+        format!(
+            "{} is in no unit of `/app`, so it was checked on its own against `/std`: declare it with `mod scratch;` in lib.crs",
+            root.join("scratch.crs").display()
+        )
+    );
 }
 
-/// A file argument compiles standalone *everywhere*, so it works where no manifest governs at all.
+/// A file no manifest governs is loose, and has nothing to be told.
 #[test]
 fn a_file_argument_needs_no_project() {
     let root = tree("run-standalone", &[("scratch.crs", "")]);
 
-    assert_eq!(
-        entry(Some("scratch.crs"), &root).unwrap(),
-        PathBuf::from("scratch.crs")
-    );
+    let program = selected(Some("scratch.crs"), &root).expect("a loose file");
+    assert_eq!(program.entry(), &Entry::File(root.join("scratch.crs")));
+    assert!(program.home().is_none() && program.unlinked().is_none());
 }
 
 /// A declared executable's binary lands in the governing root's store, nested under the package that declares it.
@@ -244,6 +259,22 @@ fn standard_input_has_no_entry_file() {
     let program = selected(Some("-"), Path::new(".")).expect("standard input");
 
     assert_eq!(program.entry(), &Entry::Stdin);
+}
+
+/// Standard input is answered before any manifest is looked for, so naming one beside it is refused rather than ignored.
+#[test]
+fn standard_input_is_governed_by_no_manifest() {
+    let root = tree("stdin-manifest", &[("curios.toml", "name = \"app\"\n")]);
+
+    let Err(refusal) = Selection::of(
+        Spelling::Stdin,
+        Some(&root.join("curios.toml")),
+        &root,
+        &Overlay::default(),
+    ) else {
+        panic!("a manifest cannot govern standard input");
+    };
+    assert!(refusal.contains("no manifest governs"), "{refusal}");
 }
 
 /// A package of nothing but programs compiles them against its dependencies alone — there is no library of its own to put last.
@@ -350,7 +381,7 @@ fn a_default_naming_the_absent_own_executable_names_the_file_that_would_declare_
     );
 }
 
-/// A package declaring no executable refuses a bare target naming the two ways to declare one — and no subcommand, since `compile` and `wonder stage` reach the same refusal and `compile` takes no loose file.
+/// A package declaring no executable refuses a bare target naming the two ways to declare one — and no subcommand, since `compile` and `wonder stage` reach the same refusal.
 #[test]
 fn a_bare_target_on_a_package_of_a_library_alone_says_how_to_declare_one() {
     let root = tree(
@@ -382,7 +413,7 @@ fn no_argument_selects_the_package_entire() {
     );
 
     let Selection::Entire(entire) =
-        Selection::of(Spelling::Nothing, None, &root, Placement::Contained)
+        Selection::of(Spelling::Nothing, None, &root, &Overlay::default())
             .expect("a governed package")
     else {
         panic!("no argument is the package entire");
@@ -405,9 +436,9 @@ fn no_argument_selects_the_package_entire() {
     assert_eq!(names, vec!["serve", "bench"]);
 }
 
-/// A question places a module of the library in the library, selected through that file and carrying the module its spelling names.
+/// A module the library's header declares is placed in the library, selected through that file.
 #[test]
-fn a_placed_library_module_selects_the_library_through_it() {
+fn a_declared_library_module_selects_the_library_through_it() {
     let root = tree(
         "placed-library",
         &[
@@ -416,29 +447,19 @@ fn a_placed_library_module_selects_the_library_through_it() {
             ("util.crs", ""),
         ],
     );
-    let file = root.join("util.crs");
 
-    let Selection::Library(library) = Selection::of(
-        Spelling::File(file.clone()),
-        None,
-        &root,
-        Placement::Contained,
-    )
-    .expect("a placed file") else {
-        panic!("a module of the library is the library");
+    let Selection::Library(library) = selection(Some("util.crs"), &root).expect("a placed file")
+    else {
+        panic!("a declared module of the library is the library");
     };
 
-    assert_eq!(library.through, Some(file));
-    assert_eq!(
-        library.module.map(|module| module.join()),
-        Some("/app/util".to_string())
-    );
+    assert_eq!(library.through, Some(root.join("util.crs")));
     assert_eq!(library.units.len(), 1);
 }
 
-/// A question places an executable's entry in its program, and a module under the entry's stem directory in the same program, selected through that module.
+/// An executable's entry is its program, a module the entry's `mod` chain reaches is the same program selected through that module, and a file under the entry's stem directory that no `mod` reaches is loose — told the line that would declare it.
 #[test]
-fn a_placed_entry_selects_its_program_and_a_placed_module_of_it_selects_it_through_that_module() {
+fn a_module_an_entry_declares_selects_its_program_and_one_it_does_not_is_loose() {
     let root = tree(
         "placed-program",
         &[
@@ -446,53 +467,177 @@ fn a_placed_entry_selects_its_program_and_a_placed_module_of_it_selects_it_throu
                 "curios.toml",
                 "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
             ),
-            ("serve.crs", "mod helper;\n"),
+            ("serve.crs", "mod helper;\n/std/print(\"\")\n"),
             ("serve/helper.crs", ""),
+            ("serve/other.crs", ""),
         ],
     );
-    let placed = |file: &str| match Selection::of(
-        Spelling::File(root.join(file)),
-        None,
-        &root,
-        Placement::Contained,
-    )
-    .expect("a placed file")
-    {
-        Selection::Program(program) => program,
-        _ => panic!("{file} belongs to the program"),
-    };
 
-    let entry = placed("serve.crs");
-    assert_eq!(
-        entry.home().expect("a declared program").executable,
-        "serve"
-    );
+    let entry = selected(Some("serve.crs"), &root).expect("the entry");
     assert_eq!(entry.through(), None);
 
-    let module = placed("serve/helper.crs");
+    let module = selected(Some("serve/helper.crs"), &root).expect("a declared module");
     assert_eq!(module.entry(), &Entry::File(root.join("serve.crs")));
     assert_eq!(
         module.through(),
         Some(root.join("serve/helper.crs").as_path())
     );
+
+    let other = selected(Some("serve/other.crs"), &root).expect("an undeclared module");
+    assert!(other.home().is_none());
+    assert!(
+        other
+            .unlinked()
+            .expect("the package holds it")
+            .message
+            .ends_with("declare it with `mod other;` in serve.crs"),
+        "{:?}",
+        other.unlinked()
+    );
 }
 
-/// A question about a file no manifest governs selects it loose, exactly as `run` does.
+/// What would put an unlinked file in a unit: the `mod` line in the header of the module above it, nothing for a spelling no module has, and a library to write it in for a package that has none.
+#[test]
+fn an_unlinked_file_is_told_what_would_declare_it() {
+    let root = tree(
+        "unlinked-remedies",
+        &[
+            ("curios.toml", "name = \"app\"\n"),
+            ("lib.crs", "pub mod parse;\n"),
+            ("parse.crs", ""),
+            ("parse/lexer.crs", ""),
+            ("notes.txt", ""),
+            ("odd-name.crs", ""),
+        ],
+    );
+
+    for (file, remedy) in [
+        (
+            "parse/lexer.crs",
+            "declare it with `mod lexer;` in parse.crs",
+        ),
+        (
+            "./notes.txt",
+            "its spelling names no module a `mod` could declare",
+        ),
+        (
+            "odd-name.crs",
+            "its spelling names no module a `mod` could declare",
+        ),
+    ] {
+        let message = selected(Some(file), &root)
+            .expect("a loose file")
+            .unlinked()
+            .map(|unlinked| unlinked.message.clone())
+            .unwrap_or_else(|| panic!("{file} is held by the package"));
+        assert!(message.ends_with(remedy), "{file}: {message}");
+    }
+
+    let programs = tree(
+        "unlinked-no-library",
+        &[
+            ("curios.toml", "name = \"tool\"\n"),
+            ("exe.crs", "/std/print(\"\")\n"),
+            ("stray.crs", ""),
+        ],
+    );
+    let message = selected(Some("stray.crs"), &programs)
+        .expect("a loose file")
+        .unlinked()
+        .map(|unlinked| unlinked.message.clone())
+        .expect("the package holds it");
+    assert!(
+        message.ends_with("`/tool` has no library to declare it in"),
+        "{message}"
+    );
+}
+
+/// A file no manifest above it governs is loose, with nothing to be told.
 #[test]
 fn a_placed_file_no_manifest_governs_is_loose() {
     let root = tree("placed-loose", &[("scratch.crs", "")]);
-    let file = root.join("scratch.crs");
 
-    let Selection::Program(program) = Selection::of(
-        Spelling::File(file.clone()),
-        None,
-        &root,
-        Placement::Contained,
-    )
-    .expect("an answer, not a refusal") else {
+    let Selection::Program(program) =
+        selection(Some("scratch.crs"), &root).expect("an answer, not a refusal")
+    else {
         panic!("a file no unit declares is a program of its own");
     };
 
-    assert_eq!(program.entry(), &Entry::File(file));
+    assert_eq!(program.entry(), &Entry::File(root.join("scratch.crs")));
     assert!(program.home().is_none() && program.declares().is_none());
+}
+
+/// An umbrella enumerating one member, with a stray file at its root and another in a directory no member holds.
+fn umbrella(name: &str) -> Temporary {
+    tree(
+        name,
+        &[
+            ("curios.toml", "members = [\"app\"]\n"),
+            ("app/curios.toml", "name = \"app\"\n"),
+            ("app/lib.crs", "pub mod util;\n"),
+            ("app/util.crs", ""),
+            ("scratch.crs", ""),
+            ("tools/scratch.crs", ""),
+        ],
+    )
+}
+
+/// An umbrella declares no units, so a file whose nearest manifest is one belongs to nothing and is loose, with no package to say anything about it.
+#[test]
+fn a_file_no_member_holds_under_an_umbrella_is_loose() {
+    let root = umbrella("umbrella-stray");
+
+    for stray in ["scratch.crs", "tools/scratch.crs"] {
+        let program = selected(Some(stray), &root).expect("an answer, not a refusal");
+        assert!(
+            program.home().is_none() && program.unlinked().is_none(),
+            "{stray}"
+        );
+    }
+}
+
+/// A member's module is the member's library, under the umbrella's root — the nearest manifest is the member's, and the umbrella governs it.
+#[test]
+fn a_members_module_is_placed_in_its_library_under_the_umbrella_root() {
+    let root = umbrella("umbrella-member");
+
+    let Selection::Library(library) =
+        selection(Some("app/util.crs"), &root).expect("a placed file")
+    else {
+        panic!("a declared module of the library is the library");
+    };
+    assert_eq!(library.root, root.to_path_buf());
+    assert_eq!(library.units.len(), 1);
+}
+
+/// Naming an umbrella outright with `--manifest` is the refusal it always was: nothing can be asked of a manifest that compiles nothing.
+#[test]
+fn an_umbrella_named_outright_is_still_refused() {
+    let root = umbrella("umbrella-named");
+
+    let Err(refusal) = Selection::of(
+        Spelling::File(root.join("scratch.crs")),
+        Some(&root.join("curios.toml")),
+        &root,
+        &Overlay::default(),
+    ) else {
+        panic!("an umbrella named by hand is refused");
+    };
+    assert!(refusal.contains("declares an umbrella"), "{refusal}");
+}
+
+/// `--manifest` names which package places a file, so a file outside that package's directory is refused rather than placed by a manifest that cannot declare it.
+#[test]
+fn a_named_manifest_places_no_file_outside_its_package() {
+    let root = umbrella("manifest-outside");
+
+    let Err(refusal) = Selection::of(
+        Spelling::File(root.join("scratch.crs")),
+        Some(&root.join("app/curios.toml")),
+        &root,
+        &Overlay::default(),
+    ) else {
+        panic!("a file outside the named package is refused");
+    };
+    assert!(refusal.contains("is outside the package"), "{refusal}");
 }

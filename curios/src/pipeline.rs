@@ -7,12 +7,12 @@ use {
     curios::{engine, to_cwasm},
     curios_package::{Entry, Program},
     curios_pipeline::{Cache, CompileError, Progress, compile_with_units},
-    curios_text::{Entrypoint, RootSource, UnitSource},
+    curios_text::{Entrypoint, Form, RootSource, UnitSource},
     curios_utilities::Source,
     curios_verdicts::Verdicts,
     curios_wasm::Module,
     curios_wonder::STDIN_LABEL,
-    std::{io, path::Path, rc::Rc},
+    std::{fs, io, path::Path, rc::Rc},
 };
 
 /// The precompiled payload for `program`, taken from `cache` when nothing it was made from has changed, and compiled — and filed there — otherwise. `cache` is the store its command opened for it to file into, and `None` compiles everything and files nothing.
@@ -39,7 +39,7 @@ pub(crate) fn payload_of(
 
     // Opened before the store is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.
     let (entrypoint, loader, source) = open(entry.as_deref())?;
-    // What the manifest declared, onto the resolver the entry's own names go through. A standalone file has no manifest, so it declares nothing and sees every open prefix — which is the whole scope it was given, since nothing mounted anything beside the prelude.
+    // What the manifest declared, onto the resolver the entry's own names go through. A loose program has no manifest, so it declares nothing and sees every open prefix — which is the whole scope it was given, since nothing mounted anything beside the prelude.
     let loader = match declares {
         Some(declares) => loader.declaring(declares),
         None => loader,
@@ -128,7 +128,14 @@ fn open(entry: Option<&Path>) -> Result<(Entrypoint, RootSource, Rc<Source>), Co
             .map_err(|error| CompileError::Failure(vec![error.report()]));
     };
 
-    Entrypoint::opened(path).map_err(|error| CompileError::Failure(vec![error.report()]))
+    Entrypoint::opened(path).map_err(|error| match fs::read_to_string(path) {
+        // A text written as a module fails the program grammar at its end, where it was never meant to hold a term: say what it is rather than what the grammar expected there.
+        Ok(text) if Form::of(path, &text) == Form::Module => CompileError::failure(format!(
+            "{} is written as a module, with no final term to compile a program from",
+            path.display()
+        )),
+        _ => CompileError::Failure(vec![error.report()]),
+    })
 }
 
 /// Compile `entrypoint` against `units` in the order given, narrating each step under a header that names `manifest` when it is not where the invocation stands.

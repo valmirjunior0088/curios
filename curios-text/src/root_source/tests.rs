@@ -2,9 +2,35 @@
 
 use {
     super::{Error, Overlay, RootSource, identity},
+    crate::Entrypoint,
     curios_utilities::{Qualifier, RootKind, Source, test_support::Temporary},
     std::{fs, path::Path, rc::Rc},
 };
+
+/// An entry's header is the one file a loader never reads, so its `mod` chain is walked from the items the entry was parsed into: a module reached through a file module below it counts, and one nothing declares does not.
+#[test]
+fn an_entry_declares_what_its_mod_chain_reaches() {
+    let root = tree(
+        "entry-declares",
+        &[
+            ("serve.crs", "mod helper;\n/std/print(\"\")\n"),
+            ("serve/helper.crs", "mod deep;\n"),
+            ("serve/helper/deep.crs", ""),
+            ("serve/stray.crs", ""),
+        ],
+    );
+    let (entrypoint, loader, _) =
+        Entrypoint::opened(&root.join("serve.crs")).expect("the entry parses");
+    let declares = |qualifier: Qualifier| {
+        loader
+            .entry_declares(&entrypoint.module.items, &qualifier)
+            .expect("every header on the chain reads")
+    };
+
+    assert!(declares(Qualifier::from(["helper"])));
+    assert!(declares(Qualifier::from(["helper", "deep"])));
+    assert!(!declares(Qualifier::from(["stray"])));
+}
 
 /// A file that does not exist is spelled by its canonical parent and its name, and a bare name's parent is the current directory — not the empty path, which canonicalizes to nothing and left the relative name as given, so every caller read it as a path with no directory at all.
 #[test]

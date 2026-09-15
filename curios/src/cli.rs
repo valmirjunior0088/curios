@@ -57,8 +57,8 @@ pub(crate) enum Mode {
         args: Vec<OsString>,
     },
 
-    /// Dispatched through the same code as `run`, so the two cannot drift apart, and then narrowed to the named form: a built executable is filed under the package that declares it, and a loose file or standard input has no package to be filed under.
-    #[command(about = "Compile a declared executable to a native executable")]
+    /// Dispatched through the same code as `run`, so the two cannot drift apart. A declared executable is filed under the package that declares it; a program no package declares — a file no unit declares, or standard input — has nowhere to be filed, and is built where `--output` says.
+    #[command(about = "Compile a program to a native executable")]
     Compile {
         #[arg(value_name = "TARGET", help = COMPILE.target_help())]
         target: Option<String>,
@@ -67,7 +67,7 @@ pub(crate) enum Mode {
             short = 'o',
             long = "output",
             value_name = "PATH",
-            help = "Write the executable to PATH (default: under the store, beside the governing manifest)"
+            help = "Write the executable to PATH (default: under the store, beside the governing manifest; required for a program no package declares)"
         )]
         output_path: Option<PathBuf>,
 

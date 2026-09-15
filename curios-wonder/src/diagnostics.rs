@@ -2,12 +2,13 @@
 
 use {
     crate::{Diagnostic, Severity},
+    curios_package::Unlinked,
     curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, check_with_units},
-    curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
+    curios_text::{Entrypoint, Form, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
-    curios_utilities::{Qualifier, Report, Source, Span},
+    curios_utilities::{Qualifier, Report, RootKind, Source, Span, is_identifier},
     curios_verdicts::Verdicts,
-    std::{collections::BTreeSet, path::PathBuf},
+    std::{collections::BTreeSet, fs, path::Path, path::PathBuf},
 };
 
 /// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject was *written* under — what `curios lint` reads a package's unused dependencies off.
@@ -18,75 +19,85 @@ pub struct Diagnosed {
 
 /// What a question is about.
 ///
-/// The transport decides this and the engine only compiles it: a file declared by a package's library is asked about as that whole unit, one declared as an executable's entry is asked about as that origin, and a file no unit declares is asked about standalone — see `curios-package`'s `Selection` for the rule. The engine never probes for a manifest of its own.
+/// The transport decides this and the engine compiles it: a file a package's library declares is asked about as that whole unit, one an executable declares as that executable's origin, and a file no unit declares on its own — see `curios-package`'s `Selection` for the rule. The engine never probes for a manifest of its own; the one thing it decides is the form a loose file is written in ([`Subject::formed`]).
 pub enum Subject {
     /// A program: the entry compiled against `units`, in the order given.
     Entry {
         units: Vec<RootSource>,
         origin: Origin,
-        /// The prefixes the entry may name, as its manifest declares them — `None` for a standalone program, which has no manifest and so sees every open prefix in scope.
+        /// The prefixes the entry may name, as its manifest declares them — `None` for a loose program, which has no manifest and so sees every open prefix in scope.
         ///
-        /// An `Option` rather than a possibly-empty list, because the two differ: a program that declared *none* sees nothing but its own names, and one that declared *nothing* sees everything a program may name. A standalone file is the second.
+        /// An `Option` rather than a possibly-empty list, because the two differ: a program that declared *none* sees nothing but its own names, and one that declared *nothing* sees everything a program may name. A loose program is the second.
         declares: Option<Vec<Qualifier>>,
+        /// Why the file is in none of the units of the package that holds it, when one does — the note the answer opens with.
+        unlinked: Option<Unlinked>,
     },
     /// A unit: the last of `units`, compiled against the ones before it. Its verdicts are the answer.
-    Unit {
-        units: Vec<RootSource>,
-        /// The file the question was asked through, when it was asked through one rather than about the unit entire — so a file the unit never reads is reported as such, ahead of an answer that would otherwise be silent about it.
-        file: Option<FileAsked>,
-    },
+    Unit { units: Vec<RootSource> },
 }
 
-/// A file a unit question was asked through: where it is, and the module its spelling names under the unit's prefix.
-///
-/// **A file under a package's directory is placed in its library, and the library may never read it.** A unit's input set is closed — a file joins it only by being declared `mod` somewhere on a chain from the header — so a file no chain reaches is in no unit at all, and an answer computed as if it were reports the library's verdicts and nothing about the file: with a clean library, nothing and exit 0, whatever the file holds. This is what lets the answer say so instead, by asking the unit's own loader whether a `mod` reaches the module, which is the same answer on a cache hit as on a compile.
-pub struct FileAsked {
-    pub path: PathBuf,
-    /// The unit's prefix, for the message.
-    pub prefix: Qualifier,
-    /// The module the file would be, by the layout rule; `None` when its spelling is no module's, which no `mod` could declare.
-    pub module: Option<Qualifier>,
-}
-
-impl FileAsked {
-    /// The diagnostic this file earns when no `mod` reachable from `unit`'s header declares it, and `None` when one does — or when a header on the way could not be read, which the compilation reports on its own account.
-    fn undeclared(&self, unit: &RootSource, overlay: &Overlay) -> Option<Diagnostic> {
-        let declared = match &self.module {
-            Some(module) => unit.declares_module(module).ok()?,
-            None => false,
-        };
-        if declared {
+impl Subject {
+    /// The note a program selected loose from inside a package opens with, located at its file's start so an editor places it on the document asked about — the text the overlay's where it holds one, as every read is.
+    fn note(&self, overlay: &Overlay) -> Option<Diagnostic> {
+        let Subject::Entry {
+            unlinked: Some(unlinked),
+            ..
+        } = self
+        else {
             return None;
-        }
-
-        let reason = match &self.module {
-            Some(module) => format!(
-                "no `mod` reachable from the library's header declares `{}`",
-                module.join()
-            ),
-            None => "its spelling names no module a `mod` could declare".to_string(),
         };
-        let message = format!(
-            "{} is not part of `{}`: {reason}, so the library was checked without it",
-            self.path.display(),
-            self.prefix.join()
-        );
 
-        // Located at the file's start, so an editor places it on the document asked about; the text is the overlay's where it holds one, as every read is.
-        let source = match overlay.get(&self.path) {
-            Some(text) => Some(Source::held(&self.path, text)),
-            None => Source::read(&self.path).ok(),
+        let source = match overlay.get(&unlinked.file) {
+            Some(text) => Some(Source::held(&unlinked.file, text)),
+            None => Source::read(&unlinked.file).ok(),
         };
         let report = match source {
-            Some(source) => Report::at(Span::new(source, 0, 0), message),
-            None => Report::unlocated(message),
+            Some(source) => Report::at(Span::new(source, 0, 0), unlinked.message.clone()),
+            None => Report::unlocated(unlinked.message.clone()),
         };
 
         Some(Diagnostic {
-            severity: Severity::Error,
+            severity: Severity::Note,
             report,
         })
     }
+
+    /// The subject a loose file is answered as, by the form it is written in: a program when a final term follows its items, and otherwise a module, checked as a unit of its own mounted at its stem the way a library is — so a file no `mod` declares is answered item by item, rather than refused at its end for lacking a term it was never meant to have.
+    pub(crate) fn formed(self, overlay: &Overlay) -> Self {
+        match self {
+            Subject::Entry {
+                units,
+                origin: Origin::File(path),
+                declares: None,
+                unlinked,
+            } if units.is_empty() => match loose_module(&path, overlay) {
+                Some(unit) => Subject::Unit { units: vec![unit] },
+                None => Subject::Entry {
+                    units,
+                    origin: Origin::File(path),
+                    declares: None,
+                    unlinked,
+                },
+            },
+            subject => subject,
+        }
+    }
+}
+
+/// `path` mounted as a unit of its own at its stem, when its text is written as a module and its stem is a name a mount can take.
+fn loose_module(path: &Path, overlay: &Overlay) -> Option<RootSource> {
+    let text = match overlay.get(path) {
+        Some(text) => text.to_string(),
+        None => fs::read_to_string(path).ok()?,
+    };
+    if Form::of(path, &text) != Form::Module {
+        return None;
+    }
+
+    let stem = path.file_stem()?.to_str()?;
+
+    is_identifier(stem)
+        .then(|| RootSource::mounted(stem, RootKind::Ordinary, path, path.with_extension("")))
 }
 
 /// Where the program a question is about comes from: a file, or text standing in for one.
@@ -99,7 +110,7 @@ pub enum Origin {
 
 /// Every diagnostic and goal `subject` reports when lowered, elaborated and judged against the prelude — empty when it compiles. `overlay` is consulted before the disk for every file read, the entry included.
 ///
-/// **A library is asked through the tail `curios test` compiles it with.** It has no written program of its own, so the question is put to the same `()` entry under [`EntryTail::LastUnitTests`], scheduling the last unit's tests; the fold that compiles the units is one and the same, and a unit with no tests gets `Test/main([])`, which costs nothing.
+/// **A library is asked through the tail `curios test` compiles it with.** It has no written program of its own, so the question is put to the same `()` entry under [`EntryTail::LastUnitTests`], scheduling the last unit's tests; the fold that compiles the units is one and the same, and a unit with no tests gets `Test/main([])`, which costs nothing. A loose file written as a module is asked the same way, as a unit of its own.
 ///
 /// An entry is asked under its written tail alone. A unit's tests are ordinary items and are elaborated whatever the policy, so a fault in one is reported either way; the synthesized tail over them pairs each declaration with its path and raises nothing of its own, which is what a test taking no parameters leaves it with. A policy that checked both tails existed while that was untrue and was removed with the parameters.
 ///
@@ -127,57 +138,61 @@ pub fn diagnosed(
     let read_only = cache.map(|cache| ReadOnly { cache, overlay });
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
 
-    let (checked, is_unit, undeclared) = match subject {
-        Subject::Unit { units, file } => {
+    // Taken before the subject is formed, since it is the one fact about the file asked that no compilation of it says.
+    let note = subject.note(overlay);
+
+    let mut diagnosed = match subject.formed(overlay) {
+        Subject::Unit { units } => {
             let units = overlaid(units, overlay);
-            let undeclared = match (&file, units.last()) {
-                (Some(file), Some(unit)) => file.undeclared(unit, overlay),
-                _ => None,
-            };
-            // A library has no written entry, so it is asked through the trivial one, which the tests tail then replaces — the subject is the scope's final unit, exactly as `curios test` compiles a library.
-            let entrypoint = Entrypoint::trivial();
-            let loader = RootSource::none();
+            // A unit has no written entry, so it is asked through the trivial one, which the tests tail then replaces — the subject is the scope's final unit, exactly as `curios test` compiles a library.
             let checked = check_with_units(
                 budget,
                 &units,
-                &entrypoint,
-                &loader,
+                &Entrypoint::trivial(),
+                &RootSource::none(),
                 cache,
                 EntryTail::LastUnitTests,
                 |_| {},
             );
-            (checked, true, undeclared)
+            answered(checked, true)
         }
         Subject::Entry {
             units,
             origin,
             declares,
-        } => {
-            let (entrypoint, loader) = match open(origin, declares, overlay) {
-                Ok(opened) => opened,
-                Err(refusal) => {
-                    return Diagnosed {
-                        diagnostics: refusal,
-                        reached: BTreeSet::new(),
-                    };
-                }
-            };
-            let units = overlaid(units, overlay);
-
-            let checked = check_with_units(
-                budget,
-                &units,
-                &entrypoint,
-                &loader,
-                cache,
-                EntryTail::Authored,
-                |_| {},
-            );
-            (checked, false, None)
-        }
+            ..
+        } => match open(origin, declares, overlay) {
+            Ok((entrypoint, loader)) => {
+                let units = overlaid(units, overlay);
+                let checked = check_with_units(
+                    budget,
+                    &units,
+                    &entrypoint,
+                    &loader,
+                    cache,
+                    EntryTail::Authored,
+                    |_| {},
+                );
+                answered(checked, false)
+            }
+            Err(refusal) => Diagnosed {
+                diagnostics: refusal,
+                reached: BTreeSet::new(),
+            },
+        },
     };
 
-    let mut diagnosed = match checked {
+    // First, because it says how everything after it was answered.
+    if let Some(note) = note {
+        diagnosed.diagnostics.insert(0, note);
+    }
+
+    diagnosed
+}
+
+/// What one check reports: its verdict's records and its lints, read off the unit it was asked about when `is_unit`, and off the entry otherwise.
+fn answered(checked: Result<Checked, CompileError>, is_unit: bool) -> Diagnosed {
+    match checked {
         Ok(Checked {
             entry,
             unit,
@@ -195,14 +210,7 @@ pub fn diagnosed(
             }
         }
         Err(error) => Diagnosed::refused(error),
-    };
-
-    // First, because it is the one fact about the file asked: everything after it is about a unit that never read that file.
-    if let Some(undeclared) = undeclared {
-        diagnosed.diagnostics.insert(0, undeclared);
     }
-
-    diagnosed
 }
 
 impl Diagnosed {

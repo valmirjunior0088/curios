@@ -44,6 +44,20 @@ fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
+/// A file a package holds and no `mod` declares is linted on its own, and the note saying so is no finding: a clean one exits 0.
+#[test]
+fn a_clean_file_no_mod_declares_lints_clean_behind_its_note() {
+    let root = temporary("unlinked");
+    write(&root, "curios.toml", "name = \"app\"\n");
+    write(&root, "lib.crs", "");
+    write(&root, "stray.crs", "pub let word : /std/Str = \"clean\";\n");
+
+    let linted = curios(&root, &["lint", "stray.crs"], "");
+    let text = stdout(&linted);
+    assert_eq!(linted.status.code(), Some(0), "{text}");
+    assert!(text.contains("stray.crs is in no unit of `/app`"), "{text}");
+}
+
 /// A lint is reported on stdout as `wonder diagnostics` reports it, and turns the exit into 1; a clean program exits 0 with nothing said.
 #[test]
 fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {

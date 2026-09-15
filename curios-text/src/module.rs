@@ -512,6 +512,23 @@ pub(crate) fn parse_for_format(source: &Rc<Source>) -> Result<FormatInput, Parse
     })
 }
 
+/// The two kinds of file a text can be written as: a **program**, whose items a final term follows, and a **module**, which is items alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Form {
+    Program,
+    Module,
+}
+
+impl Form {
+    /// The form `text`, held for `path`, is written in — read off the one grammar that admits both, which reads a file whole or not at all: items alone are a module, and anything else is a program, a text that does not parse included, since a program's own reading is the one that says where it went wrong.
+    pub fn of(path: &Path, text: &str) -> Self {
+        match parse_for_format(&Source::held(path, text)) {
+            Ok(FormatInput { tail: None, .. }) => Self::Module,
+            Ok(FormatInput { tail: Some(_), .. }) | Err(_) => Self::Program,
+        }
+    }
+}
+
 impl Entrypoint {
     /// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of the `FromStr` impl below, distinguished by keeping the real path in the [`Source`] so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`] the caller pairs it with.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {

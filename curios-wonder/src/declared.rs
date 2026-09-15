@@ -19,8 +19,8 @@ pub fn declared_tests(
     let read_only = cache.map(|cache| ReadOnly { cache, overlay });
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
 
-    let paths = match subject {
-        Subject::Unit { units, .. } => {
+    let paths = match subject.formed(overlay) {
+        Subject::Unit { units } => {
             let units = crate::overlaid(units, overlay);
             unit_test_paths(budget, &units, cache, |_| {})?
         }
@@ -28,6 +28,7 @@ pub fn declared_tests(
             units,
             origin,
             declares,
+            ..
         } => {
             let (entrypoint, loader) = open(origin, declares, overlay).map_err(|refusal| {
                 CompileError::failure(

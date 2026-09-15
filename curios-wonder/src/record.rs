@@ -2,7 +2,7 @@
 
 use {curios_text::Lint, curios_utilities::Report};
 
-/// How a diagnostic classifies. The first two are the compile path's own split — a goal batch exits 2 where a hard error exits 1 — carried per record because a transport renders them apart: a goal is something the author wrote and asked about, not something wrong. A lint is neither: an exact finding the lowering reports and nothing stops on, which `curios lint` alone turns into an exit code.
+/// How a diagnostic classifies. The first two are the compile path's own split — a goal batch exits 2 where a hard error exits 1 — carried per record because a transport renders them apart: a goal is something the author wrote and asked about, not something wrong. A lint is neither: an exact finding the lowering reports and nothing stops on, which `curios lint` alone turns into an exit code. A note is less than a lint: what a question says about how it was asked, which no exit code counts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
     /// The program does not compile: a parse failure, a refused type, a kernel refusal, a dependency that could not be assembled.
@@ -11,6 +11,8 @@ pub enum Severity {
     Goal,
     /// An unused import, binder or declaration — see `curios_text::Lint`.
     Lint,
+    /// How the question was answered rather than anything wrong with the program: a file a package holds and none of its units declares, checked on its own.
+    Note,
 }
 
 /// One thing the compiler said about a program, where it said it.
