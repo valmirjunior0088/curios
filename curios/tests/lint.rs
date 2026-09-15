@@ -55,7 +55,10 @@ fn a_clean_file_no_mod_declares_lints_clean_behind_its_note() {
     let linted = curios(&root, &["lint", "stray.crs"], "");
     let text = stdout(&linted);
     assert_eq!(linted.status.code(), Some(0), "{text}");
-    assert!(text.contains("stray.crs is in no unit of `/app`"), "{text}");
+    assert!(
+        text.starts_with("note: stray.crs is in no unit of `/app`"),
+        "{text}"
+    );
 }
 
 /// A lint is reported on stdout as `wonder diagnostics` reports it, and turns the exit into 1; a clean program exits 0 with nothing said.

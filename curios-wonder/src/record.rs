@@ -31,9 +31,12 @@ impl Diagnostic {
         }
     }
 
-    /// The diagnostic as `curios run` would have printed it: the report rendered, message then snippet.
+    /// The diagnostic as `curios run` would have printed it: the report rendered, message then snippet. A note is the one record `run` never prints, and renders as its message alone after `note: ` — its span is only the start of the file its message already names, which is where an editor places it, and a caret there would read as a refusal of the file's first line.
     pub fn render(&self) -> String {
-        self.report.render()
+        match self.severity {
+            Severity::Note => format!("note: {}", self.report.message),
+            Severity::Error | Severity::Goal | Severity::Lint => self.report.render(),
+        }
     }
 }
 

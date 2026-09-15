@@ -2,15 +2,22 @@
 //!
 //! The store is consulted exactly as `run` consults it: one payload per declared target, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records beside the machine code so a warm run recompiles nothing and still reports everything. A loose program has no store, so its tests are compiled every time.
 
+#[cfg(test)]
+mod tests;
+
 use {
-    crate::{Access, Heading, Line, Subject, fact, open, processing, report, step},
+    crate::{
+        Access, Heading, Line, Subject, drained, fact, open, processing, report, step, supplied,
+    },
     curios::{engine, to_cwasm},
     curios_package::{Entry, LIBRARY, Selection, Spelling, order},
     curios_pipeline::{Cache, CompileError, EntryTail, TestRecord, compile_tests_with_units},
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
+    curios_utilities::Source,
     curios_verdicts::{Program, Verdicts},
-    std::path::{Path, PathBuf},
+    curios_wonder::{STDIN_LABEL, STDIN_MOUNT},
+    std::{path::Path, rc::Rc},
 };
 
 /// What stands in for a library's entry text when the payload is keyed. A library is compiled through [`Entrypoint::trivial`], which is built rather than parsed and so has no text of its own; the key has to be *something* constant, and naming it here says which constant and why. The library's own content reaches the address through the unit chain, so nothing depends on this being the program.
@@ -53,7 +60,7 @@ impl Totals {
     }
 }
 
-/// Run the tests `selection` declares, optionally narrowed to paths starting with `filter`, each declared target filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed or proved.
+/// Run the tests `selection` declares, optionally narrowed to those at or under the path `filter`, each declared target filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed or proved.
 pub(crate) fn run_tests(
     budget: u64,
     selection: Selection,
@@ -113,13 +120,24 @@ pub(crate) fn run_tests(
                 };
                 run.executable(&program.into_units(), &entry, &executable, &declared)?;
             }
-            // A loose file is tested in the form it is written in: a module as a unit of its own, and a program as its entry.
+            // A loose program is tested in the form it is written in: a module as a unit of its own, and a program as its entry. Standard input is drained once, before its form is known, since either reading needs the whole text.
             None => match program.entry() {
-                Entry::File(path) => match RootSource::loose_module(path, &Overlay::default()) {
-                    Some(unit) => run.loose_module(unit, path)?,
-                    None => run.loose_program(program.entry())?,
-                },
-                Entry::Stdin => run.loose_program(program.entry())?,
+                Entry::File(path) => {
+                    let subject = Subject::File(path.clone());
+                    match RootSource::loose_module(path, &Overlay::default()) {
+                        Some(unit) => run.loose_module(unit, path, &subject)?,
+                        None => run.loose_program(open(Some(path))?, path, &subject)?,
+                    }
+                }
+                Entry::Stdin => {
+                    let text = drained()?;
+                    // argv[0] is the entry as `run` passes it, which for standard input is the `-` that asked for it.
+                    let invoked = Path::new(Spelling::STDIN);
+                    match RootSource::labelled_module(STDIN_MOUNT, STDIN_LABEL, &text) {
+                        Some(unit) => run.loose_module(unit, invoked, &Subject::Stdin)?,
+                        None => run.loose_program(supplied(&text)?, invoked, &Subject::Stdin)?,
+                    }
+                }
             },
         },
     }
@@ -205,56 +223,54 @@ impl Run<'_> {
         self.selected(&records, &cwasm, entry, &subject)
     }
 
-    /// A loose module's tests: the file mounted as a unit of its own and compiled as a library is, against the prelude alone, filed nowhere.
-    fn loose_module(&mut self, unit: RootSource, path: &Path) -> Result<(), CompileError> {
-        let subject = Subject::File(path.to_path_buf());
+    /// A loose module's tests: a file, or standard input, mounted as a unit of its own and compiled as a library is, against the prelude alone, filed nowhere. `invoked` is the entry as `run` would pass it.
+    fn loose_module(
+        &mut self,
+        unit: RootSource,
+        invoked: &Path,
+        subject: &Subject,
+    ) -> Result<(), CompileError> {
         let (records, cwasm) = tests_payload(
             self.budget,
             &[unit],
             &Entrypoint::trivial(),
             &RootSource::none(),
             LIBRARY_KEY,
-            path,
+            invoked,
             None,
             "",
             "",
             EntryTail::LastUnitTests,
-            &subject,
+            subject,
             None,
         )?;
 
-        self.selected(&records, &cwasm, path, &subject)
+        self.selected(&records, &cwasm, invoked, subject)
     }
 
-    /// A loose program's tests: its entry — a file, or standard input drained to end — compiled against the prelude alone, filed nowhere.
-    fn loose_program(&mut self, entry: &Entry) -> Result<(), CompileError> {
-        let path = match entry {
-            Entry::File(path) => Some(path.as_path()),
-            Entry::Stdin => None,
-        };
-        let (entrypoint, loader, source) = open(path)?;
-        // argv[0] is the entry as `run` passes it, which for standard input is the `-` that asked for it.
-        let invoked = path.map_or_else(|| PathBuf::from(Spelling::STDIN), Path::to_path_buf);
-        let subject = match entry {
-            Entry::File(path) => Subject::File(path.clone()),
-            Entry::Stdin => Subject::Stdin,
-        };
+    /// A loose program's tests: its entry, opened from a file or supplied from standard input, compiled against the prelude alone, filed nowhere. `invoked` is the entry as `run` passes it.
+    fn loose_program(
+        &mut self,
+        (entrypoint, loader, source): (Entrypoint, RootSource, Rc<Source>),
+        invoked: &Path,
+        subject: &Subject,
+    ) -> Result<(), CompileError> {
         let (records, cwasm) = tests_payload(
             self.budget,
             &[],
             &entrypoint,
             &loader,
             &source.text,
-            &invoked,
+            invoked,
             None,
             "",
             "",
             EntryTail::Tests,
-            &subject,
+            subject,
             None,
         )?;
 
-        self.selected(&records, &cwasm, &invoked, &subject)
+        self.selected(&records, &cwasm, invoked, subject)
     }
 
     /// Keep the first reason a store refused filing.
@@ -368,6 +384,14 @@ fn tests_payload(
     Ok((records, cwasm))
 }
 
+/// Whether the test at `path` is at or under `prefix`, compared a whole segment at a time: `/app/Map` selects `/app/Map` and everything under it, and never `/app/MapBuilder`, since a path names modules and one module's name is no part of its neighbour's. A trailing `/` says nothing more, so `/` alone selects every test.
+fn under(path: &str, prefix: &str) -> bool {
+    let prefix = prefix.strip_suffix('/').unwrap_or(prefix);
+
+    path.strip_prefix(prefix)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+}
+
 /// Run every record `filter` selects, one instantiation each, between a `↳ Testing` step and a `↳ Tested` step carrying the unit's tally, which is folded into `totals`. The guest prints the outcome line for what it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
 #[allow(clippy::too_many_arguments)]
 fn run_selected(
@@ -382,7 +406,7 @@ fn run_selected(
     let selected = records
         .iter()
         .enumerate()
-        .filter(|(_, record)| filter.is_none_or(|prefix| record.path.starts_with(prefix)))
+        .filter(|(_, record)| filter.is_none_or(|prefix| under(&record.path, prefix)))
         .collect::<Vec<_>>();
 
     // A unit with nothing to run reports its compile and nothing more: a tally of zeros would only restate the absence of lines above it.

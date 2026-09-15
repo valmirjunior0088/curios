@@ -16,6 +16,9 @@ mod tests;
 /// What a program read from standard input is called: in a status line, and — because the source it is parsed from is labelled with this too — in the `--> <stdin>:2:1` header of any diagnostic about it. One constant, so a reader is never told two names for one program. Angle brackets because no file is spelled that way, so neither line reads as naming something openable.
 pub const STDIN_LABEL: &str = "<stdin>";
 
+/// The prefix a module on standard input is mounted at. A loose file written as a module is mounted at its stem, and standard input has none, so it is mounted under the name of where it came from: the `one` a heredoc declares is `/stdin/one`.
+pub const STDIN_MOUNT: &str = "stdin";
+
 mod record;
 pub use record::*;
 

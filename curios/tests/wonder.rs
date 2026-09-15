@@ -129,10 +129,17 @@ fn a_file_no_mod_declares_is_checked_on_its_own_behind_a_note() {
     let cold = curios(&root, &["wonder", "diagnostics", "stray.crs"], "");
     assert!(cold.status.success());
     let text = stdout(&cold);
-    assert!(text.contains("stray.crs is in no unit of `/app`"), "{text}");
+    assert!(
+        text.starts_with("note: stray.crs is in no unit of `/app`"),
+        "{text}"
+    );
     assert!(
         text.contains("declare it with `mod stray;` in lib.crs"),
         "{text}"
+    );
+    assert!(
+        !text.contains("stray.crs:1:1"),
+        "a note is its message alone: {text}"
     );
     assert!(text.contains("type mismatch"), "checked on its own: {text}");
 
@@ -157,6 +164,31 @@ fn a_file_no_mod_declares_is_checked_on_its_own_behind_a_note() {
     assert!(
         text.contains("stray.crs:1:24"),
         "its own error, read as the library's: {text}"
+    );
+}
+
+/// Text on standard input written as a module is checked as one, as a loose file is — a unit of its own, mounted at `/stdin` since it has no stem — so its items are answered one by one; a stage needs a program, and refuses it as written as a module.
+#[test]
+fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
+    let root = temporary("stdin-module");
+    fs::create_dir_all(&root).unwrap();
+    let module = "pub let w : /std/Str = 1;\n";
+
+    let answered = curios(&root, &["wonder", "diagnostics", "-"], module);
+    assert!(answered.status.success());
+    let text = stdout(&answered);
+    assert!(text.contains("while elaborating /stdin/w"), "{text}");
+    assert!(text.contains("--> <stdin>:1:24"), "{text}");
+
+    let staged = curios(&root, &["wonder", "stage", "core", "-"], module);
+    let refusal = String::from_utf8_lossy(&staged.stderr);
+    assert_eq!(staged.status.code(), Some(1), "{refusal}");
+    assert!(staged.stdout.is_empty());
+    assert!(
+        refusal.contains(
+            "<stdin> is written as a module, with no final term to compile a program from"
+        ),
+        "{refusal}"
     );
 }
 

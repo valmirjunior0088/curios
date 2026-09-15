@@ -104,6 +104,19 @@ impl RootSource {
             .then(|| Self::mounted(stem, RootKind::Ordinary, path, path.with_extension("")))
     }
 
+    /// `text` supplied as a unit of its own at `prefix`, when it is written as a module: how a module that arrived as text rather than as a file — on standard input — is checked item by item, as [`loose_module`](Self::loose_module) checks a file. `label` names it in diagnostics where a path would go. Text has no stem directory, so its modules are supplied rather than read and a file-backed `mod` in it is unfound, as it is in a program supplied the same way.
+    pub fn labelled_module(prefix: &str, label: &str, text: &str) -> Option<Self> {
+        if Form::of(Path::new(label), text) != Form::Module {
+            return None;
+        }
+
+        let module = Module::parse(&Source::labelled(label, text)).ok()?;
+        let mut unit = Self::supplied();
+        unit.insert_root(prefix, RootKind::Ordinary, module);
+
+        Some(unit)
+    }
+
     /// A unit's modules supplied already parsed, claiming nothing until [`insert_root`](Self::insert_root) says so. Nothing is read, which is what lets a build script or an embedder hand a whole unit over.
     pub fn supplied() -> Self {
         Self::over(Vec::new())

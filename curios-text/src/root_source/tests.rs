@@ -87,6 +87,27 @@ fn a_bare_name_the_disk_does_not_hold_is_spelled_under_the_current_directory() {
     );
 }
 
+/// Text written as a module is supplied as a unit of its own at the prefix given, its header held rather than read; text written as a program is no module.
+#[test]
+fn text_written_as_a_module_is_supplied_at_the_prefix_given() {
+    let unit = RootSource::labelled_module("stdin", "<stdin>", "pub let one : /std/Nat = 1;\n")
+        .expect("items alone are a module");
+
+    assert_eq!(
+        unit.mounts()
+            .into_iter()
+            .map(|mount| mount.prefix)
+            .collect::<Vec<_>>(),
+        vec![Qualifier::from(["stdin"])]
+    );
+    assert!(matches!(
+        unit.load(&Qualifier::from(["stdin"])),
+        Ok(module) if module.items.len() == 1
+    ));
+
+    assert!(RootSource::labelled_module("stdin", "<stdin>", "/std/print(\"\")\n").is_none());
+}
+
 /// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
 fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
     let root = Temporary::new("root-source", name);

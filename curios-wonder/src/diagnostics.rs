@@ -1,7 +1,7 @@
 //! The `diagnostics` query: every diagnostic and goal one compilation of a program reports.
 
 use {
-    crate::{Diagnostic, Severity},
+    crate::{Diagnostic, STDIN_MOUNT, Severity},
     curios_package::Unlinked,
     curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, check_with_units},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
@@ -19,7 +19,7 @@ pub struct Diagnosed {
 
 /// What a question is about.
 ///
-/// The transport decides this and the engine compiles it: a file a package's library declares is asked about as that whole unit, one an executable declares as that executable's origin, and a file no unit declares on its own — see `curios-package`'s `Selection` for the rule. The engine never probes for a manifest of its own; the one thing it decides is the form a loose file is written in ([`Subject::formed`]).
+/// The transport decides this and the engine compiles it: a file a package's library declares is asked about as that whole unit, one an executable declares as that executable's origin, and a file no unit declares on its own — see `curios-package`'s `Selection` for the rule. The engine never probes for a manifest of its own; the one thing it decides is the form a loose program is written in (`Subject::formed`).
 pub enum Subject {
     /// A program: the entry compiled against `units`, in the order given.
     Entry {
@@ -62,23 +62,32 @@ impl Subject {
         })
     }
 
-    /// The subject a loose file is answered as, by the form it is written in: a program when a final term follows its items, and otherwise a module, checked as a unit of its own mounted at its stem the way a library is — so a file no `mod` declares is answered item by item, rather than refused at its end for lacking a term it was never meant to have.
+    /// The subject a loose program is answered as, by the form it is written in: a program when a final term follows its items, and otherwise a module, checked as a unit of its own the way a library is — mounted at its stem for a file, and at [`STDIN_MOUNT`] for text on standard input — so a module no `mod` declares is answered item by item, rather than refused at its end for lacking a term it was never meant to have.
     pub(crate) fn formed(self, overlay: &Overlay) -> Self {
         match self {
             Subject::Entry {
                 units,
-                origin: Origin::File(path),
+                origin,
                 declares: None,
                 unlinked,
-            } if units.is_empty() => match RootSource::loose_module(&path, overlay) {
-                Some(unit) => Subject::Unit { units: vec![unit] },
-                None => Subject::Entry {
-                    units,
-                    origin: Origin::File(path),
-                    declares: None,
-                    unlinked,
-                },
-            },
+            } if units.is_empty() => {
+                let module = match &origin {
+                    Origin::File(path) => RootSource::loose_module(path, overlay),
+                    Origin::Text { label, text } => {
+                        RootSource::labelled_module(STDIN_MOUNT, label, text)
+                    }
+                };
+
+                match module {
+                    Some(unit) => Subject::Unit { units: vec![unit] },
+                    None => Subject::Entry {
+                        units,
+                        origin,
+                        declares: None,
+                        unlinked,
+                    },
+                }
+            }
             subject => subject,
         }
     }

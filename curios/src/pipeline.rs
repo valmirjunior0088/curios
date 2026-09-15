@@ -13,7 +13,7 @@ use {
     curios_verdicts::Verdicts,
     curios_wasm::Module,
     curios_wonder::STDIN_LABEL,
-    std::{fs, io, path::Path, rc::Rc},
+    std::{fmt::Display, fs, io, path::Path, rc::Rc},
 };
 
 /// The precompiled payload for `program`, taken from `cache` when nothing it was made from has changed, and compiled — and filed there — otherwise. `cache` is the store its command opened for it to file into, and `None` compiles everything and files nothing.
@@ -159,22 +159,37 @@ pub(crate) fn open(
     entry: Option<&Path>,
 ) -> Result<(Entrypoint, RootSource, Rc<Source>), CompileError> {
     let Some(path) = entry else {
-        let text = io::read_to_string(io::stdin()).map_err(|error| {
-            CompileError::failure(format!("failed to read standard input: {error}"))
-        })?;
-
-        return Entrypoint::supplied(STDIN_LABEL, &text)
-            .map_err(|error| CompileError::Failure(vec![error.report()]));
+        return supplied(&drained()?);
     };
 
     Entrypoint::opened(path).map_err(|error| match fs::read_to_string(path) {
         // A text written as a module fails the program grammar at its end, where it was never meant to hold a term: say what it is rather than what the grammar expected there.
-        Ok(text) if Form::of(path, &text) == Form::Module => CompileError::failure(format!(
-            "{} is written as a module, with no final term to compile a program from",
-            path.display()
-        )),
+        Ok(text) if Form::of(path, &text) == Form::Module => written_as_a_module(path.display()),
         _ => CompileError::Failure(vec![error.report()]),
     })
+}
+
+/// Standard input, drained to end — once, since a second read finds nothing.
+pub(crate) fn drained() -> Result<String, CompileError> {
+    io::read_to_string(io::stdin())
+        .map_err(|error| CompileError::failure(format!("failed to read standard input: {error}")))
+}
+
+/// The program `text`, arrived on standard input, parsed — and refused as [`open`] refuses a file when it is written as a module.
+pub(crate) fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Rc<Source>), CompileError> {
+    Entrypoint::supplied(STDIN_LABEL, text).map_err(|error| {
+        match Form::of(Path::new(STDIN_LABEL), text) {
+            Form::Module => written_as_a_module(STDIN_LABEL),
+            Form::Program => CompileError::Failure(vec![error.report()]),
+        }
+    })
+}
+
+/// What an entry written as a module, named `label`, is refused with.
+fn written_as_a_module(label: impl Display) -> CompileError {
+    CompileError::failure(format!(
+        "{label} is written as a module, with no final term to compile a program from"
+    ))
 }
 
 /// Compile `entrypoint` against `units` in the order given, narrating each step under a header that names `manifest` when it is not where the invocation stands.

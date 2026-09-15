@@ -5,9 +5,10 @@ use {
     std::{
         ffi::OsStr,
         fs,
+        io::Write,
         os::unix::ffi::OsStrExt,
         path::Path,
-        process::{Command, Output},
+        process::{Command, Output, Stdio},
     },
 };
 
@@ -71,6 +72,26 @@ fn curios(root: &Path, arguments: &[&str]) -> Output {
         .unwrap()
 }
 
+/// [`curios`], with `stdin` on the compiler's standard input.
+fn fed(root: &Path, arguments: &[&str], stdin: &str) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .current_dir(root)
+        .args(arguments)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run the compiler");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(stdin.as_bytes())
+        .unwrap();
+
+    child.wait_with_output().expect("the compiler exits")
+}
+
 fn stdout(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).unwrap()
 }
@@ -132,7 +153,7 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
 fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     let root = project("filter");
 
-    let cold = curios(&root, &["test", "--filter", "/app/addition"]);
+    let cold = curios(&root, &["test", "--filter", "/app/addition_passes"]);
     assert_eq!(
         stdout(&cold),
         "/app/addition_passes: passed\n1 passed, 0 failed\n",
@@ -141,7 +162,7 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     );
     assert_eq!(cold.status.code(), Some(0));
 
-    let warm = curios(&root, &["test", "--filter", "/app/addition"]);
+    let warm = curios(&root, &["test", "--filter", "/app/addition_passes"]);
     assert_eq!(stdout(&warm), stdout(&cold));
     // Each payload comes back whole, so each target's one step names the target rather than a unit.
     in_order(
@@ -167,6 +188,15 @@ fn a_filter_matching_nothing_exits_one_naming_it() {
         stderr(&output).contains("no test matches '/nope'"),
         "stderr: {}",
         stderr(&output)
+    );
+
+    // A filter names whole segments, so the start of a test's name selects nothing.
+    let partial = curios(&root, &["test", "--filter", "/app/addition"]);
+    assert_eq!(partial.status.code(), Some(1));
+    assert!(
+        stderr(&partial).contains("no test matches '/app/addition'"),
+        "stderr: {}",
+        stderr(&partial)
     );
 }
 
@@ -209,6 +239,33 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
         "/loose/in_loose: passed\n1 passed, 0 failed\n",
         "stderr: {}",
         stderr(&loose)
+    );
+}
+
+/// Text on standard input written as a module runs its own tests as a file written as one does — a unit of its own, mounted at `/stdin` since it has no stem — and is no program for `run` to run.
+#[test]
+fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
+    let root = temporary("stdin-module");
+    fs::create_dir_all(&root).unwrap();
+    let module = "use /std/{Test};\n\ntest in_piped =\n    Test/assert(true);\n";
+
+    let tested = fed(&root, &["test", "-"], module);
+    assert_eq!(
+        stdout(&tested),
+        "/stdin/in_piped: passed\n1 passed, 0 failed\n",
+        "stderr: {}",
+        stderr(&tested)
+    );
+    assert_eq!(tested.status.code(), Some(0));
+
+    let ran = fed(&root, &["run", "-"], module);
+    assert_eq!(ran.status.code(), Some(1));
+    assert!(
+        stderr(&ran).contains(
+            "<stdin> is written as a module, with no final term to compile a program from"
+        ),
+        "stderr: {}",
+        stderr(&ran)
     );
 }
 
