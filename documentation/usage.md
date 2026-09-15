@@ -17,7 +17,7 @@ The complete command-line and package reference. The [README](../README.md) cove
 - [Which manifest governs](#which-manifest-governs)
 - [Where things go](#where-things-go)
 - [Reusing what was already built](#reusing-what-was-already-built)
-- [Global flags](#global-flags)
+- [Flags](#flags)
 
 ## Running and compiling
 
@@ -40,7 +40,7 @@ Everything after the target belongs to the program, not to `curios`, and reaches
 curios run serve --port 8080
 ```
 
-Everything from the target onward is collected verbatim, hyphens included, so a program's own flags never collide with the compiler's — which is also why every `curios` flag must precede the subcommand.
+Everything from the target onward is collected verbatim, hyphens included, so a program's own flags never collide with the compiler's — which is also why `run`'s own flags, `--budget` and `--manifest`, go before the target.
 
 A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` past its carrier and where larger values live, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running — followed by the wasm frames where the build kept their names.
 
@@ -297,15 +297,17 @@ An edit anywhere the program was built from is a miss, and so is a damaged or ha
 
 Payloads are native code for the machine that built them, so an entry is found only by an engine that can run it; two machines share one only when their engines agree. Nothing has to be cleaned up by hand as sources change: each executable occupies one slot per dependency chain, overwritten in place.
 
-## Global flags
+## Flags
 
-| Flag | Effect |
-| --- | --- |
-| `--manifest <PATH>` | use this `curios.toml` as the governing package's, instead of the working directory's |
-| `--budget <UNITS>` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
-| `--version` | the build's version, so a bug report can say which compiler produced the output |
-| `--profile <PATH>` | write one record per span and event to `PATH`, rotating at 512 MiB — present only in a compiler built with the `profile` feature, and inert without it |
+`--budget` and `--manifest` belong to the commands that read them, so they follow the command: `curios run --budget 200000000 serve`, `curios wonder diagnostics --manifest ../app/curios.toml`. Written before the command, either is refused with the spelling that works.
 
-The budget is restored at every declaration boundary, so it bounds the heaviest declaration rather than the compilation; `curios --help` prints the default it was built with.
+| Flag | Taken by | Effect |
+| --- | --- | --- |
+| `--manifest <PATH>` | every command that resolves against a package: `run`, `compile`, `test`, `document`, `lint`, `curate` and every `wonder` query | use this `curios.toml` as the governing package's, instead of the working directory's |
+| `--budget <UNITS>` | every command that elaborates: `run`, `compile`, `test`, `document`, `lint` and every `wonder` query | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
+| `--version` | `curios` itself | the build's version, so a bug report can say which compiler produced the output |
+| `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`, rotating at 512 MiB — present only in a compiler built with the `profile` feature, and inert without it |
+
+The budget is restored at every declaration boundary, so it bounds the heaviest declaration rather than the compilation; a command's `--help` prints the default it was built with.
 
 `--manifest` overrides exactly which manifest is the package's. Which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.

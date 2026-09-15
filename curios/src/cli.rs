@@ -1,7 +1,8 @@
-//! The clap command-line surface: the `Cli` root and its `Mode` subcommands. Parsing only — the dispatch on the parsed value lives in `main.rs`.
+//! The clap command-line surface: the `Cli` root and its `Mode` subcommands. Parsing only — the dispatch on the parsed value lives in `main.rs`, and what a TARGET's help says is computed from its command's contract, so the help cannot describe an argument its command admits another way.
 
 use {
-    clap::{Parser, Subcommand},
+    crate::{COMPILE, COST, DIAGNOSTICS, LINT, RUN, STAGE, TESTS},
+    clap::{Args, Parser, Subcommand},
     curios_pipeline::Stage,
     std::{ffi::OsString, path::PathBuf, sync::LazyLock},
 };
@@ -9,26 +10,43 @@ use {
 /// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder stage`'s help text.
 static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));
 
-/// What a TARGET names, for every subcommand that takes one and means the governing package's sole or `default` executable by none. The lexical rule is `curios_package::Spelling`'s; the sentence is written once so five subcommands cannot describe it five ways.
-const TARGET_HELP: &str = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package's sole or `default` executable)";
+/// Which manifest governs, for a command that resolves against a package.
+#[derive(Debug, Args)]
+pub(crate) struct ManifestFlag {
+    /// The explicit override for scripting. It reaches only the governing package's manifest, never the umbrella question — see `documentation/usage.md`'s Which manifest governs.
+    #[arg(
+        long = "manifest",
+        value_name = "PATH",
+        help = "Use this curios.toml as the governing package's, instead of the working directory's"
+    )]
+    pub(crate) manifest: Option<PathBuf>,
+}
 
-/// The same, for a query that takes the governing package entire when nothing is named.
-const TARGET_HELP_PACKAGE: &str = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package entire)";
+/// What a command that elaborates reads: the work a declaration may spend, and which manifest governs.
+#[derive(Debug, Args)]
+pub(crate) struct Elaboration {
+    #[arg(
+        long,
+        default_value_t = curios_pipeline::DEFAULT_STEP_BUDGET,
+        value_name = "UNITS",
+        help = "Units of reduction work each declaration may spend while type checking"
+    )]
+    pub(crate) budget: u64,
 
-/// The named form alone, for the one subcommand that writes a product and so needs a package to file it under.
-const TARGET_HELP_EXECUTABLE: &str =
-    "A declared executable's name (default: the governing package's sole or `default` executable)";
+    #[command(flatten)]
+    pub(crate) manifest: ManifestFlag,
+}
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Mode {
     /// What the four forms mean is `documentation/usage.md`'s Running and compiling. The dispatch is lexical and probes no disk: the four spaces cannot overlap, so nothing here needs to look before deciding.
     #[command(about = "Execute an executable, a .crs file, or standard input")]
     Run {
-        #[arg(
-            value_name = "TARGET",
-            help = TARGET_HELP
-        )]
+        #[arg(value_name = "TARGET", help = RUN.target_help())]
         target: Option<String>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
 
         #[arg(
             trailing_var_arg = true,
@@ -42,10 +60,7 @@ pub(crate) enum Mode {
     /// Dispatched through the same code as `run`, so the two cannot drift apart, and then narrowed to the named form: a built executable is filed under the package that declares it, and a loose file or standard input has no package to be filed under.
     #[command(about = "Compile a declared executable to a native executable")]
     Compile {
-        #[arg(
-            value_name = "TARGET",
-            help = TARGET_HELP_EXECUTABLE
-        )]
+        #[arg(value_name = "TARGET", help = COMPILE.target_help())]
         target: Option<String>,
 
         #[arg(
@@ -55,6 +70,9 @@ pub(crate) enum Mode {
             help = "Write the executable to PATH (default: under the store, beside the governing manifest)"
         )]
         output_path: Option<PathBuf>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
     },
 
     /// No target, or a file: a library is the one thing with an interface, and the governing package has at most one — the file form reads a unit already archived, a verdict slot's or the prelude image, which is how the standard library is documented without a package. Where the pages go is `documentation/usage.md`'s Documenting.
@@ -65,6 +83,7 @@ pub(crate) enum Mode {
             help = "A file holding an archived unit: a verdict slot under a store, or the prelude image (default: the governing package's library)"
         )]
         target: Option<PathBuf>,
+
         #[arg(
             short = 'o',
             long = "output",
@@ -72,6 +91,9 @@ pub(crate) enum Mode {
             help = "Write the pages under DIR (default: under the store, beside the governing manifest; required for a file)"
         )]
         output_path: Option<PathBuf>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
     },
 
     /// Always the governing package entire, and the optional argument is a filter rather than a target — the reasoning is `documentation/usage.md`'s Testing.
@@ -82,11 +104,17 @@ pub(crate) enum Mode {
             help = "A path prefix selecting which tests run, e.g. /app/Map (default: every test)"
         )]
         filter: Option<String>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
     },
 
     /// The store's tool, and the only thing in this toolchain that reaches the network. Acceptance is by hash, so what transport delivered the bytes does not matter — which is exactly why fetching can live in one place rather than being a capability the compiler carries.
     #[command(about = "Materialize what the manifests reference")]
-    Curate,
+    Curate {
+        #[command(flatten)]
+        manifest: ManifestFlag,
+    },
 
     /// Last of the machinery rather than first: it writes what everything else reads, so it can only be right once there is something for it to be right about.
     #[command(about = "Start a package in DIR, named after it")]
@@ -103,11 +131,11 @@ pub(crate) enum Mode {
         about = "Report every unused import, binder, declaration and dependency; exit 1 when any"
     )]
     Lint {
-        #[arg(
-            value_name = "TARGET",
-            help = TARGET_HELP_PACKAGE
-        )]
+        #[arg(value_name = "TARGET", help = LINT.target_help())]
         target: Option<String>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
     },
 
     #[command(about = "Format .crs files canonically, in place")]
@@ -141,20 +169,20 @@ pub(crate) enum Query {
         about = "Every diagnostic and goal, located; exit 0 once answered, whatever the answer"
     )]
     Diagnostics {
-        #[arg(
-            value_name = "TARGET",
-            help = TARGET_HELP_PACKAGE
-        )]
+        #[arg(value_name = "TARGET", help = DIAGNOSTICS.target_help())]
         target: Option<String>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
     },
 
     #[command(about = "Every test the target declares, one path per line; nothing executes")]
     Tests {
-        #[arg(
-            value_name = "TARGET",
-            help = TARGET_HELP_PACKAGE
-        )]
+        #[arg(value_name = "TARGET", help = TESTS.target_help())]
         target: Option<String>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
     },
 
     /// What the optimizer did to each declaration, which is a question about the compilation and never about a run — so it sits here beside the other things the compiler already decided, rather than behind a flag on `run`.
@@ -162,11 +190,11 @@ pub(crate) enum Query {
         about = "What became of each declaration by the time the optimizer settled, one row per line"
     )]
     Cost {
-        #[arg(
-            value_name = "TARGET",
-            help = TARGET_HELP_EXECUTABLE
-        )]
+        #[arg(value_name = "TARGET", help = COST.target_help())]
         target: Option<String>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
     },
 
     #[command(about = "The program's representation at one rung of the pipeline, reprinted")]
@@ -174,17 +202,20 @@ pub(crate) enum Query {
         #[arg(value_name = "STAGE", help = format!("One of: {}", *NAMES))]
         name: String,
 
-        #[arg(
-            value_name = "TARGET",
-            help = TARGET_HELP
-        )]
+        #[arg(value_name = "TARGET", help = STAGE.target_help())]
         target: Option<String>,
+
+        #[command(flatten)]
+        elaboration: Elaboration,
     },
 
     #[command(
         about = "Answer an editor over the language server protocol on standard input and output"
     )]
-    Server,
+    Server {
+        #[command(flatten)]
+        elaboration: Elaboration,
+    },
 }
 
 #[derive(Debug, Parser)]
@@ -200,29 +231,24 @@ pub(crate) enum Query {
 {all-args}{after-help}"
 )]
 pub(crate) struct Cli {
-    #[arg(
-        long,
-        default_value_t = curios_pipeline::DEFAULT_STEP_BUDGET,
-        value_name = "UNITS",
-        help = "Units of reduction work each declaration may spend while type checking"
-    )]
-    pub(crate) budget: u64,
+    /// `--budget` where it stood before it belonged to the commands that elaborate: parsed only to be refused with the spelling that works, and hidden, because it is no flag of this position.
+    #[arg(long = "budget", value_name = "UNITS", hide = true)]
+    pub(crate) misplaced_budget: Option<OsString>,
 
-    /// The explicit override for scripting. It reaches only the governing package's manifest, never the umbrella question — see `documentation/usage.md`'s Which manifest governs.
-    #[arg(
-        long = "manifest",
-        value_name = "PATH",
-        help = "Use this curios.toml as the governing package's, instead of the working directory's"
-    )]
-    pub(crate) manifest: Option<PathBuf>,
+    /// `--manifest` where it stood before it belonged to the commands that resolve against a package, parsed and hidden for the same reason.
+    #[arg(long = "manifest", value_name = "PATH", hide = true)]
+    pub(crate) misplaced_manifest: Option<OsString>,
 
-    /// Present only in profiling builds, and inert until asked for: the feature compiles the instrumentation in, and this decides whether anything listens to it. Without that, a build with the feature on would record on *every* invocation — including the eight the integration suite spawns under `--all-features`, all of them onto one path.
-    ///
-    /// It takes the destination rather than defaulting to one, so no path is spelled in the compiler at all. The reader chooses where the stream goes and reads it back from there, which is one spelling instead of two that have to agree.
+    // Present only in profiling builds, and inert until asked for: the feature compiles the instrumentation in, and this decides whether anything listens to it. Without that, a build with the feature on would record on *every* invocation — including the eight the integration suite spawns under `--all-features`, all of them onto one path.
+    //
+    // It takes the destination rather than defaulting to one, so no path is spelled in the compiler at all. The reader chooses where the stream goes and reads it back from there, which is one spelling instead of two that have to agree. Global, because what it measures is the invocation rather than one command, so it may stand on either side of the command.
+    //
+    // A plain comment rather than documentation, because clap prints a field's documentation of more than one paragraph as the flag's long help, and a global flag's help is printed under every command.
     #[cfg(feature = "profile")]
     #[arg(
         long = "profile",
         value_name = "PATH",
+        global = true,
         help = "Write one record per span and event to PATH, rotating at 512 MiB"
     )]
     pub(crate) profile: Option<PathBuf>,

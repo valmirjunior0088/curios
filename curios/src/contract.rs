@@ -1,6 +1,6 @@
 //! What each command accepts, stated once, and the one place a command's argument is admitted as its subject.
 //!
-//! **A contract is data, and dispatch reads it.** Every command's [`Contract`] says what its argument may select, where a file argument is compiled, how the command reaches the store and what it leaves on disk, and [`Mode::contract`] is an exhaustive match, so no command exists without one. What a command refuses is decided here too — a library where a program is needed, a file where a product must be filed under a package — so a refusal is one sentence per kind naming the command, never a sentence each command words for itself.
+//! **A contract is data, and dispatch reads it.** Every command's [`Contract`] says what its argument may select, where a file argument is compiled, how the command reaches the store and what it leaves on disk, and [`Mode::contract`] is an exhaustive match, so no command exists without one. What a command refuses is decided here too — a library where a program is needed, a file where a product must be filed under a package, a flag written before the command that reads it — so a refusal is one sentence per kind naming the command, never a sentence each command words for itself. A TARGET's help is read off the same contract, so the help cannot describe an argument its command admits another way.
 //!
 //! **A question's access is stated here and enforced below.** A command that asks the `wonder` engine reads the store and files nothing because the engine wraps whatever store it is handed so that nothing can be filed, and no contract can relax that. What dispatch chooses from a contract is a build's store: whether one is opened for it to file into.
 
@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Mode, Query},
+    crate::{Cli, Elaboration, ManifestFlag, Mode, Query},
     curios_package::{Entire, Library, Placement, Program, Selection, Spelling},
     curios_verdicts::Verdicts,
     curios_wonder::file_target,
@@ -109,7 +109,7 @@ pub(crate) struct Contract {
     pub(crate) product: Product,
 }
 
-const RUN: Contract = Contract {
+pub(crate) const RUN: Contract = Contract {
     command: "run",
     accepts: Accepts::Program,
     placement: Placement::Standalone,
@@ -117,7 +117,7 @@ const RUN: Contract = Contract {
     product: Product::Nothing,
 };
 
-const COMPILE: Contract = Contract {
+pub(crate) const COMPILE: Contract = Contract {
     command: "compile",
     accepts: Accepts::Program,
     placement: Placement::Standalone,
@@ -125,7 +125,7 @@ const COMPILE: Contract = Contract {
     product: Product::Executable,
 };
 
-const DOCUMENT: Contract = Contract {
+pub(crate) const DOCUMENT: Contract = Contract {
     command: "document",
     accepts: Accepts::Library,
     placement: Placement::Contained,
@@ -133,7 +133,7 @@ const DOCUMENT: Contract = Contract {
     product: Product::Pages,
 };
 
-const DOCUMENT_ARCHIVE: Contract = Contract {
+pub(crate) const DOCUMENT_ARCHIVE: Contract = Contract {
     command: "document",
     accepts: Accepts::Nothing,
     placement: Placement::Contained,
@@ -141,7 +141,7 @@ const DOCUMENT_ARCHIVE: Contract = Contract {
     product: Product::Pages,
 };
 
-const TEST: Contract = Contract {
+pub(crate) const TEST: Contract = Contract {
     command: "test",
     accepts: Accepts::Entire,
     placement: Placement::Contained,
@@ -149,7 +149,7 @@ const TEST: Contract = Contract {
     product: Product::Nothing,
 };
 
-const CURATE: Contract = Contract {
+pub(crate) const CURATE: Contract = Contract {
     command: "curate",
     accepts: Accepts::Entire,
     placement: Placement::Contained,
@@ -157,7 +157,7 @@ const CURATE: Contract = Contract {
     product: Product::Sources,
 };
 
-const NEW: Contract = Contract {
+pub(crate) const NEW: Contract = Contract {
     command: "new",
     accepts: Accepts::Nothing,
     placement: Placement::Contained,
@@ -165,7 +165,7 @@ const NEW: Contract = Contract {
     product: Product::Package,
 };
 
-const LINT: Contract = Contract {
+pub(crate) const LINT: Contract = Contract {
     command: "lint",
     accepts: Accepts::Any,
     placement: Placement::Contained,
@@ -173,7 +173,7 @@ const LINT: Contract = Contract {
     product: Product::Nothing,
 };
 
-const FORMAT: Contract = Contract {
+pub(crate) const FORMAT: Contract = Contract {
     command: "format",
     accepts: Accepts::Nothing,
     placement: Placement::Contained,
@@ -181,7 +181,7 @@ const FORMAT: Contract = Contract {
     product: Product::Rewritten,
 };
 
-const DIAGNOSTICS: Contract = Contract {
+pub(crate) const DIAGNOSTICS: Contract = Contract {
     command: "wonder diagnostics",
     accepts: Accepts::Any,
     placement: Placement::Contained,
@@ -189,7 +189,7 @@ const DIAGNOSTICS: Contract = Contract {
     product: Product::Nothing,
 };
 
-const TESTS: Contract = Contract {
+pub(crate) const TESTS: Contract = Contract {
     command: "wonder tests",
     accepts: Accepts::Any,
     placement: Placement::Contained,
@@ -197,7 +197,7 @@ const TESTS: Contract = Contract {
     product: Product::Nothing,
 };
 
-const COST: Contract = Contract {
+pub(crate) const COST: Contract = Contract {
     command: "wonder cost",
     accepts: Accepts::Program,
     placement: Placement::Contained,
@@ -205,7 +205,7 @@ const COST: Contract = Contract {
     product: Product::Nothing,
 };
 
-const STAGE: Contract = Contract {
+pub(crate) const STAGE: Contract = Contract {
     command: "wonder stage",
     accepts: Accepts::Program,
     placement: Placement::Contained,
@@ -213,7 +213,7 @@ const STAGE: Contract = Contract {
     product: Product::Nothing,
 };
 
-const SERVER: Contract = Contract {
+pub(crate) const SERVER: Contract = Contract {
     command: "wonder server",
     accepts: Accepts::Nothing,
     placement: Placement::Contained,
@@ -233,7 +233,7 @@ impl Mode {
             } => &DOCUMENT_ARCHIVE,
             Mode::Document { target: None, .. } => &DOCUMENT,
             Mode::Test { .. } => &TEST,
-            Mode::Curate => &CURATE,
+            Mode::Curate { .. } => &CURATE,
             Mode::New { .. } => &NEW,
             Mode::Lint { .. } => &LINT,
             Mode::Format { .. } => &FORMAT,
@@ -242,7 +242,7 @@ impl Mode {
                 Query::Tests { .. } => &TESTS,
                 Query::Cost { .. } => &COST,
                 Query::Stage { .. } => &STAGE,
-                Query::Server => &SERVER,
+                Query::Server { .. } => &SERVER,
             },
         }
     }
@@ -250,27 +250,104 @@ impl Mode {
     /// The argument the contract resolves: the target, for a command that takes one.
     pub(crate) fn target(&self) -> Option<&str> {
         match self {
-            Mode::Run { target, .. } | Mode::Compile { target, .. } | Mode::Lint { target } => {
+            Mode::Run { target, .. } | Mode::Compile { target, .. } | Mode::Lint { target, .. } => {
                 target.as_deref()
             }
             Mode::Wonder { query } => match query {
-                Query::Diagnostics { target }
-                | Query::Tests { target }
-                | Query::Cost { target }
+                Query::Diagnostics { target, .. }
+                | Query::Tests { target, .. }
+                | Query::Cost { target, .. }
                 | Query::Stage { target, .. } => target.as_deref(),
-                Query::Server => None,
+                Query::Server { .. } => None,
             },
             // A filter, an archive, a directory to create and files to rewrite: arguments, and none of them a target.
             Mode::Document { .. }
             | Mode::Test { .. }
-            | Mode::Curate
+            | Mode::Curate { .. }
             | Mode::New { .. }
             | Mode::Format { .. } => None,
         }
     }
+
+    /// The manifest the command was told governs — `None` when it was told none, or reads no manifest.
+    pub(crate) fn manifest(&self) -> Option<&Path> {
+        self.manifest_flag()?.manifest.as_deref()
+    }
+
+    /// The `--manifest` flag, for a command that resolves against a package.
+    fn manifest_flag(&self) -> Option<&ManifestFlag> {
+        match self {
+            Mode::Curate { manifest } => Some(manifest),
+            _ => self.elaboration().map(|elaboration| &elaboration.manifest),
+        }
+    }
+
+    /// The flags of a command that elaborates.
+    fn elaboration(&self) -> Option<&Elaboration> {
+        match self {
+            Mode::Run { elaboration, .. }
+            | Mode::Compile { elaboration, .. }
+            | Mode::Document { elaboration, .. }
+            | Mode::Test { elaboration, .. }
+            | Mode::Lint { elaboration, .. } => Some(elaboration),
+            Mode::Wonder { query } => match query {
+                Query::Diagnostics { elaboration, .. }
+                | Query::Tests { elaboration, .. }
+                | Query::Cost { elaboration, .. }
+                | Query::Stage { elaboration, .. }
+                | Query::Server { elaboration } => Some(elaboration),
+            },
+            Mode::Curate { .. } | Mode::New { .. } | Mode::Format { .. } => None,
+        }
+    }
+}
+
+impl Cli {
+    /// The refusal a flag earns written before the command, where `--budget` and `--manifest` stood before they belonged to the commands that read them: the spelling that works, or why the command takes no such flag.
+    pub(crate) fn misplaced(&self) -> Option<String> {
+        let command = self.mode.contract().command;
+
+        if let Some(budget) = &self.misplaced_budget {
+            return Some(match self.mode.elaboration() {
+                Some(_) => format!(
+                    "`--budget` belongs to the command, so it follows it: `curios {command} --budget {}`",
+                    budget.to_string_lossy()
+                ),
+                None => format!("`{command}` elaborates nothing, so it takes no `--budget`"),
+            });
+        }
+
+        let manifest = self.misplaced_manifest.as_ref()?;
+
+        Some(match self.mode.manifest_flag() {
+            Some(_) => format!(
+                "`--manifest` belongs to the command, so it follows it: `curios {command} --manifest {}`",
+                manifest.to_string_lossy()
+            ),
+            None => format!("`{command}` reads no manifest, so it takes no `--manifest`"),
+        })
+    }
 }
 
 impl Contract {
+    /// What a TARGET's help says for this command: the forms its argument takes, and what none means.
+    pub(crate) fn target_help(&self) -> String {
+        let forms = match self.product.filed_under_a_package() {
+            true => "A declared executable's name",
+            false => {
+                "A declared executable's name, a path to a .crs file, or `-` for standard input"
+            }
+        };
+        let none = match self.accepts {
+            Accepts::Program => "the governing package's sole or `default` executable",
+            Accepts::Library => "the governing package's library",
+            Accepts::Any | Accepts::Entire => "the governing package entire",
+            Accepts::Nothing => "nothing",
+        };
+
+        format!("{forms} (default: {none})")
+    }
+
     /// What `target` selects under this contract, standing in `directory`, before any kind of subject is refused.
     fn selection(
         &self,

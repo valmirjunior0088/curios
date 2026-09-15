@@ -282,7 +282,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 ## Tooling & Ecosystem
 
-- [x] CLI (`run`, `compile`, `test`, `curate`, `new`, `format`, `lint` and `wonder`)
+- [x] CLI (`run`, `compile`, `test`, `document`, `curate`, `new`, `format`, `lint` and `wonder`)
 - [x] Staged IR debugging (`wonder stage <name>`, one pipeline rung reprinted to stdout)
 - [x] Built-in tracing-based profiling harness (`cargo x profile`, per-span aggregation)
 - [x] CI pipeline (formatting, lints, tests, documentation, the browser bundle and the grammar)

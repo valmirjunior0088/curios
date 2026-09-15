@@ -91,7 +91,7 @@ fn a_bare_manifest_override_names_the_working_directory() {
 
     let answered = curios(
         &root,
-        &["--manifest", "curios.toml", "wonder", "diagnostics"],
+        &["wonder", "diagnostics", "--manifest", "curios.toml"],
         "",
     );
 

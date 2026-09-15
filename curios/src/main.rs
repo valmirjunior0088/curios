@@ -37,6 +37,7 @@ use {
     std::{
         ffi::OsString,
         fs, iter,
+        path::Path,
         process::{self, ExitCode},
         time::Instant,
     },
@@ -104,27 +105,30 @@ impl From<CompileError> for Failure {
 fn dispatch() -> Result<(), Failure> {
     let cli = Cli::parse();
 
+    // Before anything is measured or resolved: a flag written where it no longer goes is refused with the spelling that works, rather than read as though nothing had moved.
+    if let Some(refusal) = cli.misplaced() {
+        return Err(Failure::Error(refusal));
+    }
+
     // After parsing, because the destination is one of the arguments; before dispatch, because everything worth measuring is downstream of it.
     #[cfg(feature = "profile")]
     if let Some(path) = cli.profile.clone() {
         install_profiling(path);
     }
 
-    let Cli {
-        budget,
-        manifest,
-        mode,
-        ..
-    } = cli;
-    let manifest = manifest.as_deref();
+    let Cli { mode, .. } = cli;
 
     // Read before the match takes the command apart, so every arm admits its argument through the one contract its command has.
     let contract = mode.contract();
     let target = mode.target().map(str::to_owned);
     let target = target.as_deref();
+    let manifest = mode.manifest().map(Path::to_path_buf);
+    let manifest = manifest.as_deref();
 
     match mode {
-        Mode::Run { args, .. } => {
+        Mode::Run {
+            elaboration, args, ..
+        } => {
             let program = contract.admit_program(target, manifest, &here()?)?;
             // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by. Every argument crosses as the bytes the OS holds, since `/std/proc/args` promises opaque byte strings and a path or an argument need not be UTF-8.
             let entry = match program.entry() {
@@ -135,7 +139,7 @@ fn dispatch() -> Result<(), Failure> {
             let store = program
                 .home()
                 .and_then(|home| contract.access.filed(&home.root));
-            let cwasm = payload_of(budget, program, store)?;
+            let cwasm = payload_of(elaboration.budget, program, store)?;
 
             step(Heading::Running, &subject);
 
@@ -157,20 +161,35 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         // Exit 1 on any failing, trapping or exiting test, exactly as a failing compile exits 1 and a goal batch exits 2 — 0 means every selected test passed or proved.
-        Mode::Test { filter } => {
+        Mode::Test {
+            filter,
+            elaboration,
+        } => {
             let entire = contract.admit_entire(target, manifest, &here()?)?;
 
-            if !run_tests(budget, entire, contract.access, filter.as_deref())? {
+            if !run_tests(
+                elaboration.budget,
+                entire,
+                contract.access,
+                filter.as_deref(),
+            )? {
                 process::exit(1);
             }
         }
         // The tri-state `run` exits with, read off what was reported: a lint is as much a finding as an error, and a goal batch alone is the incomplete state it is everywhere else.
-        Mode::Lint { .. } => match lint(budget, contract.admit_any(target, manifest, &here()?)?)? {
+        Mode::Lint { elaboration, .. } => match lint(
+            elaboration.budget,
+            contract.admit_any(target, manifest, &here()?)?,
+        )? {
             Linted::Clean => {}
             Linted::Goals => process::exit(2),
             Linted::Findings => process::exit(1),
         },
-        Mode::Compile { output_path, .. } => {
+        Mode::Compile {
+            output_path,
+            elaboration,
+            ..
+        } => {
             let program = contract.admit_program(target, manifest, &here()?)?;
 
             // Admission refuses a program no package declares, since the executable is filed under the package that declares it — so this one has an entry file and a home.
@@ -192,7 +211,7 @@ fn dispatch() -> Result<(), Failure> {
             }
 
             let started = Instant::now();
-            let cwasm = payload_of(budget, program, store)?;
+            let cwasm = payload_of(elaboration.budget, program, store)?;
 
             emit_exe(&cwasm, &output)?;
 
@@ -204,6 +223,7 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Document {
             target: archive,
             output_path,
+            elaboration,
         } => {
             let (record, directory) = match archive {
                 // A unit already archived has no package to file its pages under, so the directory is asked for rather than guessed.
@@ -219,8 +239,12 @@ fn dispatch() -> Result<(), Failure> {
                 None => {
                     let library = contract.admit_library(target, manifest, &here()?)?;
                     let store = contract.access.consulted(&library.root);
-                    let record =
-                        documentation(budget, library.units, &Overlay::default(), store.as_ref())?;
+                    let record = documentation(
+                        elaboration.budget,
+                        library.units,
+                        &Overlay::default(),
+                        store.as_ref(),
+                    )?;
                     let directory = output_path
                         .unwrap_or_else(|| Store::at(library.root).documentation(&library.package));
                     (record, directory)
@@ -244,7 +268,7 @@ fn dispatch() -> Result<(), Failure> {
                 format!("cd {} && curios run", directory.display()),
             );
         }
-        Mode::Curate => {
+        Mode::Curate { .. } => {
             let entire = contract.admit_entire(target, manifest, &here()?)?;
 
             // Past tense because it is: every round has fetched before the acquisitions come back to be reported.
@@ -273,23 +297,28 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         Mode::Wonder { query } => match query {
-            Query::Diagnostics { .. } => {
-                wonder_diagnostics(budget, contract.admit_any(target, manifest, &here()?)?)?
-            }
-            Query::Tests { .. } => {
-                wonder_tests(budget, contract.admit_any(target, manifest, &here()?)?)?
-            }
-            Query::Cost { .. } => {
-                wonder_cost(budget, contract.admit_program(target, manifest, &here()?)?)?
-            }
+            Query::Diagnostics { elaboration, .. } => wonder_diagnostics(
+                elaboration.budget,
+                contract.admit_any(target, manifest, &here()?)?,
+            )?,
+            Query::Tests { elaboration, .. } => wonder_tests(
+                elaboration.budget,
+                contract.admit_any(target, manifest, &here()?)?,
+            )?,
+            Query::Cost { elaboration, .. } => wonder_cost(
+                elaboration.budget,
+                contract.admit_program(target, manifest, &here()?)?,
+            )?,
             // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
-            Query::Stage { name, .. } => wonder_stage(
-                budget,
+            Query::Stage {
+                name, elaboration, ..
+            } => wonder_stage(
+                elaboration.budget,
                 &name,
                 contract.admit_program(target, manifest, &here()?)?,
                 |module| wasm_optm(&module, |stage| println!("{stage}")),
             )?,
-            Query::Server => serve(budget, manifest)?,
+            Query::Server { elaboration } => serve(elaboration.budget, manifest)?,
         },
     }
 

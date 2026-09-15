@@ -90,6 +90,35 @@ fn parsed(line: &[&str], argument: Option<&str>) -> Mode {
         .mode
 }
 
+/// The subcommand `line` names, walked from the root for as long as its words name subcommands.
+fn subcommand(line: &[&str]) -> clap::Command {
+    let mut command = Cli::command();
+
+    for word in line {
+        let Some(subcommand) = command.find_subcommand(word).cloned() else {
+            break;
+        };
+        command = subcommand;
+    }
+
+    command
+}
+
+/// The long options the command `line` names takes, pinned beside its contract, so a command that elaborates without a budget, or takes a flag it never reads, is a row written by hand.
+fn options(line: &[&str]) -> String {
+    let options = subcommand(line)
+        .get_arguments()
+        .filter(|argument| !argument.is_global_set())
+        .filter_map(|argument| argument.get_long())
+        .map(|long| format!("--{long}"))
+        .collect::<Vec<_>>();
+
+    match options.is_empty() {
+        true => "none".to_string(),
+        false => options.join(" "),
+    }
+}
+
 /// Where a row stands: the tree's root, and the directory under it the invocation starts in.
 struct Standing<'a> {
     root: &'a Path,
@@ -190,12 +219,13 @@ fn table(root: &Path) -> String {
         let contract = parsed(line, None).contract();
         writeln!(
             table,
-            "{} — {:?}, {:?}, store {:?}, leaves {:?}",
+            "{} — {:?}, {:?}, store {:?}, leaves {:?}, options {}",
             line.join(" "),
             contract.accepts,
             contract.placement,
             contract.access,
-            contract.product
+            contract.product,
+            options(line)
         )
         .unwrap();
 
@@ -231,7 +261,7 @@ fn table(root: &Path) -> String {
     table
 }
 
-const EXPECTED: &str = r#"run TARGET — Program, Standalone, store Write, leaves Nothing
+const EXPECTED: &str = r#"run TARGET — Program, Standalone, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -248,7 +278,7 @@ const EXPECTED: &str = r#"run TARGET — Program, Standalone, store Write, leave
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → refused: no `curios.toml` in <root>/work/app/serve; a package governs the directory its manifest is in, so run a `.crs` file by name, or work in a package's own directory
-compile TARGET — Program, Standalone, store Write, leaves Executable
+compile TARGET — Program, Standalone, store Write, leaves Executable, options --output --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -265,23 +295,23 @@ compile TARGET — Program, Standalone, store Write, leaves Executable
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → refused: no `curios.toml` in <root>/work/app/serve; a package governs the directory its manifest is in, so run a `.crs` file by name, or work in a package's own directory
-document — Library, Contained, store Read, leaves Pages
+document — Library, Contained, store Read, leaves Pages, options --output --budget --manifest
   work/app: (none) → library app
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → refused: no `curios.toml` in <root>/work/app/serve; a package governs the directory its manifest is in, so run a `.crs` file by name, or work in a package's own directory
-document unit.rkyv --output site — Nothing, Contained, store None, leaves Pages
+document unit.rkyv --output site — Nothing, Contained, store None, leaves Pages, options --output --budget --manifest
   takes no subject
-test — Entire, Contained, store Write, leaves Nothing
+test — Entire, Contained, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → refused: no `curios.toml` in <root>/work/app/serve; a package governs the directory its manifest is in, so run a `.crs` file by name, or work in a package's own directory
-curate — Entire, Contained, store None, leaves Sources
+curate — Entire, Contained, store None, leaves Sources, options --manifest
   work/app: (none) → entire app
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → refused: no `curios.toml` in <root>/work/app/serve; a package governs the directory its manifest is in, so run a `.crs` file by name, or work in a package's own directory
-new fresh — Nothing, Contained, store None, leaves Package
+new fresh — Nothing, Contained, store None, leaves Package, options none
   takes no subject
-lint TARGET — Any, Contained, store Read, leaves Nothing
+lint TARGET — Any, Contained, store Read, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -298,9 +328,9 @@ lint TARGET — Any, Contained, store Read, leaves Nothing
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → refused: no `curios.toml` in <root>/work/app/serve; a package governs the directory its manifest is in, so run a `.crs` file by name, or work in a package's own directory
-format a.crs — Nothing, Contained, store None, leaves Rewritten
+format a.crs — Nothing, Contained, store None, leaves Rewritten, options --check
   takes no subject
-wonder diagnostics TARGET — Any, Contained, store Read, leaves Nothing
+wonder diagnostics TARGET — Any, Contained, store Read, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -317,7 +347,7 @@ wonder diagnostics TARGET — Any, Contained, store Read, leaves Nothing
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → refused: no `curios.toml` in <root>/work/app/serve; a package governs the directory its manifest is in, so run a `.crs` file by name, or work in a package's own directory
-wonder tests TARGET — Any, Contained, store Read, leaves Nothing
+wonder tests TARGET — Any, Contained, store Read, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -334,7 +364,7 @@ wonder tests TARGET — Any, Contained, store Read, leaves Nothing
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → refused: no `curios.toml` in <root>/work/app/serve; a package governs the directory its manifest is in, so run a `.crs` file by name, or work in a package's own directory
-wonder cost TARGET — Program, Contained, store Read, leaves Nothing
+wonder cost TARGET — Program, Contained, store Read, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -351,7 +381,7 @@ wonder cost TARGET — Program, Contained, store Read, leaves Nothing
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → refused: no `curios.toml` in <root>/work/app/serve; a package governs the directory its manifest is in, so run a `.crs` file by name, or work in a package's own directory
-wonder stage core TARGET — Program, Contained, store Read, leaves Nothing
+wonder stage core TARGET — Program, Contained, store Read, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -368,7 +398,7 @@ wonder stage core TARGET — Program, Contained, store Read, leaves Nothing
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/serve: (none) → refused: no `curios.toml` in <root>/work/app/serve; a package governs the directory its manifest is in, so run a `.crs` file by name, or work in a package's own directory
-wonder server — Nothing, Contained, store Read, leaves Nothing
+wonder server — Nothing, Contained, store Read, leaves Nothing, options --budget --manifest
   takes no subject
 "#;
 
@@ -379,6 +409,40 @@ fn every_command_admits_what_the_table_says() {
     let table = table(&root);
 
     assert!(table == EXPECTED, "the table now reads:\n{table}");
+}
+
+/// A flag a command reads follows the command, and written before it is refused with the spelling that works — or, for a command that takes no such flag, with why.
+#[test]
+fn a_flag_written_before_its_command_is_refused_with_where_it_goes() {
+    let refusal = |words: &[&str]| {
+        Cli::try_parse_from(iter::once("curios").chain(words.iter().copied()))
+            .unwrap_or_else(|error| panic!("{}: {error}", words.join(" ")))
+            .misplaced()
+    };
+
+    assert_eq!(
+        refusal(&["wonder", "diagnostics", "--manifest", "curios.toml"]),
+        None
+    );
+    assert_eq!(refusal(&["run", "--budget", "5", "serve"]), None);
+    assert_eq!(
+        refusal(&["--manifest", "curios.toml", "wonder", "diagnostics"]).as_deref(),
+        Some(
+            "`--manifest` belongs to the command, so it follows it: `curios wonder diagnostics --manifest curios.toml`"
+        )
+    );
+    assert_eq!(
+        refusal(&["--budget", "5", "run", "serve"]).as_deref(),
+        Some("`--budget` belongs to the command, so it follows it: `curios run --budget 5`")
+    );
+    assert_eq!(
+        refusal(&["--budget", "5", "new", "fresh"]).as_deref(),
+        Some("`new` elaborates nothing, so it takes no `--budget`")
+    );
+    assert_eq!(
+        refusal(&["--manifest", "curios.toml", "format", "a.crs"]).as_deref(),
+        Some("`format` reads no manifest, so it takes no `--manifest`")
+    );
 }
 
 /// Every command the parser knows has a line in the table, so a command added without one fails here rather than going unexamined.

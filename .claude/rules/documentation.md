@@ -11,7 +11,7 @@ Document each fact at the narrowest authoritative level and link to it elsewhere
 | Location | Owns |
 | --- | --- |
 | `README.md` | Public introduction: what Curios is, the happy path to running one, and where to go next |
-| `documentation/usage.md` | Complete command-line and package reference — every subcommand, exit codes, dependencies, umbrellas, and the global flags |
+| `documentation/usage.md` | Complete command-line and package reference — every subcommand, exit codes, dependencies, umbrellas, and every flag |
 | `CLAUDE.md` | Contributor behavior, ownership boundaries, durable invariants, and validation |
 | `.claude/rules/` | Conventions scoped to one kind of file, loaded when such a file is read |
 | `documentation/syntax.md` | Complete Curios surface-language reference |
