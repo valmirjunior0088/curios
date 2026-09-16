@@ -782,14 +782,23 @@ pub(crate) fn finish_deferred_witnesses(
     Ok(refusals)
 }
 
-/// Register an elaborated definition as a witness: validate its telescope (no explicit binders, regular premises), key it on the tuple of rigid heads of the concept's parameters, and insert it into the program-wide table — rejecting a duplicate key. `signature` is the definition's *elaborated* type, and `module` its declaring `Definition`'s own island, which the orphan-rule check below resolves to a mount. Registration ignores `pub`: visibility governs the name, never table membership.
-pub(crate) fn register_witness(
+/// What a witness declaration's type says: its telescope with every binder opened, the concept it witnesses with that application's parameters, and the key it registers under — the tuple of rigid heads of those parameters.
+pub(crate) struct WitnessSignature {
+    /// Each binder as plicity, opened free variable and declared type, in written order.
+    pub(crate) binders: Vec<(Plicity, Free, Term)>,
+    pub(crate) concept: Global,
+    /// The concept application's parameters, under the opened binders.
+    pub(crate) params: Vec<Term>,
+    pub(crate) key: WitnessKey,
+}
+
+/// Read `signature` as a witness declaration's type; see [`WitnessSignature`]. What a key *is* is defined here and nowhere else, which is what lets a second caller holding a witness's signature answer the question without restating the answer — `recovery::withhold`, which poisons the key of a witness its item never got to register.
+///
+/// `signature` is *elaborated*, and must be: reduction leaves a lowered concept application as the `Apply` it was written as, since a concept's name is rigid and unfolds to no `StructType` — building the node the heads are read off is elaboration's, not reduction's. Every refusal below is one `register_witness` raises, and a caller that only wants the key discards them.
+pub(crate) fn read_witness_signature(
     context: &mut Context,
-    name: &Global,
     signature: &Term,
-    universe_context: UniverseContext,
-    module: &Qualifier,
-) -> Result<(), Error> {
+) -> Result<WitnessSignature, Error> {
     let reduced = reduce_with(context, signature)?;
 
     // Peel the telescope, opening each binder with its own label as a neutral free variable (elaborated binder labels are entropy-fresh, so they cannot collide).
@@ -841,11 +850,33 @@ pub(crate) fn register_witness(
         };
         heads.push(head);
     }
-    let key = WitnessKey(heads);
+
+    Ok(WitnessSignature {
+        binders,
+        concept: concept_name.clone(),
+        params: params.clone(),
+        key: WitnessKey(heads),
+    })
+}
+
+/// Register an elaborated definition as a witness: validate its telescope (no explicit binders, regular premises), key it on the tuple of rigid heads of the concept's parameters, and insert it into the program-wide table — rejecting a duplicate key. `signature` is the definition's *elaborated* type, and `module` its declaring `Definition`'s own island, which the orphan-rule check below resolves to a mount. Registration ignores `pub`: visibility governs the name, never table membership.
+pub(crate) fn register_witness(
+    context: &mut Context,
+    name: &Global,
+    signature: &Term,
+    universe_context: UniverseContext,
+    module: &Qualifier,
+) -> Result<(), Error> {
+    let WitnessSignature {
+        binders,
+        concept: concept_name,
+        params,
+        key,
+    } = read_witness_signature(context, signature)?;
 
     // Termination (Paterson's conditions): every `use` premise is strictly smaller than the concept application it serves — its variables are this witness's own binders, none of them occurs more often than in the head, and it has fewer nodes in all — so resolution through it is structurally decreasing, with no fuel or tabling. A premise may name a constant beside a binder, `Lift(Io, M)` under a head `Lift(Io, (A) => Try(M, E, A))`, which the variables-only rule this replaced refused for nothing: the constant weighs one node and decreases like any other.
     let binder_names: BTreeSet<&Free> = binders.iter().map(|(_, n, _)| n).collect();
-    let (head_size, head_occurrences) = measure(params, &binder_names);
+    let (head_size, head_occurrences) = measure(&params, &binder_names);
     for (plicity, _, type_) in &binders {
         if !matches!(plicity, Plicity::Witness) {
             continue;
@@ -891,7 +922,7 @@ pub(crate) fn register_witness(
         (Some(here), Some(there)) => here.prefix == there.prefix,
         _ => false,
     };
-    if !owns(context.mount_of(concept_name))
+    if !owns(context.mount_of(&concept_name))
         && !key.0.iter().any(|head| owns(context.mount_of_head(head)))
     {
         return Err(Error::orphan_witness(

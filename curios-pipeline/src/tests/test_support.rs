@@ -9,7 +9,8 @@ use {
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource, UnitSource},
     curios_unit::{Prefix, Unit},
-    curios_utilities::RootKind,
+    curios_utilities::{RootKind, test_support::Temporary},
+    std::fs,
 };
 
 /// A fixture's entrypoint, stating its own type when the fixture is a bare *term* rather than a program.
@@ -190,35 +191,54 @@ pub(super) fn mounted(prefix: &str, source: &str) -> RootSource {
     modules
 }
 
+/// `source` written to a file and mounted at `prefix`, so it is read the way the compiler reads any module — the parser resynchronizing past an item it cannot read.
+///
+/// [`mounted`] is the strict `FromStr` spelling, which refuses such a text whole: right for a fixture written to compile, where a typo should fail at the fixture rather than as a diagnostic about a program nobody wrote, and wrong for one written *not* to. The guard comes back with the source because the file has to outlive every read of it.
+pub(super) fn written(prefix: &str, source: &str) -> (Temporary, RootSource) {
+    let directory = Temporary::new("pipeline", prefix);
+    let header = directory.join("lib.crs");
+    fs::create_dir_all(&*directory).expect("a fixture directory");
+    fs::write(&header, source).expect("a fixture is written");
+
+    let modules = RootSource::mounted(prefix, RootKind::Ordinary, header, directory.to_path_buf());
+
+    (directory, modules)
+}
+
 /// `source` compiled whole as the unit `/lib`, against the prelude.
 pub(super) fn unit_of(source: &str) -> Unit {
-    let modules = mounted("lib", source);
+    compile_modules(&mounted("lib", source)).expect("the unit compiles")
+}
 
+/// `source` compiled as the unit `/lib` over `baseline`, against the prelude.
+pub(super) fn recompile_over(source: &str, baseline: &Unit) -> Result<Unit, String> {
+    recompile_modules(&mounted("lib", source), baseline)
+}
+
+/// A whole compile of modules already supplied, handing back what it said rather than expecting it to compile — which is what a fixture written *not* to compile needs, and what lets its answer be held against the recompile's.
+pub(super) fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
     with_prelude(|prelude| {
         compile_units(
             DEFAULT_STEP_BUDGET,
             Prefix::over(prelude),
             &SYNTAX,
-            &[UnitSource::mounted(&modules)],
+            &[UnitSource::mounted(modules)],
             None,
             |_| {},
         )
     })
-    .expect("the unit compiles")
-    .pop()
-    .expect("one unit was compiled")
+    .map_err(String::from)
+    .map(|mut units| units.pop().expect("one unit was compiled"))
 }
 
-/// `source` compiled as the unit `/lib` over `baseline`, against the prelude.
-pub(super) fn recompile_over(source: &str, baseline: &Unit) -> Result<Unit, String> {
-    let modules = mounted("lib", source);
-
+/// [`recompile_over`] over modules already supplied; the recompiling half of [`compile_modules`]'s differential.
+pub(super) fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result<Unit, String> {
     with_prelude(|prelude| {
         compile_unit_over(
             DEFAULT_STEP_BUDGET,
             Prefix::over(prelude),
             &SYNTAX,
-            &UnitSource::mounted(&modules),
+            &UnitSource::mounted(modules),
             baseline,
         )
     })

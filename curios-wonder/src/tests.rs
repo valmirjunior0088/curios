@@ -346,6 +346,43 @@ fn an_open_document_refuses_a_hit_only_when_it_is_edited() {
     );
 }
 
+/// A declaration the parser cannot read answers with its own record, over a baseline as with none.
+///
+/// **The regression for recovery and the item-level recompile never having crossed.** A question takes a baseline where a build compiles whole, so this path is the editor's and `curios lint`'s alone. A broken item withholds its dependents, and a withheld item leaves no refusal behind it — so the recompile reassembled the lowered order looking for items its own elaboration had deliberately not produced, and every keystroke that left a half-written declaration with a dependent in it killed the analyst instead of answering.
+///
+/// Two declarations are the smallest shape that shows it: one broken, and one naming it, which is the one that goes missing.
+#[test]
+fn a_broken_declaration_over_a_baseline_is_its_own_record() {
+    let root = mounted_project("read-only-broken");
+    let module = "use /std/{Str};\n\npub let greeting: Str =\n    \"beta\";\n\npub let said: Str =\n    greeting;\n";
+    write(&root, "b/lib.crs", module);
+    built(&root);
+
+    let overlay = Overlay::of(BTreeMap::from([(
+        root.join("b/lib.crs"),
+        module.replace("\"beta\"", ""),
+    )]));
+    let store = Verdicts::at(root.to_path_buf());
+    let diagnostics = diagnostics(
+        DEFAULT_STEP_BUDGET,
+        Subject::Unit {
+            units: crate::overlaid(mounted(&root), &overlay),
+        },
+        &overlay,
+        Some(&store),
+    );
+
+    let [record] = diagnostics.as_slice() else {
+        panic!("one record, got {diagnostics:?}");
+    };
+    assert_eq!(record.severity, Severity::Error);
+    assert!(
+        record.report.message.contains("expected a term"),
+        "{}",
+        record.report.render()
+    );
+}
+
 /// Two packages in a directory of their own that goes away with the test, the second declaring the first — which is what makes them a scope of two, in that order.
 fn mounted_project(name: &str) -> Temporary {
     let root = Temporary::new("wonder", name);
@@ -533,6 +570,31 @@ fn a_goal_beside_a_refusal_keeps_its_goal_severity() {
     assert_eq!(refusal.report.span.as_ref().unwrap().line_column(), (1, 21));
     assert_eq!(goal.severity, Severity::Goal);
     assert_eq!(goal.report.span.as_ref().unwrap().line_column(), (2, 21));
+}
+
+/// A withheld witness declaration reports nothing of its own, and neither do its consumers: the miss they would report is the withholding's consequence, and the withholding's cause is already in the answer.
+///
+/// **The regression for a witness registering when its signature elaborates.** A *refused* witness registered before its body failed, so undoing it poisoned its key in place and a consumer meeting the poison stayed silent. A withheld one never registered, so there was no key to poison, and one unreadable declaration answered with two records — the second at a declaration with nothing wrong with it, pointing away from the one that has.
+#[test]
+fn a_withheld_witness_leaves_its_consumers_silent() {
+    let reports = of(concat!(
+        "use /std/{Nat, Show, Str};\n\n",
+        "pub struct Meters: pub Type { Nat }\n\n",
+        "pub let label(m: Meters) -> Str = ;\n\n",
+        "satisfy Show(Meters) {\n    show(m) = label(m),\n}\n\n",
+        "pub let render(m: Meters) -> Str = Show/show(m);\n\n",
+        "/std/print(\"\")\n",
+    ));
+
+    let [record] = reports.as_slice() else {
+        panic!("one record, got {reports:?}");
+    };
+    assert_eq!(record.severity, Severity::Error);
+    assert!(
+        record.report.message.contains("expected a term"),
+        "{}",
+        record.report.render()
+    );
 }
 
 /// A parse failure inside one declaration is that declaration's record, and the file is read past it: the refusal after it is reported beside it, at its own term.

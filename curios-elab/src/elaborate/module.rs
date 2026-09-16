@@ -1232,6 +1232,8 @@ struct ElaboratedSuffix {
     body_type: Option<Term>,
     /// Every item's refusal in item order, the entry's after them, then the whole-module passes'. Non-empty means the module is not the program that was written, and the caller raises these rather than finalizing it as one.
     refusals: Vec<Error>,
+    /// Every name an item this run produced no item for: withheld before it elaborated, refused, or retracted after the fact. Empty is the run that kept everything it was handed; non-empty is *not* the same fact as a non-empty `refusals`, since a withheld item reports nothing — see `recovery`.
+    dropped: BTreeSet<Global>,
 }
 
 /// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint `body`, and (through `mode`) its type annotation. Returns the rebuilt suffix alongside the body's type, reduced through the accumulated definitions.
@@ -1290,8 +1292,9 @@ fn elaborate_module_suffix(
     let mut survivors = Survivors::new(entry_stamp);
     for (position, item) in module.items.iter().enumerate() {
         if poison.reaches(module, item) {
-            withdraw(context, &item.declared_names());
+            withhold(context, ItemStamp(position), item);
             poison.declare(item);
+            survivors.drop_item(item);
             continue;
         }
 
@@ -1304,6 +1307,7 @@ fn elaborate_module_suffix(
             Err(error) => {
                 mark.undo(context, &item.declared_names());
                 poison.declare(item);
+                survivors.drop_item(item);
                 survivors.refuse(ItemStamp(position), error);
             }
         }
@@ -1416,7 +1420,7 @@ fn elaborate_module_suffix(
         .filter(|name| names.contains(*name))
         .cloned()
         .collect();
-    let (items, refusals) = survivors.into_parts();
+    let (items, refusals, dropped) = survivors.into_parts();
 
     let module = Module {
         items,
@@ -1435,6 +1439,7 @@ fn elaborate_module_suffix(
         module,
         body_type,
         refusals,
+        dropped,
     })
 }
 
@@ -1722,6 +1727,8 @@ pub struct Recompile<'a> {
 /// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the closure alone is elaborated, against the scope with the reused items replayed as one more predecessor, and the result is reassembled with them into one module in the new lowering's order.
 ///
 /// Zonk and the two erasure obligations narrow to the closure by construction, since `finalize_and_check` runs over the closure module and a reused item is zonked and stamped already. Positivity and totality classification then run over the reassembled whole, because a new declaration can reach an old one and both cost well under a second. The witness-cycle check stays the closure's: a cycle through a reused witness would need that witness to reach a closure item, which contradicts the closure being closed, and a cycle among reused witnesses was refused when the baseline compiled.
+///
+/// **A run that refused nothing may still have kept fewer items than it was handed**, so the reassembly is told what was dropped rather than left to read it off an absence. An item withheld for reaching a broken name records no refusal — that is `recovery`'s decision and the whole-unit path's behaviour — and the early return below therefore does not catch it. Such a run never becomes a unit: poison exists only where something was refused or the lowering reported an item broken, and `with_broken` turns the second into a failure before anything is judged, erased or filed.
 pub fn elaborate_and_zonk_unit_over(
     context: &mut Context,
     established: Established<'_>,
@@ -1757,7 +1764,12 @@ pub fn elaborate_and_zonk_unit_over(
         obligations,
     } = finalized?;
 
-    let mut module = reassemble(&recompile, closure, extended.binder_floor());
+    let mut module = reassemble(
+        &recompile,
+        closure,
+        extended.binder_floor(),
+        &elaborated.dropped,
+    );
     context.restore_budget();
     check_positivity(context, &mut module)?;
     record_totality(context, &mut module, &established.recorded_totality());
@@ -1774,7 +1786,16 @@ pub fn elaborate_and_zonk_unit_over(
 }
 
 /// The reused items and the re-elaborated closure as one module, in the lowering's item order, over the union of their registries.
-fn reassemble(recompile: &Recompile<'_>, closure: Module, scope_floor: usize) -> Module {
+///
+/// `dropped` is what the closure's elaboration produced no item for. A lowered item whose names are all in it is left out, exactly as the whole-unit path leaves a withheld item out of its module, and nothing dangles behind it: the closure is closed under reverse reachability, so no reused item reaches one of its names. A lowered item missing for any other reason is the contract broken and says so.
+///
+/// The markers follow the items rather than the lowering for the same reason the whole-unit path filters them (`elaborate_module_suffix`): a witness or test naming an item that is not there would reach zonk and erasure as a marker for nothing. On a run that dropped nothing the filter admits every one, which is every run that produces a unit.
+fn reassemble(
+    recompile: &Recompile<'_>,
+    closure: Module,
+    scope_floor: usize,
+    dropped: &BTreeSet<Global>,
+) -> Module {
     let first = |item: &Item| {
         item.declared_names()
             .first()
@@ -1797,14 +1818,28 @@ fn reassemble(recompile: &Recompile<'_>, closure: Module, scope_floor: usize) ->
         .lowered
         .items
         .iter()
-        .map(|item| {
+        .filter_map(|item| {
             let name = first(item);
             elaborated
                 .remove(&name)
                 .or_else(|| reused.get(&name).map(|item| (*item).clone()))
-                .unwrap_or_else(|| panic!("{} is neither reused nor re-elaborated", name.symbol()))
+                .or_else(|| {
+                    assert!(
+                        item.declared_names()
+                            .into_iter()
+                            .all(|name| dropped.contains(name)),
+                        "{} is neither reused nor re-elaborated",
+                        name.symbol()
+                    );
+                    None
+                })
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let declared = items
+        .iter()
+        .flat_map(Item::declared_names)
+        .cloned()
+        .collect::<BTreeSet<_>>();
 
     let mut induct_decls = recompile.reused.induct_decls.clone();
     induct_decls.extend(closure.induct_decls);
@@ -1820,8 +1855,20 @@ fn reassemble(recompile: &Recompile<'_>, closure: Module, scope_floor: usize) ->
         induct_decls,
         struct_decls,
         concepts,
-        witnesses: recompile.lowered.witnesses.clone(),
-        tests: recompile.lowered.tests.clone(),
+        witnesses: recompile
+            .lowered
+            .witnesses
+            .iter()
+            .filter(|name| declared.contains(*name))
+            .cloned()
+            .collect(),
+        tests: recompile
+            .lowered
+            .tests
+            .iter()
+            .filter(|name| declared.contains(*name))
+            .cloned()
+            .collect(),
         binder_floor: scope_floor.max(closure.binder_floor),
         entry: closure.entry,
     }

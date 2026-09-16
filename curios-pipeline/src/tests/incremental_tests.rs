@@ -2,7 +2,10 @@
 //!
 //! Reuse is observed by allocation identity — a reused item carries the very terms the baseline holds, which no elaboration could produce twice — and agreement by the differential predicate in `test_support`. Resource verdicts are deliberately outside the predicate: a partial walk runs in a different cache state, so a budget-marginal declaration can move either way, and the specification says so.
 
-use super::test_support::{assert_modules_agree, recompile_over, reuses_body, unit_of};
+use super::test_support::{
+    assert_modules_agree, compile_modules, recompile_modules, recompile_over, reuses_body, unit_of,
+    written,
+};
 
 /// Three items: `twice` reaches `double`, and `unrelated` reaches neither.
 const BASE: &str = "use /std/{Nat};
@@ -147,4 +150,29 @@ fn an_all_changed_closure_equals_the_whole_compile() {
 
     assert_eq!(incremental.core().items.len(), 3);
     assert_modules_agree(unit_of(BASE).core(), incremental.core());
+}
+
+/// An item the parser could not read withholds its dependents, which report nothing and leave no refusal behind them — so a recompile reassembling the lowered order has items in it that the closure's elaboration never produced. It leaves them out, exactly as a whole compile of the same text does, and answers with the parse error either way.
+///
+/// This is the crossing the two features never had a fixture for: recovery was written against the whole-unit path, where a withheld item simply falls out of the module, and the recompile was written against a run that either kept everything or refused something.
+#[test]
+fn a_broken_item_withholds_its_dependents_and_reports_as_the_whole_compile_does() {
+    let baseline = unit_of(BASE);
+    let (_guard, edited) = written("lib", &BASE.replace("n + n", ""));
+
+    let Err(incremental) = recompile_modules(&edited, &baseline) else {
+        panic!("a unit holding a broken item does not compile");
+    };
+    let Err(whole) = compile_modules(&edited) else {
+        panic!("a unit holding a broken item does not compile");
+    };
+
+    assert!(
+        incremental.contains("expected a term"),
+        "the parse error is the answer: {incremental}"
+    );
+    assert_eq!(
+        incremental, whole,
+        "a recompile answers what the whole compile of the same text answers"
+    );
 }
