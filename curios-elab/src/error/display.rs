@@ -7,6 +7,7 @@ mod tests;
 
 use {
     super::{Erased, Error, GoalReport, HeadKey, ShapeDiagnosis, Underivable},
+    crate::ordinal,
     curios_core::{Spelling, Subterm, Term},
     curios_utilities::{Grain, Plicity, Qualifier},
     std::{fmt, rc::Rc},
@@ -187,20 +188,27 @@ impl fmt::Display for Displayed<'_> {
                         Some(name) => format!("`{name}`, "),
                         None => String::new(),
                     };
+                    let mark = match site.plicity {
+                        Plicity::Explicit => "",
+                        Plicity::Implicit => "'@' ",
+                        Plicity::Witness => "'use' ",
+                    };
                     write!(
                         f,
-                        "\n  checked as {parameter}the {} argument of '{}'",
-                        site.ordinal, site.function
+                        "\n  checked as {parameter}the {} {mark}argument of '{}'",
+                        ordinal(site.position),
+                        site.function
                     )?;
-                    if let Some((name, ordinal)) = &site.function_typed {
+                    if let Some((name, position)) = &site.function_typed {
                         let name = match name {
                             Some(name) => format!("`{name}`, "),
                             None => String::new(),
                         };
                         write!(
                             f,
-                            "\n  '{}' takes a function as {name}its {ordinal} argument",
-                            site.function
+                            "\n  '{}' takes a function as {name}its {} argument",
+                            site.function,
+                            ordinal(*position)
                         )?;
                     }
                 }

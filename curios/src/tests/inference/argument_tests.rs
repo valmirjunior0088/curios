@@ -18,3 +18,107 @@ fn a_lambda_in_the_wrong_position_names_the_parameter_it_filled_and_the_one_it_f
         "unexpected report:\n{report}"
     );
 }
+
+// A written `@` argument is named among the `@` arguments, which is how it was aligned with its slot. Counting it among the plain ones underflowed when none came before it. The hint about a later function parameter is for swapped plain arguments, and an author who wrote `@` chose the hidden slot on purpose.
+#[test]
+fn an_implicit_lambda_before_any_plain_argument_is_named_among_the_implicit_ones() {
+    let report = error(
+        r#"
+        use /std/{Nat};
+        let f(@n: Nat, k: (Nat) -> Nat) -> Nat = k(n);
+        let g: Nat = f(@(x) => x, (y) => y);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains("checked as `n`, the 1st '@' argument of '/f'")
+            && !report.contains("takes a function"),
+        "unexpected report:\n{report}"
+    );
+}
+
+#[test]
+fn an_implicit_lambda_after_a_plain_argument_is_not_named_by_the_plain_ones_position() {
+    let report = error(
+        r#"
+        use /std/{Nat};
+        let f(m: Nat, @n: Nat) -> Nat = m + n;
+        let g: Nat = f(1, @(x) => x);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains("checked as `n`, the 1st '@' argument of '/f'"),
+        "unexpected report:\n{report}"
+    );
+}
+
+// The site is worked out for every refused argument, though only a misplaced lambda keeps it, so a plain mismatch at an `@` argument took the same path to the underflow.
+#[test]
+fn a_mismatched_implicit_argument_before_any_plain_one_is_refused_as_a_mismatch() {
+    let report = error(
+        r#"
+        use /std/{Nat};
+        let f(@n: Nat) -> Nat = n;
+        let g: Nat = f(@true);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains("type mismatch"),
+        "unexpected report:\n{report}"
+    );
+}
+
+// A `use` parameter is anonymous, so the report names its position alone.
+#[test]
+fn a_use_lambda_is_named_among_the_use_arguments_without_a_parameter_name() {
+    let report = error(
+        r#"
+        use /std/{Nat, Show};
+        let f(use Show(Nat), m: Nat) -> Nat = m;
+        let g: Nat = f(use (x) => x, 1);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains("checked as the 1st 'use' argument of '/f'"),
+        "unexpected report:\n{report}"
+    );
+}
+
+// A method wrapper's telescope holds no explicit slot, so its hidden arguments are checked by the saturating walk rather than the main one. The wrapper names its `use` binder `w`, which appears in no program and must not surface.
+#[test]
+fn a_use_lambda_in_a_leading_hidden_telescope_is_named_too() {
+    let report = error(
+        r#"
+        use /std/{Nat, Show, Str};
+        let s: Str = Show/show(use (x) => x, 5);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains("checked as the 1st 'use' argument of '/std/Show/Show/show'")
+            && !report.contains("`w`"),
+        "unexpected report:\n{report}"
+    );
+}
+
+// A premise is named by its position among every `use` slot, written or not: supplying the first does not make the second the first.
+#[test]
+fn a_missing_witness_after_a_written_one_is_named_by_its_own_position() {
+    let report = error(
+        r#"
+        use /std/{Nat, Show, Str};
+        struct Foo: Type { Nat }
+        let f(use Show(Nat), use Show(Foo)) -> Nat = 0;
+        let mine: Show(Nat) = Show { show(_n) = "n" };
+        let g: Nat = f(use mine);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains("needed by '/f' for its 2nd 'use' premise"),
+        "unexpected report:\n{report}"
+    );
+}

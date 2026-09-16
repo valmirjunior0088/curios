@@ -87,17 +87,19 @@ pub enum Underivable {
     },
 }
 
-/// Where an argument was checked, for a report that names the parameter it filled.
+/// Where an argument was checked, for a report that names the slot it filled.
 #[derive(Debug)]
 pub struct ArgumentSite {
     /// The applied function, as the call spells it.
     pub function: String,
-    /// The parameter the argument filled, when the telescope names it.
+    /// The parameter the argument filled, when the telescope names it and the slot is not a `use` one.
     pub parameter: Option<String>,
-    /// The argument's ordinal among the explicit arguments, spelled (`1st`).
-    pub ordinal: String,
-    /// A later explicit parameter whose type is a function type, with its name and ordinal — the slot a misplaced lambda was meant for.
-    pub function_typed: Option<(Option<String>, String)>,
+    /// The mark the argument was written with, which is its slot's plicity.
+    pub plicity: Plicity,
+    /// The argument's 0-based position among the arguments written with that mark.
+    pub position: usize,
+    /// For a plain argument, a later explicit parameter whose type is a function type, with its name and 0-based position among the explicit parameters — the slot a misplaced lambda was meant for.
+    pub function_typed: Option<(Option<String>, usize)>,
 }
 
 #[derive(Debug)]

@@ -508,12 +508,13 @@ fn instantiate(
         Subterm::FuncType(ft) => {
             let mut args: Vec<(Plicity, Term)> = Vec::with_capacity(ft.plicities().len());
             let mut premises: Vec<(MetavarId, Term, WitnessOrigin)> = Vec::new();
-            let mut resolved_premises = 0usize;
+            let mut positions = crate::SlotPositions::default();
             let mut tele = ft.telescope.clone();
             for plicity in ft.plicities() {
                 let Telescope::Cons(ty, rest) = tele else {
                     unreachable!("plicities parallel the telescope");
                 };
+                let position = positions.next(*plicity);
                 let binder = rest.first_hint().unwrap_or("_").to_string();
                 let arg = match plicity {
                     Plicity::Implicit => {
@@ -532,9 +533,8 @@ fn instantiate(
                     Plicity::Witness => {
                         let provenance = WitnessOrigin {
                             func: witness.name.symbol(),
-                            binder: crate::premise_label(resolved_premises),
+                            binder: crate::premise_label(position),
                         };
-                        resolved_premises += 1;
                         let (id, metavar) = context.fresh_witness_metavar(
                             ty.clone(),
                             span.clone(),

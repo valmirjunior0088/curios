@@ -419,13 +419,16 @@ impl InfixMethod {
     ) -> Result<(Vec<(Plicity, Term)>, Term), Error> {
         let mut telescope = self.signature.clone();
         let mut marks = self.plicities.iter().copied();
+        let mut positions = SlotPositions::default();
         let mut arguments = Vec::new();
 
         for operand in [left, right] {
             let Telescope::Cons(_, rest) = telescope else {
                 panic!("a syn operator concept declares its method over both operands");
             };
-            arguments.push((marks.next().unwrap_or(Plicity::Explicit), operand.clone()));
+            let plicity = marks.next().unwrap_or(Plicity::Explicit);
+            positions.next(plicity);
+            arguments.push((plicity, operand.clone()));
             telescope = rest.open(&[operand]);
         }
 
@@ -441,7 +444,7 @@ impl InfixMethod {
                         None,
                         op.symbol(),
                         origin,
-                        premise_label(0),
+                        positions.next(plicity),
                     )?;
                     telescope = rest.open(&[&filled]);
                     arguments.push((plicity, filled));

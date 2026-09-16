@@ -46,7 +46,6 @@ pub(super) fn elaborate_func_type(
     Ok((rebuilt, sort))
 }
 
-/// Fill an omitted non-explicit slot: an implicit binder gets a fresh metavariable; a witness binder gets a fresh metavariable *plus* a resolution goal, attempted eagerly (solved now, parked on a flex key, or deferred on a missing table entry). `origin` is the application node — the span anchor for the goal.
 /// A one-based position as an English ordinal, for naming which slot of a call a goal belongs to.
 pub(crate) fn ordinal(index: usize) -> String {
     let position = index + 1;
@@ -67,6 +66,31 @@ pub(crate) fn premise_label(index: usize) -> String {
     format!("its {} 'use' premise", ordinal(index))
 }
 
+/// Where each slot of a call sits among the slots of its own kind — the position a report names it by, whether it was written or filled.
+///
+/// Written `@` and `use` arguments fill the slots of their kind in order, so a slot's position among its kind is also the position of the argument written for it, and one count serves both the argument a refusal names and the premise a witness goal names. Every slot a walk visits passes through [`SlotPositions::next`] in telescope order; a walk that saturates several telescopes of one call carries one value across them, as it carries the written queues.
+#[derive(Default)]
+pub(crate) struct SlotPositions {
+    explicit: usize,
+    implicit: usize,
+    witness: usize,
+}
+
+impl SlotPositions {
+    /// The 0-based position of the next slot of `plicity` among the slots of its kind, advancing past it.
+    pub(crate) fn next(&mut self, plicity: Plicity) -> usize {
+        let counter = match plicity {
+            Plicity::Explicit => &mut self.explicit,
+            Plicity::Implicit => &mut self.implicit,
+            Plicity::Witness => &mut self.witness,
+        };
+        let position = *counter;
+        *counter += 1;
+        position
+    }
+}
+
+/// Fill an omitted non-explicit slot: an implicit binder gets a fresh metavariable; a witness binder gets a fresh metavariable *plus* a resolution goal, attempted eagerly (solved now, parked on a flex key, or deferred on a missing table entry). `origin` is the application node — the span anchor for the goal. `position` is the slot's place among the head's slots of its kind, which names a witness goal's premise.
 pub(super) fn insert_auto_argument(
     context: &mut Context,
     plicity: Plicity,
@@ -74,7 +98,7 @@ pub(super) fn insert_auto_argument(
     label: Option<&str>,
     func: &str,
     origin: &Term,
-    premise: String,
+    position: usize,
 ) -> Result<Term, Error> {
     let binder = binder_name(label);
 
@@ -109,7 +133,7 @@ pub(super) fn insert_auto_argument(
         Plicity::Witness => {
             let provenance = WitnessOrigin {
                 func: func.to_string(),
-                binder: premise,
+                binder: premise_label(position),
             };
             let (id, metavar) =
                 context.fresh_witness_metavar(type_.clone(), origin.span(), provenance.clone());
@@ -167,7 +191,7 @@ pub(super) fn elaborate_apply(
     }
 
     // All-auto telescopes (the curried `bind` shape, e.g. `(@A, @B) -> (M A, A -> M B) -> M B`, or a method wrapper's `(@A, use w) -> …`): when the head telescope has zero explicit slots but plain arguments were given, saturate it — marked queues first, fresh metavariables (and witness goals) for the rest — reduce the output, and re-target the plain arguments at the next telescope. This fires *only* with zero explicit slots, so application stays arity-strict everywhere else (this is deliberately not general partial application).
-    let mut auto_premises = 0usize;
+    let mut positions = SlotPositions::default();
     let ft = loop {
         let ft = match &*head_type {
             Subterm::FuncType(ft) => ft.clone(),
@@ -185,32 +209,35 @@ pub(super) fn elaborate_apply(
 
         let mut args = Vec::with_capacity(ft.plicities().len());
         let mut tele = ft.telescope.clone();
-        for plicity in ft.plicities() {
+        for (index, plicity) in ft.plicities().iter().enumerate() {
             let Telescope::Cons(ty, rest) = tele else {
                 unreachable!("plicities parallel the telescope");
             };
+            let position = positions.next(*plicity);
             let queue = match plicity {
                 Plicity::Implicit => &mut marked,
                 Plicity::Witness => &mut used,
                 Plicity::Explicit => unreachable!("all-auto telescope"),
             };
             let arg = match queue.pop_front() {
-                Some(arg) => check(context, &arg, ty.clone())?,
-                None => {
-                    let premise = premise_label(auto_premises);
-                    if matches!(plicity, Plicity::Witness) {
-                        auto_premises += 1;
-                    }
-                    insert_auto_argument(
-                        context,
-                        *plicity,
-                        &ty,
-                        rest.first_hint(),
+                Some(arg) => check(context, &arg, ty.clone()).map_err(|error| {
+                    error.at_argument(argument_site(
                         &func_label,
-                        term,
-                        premise,
-                    )?
-                }
+                        *plicity,
+                        position,
+                        &rest,
+                        &ft.plicities()[index + 1..],
+                    ))
+                })?,
+                None => insert_auto_argument(
+                    context,
+                    *plicity,
+                    &ty,
+                    rest.first_hint(),
+                    &func_label,
+                    term,
+                    position,
+                )?,
             };
             tele = rest.open(&[&arg]);
             args.push((*plicity, arg));
@@ -268,14 +295,11 @@ pub(super) fn elaborate_apply(
     // The pendings this apply minted: (slot, placeholder, written term), consulted by the fallback pin below.
     let mut pendings: Vec<(usize, MetavarId, Term)> = Vec::new();
     let mut tele = original.clone();
-    let mut explicit_seen = 0usize;
     for (index, plicity) in ft.plicities().iter().enumerate() {
         let Telescope::Cons(ty, rest) = tele else {
             unreachable!("plicities parallel the telescope");
         };
-        if *plicity == Plicity::Explicit {
-            explicit_seen += 1;
-        }
+        let position = positions.next(*plicity);
         let written = match plicity {
             Plicity::Explicit => Some(plain.pop_front().expect("arity checked above")),
             Plicity::Implicit => marked.pop_front(),
@@ -317,28 +341,23 @@ pub(super) fn elaborate_apply(
                     check(context, &written, ty.clone()).map_err(|error| {
                         error.at_argument(argument_site(
                             &func_label,
-                            explicit_seen,
+                            *plicity,
+                            position,
                             &rest,
                             &ft.plicities()[index + 1..],
                         ))
                     })?
                 }
             }
-            None => {
-                let premise = premise_label(auto_premises);
-                if matches!(plicity, Plicity::Witness) {
-                    auto_premises += 1;
-                }
-                insert_auto_argument(
-                    context,
-                    *plicity,
-                    &ty,
-                    rest.first_hint(),
-                    &func_label,
-                    term,
-                    premise,
-                )?
-            }
+            None => insert_auto_argument(
+                context,
+                *plicity,
+                &ty,
+                rest.first_hint(),
+                &func_label,
+                term,
+                position,
+            )?,
         };
         tele = rest.open(&[&arg]);
         elaborated.push(arg);
@@ -387,39 +406,48 @@ pub(super) fn elaborate_apply(
     ))
 }
 
-/// The metavariables the result `expect` can pin, as seen from one slot: the suffix telescope's terminal with this and every later binder opened as a fresh variable. Only prefix-born metavariables can occur in a slot's own domain — domains open over the prefix — so fresh-var opening of the unvisited suffix is decision-equivalent to a full-argument pre-read of the output, computed only for postponement candidates instead of once per application.
-/// Where the argument just checked sits: the parameter it filled, its ordinal among the explicit arguments, and the next explicit parameter of function type, if any — the slot a lambda handed in here was likely meant for.
+/// Where the argument just checked sits: the parameter it filled, the mark it was written with and its position among the arguments written with that mark, and — for a plain argument — the next explicit parameter of function type, if any, the slot a lambda handed in here was likely meant for.
+///
+/// A `use` slot's binder goes unnamed, since no program names it — the method wrappers' `w` is the only name one ever carries. A hidden argument is pointed at no plain parameter: the hint is for swapped plain arguments, and an author who wrote `@` or `use` chose a hidden slot on purpose.
 fn argument_site(
     function: &str,
-    explicit_seen: usize,
+    plicity: Plicity,
+    position: usize,
     rest: &Scope<One, Telescope<Term>>,
     later_plicities: &[Plicity],
 ) -> ArgumentSite {
     let mut function_typed = None;
-    let mut cursor = rest.body();
-    let mut explicit = explicit_seen;
-    for plicity in later_plicities {
-        let Telescope::Cons(ty, next) = cursor else {
-            break;
-        };
-        if *plicity == Plicity::Explicit {
-            explicit += 1;
-            if matches!(&**ty, Subterm::FuncType(_)) {
-                function_typed =
-                    Some((next.first_hint().map(str::to_string), ordinal(explicit - 1)));
+    if plicity == Plicity::Explicit {
+        let mut cursor = rest.body();
+        let mut explicit = position + 1;
+        for later in later_plicities {
+            let Telescope::Cons(ty, next) = cursor else {
                 break;
+            };
+            if *later == Plicity::Explicit {
+                if matches!(&**ty, Subterm::FuncType(_)) {
+                    function_typed = Some((next.first_hint().map(str::to_string), explicit));
+                    break;
+                }
+                explicit += 1;
             }
+            cursor = next.body();
         }
-        cursor = next.body();
     }
+    let parameter = match plicity {
+        Plicity::Explicit | Plicity::Implicit => rest.first_hint().map(str::to_string),
+        Plicity::Witness => None,
+    };
     ArgumentSite {
         function: function.to_string(),
-        parameter: rest.first_hint().map(str::to_string),
-        ordinal: ordinal(explicit_seen - 1),
+        parameter,
+        plicity,
+        position,
         function_typed,
     }
 }
 
+/// The metavariables the result `expect` can pin, as seen from one slot: the suffix telescope's terminal with this and every later binder opened as a fresh variable. Only prefix-born metavariables can occur in a slot's own domain — domains open over the prefix — so fresh-var opening of the unvisited suffix is decision-equivalent to a full-argument pre-read of the output, computed only for postponement candidates instead of once per application.
 fn result_metavars_from(
     context: &mut Context,
     rest: &Scope<One, Telescope<Term>>,

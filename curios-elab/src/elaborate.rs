@@ -1,6 +1,6 @@
 mod apply;
-pub(crate) use apply::premise_label;
 use apply::*;
+pub(crate) use apply::{SlotPositions, ordinal, premise_label};
 
 mod aggregate;
 use aggregate::*;
