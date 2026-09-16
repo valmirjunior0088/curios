@@ -4,7 +4,7 @@
 //!
 //! **The editor's documents are the overlay.** Every open document's text is consulted before the disk by every unit the check assembles (`RootSource::with_overlay`), so a diagnostic reflects the buffer rather than the file, and an unsaved new module is still found by the `mod` that declares it. Placement is `curios_package::Selection`'s, exactly as the one-shot query's, and it walks the overlay too — the unit whose `mod` chain declares the document, so an unsaved `mod` line counts, or no unit at all.
 //!
-//! **Edits coalesce on the analyst, and a burst settles before it is compiled.** A job carries the whole overlay as it stood when the edit arrived; before compiling, the analyst drains every job queued behind it and keeps the latest overlay and the union of the documents to check, so a burst of keystrokes during one check costs one more check from the newest text rather than one per keystroke. Draining what is already queued is not enough on its own, because the analyst is *idle* when the first keystroke of a burst arrives: it would start a check on text the next keystroke replaces, and then publish an answer about a buffer nobody is looking at any more. So the drain waits for each further job — `SETTLE_SHARE` of what the last check cost, capped at `SETTLE` — which is the one figure this cadence needs and the reason it needs no second one per project. Incrementality inside a unit is not here either, because it is the fold's: a unit the store holds from an earlier text is a baseline the edited unit is compiled over (`curios-pipeline`), so a check after a keystroke re-elaborates the closure of the edit rather than the unit, and this module only hands the fold the overlay.
+//! **Edits coalesce on the analyst, and a burst settles before it is compiled.** A job carries the whole overlay as it stood when the edit arrived; before compiling, the analyst drains every job queued behind it and keeps the latest overlay and the union of the documents to check, so a burst of keystrokes during one check costs one more check from the newest text rather than one per keystroke. Draining what is already queued is not enough on its own, because the analyst is *idle* when the first keystroke of a burst arrives: it would start a check on text the next keystroke replaces, and then publish an answer about a buffer nobody is looking at any more. So the drain waits for each further job — `SETTLE_SHARE` of what the last check cost, capped at `SETTLE` — which is the one figure this cadence needs and the reason it needs no second one per project. Incrementality inside a unit is not here either, because it is the fold's: a unit the store holds from an earlier text is a baseline the edited unit is compiled over (`curios-pipeline`), so a check after a keystroke re-elaborates the closure of the edit rather than the unit, and this module hands the fold the overlay and one thing more: the analyst's `Session`, which keeps the last unit it compiled for each unit it reached, so the baseline is the last keystroke's rather than the last build's and the closure is this edit's rather than every edit's since.
 //!
 //! **Text already checked is not checked again.** The analyst keeps the overlay its last check read and the documents it answered from it; an edit or a save carrying an equal overlay publishes nothing, because the editor is already holding that answer. Equality is over *every* open document, since a question reads every file of the unit it is about and two overlays differing anywhere may differ in what it says. This is what makes a save free: a client resolves full-text sync to a `didSave` carrying no text, so the overlay a save arrives with is by construction the one the last keystroke was checked against, and re-running the check would compute the answer the editor already has. An open is never skipped — an editor discards what it held for a document it closed, so a reopen has to be answered whatever the overlay says.
 //!
@@ -21,6 +21,7 @@ use {
     curios_package::{Selection, Spelling},
     curios_text::{Formatted, Overlay},
     curios_utilities::{Report, Source, Span},
+    curios_verdicts::Session,
     lsp_server::{Connection, Message, Notification, Request, RequestId, Response},
     lsp_types::{
         Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
@@ -300,6 +301,9 @@ struct Analyst {
 impl Analyst {
     /// Check until the channel closes, which is the protocol thread finishing.
     fn run(&mut self, inbox: &mpsc::Receiver<Job>) -> Result<(), String> {
+        // Made here rather than held on the analyst, because a kept unit holds the compiler's `Rc` spans: it can neither be made before the spawn nor handed across it, and this thread is the only one that ever reads it.
+        let session = Session::default();
+
         while let Ok(first) = inbox.recv() {
             // Coalesce and settle: everything queued behind the first job is newer, so the last overlay wins and every document any of them named is checked once against it, and the wait is what makes a burst arriving at an idle analyst one check rather than two. A closed channel ends this loop exactly as a timeout does, and the outer `recv` is what reports it.
             let mut documents = first.documents;
@@ -331,7 +335,7 @@ impl Analyst {
                 if raised == Raised::Edited && self.answered(&document) {
                     continue;
                 }
-                self.check(&document, raised, &overlay)?;
+                self.check(&document, raised, &overlay, &session)?;
                 ran = true;
                 if let Some((_, answered)) = &mut self.checked {
                     answered.insert(document);
@@ -369,7 +373,13 @@ impl Analyst {
     }
 
     /// Check `document` from `overlay`, and publish what it reported.
-    fn check(&mut self, document: &Path, raised: Raised, overlay: &Overlay) -> Result<(), String> {
+    fn check(
+        &mut self,
+        document: &Path,
+        raised: Raised,
+        overlay: &Overlay,
+        session: &Session,
+    ) -> Result<(), String> {
         // The document's own directory stands in for a working directory, which a file's placement never reads — so a server started somewhere since deleted still answers. A warming job names the workspace root rather than a file, and asks about the package governing it, which is the same question with no target.
         let (spelling, directory) = match raised {
             Raised::Warming => (Spelling::Nothing, document),
@@ -383,7 +393,7 @@ impl Analyst {
         let records = match asked {
             Ok(asked) => asked
                 .into_iter()
-                .flat_map(|asked| asked.diagnostics(self.budget, overlay))
+                .flat_map(|asked| asked.reusing(session).diagnostics(self.budget, overlay))
                 .collect(),
             // A scope that cannot be assembled is an answer about the document, not a server failure: the manifest is what is wrong, and the document is where the editor is looking.
             Err(message) => vec![Record {

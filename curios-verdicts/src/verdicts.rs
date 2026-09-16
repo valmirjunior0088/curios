@@ -14,14 +14,65 @@ use {
     curios_package::{Store, compiler, unit_slot},
     curios_pipeline::Cache,
     curios_text::{Overlay, UnitSource},
-    curios_unit::{Record, Unit, read_within, segments},
+    curios_unit::{Record, Unit, digested, read_within, segments},
     curios_utilities::digest,
     std::{
         cell::{OnceCell, RefCell},
+        collections::BTreeMap,
         fs, io,
         path::{Path, PathBuf},
+        rc::Rc,
     },
 };
+
+/// The last unit one session compiled for each unit it reached — the baseline a question takes when the store holds nothing nearer.
+///
+/// **Shared rather than owned by a store handle, because it outlives every one of them.** A handle lives for one question; this lives for as long as whoever made it. That difference is the whole point: a language server compiles a unit, the next keystroke compiles over what it just produced, and the keystroke after that over *that*, so the closure an edit re-elaborates is the closure of *that* edit rather than of everything done since the last build. Without it the baseline is the last unit the store was written with, which nothing in an editing session ever advances — so one edit to a widely-used declaration leaves every later keystroke re-elaborating its whole reverse closure, for the rest of the session.
+///
+/// **What this asks of the trusted base is argued in [Cached verdicts](../../documentation/soundness/admission-without-judgment/cached-verdicts.md)**, which owns it: an item reused from a unit that was itself a recompile, by induction on the per-item argument, and the guard below for what that argument does not cover. Nothing here is *filed* — a kept unit dies with the process.
+///
+/// **A kept unit is offered only after units that read what they read when it was kept.** The recompile diffs a unit's *own* lowered items and nothing else, so it cannot see that a unit before it changed: a reference into an edited predecessor lowers to the same name either way, the diff comes out empty, and every item reaching the edit would be reused on the strength of a definition that is gone. A slot cannot catch this, since it addresses a place — predecessors by *where* they are, not by what they hold. So each kept unit carries the read log of every unit the fold took before it, and is offered only while this fold's units read the same, position by position.
+///
+/// **Reads, not bytes, because reads are what the definitions depend on.** A unit's meaning is fixed by what it read, the units before it, and the compiler that read it; the slot covers the compiler and the places, and the read logs cover the rest, so by induction from the first unit equal logs mean every earlier unit holds the same definitions — whether it was compiled whole, recompiled, or restored from a slot. That last clause is why the digest of a predecessor's bytes, which is what the store checks a *filed* unit's chain by, is the wrong evidence here. The store needs bytes because a hit reuses its arena, which is built on the bytes of every unit before it; a kept unit is only ever a baseline, which lends its elaborated items and its lowered text while the recompile erases whole onto the arena in hand. And bytes refuse where nothing changed: a recompiled unit serializes differently from the same unit compiled whole, though each of its parts serializes the same, so a byte guard refused every unit after one that had flipped between a hit and a recompile.
+///
+/// **The log is the fold's, not the chain's.** A unit the store may not place — one carrying an identity meaningful only in its own compilation — is missing from the placed chain, so a guard read off that chain would pass over a change to it. Every unit the fold takes, restored or compiled, adds its log to [`Verdicts`]'s own, placed or not. What the guard costs is only ever a refusal, and a refused kept unit falls back to the store.
+///
+/// **One entry per unit, whatever scope it was compiled in.** Keyed by which unit it is — the prefixes it claims and the directories it reads — and not by its slot, which also names the scope: a manifest edit that adds, reorders or narrows a dependency gives every later unit a new slot, and a map keyed by slot would strand the old entry beside the new one for as long as the session lives, each holding a whole unit. Keyed this way, an edit and a rescoping both *replace*, so the map is bounded by the units the editor has reached, as the parse memo is by the files. The slot rides inside the entry instead, and a kept unit is offered only where it still matches. The directories are what keep two projects apart: a package of one name in each claims the same prefix and, compiled after the same chain, addresses the same slot, which is sound to share — a baseline is only diffed against — but a poor baseline for either, and each would keep overwriting the other.
+///
+/// A one-shot invocation makes none of these and behaves exactly as it did.
+#[derive(Clone, Default)]
+pub struct Session {
+    units: Rc<RefCell<BTreeMap<Identity, Kept>>>,
+}
+
+/// Which unit a source is, whatever scope it is compiled in: the prefixes it claims, and the directories it reads from.
+type Identity = (Vec<String>, Vec<PathBuf>);
+
+/// The [`Identity`] of `source`.
+fn identity(source: &UnitSource<'_>) -> Identity {
+    (
+        source
+            .claims()
+            .iter()
+            .map(|mount| mount.prefix.join())
+            .collect(),
+        source
+            .directories()
+            .into_iter()
+            .map(Path::to_path_buf)
+            .collect(),
+    )
+}
+
+/// Each file one unit read, by canonical path, with the digest of the text parsed from it — spelled as a record spells it, since a restored unit's log *is* its record's.
+type ReadLog = Vec<(String, String)>;
+
+/// A unit a session compiled, beside the slot it was compiled at and the read log of every unit the fold took before it — the evidence a kept unit is checked against before it is offered.
+struct Kept {
+    slot: String,
+    earlier: Vec<ReadLog>,
+    unit: Unit,
+}
 
 /// One unit's place in the chain a compilation builds.
 ///
@@ -48,6 +99,10 @@ pub struct Verdicts {
     ///
     /// The first refusal and not a count: a store nobody can write refuses every unit for one reason, so the reason is the whole of what a reader needs and repeating it per unit would say nothing new. Recorded rather than reported here because this crate has no terminal — see [`Verdicts::refused`].
     pub(crate) refused: RefCell<Option<String>>,
+    /// What the session this handle belongs to has compiled — empty, and never consulted, for a handle nobody attached one to.
+    session: Session,
+    /// The read log of every unit this fold has taken so far, in fold order: restored by [`Verdicts::hit`] or kept by [`Verdicts::keep`], placed or not. What a kept unit's `earlier` is compared against — see [`Session`].
+    taken: RefCell<Vec<ReadLog>>,
 }
 
 impl Verdicts {
@@ -60,7 +115,44 @@ impl Verdicts {
             compiler: OnceCell::new(),
             placed: RefCell::new(Vec::new()),
             refused: RefCell::new(None),
+            session: Session::default(),
+            taken: RefCell::new(Vec::new()),
         }
+    }
+
+    /// Consult `session` for a baseline ahead of the store, and keep what is compiled in it — see [`Session`].
+    pub fn reuse(&mut self, session: Session) {
+        self.session = session;
+    }
+
+    /// The unit this session last compiled for `source` at its place in the chain, if it compiled one.
+    ///
+    /// Offered only at the slot it was compiled at — the one the store files under, taken after the same predecessors — so a kept unit answers exactly where a filed one would: the same mounts, by the same compiler, after the same chain; and only while the units before it read what they read when it was kept, which the slot alone cannot say. See [`Session`]. Not placed — the unit compiled over it is, through [`Verdicts::place`], as [`Verdicts::earlier`] leaves it.
+    pub fn kept(&self, source: &UnitSource<'_>) -> Option<Unit> {
+        let slot = self.slot(source, &self.placed.borrow())?;
+        let units = self.session.units.borrow();
+        let kept = units.get(&identity(source))?;
+
+        (kept.slot == slot && kept.earlier == *self.taken.borrow()).then(|| kept.unit.clone())
+    }
+
+    /// Keep `unit` as what this session compiled for `source`, replacing whatever it compiled for that unit before — in this scope or any other.
+    ///
+    /// Called before `unit` is placed, so the slot is taken after the same predecessors [`Verdicts::kept`] will see the next time the fold reaches this source, and recorded beside the read log of every unit before it — to which this one's is then added. A clone rather than a move, because the fold goes on to hand the unit to its successors — and cheaper than what it stands beside, which serializes the same unit whole.
+    pub fn keep(&self, source: &UnitSource<'_>, unit: &Unit) {
+        if let Some(slot) = self.slot(source, &self.placed.borrow()) {
+            self.session.units.borrow_mut().insert(
+                identity(source),
+                Kept {
+                    slot,
+                    earlier: self.taken.borrow().clone(),
+                    unit: unit.clone(),
+                },
+            );
+        }
+
+        // Whether or not it could be kept: a unit after this one is checked against what this one read either way.
+        self.taken.borrow_mut().push(digested(source.reads()));
     }
 
     /// The compiler's identity, memoized on first use — see the field.
@@ -156,6 +248,8 @@ impl Verdicts {
             slot,
             contained: digest(bytes),
         });
+        // A hit's log is its record's, verified against the text just now, and spelled as the compile that filed it spelled it.
+        self.taken.borrow_mut().push(record.reads);
 
         Some(restored)
     }

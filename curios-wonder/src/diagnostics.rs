@@ -294,17 +294,25 @@ impl Cache for ReadOnly<'_> {
         self.cache.get_overlaid(source, self.overlay)
     }
 
-    /// The slot this tree filed for the unit, however its files have moved since, ahead of whatever the scope offered — a unit this tree filed more recently than the compiler was built is nearer the text being asked about than the archived image, and the image is what is there when nothing was filed.
+    /// The nearest earlier compilation of the unit there is: what this session last compiled for it, then the slot this tree filed for it however its files have moved since, then whatever the scope offered.
+    ///
+    /// Nearest first, because the order decides how much a recompile re-elaborates and nothing else — every one of the three is a unit judged when it was made, so the answer is the same over any of them. The session's is the last keystroke's, which is nearer the text being asked about than anything a build filed; a filed unit is nearer than the archived image; and the image is what is there when nothing else is. A build run in another terminal mid-session can leave the store nearer than the session, and then the recompile over the session's unit is merely larger than it had to be.
     ///
     /// A question is what takes a baseline. What it compiles over one is placed and never filed, which is the reading of this cache the method above already states; the store's own cache offers none, so a build compiles a moved unit whole and files what it compiled.
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<Unit>) -> Option<Unit> {
-        self.cache.earlier(source).or(offered)
+        self.cache
+            .kept(source)
+            .or_else(|| self.cache.earlier(source))
+            .or(offered)
     }
 
     /// Placed, not filed — and this is why the store itself is held rather than a `dyn Cache`.
     ///
     /// Dropping the write is the whole of what read-only means. Dropping the *placement* with it is a second thing nobody asked for: a slot is addressed after the units placed before it, so a unit missing from that chain shifts every later address by one, and one declined hit becomes a miss for every unit after it. A `dyn Cache` has no way to say the first without the second.
+    ///
+    /// Kept before it is placed: a kept unit is addressed after the units placed ahead of it, which is exactly the chain the next question will have built when it asks.
     fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+        self.cache.keep(source, unit);
         self.cache.place(source, unit);
     }
 }

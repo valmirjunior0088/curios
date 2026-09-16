@@ -5,7 +5,7 @@ use {
     crate::{ReadOnly, Severity, Subject, diagnostics},
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Progress, check_units_with_prelude},
     curios_text::Overlay,
-    curios_verdicts::Verdicts,
+    curios_verdicts::{Session, Verdicts},
     std::{collections::BTreeMap, fs, path::Path},
 };
 
@@ -111,6 +111,115 @@ fn an_open_document_refuses_a_hit_only_when_it_is_edited() {
     );
 }
 
+/// A package nothing was filed for recompiles over what the session compiled last, rather than compiling whole every time: the store has no slot, so the unit a check produced is the only baseline there is.
+///
+/// **The regression for the baseline never advancing.** A fresh checkout, and every package after a compiler upgrade, has no slot — the key carries the compiler's digest — and a question never files, so an editing session on one compiled its whole unit on every keystroke, measured at 2.2 s against 0.6 s once built.
+#[test]
+fn a_session_recompiles_what_nothing_was_filed_for() {
+    let root = mounted_project("session-unfiled");
+    let session = Session::default();
+
+    assert_eq!(
+        folded_reusing(&root, &Overlay::default(), &session),
+        ["compiling /alpha", "compiling /beta"],
+        "nothing filed and nothing kept yet"
+    );
+    assert_eq!(
+        folded_reusing(&root, &edited(&root, "b/lib.crs"), &session),
+        ["recompiling /alpha", "recompiling /beta"],
+        "both over what the first check kept"
+    );
+    assert_eq!(
+        folded(&root, &edited(&root, "b/lib.crs")),
+        ["compiling /alpha", "compiling /beta"],
+        "and a question with no session is what it was"
+    );
+}
+
+/// A unit after an edited one is offered what the session kept for it, once the edited one is back to what it held when that unit was kept. The store cannot do this: its slot for the second unit was filed after the first unit's disk text, which the edit has moved away from for as long as the edit stands.
+#[test]
+fn a_session_offers_a_unit_downstream_of_an_edit_the_store_cannot() {
+    let root = mounted_project("session-downstream");
+    built(&root);
+    let session = Session::default();
+    let overlay = edited(&root, "a/lib.crs");
+
+    assert_eq!(
+        folded_reusing(&root, &overlay, &session),
+        ["recompiling /alpha", "compiling /beta"],
+        "the first check has only the store, whose slot for /beta vouches for the /alpha on disk"
+    );
+    assert_eq!(
+        folded_reusing(&root, &overlay, &session),
+        ["recompiling /alpha", "recompiling /beta"],
+        "the second has what the first kept, compiled after the /alpha the overlay still holds"
+    );
+}
+
+/// A unit compiled in a second scope replaces what the session kept for it in the first, rather than sitting beside it: the session holds one unit per unit, so what it holds is bounded by the units the editor reached and never by how often their scope moved.
+///
+/// Observed from the far side of the bound. `/beta` is compiled after `/alpha`, then with its dependency dropped from the manifest, then after `/alpha` again — and the third check compiles it whole, since the second replaced what the first kept. A session keyed by slot would still hold the first scope's unit, and would have recompiled over it, beside a stranded unit per scope the session had ever seen.
+#[test]
+fn a_unit_kept_in_a_new_scope_replaces_what_its_old_scope_kept() {
+    let root = mounted_project("session-rescoped");
+    let manifest = fs::read_to_string(root.join("b/curios.toml")).expect("a written manifest");
+    let session = Session::default();
+
+    assert_eq!(
+        folded_reusing(&root, &Overlay::default(), &session),
+        ["compiling /alpha", "compiling /beta"],
+        "after /alpha"
+    );
+
+    write(&root, "b/curios.toml", "name = \"beta\"\n");
+    assert_eq!(
+        folded_reusing(&root, &Overlay::default(), &session),
+        ["compiling /beta"],
+        "alone, a scope nothing was kept in"
+    );
+
+    write(&root, "b/curios.toml", &manifest);
+    assert_eq!(
+        folded_reusing(&root, &Overlay::default(), &session),
+        ["recompiling /alpha", "compiling /beta"],
+        "after /alpha again: /alpha's unit was never replaced, /beta's was"
+    );
+}
+
+/// A kept unit is refused once a unit before it holds something else, and what it would have hidden is reported.
+///
+/// **The regression for the guard a slot cannot provide.** A slot addresses a unit's predecessors by where they are, not by what they hold, and the recompile diffs a unit's own lowered items alone — a reference into an edited predecessor lowers to the same name either way. So without the guard, `/beta`'s kept unit was offered after `/alpha` changed its declared type, the diff was empty, every item was reused, and the mismatch this asserts was never reported.
+#[test]
+fn a_kept_unit_after_a_changed_predecessor_is_refused() {
+    let root = mounted_project("session-guard");
+    write(
+        &root,
+        "b/lib.crs",
+        "use /std/{Str};\n\npub let said: Str =\n    /alpha/said;\n",
+    );
+    let session = Session::default();
+
+    let clean = checked(&root, &Overlay::default(), &session);
+    assert!(clean.is_empty(), "{clean:?}");
+
+    let retyped = Overlay::of(BTreeMap::from([(
+        root.join("a/lib.crs"),
+        "use /std/{Nat};\n\npub let said: Nat =\n    1;\n".to_string(),
+    )]));
+    let diagnostics = checked(&root, &retyped, &session);
+    assert!(
+        diagnostics
+            .iter()
+            .any(|record| record.severity == Severity::Error
+                && record.report.message.contains("type mismatch")),
+        "{:?}",
+        diagnostics
+            .iter()
+            .map(|record| record.report.render())
+            .collect::<Vec<_>>()
+    );
+}
+
 /// A declaration the parser cannot read answers with its own record, over a baseline as with none.
 ///
 /// **The regression for recovery and the item-level recompile never having crossed.** A question takes a baseline where a build compiles whole, so this path is the editor's and `curios lint`'s alone. A broken item withholds its dependents, and a withheld item leaves no refusal behind it — so the recompile reassembled the lowered order looking for items its own elaboration had deliberately not produced, and every keystroke that left a half-written declaration with a dependent in it killed the analyst instead of answering.
@@ -163,8 +272,14 @@ fn built(root: &Path) {
 
 /// What the fold did to each of `root`'s units, checked through [`ReadOnly`] over `overlay` — the store `wonder` hands a query.
 fn folded(root: &Path, overlay: &Overlay) -> Vec<String> {
+    folded_reusing(root, overlay, &Session::default())
+}
+
+/// [`folded`], compiling over what `session` kept — the store the language server hands a query.
+fn folded_reusing(root: &Path, overlay: &Overlay, session: &Session) -> Vec<String> {
     let units = crate::overlaid(mounted(root), overlay);
-    let store = Verdicts::at(root.to_path_buf());
+    let mut store = Verdicts::at(root.to_path_buf());
+    store.reuse(session.clone());
     let read_only = ReadOnly {
         cache: &store,
         overlay,
@@ -187,6 +302,21 @@ fn folded(root: &Path, overlay: &Overlay) -> Vec<String> {
     .expect("two compiling units");
 
     events
+}
+
+/// Every record the second package reports over `overlay`, compiled over what `session` kept — the question the language server asks about a library.
+fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diagnostic> {
+    let mut store = Verdicts::at(root.to_path_buf());
+    store.reuse(session.clone());
+
+    diagnostics(
+        DEFAULT_STEP_BUDGET,
+        Subject::Unit {
+            units: crate::overlaid(mounted(root), overlay),
+        },
+        overlay,
+        Some(&store),
+    )
 }
 
 /// An overlay holding `path`'s own text: a document an editor has open and has not yet changed.

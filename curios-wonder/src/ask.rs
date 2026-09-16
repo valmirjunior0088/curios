@@ -13,7 +13,7 @@ use {
     curios_package::{Entry, Library, Program, Selection},
     curios_pipeline::CompileError,
     curios_text::{LoadError, Overlay},
-    curios_verdicts::Verdicts,
+    curios_verdicts::{Session, Verdicts},
     std::{collections::BTreeSet, fs, io, path::PathBuf},
 };
 
@@ -74,6 +74,15 @@ impl Asked {
             },
             store: Some(Verdicts::at(library.root)),
         }
+    }
+
+    /// Compile over what `session` already compiled, where this question has a store to consult — see [`Session`]. A question with no store has nothing to address a kept unit by, and is unchanged.
+    pub fn reusing(mut self, session: &Session) -> Self {
+        if let Some(store) = &mut self.store {
+            store.reuse(session.clone());
+        }
+
+        self
     }
 
     /// Every diagnostic, goal and lint the subject reports.
