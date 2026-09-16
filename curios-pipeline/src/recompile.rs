@@ -17,7 +17,7 @@ use {
     },
     curios_text::{UnitSource, into_core_unit},
     curios_unit::{Prefix, Unit},
-    curios_utilities::SyntaxRegistry,
+    curios_utilities::{SyntaxRegistry, grown},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -128,6 +128,10 @@ pub(crate) fn recheck_over(
 
 /// The names the new text invalidates: every declared name whose lowered item differs from the baseline's modulo the identities lowering mints, every registry key whose entry differs, every name only one side declares, and every name whose witness or test membership moved — closed backwards over the baseline's elaborated graph.
 pub(crate) fn invalidated(baseline: &Unit, lowered: &Module) -> BTreeSet<Global> {
+    grown(|| invalidated_within(baseline, lowered))
+}
+
+fn invalidated_within(baseline: &Unit, lowered: &Module) -> BTreeSet<Global> {
     let seeds = changed_names(baseline.text().core(), lowered);
 
     reverse_closure(baseline.core(), seeds)

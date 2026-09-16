@@ -1678,6 +1678,28 @@ pub fn elaborate_and_zonk_unit_reporting(
     tail: Tail<'_>,
 ) -> Result<FinalizedModule, Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
+    grown(|| {
+        elaborate_and_zonk_unit_reporting_within(
+            context,
+            established,
+            module,
+            metavar_floor,
+            universe_floor,
+            mode,
+            tail,
+        )
+    })
+}
+
+fn elaborate_and_zonk_unit_reporting_within(
+    context: &mut Context,
+    established: Established<'_>,
+    module: &Module,
+    metavar_floor: usize,
+    universe_floor: usize,
+    mode: Mode,
+    tail: Tail<'_>,
+) -> Result<FinalizedModule, Error> {
     let elaborated = elaborate_module_suffix(
         context,
         established,
@@ -1739,6 +1761,28 @@ pub fn elaborate_and_zonk_unit_over(
     tail: Tail<'_>,
 ) -> Result<(Module, Option<Term>), Error> {
     curios_profile::profile!("elaborate_and_zonk_unit_over");
+    grown(|| {
+        elaborate_and_zonk_unit_over_within(
+            context,
+            established,
+            recompile,
+            metavar_floor,
+            universe_floor,
+            mode,
+            tail,
+        )
+    })
+}
+
+fn elaborate_and_zonk_unit_over_within(
+    context: &mut Context,
+    established: Established<'_>,
+    recompile: Recompile<'_>,
+    metavar_floor: usize,
+    universe_floor: usize,
+    mode: Mode,
+    tail: Tail<'_>,
+) -> Result<(Module, Option<Term>), Error> {
     let mut scope = established.modules().to_vec();
     scope.push(recompile.reused);
     let extended = Established::over(&scope);
