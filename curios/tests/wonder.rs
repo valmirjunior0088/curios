@@ -4,13 +4,21 @@
 
 use {
     curios_utilities::test_support::Temporary,
+    curios_wonder::SETTLE,
     std::{
         fs,
         io::{BufRead, BufReader, Read, Write},
         path::Path,
         process::{Child, ChildStdout, Command, Output, Stdio},
+        thread,
+        time::Duration,
     },
 };
+
+/// Long enough that two notifications sent around one of these reach the analyst as two checks rather than one coalesced pair — which is what a test of the skip needs, since a coalesced pair hides what the analyst did with the second.
+///
+/// Derived from the analyst's own settle rather than restated, so raising that figure cannot leave this one quietly too short. The multiple is slack for a loaded machine, not a second opinion about the cadence.
+const QUIET: Duration = SETTLE.saturating_mul(4);
 
 /// A directory of its own, shared with no other test and gone with it — canonical, which matters here because the server publishes the root the governance walk canonicalizes, and a URI computed from any other spelling would never match the one published.
 fn temporary(name: &str) -> Temporary {
@@ -284,9 +292,12 @@ impl Editor {
 
     fn finish(mut self) -> Output {
         self.send(r#"{"jsonrpc":"2.0","id":9,"method":"shutdown","params":null}"#);
-        assert!(self.receive().contains(r#""id":9"#));
+        // Looked for rather than assumed to be next: the analyst answers on its own thread, so a publish a test had no reason to read can still be ahead of the response.
+        while !self.receive().contains(r#""id":9"#) {}
         self.send(r#"{"jsonrpc":"2.0","method":"exit","params":null}"#);
-        drop(self.reader);
+        // Read to the end rather than closing the pipe under the writer. A publish arriving after the read end is gone is a broken pipe, which the server reports as the session having failed — so dropping the reader here would make every test that left one in flight fail on the way out, for a reason that is the test's and not the server's.
+        let mut rest = String::new();
+        self.reader.read_to_string(&mut rest).ok();
 
         self.child.wait_with_output().unwrap()
     }
@@ -330,6 +341,178 @@ fn the_server_publishes_from_the_buffer_and_clears() {
     ));
     let cleared = editor.receive();
     assert!(cleared.contains(r#""diagnostics":[]"#), "{cleared}");
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// A save carries no text, so the overlay it arrives with is the one the last keystroke was already checked against, and the analyst publishes nothing for it. What proves the skip is which publish comes back next: the edit's, where a save that had run would have put its own identical answer in front of it.
+#[test]
+fn a_save_of_text_already_checked_publishes_nothing() {
+    let root = temporary("resaved");
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("scratch.crs");
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let uri = format!("file://{}", path.display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}}}}}}"#
+    ));
+    let opened = editor.receive();
+    assert!(opened.contains(r#""severity":3"#), "{opened}");
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didSave","params":{{"textDocument":{{"uri":"{uri}"}}}}}}"#
+    ));
+    thread::sleep(QUIET);
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"/std/print(\"\")\n"}}]}}}}"#
+    ));
+    let published = editor.receive();
+    assert!(published.contains(r#""diagnostics":[]"#), "{published}");
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// An editor discards what it held for a document it closed, so a reopen is answered even though the overlay it arrives with is exactly the one the last check read — the one case the skip above must not cover.
+#[test]
+fn a_reopened_document_is_published_again() {
+    let root = temporary("reopened");
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("scratch.crs");
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let uri = format!("file://{}", path.display());
+    let opening = format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}}}}}}"#
+    );
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&opening);
+    assert!(editor.receive().contains(r#""severity":3"#));
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didClose","params":{{"textDocument":{{"uri":"{uri}"}}}}}}"#
+    ));
+    thread::sleep(QUIET);
+
+    editor.send(&opening);
+    thread::sleep(QUIET);
+
+    // An edit behind the reopen, so a reopen that was wrongly skipped is this edit's answer arriving first rather than silence — a test whose failure is nothing published is one that hangs instead of failing.
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"let mm : /std/Nat = ?;\n/std/print(\"\")\n"}}]}}}}"#
+    ));
+
+    let republished = editor.receive();
+    assert!(
+        republished.contains(r#""start":{"character":19,"line":0}"#),
+        "{republished}"
+    );
+
+    // And the edit behind it is answered in its turn, which is what says the reopen's publish was the reopen's.
+    let edited = editor.receive();
+    assert!(
+        edited.contains(r#""start":{"character":20,"line":0}"#),
+        "{edited}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// A burst settles before it is compiled, so the first thing the editor is told is about the text the burst ended on. Without the wait the analyst would start on the first keystroke's text — it is idle when that one arrives — and publish an answer about a buffer two keystrokes out of date.
+#[test]
+fn a_burst_of_edits_is_answered_from_the_text_it_ended_on() {
+    let root = temporary("burst");
+    fs::create_dir_all(&root).unwrap();
+    let path = root.join("scratch.crs");
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let uri = format!("file://{}", path.display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"/std/print(\"\")\n"}}}}}}"#
+    ));
+    assert!(editor.receive().contains(r#""diagnostics":[]"#));
+
+    // One keystroke per name, each moving the goal one column right, sent as fast as the wire carries them.
+    for (version, name) in ["m", "mm", "mmm"].iter().enumerate() {
+        editor.send(&format!(
+            r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":{}}},"contentChanges":[{{"text":"let {name} : /std/Nat = ?;\n/std/print(\"\")\n"}}]}}}}"#,
+            version + 2
+        ));
+    }
+
+    let published = editor.receive();
+    assert!(
+        published.contains(r#""start":{"character":21,"line":0}"#),
+        "{published}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// The warming check is run for what it leaves on the analyst's thread and never for what it says. The workspace's library has a goal in it and the editor is never told: the first thing it hears about is the document it opened.
+///
+/// The wait before the document is what makes this a test of warming at all. A document sent straight after `initialize` is a document waiting, and the analyst drops the warming check rather than making it queue — so without the wait this would pass on a server that never warms.
+#[test]
+fn a_warming_check_never_publishes() {
+    let root = temporary("warmed");
+    write(&root, "curios.toml", "name = \"app\"\n");
+    write(&root, "lib.crs", "pub mod util;\n");
+    write(&root, "util.crs", "pub let word : /std/Str = ?;\n");
+    write(&root, "scratch.crs", "/std/print(\"\")\n");
+    let path = root.join("scratch.crs");
+    let uri = format!("file://{}", path.display());
+    let folder = format!("file://{}", root.display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"capabilities":{{}},"workspaceFolders":[{{"uri":"{folder}","name":"app"}}]}}}}"#
+    ));
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+    thread::sleep(QUIET);
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"/std/print(\"\")\n"}}}}}}"#
+    ));
+
+    let published = editor.receive();
+    assert!(published.contains("scratch.crs"), "{published}");
+    assert!(!published.contains("util.crs"), "{published}");
 
     let output = editor.finish();
     assert!(
