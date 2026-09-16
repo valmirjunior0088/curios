@@ -21,7 +21,10 @@ pub(super) fn elaborate_func_type(
                 let x = Term::free_var(&name);
                 // Assume the *rebuilt* domain: insertion saturates applications during elaboration, and a lowered (under-applied) type leaking into later reduction would open a telescope at the wrong arity. A `use` binder additionally joins the witness scope: the rest of the type may itself need resolution through it.
                 match plicities.get(domains.len()) {
-                    Some(Plicity::Witness) => context.assume_witness(&name, &domain),
+                    Some(Plicity::Witness) => {
+                        check_witness_domain(context, &domain)?;
+                        context.assume_witness(&name, &domain);
+                    }
                     _ => context.assume(&name, &domain),
                 }
                 domains.push((name, domain));
@@ -44,6 +47,24 @@ pub(super) fn elaborate_func_type(
 
     let sort = sort_term(context, &rebuilt)?;
     Ok((rebuilt, sort))
+}
+
+/// Refuse a written `use` binder whose type is not a concept application.
+///
+/// Resolution answers a `use` slot with a concept's witness and nothing else, so a binder at any other type could only ever be filled by writing its argument out, and every call that omitted it failed at resolution — far from the declaration, naming whatever the type happened to reduce to. A type still headed by an unsolved metavariable is let through, since it may yet be solved to a concept application.
+pub(super) fn check_witness_domain(context: &mut Context, domain: &Term) -> Result<(), Error> {
+    let reduced = reduce_with(context, domain)?;
+    let admitted = match &*reduced {
+        Subterm::StructType(struct_type) => context.concept(&struct_type.name).is_some(),
+        _ => flexible(context, &reduced),
+    };
+    if admitted {
+        return Ok(());
+    }
+
+    // Only a hint: a sort that cannot be computed must not hide the refusal it decorates.
+    let proposition = crate::is_prop(context, domain).unwrap_or(false);
+    Err(Error::use_parameter_not_a_concept(domain.clone(), proposition).at_opt(domain.span()))
 }
 
 /// A one-based position as an English ordinal, for naming which slot of a call a goal belongs to.

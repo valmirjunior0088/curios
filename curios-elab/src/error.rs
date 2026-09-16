@@ -495,8 +495,13 @@ pub enum Error {
         concept: String,
     },
     /// A witness's annotation does not elaborate to an application of a registered concept.
-    NotAConcept {
+    WitnessNotAConcept {
         found: Box<Term>,
+    },
+    /// A `use` parameter's type is not a concept application, so resolution could answer no call that omits it. `proposition` says whether the type is a proof the author likely meant to have discharged, which an implicit parameter does.
+    UseParameterNotAConcept {
+        found: Box<Term>,
+        proposition: bool,
     },
     /// A `use` premise of a witness applies its concept to something other than the witness's own parameters — resolution through it would not be structurally decreasing.
     NonRegularWitnessPremise {
@@ -1125,9 +1130,16 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_a_concept<T: Into<Term>>(found: T) -> Self {
-        Self::NotAConcept {
+    pub(crate) fn witness_not_a_concept<T: Into<Term>>(found: T) -> Self {
+        Self::WitnessNotAConcept {
             found: Box::new(found.into()),
+        }
+    }
+
+    pub(crate) fn use_parameter_not_a_concept<T: Into<Term>>(found: T, proposition: bool) -> Self {
+        Self::UseParameterNotAConcept {
+            found: Box::new(found.into()),
+            proposition,
         }
     }
 
@@ -1516,7 +1528,8 @@ impl Error {
                 out.push(second);
             }
             Self::InvalidWitnessHead { head, .. } => out.push(head),
-            Self::NotAConcept { found, .. } => out.push(found),
+            Self::WitnessNotAConcept { found, .. }
+            | Self::UseParameterNotAConcept { found, .. } => out.push(found),
             Self::NonRegularWitnessPremise { premise, .. } => out.push(premise),
             _ => {}
         }

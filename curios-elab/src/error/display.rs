@@ -859,12 +859,26 @@ impl fmt::Display for Displayed<'_> {
                     "this witness cannot be registered: concept '{concept}' has no parameters to key on\n  a global witness keys on its concept's parameter heads; supply a parameterless concept through a local 'use' binder instead"
                 )
             }
-            Error::NotAConcept { found } => {
+            Error::WitnessNotAConcept { found } => {
                 let found = found.spelled(spelling);
                 write!(
                     f,
                     "this witness does not witness a concept\n  its annotation elaborates to: {found}"
                 )
+            }
+            Error::UseParameterNotAConcept { found, proposition } => {
+                let found = found.spelled(spelling);
+                write!(
+                    f,
+                    "a 'use' parameter's type must be a concept application\n  found: {found}"
+                )?;
+                if *proposition {
+                    write!(
+                        f,
+                        "\n  a proof is discharged through an implicit parameter: write '@' in place of 'use'"
+                    )?;
+                }
+                Ok(())
             }
             Error::NonRegularWitnessPremise { premise } => {
                 let premise = premise.spelled(spelling);

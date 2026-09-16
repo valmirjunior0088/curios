@@ -832,10 +832,10 @@ pub(crate) fn read_witness_signature(
         ..
     }) = &*terminal
     else {
-        return Err(Error::not_a_concept(terminal.clone()));
+        return Err(Error::witness_not_a_concept(terminal.clone()));
     };
     if context.concept(concept_name).is_none() {
-        return Err(Error::not_a_concept(terminal.clone()));
+        return Err(Error::witness_not_a_concept(terminal.clone()));
     }
 
     // Key on every parameter: each must reduce to a rigid, keyable head. A parameterless concept has no head to key on at all — it is supplied through a local `use` binder, never the global table.

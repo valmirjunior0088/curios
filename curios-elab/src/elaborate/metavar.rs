@@ -83,8 +83,8 @@ pub(super) fn elaborate_metavar(
     }
 }
 
-/// Whether the (reduced) expectation is headed by an unsolved metavariable — including a stuck application of one. Such an expectation may yet be solved to the reference's own hidden-headed function type, so insertion must not fire on it.
-fn flexible(context: &Context, term: &Term) -> bool {
+/// Whether a reduced term is headed by an unsolved metavariable — including a stuck application of one — and so may yet be solved to any rigid shape. An expectation of that kind may be solved to the reference's own hidden-headed function type, so insertion must not fire on it.
+pub(super) fn flexible(context: &Context, term: &Term) -> bool {
     match &**term {
         Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
         Subterm::Apply(apply) => flexible(context, &apply.head),

@@ -1120,7 +1120,10 @@ pub(super) fn elaborate_func_infer(
                 let name = context.fresh(body_rest.first_hint());
                 let x = Term::free_var(&name);
                 match plicity {
-                    Plicity::Witness => context.assume_witness(&name, &domain),
+                    Plicity::Witness => {
+                        check_witness_domain(context, &domain)?;
+                        context.assume_witness(&name, &domain);
+                    }
                     _ => context.assume(&name, &domain),
                 }
                 domains.push((plicity, name, domain));

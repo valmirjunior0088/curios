@@ -1065,7 +1065,7 @@ In a structure update, a spread copies superclass fields from the base. An expli
 
 ### Witness parameters and arguments
 
-A witness parameter is written `use Concept(args)` in a function type or definition telescope. It is anonymous but joins the witness scope of the function body.
+A witness parameter is written `use Concept(args)` in a function type or definition telescope. It is anonymous but joins the witness scope of the function body. Its type must reduce to a concept application, since resolution answers nothing else: any other type is refused where the parameter is declared — in a signature, a witness telescope, or a lambda's annotation — and a proof meant to be discharged is an implicit `@` parameter instead.
 
 ```crs
 pub let join(@A: Type, use Show(A), values: List(A)) -> Str =
