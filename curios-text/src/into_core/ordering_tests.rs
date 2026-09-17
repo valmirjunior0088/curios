@@ -185,8 +185,11 @@ fn a_derived_spell_witness_orders_its_vocabulary_first() {
             end
             pub mod Str
                 pub let Str : Type = Type;
-                pub let of_scan_eq : Type = Type;
-                pub let refl_scan : Type = Type;
+            end
+            pub mod True
+                pub mod True
+                    pub let qed : Type = Type;
+                end
             end
         end
         Type
@@ -210,10 +213,9 @@ fn a_derived_spell_witness_orders_its_vocabulary_first() {
     assert!(at("/std/Spell/call") < witness, "{names:?}");
     assert!(at("/std/Spell/record") < witness, "{names:?}");
 
-    // The rendered pieces are string literals, so the carrier and its scan certificate are as much a part of what the body writes as the renderers are.
+    // The rendered pieces are string literals, so the carrier and the proof that closes its `Valid` field are as much a part of what the body writes as the renderers are.
     assert!(at("/std/Str/Str") < witness, "{names:?}");
-    assert!(at("/std/Str/of_scan_eq") < witness, "{names:?}");
-    assert!(at("/std/Str/refl_scan") < witness, "{names:?}");
+    assert!(at("/std/True/True/qed") < witness, "{names:?}");
 }
 
 /// The equality derivation applies its concept's own method and nothing else — no renderer, and no string machinery, since it builds a `Bool` rather than text.

@@ -335,34 +335,20 @@ pub(super) fn elaborate_num_lit(
     Ok((Term::intrinsic(intrinsic), type_))
 }
 
-/// The certified `/std/Char` value a character literal denotes: the code point with its `Scalar` range proof, exactly the term the lowerer's meta-emitter used to build eagerly. A Rust `char` is already a Unicode scalar, so the range constructor is selected by the code alone and the proof is one closed `qed`.
+/// The certified `/std/Char` value a character literal denotes: the code point beside the one inhabitant of `True`. `Char`'s `Valid` is decided and a Rust `char` is already a Unicode scalar, so `qed` checks against `Valid(code)` by reduction — the compiler decides nothing about the code point.
 fn character_value(context: &Context, character: char) -> Term {
     let syntax = context.syntax();
     let code: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(character as u32))).into();
-    let constructor = if (character as u32) < 0xD800 {
-        syntax.character.scalar_below
-    } else {
-        syntax.character.scalar_above
-    };
-    let qed = Term::apply(
+    let valid = Term::apply(
         Term::var(curios_core::Var::free(curios_core::Free::global(
             syntax.proof.true_qed.qualifier(),
         ))),
         Vec::<Term>::new(),
     );
-    let scalar = Term::apply_marked(
-        Term::var(curios_core::Var::free(curios_core::Free::global(
-            constructor.qualifier(),
-        ))),
-        [
-            (curios_utilities::Plicity::Implicit, code.clone()),
-            (curios_utilities::Plicity::Explicit, qed),
-        ],
-    );
     Term::struct_(
         Global::Authored(syntax.character.character.qualifier()),
         Vec::<Term>::new(),
-        [code, scalar],
+        [code, valid],
     )
 }
 

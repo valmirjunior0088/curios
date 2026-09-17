@@ -88,13 +88,13 @@ fn slice_proof_aligns_with_byte_walk() {
     assert_eq!(run(source), b"ok");
 }
 
-// The UTF-8 decode certification lemmas: naming them forces their bodies to elaborate (demand-driven checking). `cont_len` is the one that exercises the comparison intrinsic — `step` only reduces in `cont` state because `eql(succ(succ k''), 1)` now folds to `false`. `peel_byte`/`count_scalars`/ `decode_head` are the cursor-free decode core: `peel_byte` advances the (prop) validity witness one byte without ever large-eliminating it, `count_scalars` is the codepoint count `len` is built on, and `decode_head` reads the head codepoint from the relevant bytes under that witness.
+// The UTF-8 decode certification lemmas: naming them forces their bodies to elaborate (demand-driven checking). `cont_len` is the one that exercises the comparison intrinsic — `step` only reduces in `cont` state because `eql(succ(succ k''), 1)` now folds to `false`. `count_scalars`/`decode_head` are the cursor-free decode core: `count_scalars` is the codepoint count `len` is built on, and `decode_head` reads the head codepoint from the relevant bytes under the decided validity, which crosses each byte by conversion alone.
 #[test]
 fn decode_lemmas_type_check() {
     let source = r#"
         use /std/{Str, Nat, Io};
-        let lemmas = (Str/utf8/bad_uninhabited, Str/utf8/cont_len, Str/utf8/peel_byte,
-            Nat/Le/Ind/trans, Nat/Lt/of_ind_succ, Nat/Le/Ind/add_mono_l, Str/utf8/count_scalars, Str/utf8/cont0_uninhabited, Str/utf8/take_continuations, Str/utf8/decode_head);
+        let lemmas = (Str/Valid/from_bad, Str/Valid/cont_len,
+            Nat/Le/Ind/trans, Nat/Lt/of_ind_succ, Nat/Le/Ind/add_mono_l, Str/count_scalars, Str/take_continuations, Str/Valid/decode_head);
         /std/print("ok")
         "#;
 

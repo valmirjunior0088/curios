@@ -509,7 +509,7 @@ fn kernel_memo_charge_measurements() {
 
 /// A `Str` literal of `n` identical ASCII characters, bound and used `uses` times.
 ///
-/// The literal lowers to `Str { bytes = <Bytes>, valid = of_scan_eq(b, refl_scan(b)) }`, and checking that proof makes conversion decide `scan_from(lead, b) ≡ lead` — a `rec` unfold, a `Bytes` peel, a `Byte/to_nat`, `classify`'s ladder and an inductive match, per byte. Nothing else in the program costs anything, so what a floor over this reports is the check.
+/// The literal lowers to `Str { bytes = <Bytes>, valid = True/qed() }`, and checking that proof makes conversion decide `True ≡ Valid(b)` — `Valid`'s unfolding once, then a `rec` unfold, a `Bytes` peel, a `Byte/to_nat`, `classify`'s ladder and an inductive match, per byte. Nothing else in the program costs anything, so what a floor over this reports is the check.
 fn str_literal(n: usize, uses: usize) -> String {
     let literal = "0123456789".repeat(n.div_ceil(10))[..n].to_string();
     let used = (0..uses)
@@ -526,7 +526,7 @@ fn str_literal(n: usize, uses: usize) -> String {
     )
 }
 
-/// The same `n` bytes written as a raw `Bytes` literal — the derivation-free control, and the whole of what a `Str` literal would cost if its validity were not checked by running a fold.
+/// The same `n` bytes written as a raw `Bytes` literal — the proof-free control, and the whole of what a `Str` literal would cost if its validity were not checked by running a fold.
 fn bytes_literal(n: usize) -> String {
     let entries = (0..n)
         .map(|index| format!("0x{:02x}", b'0' + (index % 10) as u8))
@@ -587,7 +587,7 @@ fn cost_row(label: &str, source: &str) {
     );
 }
 
-/// A literal folded at the type level is folded once however many types mention it. Its certificate is built at a fixed universe, so every mention is one term to the reduction cache; when the certificate was instantiated at a fresh level per mention, the four mentions here were four keys and four full folds.
+/// A literal folded at the type level is folded once however many types mention it. Its certificate, `True/qed()`, has no universe to instantiate, so every mention is one term to the reduction cache; when an earlier certificate was instantiated at a fresh level per mention, the four mentions here were four keys and four full folds.
 #[test]
 fn a_literal_mentioned_in_several_types_is_folded_once() {
     let literal = "0123456789".repeat(30);
@@ -638,7 +638,7 @@ fn a_literal_mentioned_in_several_types_is_folded_once() {
 ///
 /// The kernel's `retained` column reads its unfold table alone now, and a literal unfolds nothing monomorphic; the day before, with its term-keyed tables still charged, it read 184 567 to 202 959 across the ladder.
 ///
-/// **The elaborator's retention is linear now** — 33K to 67K units across the ladder, about four a character, where it grew as 37·n² and saturated the quota near 5 200 characters — and **its units are the kernel's**: the `kernel/elab` column reads 1.0× at every size, where it read 0.3×. Both were one defect. The literal's proof is `of_scan_eq(b, refl_scan(b))`, and checking it asks conversion one question, `scan_from(lead, b) ≡ Scan/lead()`; the elaborator's conversion reduced the left at the *plain* demand — where a folded recursive call is its own normal form, as the machine's contract says — met the fold against a constructor, and unfolded it **one step per round**, each round storing a cache entry keyed on the next folded spelling with the scan's state unreduced in its argument, one `step` deeper per character. The kernel forces both sides of every comparison, which is one machine run. `Convert::force_folded_call` now does the same, falling back to the one-step unfold only when forcing reaches no value.
+/// **The elaborator's retention is linear now** — 33K to 67K units across the ladder, about four a character, where it grew as 37·n² and saturated the quota near 5 200 characters — and **its units are the kernel's**: the `kernel/elab` column reads 1.0× at every size, where it read 0.3×. Both were one defect. The literal's proof was then `of_scan_eq(b, refl_scan(b))`, and checking it asked conversion one question, `scan_from(lead, b) ≡ Scan/lead()`; the elaborator's conversion reduced the left at the *plain* demand — where a folded recursive call is its own normal form, as the machine's contract says — met the fold against a constructor, and unfolded it **one step per round**, each round storing a cache entry keyed on the next folded spelling with the scan's state unreduced in its argument, one `step` deeper per character. The kernel forces both sides of every comparison, which is one machine run. `Convert::force_folded_call` now does the same, falling back to the one-step unfold only when forcing reaches no value.
 ///
 /// **Wall clock was superlinear where every counter was linear, and that was the representation.** Release, the bisection's rungs: 16K in 0.95 s, 32K in 2.15 s, 64K in 5.86 s, 128K in 18.3 s — where they were 5.7 s, 21 s, 82 s and about 250 s on this host. The whole of the difference was inside one `reduce_closed` run, and `PackedBin`'s equality was what it did per element: the run-scoped memo probes a key holding the current tail window and finds the key it stored, and confirming those equal walked the window bit by bit. A window of one buffer at one offset is the same bits, and `PartialEq` now says so without a read; aligned windows compare as byte slices beside it. What remains grows as about n^1.5 at the top of that ladder and is not a per-element walk — its shape is the run-scoped memo's size — and is left measured rather than chased.
 ///
@@ -721,7 +721,7 @@ fn str_literal_cost_measurements() {
         cost_row(&format!("Str n=500, {uses} uses"), &str_literal(500, uses));
     }
 
-    // The control: the same bytes with no derivation over them.
+    // The control: the same bytes with no proof over them.
     cost_row("Bytes literal, n=500", &bytes_literal(500));
 
     // Slicing supplies its bounds with `@drop_width_within` rather than leaving a decided proposition to reduce, so this should sit within a few percent of the bare literal — the check is the cost, not the slice.
@@ -737,7 +737,7 @@ fn str_literal_cost_measurements() {
 /// cargo test --release --package curios -- --ignored --nocapture combinator_web_cost_measurements
 /// ```
 ///
-/// The third of the parity probes, and the one aimed at a gap that was an *exponent* rather than a multiple. [`str_literal_cost_measurements`] holds a derivation fixed and divides one checker's cost; [`kernel_memo_charge_measurements`] divides the two checkers by budget floor; this one divides them on a program shape where they used to disagree without disagreeing about any rule — a scrutinee whose subject mentions a binder, which the kernel reduced once per arm to key its case refinement and the elaborator did not reduce at all.
+/// The third of the parity probes, and the one aimed at a gap that was an *exponent* rather than a multiple. [`str_literal_cost_measurements`] holds a proof fixed and divides one checker's cost; [`kernel_memo_charge_measurements`] divides the two checkers by budget floor; this one divides them on a program shape where they used to disagree without disagreeing about any rule — a scrutinee whose subject mentions a binder, which the kernel reduced once per arm to key its case refinement and the elaborator did not reduce at all.
 ///
 /// Three rows per size, differing only in what demands the web's value: nothing, a `match` at a binder, a `match` at a literal. The middle row is the one that used to grow; the last is the control that says the trigger was the binder rather than the `match`.
 ///

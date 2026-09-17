@@ -224,7 +224,7 @@ pub(super) const VARIANT_FILLER: &str = r#"
 
 /// An idiomatic string walk: `/std/Str/fold` over a string the program derives at runtime.
 ///
-/// The string comes from `Nat/to_str` rather than a literal or `Str/of_bytes`, and both choices are load-bearing. A literal would let partial evaluation unroll the walk over known bytes, so the fixture would assert nothing about a loop; `of_bytes` would drag in `/std/Str/utf8/check`, whose own encoding still returns a function per byte and whose allocations would swamp the claim. What is left is the walk itself.
+/// The string comes from `Nat/to_str` rather than a literal or `Str/of_bytes`, and both choices are load-bearing. A literal would let partial evaluation unroll the walk over known bytes, so the fixture would assert nothing about a loop; `of_bytes` would drag in the scan `/std/Str/Valid/try` runs over every byte, whose allocations would swamp the claim. What is left is the walk itself.
 pub(super) const STRING_WALK: &str = r#"
     use /std/{Nat, Str, Char, List, proc};
     let taint = List/len(proc/args!);

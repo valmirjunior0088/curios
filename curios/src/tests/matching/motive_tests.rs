@@ -122,12 +122,17 @@ fn an_under_bound_motive_reports_its_binder_count() {
 
 // === The ambient result ======================================================
 //
-// An omitted motive over a variable scrutinee, in a position with an expected type, takes that type as the elimination's result and checks each arm against it with the scrutinee and its variable indices standing for the arm's case. A hypothesis whose type mentions the scrutinee — `d : Utf8(s, b)` under `match s` — therefore needs no convoy: no family is closed over `s`, so nothing has to be typed under a binder that `d`'s type does not name. This is the shape the elaborator used to synthesize a convoy for, and the one that convoy hid from the size-change walk.
+// An omitted motive over a variable scrutinee, in a position with an expected type, takes that type as the elimination's result and checks each arm against it with the scrutinee and its variable indices standing for the arm's case. A hypothesis whose type mentions the scrutinee — `d : Utf8(s, b)` under `match s`, over the state-indexed validity family `/std/Str` once declared — therefore needs no convoy: no family is closed over `s`, so nothing has to be typed under a binder that `d`'s type does not name. This is the shape the elaborator used to synthesize a convoy for, and the one that convoy hid from the size-change walk.
 #[test]
 fn a_hypothesis_typed_by_the_scrutinee_needs_no_convoy() {
     let source = r#"
-        use /std/{Nat, Bytes, Eq, Str};
-        use /std/Str/{Scan, Utf8, step};
+        use /std/{Nat, Byte, Bytes, Eq, Str};
+        use /std/Str/{Scan, step};
+
+        induct Utf8: (Scan, Bytes) -> Prop
+        | stop(): (Scan/lead(), x[])
+        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
+        end
 
         let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq(0, 0) =
             match s

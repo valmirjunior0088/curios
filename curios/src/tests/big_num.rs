@@ -7,7 +7,7 @@ use super::run;
 #[test]
 #[allow(clippy::approx_constant)] // "+3.14" is a parse-and-render test vector, not π
 fn flt_to_str_matches_rust_shortest_format() {
-    // Stage 2: `Flt/to_str` is a real Dragon4 shortest-float renderer (BigNat-backed), matching `format!("{:+}", f64)` byte-for-byte — no longer the `of_bin` shim. The result is assembled from `Str` literals + `Nat/to_str` digits via `Str/concat`, so it carries the UTF-8 proof through `concat_closed` (closing the Stage 3 gap too). Expectations come straight from Rust's own `{:+}` so the test cannot drift from the oracle the host renderer used to call.
+    // Stage 2: `Flt/to_str` is a real Dragon4 shortest-float renderer (BigNat-backed), matching `format!("{:+}", f64)` byte-for-byte — no longer the `of_bin` shim. The result is assembled from `Str` literals + `Nat/to_str` digits via `Str/concat`, so it carries the UTF-8 proof through `Str/Valid/concat` (closing the Stage 3 gap too). Expectations come straight from Rust's own `{:+}` so the test cannot drift from the oracle the host renderer used to call.
     let cases: &[(&str, f64)] = &[
         ("+1.0", 1.0),
         ("Flt/neg(+1.0)", -1.0),

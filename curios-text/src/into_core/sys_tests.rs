@@ -74,7 +74,7 @@ fn does_not_offer_a_closed_root_as_a_way_out_of_an_unresolved_name() {
     );
 }
 
-// **A type re-exported out of a closed root carries its constructors with it.** The `use` naming it was vetted against the facade where it was written, so walking into what it holds is reaching through that facade rather than past it: the guard answers for the reach an author spelled, not for where the library keeps the declaration. Closing `/sys` without this left `Scalar/below` and `Verdict/passed` unwritable by any spelling at all.
+// **A type re-exported out of a closed root carries its constructors with it.** The `use` naming it was vetted against the facade where it was written, so walking into what it holds is reaching through that facade rather than past it: the guard answers for the reach an author spelled, not for where the library keeps the declaration. Closing `/sys` without this left `True/qed` and `Verdict/passed` unwritable by any spelling at all.
 #[test]
 fn allows_a_constructor_of_a_type_re_exported_out_of_a_closed_root() {
     assert!(lower_with_prelude("use /std/{True}; True/qed()").is_ok());

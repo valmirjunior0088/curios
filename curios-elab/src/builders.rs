@@ -5,8 +5,8 @@
 use {
     crate::Context,
     curios_core::{
-        Apply, Bang, Free, Func, FuncType, Global, Infix, InstanceHead, Intrinsic, Level, Many,
-        NumLit, Scope, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Var,
+        Apply, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, NumLit, Scope,
+        Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Var,
     },
     curios_num::Natural,
     curios_utilities::{Grain, InfixOp, PackedBin, Sign, Span, StringSyntax, SyntaxName},
@@ -20,21 +20,15 @@ pub(crate) fn syn_call(name: SyntaxName, args: impl IntoIterator<Item = Term>) -
     )
 }
 
-/// The Core expansion of a string literal: the `/std/Str` struct over the packed bytes and the `of_scan_eq(b, refl_scan(b))` validity derivation, built from the [`StringSyntax`] slots alone. Owned here so the surface lowering and the synthesized test tail expand a literal identically — two expansions would be two opportunities for the scan bridge to drift.
+/// The Core expansion of a string literal: the `/std/Str` struct over the packed bytes, its `Valid` field closed by the one inhabitant of `True`, built from the [`StringSyntax`] slots alone. Owned here so the surface lowering, the synthesized test tail and the derivations expand a literal identically.
+///
+/// `Valid` is decided, so the literal's bytes certify themselves: `True/qed()` checks against `Valid(b)` by running the scan over `b` in both checkers, and the term the compiler writes is the same whatever the literal's length or content. How the library proves validity is the library's; nothing here knows the scan.
 pub fn str_literal(syntax: &StringSyntax, bytes: &[u8]) -> Term {
     let packed = Term::intrinsic(Intrinsic::Bin(
         Grain::X,
         PackedBin::from_bytes(bytes.to_vec()),
     ));
-
-    // The certificate is built at universe zero rather than as a bare reference. A bare `of_scan_eq` is instantiated at a fresh level metavariable wherever elaboration meets it, and the level is the one thing that differed between two spellings of one literal — so every mention was a distinct term to the reduction cache, and a fold over the literal at the type level ran once per mention. The declaration has exactly one universe parameter, the `Eq` its premise is stated in, and the fixed prelude's build is what holds this arity: a literal it lowers refuses at the instance the day the scheme moves.
-    let valid = Term::apply(
-        Term::instance(
-            InstanceHead::Var(Var::free(Free::global(syntax.of_scan_eq.qualifier()))),
-            vec![Level::constant(0)],
-        ),
-        [packed.clone(), syn_call(syntax.refl_scan, [packed.clone()])],
-    );
+    let valid = syn_call(syntax.qed, []);
 
     Term::struct_(
         Global::Authored(syntax.string.qualifier()),

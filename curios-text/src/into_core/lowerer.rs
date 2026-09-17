@@ -272,24 +272,20 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    // The meta-emitter: a string literal becomes a proof-carrying `/std/Str/Str` value `Str { bytes = <Bytes>, valid = <proof> }`. `valid` is erased, so at runtime `Str` collapses to its `Bytes` field — a literal costs exactly what a `Bytes` literal does.
+    // The meta-emitter: a string literal becomes a proof-carrying `/std/Str/Str` value `Str { bytes = <Bytes>, valid = True/qed() }`. `valid` is erased, so at runtime `Str` collapses to its `Bytes` field — a literal costs exactly what a `Bytes` literal does.
     //
-    // # Why the proof is a computation and not a derivation
+    // # Why the proof is one constant
     //
-    // `Valid(b)` is `Utf8(lead, b)`, an inductive family whose canonical inhabitant is one `more` link per byte. Writing that out made the *term* linear in the data, and everything that walks a term inherited it: elaboration, zonking, both erasure obligations, the printer, and the kernel's typing judgment. Five separate stack-overflow or quadratic defects traced to that one shape, and the reduction budget capped a literal near 23KiB regardless.
-    //
-    // So the proof emitted here is `of_scan_eq(b, refl_scan(b))`: constant size, discharged by *running* the `scan_from` fold rather than by traversing a derivation. `/std/Str/of_scan_eq` rebuilds the derivation by reduction for the lemmas in `/std/Str/utf8` that genuinely eliminate it, so none of them changed.
+    // `/std/Str/Valid` is a decided proposition: reading the bytes from the first one lands back between characters. So the only inhabitant it has is `True/qed()`, which checks by *running* the scan over the literal rather than by traversing a derivation. It was once an inductive family whose canonical inhabitant is one link per byte, and writing that out made the *term* linear in the data: elaboration, zonking, both erasure obligations, the printer and the kernel's typing judgment all inherited it, five separate stack-overflow or quadratic defects traced to that one shape, and the reduction budget capped a literal near 23KiB regardless. A bridge from the scan's equation to the derivation followed, which the compiler had to name; with `Valid` decided there is nothing left for it to know about how the library proves a literal valid.
     //
     // # What bounds a literal now
     //
-    // Reduction of the scan is linear in the literal's length, and it runs on `curios-core`'s closed machine — the explicit-stack evaluator both checkers enter for closed terms — so a character costs transitions and machine frames rather than the native reduction level the scan used to nest per byte, and guarded depth is flat in the length. No figure is quoted here, because a figure quoted here has decayed twice; `curios`' `str_literal_cost_measurements` carries the per-character price and the ceiling with their dates, and `a_str_literal_costs_transitions_rather_than_frames` is the ordinary assertion that holds the shape.
-    //
-    // The two remedies an earlier version of this note deferred are settled by that machine rather than taken. A native scan intrinsic is refused (see `documentation/design/toolchain/evaluating-a-closed-term-is-representation-not-judgment.md`) — it would bless one type's fold where the machine accelerates every closed fold on the same terms, `Str`'s and a user's alike. And full reflection — restating `Valid` as an equation on `scan_from` and rewriting `/std/Str/utf8`'s lemmas as fold algebra — stays unnecessary, because the derivation this bridge preserves now costs what the machine prices it rather than a frame per link.
+    // Reduction of the scan is linear in the literal's length, and it runs on `curios-core`'s closed machine — the explicit-stack evaluator both checkers enter for closed terms — so a character costs transitions and machine frames rather than a native reduction level, and guarded depth is flat in the length. No figure is quoted here, because a figure quoted here has decayed twice; `curios`' `str_literal_cost_measurements` carries the per-character price and the ceiling with their dates, and `a_str_literal_costs_transitions_rather_than_frames` is the ordinary assertion that holds the shape. A native scan intrinsic is refused (see `documentation/design/toolchain/evaluating-a-closed-term-is-representation-not-judgment.md`): it would bless one type's fold where the machine accelerates every closed fold on the same terms, `Str`'s and a user's alike.
     pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
         curios_elab::str_literal(&self.context.syntax().string, bytes)
     }
 
-    // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, x[])` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A registry-synthesized literal — its value is synthesized from the registry by the meta-emitter rather than lowered to a core intrinsic.
+    // A registry-synthesized literal — its value is synthesized from the registry by the meta-emitter rather than lowered to a core intrinsic.
     pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
         match syn {
             // A character literal is a polymorphic literal like a numeral: elaboration realizes it — `/std/Char` by default, a numeric carrier where one is expected — so the certified value is built there, not here.

@@ -159,7 +159,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// ## After the scan argument stopped being rebuilt (2026-08-16)
 ///
-/// The `struct.new $tuple/4` row above was a spelling, not a compiler obligation. The cont arm passed `step(h, Scan/cont(rem, lo, hi))` with `sc` — the parameter holding exactly that value — in scope, and match refinement makes the two spellings definitionally equal, so `/std` now passes the held parameter at every such site: `fold`, `at`, `utf8/drop_width`, `utf8/count_scalars`, and their proof twins, which keeps function and proof unfolding in the same spelling. The kernel recertified the prelude over the change, and the walk, `len` and `slice` each lost a per-continuation-byte allocation at once.
+/// The `struct.new $tuple/4` row above was a spelling, not a compiler obligation. The cont arm passed `step(h, Scan/cont(rem, lo, hi))` with `sc` — the parameter holding exactly that value — in scope, and match refinement makes the two spellings definitionally equal, so `/std` now passes the held parameter at every such site: `fold`, `at`, `drop_width`, `count_scalars`, and their proof twins, which keeps function and proof unfolding in the same spelling. The kernel recertified the prelude over the change, and the walk, `len` and `slice` each lost a per-continuation-byte allocation at once.
 ///
 /// The emitted fold body for `programs/parse_multibyte.crs` now holds five `struct.new $tuple/2`, no `struct.new $tuple/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`, and the only arity-4 constructions left in that module are the two genuine transitions inside `/std/Str/step` — the probe now spelled [`the_per_character_walk_carries_its_scan_without_allocating`] held both facts. Timed **2026-08-17** with the native-binary protocol above, five runs each, `user` seconds:
 ///
@@ -181,7 +181,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// This is the reboxing mode GHC's boxity analysis names, measured live at about five percent, and it is deliberate: the value-lifetime campaign shipped its demand deferral first because it is the cheapest change that measures the fact, and M2's continuation splitting is what turns the relocated construction into flowing fields — the ASCII path then rebuilds nothing, and the cont arm materializes once per multi-byte character at the step call alone.
 ///
-/// The `check` rework in the same change also removes a closure per validated byte from every `of_bytes`: the validator was an induction returning a function of the scan, and now threads the scan by recursion exactly as the fold does.
+/// The validator's rework in the same change also removed a closure per validated byte from every `of_bytes`: it was an induction returning a function of the scan, and threads the scan by recursion exactly as the fold does — today as `Str/Valid/try`'s `scan_from`.
 ///
 /// ## After the accumulator crossed as fields (M2, 2026-08-17)
 ///

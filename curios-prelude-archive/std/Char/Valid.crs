@@ -1,0 +1,9 @@
+use /std/{Bool, Nat, Option, True};
+use /std/Char/{is_valid, Valid};
+
+--- The evidence that `code` is a Unicode scalar value, or `none`.
+pub let try(code: Nat) -> Option(Valid(code)) =
+    match is_valid(code): (r) => Option(Bool/Holds(r))
+    | true => Option/some(True/qed())
+    | false => Option/none()
+    end;

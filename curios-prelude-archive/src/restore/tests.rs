@@ -43,19 +43,22 @@ fn the_stored_prelude_declares_no_tests() {
     });
 }
 
-/// The declarations a literal expands into *per byte* are monomorphic, so no occurrence mints universe metavariables in the data's length.
+/// The declarations a literal expands into, and those its proof is checked by running, are monomorphic, so no occurrence mints universe metavariables in the data's length.
 ///
 /// A literal's type is `Str` at a single level. It used to expand into one constructor application per byte, and when those carried universe parameters every application instantiated fresh levels — a declaration's level count grew with literal *length* and elaboration went quartic in it: a 500-byte literal took 50s in release and put `long_str_literal_compiles_on_the_default_test_stack` beyond any test budget. Pinning the per-byte targets at zero is what keeps that linear.
 ///
-/// **The bridge changed what is pinned, and why.** A literal now emits `of_scan_eq(b, refl_scan(b))` — once, whatever the length — so those two are free to be universe-polymorphic: they cost one level per *literal*, not one per byte, and the quartic behaviour this guards against cannot arise from an `O(1)` emission. They route through `/std/Eq`, which is `Eq(@A : Type)`, so they do carry a parameter.
-///
-/// A monomorphic equality at `Scan` would have kept them pinned, and was tried and rejected: it works only while nothing consumes the proof, and the moment a third-party proof does, it needs transport, congruence, symmetry and transitivity restated at `Scan` — a second equality to maintain. It also broke erasure outright, at 333 tests.
-///
-/// So what stays pinned is what a literal still emits per byte: nothing. The type itself is checked because a polymorphic `Str` would put a level on every literal value.
+/// A literal now emits `True/qed()` against a decided `Valid` — once, whatever the length, and `True` has no level to mint — so what stays pinned is what checking that proof reduces: each carrier's `Valid`, the `Valid/from` a string's unfolds to, and the `scan_from` fold under it, on which a level would be minted once per literal or once per byte.
 #[test]
 fn string_literal_machinery_is_monomorphic() {
-    // The literal machinery whose universe parameters would be paid per literal *value* or per byte of *reduction* — not what lowering emits repeatedly, which is nothing (see above). `Str` and `Char` are the carriers a literal builds; `scan_from` is the fold its proof is discharged by running, so a level on it is minted once per byte checked. `of_scan_eq` and `refl_scan` are deliberately absent — see above. `scan_from` is deliberately not in `curios-prelude-archive/src/syntax.rs` either: nothing in Rust emits it, it is reached through the other two's types.
-    let pinned = ["/std/Str/Str", "/std/Str/scan_from", "/std/Char/Char"];
+    // `Str` and `Char` are the carriers a literal builds; the rest is what its proof is discharged by running. None of the reduced names is in `curios-prelude-archive/src/syntax.rs`: nothing in Rust emits them, they are reached through the carriers' field types.
+    let pinned = [
+        "/std/Str/Str",
+        "/std/Str/Valid",
+        "/std/Str/Valid/from",
+        "/std/Str/scan_from",
+        "/std/Char/Char",
+        "/std/Char/Valid",
+    ];
 
     with_prelude(|prelude| {
         let mut parameters = std::collections::BTreeMap::new();

@@ -96,7 +96,7 @@ fn a_guard_over_like_terms_discharges_a_bound_spelled_the_other_way() {
     );
 }
 
-// A shape from `/std/Str/utf8`: `len(h :: t) - 1` is a difference over a folded recursive application, and `len(t)` is that recursion one step further. Both checkers judge the `refl`.
+// A shape from `/std/Str`'s byte folds: `len(h :: t) - 1` is a difference over a folded recursive application, and `len(t)` is that recursion one step further. Both checkers judge the `refl`.
 #[test]
 fn a_difference_over_a_folded_recursion_converts_with_its_unfolding() {
     assert_eq!(

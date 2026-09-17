@@ -59,15 +59,18 @@ fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
 
 #[test]
 fn a_conversion_parked_under_refinements_notes_the_dependence() {
-    // `Scalar/below`'s proof checks against `Below(?c, 0xD800)` — a match stuck on the unsolved index — and parks under the `code < 0xD800` arm's refinement. Nothing ever pins `?c`, so the survivor's report must say the goal was postponed and note the refinement dependence.
+    // `Below/mk`'s proof checks against `Holds(?c < 0xD800)` — a match stuck on the unsolved index — and parks under the `code < 0xD800` arm's refinement. Nothing ever pins `?c`, so the survivor's report must say the goal was postponed and note the refinement dependence.
     let source = r#"
-        use /std/{Nat, Option, True, Char, Io};
-        use /std/Char/{Scalar};
+        use /std/{Nat, Bool, True, Io};
+
+        induct Below: (Nat) -> Prop
+        | mk(@code: Nat, proof: Bool/Holds(code < 0xD800)): (code)
+        end
 
         let f(code: Nat) -> {} =
             match code < 0xD800
             | true =>
-                let s = Scalar/below(True/qed());
+                let s = Below/mk(True/qed());
                 ()
             | false => ()
             end;
@@ -89,12 +92,12 @@ fn a_conversion_parked_under_refinements_notes_the_dependence() {
 fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
     // The Item 2 acceptance shape: the proof argument is checked before anything pins `@b`, against `Nat/Lt(0, Bytes/len(?b))` — a match stuck on the metavariable. The goal must park and discharge once the witness argument solves `?b`, in either argument order.
     let source = r#"
-        use /std/Str/{Scan, Utf8};
+        use /std/Str/{Valid};
         use /std/{Nat, Byte, Bytes, True, Io};
 
-        let proof_first(@b: Bytes, nz: Nat/Lt(0, Bytes/len(b)), w: Utf8(Scan/lead(), b)) -> {} = ();
+        let proof_first(@b: Bytes, nz: Nat/Lt(0, Bytes/len(b)), w: Valid(b)) -> {} = ();
 
-        let call(h: Byte, t: Bytes, valid: Utf8(Scan/lead(), x[h, ..t])) -> {} =
+        let call(h: Byte, t: Bytes, valid: Valid(x[h, ..t])) -> {} =
             proof_first(True/qed(), valid);
 
         Io/pure(())

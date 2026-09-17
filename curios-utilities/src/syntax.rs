@@ -209,41 +209,33 @@ impl OperatorSyntax {
     }
 }
 
+/// The name a character literal builds: `/std/Char`, whose decided `Valid` field the literal closes with [`ProofSyntax::true_qed`].
 #[derive(Debug, Clone, Copy)]
 pub struct CharacterSyntax {
     pub character: SyntaxName,
-    pub scalar_below: SyntaxName,
-    pub scalar_above: SyntaxName,
 }
 
 impl CharacterSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        let Self {
-            character,
-            scalar_below,
-            scalar_above,
-        } = self;
+        let Self { character } = self;
 
-        [character, scalar_below, scalar_above].into_iter()
+        [character].into_iter()
     }
 }
 
+/// The names a string literal writes: `/std/Str`, and the inhabitant of `True` its decided `Valid` field is closed with.
 #[derive(Debug, Clone, Copy)]
 pub struct StringSyntax {
     pub string: SyntaxName,
-    pub of_scan_eq: SyntaxName,
-    pub refl_scan: SyntaxName,
+    /// The same declaration [`ProofSyntax::true_qed`] names, carried here as well because the `Spell` derivation's row holds this group alone and writes literals from it.
+    pub qed: SyntaxName,
 }
 
 impl StringSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        let Self {
-            string,
-            of_scan_eq,
-            refl_scan,
-        } = self;
+        let Self { string, qed } = self;
 
-        [string, of_scan_eq, refl_scan].into_iter()
+        [string, qed].into_iter()
     }
 }
 

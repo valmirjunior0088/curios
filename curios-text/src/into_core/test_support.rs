@@ -28,8 +28,7 @@ pub(super) const fn registry_field(
 /// Spelled once and used twice: the registry's own group, and the `Spell` derivation's row, which carries it because `str_literal` is what writes it into every rendered piece.
 const STRING: StringSyntax = StringSyntax {
     string: registry_name(&["std", "Str", "Str"]),
-    of_scan_eq: registry_name(&["std", "Str", "of_scan_eq"]),
-    refl_scan: registry_name(&["std", "Str", "refl_scan"]),
+    qed: registry_name(&["std", "True", "True", "qed"]),
 };
 
 pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
@@ -56,8 +55,6 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     character: CharacterSyntax {
         character: registry_name(&["std", "Char", "Char"]),
-        scalar_below: registry_name(&["std", "Char", "Scalar", "below"]),
-        scalar_above: registry_name(&["std", "Char", "Scalar", "above"]),
     },
     string: STRING,
     proof: ProofSyntax {

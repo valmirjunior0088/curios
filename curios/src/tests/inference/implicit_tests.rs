@@ -128,12 +128,12 @@ fn a_spine_mismatch_falls_through_to_unfolding() {
     assert_eq!(run(source), b"ok");
 }
 
-// An implicit solved from a projection of a local binding whose value discharges a bound inside a match arm. The candidate `t.0` reduces to the whole of `Str/to_list`'s scan fold, whose `x[h, ..t]` arm carries `peel_byte(True/qed(), valid)` — a proof the arm's own refinement discharged where it was written. `Convert::solve` re-validates a candidate as an oracle, and the oracle used to withhold *every* refinement, including the ones the candidate's own arms re-establish: the proof was then checked against the unreduced `Nat/Lt(0, Bytes/len(b))`, re-validation rejected a correct solution, and the implicit surfaced as a mismatch with the entire unfolded fold on its inferred side. Suppression is scoped to the depth it began at, so the ambient arm stays withheld and the validated term's own arms do not.
+// An implicit solved from a projection of a local binding whose value discharges a bound inside a match arm. The candidate `t.0` reduces to the whole of `codes`'s fold, whose `x[h, ..t]` arm carries `Bytes/get(b, 0, @True/qed())` — a proof the arm's own refinement discharged where it was written, the shape `Str/to_list`'s scan once carried. `Convert::solve` re-validates a candidate as an oracle, and the oracle used to withhold *every* refinement, including the ones the candidate's own arms re-establish: the proof was then checked against the unreduced `Nat/Lt(0, Bytes/len(b))`, re-validation rejected a correct solution, and the implicit surfaced as a mismatch with the entire unfolded fold on its inferred side. Suppression is scoped to the depth it began at, so the ambient arm stays withheld and the validated term's own arms do not.
 #[test]
 fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Str, Char, List};
+        use /std/{Nat, Byte, Bytes, Str, Char, List, Option, True};
 
         induct Vec(T: Type): (n: Nat) -> pub Type
         | nil(): (0)
@@ -156,8 +156,18 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
                 end
             end)(w0, v);
 
+        let codes(s: Str) -> List(Char) =
+            let go(b: Bytes, acc: List(Char)) -> List(Char) =
+                match b
+                | x[] => acc
+                | x[_, ..t] =>
+                    let code = Byte/to_nat(Bytes/get(b, 0, @True/qed()));
+                    go(t, [..acc, Option/unwrap_or(Char/of_nat(code), '?')])
+                end;
+            go(Str/to_bytes(s), []);
+
         let padded(s: Str, w: Nat) -> Vec(Char, w) =
-            let t = of_list(Str/to_list(s));
+            let t = of_list(codes(s));
             resize(w, t.1);
 
         /std/print(Str/flatten(List/map(to_list(padded("hi", 4)), Str/of_char)))

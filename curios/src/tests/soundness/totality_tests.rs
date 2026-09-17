@@ -539,8 +539,13 @@ fn the_library_well_founded_recursion_serves_a_proof() {
 #[test]
 fn a_hand_written_convoy_keeps_its_descent_visible() {
     let source = r#"
-        use /std/{Nat, Bytes, Eq, Str};
-        use /std/Str/{Scan, Utf8, step};
+        use /std/{Nat, Byte, Bytes, Eq, Str};
+        use /std/Str/{Scan, step};
+
+        induct Utf8: (Scan, Bytes) -> Prop
+        | stop(): (Scan/lead(), x[])
+        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
+        end
 
         let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq(0, 0) =
             match d
@@ -557,8 +562,13 @@ fn a_hand_written_convoy_keeps_its_descent_visible() {
 #[test]
 fn a_let_alias_keeps_its_descent_visible() {
     let source = r#"
-        use /std/{Nat, Bytes, Eq, Str};
-        use /std/Str/{Scan, Utf8, step};
+        use /std/{Nat, Byte, Bytes, Eq, Str};
+        use /std/Str/{Scan, step};
+
+        induct Utf8: (Scan, Bytes) -> Prop
+        | stop(): (Scan/lead(), x[])
+        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
+        end
 
         let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq(0, 0) =
             match d
@@ -575,8 +585,13 @@ fn a_let_alias_keeps_its_descent_visible() {
 #[test]
 fn a_proof_over_a_dependent_hypothesis_descends() {
     let source = r#"
-        use /std/{Nat, Bytes, Eq, Str};
-        use /std/Str/{Scan, Utf8, step};
+        use /std/{Nat, Byte, Bytes, Eq, Str};
+        use /std/Str/{Scan, step};
+
+        induct Utf8: (Scan, Bytes) -> Prop
+        | stop(): (Scan/lead(), x[])
+        | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
+        end
 
         let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq(0, 0) =
             match s

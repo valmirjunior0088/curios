@@ -24,8 +24,7 @@ const fn field(segments: &'static [&'static str], label: &'static str) -> Concep
 /// Spelled once and used twice: the registry's own group, and the `Spell` derivation's row, which carries it because `str_literal` is what writes it into every rendered piece.
 const STRING: StringSyntax = StringSyntax {
     string: name(&["std", "Str", "Str"]),
-    of_scan_eq: name(&["std", "Str", "of_scan_eq"]),
-    refl_scan: name(&["std", "Str", "refl_scan"]),
+    qed: name(&["std", "True", "True", "qed"]),
 };
 
 pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
@@ -52,8 +51,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     character: CharacterSyntax {
         character: name(&["std", "Char", "Char"]),
-        scalar_below: name(&["std", "Char", "Scalar", "below"]),
-        scalar_above: name(&["std", "Char", "Scalar", "above"]),
     },
     string: STRING,
     proof: ProofSyntax {

@@ -57,36 +57,88 @@ pub let step(c: Byte, s: Scan) -> Scan =
         end
     end;
 
---- That `b` is well-formed UTF-8 read from the state `s`.
-pub induct Utf8: (Scan, Bytes) -> pub Prop
---- Nothing left to read, and no character left half-read.
-| stop(): (Scan/lead(), x[])
---- One byte, and then the rest under the state it leaves.
-| more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, x[c, ..t])
-end
-
---- That `b` is well-formed UTF-8 read from its first byte, which is what `Str` carries.
-pub let Valid(b: Bytes) -> Prop =
-    Utf8(Scan/lead(), b);
-
 --- The state reading all of `b` leaves the scan in.
 pub let scan_from(s: Scan, b: Bytes) -> Scan =
     match b | x[] => s | x[h, ..t] => scan_from(step(h, s), t) end;
 
---- The proof that `b` is UTF-8 from `s`, out of the equation that reading it lands back between characters.
-pub let of_scan_eq_from(s: Scan, b: Bytes, p: Eq(scan_from(s, b), Scan/lead())) -> Utf8(s, b) =
+--- That `b` is well-formed UTF-8, which is what `Str` carries.
+---
+--- Decided: reading `b` from the first byte lands back between characters, so a literal discharges it by running the scan.
+pub let Valid(b: Bytes) -> Prop =
+    Valid/from(Scan/lead(), b);
+
+--- What `Valid` rests on, from any scan state, and what the operations carry it through.
+pub mod Valid;
+
+--- How many bytes the first `n` characters take from scan state `s`.
+pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
     match b
-    | x[] => Eq/subst((q) => Utf8(q, x[]), Eq/sym(p), Utf8/stop())
-    | x[h, ..t] => Utf8/more(h, s, t, of_scan_eq_from(step(h, s), t, p))
+    | x[] => 0
+    | x[h, ..t] =>
+        match s
+        | lead() => match n | 0 => 0 | pred + 1 => 1 + drop_width(pred, step(h, Scan/lead()), t) end
+        | cont(_, _, _) => 1 + drop_width(n, step(h, s), t)
+        | bad() => 1 + drop_width(n, step(h, Scan/bad()), t)
+        end
     end;
 
---- The same from the first byte, which is what certifies a string literal.
-pub let of_scan_eq(b: Bytes, p: Eq(scan_from(Scan/lead(), b), Scan/lead())) -> Valid(b) =
-    of_scan_eq_from(Scan/lead(), b, p);
+--- `drop_width` never passes the end.
+pub let drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, b), Bytes/len(b)) =
+    match b
+    | x[] => True/qed()
+    | x[h, ..t] =>
+        match s
+        | lead() =>
+            match n
+            | 0 => True/qed()
+            | pred + 1 => drop_width_within(pred, step(h, Scan/lead()), t)
+            end
+        | cont(_, _, _) => drop_width_within(n, step(h, s), t)
+        | bad() => drop_width_within(n, step(h, Scan/bad()), t)
+        end
+    end;
 
---- That reading `b` from the start equals itself, which a literal discharges by reduction.
-pub let refl_scan(b: Bytes) -> Eq(scan_from(Scan/lead(), b), scan_from(Scan/lead(), b)) =
-    Eq/refl();
+--- How many characters `b` holds from scan state `s`.
+pub let count_scalars(s: Scan, b: Bytes) -> Nat =
+    match b
+    | x[] => 0
+    | x[h, ..t] =>
+        match s
+        | lead() => count_scalars(step(h, Scan/lead()), t) + 1
+        | cont(_, _, _) => count_scalars(step(h, s), t)
+        | bad() => count_scalars(step(h, Scan/bad()), t)
+        end
+    end;
+
+--- The continuation bytes from `off`, folded into `acc`.
+pub let take_continuations(
+    b: Bytes,
+    off: Nat,
+    remaining: Nat,
+    acc: Nat,
+    bound: Nat/Le/Ind(off + remaining, Bytes/len(b)),
+) -> {Nat, Nat} =
+    match remaining
+    | 0 => (acc, off)
+    | pred + 1 =>
+        take_continuations(
+            b,
+            off + 1,
+            pred,
+            acc * 0x40
+                + (Byte/to_nat(
+                    Bytes/get(
+                        b,
+                        off,
+                        @Nat/Lt/of_ind_succ(
+                            Nat/Le/Ind/trans(Nat/Le/Ind/s(Nat/Le/Ind/add_r(off, pred)), bound))))
+                    - 0x80),
+            bound)
+    end;
+
+--- A decoded code point as a character.
+pub let certify_decoded(code: Nat) -> Char =
+    Option/unwrap_or(Char/of_nat(code), '?');
 
 --- Text: bytes certified as UTF-8.
 pub struct Str: pub Type {
@@ -96,18 +148,13 @@ pub struct Str: pub Type {
     valid: Valid(bytes),
 }
 
---- The scan witness a string carries, and the lemmas the operations rest on.
-pub mod utf8;
-use utf8/{check, concat_closed, drop_width, drop_width_within, drop_valid, take_valid, peel_byte,
-    certify_decoded, decode_head, count_scalars};
-
 --- The UTF-8 bytes.
 pub let to_bytes(s: Str) -> Bytes =
     s.bytes;
 
 --- The text the bytes encode, or `none` unless they are UTF-8.
 pub let of_bytes(b: Bytes) -> Option(Str) =
-    match check(Scan/lead(), b)
+    match Valid/try(Scan/lead(), b)
     | some(v) => Option/some(Str { bytes = b, valid = v })
     | none() => Option/none()
     end;
@@ -125,7 +172,7 @@ pub let eq_of_bytes(a: Str, b: Str, p: Eq(a.bytes, b.bytes)) -> Eq(a, b) =
 
 --- `a` then `b`.
 pub let concat(a: Str, b: Str) -> Str =
-    Str { bytes = x[..a.bytes, ..b.bytes], valid = concat_closed(a.valid, b.valid) };
+    Str { bytes = x[..a.bytes, ..b.bytes], valid = Valid/concat(a.valid, b.valid) };
 
 let drop_n(n: Nat, s: Str) -> Str =
     Str {
@@ -134,7 +181,7 @@ let drop_n(n: Nat, s: Str) -> Str =
                 s.bytes,
                 drop_width(n, Scan/lead(), s.bytes),
                 @drop_width_within(n, Scan/lead(), s.bytes)),
-        valid = drop_valid(n, Scan/lead(), s.valid),
+        valid = Valid/drop(n, Scan/lead(), s.valid),
     };
 
 let take_n(n: Nat, s: Str) -> Str =
@@ -145,7 +192,7 @@ let take_n(n: Nat, s: Str) -> Str =
                 0,
                 drop_width(n, Scan/lead(), s.bytes),
                 @drop_width_within(n, Scan/lead(), s.bytes)),
-        valid = take_valid(n, Scan/lead(), s.valid),
+        valid = Valid/take(n, Scan/lead(), s.valid),
     };
 
 --- The `n` characters from `x`, stopping at either end, so a window past the end is what is there.
@@ -177,7 +224,7 @@ pub let repeat(s: Str, n: Nat) -> Str =
 
 --- Left to right over the characters with `f(char, acc)`.
 pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
-    let go(sc: Scan, b: Bytes, valid: Utf8(sc, b), acc: {A, Nat}) -> {A, Nat} =
+    let go(sc: Scan, b: Bytes, acc: {A, Nat}) -> {A, Nat} =
         match b
         | x[] => acc
         | x[h, ..t] =>
@@ -186,7 +233,6 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                 go(
                     step(h, Scan/lead()),
                     t,
-                    peel_byte(True/qed(), valid),
                     match classify(h)
                     | ascii() => (f(certify_decoded(Byte/to_nat(h)), acc.0), 0)
                     | lead(_, _, _, payload) => (acc.0, payload)
@@ -197,15 +243,14 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                 go(
                     step(h, sc),
                     t,
-                    peel_byte(True/qed(), valid),
                     match rem == 1
                     | true => (f(certify_decoded(partial), acc.0), 0)
                     | false => (acc.0, partial)
                     end)
-            | bad() => go(step(h, Scan/bad()), t, peel_byte(True/qed(), valid), acc)
+            | bad() => go(step(h, Scan/bad()), t, acc)
             end
         end;
-    go(Scan/lead(), s.bytes, s.valid, (init, 0)).0;
+    go(Scan/lead(), s.bytes, (init, 0)).0;
 
 --- The characters.
 pub let to_list(s: Str) -> List(Char) =
@@ -215,24 +260,29 @@ pub let to_list(s: Str) -> List(Char) =
 pub let len(s: Str) -> Nat =
     count_scalars(Scan/lead(), s.bytes);
 
---- The characters of a concatenation are those of its halves. Not a law of the bytes: it holds because a valid string reads the scan back to `lead` at its end, which is what the witness says and what the count restarts on.
+--- The characters of a concatenation are those of its halves. Not a law of the bytes: it holds because a valid string reads the scan back to `lead` at its end, which is what `Valid` says and what the count restarts on.
 pub let len_concat(a: Str, b: Str) -> Eq(len(concat(a, b)), len(a) + len(b)) =
     count_concat(a.bytes, b.bytes, a.valid);
 
---- `count_scalars` splits at the seam of a concatenation whose first half the witness reads to the end, from whatever state the witness starts in — the strengthening `len_concat` needs to descend through `more`, where the state has moved.
+--- `count_scalars` splits at the seam of a concatenation whose first half reads to the end, from whatever state the reading starts in — the strengthening `len_concat` needs to descend a byte, where the state has moved.
 let count_concat(
     a: Bytes,
     b: Bytes,
     @s: Scan,
-    w: Utf8(s, a),
+    w: Valid/from(s, a),
 ) -> Eq(count_scalars(s, x[..a, ..b]), count_scalars(s, a) + count_scalars(Scan/lead(), b)) =
-    match w
-    | stop() => Eq/refl()
-    | more(_, st, t, rest) =>
-        match st
-        | lead() => Eq/cong((n: Nat) => n + 1, count_concat(t, b, rest))
-        | cont(_, _, _) => count_concat(t, b, rest)
-        | bad() => count_concat(t, b, rest)
+    match a
+    | x[] =>
+        match s
+        | lead() => Eq/refl()
+        | cont(_, _, _) => match w end
+        | bad() => match w end
+        end
+    | x[h, ..t] =>
+        match s
+        | lead() => Eq/cong((n: Nat) => n + 1, count_concat(t, b, @step(h, Scan/lead()), w))
+        | cont(_, _, _) => count_concat(t, b, @step(h, s), w)
+        | bad() => count_concat(t, b, @step(h, Scan/bad()), w)
         end
     end;
 
@@ -282,7 +332,7 @@ pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
     let go(
         sc: Scan,
         b: Bytes,
-        valid: Utf8(sc, b),
+        valid: Valid/from(sc, b),
         i: Nat,
         le: Nat/Le/Ind(i + 1, count_scalars(sc, b)),
     ) -> Char =
@@ -292,17 +342,12 @@ pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
             match sc
             | lead() =>
                 match i
-                | 0 => decode_head(h, valid)
+                | 0 => Valid/decode_head(h, valid)
                 | pred + 1 =>
-                    go(
-                        step(h, Scan/lead()),
-                        t,
-                        peel_byte(True/qed(), valid),
-                        pred,
-                        match le | s(@_, @_, prev) => prev end)
+                    go(step(h, Scan/lead()), t, valid, pred, match le | s(@_, @_, prev) => prev end)
                 end
-            | cont(_, _, _) => go(step(h, sc), t, peel_byte(True/qed(), valid), i, le)
-            | bad() => go(step(h, Scan/bad()), t, peel_byte(True/qed(), valid), i, le)
+            | cont(_, _, _) => go(step(h, sc), t, valid, i, le)
+            | bad() => go(step(h, Scan/bad()), t, valid, i, le)
             end
         end;
     go(
