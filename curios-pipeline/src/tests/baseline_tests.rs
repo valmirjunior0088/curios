@@ -1,4 +1,4 @@
-//! How the fold takes a baseline through the cache seam: asked for on a miss alone, announced as a recompile, and handed to `put` as any unit is.
+//! How the fold takes a baseline through the cache seam: asked for on a miss alone, offered what the fold's assembler offers and taken only by a cache, announced as a recompile, and handed to `put` as any unit is.
 
 use {
     super::test_support::{mounted, unit_of},
@@ -11,7 +11,7 @@ use {
 
 const BASE: &str = "use /std/{Nat};\n\npub let answer: Nat = 42;\n";
 
-/// A cache that hits with `hit`, offers `baseline` on a miss, and counts what it is handed.
+/// A cache that hits with `hit`, answers a miss with `baseline` or else with whatever it was offered, and records what it is handed.
 struct Stub {
     hit: Option<Unit>,
     baseline: Option<Unit>,
@@ -24,12 +24,12 @@ impl Cache for Stub {
         self.hit.clone()
     }
 
-    fn baseline(&self, _: &UnitSource<'_>, offered: Option<Unit>) -> Option<Unit> {
+    fn baseline(&self, _: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
         assert!(
             self.hit.is_none(),
             "a baseline is asked for on a miss alone"
         );
-        self.baseline.clone().or(offered)
+        self.baseline.clone().or_else(|| offered.cloned())
     }
 
     fn put(&self, _: &UnitSource<'_>, _: &Unit, followed: bool) {
@@ -42,13 +42,26 @@ fn folded(cache: &dyn Cache) -> Vec<String> {
     folded_all(cache, &[("lib", BASE)])
 }
 
-/// What the fold reported for `units`, each a prefix and the source mounted at it, folded through `cache` in the order given.
+/// What the fold reported for `units`, each a prefix and the source mounted at it, folded through `cache` in the order given with nothing offered.
 fn folded_all(cache: &dyn Cache, units: &[(&str, &str)]) -> Vec<String> {
+    folded_offered(Some(cache), units, None)
+}
+
+/// [`folded_all`], through a cache or none, with `offered` offered for the first unit alone.
+fn folded_offered(
+    cache: Option<&dyn Cache>,
+    units: &[(&str, &str)],
+    offered: Option<&Unit>,
+) -> Vec<String> {
     let modules = units
         .iter()
         .map(|(prefix, source)| mounted(prefix, source))
         .collect::<Vec<_>>();
-    let sources = modules.iter().map(UnitSource::mounted).collect::<Vec<_>>();
+    let sources = modules
+        .iter()
+        .enumerate()
+        .map(|(index, modules)| (UnitSource::mounted(modules), offered.filter(|_| index == 0)))
+        .collect::<Vec<_>>();
     let mut events = Vec::new();
 
     with_prelude(|prelude| {
@@ -57,7 +70,7 @@ fn folded_all(cache: &dyn Cache, units: &[(&str, &str)]) -> Vec<String> {
             Prefix::over(prelude),
             &SYNTAX,
             &sources,
-            Some(cache),
+            cache,
             |progress| {
                 events.push(match progress {
                     Progress::Compiling(prefix) => format!("compiling {}", prefix.join()),
@@ -112,6 +125,27 @@ fn a_miss_without_a_baseline_compiles_whole() {
 
     assert_eq!(folded(&stub), ["compiling /lib", "compiled"]);
     assert_eq!(*stub.put.borrow(), [false]);
+}
+
+/// An offered baseline is the cache's to take, and the fold takes nothing without one: the store's own cache declines an offer so a build compiles the unit whole, and a fold with no cache compiles every unit whole whatever it was offered.
+#[test]
+fn an_offered_baseline_is_taken_by_a_cache_and_by_nothing_else() {
+    let offered = unit_of(BASE);
+    let taking = Stub {
+        hit: None,
+        baseline: None,
+        put: RefCell::new(Vec::new()),
+    };
+
+    assert_eq!(
+        folded_offered(Some(&taking), &[("lib", BASE)], Some(&offered)),
+        ["recompiling /lib", "compiled"]
+    );
+    assert_eq!(
+        folded_offered(None, &[("lib", BASE)], Some(&offered)),
+        ["compiling /lib", "compiled"],
+        "no cache, no taker"
+    );
 }
 
 /// `put` is told which units have another after them, which is what lets a cache that files nothing skip the placement of the last: a placement is read by the next unit's address and nothing else within a fold.

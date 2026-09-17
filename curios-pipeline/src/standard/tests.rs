@@ -1,16 +1,16 @@
 //! Which unit takes an archived root's place, what it is granted, and what it is offered.
 
 use {
-    super::{Baselined, granted, withheld},
+    super::{granted, withheld},
     crate::{
-        Cache, DEFAULT_STEP_BUDGET, compile_unit_over, invalidated,
+        Cache, DEFAULT_STEP_BUDGET, Fold, compile_unit_over, invalidated,
         tests::test_support::compile_with_units,
     },
     curios_prelude::{SYNTAX, with_stored},
     curios_text::{Overlay, RootSource, UnitSource, into_core_unit},
     curios_unit::{Prefix, Unit},
     curios_utilities::{Qualifier, RootKind, test_support::Temporary},
-    std::{fs, path::PathBuf, time::Instant},
+    std::{cell::RefCell, fs, path::PathBuf, time::Instant},
 };
 
 /// The standard library's own tree, as the package claiming `/std` from it.
@@ -177,52 +177,31 @@ fn a_withheld_root_is_granted_the_roots_before_it() {
     });
 }
 
-/// The archived unit reaches the caller's cache as an offer for the unit claiming its prefix and for no other, and the cache decides what becomes of it.
+/// The archived unit is offered to the unit taking its root's place and to no other, and the offer reaches the cache, which decides what becomes of it.
+///
+/// Read off what the cache was offered rather than off a compile over it, so the standard library is never recompiled here: the offer is made before a unit compiles, and a one-declaration `/std`, which does not, is refused only after it.
 #[test]
-fn the_withheld_root_is_offered_as_the_baseline() {
-    struct Taking;
+fn the_withheld_root_is_offered_to_the_unit_taking_its_place() {
+    struct Recording(RefCell<Vec<bool>>);
 
-    impl Cache for Taking {
+    impl Cache for Recording {
         fn get(&self, _: &UnitSource<'_>) -> Option<Unit> {
             None
         }
 
-        fn baseline(&self, _: &UnitSource<'_>, offered: Option<Unit>) -> Option<Unit> {
-            offered
+        fn baseline(&self, _: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
+            self.0.borrow_mut().push(offered.is_some());
+            None
         }
 
         fn put(&self, _: &UnitSource<'_>, _: &Unit, _: bool) {}
     }
 
-    with_stored(|stored| {
-        let root = stored.last().expect("the prelude has roots");
-        let baselined = Baselined {
-            cache: Some(&Taking),
-            withheld: Some((Qualifier::from(["std"]), &root.unit)),
-        };
-        let std = std_from_its_tree();
-        let other = supplied("other");
+    for (claim, offered) in [("std", true), ("other", false)] {
+        let units = [supplied(claim)];
+        let recording = Recording(RefCell::new(Vec::new()));
+        let _ = Fold::new(DEFAULT_STEP_BUDGET, &units, Some(&recording)).check_units(|_| {});
 
-        assert!(
-            baselined
-                .baseline(&UnitSource::mounted(&std), None)
-                .is_some()
-        );
-        assert!(
-            baselined
-                .baseline(&UnitSource::mounted(&other), None)
-                .is_none()
-        );
-
-        let declined = Baselined {
-            cache: None,
-            withheld: Some((Qualifier::from(["std"]), &root.unit)),
-        };
-        assert!(
-            declined
-                .baseline(&UnitSource::mounted(&std), None)
-                .is_none(),
-            "no cache, no taker"
-        );
-    });
+        assert_eq!(*recording.0.borrow(), [offered], "a unit claiming /{claim}");
+    }
 }

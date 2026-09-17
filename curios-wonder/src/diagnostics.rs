@@ -295,11 +295,11 @@ impl Cache for ReadOnly<'_> {
     /// Nearest first, because the order decides how much a recompile re-elaborates and nothing else — every one of the three is a unit judged when it was made, so the answer is the same over any of them. The session's is the last keystroke's, which is nearer the text being asked about than anything a build filed; a filed unit is nearer than the archived image; and the image is what is there when nothing else is. A build run in another terminal mid-session can leave the store nearer than the session, and then the recompile over the session's unit is merely larger than it had to be.
     ///
     /// A question is what takes a baseline. What it compiles over one is placed and never filed, which is the reading of this cache the method above already states; the store's own cache offers none, so a build compiles a moved unit whole and files what it compiled.
-    fn baseline(&self, source: &UnitSource<'_>, offered: Option<Unit>) -> Option<Unit> {
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
         self.cache
             .kept(source)
             .or_else(|| self.cache.earlier(source))
-            .or(offered)
+            .or_else(|| offered.cloned())
     }
 
     /// Kept, and placed where something follows — never filed. This is why the store itself is held rather than a `dyn Cache`.

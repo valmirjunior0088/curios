@@ -146,7 +146,7 @@ pub(crate) fn compile_with_units(
     with_prelude(|prelude| {
         let sources = parsed
             .iter()
-            .map(curios_text::UnitSource::mounted)
+            .map(|modules| (curios_text::UnitSource::mounted(modules), None))
             .collect::<Vec<_>>();
         let produced = compile_units(
             DEFAULT_STEP_BUDGET,
@@ -222,7 +222,7 @@ pub(super) fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
             DEFAULT_STEP_BUDGET,
             Prefix::over(prelude),
             &SYNTAX,
-            &[UnitSource::mounted(modules)],
+            &[(UnitSource::mounted(modules), None)],
             None,
             |_| {},
         )

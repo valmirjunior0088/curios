@@ -201,31 +201,24 @@ impl<'a> Fold<'a> {
                 .map(|(_, stored)| &stored.unit)
                 .collect::<Vec<_>>();
 
+            // The unit taking a root's place sees what the root could see, and is offered the root's archived unit as its baseline — which the cache takes or declines.
             let sources = units
                 .iter()
                 .enumerate()
                 .map(|(index, unit)| match withheld {
-                    Some((root, _)) if index == 0 => {
-                        UnitSource::mounted(unit).seeing(granted(stored, root, unit))
-                    }
-                    _ => UnitSource::mounted(unit),
+                    Some((index_of_root, root)) if index == 0 => (
+                        UnitSource::mounted(unit).seeing(granted(stored, index_of_root, unit)),
+                        Some(&root.unit),
+                    ),
+                    _ => (UnitSource::mounted(unit), None),
                 })
                 .collect::<Vec<_>>();
-            let baselined = Baselined {
-                cache,
-                withheld: withheld.and_then(|(_, root)| {
-                    root.unit
-                        .mounts()
-                        .first()
-                        .map(|mount| (mount.prefix.clone(), &root.unit))
-                }),
-            };
             let produced = compile_units(
                 budget,
                 Prefix::over(&roots),
                 &SYNTAX,
                 &sources,
-                Some(&baselined),
+                cache,
                 &mut progress,
             )?;
 
@@ -260,37 +253,6 @@ fn granted(stored: &[&Stored], withheld: usize, unit: &RootSource) -> Vec<Qualif
     prefixes.extend(source.declared().unwrap_or(&[]).iter().cloned());
 
     prefixes
-}
-
-/// The caller's cache with the withheld root offered as a baseline for the unit claiming its prefix.
-///
-/// Offered rather than imposed: the cache decides whether the unit is compiled over it, so a question takes the archived unit as a baseline while a build compiles the package whole and files it as any unit — and the fold learns nothing about a prelude either way. Whatever tree the package is, the baseline is correct: an item is reused only where its lowered form matches the archived one and nothing it reaches changed, so a tree far from the archive's is simply a larger closure.
-struct Baselined<'a> {
-    cache: Option<&'a dyn Cache>,
-    withheld: Option<(Qualifier, &'a Unit)>,
-}
-
-impl Cache for Baselined<'_> {
-    fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
-        self.cache?.get(source)
-    }
-
-    fn baseline(&self, source: &UnitSource<'_>, offered: Option<Unit>) -> Option<Unit> {
-        let offered = self
-            .withheld
-            .as_ref()
-            .filter(|(prefix, _)| *prefix == source.prefix())
-            .map(|(_, unit)| (*unit).clone())
-            .or(offered);
-
-        self.cache?.baseline(source, offered)
-    }
-
-    fn put(&self, source: &UnitSource<'_>, unit: &Unit, followed: bool) {
-        if let Some(cache) = self.cache {
-            cache.put(source, unit, followed);
-        }
-    }
 }
 
 /// Lower and type-check `entrypoint` against the fixed prelude, reporting the erasure obligations rather than raising them. See [`typecheck_reporting`](crate::typecheck_reporting).

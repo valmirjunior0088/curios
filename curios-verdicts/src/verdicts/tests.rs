@@ -41,8 +41,8 @@ impl Cache for Overlaid<'_> {
         self.0.get_overlaid(source, self.1)
     }
 
-    fn baseline(&self, source: &UnitSource<'_>, offered: Option<Unit>) -> Option<Unit> {
-        self.0.earlier(source).or(offered)
+    fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Unit> {
+        self.0.earlier(source).or_else(|| offered.cloned())
     }
 
     fn put(&self, source: &UnitSource<'_>, unit: &Unit, _followed: bool) {
