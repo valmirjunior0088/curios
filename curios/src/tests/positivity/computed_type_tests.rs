@@ -141,7 +141,6 @@ fn a_constructor_payload_a_self_calling_rec_computes_is_admitted() {
 fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
     let source = r#"
         use /std/{Bytes, Bool};
-        use /std/{Bool};
 
         let always(b : Bytes) -> Bool =
             match b
@@ -169,7 +168,6 @@ fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
 fn a_refinement_field_over_a_fold_hypothesis_is_admitted() {
     let source = r#"
         use /std/{Bytes, Bool};
-        use /std/{Bool};
 
         let always(b : Bytes) -> Bool =
             match b

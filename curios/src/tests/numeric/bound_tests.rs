@@ -391,7 +391,7 @@ fn a_late_pinned_bound_that_fails_reports_what_it_reduces_to() {
     .expect_err("30 is not below 10");
 
     assert!(
-        error.contains("nothing discharged Bool/Holds(30 < 10), which reduces to False"),
+        error.contains("nothing discharged Bool/Holds(30 < 10), which reduces to Bool/False"),
         "unexpected report: {error}"
     );
 }
