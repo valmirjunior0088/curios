@@ -4,7 +4,7 @@
 
 use {
     crate::{Diagnostic, Origin, ReadOnly, of_error, open, overlaid},
-    curios_pipeline::{Cache, Stage, compile_with_units},
+    curios_pipeline::{Cache, Fold, Stage},
     curios_text::{Overlay, RootSource},
     curios_utilities::Qualifier,
     curios_verdicts::Verdicts,
@@ -58,12 +58,9 @@ pub fn stage(
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
 
     let mut text = None;
-    let compiled = compile_with_units(
-        budget,
-        &units,
+    let compiled = Fold::new(budget, &units, cache).compile(
         &entrypoint,
         &loader,
-        cache,
         |stage| {
             if stage.name() == name {
                 text = Some(stage.to_string());

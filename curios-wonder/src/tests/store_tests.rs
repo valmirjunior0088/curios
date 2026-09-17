@@ -3,7 +3,7 @@
 use {
     super::test_support::{mounted, mounted_project, write},
     crate::{ReadOnly, Severity, Subject, diagnostics},
-    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Progress, check_units_with_prelude},
+    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Fold, Progress},
     curios_text::Overlay,
     curios_verdicts::{Session, Verdicts},
     std::{collections::BTreeMap, fs, path::Path},
@@ -261,12 +261,12 @@ fn a_broken_declaration_over_a_baseline_is_its_own_record() {
 fn built(root: &Path) {
     let store = Verdicts::at(root.to_path_buf());
 
-    check_units_with_prelude(
+    Fold::new(
         DEFAULT_STEP_BUDGET,
         &mounted(root),
         Some(&store as &dyn Cache),
-        |_| {},
     )
+    .check_units(|_| {})
     .expect("two compiling units");
 }
 
@@ -286,20 +286,16 @@ fn folded_reusing(root: &Path, overlay: &Overlay, session: &Session) -> Vec<Stri
     };
 
     let mut events = Vec::new();
-    check_units_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &units,
-        Some(&read_only as &dyn Cache),
-        |progress| match progress {
+    Fold::new(DEFAULT_STEP_BUDGET, &units, Some(&read_only as &dyn Cache))
+        .check_units(|progress| match progress {
             Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
             Progress::Recompiling(prefix) => {
                 events.push(format!("recompiling {}", prefix.join()));
             }
             Progress::Reused(prefix) => events.push(format!("reused {}", prefix.join())),
             _ => {}
-        },
-    )
-    .expect("two compiling units");
+        })
+        .expect("two compiling units");
 
     events
 }

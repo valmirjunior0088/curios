@@ -2,9 +2,7 @@
 
 use {
     crate::{DeclaredTest, ReadOnly, Subject, open},
-    curios_pipeline::{
-        Cache, CompileError, EntryTail, check_with_units, declared_test_paths, unit_test_paths,
-    },
+    curios_pipeline::{Cache, CompileError, EntryTail, Fold, declared_test_paths},
     curios_text::Overlay,
     curios_verdicts::Verdicts,
 };
@@ -22,7 +20,7 @@ pub fn declared_tests(
     let paths = match subject.formed(overlay) {
         Subject::Unit { units } => {
             let units = crate::overlaid(units, overlay);
-            unit_test_paths(budget, &units, cache, |_| {})?
+            Fold::new(budget, &units, cache).test_paths(|_| {})?
         }
         Subject::Entry {
             units,
@@ -40,16 +38,9 @@ pub fn declared_tests(
                 )
             })?;
             let units = crate::overlaid(units, overlay);
-            let module = check_with_units(
-                budget,
-                &units,
-                &entrypoint,
-                &loader,
-                cache,
-                EntryTail::Authored,
-                |_| {},
-            )?
-            .verdict?;
+            let module = Fold::new(budget, &units, cache)
+                .check(&entrypoint, &loader, EntryTail::Authored, |_| {})?
+                .verdict?;
 
             declared_test_paths(&module)
         }

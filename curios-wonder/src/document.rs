@@ -3,7 +3,7 @@
 use {
     crate::ReadOnly,
     curios_document::Documentation,
-    curios_pipeline::{Cache, CompileError, with_units},
+    curios_pipeline::{Cache, CompileError, Fold},
     curios_text::{Overlay, RootSource},
     curios_verdicts::{Verdicts, archived_unit},
     std::path::Path,
@@ -36,10 +36,7 @@ pub fn documentation(
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
     let units = crate::overlaid(units, overlay);
 
-    with_units(
-        budget,
-        &units,
-        cache,
+    Fold::new(budget, &units, cache).units(
         |_| {},
         |_, produced| {
             produced

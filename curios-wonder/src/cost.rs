@@ -7,7 +7,7 @@
 use {
     crate::{Diagnostic, Origin, ReadOnly, of_error, open, overlaid},
     curios_cont::{Fate, descendants, fates},
-    curios_pipeline::{Cache, Stage, compile_with_units},
+    curios_pipeline::{Cache, Fold, Stage},
     curios_text::{Overlay, RootSource},
     curios_utilities::Qualifier,
     curios_verdicts::Verdicts,
@@ -34,12 +34,9 @@ pub fn cost(
 
     let mut before = BTreeMap::new();
     let mut after = BTreeMap::new();
-    let compiled = compile_with_units(
-        budget,
-        &units,
+    let compiled = Fold::new(budget, &units, cache).compile(
         &entrypoint,
         &loader,
-        cache,
         |stage| match stage {
             Stage::Cont(module) => before = descendants(module),
             Stage::ContOptm(module) => after = descendants(module),

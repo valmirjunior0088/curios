@@ -1,12 +1,12 @@
 //! The Curios corpus: each `curios/src/tests/corpus/<unit>.crs` mounted as a unit, compiled once as its own test program, and every test it declares run in an instantiation of its own.
 //!
-//! What this replaces is one full compile per library fixture. A unit's tests share one `compile_tests_with_units` and one [`to_cwasm`], so the prelude-linked baseline each fixture used to pay alone is paid once for the whole unit, and a run of the precompiled module is milliseconds. The units stay separate for two reasons that pull the same way: cargo runs them in parallel, and a compile error costs one unit's results rather than the corpus entire.
+//! What this replaces is one full compile per library fixture. A unit's tests share one `Fold::tests` and one [`to_cwasm`], so the prelude-linked baseline each fixture used to pay alone is paid once for the whole unit, and a run of the precompiled module is milliseconds. The units stay separate for two reasons that pull the same way: cargo runs them in parallel, and a compile error costs one unit's results rather than the corpus entire.
 //!
 //! Nothing here reaches `curios-package`. A unit is mounted from a header and a directory directly, so the corpus needs no manifest and is not a project — `wonder` and `curios test` do not reach these files, and `cargo test` is the channel, exactly as it is for the `/std` sources they exercise.
 
 use {
     crate::to_cwasm,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, compile_tests_with_units},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
     curios_runtime::{ForeignBindings, MockHost, run_bytes},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::RootKind,
@@ -39,17 +39,15 @@ fn run_unit(unit: &str) {
     let loader = RootSource::none();
 
     // No cache: a test must not file payloads into a project store.
-    let (module, _foreigns, records) = compile_tests_with_units(
-        DEFAULT_STEP_BUDGET,
-        &[mounted],
-        &entrypoint,
-        &loader,
-        None,
-        EntryTail::LastUnitTests,
-        |_| {},
-        |_| {},
-    )
-    .unwrap_or_else(|error| panic!("`{unit}` failed to compile:\n{error}"));
+    let (module, _foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[mounted], None)
+        .tests(
+            &entrypoint,
+            &loader,
+            EntryTail::LastUnitTests,
+            |_| {},
+            |_| {},
+        )
+        .unwrap_or_else(|error| panic!("`{unit}` failed to compile:\n{error}"));
     let cwasm = to_cwasm(&module).expect("the test program precompiles");
 
     assert!(!records.is_empty(), "`{unit}` declares no tests");

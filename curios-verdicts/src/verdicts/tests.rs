@@ -5,7 +5,7 @@
 use {
     super::*,
     curios_package::{Governing, order},
-    curios_pipeline::{Progress, compile_with_units},
+    curios_pipeline::{Fold, Progress},
     curios_text::Entrypoint,
     curios_utilities::test_support::Temporary,
     std::{collections::BTreeMap, path::Path},
@@ -62,23 +62,21 @@ fn folded_through(root: &Path, shape: &Path, cache: &dyn Cache) -> Vec<String> {
         Entrypoint::opened(&root.join("exe.crs")).expect("an openable entrypoint");
 
     let mut events = Vec::new();
-    compile_with_units(
-        1_000_000,
-        &library,
-        &entrypoint,
-        &loader,
-        Some(cache),
-        |_| {},
-        |progress| match progress {
-            Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
-            Progress::Recompiling(prefix) => {
-                events.push(format!("recompiling {}", prefix.join()));
-            }
-            Progress::Reused(prefix) => events.push(format!("reused {}", prefix.join())),
-            _ => {}
-        },
-    )
-    .expect("a compiling program");
+    Fold::new(1_000_000, &library, Some(cache))
+        .compile(
+            &entrypoint,
+            &loader,
+            |_| {},
+            |progress| match progress {
+                Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
+                Progress::Recompiling(prefix) => {
+                    events.push(format!("recompiling {}", prefix.join()));
+                }
+                Progress::Reused(prefix) => events.push(format!("reused {}", prefix.join())),
+                _ => {}
+            },
+        )
+        .expect("a compiling program");
 
     events
 }

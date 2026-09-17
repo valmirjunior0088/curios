@@ -2,7 +2,7 @@
 
 use {
     super::{error, ersd_optm, ersd_optm_tests, run, run_tests_program, run_text},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, compile_tests_with_units},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
     curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
@@ -349,17 +349,15 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
         "#
     .parse::<Entrypoint>()
     .expect("fixture parses");
-    let (_module, _foreigns, records) = compile_tests_with_units(
-        DEFAULT_STEP_BUDGET,
-        &[],
-        &entrypoint,
-        &RootSource::none(),
-        None,
-        EntryTail::Tests,
-        |_| {},
-        |_| {},
-    )
-    .expect("fixture compiles as a test program");
+    let (_module, _foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+        .tests(
+            &entrypoint,
+            &RootSource::none(),
+            EntryTail::Tests,
+            |_| {},
+            |_| {},
+        )
+        .expect("fixture compiles as a test program");
 
     assert_eq!(
         records

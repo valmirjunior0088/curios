@@ -3,9 +3,7 @@
 use {
     crate::{Diagnostic, STDIN_MOUNT, Severity},
     curios_package::Unlinked,
-    curios_pipeline::{
-        Cache, Checked, CompileError, EntryTail, Findings, check_with_units, with_units,
-    },
+    curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, Fold},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
     curios_utilities::{Qualifier, Report, Source, Span},
@@ -139,10 +137,7 @@ pub fn diagnosed(
     let mut diagnosed = match subject.formed(overlay) {
         Subject::Unit { units } => {
             let units = overlaid(units, overlay);
-            let found = with_units(
-                budget,
-                &units,
-                cache,
+            let found = Fold::new(budget, &units, cache).units(
                 |_| {},
                 |_, produced| {
                     Ok(produced
@@ -164,12 +159,9 @@ pub fn diagnosed(
         } => match open(origin, declares, overlay) {
             Ok((entrypoint, loader)) => {
                 let units = overlaid(units, overlay);
-                let checked = check_with_units(
-                    budget,
-                    &units,
+                let checked = Fold::new(budget, &units, cache).check(
                     &entrypoint,
                     &loader,
-                    cache,
                     EntryTail::Authored,
                     |_| {},
                 );

@@ -11,7 +11,7 @@ use {
     },
     curios::{engine, to_cwasm},
     curios_package::{Entry, LIBRARY, Selection, Spelling, order},
-    curios_pipeline::{Cache, CompileError, EntryTail, TestRecord, compile_tests_with_units},
+    curios_pipeline::{Cache, CompileError, EntryTail, Fold, TestRecord},
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_utilities::Source,
@@ -359,12 +359,9 @@ fn tests_payload(
 
     processing(subject, manifest);
     let mut line: Option<Line> = None;
-    let compiled = compile_tests_with_units(
-        budget,
-        units,
+    let compiled = Fold::new(budget, units, store.map(|store| store as &dyn Cache)).tests(
         entrypoint,
         loader,
-        store.map(|store| store as &dyn Cache),
         tail,
         |_| {},
         |progress| report(&mut line, subject, !units.is_empty(), progress),

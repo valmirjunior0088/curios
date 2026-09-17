@@ -3,7 +3,7 @@
 use {
     super::{error, run_entrypoint},
     crate::to_cwasm,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, compile_tests_with_units},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
     curios_runtime::{ForeignBindings, MockHost, run_bytes},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::RootKind,
@@ -20,19 +20,17 @@ fn supplied_error(source: &str) -> String {
 /// Compile `source` as its own test program, expecting a refusal, and return its report.
 fn tests_error(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
-    compile_tests_with_units(
-        DEFAULT_STEP_BUDGET,
-        &[],
-        &entrypoint,
-        &RootSource::none(),
-        None,
-        EntryTail::Tests,
-        |_| {},
-        |_| {},
-    )
-    .map(|_| ())
-    .expect_err("the fixture is refused")
-    .to_string()
+    Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+        .tests(
+            &entrypoint,
+            &RootSource::none(),
+            EntryTail::Tests,
+            |_| {},
+            |_| {},
+        )
+        .map(|_| ())
+        .expect_err("the fixture is refused")
+        .to_string()
 }
 
 #[test]
@@ -184,17 +182,15 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
             .expect("the unit parses"),
     );
 
-    let (module, _foreigns, records) = compile_tests_with_units(
-        DEFAULT_STEP_BUDGET,
-        &[unit],
-        &Entrypoint::trivial(),
-        &RootSource::none(),
-        None,
-        EntryTail::LastUnitTests,
-        |_| {},
-        |_| {},
-    )
-    .expect("the unit's test program compiles");
+    let (module, _foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[unit], None)
+        .tests(
+            &Entrypoint::trivial(),
+            &RootSource::none(),
+            EntryTail::LastUnitTests,
+            |_| {},
+            |_| {},
+        )
+        .expect("the unit's test program compiles");
     let cwasm = to_cwasm(&module).expect("the test program precompiles");
     assert_eq!(records.len(), 1);
 

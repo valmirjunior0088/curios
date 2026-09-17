@@ -103,7 +103,7 @@ The library work this names: `WellFounded(BigNat/lt)`, and a `bit_len`-fuelled r
 
 ## What constrains any answer
 
-- Every candidate a tool offers is checked by elaboration *and* the kernel, never by the elaborator's oracle alone: the kernel refuses what the elaborator accepts at grounded argument positions ([Eta and untyped child positions](../soundness/per-term-rules/eta-and-untyped-child-positions.md), `a_grounded_argument_forfeits_irrelevance`), so `verifies` in `suggest.rs` is a filter and `check_with_units` is the guarantee.
+- Every candidate a tool offers is checked by elaboration *and* the kernel, never by the elaborator's oracle alone: the kernel refuses what the elaborator accepts at grounded argument positions ([Eta and untyped child positions](../soundness/per-term-rules/eta-and-untyped-child-positions.md), `a_grounded_argument_forfeits_irrelevance`), so `verifies` in `suggest.rs` is a filter and `Fold::check` is the guarantee.
 - Nothing invisible: what a tool finds is written into the source. Witness resolution is invisible and re-run on every compile, which is why lemma-keyed resolution is rejected below.
 - A query never writes the store and the engine names no transport's types (`curios-wonder`'s own decisions); JSON belongs to `ask.rs`.
 - Obligations T and V: anything a type or a proof reaches must be total ([Totality of the erased program](../design/language/totality-of-the-erased-program.md)), so a decider is structural, fuelled, or certified.

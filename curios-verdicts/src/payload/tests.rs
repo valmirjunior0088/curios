@@ -6,7 +6,7 @@
 
 use {
     super::*,
-    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, compile_with_units},
+    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Fold},
     curios_text::{Entrypoint, Module},
     curios_utilities::{RootKind, test_support::Temporary},
     curios_wasm::to_bytes,
@@ -82,16 +82,9 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
         };
     }
 
-    let (module, _foreigns) = compile_with_units(
-        DEFAULT_STEP_BUDGET,
-        &scope,
-        &entrypoint,
-        &loader,
-        Some(&verdicts as &dyn Cache),
-        |_| {},
-        |_| {},
-    )
-    .expect("the package compiles");
+    let (module, _foreigns) = Fold::new(DEFAULT_STEP_BUDGET, &scope, Some(&verdicts as &dyn Cache))
+        .compile(&entrypoint, &loader, |_| {}, |_| {})
+        .expect("the package compiles");
 
     // The module's own bytes stand in for machine code: the store digests a payload and never reads it, and nothing here runs one.
     let payload = to_bytes(&module);

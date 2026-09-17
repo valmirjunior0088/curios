@@ -5,7 +5,7 @@
 use {
     crate::run_wasm,
     curios_package::{Entry, Selection, Spelling},
-    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, compile_with_units},
+    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Fold},
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, Overlay, RootSource},
     curios_utilities::test_support::Temporary,
@@ -59,16 +59,9 @@ fn cached(directory: &Path, target: Option<&str>, cache: Option<&dyn Cache>) -> 
     let (entry, units) = resolved(directory, target);
 
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
-    let (module, _foreigns) = compile_with_units(
-        DEFAULT_STEP_BUDGET,
-        &units,
-        &entrypoint,
-        &loader,
-        cache,
-        |_| {},
-        |_| {},
-    )
-    .expect("the package compiles");
+    let (module, _foreigns) = Fold::new(DEFAULT_STEP_BUDGET, &units, cache)
+        .compile(&entrypoint, &loader, |_| {}, |_| {})
+        .expect("the package compiles");
 
     let (system, io) = MockHost::builder().build();
     run_wasm(&module, system, ForeignBindings::empty()).expect("the program runs");
@@ -201,16 +194,9 @@ fn a_file_no_unit_declares_compiles_loose_inside_a_package() {
 
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
     assert!(
-        compile_with_units(
-            DEFAULT_STEP_BUDGET,
-            &units,
-            &entrypoint,
-            &loader,
-            None,
-            |_| {},
-            |_| {}
-        )
-        .is_err(),
+        Fold::new(DEFAULT_STEP_BUDGET, &units, None)
+            .compile(&entrypoint, &loader, |_| {}, |_| {})
+            .is_err(),
         "the package's library is not in a bare file's scope"
     );
 }
@@ -236,18 +222,11 @@ fn a_loose_program_names_std_and_is_refused_sys() {
 
     let (entry, units) = resolved(&root, Some(root.join("sys.crs").to_str().unwrap()));
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
-    let refusal = compile_with_units(
-        DEFAULT_STEP_BUDGET,
-        &units,
-        &entrypoint,
-        &loader,
-        None,
-        |_| {},
-        |_| {},
-    )
-    .map(|_| ())
-    .expect_err("a loose program cannot name /sys")
-    .to_string();
+    let refusal = Fold::new(DEFAULT_STEP_BUDGET, &units, None)
+        .compile(&entrypoint, &loader, |_| {}, |_| {})
+        .map(|_| ())
+        .expect_err("a loose program cannot name /sys")
+        .to_string();
     assert!(
         refusal.contains("`sys` is internal to the standard library"),
         "{refusal}"

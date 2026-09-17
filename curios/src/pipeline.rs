@@ -7,7 +7,7 @@ use {
     curios::{engine, to_cwasm},
     curios_document::Documentation,
     curios_package::{Entry, Program},
-    curios_pipeline::{Cache, CompileError, Progress, compile_with_units, with_units},
+    curios_pipeline::{Cache, CompileError, Fold, Progress},
     curios_text::{Entrypoint, Form, RootSource, UnitSource},
     curios_utilities::Source,
     curios_verdicts::Verdicts,
@@ -113,10 +113,7 @@ pub(crate) fn documentation_of(
     units: &[RootSource],
     store: Option<&Verdicts>,
 ) -> Result<Documentation, CompileError> {
-    let documented = with_units(
-        budget,
-        units,
-        store.map(|store| store as &dyn Cache),
+    let documented = Fold::new(budget, units, store.map(|store| store as &dyn Cache)).units(
         |_| {},
         |_, produced| {
             produced
@@ -210,12 +207,9 @@ pub(crate) fn compile_entry(
     let mut line: Option<Line> = None;
 
     // The CLI doesn't yet expose a way to supply `foreign` implementations, so its `ForeignStore` is dropped here.
-    let compiled = compile_with_units(
-        budget,
-        units,
+    let compiled = Fold::new(budget, units, cache).compile(
         entrypoint,
         loader,
-        cache,
         |_| {},
         |progress| report(&mut line, subject, has_units, progress),
     );

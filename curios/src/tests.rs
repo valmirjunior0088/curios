@@ -42,9 +42,7 @@ mod wasm_conformance;
 
 use {
     crate::{run_wasm, to_cwasm},
-    curios_pipeline::{
-        DEFAULT_STEP_BUDGET, EntryTail, Stage, compile_tests_with_units, compile_with_prelude,
-    },
+    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold, Stage, compile_with_prelude},
     curios_runtime::{ForeignBindings, HostOps, MockHost, run_bytes},
     curios_text::{Entrypoint, RootSource},
 };
@@ -138,17 +136,15 @@ fn error(source: &str) -> String {
 /// Compile `source` as its own test program — the synthesized `Test/main` tail over its declared tests in place of the authored one — and run it under a fresh mock host with no arguments, returning what it wrote. Success is asserted: a fixture about a failing run reaches for the pieces itself.
 fn run_tests_program(source: &str) -> Vec<u8> {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
-    let (module, _foreigns, _records) = compile_tests_with_units(
-        DEFAULT_STEP_BUDGET,
-        &[],
-        &entrypoint,
-        &RootSource::none(),
-        None,
-        EntryTail::Tests,
-        |_| {},
-        |_| {},
-    )
-    .expect("fixture compiles as a test program");
+    let (module, _foreigns, _records) = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+        .tests(
+            &entrypoint,
+            &RootSource::none(),
+            EntryTail::Tests,
+            |_| {},
+            |_| {},
+        )
+        .expect("fixture compiles as a test program");
 
     let (system, io) = MockHost::builder().build();
     run_wasm(&module, system, ForeignBindings::empty()).expect("the test program runs");
@@ -161,21 +157,19 @@ fn ersd_optm_tests(source: &str) -> curios_ersd::Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let mut captured = None;
-    compile_tests_with_units(
-        DEFAULT_STEP_BUDGET,
-        &[],
-        &entrypoint,
-        &RootSource::none(),
-        None,
-        EntryTail::Tests,
-        |stage| {
-            if let Stage::ErsdOptm(module) = stage {
-                captured = Some(module.clone());
-            }
-        },
-        |_| {},
-    )
-    .expect("fixture compiles as a test program");
+    Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+        .tests(
+            &entrypoint,
+            &RootSource::none(),
+            EntryTail::Tests,
+            |stage| {
+                if let Stage::ErsdOptm(module) = stage {
+                    captured = Some(module.clone());
+                }
+            },
+            |_| {},
+        )
+        .expect("fixture compiles as a test program");
 
     captured.expect("the pipeline emits the optimized Ersd stage")
 }
