@@ -588,7 +588,7 @@ impl<'a> Table<'a> {
             .clone()
     }
 
-    /// The instruction sequence a refusal is: the class's message, forced to its payload, handed to `sys.panic`, and the `unreachable` that keeps the block's type. Spelled once for the code emitter, the region context and the rope helpers alike. The message const is a rope leaf — [`refusal_data`] asserts as much — so it forces through `$bytes/force` exactly as a `Bytes` host operand does.
+    /// The instruction sequence a refusal is: the class's message, forced to its payload, handed to `sys.panic`, and the `unreachable` that keeps the block's type. Spelled once for the code emitter, the region context and the rope helpers alike. The message const is a rope leaf — [`refusal_data`](super::refusal_data) asserts as much — so it forces through `$bytes/force` exactly as a `Bytes` host operand does.
     pub(crate) fn refuse_instrs(&self, panic: curios_cont::Panic) -> Vec<curios_wasm::Instr> {
         vec![
             curios_wasm::Instr::GlobalGet {
