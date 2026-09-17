@@ -620,6 +620,30 @@ fn a_literal_mentioned_in_several_types_is_folded_once() {
 ///
 /// # What it last printed
 ///
+/// Taken **2026-09-17**, **debug**, on `x86_64-unknown-linux-gnu`, with the literal's certificate `True/qed()` against the decided `Str/Valid`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
+///
+/// ```text
+///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
+///   Str literal, n=250           25832       2      23784         62091       27078       6      20934             0     1.0x
+///   Str literal, n=500           39445       1      38421         62122       39485       1      38461             0     1.0x
+///   Str literal, n=1000          73945       1      72921         62184       73985       1      72961             0     1.0x
+///   Str literal, n=2000         142945       1     141921         62309      142985       1     141961             0     1.0x
+///   Str literal, n=4000         280945       1     279921         62559      280985       1     279961             0     1.0x
+///   Str literal, n=8000         556945       1     555921         63059      556985       1     555961             0     1.0x
+///   Str n=500, 1 uses            39445       1      38421         62286       39485       1      38461             0     1.0x
+///   Str n=500, 3 uses            39445       1      38421         62286       39485       1      38461             0     1.0x
+///   Bytes literal, n=500         25832       2      23784         61809       25534       6      19390             0     1.0x
+///   Str n=500, sliced            39445       1      38421         62145       39485       1      38461             0     1.0x
+/// ```
+///
+/// **A character costs 69 units on each checker**, where it cost 45 in the table below. Every change to `/std/Str` and to both checkers since then lies between the two, the certificate's among them, and which of them moved the price was not bisected. Dividing the default budget by it puts the ceiling near 434 000 characters, by arithmetic rather than by bisection. The kernel's peak depth on a literal is 1, where it was 2.
+///
+/// **The `n=250` and `Bytes` rows no longer measure a literal.** Each checker reports its heaviest declaration, and in those two programs that is none of the program's own: a program that only prints is refused below about 26 000 units on standard-library terms — `Eql(B)` at 20 000, `Write(Async, Serial)` at 25 000 — so the floor is work every compilation repeats over `/std`, which has grown since the table below, `Write(Async, Serial)` among it. The `Bytes` control says nothing about a proof-free literal until that floor sits below one again.
+///
+/// **The elaborator's retention is flat**: 62 091 to 63 059 units across the ladder, about one unit per eight characters, where it grew by four a character.
+///
+/// # What it printed on 2026-08-22
+///
 /// Taken **2026-08-22**, **release**, on `x86_64-unknown-linux-gnu`, with the elaborator's conversion forcing a folded recursive call before comparing it, a window comparing equal to itself by identity, and the declaration-scoped memo tables no longer charged against the allowance.
 ///
 /// ```text
