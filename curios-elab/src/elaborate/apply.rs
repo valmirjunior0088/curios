@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::{ArgumentSite, SettleTier, callee, exhausted_bound},
+    crate::{ArgumentSite, FrozenFrame, SettleTier, callee, exhausted_bound},
     curios_core::Spelling,
 };
 
@@ -125,28 +125,41 @@ pub(super) fn insert_auto_argument(
     let binder = binder_name(label);
 
     match plicity {
-        // An obligation already decided in the goal's favour is filled here rather than deferred, because *here* is where the facts that decide it are in scope. A scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established at the call and nowhere afterwards — a hole minted now and swept at the item boundary would be reduced with the refinement already out of scope, and would report as uninferred against a caller who did establish it.
+        // An obligation already decided in the goal's favour is filled here, because *here* is where the facts that decide it are in scope: a scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established at the call and nowhere afterwards, and the inhabitant written here sits inside that arm. A bound not yet decided because its subject still waits on a metavariable — one a later argument or the expectation pins — is parked instead, and filled once the subject is known ([`attempt_discharge`]).
         Plicity::Implicit => {
-            let (reduced, inhabitant) = trivially_inhabited(context, type_).map_err(|error| {
-                let site = callee(context, func).slot("bound", &binder, &Spelling::default());
-                exhausted_bound(context, error, type_, site)
-            })?;
-            Ok(inhabitant.unwrap_or_else(|| {
-                // Whether the slot is a bound or a value is decided here, where the sort can still be asked, and kept on the birth record for the report an unsolved one becomes — with what the bound reduced to, when that is an inductive type the report can name.
-                let proposition = crate::is_prop(context, type_).unwrap_or(false);
-                let reduct =
-                    (proposition && matches!(&*reduced, Subterm::InductType(_))).then_some(reduced);
-                context.fresh_metavar(
-                    type_.clone(),
-                    origin.span(),
-                    ImplicitOrigin {
-                        func: func.to_string(),
-                        binder: binder.clone(),
+            let provenance = ImplicitOrigin {
+                func: func.to_string(),
+                binder,
+            };
+            let (reduced, inhabitant) = trivially_inhabited(context, type_)
+                .map_err(|error| bound_exhausted(context, error, type_, &provenance))?;
+            if let Some(inhabitant) = inhabitant {
+                return Ok(inhabitant);
+            }
+
+            // Whether the slot is a bound or a value is decided here, where the sort can still be asked, and kept on the birth record for the report an unsolved one becomes — with what the bound reduced to, when that is an inductive type the report can name.
+            let proposition = crate::is_prop(context, type_).unwrap_or(false);
+            let waiting = proposition && waits_on_metavariable(context, &reduced);
+            let reduct =
+                (proposition && matches!(&*reduced, Subterm::InductType(_))).then_some(reduced);
+            let (slot, hole) = context.fresh_metavar(
+                type_.clone(),
+                origin.span(),
+                provenance.clone(),
+                proposition,
+                reduct,
+            );
+            if waiting && !context.parking_suppressed() {
+                context.park(
+                    ParkedWork::Discharge {
+                        slot,
+                        bound: type_.clone(),
+                        provenance,
                     },
-                    proposition,
-                    reduct,
-                )
-            }))
+                    origin.clone(),
+                );
+            }
+            Ok(hole)
         }
         Plicity::Witness => {
             let provenance = WitnessOrigin {
@@ -160,6 +173,83 @@ pub(super) fn insert_auto_argument(
         }
         Plicity::Explicit => unreachable!("explicit slots are never auto-filled"),
     }
+}
+
+/// Try a bound standing as the hole `slot` once more: fill the hole if the bound has come to truth, record what it reduced to if it came to anything else, and answer whether it still waits on a metavariable.
+///
+/// The fill is a metavariable solution, spliced wherever the hole travelled — past the arm it was minted in, when unification carried it out — so the bound is reduced with every live refinement withheld. A bound true only inside an arm stays unfilled and is reported; the eager attempt at insertion, which writes its inhabitant into the arm itself, is the one that may use them.
+pub(crate) fn attempt_discharge(
+    context: &mut Context,
+    slot: MetavarId,
+    bound: &Term,
+    provenance: &ImplicitOrigin,
+) -> Result<bool, Error> {
+    if context.metavar_solution(slot).is_some() {
+        return Ok(false);
+    }
+    let (reduced, inhabitant) = context
+        .with_suppressed_refinements(|context| trivially_inhabited(context, bound))
+        .map_err(|error| bound_exhausted(context, error, bound, provenance))?;
+    if let Some(inhabitant) = inhabitant {
+        context.solve_metavar(slot, inhabitant);
+        return Ok(false);
+    }
+    if waits_on_metavariable(context, &reduced) {
+        return Ok(true);
+    }
+    if matches!(&*reduced, Subterm::InductType(_)) {
+        context.note_reduct(slot, reduced);
+    }
+    Ok(false)
+}
+
+/// Retry a parked discharge under the frame it was parked in ([`attempt_discharge`]), parking it again while it still waits.
+pub(crate) fn retry_discharge(
+    context: &mut Context,
+    slot: MetavarId,
+    bound: Term,
+    provenance: ImplicitOrigin,
+    origin: Term,
+    frame: FrozenFrame,
+) -> Result<(), Error> {
+    let waiting = context
+        .with_frame(|context| {
+            context.restore_frame(&frame);
+            attempt_discharge(context, slot, &bound, &provenance)
+        })
+        .map_err(|error| error.at_opt(origin.span()))?;
+    if waiting {
+        context.repark(
+            ParkedWork::Discharge {
+                slot,
+                bound,
+                provenance,
+            },
+            origin,
+            frame,
+        );
+    }
+    Ok(())
+}
+
+/// Whether a bound's reduct still waits on an unsolved metavariable, so that a later solution may yet bring it to truth. A reduct that waits on none has said all it will.
+fn waits_on_metavariable(context: &Context, reduct: &Term) -> bool {
+    reduct
+        .metavars()
+        .iter()
+        .any(|id| context.metavar_solution(*id).is_none())
+}
+
+/// An exhausted discharge of a bound, re-reported by the partial definition it names when it names one ([`exhausted_bound`]).
+fn bound_exhausted(
+    context: &Context,
+    error: Error,
+    bound: &Term,
+    provenance: &ImplicitOrigin,
+) -> Error {
+    let site =
+        callee(context, &provenance.func).slot("bound", &provenance.binder, &Spelling::default());
+    exhausted_bound(context, error, bound, site)
 }
 
 /// A binder's user-facing name: its minting hint, or `_` where it has none.

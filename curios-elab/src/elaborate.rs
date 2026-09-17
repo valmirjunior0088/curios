@@ -1,6 +1,6 @@
 mod apply;
 use apply::*;
-pub(crate) use apply::{SlotPositions, ordinal, premise_label};
+pub(crate) use apply::{SlotPositions, attempt_discharge, ordinal, premise_label, retry_discharge};
 
 mod aggregate;
 use aggregate::*;

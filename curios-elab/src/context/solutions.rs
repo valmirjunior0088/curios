@@ -5,7 +5,9 @@
 use {
     super::{FrozenFrame, ItemStamp, SharedTelescope},
     crate::Problem,
-    curios_core::{Bound, Metavar, MetavarId, MetavarOrigin, Subterm, Term, WitnessOrigin},
+    curios_core::{
+        Bound, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, Subterm, Term, WitnessOrigin,
+    },
     curios_utilities::Entropy,
     std::{collections::BTreeSet, mem},
 };
@@ -23,7 +25,7 @@ pub(crate) struct MetaEntry {
     pub kind: MetaKind,
     /// Whether `result` is a proposition, decided once where an omitted implicit is minted. It is what tells a *bound* nothing discharged — `Nat/Lt(i, n)`, the whole of why a call was refused — from a type argument nothing determined, `@T: Type`, which never was an obligation; the report reads differently for the two, and zonk, which raises it, holds the context immutably and cannot ask the sort itself.
     pub proposition: bool,
-    /// What `result` reduced to when the mint asked whether it was decided, kept when that is an inductive type: the reduct — `False` — is what the unsolved report says beside the bound's spelling, and the report cannot reduce for itself.
+    /// What `result` reduced to when the mint — or a later attempt at a parked discharge — asked whether it was decided, kept when that is an inductive type: the reduct — `False` — is what the unsolved report says beside the bound's spelling, and the report cannot reduce for itself.
     pub reduct: Option<Term>,
 }
 
@@ -49,6 +51,12 @@ pub(crate) enum ParkedWork {
         slot: MetavarId,
         goal: Term,
         provenance: WitnessOrigin,
+    },
+    /// A decided bound nothing discharged when it was inserted, because its subject still waited on a metavariable — one a later argument or the expectation pins. `slot` is the hole standing in the bound's place, `bound` its type. Woken when a watched metavariable solves; the bound is reduced again and the hole filled if it came to truth.
+    Discharge {
+        slot: MetavarId,
+        bound: Term,
+        provenance: ImplicitOrigin,
     },
 }
 
@@ -250,6 +258,11 @@ impl Solutions {
                 .filter(|id| self.solution(*id).is_none())
                 .collect(),
             ParkedWork::Witness { goal, .. } => goal
+                .metavars()
+                .into_iter()
+                .filter(|id| self.solution(*id).is_none())
+                .collect(),
+            ParkedWork::Discharge { bound, .. } => bound
                 .metavars()
                 .into_iter()
                 .filter(|id| self.solution(*id).is_none())

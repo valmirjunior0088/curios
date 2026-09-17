@@ -523,10 +523,11 @@ fn instantiate(
     };
     let span = origin.span();
 
-    let (args, premises, terminal) = match &*signature {
+    let (args, premises, bounds, terminal) = match &*signature {
         Subterm::FuncType(ft) => {
             let mut args: Vec<(Plicity, Term)> = Vec::with_capacity(ft.plicities().len());
             let mut premises: Vec<(MetavarId, Term, WitnessOrigin)> = Vec::new();
+            let mut bounds: Vec<(MetavarId, Term, ImplicitOrigin)> = Vec::new();
             let mut positions = crate::SlotPositions::default();
             let mut tele = ft.telescope.clone();
             for plicity in ft.plicities() {
@@ -538,16 +539,21 @@ fn instantiate(
                 let arg = match plicity {
                     Plicity::Implicit => {
                         let proposition = crate::is_prop(context, &ty).unwrap_or(false);
-                        context.fresh_metavar(
+                        let provenance = ImplicitOrigin {
+                            func: witness.name.symbol(),
+                            binder,
+                        };
+                        let (slot, hole) = context.fresh_metavar(
                             ty.clone(),
                             span.clone(),
-                            ImplicitOrigin {
-                                func: witness.name.symbol(),
-                                binder,
-                            },
+                            provenance.clone(),
                             proposition,
                             None,
-                        )
+                        );
+                        if proposition {
+                            bounds.push((slot, ty.clone(), provenance));
+                        }
+                        hole
                     }
                     Plicity::Witness => {
                         let provenance = WitnessOrigin {
@@ -572,9 +578,9 @@ fn instantiate(
             let Telescope::Done(terminal) = tele else {
                 unreachable!("plicities parallel the telescope");
             };
-            (args, premises, *terminal)
+            (args, premises, bounds, *terminal)
         }
-        _ => (Vec::new(), Vec::new(), signature),
+        _ => (Vec::new(), Vec::new(), Vec::new(), signature),
     };
 
     // Instantiated premise types must reflect solutions the terminal unification lands, so unify first, then resolve premises.
@@ -611,6 +617,21 @@ fn instantiate(
     }
     for (id, type_, provenance) in premises {
         attempt_witness_goal(context, id, &type_, provenance, origin)?;
+    }
+    // A bound in the telescope is decided by the parameters the goal just pinned, so it is tried only now; one still waiting on a metavariable is parked like a premise on a flex key.
+    for (slot, bound, provenance) in bounds {
+        if super::attempt_discharge(context, slot, &bound, &provenance)?
+            && !context.parking_suppressed()
+        {
+            context.park(
+                ParkedWork::Discharge {
+                    slot,
+                    bound,
+                    provenance,
+                },
+                origin.clone(),
+            );
+        }
     }
 
     let term = match args.is_empty() {

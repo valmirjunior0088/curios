@@ -1277,7 +1277,7 @@ impl Context {
         self.solutions.seed_floor(floor);
     }
 
-    /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns the metavariable term carrying the *call site's* span and the insertion provenance (which rides on the node; see [`Metavar::origin`]). `proposition` is whether `result` is one, decided by the caller, which has the sort in hand; it is kept on the birth record for the unsolved report, which cannot ask.
+    /// Mint a metavariable for an omitted implicit argument and birth it immediately — frozen local Γ, the binder's instantiated type as `result` — so the id always has a birth record. Returns its id beside the metavariable term carrying the *call site's* span and the insertion provenance (which rides on the node; see [`Metavar::origin`]). `proposition` is whether `result` is one, decided by the caller, which has the sort in hand; it is kept on the birth record for the unsolved report, which cannot ask.
     pub(crate) fn fresh_metavar(
         &mut self,
         result: Term,
@@ -1285,7 +1285,7 @@ impl Context {
         origin: ImplicitOrigin,
         proposition: bool,
         reduct: Option<Term>,
-    ) -> Term {
+    ) -> (MetavarId, Term) {
         let (id, metavar) = self.fresh_metavar_with(result, span, MetavarOrigin::Implicit(origin));
         if proposition {
             self.solutions.mark_proposition(id);
@@ -1293,7 +1293,12 @@ impl Context {
         if let Some(reduct) = reduct {
             self.solutions.note_reduct(id, reduct);
         }
-        metavar
+        (id, metavar)
+    }
+
+    /// Record what an unsolved bound's type reduced to when a later attempt asked, for the report the hole becomes.
+    pub(crate) fn note_reduct(&mut self, id: MetavarId, reduct: Term) {
+        self.solutions.note_reduct(id, reduct);
     }
 
     /// Mint a metavariable for an omitted `use` argument — like [`Context::fresh_metavar`] but carrying witness provenance, and returning the id so the caller can register the resolution goal.

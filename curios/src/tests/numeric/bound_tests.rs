@@ -334,3 +334,95 @@ fn an_undischarged_bound_is_named_in_the_refusal() {
         "expected the refusal to name the bound, got: {error}"
     );
 }
+
+// A bound is tried when it is inserted, where an arm's refinements are in scope — but its subject may not be known yet. Here a later argument pins `n`, after `ok` was inserted over an unsolved `n`; the bound is parked and discharged once the subject is known, instead of reported with the subject already substituted into it.
+#[test]
+fn a_bound_whose_subject_a_later_argument_pins_discharges() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Bool, Eq};
+        let need(@n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq(n, 3)) -> Nat = n;
+        let g: Nat = need(Eq/refl());
+        /std/print(Nat/to_str(g))
+        "#),
+        b"3"
+    );
+}
+
+// The expectation pins the subject only at the call's turnaround, after every argument was inserted: the shape of any constructor indexed by a value whose bound is an implicit.
+#[test]
+fn a_bound_whose_subject_the_expected_type_pins_discharges() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Bool, Vec};
+        let mk(@n: Nat, @_ok: Bool/Holds(n < 10)) -> Vec(Nat, n) = Vec/replicate(n, 0);
+        let v: Vec(Nat, 3) = mk();
+        /std/print(Nat/to_str(Vec/len(v)))
+        "#),
+        b"3"
+    );
+}
+
+// A witness's telescope is instantiated before the goal pins its parameters, so its bounds are tried once the goal has unified with its head.
+#[test]
+fn a_bound_in_a_witness_telescope_discharges_once_the_goal_pins_it() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Bool, Str, Show};
+        struct Small(n: Nat): pub Type { Nat }
+        satisfy (@n: Nat, @_ok: Bool/Holds(n < 10)) => Show(Small(n)) { show(_s) = "small" }
+        /std/print(Show/show(Small(3) { 0 }))
+        "#),
+        b"small"
+    );
+}
+
+// A late subject that makes the bound false is refused, and the refusal says what the bound came to, which the insertion could not: the bound was still waiting then.
+#[test]
+fn a_late_pinned_bound_that_fails_reports_what_it_reduces_to() {
+    let error = typecheck(
+        r#"
+        use /std/{Nat, Bool, Eq};
+        let need(@n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq(n, 30)) -> Nat = n;
+        let g: Nat = need(Eq/refl());
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("30 is not below 10");
+
+    assert!(
+        error.contains("nothing discharged Bool/Holds(30 < 10), which reduces to False"),
+        "unexpected report: {error}"
+    );
+}
+
+// A late fill is a metavariable solution, which may be spliced past the arm it was minted in, so it is decided without the arm's refinements: a bound true only under `m < 10` is still refused when its subject arrives late. Written first — `need(@m, …)` — the same bound is filled at insertion, inside the arm.
+#[test]
+fn a_late_pinned_bound_that_holds_only_under_a_refinement_is_still_refused() {
+    let error = typecheck(
+        r#"
+        use /std/{Nat, Bool, Eq};
+        let need(m: Nat, @n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq(n, m)) -> Nat = n;
+        let f(m: Nat) -> Nat =
+            match m < 10 | true => need(m, Eq/refl()) | false => 0 end;
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("the refinement is withheld from a late fill");
+
+    assert!(
+        error.contains("nothing discharged Bool/Holds(m < 10)"),
+        "unexpected report: {error}"
+    );
+
+    typecheck(
+        r#"
+        use /std/{Nat, Bool, Eq};
+        let need(m: Nat, @n: Nat, @_ok: Bool/Holds(n < 10), _witness: Eq(n, m)) -> Nat = n;
+        let f(m: Nat) -> Nat =
+            match m < 10 | true => need(m, @m, Eq/refl()) | false => 0 end;
+        /std/print("ok")
+        "#,
+    )
+    .expect("written first, the bound is filled inside the arm");
+}

@@ -68,7 +68,7 @@ pub(super) fn elaborate_struct_type(
         while let Telescope::Cons(ty, rest) = tele {
             let binder = binder_name(rest.first_hint());
             let proposition = crate::is_prop(context, &ty).unwrap_or(false);
-            let arg = context.fresh_metavar(
+            let (_, arg) = context.fresh_metavar(
                 ty.clone(),
                 term.span(),
                 ImplicitOrigin {
@@ -336,16 +336,18 @@ pub(super) fn resolve_struct_params(
             None => {
                 let binder = binder_name(rest.first_hint());
                 let proposition = crate::is_prop(context, &ty).unwrap_or(false);
-                context.fresh_metavar(
-                    ty.clone(),
-                    term.span(),
-                    ImplicitOrigin {
-                        func: name.to_string(),
-                        binder,
-                    },
-                    proposition,
-                    None,
-                )
+                context
+                    .fresh_metavar(
+                        ty.clone(),
+                        term.span(),
+                        ImplicitOrigin {
+                            func: name.to_string(),
+                            binder,
+                        },
+                        proposition,
+                        None,
+                    )
+                    .1
             }
         };
         tele = rest.open(&[&arg]);

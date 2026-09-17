@@ -650,6 +650,8 @@ impl Context {
                             )
                             .at_opt(parked_origin.span())
                         }
+                        // A bound that never came to truth is its hole's to report: zonk names the binder and the bound, which is the report such a hole gets whether or not it was ever parked.
+                        ParkedWork::Discharge { .. } => continue,
                     });
                 }
                 return Ok(());
@@ -763,6 +765,11 @@ fn retry_one(context: &mut Context, parked: super::ParkedProblem) -> Result<(), 
             goal,
             provenance,
         } => return super::retry_witness(context, slot, goal, provenance, origin, frame),
+        ParkedWork::Discharge {
+            slot,
+            bound,
+            provenance,
+        } => return super::retry_discharge(context, slot, bound, provenance, origin, frame),
     };
 
     enum Retry {
