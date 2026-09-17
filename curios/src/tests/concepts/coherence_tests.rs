@@ -20,7 +20,7 @@ fn duplicate_witness_is_an_error() {
         /std/print(Show/show(n))
         "#;
 
-    // Both the concept and the declaring module are pinned, not just the word "witness". The module is the *coarse* coordinate the report gives, and it comes from each definition's `island` rather than from splitting the compiler-minted `witness@N` name; the caret below is what locates the declaration itself, which a module cannot when it holds several. Matched on the message body: the `while elaborating …` prefix names the minted `witness@N`, which Phase C of the name-identity work replaces.
+    // Both the concept and the declaring module are pinned, not just the word "witness". The module is the *coarse* coordinate the report gives, and it comes from each definition's `island` rather than from the witness's identity; the caret below is what locates the declaration itself, which a module cannot when it holds several. Matched on the message body, since the `while elaborating …` prefix names the witness only by its module.
     let rendered = error(source);
     assert!(
         rendered.contains(

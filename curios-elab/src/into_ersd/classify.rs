@@ -8,7 +8,7 @@ use {
     std::collections::BTreeSet,
 };
 
-/// Whether a value of type `type_` is dropped at runtime. Erasure is sort-driven: a value erases iff it is a *type/prop-as-value* (`type_` reduces to the universe `Type` or `Prop`), a *genuine proposition* — a `Prop`-sorted nominal/neutral type (`Eq`, `False`, `Le`, `Utf8`, a stuck `Nat/Lt` match) whose inhabitants are pure proof-irrelevant witnesses — or a *function into* such a thing (a proof-/type-producing function is itself pure content-free).
+/// Whether a value of type `type_` is dropped at runtime. Erasure is sort-driven: a value erases iff it is a *type/prop-as-value* (`type_` reduces to the universe `Type` or `Prop`), a *genuine proposition* — a `Prop`-sorted nominal/neutral type (`Eq`, `False`, a stuck `Bool/Holds` match such as `Nat/Lt(a, b)` over symbolic operands) whose inhabitants are pure proof-irrelevant witnesses — or a *function into* such a thing (a proof-/type-producing function is itself pure content-free).
 ///
 /// [`Sort::of`](crate::Sort::of) classifies the empty tuple `{}` as `Type`, not a prop — `{}` is the result type of effects (`print`'s `let _ = write(..); ()`) and must be kept — so `{}`, `{ .., {} }`, and `X -> {}` are not erased. A `FuncType` erases only when its ultimate codomain does, recursing past the parameters into the return type, which lands on `{}` (kept) or on a genuine proposition / universe (erased). Every std `@`-marker was either such a proposition/type or a function returning one, so this stays output-equivalent.
 ///

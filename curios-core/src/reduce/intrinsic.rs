@@ -1071,7 +1071,7 @@ pub fn reduce_intrinsic(
                 }
                 None => {}
             }
-            // A slice over a cons spine peels one generator per `0`/`succ` boundary step — the reduction partner of the `Utf8` cons the validity proofs walk:  `slice(cons(h, t), 0, succ n) = h ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)`.
+            // A slice over a cons spine peels one generator per `0`/`succ` boundary step — the reduction partner of the `x[c, ..t]` cons `/std/Str/Valid`'s proofs walk:  `slice(cons(h, t), 0, succ n) = h ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)`.
             //
             // Advancing the start no longer touches the length, which is the reparameterisation paying for itself: the count is invariant under peeling the base, so nothing about the window has to be recomputed to move it.
             if let Some((head, tail)) = peel_first_atom(grain, &bin) {

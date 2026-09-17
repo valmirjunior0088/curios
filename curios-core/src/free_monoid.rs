@@ -89,7 +89,7 @@ impl FreeMonoid {
     }
 }
 
-/// A leading generator peeled off a `Bin` value: a concrete byte (`Literal`) or the symbolic byte of a `Utf8` cons `append(x[], c)` (`Symbolic`). Kept abstract so each destructor reflects it into the shape its consumer wants — the eliminator into a `Nat`, `Bin/get`/`Bin/slice` into a one-byte `Bin` chunk.
+/// A leading generator peeled off a `Bin` value: a concrete byte (`Literal`) or the symbolic byte of a cons `append(x[], c)`, the head `x[c, ..t]` lowers to (`Symbolic`). Kept abstract so each destructor reflects it into the shape its consumer wants — the eliminator into a `Nat`, `Bin/get`/`Bin/slice` into a one-byte `Bin` chunk.
 enum Head {
     LiteralBit(bool),
     LiteralByte(u8),
@@ -106,7 +106,7 @@ impl Head {
         }
     }
 
-    /// Reflect into a length-1 `Bin` chunk — the cons head `Bin/get`/`Bin/slice` rebuild as `head ++ tail` (`get(head, 0)` is the byte; a `Utf8` cons head stays the symbolic `append(x[], c)`).
+    /// Reflect into a length-1 `Bin` chunk — the cons head `Bin/get`/`Bin/slice` rebuild as `head ++ tail` (`get(head, 0)` is the byte; a symbolic cons head stays `append(x[], c)`).
     fn into_chunk(self, grain: Grain) -> Term {
         match self {
             Head::LiteralBit(bit) => {
@@ -140,7 +140,7 @@ enum BinLevel<'a> {
     Concat(&'a [Term]),
 }
 
-/// The structural traversal shared by both `Bin` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bin/get`/`Bin/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a `Utf8` cons `append(x[], c)` yields its symbolic byte; a concatenation descends into its first operand so a literal- or cons-led `BinConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`x[]`-based append) is `Opaque`.
+/// The structural traversal shared by both `Bin` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bin/get`/`Bin/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a cons `append(x[], c)` yields its symbolic byte; a concatenation descends into its first operand so a literal- or cons-led `BinConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`x[]`-based append) is `Opaque`.
 ///
 /// Two phases over a [`BinLevel`] stack: descend the leading edge to the value that actually carries the first generator, then rebuild outward, each level rejoining what it was holding. `Opaque` propagates through both level kinds, and a concatenation whose first operand exposes no generator is itself opaque — a reduced `BinConcat` has no empty operands, so that case is a leading variable or slice.
 fn peel_front(grain: Grain, bin: &Term) -> Front {
@@ -244,7 +244,7 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
     front
 }
 
-/// Split the first byte off a reduced `Bin` value, returning a length-1 head chunk and the residual tail. Where `peel_bin` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructors `Bin/get` and `Bin/slice` walk an atom at a time, exposing the cons structure the `Utf8` relation builds (`concat(append(x[], h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
+/// Split the first byte off a reduced `Bin` value, returning a length-1 head chunk and the residual tail. Where `peel_bin` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructors `Bin/get` and `Bin/slice` walk an atom at a time, exposing the cons structure a symbolic `x[h, ..t]` builds (`concat(append(x[], h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
 pub(crate) fn peel_first_atom(grain: Grain, bin: &Term) -> Option<(Term, Term)> {
     match peel_front(grain, bin) {
         Front::Cons { head, tail } => Some((head.into_chunk(grain), tail)),
