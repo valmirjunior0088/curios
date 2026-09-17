@@ -10,15 +10,15 @@ use {
         optimize::optimize,
     },
     crate::{
-        CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral, CpsModule,
-        CpsNode, CpsValueId, atoms,
+        Atom, Callee, Continuation, Edge, Function, FunctionId, Literal, Module, Node, ValueId,
+        atoms,
     },
     std::collections::BTreeMap,
 };
 
 /// Two functions in one group, each applying its own parameter and passing a reference onward: `a(p) = p(b)`, and `b(q) = q(a)` when `mutual`, else `b(q) = q(1)`. `main` calls `a(b)`. Neither ever calls the other by name, so the knot exists only in the references — which is the whole point.
-fn two_functions_passing_references(mutual: bool) -> (CpsModule, CpsFunId, CpsFunId) {
-    let mut module = CpsModule::new();
+fn two_functions_passing_references(mutual: bool) -> (Module, FunctionId, FunctionId) {
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
     let a = module.reserve_function();
@@ -27,14 +27,14 @@ fn two_functions_passing_references(mutual: bool) -> (CpsModule, CpsFunId, CpsFu
     let b_return = module.reserve_continuation();
 
     let p = module.add_value(Some("p".into()));
-    let a_body = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Closure(p),
-        args: vec![CpsAtom::Fun(b)],
+    let a_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(p),
+        args: vec![Atom::Fun(b)],
         return_to: a_return,
     });
     module.define_function(
         a,
-        CpsFunction {
+        Function {
             debug_name: Some("a".into()),
             params: vec![p],
             return_cont: a_return,
@@ -43,17 +43,17 @@ fn two_functions_passing_references(mutual: bool) -> (CpsModule, CpsFunId, CpsFu
     );
 
     let q = module.add_value(Some("q".into()));
-    let b_body = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Closure(q),
+    let b_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(q),
         args: vec![match mutual {
-            true => CpsAtom::Fun(a),
-            false => CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            true => Atom::Fun(a),
+            false => Atom::Literal(Literal::Nat(Natural::from(1u32))),
         }],
         return_to: b_return,
     });
     module.define_function(
         b,
-        CpsFunction {
+        Function {
             debug_name: Some("b".into()),
             params: vec![q],
             return_cont: b_return,
@@ -61,19 +61,19 @@ fn two_functions_passing_references(mutual: bool) -> (CpsModule, CpsFunId, CpsFu
         },
     );
 
-    let call_a = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(a),
-        args: vec![CpsAtom::Fun(b)],
+    let call_a = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(a),
+        args: vec![Atom::Fun(b)],
         return_to: entry_return,
     });
     // One group, because each body must be able to name the other: mutual recursion is the shape that produces a multi-member `LetFun`.
-    let body = module.add_node(CpsNode::LetFun {
+    let body = module.add_node(Node::LetFun {
         functions: vec![a, b],
         body: call_a,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -87,7 +87,7 @@ fn two_functions_passing_references(mutual: bool) -> (CpsModule, CpsFunId, CpsFu
 
 #[test]
 fn a_knot_of_function_references_is_recursive_though_neither_body_calls_the_other() {
-    // Neither `a` nor `b` holds a `Known` callee naming the other, so the body-only call graph is empty of edges between them and the verdict has to come from the references. It must, because an inline reproduces a `CpsAtom::Fun` exactly as it reproduces a nested definition, and substituting one into a closure callee turns it into a call: without the edge these two devirtualize into each other with period four, growing nothing and so tripping no size limit, until the sweep and then the round limit run out.
+    // Neither `a` nor `b` holds a `Known` callee naming the other, so the body-only call graph is empty of edges between them and the verdict has to come from the references. It must, because an inline reproduces a `Atom::Fun` exactly as it reproduces a nested definition, and substituting one into a closure callee turns it into a call: without the edge these two devirtualize into each other with period four, growing nothing and so tripping no size limit, until the sweep and then the round limit run out.
     let (mutual, a, b) = two_functions_passing_references(true);
     let analysis = analyze_calls(&mutual);
     assert!(analysis.recursive.contains(&a), "`a` lies on the knot");
@@ -111,8 +111,8 @@ enum FeedShape {
 }
 
 /// `g(p, n) = let _ = p() in g(p, n)`, a self-recursive member whose closure parameter every entry feeds the same function `f`, called once from `h() = g(f, 0)`.
-fn a_recursive_member_fed_one_function(shape: FeedShape) -> (CpsModule, CpsValueId) {
-    let mut module = CpsModule::new();
+fn a_recursive_member_fed_one_function(shape: FeedShape) -> (Module, ValueId) {
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
     let g = module.reserve_function();
@@ -122,13 +122,13 @@ fn a_recursive_member_fed_one_function(shape: FeedShape) -> (CpsModule, CpsValue
     let f = module.reserve_function();
     let f_return = module.reserve_continuation();
 
-    let f_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let f_body = module.add_node(Node::ApplyCont(Edge {
         target: f_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
     }));
     module.define_function(
         f,
-        CpsFunction {
+        Function {
             debug_name: Some("f".into()),
             params: vec![],
             return_cont: f_return,
@@ -139,32 +139,32 @@ fn a_recursive_member_fed_one_function(shape: FeedShape) -> (CpsModule, CpsValue
     let p = module.add_value(Some("p".into()));
     let n = module.add_value(Some("n".into()));
     let r = module.add_value(Some("r".into()));
-    let again = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(g),
-        args: vec![CpsAtom::Value(p), CpsAtom::Value(n)],
+    let again = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(g),
+        args: vec![Atom::Value(p), Atom::Value(n)],
         return_to: g_return,
     });
     let after_call = module.reserve_continuation();
     module.define_continuation(
         after_call,
-        CpsContinuation {
+        Continuation {
             debug_name: None,
             params: vec![r],
             body: again,
         },
     );
-    let apply_p = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Closure(p),
+    let apply_p = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(p),
         args: vec![],
         return_to: after_call,
     });
-    let g_body = module.add_node(CpsNode::LetCont {
+    let g_body = module.add_node(Node::LetCont {
         continuations: vec![after_call],
         body: apply_p,
     });
     module.define_function(
         g,
-        CpsFunction {
+        Function {
             debug_name: Some("g".into()),
             params: vec![p, n],
             return_cont: g_return,
@@ -172,16 +172,16 @@ fn a_recursive_member_fed_one_function(shape: FeedShape) -> (CpsModule, CpsValue
         },
     );
 
-    let call_g = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(g),
+    let call_g = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(g),
         args: vec![
-            CpsAtom::Fun(f),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            Atom::Fun(f),
+            Atom::Literal(Literal::Nat(Natural::from(0u32))),
         ],
         return_to: h_return,
     });
     let h_body = match shape {
-        FeedShape::Nested => module.add_node(CpsNode::LetFun {
+        FeedShape::Nested => module.add_node(Node::LetFun {
             functions: vec![f],
             body: call_g,
         }),
@@ -189,7 +189,7 @@ fn a_recursive_member_fed_one_function(shape: FeedShape) -> (CpsModule, CpsValue
     };
     module.define_function(
         h,
-        CpsFunction {
+        Function {
             debug_name: Some("h".into()),
             params: vec![],
             return_cont: h_return,
@@ -197,26 +197,26 @@ fn a_recursive_member_fed_one_function(shape: FeedShape) -> (CpsModule, CpsValue
         },
     );
 
-    let call_h = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(h),
+    let call_h = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(h),
         args: vec![],
         return_to: entry_return,
     });
     // Singleton groups chained innermost-outward, so the order they are bound in is the order this list reverses.
-    let order: &[CpsFunId] = match shape {
+    let order: &[FunctionId] = match shape {
         FeedShape::SiblingBefore => &[f, g, h],
         FeedShape::SiblingAfter => &[g, f, h],
         FeedShape::Nested => &[g, h],
     };
     let body = order.iter().rev().fold(call_h, |inner, function| {
-        module.add_node(CpsNode::LetFun {
+        module.add_node(Node::LetFun {
             functions: vec![*function],
             body: inner,
         })
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -235,7 +235,7 @@ fn a_function_reference_reaches_a_recursive_member_only_within_its_scope() {
     // The three shapes are the whole rule. Order decides the two sibling cases, and it is the half an owner-chain reading of scope cannot see: `SiblingAfter` is admitted by every reading that asks only who *encloses* `g`, and refused by the one that asks what was bound before it.
     let (before, p) = a_recursive_member_fed_one_function(FeedShape::SiblingBefore);
     assert!(
-        matches!(known_values(&before).get(&p), Some(CpsAtom::Fun(_))),
+        matches!(known_values(&before).get(&p), Some(Atom::Fun(_))),
         "`f` is bound before `g`, so `g`'s body may name it",
     );
 
@@ -260,17 +260,17 @@ fn sccs_group_cycles_and_stay_deterministic() {
     let graph = call_graph(&[(0, &[1]), (1, &[0, 2]), (2, &[2]), (3, &[])]);
     let sccs = analyze_sccs(&graph);
 
-    let component = |function: u32| sccs.component_of[&CpsFunId(function)];
+    let component = |function: u32| sccs.component_of[&FunctionId(function)];
     assert_eq!(component(0), component(1));
     assert_ne!(component(0), component(2));
     assert_ne!(component(2), component(3));
     assert_eq!(sccs.members.len(), 3);
     assert_eq!(
         sccs.members[component(0)],
-        vec![CpsFunId(0), CpsFunId(1)],
-        "cycle members are reported in CpsFunId order"
+        vec![FunctionId(0), FunctionId(1)],
+        "cycle members are reported in FunctionId order"
     );
-    assert_eq!(sccs.members[component(2)], vec![CpsFunId(2)]);
+    assert_eq!(sccs.members[component(2)], vec![FunctionId(2)]);
 
     let again = analyze_sccs(&graph);
     assert_eq!(sccs.component_of, again.component_of);
@@ -279,7 +279,7 @@ fn sccs_group_cycles_and_stay_deterministic() {
 
 #[test]
 fn known_continuation_values_are_not_substituted_across_scopes() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let seed = module.add_value(Some("seed".into()));
@@ -287,41 +287,41 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
     let forwarded = module.add_value(Some("forwarded".into()));
     let target = module.reserve_continuation();
     let target_param = module.add_value(Some("target".into()));
-    let target_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let target_body = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(target_param)],
+        args: vec![Atom::Value(target_param)],
     }));
     module.define_continuation(
         target,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("target".into()),
             params: vec![target_param],
             body: target_body,
         },
     );
-    let forwarding_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let forwarding_body = module.add_node(Node::ApplyCont(Edge {
         target,
-        args: vec![CpsAtom::Value(forwarded)],
+        args: vec![Atom::Value(forwarded)],
     }));
     module.define_continuation(
         forwarding,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("forwarding".into()),
             params: vec![forwarded],
             body: forwarding_body,
         },
     );
-    let call = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let call = module.add_node(Node::ApplyCont(Edge {
         target: forwarding,
-        args: vec![CpsAtom::Value(seed)],
+        args: vec![Atom::Value(seed)],
     }));
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![forwarding, target],
         body: call,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![seed],
             return_cont,
@@ -338,7 +338,7 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
             .iter()
             .flatten()
             .flat_map(atoms)
-            .all(|atom| atom != &CpsAtom::Value(forwarded))
+            .all(|atom| atom != &Atom::Value(forwarded))
     );
     module.verify().unwrap();
 }
@@ -346,34 +346,34 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
 /// A continuation parameter that every transfer hands the same literal is known, exactly as a function parameter is. The single-transfer case is still beta-reduced outright — `inline_single_use_continuations` needs no literal to do that — and the analysis recording it first costs nothing; what the analysis is *for* is the multi-transfer join below, which nothing else folds.
 #[test]
 fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_same_literal() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let continuation = module.reserve_continuation();
     let parameter = module.add_value(None);
-    let continuation_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let continuation_body = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(parameter)],
+        args: vec![Atom::Value(parameter)],
     }));
     module.define_continuation(
         continuation,
-        CpsContinuation {
+        Continuation {
             debug_name: None,
             params: vec![parameter],
             body: continuation_body,
         },
     );
-    let call = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let call = module.add_node(Node::ApplyCont(Edge {
         target: continuation,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))],
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(7u32)))],
     }));
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![continuation],
         body: call,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: None,
             params: vec![],
             return_cont,
@@ -385,31 +385,31 @@ fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_s
 
     assert_eq!(
         known_values(&module).get(&parameter),
-        Some(&CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))))
+        Some(&Atom::Literal(Literal::Nat(Natural::from(7u32))))
     );
     assert!(inline_single_use_continuations(&mut module));
     assert!(matches!(
         module.node(call),
-        Some(CpsNode::ApplyCont(CpsEdge { args, .. }))
-            if args == &[CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))]
+        Some(Node::ApplyCont(Edge { args, .. }))
+            if args == &[Atom::Literal(Literal::Nat(Natural::from(7u32)))]
     ));
 }
 
 /// A join that is an operation's `return_to` as well as a jump's target learns nothing from the jump, whichever of the two the arena lists first. The call comes first here, which is the order that once left the parameter `Unknown` for the jump to decide.
 #[test]
 fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let callee = module.reserve_function();
     let callee_return = module.reserve_continuation();
-    let callee_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let callee_body = module.add_node(Node::ApplyCont(Edge {
         target: callee_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(3u32)))],
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(3u32)))],
     }));
     module.define_function(
         callee,
-        CpsFunction {
+        Function {
             debug_name: None,
             params: vec![],
             return_cont: callee_return,
@@ -418,33 +418,33 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
     );
     let join = module.reserve_continuation();
     let received = module.add_value(Some("received".into()));
-    let join_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let join_body = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(received)],
+        args: vec![Atom::Value(received)],
     }));
     module.define_continuation(
         join,
-        CpsContinuation {
+        Continuation {
             debug_name: None,
             params: vec![received],
             body: join_body,
         },
     );
     let chooser = module.add_value(Some("chooser".into()));
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(callee),
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
         args: vec![],
         return_to: join,
     });
-    let jump = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let jump = module.add_node(Node::ApplyCont(Edge {
         target: join,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))],
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(7u32)))],
     }));
     let calling = module.reserve_continuation();
     let jumping = module.reserve_continuation();
     module.define_continuation(
         calling,
-        CpsContinuation {
+        Continuation {
             debug_name: None,
             params: vec![],
             body: call,
@@ -452,41 +452,41 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
     );
     module.define_continuation(
         jumping,
-        CpsContinuation {
+        Continuation {
             debug_name: None,
             params: vec![],
             body: jump,
         },
     );
-    let switch = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(chooser),
+    let switch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(chooser),
         cases: BTreeMap::from([(
             0,
-            CpsEdge {
+            Edge {
                 target: calling,
                 args: vec![],
             },
         )]),
-        default: Some(CpsEdge {
+        default: Some(Edge {
             target: jumping,
             args: vec![],
         }),
     });
-    let arms = module.add_node(CpsNode::LetCont {
+    let arms = module.add_node(Node::LetCont {
         continuations: vec![calling, jumping],
         body: switch,
     });
-    let joined = module.add_node(CpsNode::LetCont {
+    let joined = module.add_node(Node::LetCont {
         continuations: vec![join],
         body: arms,
     });
-    let body = module.add_node(CpsNode::LetFun {
+    let body = module.add_node(Node::LetFun {
         functions: vec![callee],
         body: joined,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: None,
             params: vec![chooser],
             return_cont,
@@ -502,7 +502,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
 /// The join `specialize_jump_patterns` or `split_parameters` leaves behind once one tag's jumps are gone: two transfers, both passing tag `1`, into a body that still switches on the tag. The parameter is known, so `rewrite_atoms` turns the switch into one on a literal and the arm the join can never take — which may read the payload in the other tag's vocabulary — folds away before `verify_rows` could see a construction substituted into it.
 #[test]
 fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let join = module.reserve_continuation();
@@ -510,43 +510,43 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
     let payload = module.add_value(Some("payload".into()));
     let taken = module.reserve_continuation();
     let untaken = module.reserve_continuation();
-    let taken_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let taken_body = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(payload)],
+        args: vec![Atom::Value(payload)],
     }));
     module.define_continuation(
         taken,
-        CpsContinuation {
+        Continuation {
             debug_name: None,
             params: vec![],
             body: taken_body,
         },
     );
-    let untaken_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let untaken_body = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))],
     }));
     module.define_continuation(
         untaken,
-        CpsContinuation {
+        Continuation {
             debug_name: None,
             params: vec![],
             body: untaken_body,
         },
     );
-    let switch = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(tag),
+    let switch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(tag),
         cases: BTreeMap::from([
             (
                 0,
-                CpsEdge {
+                Edge {
                     target: untaken,
                     args: vec![],
                 },
             ),
             (
                 1,
-                CpsEdge {
+                Edge {
                     target: taken,
                     args: vec![],
                 },
@@ -554,46 +554,46 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
         ]),
         default: None,
     });
-    let join_body = module.add_node(CpsNode::LetCont {
+    let join_body = module.add_node(Node::LetCont {
         continuations: vec![untaken, taken],
         body: switch,
     });
     module.define_continuation(
         join,
-        CpsContinuation {
+        Continuation {
             debug_name: None,
             params: vec![tag, payload],
             body: join_body,
         },
     );
     let chooser = module.add_value(Some("chooser".into()));
-    let split = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(chooser),
+    let split = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(chooser),
         cases: BTreeMap::from([(
             0,
-            CpsEdge {
+            Edge {
                 target: join,
                 args: vec![
-                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(10u32))),
+                    Atom::Literal(Literal::Nat(Natural::from(1u32))),
+                    Atom::Literal(Literal::Nat(Natural::from(10u32))),
                 ],
             },
         )]),
-        default: Some(CpsEdge {
+        default: Some(Edge {
             target: join,
             args: vec![
-                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(20u32))),
+                Atom::Literal(Literal::Nat(Natural::from(1u32))),
+                Atom::Literal(Literal::Nat(Natural::from(20u32))),
             ],
         }),
     });
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![join],
         body: split,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: None,
             params: vec![chooser],
             return_cont,
@@ -606,7 +606,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
     let known = known_values(&module);
     assert_eq!(
         known.get(&tag),
-        Some(&CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))))
+        Some(&Atom::Literal(Literal::Nat(Natural::from(1u32))))
     );
     assert!(
         !known.contains_key(&payload),
@@ -617,7 +617,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
 // `f` calls `g`; `g` defines `h` and returns it as a closure; `h` calls `f`. No body calls back on its own, so the body-only graph is acyclic — yet inlining `g` copies `h`, and each copy is a fresh call to `f`, which the next sweep meets again: the shape a by-need knot's forcing function, initializer and built closure take. The recursive verdict closes the graph under definition, so `f` and `g` are recursive; `h` lies on no cycle of its own and is not.
 #[test]
 fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
-    let mut module = CpsModule::default();
+    let mut module = Module::default();
     let f = module.reserve_function();
     let g = module.reserve_function();
     let h = module.reserve_function();
@@ -625,45 +625,45 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
     let g_return = module.reserve_continuation();
     let h_return = module.reserve_continuation();
 
-    let h_body = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(f),
+    let h_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(f),
         args: vec![],
         return_to: h_return,
     });
     module.define_function(
         h,
-        CpsFunction {
+        Function {
             debug_name: Some("h".into()),
             params: vec![],
             return_cont: h_return,
             body: h_body,
         },
     );
-    let return_h = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let return_h = module.add_node(Node::ApplyCont(Edge {
         target: g_return,
-        args: vec![CpsAtom::Fun(h)],
+        args: vec![Atom::Fun(h)],
     }));
-    let g_body = module.add_node(CpsNode::LetFun {
+    let g_body = module.add_node(Node::LetFun {
         functions: vec![h],
         body: return_h,
     });
     module.define_function(
         g,
-        CpsFunction {
+        Function {
             debug_name: Some("g".into()),
             params: vec![],
             return_cont: g_return,
             body: g_body,
         },
     );
-    let f_body = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(g),
+    let f_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(g),
         args: vec![],
         return_to: f_return,
     });
     module.define_function(
         f,
-        CpsFunction {
+        Function {
             debug_name: Some("f".into()),
             params: vec![],
             return_cont: f_return,
@@ -672,18 +672,18 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
     );
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
-    let call_f = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(f),
+    let call_f = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(f),
         args: vec![],
         return_to: entry_return,
     });
-    let entry_body = module.add_node(CpsNode::LetFun {
+    let entry_body = module.add_node(Node::LetFun {
         functions: vec![f, g],
         body: call_f,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,

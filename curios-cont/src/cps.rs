@@ -1,6 +1,6 @@
 //! Arena-backed high CPS.
 //!
-//! The surface of this module is intentionally small: Ersd lowering constructs a [`CpsModule`], the optimizer mutates that graph through its checked mutation API, and `curios-emit`'s lowering to WebAssembly consumes it. Stable integer identities, tombstoned arena entries, and deterministic traversal are representation invariants rather than optimizer conventions. Use information is derived on demand (see [`CpsModule::value_use_counts`]) rather than maintained as a shadow arena.
+//! The surface of this module is intentionally small: Ersd lowering constructs a [`Module`], the optimizer mutates that graph through its checked mutation API, and `curios-emit`'s lowering to WebAssembly consumes it. Stable integer identities, tombstoned arena entries, and deterministic traversal are representation invariants rather than optimizer conventions. Use information is derived on demand (see [`Module::value_use_counts`]) rather than maintained as a shadow arena.
 
 use {
     curios_abi::ForeignFunction,
@@ -15,7 +15,7 @@ use {
 
 /// How many value bits the scalar envelope holds — the width of an `i31ref`'s payload, and the one width in the whole pipeline that is a fact about the target rather than about the language.
 ///
-/// It is named here rather than at each use because two readers need it and they are not the same kind of reader: [`CpsIntrinsic::effect`] states *which* operations it makes partial, and `curios-emit`'s `into_wasm` emits the guards that enforce it. Above this crate nothing knows the number — `curios-core` computes unbounded and `curios-ersd`'s constants carry whatever the theory produced — which is why every guard for it lives below, and why this constant may not travel upward.
+/// It is named here rather than at each use because two readers need it and they are not the same kind of reader: [`Intrinsic::effect`] states *which* operations it makes partial, and `curios-emit`'s `into_wasm` emits the guards that enforce it. Above this crate nothing knows the number — `curios-core` computes unbounded and `curios-ersd`'s constants carry whatever the theory produced — which is why every guard for it lives below, and why this constant may not travel upward.
 pub const ENVELOPE_BITS: i32 = 31;
 
 /// Whether `value` is a `Nat` the envelope can box.
@@ -35,13 +35,13 @@ pub fn int_fits_envelope(value: &Integer) -> bool {
 }
 
 // Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see `documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md`.
-id!(CpsNodeId, "~n");
-id!(CpsValueId, "~v");
-id!(CpsFunId, "~f");
-id!(CpsContId, "~k");
-id!(CpsRowId, "~r");
+id!(NodeId, "~n");
+id!(ValueId, "~v");
+id!(FunctionId, "~f");
+id!(ContinuationId, "~k");
+id!(RowId, "~r");
 
-impl CpsFunId {
+impl FunctionId {
     pub fn from_index(index: usize) -> Self {
         Self(index as u32)
     }
@@ -49,7 +49,7 @@ impl CpsFunId {
 
 /// A literal operand. `Flt` holds the bitwise [`Floating`] rather than an `f64` so that the derived equality is identity on the bit pattern: under IEEE equality a NaN literal is unequal to itself, and a pass comparing an edge it rebuilt against the edge it read would report a change on every round — `forward_continuations` did exactly that, and the fixpoint ran to its backstop on any module carrying a `NaN` through a jump.
 #[derive(Debug, Clone, PartialEq)]
-pub enum CpsLiteral {
+pub enum Literal {
     Nat(Natural),
     Int(Integer),
     Flt(Floating),
@@ -57,28 +57,28 @@ pub enum CpsLiteral {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum CpsAtom {
-    Value(CpsValueId),
-    Fun(CpsFunId),
-    Literal(CpsLiteral),
-    /// No value: a reference slot belonging to a wider constructor than the edge or call carrying it fills. It travels as null, which is what the field the constructor never wrote holds, and every reference position admits it; a register slot is padded with its zero literal instead, since a register has no null and the field holds zero there. [`CpsModule::pad`] is the one place that chooses.
+pub enum Atom {
+    Value(ValueId),
+    Fun(FunctionId),
+    Literal(Literal),
+    /// No value: a reference slot belonging to a wider constructor than the edge or call carrying it fills. It travels as null, which is what the field the constructor never wrote holds, and every reference position admits it; a register slot is padded with its zero literal instead, since a register has no null and the field holds zero there. [`Module::pad`] is the one place that chooses.
     ///
     /// The register the *parameter* is held at is decided by `represent` during backend lowering, from the uses of the parameter it feeds — strictly after the passes that create fillers — so a filler reaching a register-held parameter is the emitter's to materialise as that register's zero.
     Filler,
 }
 
 #[derive(Debug, Clone)]
-pub enum CpsValueExpr {
-    Literal(CpsLiteral),
-    List(Vec<CpsAtom>),
-    Tuple(Vec<CpsAtom>),
-    /// A construction of a *nominal* row — a variant family or a product schema — at that row's full width, padded with [`CpsAtom::Filler`] wherever the constructor building it is narrower than the row. A family's slot zero is its tag; a product has none. The Ersd door is the only mint and pads every construction, so a row value's arity is a fact of the row rather than of the site that built it — which is what lets the emitter key one final heap type per row and read it with an exact cast instead of the structural roster cascade.
-    Row(CpsRowId, Vec<CpsAtom>),
+pub enum ValueExpr {
+    Literal(Literal),
+    List(Vec<Atom>),
+    Tuple(Vec<Atom>),
+    /// A construction of a *nominal* row — a variant family or a product schema — at that row's full width, padded with [`Atom::Filler`] wherever the constructor building it is narrower than the row. A family's slot zero is its tag; a product has none. The Ersd door is the only mint and pads every construction, so a row value's arity is a fact of the row rather than of the site that built it — which is what lets the emitter key one final heap type per row and read it with an exact cast instead of the structural roster cascade.
+    Row(RowId, Vec<Atom>),
 }
 
 /// Intrinsic identity without operands. Operand order and arity live on the surrounding `LetIntrinsic`, so every analysis sees one uniform operand vector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CpsIntrinsic {
+pub enum Intrinsic {
     NatEql,
     NatNeq,
     NatAdd,
@@ -149,22 +149,22 @@ pub enum CpsIntrinsic {
     ListLen,
     ListGet,
     ListSlice,
-    /// The `List` mirror of [`CpsIntrinsic::BinRest`].
+    /// The `List` mirror of [`Intrinsic::BinRest`].
     ListRest,
     ListAppend,
     ListConcat(usize),
     /// `(list) -> list`: the same value, flat — a leaf answers itself, and anything else answers a fresh leaf over its forced payload (an O(1) wrap, since payload arrays are filled once and never rewritten). Semantically the identity; representationally the settle the door inserts on stores into fields the Ersd census marked indexed-only, so the values a program only ever indexes are flat by the time they are stored.
     ListSettle,
-    /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_append_chains` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`CpsIntrinsic::BinChunk`].
+    /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_append_chains` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`Intrinsic::BinChunk`].
     ListFlat(usize),
     TupleGet(usize),
-    /// `(row) -> value`: slot `index` of a [`CpsValueExpr::Row`] of `row`. Which slot holds what is the row's to say — a family's slot zero is its tag — and the door is what knows it. Distinct from [`CpsIntrinsic::TupleGet`] so a row read names the row whose final type the emitter casts to exactly, and so a structural projection can never silently read a row value through the roster cascade: the two vocabularies meet only in the verifier, which refuses a mismatch.
-    RowGet(CpsRowId, usize),
+    /// `(row) -> value`: slot `index` of a [`ValueExpr::Row`] of `row`. Which slot holds what is the row's to say — a family's slot zero is its tag — and the door is what knows it. Distinct from [`Intrinsic::TupleGet`] so a row read names the row whose final type the emitter casts to exactly, and so a structural projection can never silently read a row value through the roster cascade: the two vocabularies meet only in the verifier, which refuses a mismatch.
+    RowGet(RowId, usize),
     /// The virtual-window bounds guard: `(start, count, len) -> count`, trapping unless the window ends inside `len` — the eager trap a physical slice would have performed, kept at the original evaluation point when the slice itself is virtualized away. It answers the count unchanged rather than a difference, because a window is a start and a count everywhere above this too; what it contributes is the trap, not the arithmetic.
     WindowExtent,
     /// Whether the operand is an unboxed scalar (1) or an aggregate reference (0) — the dispatch of a variant encoding whose one scalar-payload constructor rides bare. A representation question, which is why it exists in this crate's vocabulary and not in Ersd: the lowering that chose the encoding is the only producer, and it guarantees the two answers are disjoint over every value the test can reach.
     IsImmediate,
-    /// `(value) -> value`: the bare payload of the constructor [`CpsIntrinsic::IsImmediate`] just answered for, passed through unchanged.
+    /// `(value) -> value`: the bare payload of the constructor [`Intrinsic::IsImmediate`] just answered for, passed through unchanged.
     ///
     /// Representationally the identity, and that is the whole point: it exists so the payload has a *definition* instead of being aliased to the scrutinee. The representation analysis fixes a value's carrier from whatever produced it, so a payload with no producer of its own carries its uses' raw demand back onto the scrutinee — which on the boxed path is a tuple, not a scalar. That is not a missed optimization but a miscompile: an arm's `NatAdd` demanded the raw carrier, the demand reached the scrutinee's own definition, and the emitter coerced a `struct.new` with a `ref.cast` to `i31`. Answering `Repr::Ref` makes this definition's offer `Never`, so the demand coerces at the use where it belongs and the scrutinee is never demanded raw.
     ImmediateGet,
@@ -189,12 +189,12 @@ pub enum Repr {
     Ref,
 }
 
-impl CpsIntrinsic {
+impl Intrinsic {
     /// The representation this operation reads its `index`-th operand at.
     ///
     /// Indexed rather than returning a sequence because the concatenations are variadic and every operand of one shares a representation, so a list would allocate to say what a match arm already says.
     pub fn operand_repr(&self, index: usize) -> Repr {
-        use CpsIntrinsic::*;
+        use Intrinsic::*;
 
         match (self, index) {
             // The sequence operations are the only ones whose operands differ from one another: a rope first, then positions.
@@ -241,7 +241,7 @@ impl CpsIntrinsic {
 
     /// The representation this operation produces.
     pub fn result_repr(&self) -> Repr {
-        use CpsIntrinsic::*;
+        use Intrinsic::*;
 
         match self {
             // Every comparison and predicate answers a `Bool`, whose carrier is a `Nat`.
@@ -276,13 +276,13 @@ impl CpsIntrinsic {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CpsIntrinsicEffect {
+pub enum IntrinsicEffect {
     Total,
     MayTrap,
     Allocates,
 }
 
-impl CpsIntrinsic {
+impl Intrinsic {
     pub fn arity(self) -> usize {
         match self {
             Self::NatEqz
@@ -323,7 +323,7 @@ impl CpsIntrinsic {
     /// The `MayTrap` set is the union of two unrelated reasons, and both belong at this layer rather than above it. A division, a float-to-integer conversion, an index and a projection are partial in the language, and `curios-ersd`'s `Semantics` says so too. The arithmetic entries are not: `Nat` addition wraps its `u32` carrier and cannot fail, and it is *this crate's* i31 envelope that makes a result leaving 31 bits trap instead of changing, per `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`. So every operation `curios-emit`'s `into_wasm` guards belongs here, and none of it may travel upward.
     ///
     /// Exhaustive on purpose. This was a wildcard defaulting to `Total`, which silently classified seven guarded operations as deletable — the same hazard the representation table is exhaustive to avoid, one accessor over.
-    pub fn effect(self) -> CpsIntrinsicEffect {
+    pub fn effect(self) -> IntrinsicEffect {
         match self {
             // Partial in the language: a zero divisor, a signed-division overflow, a non-finite or out-of-range conversion, an index or a projection out of bounds, a decode of the wrong length.
             Self::NatDiv
@@ -351,7 +351,7 @@ impl CpsIntrinsic {
             | Self::IntSub
             | Self::IntMul
             | Self::IntShl
-            | Self::IntToNat => CpsIntrinsicEffect::MayTrap,
+            | Self::IntToNat => IntrinsicEffect::MayTrap,
 
             // Allocates a *sequence*. An `Flt` result is boxed too, but every `Flt` producer below is treated as total, so the category means a rope or a list rather than any heap traffic at all.
             Self::BinAppend(_)
@@ -361,7 +361,7 @@ impl CpsIntrinsic {
             | Self::ListConcat(_)
             | Self::ListSettle
             | Self::ListFlat(_)
-            | Self::FltToLeBytes => CpsIntrinsicEffect::Allocates,
+            | Self::FltToLeBytes => IntrinsicEffect::Allocates,
 
             Self::NatEql
             | Self::NatNeq
@@ -407,20 +407,20 @@ impl CpsIntrinsic {
             | Self::BinEql(_)
             | Self::ListLen
             | Self::IsImmediate
-            | Self::ImmediateGet => CpsIntrinsicEffect::Total,
+            | Self::ImmediateGet => IntrinsicEffect::Total,
         }
     }
 
     pub fn is_total(self) -> bool {
-        self.effect() == CpsIntrinsicEffect::Total
+        self.effect() == IntrinsicEffect::Total
     }
 
     pub fn may_trap(self) -> bool {
-        self.effect() == CpsIntrinsicEffect::MayTrap
+        self.effect() == IntrinsicEffect::MayTrap
     }
 
     pub fn allocates(self) -> bool {
-        self.effect() == CpsIntrinsicEffect::Allocates
+        self.effect() == IntrinsicEffect::Allocates
     }
 
     pub fn is_commutative(self) -> bool {
@@ -450,19 +450,19 @@ impl CpsIntrinsic {
 }
 
 #[derive(Debug, Clone)]
-pub enum CpsCallee {
-    Known(CpsFunId),
-    Closure(CpsValueId),
+pub enum Callee {
+    Known(FunctionId),
+    Closure(ValueId),
 }
 
 #[derive(Debug, Clone)]
-pub struct CpsEdge {
-    pub target: CpsContId,
-    pub args: Vec<CpsAtom>,
+pub struct Edge {
+    pub target: ContinuationId,
+    pub args: Vec<Atom>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CpsCellOp {
+pub enum CellOp {
     New,
     /// A cell allocated *empty*, to be filled by a later `Set`: what ties a recursive knot, whose members' cells must exist before any initializer runs and hold nothing meaningful until their own has. Reading one before its fill traps, which is the point — a knot read out of order once computed with the placeholder `New` had been handed, and `Get`'s emission already refuses a null for free. Nothing a program writes mints one; only the erased lowering does.
     Reserve,
@@ -470,7 +470,7 @@ pub enum CpsCellOp {
     Get,
 }
 
-impl CpsCellOp {
+impl CellOp {
     pub fn operand_arity(self) -> usize {
         match self {
             Self::Reserve => 0,
@@ -489,67 +489,67 @@ impl CpsCellOp {
 
 /// A call-like intrinsic. `ListMap` takes the list then the mapper — the carrier-first order of the whole sequence row, matched by the erased representation so the lowering transcribes without reordering — and runs the mapper once per element, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CpsIntrinsicCall {
+pub enum IntrinsicCall {
     ListMap,
 }
 
 #[derive(Debug, Clone)]
-pub enum CpsNode {
+pub enum Node {
     LetValue {
-        result: CpsValueId,
-        value: CpsValueExpr,
-        next: CpsNodeId,
+        result: ValueId,
+        value: ValueExpr,
+        next: NodeId,
     },
     LetIntrinsic {
-        result: CpsValueId,
-        op: CpsIntrinsic,
-        args: Vec<CpsAtom>,
-        next: CpsNodeId,
+        result: ValueId,
+        op: Intrinsic,
+        args: Vec<Atom>,
+        next: NodeId,
     },
     LetFun {
-        functions: Vec<CpsFunId>,
-        body: CpsNodeId,
+        functions: Vec<FunctionId>,
+        body: NodeId,
     },
     LetCont {
-        continuations: Vec<CpsContId>,
-        body: CpsNodeId,
+        continuations: Vec<ContinuationId>,
+        body: NodeId,
     },
     ApplyFun {
-        callee: CpsCallee,
-        args: Vec<CpsAtom>,
-        return_to: CpsContId,
+        callee: Callee,
+        args: Vec<Atom>,
+        return_to: ContinuationId,
     },
-    ApplyCont(CpsEdge),
+    ApplyCont(Edge),
     Switch {
-        scrutinee: CpsAtom,
-        cases: BTreeMap<u32, CpsEdge>,
-        default: Option<CpsEdge>,
+        scrutinee: Atom,
+        cases: BTreeMap<u32, Edge>,
+        default: Option<Edge>,
     },
     Foreign {
         function: Arc<ForeignFunction>,
-        args: Vec<CpsAtom>,
-        return_to: CpsContId,
+        args: Vec<Atom>,
+        return_to: ContinuationId,
     },
     Cell {
-        op: CpsCellOp,
-        args: Vec<CpsAtom>,
-        return_to: CpsContId,
+        op: CellOp,
+        args: Vec<Atom>,
+        return_to: ContinuationId,
     },
     Intrinsic {
-        op: CpsIntrinsicCall,
-        args: Vec<CpsAtom>,
-        return_to: CpsContId,
+        op: IntrinsicCall,
+        args: Vec<Atom>,
+        return_to: ContinuationId,
     },
     Exit {
-        value: Option<CpsAtom>,
+        value: Option<Atom>,
     },
-    /// A deliberate runtime failure of the given class: the block ends by reporting it and never continues. A lowering seats one where the program can reach a state it has to refuse — today the knot's forcing state, a member read while its own initializer runs — and the emitter renders every class as its sentence through the `sys.panic` import. Distinct from [`CpsNode::Unreachable`], which marks an arm the theory proved impossible: reaching a `Panic` is the program's doing, reaching an `Unreachable` is the compiler's.
+    /// A deliberate runtime failure of the given class: the block ends by reporting it and never continues. A lowering seats one where the program can reach a state it has to refuse — today the knot's forcing state, a member read while its own initializer runs — and the emitter renders every class as its sentence through the `sys.panic` import. Distinct from [`Node::Unreachable`], which marks an arm the theory proved impossible: reaching a `Panic` is the program's doing, reaching an `Unreachable` is the compiler's.
     Panic(Panic),
     /// An arm the theory proved impossible. Never reached by a sound compilation; the emitter renders it as [`Panic::Invariant`]'s sentence so that a compiler bug says so.
     Unreachable,
 }
 
-/// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `CpsNode::Panic` carries one; the emitter's own checks — an overflow, a read past the end, a `Flt` decode — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`curios-emit`'s `into_wasm/refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
+/// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `Node::Panic` carries one; the emitter's own checks — an overflow, a read past the end, a `Flt` decode — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`curios-emit`'s `into_wasm/refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panic {
     /// A `Nat` result or conversion the i31 carrier cannot hold.
@@ -592,61 +592,61 @@ impl fmt::Display for Panic {
 }
 
 #[derive(Debug, Clone)]
-pub struct CpsValueDef {
+pub struct ValueDef {
     pub debug_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-pub struct CpsFunction {
+pub struct Function {
     pub debug_name: Option<String>,
-    pub params: Vec<CpsValueId>,
-    pub return_cont: CpsContId,
-    pub body: CpsNodeId,
+    pub params: Vec<ValueId>,
+    pub return_cont: ContinuationId,
+    pub body: NodeId,
 }
 
 #[derive(Debug, Clone)]
-pub struct CpsContinuation {
+pub struct Continuation {
     pub debug_name: Option<String>,
-    pub params: Vec<CpsValueId>,
-    pub body: CpsNodeId,
+    pub params: Vec<ValueId>,
+    pub body: NodeId,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum CpsUseTarget {
-    Value(CpsValueId),
-    Fun(CpsFunId),
-    Cont(CpsContId),
+pub enum UseTarget {
+    Value(ValueId),
+    Fun(FunctionId),
+    Cont(ContinuationId),
 }
 
 /// What the module's functions state about returning: which continuation is whose sentinel, and how many values each hands back.
 ///
 /// The two travel together because every arity question needs both — whether a transfer is a return at all, and how wide a return is — so they are one parameter rather than two threaded in parallel through the verifier.
 struct ReturnFacts<'a> {
-    owners: &'a BTreeMap<CpsContId, CpsFunId>,
-    arities: &'a BTreeMap<CpsFunId, usize>,
+    owners: &'a BTreeMap<ContinuationId, FunctionId>,
+    arities: &'a BTreeMap<FunctionId, usize>,
 }
 
 impl ReturnFacts<'_> {
     /// How many values `function` returns, reading absence as the single value a function carried before any protocol widened it.
-    fn arity(&self, function: CpsFunId) -> usize {
+    fn arity(&self, function: FunctionId) -> usize {
         self.arities.get(&function).copied().unwrap_or(1)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct CpsVerifyError(pub String);
+pub struct VerifyError(pub String);
 
-impl fmt::Display for CpsVerifyError {
+impl fmt::Display for VerifyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
     }
 }
 
-impl std::error::Error for CpsVerifyError {}
+impl std::error::Error for VerifyError {}
 
 /// The recorded fields representation: `width` consecutive parameters of a continuation, starting at `start`, that *are* the fields of one former aggregate parameter.
 ///
-/// The record is what makes a split a fact of the program rather than a convention between passes: [`CpsModule::verify`] holds every group to its continuation's parameter list the way it already holds arities, so a pass that reshapes a recorded parameter list without maintaining the record fails loudly instead of silently disagreeing with the split.
+/// The record is what makes a split a fact of the program rather than a convention between passes: [`Module::verify`] holds every group to its continuation's parameter list the way it already holds arities, so a pass that reshapes a recorded parameter list without maintaining the record fails loudly instead of silently disagreeing with the split.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FieldGroup {
     pub start: usize,
@@ -655,24 +655,24 @@ pub struct FieldGroup {
 
 /// A value a node binds, bound here and nowhere else; `noun` names it in the duplicate-binding message.
 struct ScopeBinding {
-    value: CpsValueId,
+    value: ValueId,
     noun: &'static str,
 }
 
 /// A pending region in a walk over lexical structure, carrying the scope that region sees.
 enum ScopeTask {
     Function {
-        function: CpsFunId,
-        values: BTreeSet<CpsValueId>,
-        functions: BTreeSet<CpsFunId>,
+        function: FunctionId,
+        values: BTreeSet<ValueId>,
+        functions: BTreeSet<FunctionId>,
     },
     Node {
         /// The function the node belongs to. It names the region in a verification message and is needed for nothing else, so a walk that reports nothing has none.
-        owner: Option<CpsFunId>,
-        node: CpsNodeId,
-        values: BTreeSet<CpsValueId>,
-        functions: BTreeSet<CpsFunId>,
-        continuations: BTreeSet<CpsContId>,
+        owner: Option<FunctionId>,
+        node: NodeId,
+        values: BTreeSet<ValueId>,
+        functions: BTreeSet<FunctionId>,
+        continuations: BTreeSet<ContinuationId>,
     },
 }
 
@@ -680,30 +680,30 @@ enum ScopeTask {
 #[derive(Default)]
 struct ScopeStep {
     values: Vec<ScopeBinding>,
-    functions: Vec<CpsFunId>,
+    functions: Vec<FunctionId>,
     tasks: Vec<ScopeTask>,
 }
 
 type NodeTask = (
-    Option<CpsFunId>,
-    CpsNodeId,
-    BTreeSet<CpsValueId>,
-    BTreeSet<CpsFunId>,
-    BTreeSet<CpsContId>,
+    Option<FunctionId>,
+    NodeId,
+    BTreeSet<ValueId>,
+    BTreeSet<FunctionId>,
+    BTreeSet<ContinuationId>,
 );
 
 /// The bookkeeping a lexical *verification* walk carries on top of the scope rules: which names have been bound, and which regions are still to visit.
 #[derive(Default)]
 struct ScopeVerifier {
-    bound_functions: BTreeSet<CpsFunId>,
-    bound_values: BTreeSet<CpsValueId>,
-    function_work: Vec<(CpsFunId, BTreeSet<CpsValueId>, BTreeSet<CpsFunId>)>,
+    bound_functions: BTreeSet<FunctionId>,
+    bound_values: BTreeSet<ValueId>,
+    function_work: Vec<(FunctionId, BTreeSet<ValueId>, BTreeSet<FunctionId>)>,
     node_work: Vec<NodeTask>,
 }
 
 impl ScopeVerifier {
     /// Record what `step` binds, rejecting a name bound twice, then queue the regions below it.
-    fn admit(&mut self, step: ScopeStep) -> Result<(), CpsVerifyError> {
+    fn admit(&mut self, step: ScopeStep) -> Result<(), VerifyError> {
         let ScopeStep {
             values,
             functions,
@@ -711,14 +711,14 @@ impl ScopeVerifier {
         } = step;
         for function in functions {
             if !self.bound_functions.insert(function) {
-                return Err(CpsVerifyError(format!(
+                return Err(VerifyError(format!(
                     "function {function} is bound more than once"
                 )));
             }
         }
         for ScopeBinding { value, noun } in values {
             if !self.bound_values.insert(value) {
-                return Err(CpsVerifyError(format!(
+                return Err(VerifyError(format!(
                     "{noun} {value} is bound more than once"
                 )));
             }
@@ -752,25 +752,25 @@ impl ScopeVerifier {
 
 /// The production Cont representation. Arena slots never move or get reused; deletion writes `None` and deterministic compaction is explicit.
 #[derive(Debug, Clone, Default)]
-pub struct CpsModule {
-    nodes: Arena<CpsNodeId, CpsNode>,
-    values: Arena<CpsValueId, CpsValueDef>,
-    functions: Arena<CpsFunId, CpsFunction>,
-    continuations: Arena<CpsContId, CpsContinuation>,
-    field_groups: BTreeMap<CpsContId, Vec<FieldGroup>>,
-    /// The nominal rows this module's [`CpsValueExpr::Row`]s belong to, appended by the Ersd door and never removed — a row that loses its last construction is simply an unreferenced entry, so the ids stay stable without tombstones.
-    rows: Vec<Option<CpsRow>>,
-    entry: Option<CpsFunId>,
+pub struct Module {
+    nodes: Arena<NodeId, Node>,
+    values: Arena<ValueId, ValueDef>,
+    functions: Arena<FunctionId, Function>,
+    continuations: Arena<ContinuationId, Continuation>,
+    field_groups: BTreeMap<ContinuationId, Vec<FieldGroup>>,
+    /// The nominal rows this module's [`ValueExpr::Row`]s belong to, appended by the Ersd door and never removed — a row that loses its last construction is simply an unreferenced entry, so the ids stay stable without tombstones.
+    rows: Vec<Option<Row>>,
+    entry: Option<FunctionId>,
 }
 
-/// One nominal row — a variant family or a product schema: its debug name, and the carrier of every slot of its heap type. A family carries its tag at slot zero and a product does not; either way this is the width every [`CpsValueExpr::Row`] naming it is padded to.
+/// One nominal row — a variant family or a product schema: its debug name, and the carrier of every slot of its heap type. A family carries its tag at slot zero and a product does not; either way this is the width every [`ValueExpr::Row`] naming it is padded to.
 #[derive(Debug, Clone)]
-pub struct CpsRow {
+pub struct Row {
     pub debug_name: Option<String>,
-    pub slots: Vec<CpsSlot>,
+    pub slots: Vec<Slot>,
 }
 
-impl CpsRow {
+impl Row {
     /// The arity every construction of this row carries.
     pub fn width(&self) -> usize {
         self.slots.len()
@@ -783,9 +783,9 @@ impl CpsRow {
 ///
 /// Slots are assigned by carrier rather than by field position, which is what keeps a family from widening: a constructor's fields are distributed into the slot range their carrier owns, so two constructors sharing a carrier share its slots and only a disagreement costs width. Positional assignment would have been free but types almost nothing — over the standard library it settles 11 slots against this rule's 22 — while giving each constructor a disjoint range types only five more and costs 18 slots more than this.
 ///
-/// Three shapes stay [`CpsSlot::Opaque`] deliberately. A packed carrier is *sometimes* an immediate, so no single heap type names its population. A closure's runtime arity is not something the recorded shape is yet entitled to promise, since the erased arity is read off the declared type and the passes above may raise it. A row-typed field would need the field's row identity, which erasure does not record.
+/// Three shapes stay [`Slot::Opaque`] deliberately. A packed carrier is *sometimes* an immediate, so no single heap type names its population. A closure's runtime arity is not something the recorded shape is yet entitled to promise, since the erased arity is read off the declared type and the passes above may raise it. A row-typed field would need the field's row identity, which erasure does not record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum CpsSlot {
+pub enum Slot {
     /// A variant family's discriminant, at slot zero. Stored packed and read unsigned, since a family's constructor count is bounded far below the byte the tag occupies; a product row carries none.
     Tag,
     /// A raw unsigned 32-bit payload.
@@ -796,43 +796,43 @@ pub enum CpsSlot {
     Flt,
     /// A list rope. The base type is not final, so this is the slot that deletes an `is_subtype` libcall rather than an inline check.
     List,
-    /// A closure of the given arity. Its environment base is *not* final — it is the supertype of every per-closure environment of that arity — so, like [`CpsSlot::List`], this is a slot that deletes an `is_subtype` libcall rather than an inline check.
+    /// A closure of the given arity. Its environment base is *not* final — it is the supertype of every per-closure environment of that arity — so, like [`Slot::List`], this is a slot that deletes an `is_subtype` libcall rather than an inline check.
     Closure(usize),
     /// A value of the named nominal row. A row's heap type is final, so this is the slot whose read needs no cast at all once Binaryen has the static type.
-    Row(CpsRowId),
+    Row(RowId),
     /// The uniform reference: a polymorphic payload, or one whose shape names no single heap type.
     Opaque,
 }
 
-impl CpsSlot {
+impl Slot {
     /// The representation a read of this slot produces.
     pub fn repr(self) -> Repr {
         match self {
-            CpsSlot::Tag | CpsSlot::Nat => Repr::Nat,
-            CpsSlot::Int => Repr::Int,
-            CpsSlot::Flt => Repr::Flt,
-            CpsSlot::List => Repr::List,
-            CpsSlot::Closure(_) | CpsSlot::Row(_) | CpsSlot::Opaque => Repr::Ref,
+            Slot::Tag | Slot::Nat => Repr::Nat,
+            Slot::Int => Repr::Int,
+            Slot::Flt => Repr::Flt,
+            Slot::List => Repr::List,
+            Slot::Closure(_) | Slot::Row(_) | Slot::Opaque => Repr::Ref,
         }
     }
 }
 
-impl CpsModule {
+impl Module {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn entry(&self) -> Option<CpsFunId> {
+    pub fn entry(&self) -> Option<FunctionId> {
         self.entry
     }
 
     /// The recorded fields representations, by continuation.
-    pub fn field_groups(&self) -> &BTreeMap<CpsContId, Vec<FieldGroup>> {
+    pub fn field_groups(&self) -> &BTreeMap<ContinuationId, Vec<FieldGroup>> {
         &self.field_groups
     }
 
-    /// Register a nominal row and hand back its identity. The Ersd door is the only caller; see [`CpsValueExpr::Row`].
-    pub fn add_row(&mut self, row: CpsRow) -> CpsRowId {
+    /// Register a nominal row and hand back its identity. The Ersd door is the only caller; see [`ValueExpr::Row`].
+    pub fn add_row(&mut self, row: Row) -> RowId {
         let id = self.reserve_row();
         self.define_row(id, row);
         id
@@ -840,57 +840,58 @@ impl CpsModule {
 
     /// Claim an identity before the row it names is known.
     ///
-    /// A row's slots may name other rows, and a self-referential declaration names its own — so the identity has to exist before the slots are computed, or computing them would not terminate. An undefined row is a compiler bug, and [`CpsModule::row`] says so rather than carrying an `Option` every caller would unwrap.
-    pub fn reserve_row(&mut self) -> CpsRowId {
-        let id = CpsRowId::from_index(self.rows.len());
+    /// A row's slots may name other rows, and a self-referential declaration names its own — so the identity has to exist before the slots are computed, or computing them would not terminate. An undefined row is a compiler bug, and [`Module::row`] says so rather than carrying an `Option` every caller would unwrap.
+    pub fn reserve_row(&mut self) -> RowId {
+        let id = RowId::from_index(self.rows.len());
         self.rows.push(None);
         id
     }
 
-    pub fn define_row(&mut self, id: CpsRowId, row: CpsRow) {
+    pub fn define_row(&mut self, id: RowId, row: Row) {
         self.rows[id.index()] = Some(row);
     }
 
-    pub fn row(&self, id: CpsRowId) -> &CpsRow {
+    pub fn row(&self, id: RowId) -> &Row {
         self.rows[id.index()]
             .as_ref()
             .unwrap_or_else(|| panic!("{id} was reserved and never defined"))
     }
 
-    /// What a transfer hands a slot its construction never wrote: what the constructed row's field holds there — zero for a register slot, since a register has no null, and null, as [`CpsAtom::Filler`], for a reference. `None` is a tuple, whose every field is a reference.
-    pub fn pad(&self, row: Option<CpsRowId>, index: usize) -> CpsAtom {
+    /// What a transfer hands a slot its construction never wrote: what the constructed row's field holds there — zero for a register slot, since a register has no null, and null, as [`Atom::Filler`], for a reference. `None` is a tuple, whose every field is a reference.
+    pub fn pad(&self, row: Option<RowId>, index: usize) -> Atom {
         match row.map(|row| self.row(row).slots[index]) {
-            Some(CpsSlot::Tag | CpsSlot::Nat) => CpsAtom::Literal(CpsLiteral::Nat(Natural::zero())),
-            Some(CpsSlot::Int) => CpsAtom::Literal(CpsLiteral::Int(Integer::from(0u32))),
-            Some(CpsSlot::Flt) => CpsAtom::Literal(CpsLiteral::Flt(Floating::zero(false))),
-            Some(CpsSlot::List | CpsSlot::Closure(_) | CpsSlot::Row(_) | CpsSlot::Opaque)
-            | None => CpsAtom::Filler,
+            Some(Slot::Tag | Slot::Nat) => Atom::Literal(Literal::Nat(Natural::zero())),
+            Some(Slot::Int) => Atom::Literal(Literal::Int(Integer::from(0u32))),
+            Some(Slot::Flt) => Atom::Literal(Literal::Flt(Floating::zero(false))),
+            Some(Slot::List | Slot::Closure(_) | Slot::Row(_) | Slot::Opaque) | None => {
+                Atom::Filler
+            }
         }
     }
 
-    /// The representation a read of `row`'s slot at `index` produces. The one result representation that is a fact of the module rather than of the operation, which is why [`CpsIntrinsic::result_repr`] cannot answer it alone.
-    pub fn slot_repr(&self, row: CpsRowId, index: usize) -> Repr {
+    /// The representation a read of `row`'s slot at `index` produces. The one result representation that is a fact of the module rather than of the operation, which is why [`Intrinsic::result_repr`] cannot answer it alone.
+    pub fn slot_repr(&self, row: RowId, index: usize) -> Repr {
         self.row(row).slots[index].repr()
     }
 
     /// The representation `op` produces, resolving a row read against this module's slot carriers.
-    pub fn result_repr(&self, op: &CpsIntrinsic) -> Repr {
+    pub fn result_repr(&self, op: &Intrinsic) -> Repr {
         match op {
-            CpsIntrinsic::RowGet(row, index) => self.slot_repr(*row, *index),
+            Intrinsic::RowGet(row, index) => self.slot_repr(*row, *index),
             _ => op.result_repr(),
         }
     }
 
-    pub fn rows(&self) -> impl Iterator<Item = (CpsRowId, &CpsRow)> {
+    pub fn rows(&self) -> impl Iterator<Item = (RowId, &Row)> {
         (0..self.rows.len())
-            .map(CpsRowId::from_index)
+            .map(RowId::from_index)
             .map(|id| (id, self.row(id)))
     }
 
     /// Record that `continuation`'s parameter at `start` was spliced into `width` fields: the new group, *and* every group past it shifted by the parameters the splice added.
     ///
-    /// Recording and shifting are one operation because they are one fact. They were two, and the shift lived in the one caller that had needed it so far — which left every other caller silently recording stale starts, reachable as soon as two parameters of one continuation were split in the same pass. Groups are kept sorted by start; [`CpsModule::verify`] holds them to the parameter list.
-    pub fn record_split(&mut self, continuation: CpsContId, start: usize, width: usize) {
+    /// Recording and shifting are one operation because they are one fact. They were two, and the shift lived in the one caller that had needed it so far — which left every other caller silently recording stale starts, reachable as soon as two parameters of one continuation were split in the same pass. Groups are kept sorted by start; [`Module::verify`] holds them to the parameter list.
+    pub fn record_split(&mut self, continuation: ContinuationId, start: usize, width: usize) {
         let groups = self.field_groups.entry(continuation).or_default();
         for group in groups.iter_mut() {
             if group.start > start {
@@ -904,7 +905,7 @@ impl CpsModule {
     /// Maintain the record across a parameter removal: shift groups past each removed index down, shrink groups losing a member, and drop groups emptied entirely. The caller removes the parameters; this keeps the record telling the truth about what remains.
     pub fn remove_params_from_record(
         &mut self,
-        continuation: CpsContId,
+        continuation: ContinuationId,
         removed: &BTreeSet<usize>,
     ) {
         let Some(groups) = self.field_groups.get_mut(&continuation) else {
@@ -925,49 +926,49 @@ impl CpsModule {
         }
     }
 
-    pub fn set_entry(&mut self, entry: CpsFunId) {
+    pub fn set_entry(&mut self, entry: FunctionId) {
         self.entry = Some(entry);
     }
 
-    pub fn nodes(&self) -> &[Option<CpsNode>] {
+    pub fn nodes(&self) -> &[Option<Node>] {
         self.nodes.slots()
     }
 
-    pub fn values(&self) -> &[Option<CpsValueDef>] {
+    pub fn values(&self) -> &[Option<ValueDef>] {
         self.values.slots()
     }
 
-    pub fn functions(&self) -> &[Option<CpsFunction>] {
+    pub fn functions(&self) -> &[Option<Function>] {
         self.functions.slots()
     }
 
-    pub fn continuations(&self) -> &[Option<CpsContinuation>] {
+    pub fn continuations(&self) -> &[Option<Continuation>] {
         self.continuations.slots()
     }
 
-    pub fn node(&self, id: CpsNodeId) -> Option<&CpsNode> {
+    pub fn node(&self, id: NodeId) -> Option<&Node> {
         self.nodes.get(id)
     }
 
-    pub fn function(&self, id: CpsFunId) -> Option<&CpsFunction> {
+    pub fn function(&self, id: FunctionId) -> Option<&Function> {
         self.functions.get(id)
     }
 
-    pub fn continuation(&self, id: CpsContId) -> Option<&CpsContinuation> {
+    pub fn continuation(&self, id: ContinuationId) -> Option<&Continuation> {
         self.continuations.get(id)
     }
 
     /// Count, per value, how many times it is referenced across the module. A value's use sites are its operand occurrences plus its use as an indirect callee; definitions (`LetValue`/`LetIntrinsic` results, parameters) are not uses, so an unreferenced value is absent from the map. Derived on demand rather than maintained incrementally.
-    pub(crate) fn value_use_counts(&self) -> BTreeMap<CpsValueId, usize> {
+    pub(crate) fn value_use_counts(&self) -> BTreeMap<ValueId, usize> {
         let mut counts = BTreeMap::new();
         for (_, node) in self.nodes.iter_live() {
             for atom in atoms(node) {
-                if let CpsAtom::Value(value) = atom {
+                if let Atom::Value(value) = atom {
                     *counts.entry(*value).or_insert(0) += 1;
                 }
             }
-            if let CpsNode::ApplyFun {
-                callee: CpsCallee::Closure(value),
+            if let Node::ApplyFun {
+                callee: Callee::Closure(value),
                 ..
             } = node
             {
@@ -981,10 +982,10 @@ impl CpsModule {
     ///
     /// A function's returns are its edges to its own return sentinel, so the arity those edges carry *is* its result count — nothing declares it, and adding a field to say so would mean restating it at every construction site rather than reading it off the one place that already knows. A function with no such edge returns through some tail position instead: a foreign call, a cell operation, or a `ListMap` hands back what that operation produces, a closure call hands back the one value its shared type carries, and a tail call to a known function hands back whatever *that* function does — which is why the last of those is resolved by propagation rather than locally. A function with none of those neither returns nor is called for a result, and takes the one value every function carried before any protocol widened it.
     ///
-    /// Where a function has both a return edge and a constrained tail position, the edge is taken and the disagreement is left to [`CpsModule::verify`], whose business it is to report rather than to paper over.
-    pub fn return_arities(&self) -> BTreeMap<CpsFunId, usize> {
-        let mut settled = BTreeMap::<CpsFunId, usize>::new();
-        let mut inherits = BTreeMap::<CpsFunId, BTreeSet<CpsFunId>>::new();
+    /// Where a function has both a return edge and a constrained tail position, the edge is taken and the disagreement is left to [`Module::verify`], whose business it is to report rather than to paper over.
+    pub fn return_arities(&self) -> BTreeMap<FunctionId, usize> {
+        let mut settled = BTreeMap::<FunctionId, usize>::new();
+        let mut inherits = BTreeMap::<FunctionId, BTreeSet<FunctionId>>::new();
 
         for (function, definition) in self.functions.iter_live() {
             let sentinel = definition.return_cont;
@@ -993,37 +994,37 @@ impl CpsModule {
             let mut tail_calls = BTreeSet::new();
 
             for node_id in analysis::nodes_from(self, definition.body) {
-                let mut returning = |edge: &CpsEdge| {
+                let mut returning = |edge: &Edge| {
                     if edge.target == sentinel {
                         edges.get_or_insert(edge.args.len());
                     }
                 };
                 match self.node(node_id).unwrap() {
-                    CpsNode::ApplyCont(edge) => returning(edge),
-                    CpsNode::Switch { cases, default, .. } => {
+                    Node::ApplyCont(edge) => returning(edge),
+                    Node::Switch { cases, default, .. } => {
                         cases.values().chain(default.as_ref()).for_each(returning);
                     }
-                    CpsNode::ApplyFun {
+                    Node::ApplyFun {
                         callee,
                         return_to: to,
                         ..
                     } if *to == sentinel => match callee {
-                        CpsCallee::Known(callee) => {
+                        Callee::Known(callee) => {
                             tail_calls.insert(*callee);
                         }
-                        CpsCallee::Closure(_) => operation = operation.or(Some(1)),
+                        Callee::Closure(_) => operation = operation.or(Some(1)),
                     },
-                    CpsNode::Foreign {
+                    Node::Foreign {
                         function,
                         return_to,
                         ..
                     } if *return_to == sentinel => {
                         operation = operation.or(Some(function.signature.results.len()));
                     }
-                    CpsNode::Cell { op, return_to, .. } if *return_to == sentinel => {
+                    Node::Cell { op, return_to, .. } if *return_to == sentinel => {
                         operation = operation.or(Some(op.result_arity()));
                     }
-                    CpsNode::Intrinsic { return_to, .. } if *return_to == sentinel => {
+                    Node::Intrinsic { return_to, .. } if *return_to == sentinel => {
                         operation = operation.or(Some(1));
                     }
                     _ => {}
@@ -1059,58 +1060,58 @@ impl CpsModule {
         settled
     }
 
-    pub fn reserve_node(&mut self) -> CpsNodeId {
+    pub fn reserve_node(&mut self) -> NodeId {
         self.nodes.reserve()
     }
 
-    pub fn add_node(&mut self, node: CpsNode) -> CpsNodeId {
+    pub fn add_node(&mut self, node: Node) -> NodeId {
         let id = self.reserve_node();
         self.define_node(id, node);
         id
     }
 
-    pub fn define_node(&mut self, id: CpsNodeId, node: CpsNode) {
+    pub fn define_node(&mut self, id: NodeId, node: Node) {
         self.nodes.define(id, node);
     }
 
-    pub fn add_value(&mut self, debug_name: Option<String>) -> CpsValueId {
-        self.values.mint(CpsValueDef { debug_name })
+    pub fn add_value(&mut self, debug_name: Option<String>) -> ValueId {
+        self.values.mint(ValueDef { debug_name })
     }
 
-    pub fn reserve_function(&mut self) -> CpsFunId {
+    pub fn reserve_function(&mut self) -> FunctionId {
         self.functions.reserve()
     }
 
-    pub fn define_function(&mut self, id: CpsFunId, function: CpsFunction) {
+    pub fn define_function(&mut self, id: FunctionId, function: Function) {
         self.functions.define(id, function);
     }
 
-    pub fn add_function(&mut self, function: CpsFunction) -> CpsFunId {
+    pub fn add_function(&mut self, function: Function) -> FunctionId {
         self.functions.mint(function)
     }
 
-    pub fn reserve_continuation(&mut self) -> CpsContId {
+    pub fn reserve_continuation(&mut self) -> ContinuationId {
         self.continuations.reserve()
     }
 
-    pub fn define_continuation(&mut self, id: CpsContId, continuation: CpsContinuation) {
+    pub fn define_continuation(&mut self, id: ContinuationId, continuation: Continuation) {
         self.continuations.define(id, continuation);
     }
 
-    pub fn add_continuation(&mut self, continuation: CpsContinuation) -> CpsContId {
+    pub fn add_continuation(&mut self, continuation: Continuation) -> ContinuationId {
         self.continuations.mint(continuation)
     }
 
-    pub fn remove_node(&mut self, id: CpsNodeId) -> Option<CpsNode> {
+    pub fn remove_node(&mut self, id: NodeId) -> Option<Node> {
         self.nodes.remove(id)
     }
 
-    pub fn replace_atom(&mut self, from: CpsUseTarget, replacement: CpsAtom) {
+    pub fn replace_atom(&mut self, from: UseTarget, replacement: Atom) {
         for (_, node) in self.nodes.iter_live_mut() {
             visit_atoms_mut(node, &mut |atom| {
                 let matches = match (&from, &*atom) {
-                    (CpsUseTarget::Value(a), CpsAtom::Value(b)) => a == b,
-                    (CpsUseTarget::Fun(a), CpsAtom::Fun(b)) => a == b,
+                    (UseTarget::Value(a), Atom::Value(b)) => a == b,
+                    (UseTarget::Fun(a), Atom::Fun(b)) => a == b,
                     _ => false,
                 };
                 if matches {
@@ -1135,45 +1136,45 @@ impl CpsModule {
                 .iter()
                 .enumerate()
                 .filter(|(index, slot)| {
-                    slot.is_none() && !return_continuations.contains(&CpsContId(*index as u32))
+                    slot.is_none() && !return_continuations.contains(&ContinuationId(*index as u32))
                 })
                 .count(),
         )
     }
 
-    pub fn verify(&self) -> Result<(), CpsVerifyError> {
+    pub fn verify(&self) -> Result<(), VerifyError> {
         self.verify_with(true)
     }
 
-    /// The round-boundary subset of [`CpsModule::verify`]: every structural clause, without the row-vocabulary one.
+    /// The round-boundary subset of [`Module::verify`]: every structural clause, without the row-vocabulary one.
     ///
     /// A round's close leaves scoping, ownership and arities canonical, but the vocabulary clause holds only of the *converged* module: constant folding pushes a decided reply's payload into both arms of its dispatch, so until a later round threads the decided switch and prunes behind it, the dead arm legitimately reads that payload in the other vocabulary — the tag the fold decided is what keeps it honest, and no per-round rewrite is obliged to have cleaned it up yet. `/std/Parse`'s reply dispatches reach this state on every `pure`-fed combinator, which is how the full check at the boundary broke half the cross-stage corpus while the exit gate stayed green. The entry and exit verifies keep the full set, so a mismatch that survives convergence is still refused where its premise actually holds.
-    pub fn verify_structure(&self) -> Result<(), CpsVerifyError> {
+    pub fn verify_structure(&self) -> Result<(), VerifyError> {
         self.verify_with(false)
     }
 
-    fn verify_with(&self, rows: bool) -> Result<(), CpsVerifyError> {
+    fn verify_with(&self, rows: bool) -> Result<(), VerifyError> {
         let entry = self
             .entry
-            .ok_or_else(|| CpsVerifyError("module has no entry function".into()))?;
+            .ok_or_else(|| VerifyError("module has no entry function".into()))?;
         self.require_fun(entry, "entry")?;
 
-        let mut returns = BTreeMap::<CpsContId, CpsFunId>::new();
+        let mut returns = BTreeMap::<ContinuationId, FunctionId>::new();
         for (id, function) in self.functions.iter_live() {
             if function.return_cont.index() >= self.continuations.len() {
-                return Err(CpsVerifyError(format!(
+                return Err(VerifyError(format!(
                     "{id} return continuation {} was not minted by this module",
                     function.return_cont
                 )));
             }
             if self.continuation(function.return_cont).is_some() {
-                return Err(CpsVerifyError(format!(
+                return Err(VerifyError(format!(
                     "{id} return continuation {} also identifies a local continuation",
                     function.return_cont
                 )));
             }
             if let Some(previous) = returns.insert(function.return_cont, id) {
-                return Err(CpsVerifyError(format!(
+                return Err(VerifyError(format!(
                     "{} is the return continuation of both {previous} and {id}",
                     function.return_cont
                 )));
@@ -1196,8 +1197,8 @@ impl CpsModule {
             owners: &returns,
             arities: &arities,
         };
-        let mut node_owners = BTreeMap::<CpsNodeId, CpsFunId>::new();
-        let mut bound_continuations = BTreeSet::<CpsContId>::new();
+        let mut node_owners = BTreeMap::<NodeId, FunctionId>::new();
+        let mut bound_continuations = BTreeSet::<ContinuationId>::new();
         for (id, function) in self.functions.iter_live() {
             self.verify_function_body(
                 id,
@@ -1215,14 +1216,14 @@ impl CpsModule {
         let live_nodes = self.nodes.live_ids().collect::<BTreeSet<_>>();
         let owned_nodes = node_owners.keys().copied().collect::<BTreeSet<_>>();
         if live_nodes != owned_nodes {
-            return Err(CpsVerifyError(
+            return Err(VerifyError(
                 "node arena contains an unowned node or an owner references a tombstone".into(),
             ));
         }
 
         let live_continuations = self.continuations.live_ids().collect::<BTreeSet<_>>();
         if live_continuations != bound_continuations {
-            return Err(CpsVerifyError(
+            return Err(VerifyError(
                 "local-continuation arena and lexical LetCont bindings disagree".into(),
             ));
         }
@@ -1230,20 +1231,20 @@ impl CpsModule {
         // The recorded fields representations hold: every group names a live continuation and lies inside its parameter list without overlapping a neighbour, so a pass that reshaped a recorded parameter list without maintaining the record fails here rather than silently disagreeing with the split.
         for (continuation, groups) in &self.field_groups {
             let Some(definition) = self.continuation(*continuation) else {
-                return Err(CpsVerifyError(format!(
+                return Err(VerifyError(format!(
                     "field group records dead continuation {continuation}"
                 )));
             };
             let mut end = 0;
             for group in groups {
                 if group.width == 0 {
-                    return Err(CpsVerifyError(format!(
+                    return Err(VerifyError(format!(
                         "{continuation} records an empty field group at {}",
                         group.start
                     )));
                 }
                 if group.start < end {
-                    return Err(CpsVerifyError(format!(
+                    return Err(VerifyError(format!(
                         "{continuation} records overlapping field groups at {}",
                         group.start
                     )));
@@ -1251,7 +1252,7 @@ impl CpsModule {
                 end = group.start + group.width;
             }
             if end > definition.params.len() {
-                return Err(CpsVerifyError(format!(
+                return Err(VerifyError(format!(
                     "{continuation} records a field group past its {} parameters",
                     definition.params.len()
                 )));
@@ -1263,39 +1264,39 @@ impl CpsModule {
 
     /// The row vocabulary's coherence: every row named by a construction or a read exists, every construction carries exactly its row's width, every read is in range of it — and a read of a value this module visibly constructs is in the vocabulary that construction was minted in.
     ///
-    /// This is what the distinct [`CpsValueExpr::Row`] buys over an annotation on `Tuple`. A row value read at a structural projection, or a construction one slot short of its row, would be a `ref.cast` trap in emitted code far from the pass that caused it; here it is a verifier failure at the boundary that produced it. Padding is the door's job, so a mismatch is always a compiler bug rather than a program's.
+    /// This is what the distinct [`ValueExpr::Row`] buys over an annotation on `Tuple`. A row value read at a structural projection, or a construction one slot short of its row, would be a `ref.cast` trap in emitted code far from the pass that caused it; here it is a verifier failure at the boundary that produced it. Padding is the door's job, so a mismatch is always a compiler bug rather than a program's.
     ///
     /// The last clause was documented here before it was checked, and the gap was found the way the paragraph above predicts: `split_returns` rebuilt a resume's `Tuple` for a class returning an `Option` row, the `RowGet` below it cast `$tuple/2` to the row's final type, and the only symptom was an HTTP client trapping on its first response header. The check covers direct operands — a value constructed by a `LetValue` in this module and read by a `TupleGet` or `RowGet` in it — which is every case a pass's own rebuild can produce; a value that arrives through a parameter is the emitter's cast to decide, as before.
-    fn verify_rows(&self) -> Result<(), CpsVerifyError> {
+    fn verify_rows(&self) -> Result<(), VerifyError> {
         // What every visible construction built, so a read can be checked against the vocabulary its operand was actually minted in rather than only against the row's own width.
-        let mut built = BTreeMap::<CpsValueId, Option<CpsRowId>>::new();
+        let mut built = BTreeMap::<ValueId, Option<RowId>>::new();
         for (_, node) in self.nodes.iter_live() {
-            if let CpsNode::LetValue { result, value, .. } = node {
+            if let Node::LetValue { result, value, .. } = node {
                 match value {
-                    CpsValueExpr::Row(row, _) => {
+                    ValueExpr::Row(row, _) => {
                         built.insert(*result, Some(*row));
                     }
-                    CpsValueExpr::Tuple(_) => {
+                    ValueExpr::Tuple(_) => {
                         built.insert(*result, None);
                     }
-                    CpsValueExpr::Literal(_) | CpsValueExpr::List(_) => {}
+                    ValueExpr::Literal(_) | ValueExpr::List(_) => {}
                 }
             }
         }
         for (_, node) in self.nodes.iter_live() {
-            if let CpsNode::LetIntrinsic { op, args, .. } = node
-                && let [CpsAtom::Value(operand)] = args.as_slice()
+            if let Node::LetIntrinsic { op, args, .. } = node
+                && let [Atom::Value(operand)] = args.as_slice()
                 && let Some(&minted) = built.get(operand)
             {
                 let read = match op {
-                    CpsIntrinsic::RowGet(row, _) => Some(Some(*row)),
-                    CpsIntrinsic::TupleGet(_) => Some(None),
+                    Intrinsic::RowGet(row, _) => Some(Some(*row)),
+                    Intrinsic::TupleGet(_) => Some(None),
                     _ => None,
                 };
                 if let Some(read) = read
                     && read != minted
                 {
-                    return Err(CpsVerifyError(format!(
+                    return Err(VerifyError(format!(
                         "{operand} was built as {} but is read as {}",
                         match minted {
                             Some(row) => format!("{row}"),
@@ -1311,34 +1312,34 @@ impl CpsModule {
         }
         for (_, node) in self.nodes.iter_live() {
             match node {
-                CpsNode::LetValue {
-                    value: CpsValueExpr::Row(row, atoms),
+                Node::LetValue {
+                    value: ValueExpr::Row(row, atoms),
                     ..
                 } => {
                     let Some(Some(definition)) = self.rows.get(row.index()) else {
-                        return Err(CpsVerifyError(format!(
+                        return Err(VerifyError(format!(
                             "row construction names {row}, which was not minted by this module"
                         )));
                     };
                     if atoms.len() != definition.width() {
-                        return Err(CpsVerifyError(format!(
+                        return Err(VerifyError(format!(
                             "row construction of {row} carries {} slots, but the row is {} wide",
                             atoms.len(),
                             definition.width(),
                         )));
                     }
                 }
-                CpsNode::LetIntrinsic {
-                    op: CpsIntrinsic::RowGet(row, index),
+                Node::LetIntrinsic {
+                    op: Intrinsic::RowGet(row, index),
                     ..
                 } => {
                     let Some(Some(definition)) = self.rows.get(row.index()) else {
-                        return Err(CpsVerifyError(format!(
+                        return Err(VerifyError(format!(
                             "row read names {row}, which was not minted by this module"
                         )));
                     };
                     if *index >= definition.width() {
-                        return Err(CpsVerifyError(format!(
+                        return Err(VerifyError(format!(
                             "row read of {row} at slot {index}, but the row is {} wide",
                             definition.width(),
                         )));
@@ -1350,7 +1351,7 @@ impl CpsModule {
         Ok(())
     }
 
-    fn verify_lexical_scopes(&self, entry: CpsFunId) -> Result<(), CpsVerifyError> {
+    fn verify_lexical_scopes(&self, entry: FunctionId) -> Result<(), VerifyError> {
         let mut walk = ScopeVerifier {
             bound_functions: BTreeSet::from([entry]),
             function_work: vec![(entry, BTreeSet::new(), BTreeSet::from([entry]))],
@@ -1374,33 +1375,32 @@ impl CpsModule {
             let node = self.node(node_id).unwrap();
             for atom in atoms(node) {
                 match atom {
-                    CpsAtom::Value(value) if !values.contains(value) => {
-                        return Err(CpsVerifyError(format!(
+                    Atom::Value(value) if !values.contains(value) => {
+                        return Err(VerifyError(format!(
                             "{owner} node {node_id} uses out-of-scope {value}"
                         )));
                     }
-                    CpsAtom::Fun(function) if !functions.contains(function) => {
-                        return Err(CpsVerifyError(format!(
+                    Atom::Fun(function) if !functions.contains(function) => {
+                        return Err(VerifyError(format!(
                             "{owner} node {node_id} uses out-of-scope {function}"
                         )));
                     }
-                    CpsAtom::Value(_) | CpsAtom::Fun(_) | CpsAtom::Literal(_) | CpsAtom::Filler => {
-                    }
+                    Atom::Value(_) | Atom::Fun(_) | Atom::Literal(_) | Atom::Filler => {}
                 }
             }
-            if let CpsNode::ApplyFun { callee, .. } = node {
+            if let Node::ApplyFun { callee, .. } = node {
                 match callee {
-                    CpsCallee::Known(function) if !functions.contains(function) => {
-                        return Err(CpsVerifyError(format!(
+                    Callee::Known(function) if !functions.contains(function) => {
+                        return Err(VerifyError(format!(
                             "{owner} node {node_id} calls out-of-scope {function}"
                         )));
                     }
-                    CpsCallee::Closure(value) if !values.contains(value) => {
-                        return Err(CpsVerifyError(format!(
+                    Callee::Closure(value) if !values.contains(value) => {
+                        return Err(VerifyError(format!(
                             "{owner} node {node_id} calls out-of-scope {value}"
                         )));
                     }
-                    CpsCallee::Known(_) | CpsCallee::Closure(_) => {}
+                    Callee::Known(_) | Callee::Closure(_) => {}
                 }
             }
 
@@ -1409,13 +1409,13 @@ impl CpsModule {
 
         let live_functions = self.functions.live_ids().collect::<BTreeSet<_>>();
         if live_functions != walk.bound_functions {
-            return Err(CpsVerifyError(
+            return Err(VerifyError(
                 "function arena and lexical function bindings disagree".into(),
             ));
         }
         let live_values = self.values.live_ids().collect::<BTreeSet<_>>();
         if live_values != walk.bound_values {
-            return Err(CpsVerifyError(
+            return Err(VerifyError(
                 "value arena and lexical value bindings disagree".into(),
             ));
         }
@@ -1425,7 +1425,7 @@ impl CpsModule {
     /// The functions each body may name, by the rule [`Self::scope_step`] states and [`Self::verify_lexical_scopes`] enforces: its own `LetFun` group, every group enclosing it, and every group bound *before* it along the chain from the entry. Recorded rather than checked, so a pass forwarding a function reference into a body can ask whether that body may legally name it.
     ///
     /// A function the walk does not reach is absent rather than empty, and the caller decides what to answer for it. This runs mid-round, where the module is transiently unscoped by design and only a round boundary promises a walk from the entry reaches every live function.
-    fn lexical_scopes(&self) -> BTreeMap<CpsFunId, BTreeSet<CpsFunId>> {
+    fn lexical_scopes(&self) -> BTreeMap<FunctionId, BTreeSet<FunctionId>> {
         let Some(entry) = self.entry else {
             return BTreeMap::new();
         };
@@ -1461,9 +1461,9 @@ impl CpsModule {
     /// The scope a function's own body sees: its parameters join the values it inherits, and no continuation crosses the boundary.
     fn function_scope(
         &self,
-        function: CpsFunId,
-        mut values: BTreeSet<CpsValueId>,
-        functions: BTreeSet<CpsFunId>,
+        function: FunctionId,
+        mut values: BTreeSet<ValueId>,
+        functions: BTreeSet<FunctionId>,
     ) -> ScopeStep {
         let definition = self.function(function).unwrap();
         let mut step = ScopeStep::default();
@@ -1489,15 +1489,15 @@ impl CpsModule {
     /// This is the single statement of the lexical scoping rules, which [`Self::verify_lexical_scopes`] enforces.
     fn scope_step(
         &self,
-        owner: Option<CpsFunId>,
-        node: &CpsNode,
-        values: BTreeSet<CpsValueId>,
-        functions: BTreeSet<CpsFunId>,
-        continuations: BTreeSet<CpsContId>,
+        owner: Option<FunctionId>,
+        node: &Node,
+        values: BTreeSet<ValueId>,
+        functions: BTreeSet<FunctionId>,
+        continuations: BTreeSet<ContinuationId>,
     ) -> ScopeStep {
         let mut step = ScopeStep::default();
         match node {
-            CpsNode::LetValue { result, next, .. } | CpsNode::LetIntrinsic { result, next, .. } => {
+            Node::LetValue { result, next, .. } | Node::LetIntrinsic { result, next, .. } => {
                 step.values.push(ScopeBinding {
                     value: *result,
                     noun: "node result",
@@ -1512,7 +1512,7 @@ impl CpsModule {
                     continuations,
                 });
             }
-            CpsNode::LetFun {
+            Node::LetFun {
                 functions: members,
                 body,
             } => {
@@ -1536,7 +1536,7 @@ impl CpsModule {
                     continuations,
                 });
             }
-            CpsNode::LetCont {
+            Node::LetCont {
                 continuations: members,
                 body,
             } => {
@@ -1569,29 +1569,29 @@ impl CpsModule {
                     continuations: inner,
                 });
             }
-            CpsNode::ApplyFun { .. }
-            | CpsNode::ApplyCont(_)
-            | CpsNode::Switch { .. }
-            | CpsNode::Foreign { .. }
-            | CpsNode::Cell { .. }
-            | CpsNode::Intrinsic { .. }
-            | CpsNode::Exit { .. }
-            | CpsNode::Panic(_)
-            | CpsNode::Unreachable => {}
+            Node::ApplyFun { .. }
+            | Node::ApplyCont(_)
+            | Node::Switch { .. }
+            | Node::Foreign { .. }
+            | Node::Cell { .. }
+            | Node::Intrinsic { .. }
+            | Node::Exit { .. }
+            | Node::Panic(_)
+            | Node::Unreachable => {}
         }
         step
     }
 
     fn verify_function_body(
         &self,
-        owner: CpsFunId,
-        function: &CpsFunction,
+        owner: FunctionId,
+        function: &Function,
         facts: &ReturnFacts<'_>,
-        node_owners: &mut BTreeMap<CpsNodeId, CpsFunId>,
-        bound_continuations: &mut BTreeSet<CpsContId>,
-    ) -> Result<(), CpsVerifyError> {
-        let mut work = vec![(function.body, BTreeSet::<CpsContId>::new())];
-        let mut visited = BTreeSet::<CpsNodeId>::new();
+        node_owners: &mut BTreeMap<NodeId, FunctionId>,
+        bound_continuations: &mut BTreeSet<ContinuationId>,
+    ) -> Result<(), VerifyError> {
+        let mut work = vec![(function.body, BTreeSet::<ContinuationId>::new())];
+        let mut visited = BTreeSet::<NodeId>::new();
 
         while let Some((id, scope)) = work.pop() {
             if !visited.insert(id) {
@@ -1600,36 +1600,36 @@ impl CpsModule {
             if let Some(previous) = node_owners.insert(id, owner)
                 && previous != owner
             {
-                return Err(CpsVerifyError(format!(
+                return Err(VerifyError(format!(
                     "{id} is owned by both {previous} and {owner}"
                 )));
             }
             let node = self
                 .node(id)
-                .ok_or_else(|| CpsVerifyError(format!("function body references missing {id}")))?;
+                .ok_or_else(|| VerifyError(format!("function body references missing {id}")))?;
             self.verify_node(owner, function.return_cont, facts, &scope, id, node)?;
 
             match node {
-                CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
+                Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
                     work.push((*next, scope));
                 }
-                CpsNode::LetFun { body, .. } => {
+                Node::LetFun { body, .. } => {
                     work.push((*body, scope));
                 }
-                CpsNode::LetCont {
+                Node::LetCont {
                     continuations,
                     body,
                 } => {
                     let mut inner = scope;
                     for &continuation in continuations {
                         if facts.owners.contains_key(&continuation) {
-                            return Err(CpsVerifyError(format!(
+                            return Err(VerifyError(format!(
                                 "return ID {continuation} cannot be bound as a local continuation"
                             )));
                         }
                         self.require_cont(continuation, "LetCont member")?;
                         if !bound_continuations.insert(continuation) {
-                            return Err(CpsVerifyError(format!(
+                            return Err(VerifyError(format!(
                                 "local continuation {continuation} is bound more than once"
                             )));
                         }
@@ -1640,15 +1640,15 @@ impl CpsModule {
                         work.push((self.continuation(continuation).unwrap().body, inner.clone()));
                     }
                 }
-                CpsNode::ApplyFun { .. }
-                | CpsNode::ApplyCont(_)
-                | CpsNode::Switch { .. }
-                | CpsNode::Foreign { .. }
-                | CpsNode::Cell { .. }
-                | CpsNode::Intrinsic { .. }
-                | CpsNode::Exit { .. }
-                | CpsNode::Panic(_)
-                | CpsNode::Unreachable => {}
+                Node::ApplyFun { .. }
+                | Node::ApplyCont(_)
+                | Node::Switch { .. }
+                | Node::Foreign { .. }
+                | Node::Cell { .. }
+                | Node::Intrinsic { .. }
+                | Node::Exit { .. }
+                | Node::Panic(_)
+                | Node::Unreachable => {}
             }
         }
         Ok(())
@@ -1656,19 +1656,19 @@ impl CpsModule {
 
     fn verify_node(
         &self,
-        current_function: CpsFunId,
-        return_cont: CpsContId,
+        current_function: FunctionId,
+        return_cont: ContinuationId,
         facts: &ReturnFacts<'_>,
-        scope: &BTreeSet<CpsContId>,
-        id: CpsNodeId,
-        node: &CpsNode,
-    ) -> Result<(), CpsVerifyError> {
+        scope: &BTreeSet<ContinuationId>,
+        id: NodeId,
+        node: &Node,
+    ) -> Result<(), VerifyError> {
         match node {
-            CpsNode::LetValue { result, next, .. } => {
+            Node::LetValue { result, next, .. } => {
                 self.require_value(*result, "let-value result")?;
                 self.require_node(*next, "let-value successor")?;
             }
-            CpsNode::LetIntrinsic {
+            Node::LetIntrinsic {
                 result,
                 op,
                 args,
@@ -1677,20 +1677,20 @@ impl CpsModule {
                 self.require_value(*result, "let-intrinsic result")?;
                 self.require_node(*next, "let-intrinsic successor")?;
                 if args.len() != op.arity() {
-                    return Err(CpsVerifyError(format!(
+                    return Err(VerifyError(format!(
                         "{id} intrinsic {op:?} expects {} operands, got {}",
                         op.arity(),
                         args.len()
                     )));
                 }
             }
-            CpsNode::LetFun { functions, body } => {
+            Node::LetFun { functions, body } => {
                 for &function in functions {
                     self.require_fun(function, "let-fun member")?;
                 }
                 self.require_node(*body, "let-fun body")?;
             }
-            CpsNode::LetCont {
+            Node::LetCont {
                 continuations,
                 body,
             } => {
@@ -1699,28 +1699,28 @@ impl CpsModule {
                 }
                 self.require_node(*body, "let-cont body")?;
             }
-            CpsNode::ApplyFun {
+            Node::ApplyFun {
                 callee,
                 args,
                 return_to,
             } => {
                 match callee {
-                    CpsCallee::Known(function) => {
+                    Callee::Known(function) => {
                         self.require_fun(*function, "known callee")?;
                         let arity = self.function(*function).unwrap().params.len();
                         if arity != args.len() {
-                            return Err(CpsVerifyError(format!(
+                            return Err(VerifyError(format!(
                                 "{id} calls {function} with {} arguments; expected {arity}",
                                 args.len()
                             )));
                         }
                     }
-                    CpsCallee::Closure(value) => self.require_value(*value, "closure callee")?,
+                    Callee::Closure(value) => self.require_value(*value, "closure callee")?,
                 }
                 // A closure is reached through the shared type of its arity, which carries one result whatever the function behind it returns.
                 let results = match callee {
-                    CpsCallee::Known(function) => facts.arity(*function),
-                    CpsCallee::Closure(_) => 1,
+                    Callee::Known(function) => facts.arity(*function),
+                    Callee::Closure(_) => 1,
                 };
                 let params = self.continuation_arity(
                     current_function,
@@ -1730,15 +1730,15 @@ impl CpsModule {
                     *return_to,
                 )?;
                 if params != results {
-                    return Err(CpsVerifyError(format!(
+                    return Err(VerifyError(format!(
                         "{id} user call return continuation {return_to} accepts {params} values, callee returns {results}"
                     )));
                 }
             }
-            CpsNode::ApplyCont(edge) => {
+            Node::ApplyCont(edge) => {
                 self.verify_edge(current_function, return_cont, facts, scope, id, edge)?
             }
-            CpsNode::Switch { cases, default, .. } => {
+            Node::Switch { cases, default, .. } => {
                 for edge in cases.values() {
                     self.verify_edge(current_function, return_cont, facts, scope, id, edge)?;
                 }
@@ -1746,13 +1746,13 @@ impl CpsModule {
                     self.verify_edge(current_function, return_cont, facts, scope, id, edge)?;
                 }
             }
-            CpsNode::Foreign {
+            Node::Foreign {
                 function,
                 args,
                 return_to,
             } => {
                 if args.len() != function.signature.params.len() {
-                    return Err(CpsVerifyError(format!(
+                    return Err(VerifyError(format!(
                         "{id} foreign call expects {} operands, got {}",
                         function.signature.params.len(),
                         args.len()
@@ -1767,18 +1767,18 @@ impl CpsModule {
                     *return_to,
                 )?;
                 if results != params {
-                    return Err(CpsVerifyError(format!(
+                    return Err(VerifyError(format!(
                         "{id} foreign return continuation expects {params} values, call returns {results}"
                     )));
                 }
             }
-            CpsNode::Cell {
+            Node::Cell {
                 op,
                 args,
                 return_to,
             } => {
                 if args.len() != op.operand_arity() {
-                    return Err(CpsVerifyError(format!(
+                    return Err(VerifyError(format!(
                         "{id} cell {op:?} expects {} operands, got {}",
                         op.operand_arity(),
                         args.len()
@@ -1792,18 +1792,18 @@ impl CpsModule {
                     *return_to,
                 )? != op.result_arity()
                 {
-                    return Err(CpsVerifyError(format!(
+                    return Err(VerifyError(format!(
                         "{id} cell {op:?} continuation arity mismatch"
                     )));
                 }
             }
-            CpsNode::Intrinsic {
-                op: CpsIntrinsicCall::ListMap,
+            Node::Intrinsic {
+                op: IntrinsicCall::ListMap,
                 args,
                 return_to,
             } => {
                 if args.len() != 2 {
-                    return Err(CpsVerifyError(format!(
+                    return Err(VerifyError(format!(
                         "{id} ListMap expects two operands, got {}",
                         args.len()
                     )));
@@ -1816,40 +1816,40 @@ impl CpsModule {
                     *return_to,
                 )? != 1
                 {
-                    return Err(CpsVerifyError(format!(
+                    return Err(VerifyError(format!(
                         "{id} ListMap continuation must accept one value"
                     )));
                 }
             }
-            CpsNode::Exit { .. } | CpsNode::Panic(_) | CpsNode::Unreachable => {}
+            Node::Exit { .. } | Node::Panic(_) | Node::Unreachable => {}
         }
 
         for atom in atoms(node) {
             match atom {
-                CpsAtom::Value(value) => {
+                Atom::Value(value) => {
                     // Naming the referencing statement turns a dangling-operand refusal from a value id into a site: which node, and — through its spelled form — which rewrite left it behind.
                     self.require_value(*value, &format!("statement {id} ({node:?}) operand"))?
                 }
-                CpsAtom::Fun(function) => self.require_fun(*function, "function atom")?,
-                CpsAtom::Literal(_) | CpsAtom::Filler => {}
+                Atom::Fun(function) => self.require_fun(*function, "function atom")?,
+                Atom::Literal(_) | Atom::Filler => {}
             }
         }
         Ok(())
     }
 
-    /// Check one transfer's argument count against its target's. A return edge is covered by the same rule: a transfer to the enclosing function's own return continuation carries its return arity, read off [`CpsModule::return_arities`] — so an edge that disagrees with its siblings is reported here rather than reaching the emitter.
+    /// Check one transfer's argument count against its target's. A return edge is covered by the same rule: a transfer to the enclosing function's own return continuation carries its return arity, read off [`Module::return_arities`] — so an edge that disagrees with its siblings is reported here rather than reaching the emitter.
     fn verify_edge(
         &self,
-        function: CpsFunId,
-        return_cont: CpsContId,
+        function: FunctionId,
+        return_cont: ContinuationId,
         facts: &ReturnFacts<'_>,
-        scope: &BTreeSet<CpsContId>,
-        owner: CpsNodeId,
-        edge: &CpsEdge,
-    ) -> Result<(), CpsVerifyError> {
+        scope: &BTreeSet<ContinuationId>,
+        owner: NodeId,
+        edge: &Edge,
+    ) -> Result<(), VerifyError> {
         let arity = self.continuation_arity(function, return_cont, facts, scope, edge.target)?;
         if arity != edge.args.len() {
-            return Err(CpsVerifyError(format!(
+            return Err(VerifyError(format!(
                 "{owner} edge to {} carries {} arguments; expected {arity}",
                 edge.target,
                 edge.args.len()
@@ -1861,72 +1861,72 @@ impl CpsModule {
     /// How many values a transfer to `target` carries; a transfer to the enclosing function's own return continuation carries its return.
     fn continuation_arity(
         &self,
-        function: CpsFunId,
-        return_cont: CpsContId,
+        function: FunctionId,
+        return_cont: ContinuationId,
         facts: &ReturnFacts<'_>,
-        scope: &BTreeSet<CpsContId>,
-        target: CpsContId,
-    ) -> Result<usize, CpsVerifyError> {
+        scope: &BTreeSet<ContinuationId>,
+        target: ContinuationId,
+    ) -> Result<usize, VerifyError> {
         if target == return_cont {
             return Ok(facts.arity(function));
         }
         if let Some(owner) = facts.owners.get(&target) {
-            return Err(CpsVerifyError(format!(
+            return Err(VerifyError(format!(
                 "{function} references {owner}'s return continuation {target}"
             )));
         }
         if !scope.contains(&target) {
-            return Err(CpsVerifyError(format!(
+            return Err(VerifyError(format!(
                 "{function} references undefined or out-of-scope continuation {target}"
             )));
         }
         self.continuation(target)
             .map(|continuation| continuation.params.len())
-            .ok_or_else(|| CpsVerifyError(format!("undefined non-return continuation {target}")))
+            .ok_or_else(|| VerifyError(format!("undefined non-return continuation {target}")))
     }
 
-    fn require_node(&self, id: CpsNodeId, what: &str) -> Result<(), CpsVerifyError> {
+    fn require_node(&self, id: NodeId, what: &str) -> Result<(), VerifyError> {
         self.node(id)
             .map(|_| ())
-            .ok_or_else(|| CpsVerifyError(format!("{what} references missing {id}")))
+            .ok_or_else(|| VerifyError(format!("{what} references missing {id}")))
     }
 
-    fn require_value(&self, id: CpsValueId, what: &str) -> Result<(), CpsVerifyError> {
+    fn require_value(&self, id: ValueId, what: &str) -> Result<(), VerifyError> {
         self.values
             .get(id)
             .map(|_| ())
-            .ok_or_else(|| CpsVerifyError(format!("{what} references missing {id}")))
+            .ok_or_else(|| VerifyError(format!("{what} references missing {id}")))
     }
 
-    fn require_fun(&self, id: CpsFunId, what: &str) -> Result<(), CpsVerifyError> {
+    fn require_fun(&self, id: FunctionId, what: &str) -> Result<(), VerifyError> {
         self.function(id)
             .map(|_| ())
-            .ok_or_else(|| CpsVerifyError(format!("{what} references missing {id}")))
+            .ok_or_else(|| VerifyError(format!("{what} references missing {id}")))
     }
 
-    fn require_cont(&self, id: CpsContId, what: &str) -> Result<(), CpsVerifyError> {
+    fn require_cont(&self, id: ContinuationId, what: &str) -> Result<(), VerifyError> {
         self.continuation(id)
             .map(|_| ())
-            .ok_or_else(|| CpsVerifyError(format!("{what} references missing {id}")))
+            .ok_or_else(|| VerifyError(format!("{what} references missing {id}")))
     }
 }
 
-pub fn atoms(node: &CpsNode) -> Vec<&CpsAtom> {
+pub fn atoms(node: &Node) -> Vec<&Atom> {
     let mut output = Vec::new();
     match node {
-        CpsNode::LetValue { value, .. } => match value {
-            CpsValueExpr::Literal(_) => {}
-            CpsValueExpr::List(values)
-            | CpsValueExpr::Tuple(values)
-            | CpsValueExpr::Row(_, values) => output.extend(values),
+        Node::LetValue { value, .. } => match value {
+            ValueExpr::Literal(_) => {}
+            ValueExpr::List(values) | ValueExpr::Tuple(values) | ValueExpr::Row(_, values) => {
+                output.extend(values)
+            }
         },
-        CpsNode::LetIntrinsic { args, .. }
-        | CpsNode::ApplyFun { args, .. }
-        | CpsNode::Foreign { args, .. }
-        | CpsNode::Cell { args, .. }
-        | CpsNode::Intrinsic { args, .. } => output.extend(args),
-        CpsNode::ApplyCont(edge) => output.extend(&edge.args),
-        CpsNode::Switch {
+        Node::LetIntrinsic { args, .. }
+        | Node::ApplyFun { args, .. }
+        | Node::Foreign { args, .. }
+        | Node::Cell { args, .. }
+        | Node::Intrinsic { args, .. } => output.extend(args),
+        Node::ApplyCont(edge) => output.extend(&edge.args),
+        Node::Switch {
             scrutinee,
             cases,
             default,
@@ -1939,30 +1939,27 @@ pub fn atoms(node: &CpsNode) -> Vec<&CpsAtom> {
                 output.extend(&edge.args);
             }
         }
-        CpsNode::Exit { value, .. } => output.extend(value),
-        CpsNode::LetFun { .. }
-        | CpsNode::LetCont { .. }
-        | CpsNode::Panic(_)
-        | CpsNode::Unreachable => {}
+        Node::Exit { value, .. } => output.extend(value),
+        Node::LetFun { .. } | Node::LetCont { .. } | Node::Panic(_) | Node::Unreachable => {}
     }
     output
 }
 
-pub(crate) fn visit_atoms_mut(node: &mut CpsNode, visitor: &mut impl FnMut(&mut CpsAtom)) {
+pub(crate) fn visit_atoms_mut(node: &mut Node, visitor: &mut impl FnMut(&mut Atom)) {
     match node {
-        CpsNode::LetValue { value, .. } => match value {
-            CpsValueExpr::Literal(_) => {}
-            CpsValueExpr::List(values)
-            | CpsValueExpr::Tuple(values)
-            | CpsValueExpr::Row(_, values) => values.iter_mut().for_each(visitor),
+        Node::LetValue { value, .. } => match value {
+            ValueExpr::Literal(_) => {}
+            ValueExpr::List(values) | ValueExpr::Tuple(values) | ValueExpr::Row(_, values) => {
+                values.iter_mut().for_each(visitor)
+            }
         },
-        CpsNode::LetIntrinsic { args, .. }
-        | CpsNode::ApplyFun { args, .. }
-        | CpsNode::Foreign { args, .. }
-        | CpsNode::Cell { args, .. }
-        | CpsNode::Intrinsic { args, .. } => args.iter_mut().for_each(visitor),
-        CpsNode::ApplyCont(edge) => edge.args.iter_mut().for_each(visitor),
-        CpsNode::Switch {
+        Node::LetIntrinsic { args, .. }
+        | Node::ApplyFun { args, .. }
+        | Node::Foreign { args, .. }
+        | Node::Cell { args, .. }
+        | Node::Intrinsic { args, .. } => args.iter_mut().for_each(visitor),
+        Node::ApplyCont(edge) => edge.args.iter_mut().for_each(visitor),
+        Node::Switch {
             scrutinee,
             cases,
             default,
@@ -1975,15 +1972,12 @@ pub(crate) fn visit_atoms_mut(node: &mut CpsNode, visitor: &mut impl FnMut(&mut 
                 edge.args.iter_mut().for_each(visitor);
             }
         }
-        CpsNode::Exit { value, .. } => {
+        Node::Exit { value, .. } => {
             if let Some(value) = value {
                 visitor(value);
             }
         }
-        CpsNode::LetFun { .. }
-        | CpsNode::LetCont { .. }
-        | CpsNode::Panic(_)
-        | CpsNode::Unreachable => {}
+        Node::LetFun { .. } | Node::LetCont { .. } | Node::Panic(_) | Node::Unreachable => {}
     }
 }
 
@@ -2031,7 +2025,7 @@ pub use optimize::optimize;
 pub(crate) use origin::*;
 pub use represent::*;
 
-impl fmt::Display for CpsModule {
+impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
@@ -2054,14 +2048,14 @@ impl fmt::Display for CpsModule {
             writeln!(f, ") = {}", continuation.body)?;
         }
         for (id, node) in self.nodes.iter_live() {
-            writeln!(f, "{id} = {}", CpsDisplayNode(node))?;
+            writeln!(f, "{id} = {}", DisplayNode(node))?;
         }
         Ok(())
     }
 }
 
 /// Render a parameter list, spelling each binder's source hint as `$name` — the definition-site form that matches function names and the wasm scheme, so a value's origin is legible where it is bound. A binder with no hint prints bare.
-fn params(module: &CpsModule, f: &mut fmt::Formatter<'_>, params: &[CpsValueId]) -> fmt::Result {
+fn params(module: &Module, f: &mut fmt::Formatter<'_>, params: &[ValueId]) -> fmt::Result {
     for (index, &param) in params.iter().enumerate() {
         if index != 0 {
             write!(f, ", ")?;
@@ -2079,17 +2073,17 @@ fn params(module: &CpsModule, f: &mut fmt::Formatter<'_>, params: &[CpsValueId])
     Ok(())
 }
 
-struct CpsDisplayNode<'a>(&'a CpsNode);
+struct DisplayNode<'a>(&'a Node);
 
-impl fmt::Display for CpsDisplayNode<'_> {
+impl fmt::Display for DisplayNode<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
-            CpsNode::LetValue {
+            Node::LetValue {
                 result,
                 value,
                 next,
             } => write!(f, "let {result} = {value:?}; {next}"),
-            CpsNode::LetIntrinsic {
+            Node::LetIntrinsic {
                 result,
                 op,
                 args,
@@ -2097,48 +2091,48 @@ impl fmt::Display for CpsDisplayNode<'_> {
             } => {
                 write!(f, "let {result} = {op:?}{args:?}; {next}")
             }
-            CpsNode::LetFun { functions, body } => write!(f, "let-fun {functions:?}; {body}"),
-            CpsNode::LetCont {
+            Node::LetFun { functions, body } => write!(f, "let-fun {functions:?}; {body}"),
+            Node::LetCont {
                 continuations,
                 body,
             } => write!(f, "let-cont {continuations:?}; {body}"),
-            CpsNode::ApplyFun {
+            Node::ApplyFun {
                 callee,
                 args,
                 return_to,
             } => {
                 write!(f, "apply {callee:?}{args:?} -> {return_to}")
             }
-            CpsNode::ApplyCont(edge) => write!(f, "jump {}{:?}", edge.target, edge.args),
-            CpsNode::Switch {
+            Node::ApplyCont(edge) => write!(f, "jump {}{:?}", edge.target, edge.args),
+            Node::Switch {
                 scrutinee,
                 cases,
                 default,
             } => {
                 write!(f, "switch {scrutinee:?} {cases:?} default {default:?}")
             }
-            CpsNode::Foreign {
+            Node::Foreign {
                 function,
                 args,
                 return_to,
             } => {
                 write!(f, "foreign {}{args:?} -> {return_to}", function.name)
             }
-            CpsNode::Cell {
+            Node::Cell {
                 op,
                 args,
                 return_to,
             } => write!(f, "cell.{op:?}{args:?} -> {return_to}"),
-            CpsNode::Intrinsic {
+            Node::Intrinsic {
                 op,
                 args,
                 return_to,
             } => {
                 write!(f, "intrinsic.{op:?}{args:?} -> {return_to}")
             }
-            CpsNode::Exit { value } => write!(f, "exit {value:?}"),
-            CpsNode::Panic(panic) => write!(f, "panic {panic}"),
-            CpsNode::Unreachable => f.write_str("unreachable"),
+            Node::Exit { value } => write!(f, "exit {value:?}"),
+            Node::Panic(panic) => write!(f, "panic {panic}"),
+            Node::Unreachable => f.write_str("unreachable"),
         }
     }
 }

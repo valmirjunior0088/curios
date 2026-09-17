@@ -690,7 +690,7 @@ impl<'a, 'b> Context<'a, 'b> {
             EmissionTail::Host(host) => self.host_instrs(host),
             EmissionTail::Cell(cell) => self.cell_instrs(cell),
             EmissionTail::Panic(panic) => self.table().refuse_instrs(*panic),
-            // An arm the theory proved impossible, carried down as `CpsNode::Unreachable`; reaching it is a compiler bug, which is what the refusal reports.
+            // An arm the theory proved impossible, carried down as `curios_cont::Node::Unreachable`; reaching it is a compiler bug, which is what the refusal reports.
             EmissionTail::Unreachable => self.table().refuse_instrs(curios_cont::Panic::Invariant),
         }
     }
@@ -891,16 +891,16 @@ pub(crate) enum LoadAs {
 /// The zero of one row slot: the register zero for a scalar carrier, a null for a declared heap type, and the boxed zero for the uniform reference.
 ///
 /// A typed reference slot takes `ref.null none` rather than the boxed zero because the boxed zero is not of its type — and because null is what a filler *means*, where an `i31` zero is a perfectly good `Nat` standing in a position that holds no value at all.
-pub(crate) fn slot_zero_instrs(slot: curios_cont::CpsSlot) -> Vec<curios_wasm::Instr> {
+pub(crate) fn slot_zero_instrs(slot: curios_cont::Slot) -> Vec<curios_wasm::Instr> {
     match slot {
-        curios_cont::CpsSlot::Tag | curios_cont::CpsSlot::Nat | curios_cont::CpsSlot::Int => {
+        curios_cont::Slot::Tag | curios_cont::Slot::Nat | curios_cont::Slot::Int => {
             vec![curios_wasm::Instr::I32Const { value: 0 }]
         }
-        curios_cont::CpsSlot::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
-        curios_cont::CpsSlot::List
-        | curios_cont::CpsSlot::Closure(_)
-        | curios_cont::CpsSlot::Row(_)
-        | curios_cont::CpsSlot::Opaque => null_instrs(),
+        curios_cont::Slot::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
+        curios_cont::Slot::List
+        | curios_cont::Slot::Closure(_)
+        | curios_cont::Slot::Row(_)
+        | curios_cont::Slot::Opaque => null_instrs(),
     }
 }
 

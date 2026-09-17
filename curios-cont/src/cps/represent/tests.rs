@@ -4,19 +4,19 @@ use {
     super::{Storage, storage},
     crate::Repr,
     crate::{
-        CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsic, CpsLiteral,
-        CpsModule, CpsNode, CpsNodeId, CpsValueId,
+        Atom, Callee, Continuation, Edge, Function, Intrinsic, Literal, Module, Node, NodeId,
+        ValueId,
     },
 };
 
 /// Make `body` the entry function's body, with `params` as its parameters. The return continuation is reserved and never defined, which is exactly what a function's return sentinel is.
-fn entry(module: &mut CpsModule, params: Vec<CpsValueId>, body: CpsNodeId) {
+fn entry(module: &mut Module, params: Vec<ValueId>, body: NodeId) {
     let function = module.reserve_function();
     let return_cont = module.reserve_continuation();
 
     module.define_function(
         function,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params,
             return_cont,
@@ -27,33 +27,29 @@ fn entry(module: &mut CpsModule, params: Vec<CpsValueId>, body: CpsNodeId) {
 }
 
 /// Route `body` through a continuation taking `params`, and answer the node that enters it. A literal argument stands in for the incoming values, so entering the continuation demands nothing of its own.
-fn through_continuation(
-    module: &mut CpsModule,
-    params: Vec<CpsValueId>,
-    body: CpsNodeId,
-) -> CpsNodeId {
+fn through_continuation(module: &mut Module, params: Vec<ValueId>, body: NodeId) -> NodeId {
     let head = module.reserve_continuation();
     let args = params
         .iter()
-        .map(|_| CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))))
+        .map(|_| Atom::Literal(Literal::Nat(Natural::from(0u32))))
         .collect();
 
     module.define_continuation(
         head,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("head".into()),
             params,
             body,
         },
     );
 
-    module.add_node(CpsNode::ApplyCont(CpsEdge { target: head, args }))
+    module.add_node(Node::ApplyCont(Edge { target: head, args }))
 }
 
 /// Jump to a reserved-but-undefined continuation — the return sentinel, which demands nothing of what it carries.
-fn finish(module: &mut CpsModule, args: Vec<CpsAtom>) -> CpsNodeId {
+fn finish(module: &mut Module, args: Vec<Atom>) -> NodeId {
     let sentinel = module.reserve_continuation();
-    module.add_node(CpsNode::ApplyCont(CpsEdge {
+    module.add_node(Node::ApplyCont(Edge {
         target: sentinel,
         args,
     }))
@@ -61,17 +57,17 @@ fn finish(module: &mut CpsModule, args: Vec<CpsAtom>) -> CpsNodeId {
 
 #[test]
 fn an_intrinsic_operand_position_demands_the_raw_carrier() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let param = module.add_value(Some("x".into()));
     let result = module.add_value(Some("r".into()));
 
-    let done = finish(&mut module, vec![CpsAtom::Value(result)]);
-    let body = module.add_node(CpsNode::LetIntrinsic {
+    let done = finish(&mut module, vec![Atom::Value(result)]);
+    let body = module.add_node(Node::LetIntrinsic {
         result,
-        op: CpsIntrinsic::NatAdd,
+        op: Intrinsic::NatAdd,
         args: vec![
-            CpsAtom::Value(param),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            Atom::Value(param),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
         ],
         next: done,
     });
@@ -84,16 +80,16 @@ fn an_intrinsic_operand_position_demands_the_raw_carrier() {
 /// The scrutinee is read as an unsigned tag, so it is a raw position even though nothing arithmetic touches it.
 #[test]
 fn a_switch_scrutinee_demands_the_raw_carrier() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let param = module.add_value(Some("tag".into()));
 
     let done = finish(&mut module, vec![]);
-    let body = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(param),
+    let body = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(param),
         cases: Default::default(),
-        default: Some(CpsEdge {
+        default: Some(Edge {
             target: match module.node(done) {
-                Some(CpsNode::ApplyCont(edge)) => edge.target,
+                Some(Node::ApplyCont(edge)) => edge.target,
                 _ => unreachable!("`finish` builds an `ApplyCont`"),
             },
             args: vec![],
@@ -108,14 +104,14 @@ fn a_switch_scrutinee_demands_the_raw_carrier() {
 /// A call argument crosses a `func/N` signature that is uniformly `anyref`, so nothing about it is raw.
 #[test]
 fn a_call_argument_alone_stays_boxed() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let param = module.add_value(Some("a".into()));
     let callee = module.reserve_function();
     let resume = module.reserve_continuation();
 
-    let body = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(callee),
-        args: vec![CpsAtom::Value(param)],
+    let body = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(param)],
         return_to: resume,
     });
     let enter = through_continuation(&mut module, vec![param], body);
@@ -127,26 +123,26 @@ fn a_call_argument_alone_stays_boxed() {
 /// The rule the whole analysis turns on. `carried` is *only* ever passed round an edge — it has no raw use of its own — so a scan over use positions would leave it boxed and the loop would coerce every iteration. Its demand is the storage of the parameter it feeds, and that parameter is raw because an intrinsic reads it, so the decision has to travel backwards across the edge to reach it.
 #[test]
 fn an_edge_argument_inherits_the_storage_of_the_parameter_it_feeds() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let param = module.add_value(Some("p".into()));
     let result = module.add_value(Some("r".into()));
     let carried = module.add_value(Some("carried".into()));
 
     // The loop head reads its parameter arithmetically, which is what makes the parameter raw.
     let head = module.reserve_continuation();
-    let done = finish(&mut module, vec![CpsAtom::Value(result)]);
-    let head_body = module.add_node(CpsNode::LetIntrinsic {
+    let done = finish(&mut module, vec![Atom::Value(result)]);
+    let head_body = module.add_node(Node::LetIntrinsic {
         result,
-        op: CpsIntrinsic::NatAdd,
+        op: Intrinsic::NatAdd,
         args: vec![
-            CpsAtom::Value(param),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            Atom::Value(param),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
         ],
         next: done,
     });
     module.define_continuation(
         head,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("head".into()),
             params: vec![param],
             body: head_body,
@@ -154,16 +150,16 @@ fn an_edge_argument_inherits_the_storage_of_the_parameter_it_feeds() {
     );
 
     // `carried` is produced arithmetically and then reaches the head only as an edge argument.
-    let jump = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let jump = module.add_node(Node::ApplyCont(Edge {
         target: head,
-        args: vec![CpsAtom::Value(carried)],
+        args: vec![Atom::Value(carried)],
     }));
-    let body = module.add_node(CpsNode::LetIntrinsic {
+    let body = module.add_node(Node::LetIntrinsic {
         result: carried,
-        op: CpsIntrinsic::NatAdd,
+        op: Intrinsic::NatAdd,
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+            Atom::Literal(Literal::Nat(Natural::from(2u32))),
         ],
         next: jump,
     });
@@ -175,29 +171,29 @@ fn an_edge_argument_inherits_the_storage_of_the_parameter_it_feeds() {
 /// The top of the lattice. A continuation parameter is the one value with no producer to fix its carrier, so it is the one value two uses can disagree about — and the disagreement has to settle *above* both, because the solver stops when nothing changed, not when nothing is left to change.
 #[test]
 fn disagreeing_raw_carriers_settle_at_conflict_rather_than_oscillating() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let shared = module.add_value(Some("shared".into()));
     let first = module.add_value(Some("a".into()));
     let second = module.add_value(Some("b".into()));
 
-    let done = finish(&mut module, vec![CpsAtom::Value(second)]);
+    let done = finish(&mut module, vec![Atom::Value(second)]);
     // Read as a signed carrier here...
-    let signed = module.add_node(CpsNode::LetIntrinsic {
+    let signed = module.add_node(Node::LetIntrinsic {
         result: second,
-        op: CpsIntrinsic::IntAdd,
+        op: Intrinsic::IntAdd,
         args: vec![
-            CpsAtom::Value(shared),
-            CpsAtom::Literal(CpsLiteral::Int(Integer::from(1))),
+            Atom::Value(shared),
+            Atom::Literal(Literal::Int(Integer::from(1))),
         ],
         next: done,
     });
     // ...and as an unsigned one here.
-    let body = module.add_node(CpsNode::LetIntrinsic {
+    let body = module.add_node(Node::LetIntrinsic {
         result: first,
-        op: CpsIntrinsic::NatAdd,
+        op: Intrinsic::NatAdd,
         args: vec![
-            CpsAtom::Value(shared),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            Atom::Value(shared),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
         ],
         next: signed,
     });
@@ -212,17 +208,17 @@ fn disagreeing_raw_carriers_settle_at_conflict_rather_than_oscillating() {
 /// A function is entered through a `func/N` signature whose parameters are uniformly `anyref`. There is no store site the analysis controls, so however arithmetically the body reads the parameter, it is held as it arrived and each use unboxes.
 #[test]
 fn a_function_parameter_stays_boxed_however_its_body_reads_it() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let param = module.add_value(Some("x".into()));
     let result = module.add_value(Some("r".into()));
 
-    let done = finish(&mut module, vec![CpsAtom::Value(result)]);
-    let body = module.add_node(CpsNode::LetIntrinsic {
+    let done = finish(&mut module, vec![Atom::Value(result)]);
+    let body = module.add_node(Node::LetIntrinsic {
         result,
-        op: CpsIntrinsic::NatAdd,
+        op: Intrinsic::NatAdd,
         args: vec![
-            CpsAtom::Value(param),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            Atom::Value(param),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
         ],
         next: done,
     });
@@ -234,7 +230,7 @@ fn a_function_parameter_stays_boxed_however_its_body_reads_it() {
 /// The case the emitter caught and the unit tests did not. `escaping` is bound in the entry function and read arithmetically inside *another* function's body, so `machine::lower` lambda-lifts it onto that function as an extra `anyref` parameter. Deciding it from its binding scope alone answers `Raw(Nat)` — and then the callee, which holds it as a parameter, loads it with no unboxing and hands a `(ref any)` to an `i32.sub`. `trees` miscompiled exactly this way, in `/std/Str/fold/2`.
 #[test]
 fn a_value_free_in_another_function_stays_boxed() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let escaping = module.add_value(Some("escaping".into()));
     let result = module.add_value(Some("r".into()));
     let callee = module.reserve_function();
@@ -242,19 +238,19 @@ fn a_value_free_in_another_function_stays_boxed() {
     let resume = module.reserve_continuation();
 
     // The callee reads a value it does not bind, which is what makes it free there.
-    let callee_done = finish(&mut module, vec![CpsAtom::Value(result)]);
-    let callee_body = module.add_node(CpsNode::LetIntrinsic {
+    let callee_done = finish(&mut module, vec![Atom::Value(result)]);
+    let callee_body = module.add_node(Node::LetIntrinsic {
         result,
-        op: CpsIntrinsic::NatAdd,
+        op: Intrinsic::NatAdd,
         args: vec![
-            CpsAtom::Value(escaping),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            Atom::Value(escaping),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
         ],
         next: callee_done,
     });
     module.define_function(
         callee,
-        CpsFunction {
+        Function {
             debug_name: Some("callee".into()),
             params: vec![],
             return_cont: callee_return,
@@ -263,17 +259,17 @@ fn a_value_free_in_another_function_stays_boxed() {
     );
 
     // The entry binds it, and binds it at the very carrier the callee wants.
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(callee),
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
         args: vec![],
         return_to: resume,
     });
-    let body = module.add_node(CpsNode::LetIntrinsic {
+    let body = module.add_node(Node::LetIntrinsic {
         result: escaping,
-        op: CpsIntrinsic::NatAdd,
+        op: Intrinsic::NatAdd,
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+            Atom::Literal(Literal::Nat(Natural::from(2u32))),
         ],
         next: call,
     });
@@ -285,33 +281,33 @@ fn a_value_free_in_another_function_stays_boxed() {
 /// The same argument one step further out: a call's result reaches its continuation's parameter as a reference, because that is what the callee returned. The parameter is open to its uses in general, and this is what withdraws it.
 #[test]
 fn a_call_result_stays_boxed_however_its_continuation_reads_it() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let returned = module.add_value(Some("returned".into()));
     let result = module.add_value(Some("r".into()));
     let callee = module.reserve_function();
     let resume = module.reserve_continuation();
 
-    let done = finish(&mut module, vec![CpsAtom::Value(result)]);
-    let resume_body = module.add_node(CpsNode::LetIntrinsic {
+    let done = finish(&mut module, vec![Atom::Value(result)]);
+    let resume_body = module.add_node(Node::LetIntrinsic {
         result,
-        op: CpsIntrinsic::NatAdd,
+        op: Intrinsic::NatAdd,
         args: vec![
-            CpsAtom::Value(returned),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            Atom::Value(returned),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
         ],
         next: done,
     });
     module.define_continuation(
         resume,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("resume".into()),
             params: vec![returned],
             body: resume_body,
         },
     );
 
-    let body = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(callee),
+    let body = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
         args: vec![],
         return_to: resume,
     });

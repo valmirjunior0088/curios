@@ -6,33 +6,33 @@ use {
 
 #[derive(Default)]
 pub(super) struct CallAnalysis {
-    pub(super) call_sites: BTreeMap<CpsFunId, Vec<CpsNodeId>>,
-    pub(super) call_graph: BTreeMap<CpsFunId, BTreeSet<CpsFunId>>,
-    pub(super) node_owners: BTreeMap<CpsNodeId, CpsFunId>,
-    pub(super) escaping: BTreeSet<CpsFunId>,
+    pub(super) call_sites: BTreeMap<FunctionId, Vec<NodeId>>,
+    pub(super) call_graph: BTreeMap<FunctionId, BTreeSet<FunctionId>>,
+    pub(super) node_owners: BTreeMap<NodeId, FunctionId>,
+    pub(super) escaping: BTreeSet<FunctionId>,
     /// On a cycle of the call graph closed under definition — a callee inherits the calls of every function nested within it — which is the inliner's question: see `analyze_calls`.
-    pub(super) recursive: BTreeSet<CpsFunId>,
+    pub(super) recursive: BTreeSet<FunctionId>,
     pub(super) sccs: SccAnalysis,
     /// The functions each function's body may name: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry — the scope `verify_lexical_scopes` walks, recorded per function so a pass that forwards a function reference into a body can ask whether that body may name it. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.
-    pub(super) lexical_scope: BTreeMap<CpsFunId, BTreeSet<CpsFunId>>,
+    pub(super) lexical_scope: BTreeMap<FunctionId, BTreeSet<FunctionId>>,
 }
-/// Function strongly-connected components of the known-callee call graph, computed at an explicit phase boundary. `SccId` is a dense index into `members`; each component lists its functions in `CpsFunId` order.
+/// Function strongly-connected components of the known-callee call graph, computed at an explicit phase boundary. `SccId` is a dense index into `members`; each component lists its functions in `FunctionId` order.
 pub(super) type SccId = usize;
 #[derive(Default)]
 pub(super) struct SccAnalysis {
-    pub(super) component_of: BTreeMap<CpsFunId, SccId>,
-    pub(super) members: Vec<Vec<CpsFunId>>,
+    pub(super) component_of: BTreeMap<FunctionId, SccId>,
+    pub(super) members: Vec<Vec<FunctionId>>,
 }
 /// Deterministic iterative Tarjan over the known-callee call graph. Uses an explicit frame stack rather than recursion so it stays within the default test-thread stack on deep call graphs. Components are numbered in the order their roots pop, and members are sorted, so the output is a pure function of the graph.
-pub(super) fn analyze_sccs(call_graph: &BTreeMap<CpsFunId, BTreeSet<CpsFunId>>) -> SccAnalysis {
+pub(super) fn analyze_sccs(call_graph: &BTreeMap<FunctionId, BTreeSet<FunctionId>>) -> SccAnalysis {
     let mut analysis = SccAnalysis::default();
-    let mut index_of: BTreeMap<CpsFunId, u32> = BTreeMap::new();
-    let mut lowlink: BTreeMap<CpsFunId, u32> = BTreeMap::new();
-    let mut on_stack: BTreeSet<CpsFunId> = BTreeSet::new();
-    let mut stack: Vec<CpsFunId> = Vec::new();
+    let mut index_of: BTreeMap<FunctionId, u32> = BTreeMap::new();
+    let mut lowlink: BTreeMap<FunctionId, u32> = BTreeMap::new();
+    let mut on_stack: BTreeSet<FunctionId> = BTreeSet::new();
+    let mut stack: Vec<FunctionId> = Vec::new();
     let mut next_index: u32 = 0;
 
-    let successors = |function: CpsFunId| -> Vec<CpsFunId> {
+    let successors = |function: FunctionId| -> Vec<FunctionId> {
         call_graph
             .get(&function)
             .map(|edges| edges.iter().copied().collect())
@@ -48,7 +48,7 @@ pub(super) fn analyze_sccs(call_graph: &BTreeMap<CpsFunId, BTreeSet<CpsFunId>>) 
         next_index += 1;
         stack.push(root);
         on_stack.insert(root);
-        let mut work: Vec<(CpsFunId, Vec<CpsFunId>, usize)> = vec![(root, successors(root), 0)];
+        let mut work: Vec<(FunctionId, Vec<FunctionId>, usize)> = vec![(root, successors(root), 0)];
 
         while let Some(&(node, _, _)) = work.last() {
             let position = work.last().unwrap().2;
@@ -98,7 +98,7 @@ pub(super) fn analyze_sccs(call_graph: &BTreeMap<CpsFunId, BTreeSet<CpsFunId>>) 
     }
     analysis
 }
-pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
+pub(super) fn analyze_calls(module: &Module) -> CallAnalysis {
     let mut analysis = CallAnalysis::default();
     for (function, _) in module.functions.iter_live() {
         analysis.call_sites.entry(function).or_default();
@@ -106,15 +106,15 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
     }
 
     // The function references each body names, collected beside `escaping` off the same atoms, and which bodies hold a closure callee at all. The recursion verdict below needs both; the body-only `call_graph` must carry neither, since a reference is not a call site.
-    let mut named_in: BTreeMap<CpsFunId, BTreeSet<CpsFunId>> = BTreeMap::new();
-    let mut applies_a_closure: BTreeSet<CpsFunId> = BTreeSet::new();
+    let mut named_in: BTreeMap<FunctionId, BTreeSet<FunctionId>> = BTreeMap::new();
+    let mut applies_a_closure: BTreeSet<FunctionId> = BTreeSet::new();
     for owner in module.functions.live_ids().collect::<Vec<_>>() {
         for node_id in function_nodes(module, owner) {
             analysis.node_owners.insert(node_id, owner);
             let node = module.node(node_id).unwrap();
             match node {
-                CpsNode::ApplyFun {
-                    callee: CpsCallee::Known(callee),
+                Node::ApplyFun {
+                    callee: Callee::Known(callee),
                     ..
                 } => {
                     analysis
@@ -128,8 +128,8 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
                         .or_default()
                         .insert(*callee);
                 }
-                CpsNode::ApplyFun {
-                    callee: CpsCallee::Closure(_),
+                Node::ApplyFun {
+                    callee: Callee::Closure(_),
                     ..
                 } => {
                     applies_a_closure.insert(owner);
@@ -137,7 +137,7 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
                 _ => {}
             }
             for atom in atoms(node) {
-                if let CpsAtom::Fun(function) = atom {
+                if let Atom::Fun(function) = atom {
                     analysis.escaping.insert(*function);
                     named_in.entry(owner).or_default().insert(*function);
                 }
@@ -147,14 +147,14 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
 
     // A function is recursive, for the inliner, when it lies on a cycle of what an inline *copies*. A callee's extent carries every function defined lexically within it (`copied_extent`), so a call one of those makes is reproduced by each copy as surely as a call the callee's own body makes — and a copy that reaches back to the caller is a call the next sweep meets again, with nothing but the size limits to end it. That is how a by-need knot's forcing function, its initializer and the closure the initializer builds — three small functions, none calling itself, each reaching the next through a call or a definition — inlined one another without bound. So the verdict is taken over the call graph closed under definition: an owner inherits the calls of every function nested within it, transitively.
     //
-    // A body that *names* a function can reach it the same way, and this is the second half of the closure rather than a separate rule. `map_atom` carries a `CpsAtom::Fun` through a copy unchanged, and substituting one into a closure callee is what turns it into a known call, so a reference such a body reproduces is a call it reproduces. Without that edge two functions handing each other's reference back and forth are a knot the verdict cannot see: `a(p) = p(b)` and `b(q) = q(a)`, called as `a(b)`, oscillate with period four under the sweep — each round devirtualizes to the other, neither ever closes a cycle of `Known` callees, the node count never moves, and so no size limit ever applies.
+    // A body that *names* a function can reach it the same way, and this is the second half of the closure rather than a separate rule. `map_atom` carries a `Atom::Fun` through a copy unchanged, and substituting one into a closure callee is what turns it into a known call, so a reference such a body reproduces is a call it reproduces. Without that edge two functions handing each other's reference back and forth are a knot the verdict cannot see: `a(p) = p(b)` and `b(q) = q(a)`, called as `a(b)`, oscillate with period four under the sweep — each round devirtualizes to the other, neither ever closes a cycle of `Known` callees, the node count never moves, and so no size limit ever applies.
     //
-    // The edge is conditional on the naming body *applying* a closure, because that is precisely what the rewrite needs: `map_callee` turns a reference into a call only where a substituted parameter stood in a `CpsCallee::Closure`. A body that merely hands a reference onward — an initializer returning the closure it built, which is the shape beside this one — cannot devirtualize anything, and reading its reference as a call would make the closure it defines recursive on a cycle no inline can travel.
+    // The edge is conditional on the naming body *applying* a closure, because that is precisely what the rewrite needs: `map_callee` turns a reference into a call only where a substituted parameter stood in a `Callee::Closure`. A body that merely hands a reference onward — an initializer returning the closure it built, which is the shape beside this one — cannot devirtualize anything, and reading its reference as a call would make the closure it defines recursive on a cycle no inline can travel.
     //
     // The body-only graph and its components stay what specialization and contification read, since to them a nested closure is a function of its own, and folding it into its definer's component would let an escaping closure disqualify a component it merely sits in. That is why the reference edges are seeded into `closed` alone and never into `call_graph`.
-    let mut nested_in: BTreeMap<CpsFunId, Vec<CpsFunId>> = BTreeMap::new();
+    let mut nested_in: BTreeMap<FunctionId, Vec<FunctionId>> = BTreeMap::new();
     for (&node_id, &owner) in &analysis.node_owners {
-        if let Some(CpsNode::LetFun { functions, .. }) = module.node(node_id) {
+        if let Some(Node::LetFun { functions, .. }) = module.node(node_id) {
             nested_in
                 .entry(owner)
                 .or_default()
@@ -204,9 +204,9 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
     analysis.lexical_scope = module.lexical_scopes();
 
     // A function the walk did not reach keeps the owner-chain answer, which is a subset of what it may name. This runs mid-round, where the module is transiently unscoped by design, so a walk from the entry can miss a live function; and the set is read to *refuse* a forward, so answering with less than the truth costs an optimization where answering with more would forward a reference the body cannot legally name.
-    let mut group_of: BTreeMap<CpsFunId, (CpsFunId, Vec<CpsFunId>)> = BTreeMap::new();
+    let mut group_of: BTreeMap<FunctionId, (FunctionId, Vec<FunctionId>)> = BTreeMap::new();
     for (&node_id, &owner) in &analysis.node_owners {
-        if let Some(CpsNode::LetFun { functions, .. }) = module.node(node_id) {
+        if let Some(Node::LetFun { functions, .. }) = module.node(node_id) {
             for &member in functions {
                 group_of.insert(member, (owner, functions.clone()));
             }
@@ -236,10 +236,10 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
     analysis
 }
 /// Every node in `function`'s own body, stopping at each nested function's boundary — see [`free_values`] for which callers that suits and which it does not.
-pub(super) fn function_nodes(module: &CpsModule, function: CpsFunId) -> Vec<CpsNodeId> {
+pub(super) fn function_nodes(module: &Module, function: FunctionId) -> Vec<NodeId> {
     nodes_from(module, module.function(function).unwrap().body)
 }
-pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> {
+pub(super) fn nodes_from(module: &Module, body: NodeId) -> Vec<NodeId> {
     let mut found = BTreeSet::new();
     let mut work = vec![body];
     while let Some(node_id) = work.pop() {
@@ -247,9 +247,9 @@ pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> 
             continue;
         }
         match module.node(node_id).unwrap() {
-            CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => work.push(*next),
-            CpsNode::LetFun { body, .. } => work.push(*body),
-            CpsNode::LetCont {
+            Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => work.push(*next),
+            Node::LetFun { body, .. } => work.push(*body),
+            Node::LetCont {
                 continuations,
                 body,
             } => {
@@ -261,15 +261,15 @@ pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> 
                     }
                 }
             }
-            CpsNode::ApplyFun { .. }
-            | CpsNode::ApplyCont(_)
-            | CpsNode::Switch { .. }
-            | CpsNode::Foreign { .. }
-            | CpsNode::Cell { .. }
-            | CpsNode::Intrinsic { .. }
-            | CpsNode::Exit { .. }
-            | CpsNode::Panic(_)
-            | CpsNode::Unreachable => {}
+            Node::ApplyFun { .. }
+            | Node::ApplyCont(_)
+            | Node::Switch { .. }
+            | Node::Foreign { .. }
+            | Node::Cell { .. }
+            | Node::Intrinsic { .. }
+            | Node::Exit { .. }
+            | Node::Panic(_)
+            | Node::Unreachable => {}
         }
     }
     found.into_iter().collect()
@@ -279,7 +279,7 @@ pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> 
 /// **The walk stops at a nested function.** [`function_nodes`] enters a `LetFun`'s body and not its members, so a value referenced only inside a function defined *within* this one is not reported here. That is correct for a caller asking what to carry into a call or a closure — a nested function's own captures are answered when the sweep reaches that function, which is the shape `represent`'s `offers` sweep over every live function relies on. It is wrong for a caller about to *remove* a binding, which must cover the whole region that loses it — a pass once asked this question for that purpose and dropped a binding a nested function still referenced.
 ///
 /// What this is *not* for is admitting a call's inline or contification: a site names its callee, so the callee's `LetFun` encloses the site and every value reported here is bound before it — in scope at the site by construction. Two passes once checked it against the values the owner's body happened to mention, and refused a move whenever the owner did not name the captured binding itself.
-pub(super) fn free_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<CpsValueId> {
+pub(super) fn free_values(module: &Module, function: FunctionId) -> BTreeSet<ValueId> {
     let mut owned = module
         .function(function)
         .unwrap()
@@ -293,10 +293,10 @@ pub(super) fn free_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<Cp
         let node = module.node(node_id).unwrap();
 
         match node {
-            CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
+            Node::LetValue { result, .. } | Node::LetIntrinsic { result, .. } => {
                 owned.insert(*result);
             }
-            CpsNode::LetCont { continuations, .. } => {
+            Node::LetCont { continuations, .. } => {
                 for continuation in continuations {
                     owned.extend(
                         module
@@ -309,8 +309,8 @@ pub(super) fn free_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<Cp
                 }
             }
             // A closure callee is a value the body reads, and it is the one such read that is not an operand atom.
-            CpsNode::ApplyFun {
-                callee: CpsCallee::Closure(value),
+            Node::ApplyFun {
+                callee: Callee::Closure(value),
                 ..
             } => {
                 used.insert(*value);
@@ -319,7 +319,7 @@ pub(super) fn free_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<Cp
         }
 
         for atom in atoms(node) {
-            if let CpsAtom::Value(value) = atom {
+            if let Atom::Value(value) = atom {
                 used.insert(*value);
             }
         }
@@ -328,31 +328,31 @@ pub(super) fn free_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<Cp
     used.difference(&owned).copied().collect()
 }
 
-pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {
+pub(super) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
     let mut known = BTreeMap::new();
 
     for (_, node) in module.nodes.iter_live() {
-        if let CpsNode::LetValue {
+        if let Node::LetValue {
             result,
-            value: CpsValueExpr::Literal(literal),
+            value: ValueExpr::Literal(literal),
             ..
         } = node
         {
-            known.insert(*result, CpsAtom::Literal(literal.clone()));
+            known.insert(*result, Atom::Literal(literal.clone()));
         }
     }
 
     let analysis = analyze_calls(module);
     let recursive_functions = &analysis.recursive;
 
-    let mut function_inputs = BTreeMap::<CpsFunId, Vec<Knowledge>>::new();
+    let mut function_inputs = BTreeMap::<FunctionId, Vec<Knowledge>>::new();
     for (function, definition) in module.functions.iter_live() {
         function_inputs.insert(function, vec![Knowledge::Unknown; definition.params.len()]);
     }
 
     for (_, node) in module.nodes.iter_live() {
-        if let CpsNode::ApplyFun {
-            callee: CpsCallee::Known(function),
+        if let Node::ApplyFun {
+            callee: Callee::Known(function),
             args,
             ..
         } = node
@@ -362,7 +362,7 @@ pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> 
         }
 
         for atom in atoms(node) {
-            if let CpsAtom::Fun(function) = atom
+            if let Atom::Fun(function) = atom
                 && let Some(inputs) = function_inputs.get_mut(function)
             {
                 merge_inputs(inputs, None);
@@ -379,7 +379,7 @@ pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> 
     }
 
     // A continuation parameter is known the same way a function's is: every transfer hands it the same literal. Edges carry their arguments; an operation delivering into its `return_to` hands a runtime value, which is the `None` that forces `Conflict`. A join point whose every jump passes one tag — the clone `specialize_jump_patterns` or `split_parameters` leaves once the other tag's jumps are gone — keeps a switch on that parameter and the arm it can never take, and a read in that dead arm of a value minted in the live arm's vocabulary is exactly what `verify_rows` refuses once a later pass substitutes the construction into it.
-    let mut continuation_inputs = BTreeMap::<CpsContId, Vec<Knowledge>>::new();
+    let mut continuation_inputs = BTreeMap::<ContinuationId, Vec<Knowledge>>::new();
     for (continuation, definition) in module.continuations.iter_live() {
         continuation_inputs.insert(
             continuation,
@@ -387,31 +387,31 @@ pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> 
         );
     }
     for (_, node) in module.nodes.iter_live() {
-        let mut edge = |edge: &CpsEdge| {
+        let mut edge = |edge: &Edge| {
             if let Some(inputs) = continuation_inputs.get_mut(&edge.target) {
                 merge_inputs(inputs, Some(&edge.args));
             }
         };
         match node {
-            CpsNode::ApplyCont(target) => edge(target),
-            CpsNode::Switch { cases, default, .. } => {
+            Node::ApplyCont(target) => edge(target),
+            Node::Switch { cases, default, .. } => {
                 cases.values().chain(default.iter()).for_each(edge);
             }
-            CpsNode::ApplyFun { return_to, .. }
-            | CpsNode::Foreign { return_to, .. }
-            | CpsNode::Cell { return_to, .. }
-            | CpsNode::Intrinsic { return_to, .. } => {
+            Node::ApplyFun { return_to, .. }
+            | Node::Foreign { return_to, .. }
+            | Node::Cell { return_to, .. }
+            | Node::Intrinsic { return_to, .. } => {
                 if let Some(inputs) = continuation_inputs.get_mut(return_to) {
                     merge_inputs(inputs, None);
                 }
             }
-            CpsNode::LetValue { .. }
-            | CpsNode::LetIntrinsic { .. }
-            | CpsNode::LetFun { .. }
-            | CpsNode::LetCont { .. }
-            | CpsNode::Exit { .. }
-            | CpsNode::Panic(_)
-            | CpsNode::Unreachable => {}
+            Node::LetValue { .. }
+            | Node::LetIntrinsic { .. }
+            | Node::LetFun { .. }
+            | Node::LetCont { .. }
+            | Node::Exit { .. }
+            | Node::Panic(_)
+            | Node::Unreachable => {}
         }
     }
     for (continuation, inputs) in continuation_inputs {
@@ -428,7 +428,7 @@ pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> 
     for key in keys {
         let mut value = known[&key].clone();
         let mut seen = BTreeSet::new();
-        while let CpsAtom::Value(next) = value {
+        while let Atom::Value(next) = value {
             if !seen.insert(next) {
                 break;
             }
@@ -443,20 +443,19 @@ pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> 
 }
 /// Resolve an argument atom to its lattice value: literals and function references are known; a value is a forwarded SCC parameter (its current class), a caller constant (`known_literals`), or otherwise an unobservable runtime value that forces `Conflict`.
 pub(super) fn resolve_atom(
-    atom: &CpsAtom,
-    class: &BTreeMap<CpsValueId, Knowledge>,
-    known_literals: &BTreeMap<CpsValueId, CpsAtom>,
+    atom: &Atom,
+    class: &BTreeMap<ValueId, Knowledge>,
+    known_literals: &BTreeMap<ValueId, Atom>,
 ) -> Knowledge {
     match atom {
-        CpsAtom::Literal(literal) => Knowledge::Known(CpsAtom::Literal(literal.clone())),
-        CpsAtom::Fun(function) => Knowledge::Known(CpsAtom::Fun(*function)),
+        Atom::Literal(literal) => Knowledge::Known(Atom::Literal(literal.clone())),
+        Atom::Fun(function) => Knowledge::Known(Atom::Fun(*function)),
         // A filler is unobservable rather than known: propagating it would substitute "no value" into a position that reads one.
-        CpsAtom::Filler => Knowledge::Conflict,
-        CpsAtom::Value(value) => {
+        Atom::Filler => Knowledge::Conflict,
+        Atom::Value(value) => {
             if let Some(knowledge) = class.get(value) {
                 knowledge.clone()
-            } else if let Some(atom @ (CpsAtom::Literal(_) | CpsAtom::Fun(_))) =
-                known_literals.get(value)
+            } else if let Some(atom @ (Atom::Literal(_) | Atom::Fun(_))) = known_literals.get(value)
             {
                 Knowledge::Known(atom.clone())
             } else {

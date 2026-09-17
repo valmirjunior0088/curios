@@ -1,6 +1,6 @@
 //! Every scalar intrinsic's emitted shape: the carrier it computes in, and the guard it traps through.
 
-//! Backend lowering coverage: build a [`curios_cont::CpsModule`](curios_cont::CpsModule) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
+//! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
 use super::test_support::*;
 
@@ -9,7 +9,7 @@ use super::test_support::*;
 #[test]
 fn nat_add_guards_the_i31_carrier() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::NatAdd,
+        curios_cont::Intrinsic::NatAdd,
         vec![nat(3), nat(4)],
     ));
     assert_contains(&wat, "i32.add");
@@ -20,7 +20,7 @@ fn nat_add_guards_the_i31_carrier() {
 #[test]
 fn nat_sub_is_saturating_monus_without_a_guard() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::NatSub,
+        curios_cont::Intrinsic::NatSub,
         vec![nat(3), nat(4)],
     ));
     assert_contains(&wat, "i32.sub");
@@ -31,7 +31,7 @@ fn nat_sub_is_saturating_monus_without_a_guard() {
 #[test]
 fn nat_mul_widens_to_i64_and_guards() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::NatMul,
+        curios_cont::Intrinsic::NatMul,
         vec![nat(3), nat(4)],
     ));
     assert_contains(&wat, "i64.mul");
@@ -42,14 +42,14 @@ fn nat_mul_widens_to_i64_and_guards() {
 fn nat_div_is_unsigned_and_rem_unsigned() {
     assert_contains(
         &wat(&intrinsic_main(
-            curios_cont::CpsIntrinsic::NatDiv,
+            curios_cont::Intrinsic::NatDiv,
             vec![nat(9), nat(2)],
         )),
         "i32.div_u",
     );
     assert_contains(
         &wat(&intrinsic_main(
-            curios_cont::CpsIntrinsic::NatRem,
+            curios_cont::Intrinsic::NatRem,
             vec![nat(9), nat(2)],
         )),
         "i32.rem_u",
@@ -59,7 +59,7 @@ fn nat_div_is_unsigned_and_rem_unsigned() {
 #[test]
 fn nat_lt_compares_unsigned() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::NatLt,
+        curios_cont::Intrinsic::NatLt,
         vec![nat(3), nat(4)],
     ));
     assert_contains(&wat, "i32.lt_u");
@@ -69,7 +69,7 @@ fn nat_lt_compares_unsigned() {
 #[test]
 fn nat_and_is_bitwise_and_total() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::NatAnd,
+        curios_cont::Intrinsic::NatAnd,
         vec![nat(6), nat(3)],
     ));
     assert_contains(&wat, "i32.and");
@@ -79,7 +79,7 @@ fn nat_and_is_bitwise_and_total() {
 #[test]
 fn nat_to_flt_converts_unsigned() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::NatToFlt,
+        curios_cont::Intrinsic::NatToFlt,
         vec![nat(7)],
     ));
     assert_contains(&wat, "f64.convert_i32_u");
@@ -90,7 +90,7 @@ fn nat_to_flt_converts_unsigned() {
 #[test]
 fn int_add_guards_the_signed_carrier() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::IntAdd,
+        curios_cont::Intrinsic::IntAdd,
         vec![int(3), int(-4)],
     ));
     assert_contains(&wat, "i32.add");
@@ -100,7 +100,7 @@ fn int_add_guards_the_signed_carrier() {
 #[test]
 fn int_mul_widens_to_i64_and_guards() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::IntMul,
+        curios_cont::Intrinsic::IntMul,
         vec![int(3), int(-4)],
     ));
     assert_contains(&wat, "i64.mul");
@@ -110,7 +110,7 @@ fn int_mul_widens_to_i64_and_guards() {
 #[test]
 fn int_div_is_signed_and_guarded() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::IntDiv,
+        curios_cont::Intrinsic::IntDiv,
         vec![int(-9), int(2)],
     ));
     assert_contains(&wat, "i32.div_s");
@@ -120,7 +120,7 @@ fn int_div_is_signed_and_guarded() {
 #[test]
 fn int_lt_compares_signed() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::IntLt,
+        curios_cont::Intrinsic::IntLt,
         vec![int(-3), int(4)],
     ));
     assert_contains(&wat, "i32.lt_s");
@@ -132,7 +132,7 @@ fn int_lt_compares_signed() {
 #[test]
 fn flt_add_boxes_into_the_flt_struct() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::FltAdd,
+        curios_cont::Intrinsic::FltAdd,
         vec![flt(1.5), flt(2.5)],
     ));
     assert_contains(&wat, "f64.add");
@@ -143,7 +143,7 @@ fn flt_add_boxes_into_the_flt_struct() {
 fn flt_div_divides() {
     assert_contains(
         &wat(&intrinsic_main(
-            curios_cont::CpsIntrinsic::FltDiv,
+            curios_cont::Intrinsic::FltDiv,
             vec![flt(3.0), flt(2.0)],
         )),
         "f64.div",
@@ -153,7 +153,7 @@ fn flt_div_divides() {
 #[test]
 fn flt_to_le_bytes_packs_an_eight_byte_leaf() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::FltToLeBytes,
+        curios_cont::Intrinsic::FltToLeBytes,
         vec![flt(1.0)],
     ));
     assert_contains(&wat, "i64.reinterpret_f64");
@@ -164,7 +164,7 @@ fn flt_to_le_bytes_packs_an_eight_byte_leaf() {
 #[test]
 fn flt_to_int_truncates_and_guards_the_range() {
     let wat = wat(&intrinsic_main(
-        curios_cont::CpsIntrinsic::FltToInt,
+        curios_cont::Intrinsic::FltToInt,
         vec![flt(1.0)],
     ));
     assert_contains(&wat, "i32.trunc_f64_s");

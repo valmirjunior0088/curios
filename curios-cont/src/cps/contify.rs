@@ -11,7 +11,7 @@ use {
 /// The callee's captures need no check. Its one external site names it, so the `LetFun` binding it encloses that site, and every value the callee mentions without binding is bound before that `LetFun` — in scope at the site by the rule `verify_lexical_scopes` walks. A guard once refused the move unless the owner's own body *mentioned* each such value, which is a fact about the owner's text rather than its scope: a loop capturing an outer binding stayed a function call whenever its caller happened not to name the binding itself.
 ///
 /// One call analysis serves every candidate, because a contification leaves the others admissible. It replaces one call and moves one body: no other function's sites change, nothing new escapes, and the one fact that does move — the owner of a site that sat inside the contified body is now that body's new owner — preserves the reachability condition that reads it: the new owner called the contified function directly, so reaching it would have meant reaching the function, which was refused. What does go stale — which function the snapshot says owns a site — nothing below reads. It was one contification per call, which `fixpoint_pass_measurements` found setting a `Toml/decode` compile's round count once the two passes ahead of it stopped.
-pub(super) fn contify_calls(module: &mut CpsModule) -> bool {
+pub(super) fn contify_calls(module: &mut Module) -> bool {
     let analysis = analyze_calls(module);
     let mut admitted = Vec::new();
 
@@ -39,7 +39,7 @@ pub(super) fn contify_calls(module: &mut CpsModule) -> bool {
 
         let mut compatible = true;
         for &site in sites {
-            let CpsNode::ApplyFun { return_to, .. } = module.node(site).unwrap() else {
+            let Node::ApplyFun { return_to, .. } = module.node(site).unwrap() else {
                 unreachable!()
             };
             if analysis.node_owners[&site] == callee && *return_to != function.return_cont {
@@ -61,9 +61,9 @@ pub(super) fn contify_calls(module: &mut CpsModule) -> bool {
 }
 
 pub(super) fn function_reaches(
-    graph: &BTreeMap<CpsFunId, BTreeSet<CpsFunId>>,
-    start: CpsFunId,
-    target: CpsFunId,
+    graph: &BTreeMap<FunctionId, BTreeSet<FunctionId>>,
+    start: FunctionId,
+    target: FunctionId,
 ) -> bool {
     let mut visited = BTreeSet::new();
     let mut work = graph[&start].iter().copied().collect::<Vec<_>>();
@@ -79,10 +79,10 @@ pub(super) fn function_reaches(
     }
     false
 }
-pub(super) fn contify_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNodeId) {
+pub(super) fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId) {
     let function = module.function(callee).unwrap().clone();
-    let CpsNode::ApplyFun {
-        callee: CpsCallee::Known(found),
+    let Node::ApplyFun {
+        callee: Callee::Known(found),
         args,
         return_to,
     } = module.node(call).unwrap().clone()
@@ -99,33 +99,33 @@ pub(super) fn contify_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNo
     for node_id in function_nodes(module, callee) {
         let node = module.nodes.get_mut(node_id).unwrap();
         match node {
-            CpsNode::ApplyFun {
-                callee: CpsCallee::Known(target),
+            Node::ApplyFun {
+                callee: Callee::Known(target),
                 args,
                 return_to: target_return,
             } if *target == callee => {
                 debug_assert_eq!(*target_return, function.return_cont);
-                *node = CpsNode::ApplyCont(CpsEdge {
+                *node = Node::ApplyCont(Edge {
                     target: loop_cont,
                     args: std::mem::take(args),
                 });
             }
-            CpsNode::ApplyFun {
+            Node::ApplyFun {
                 return_to: target, ..
             }
-            | CpsNode::Foreign {
+            | Node::Foreign {
                 return_to: target, ..
             }
-            | CpsNode::Cell {
+            | Node::Cell {
                 return_to: target, ..
             }
-            | CpsNode::Intrinsic {
+            | Node::Intrinsic {
                 return_to: target, ..
             } if *target == function.return_cont => *target = return_to,
-            CpsNode::ApplyCont(edge) if edge.target == function.return_cont => {
+            Node::ApplyCont(edge) if edge.target == function.return_cont => {
                 edge.target = return_to;
             }
-            CpsNode::Switch { cases, default, .. } => {
+            Node::Switch { cases, default, .. } => {
                 for edge in cases.values_mut().chain(default.iter_mut()) {
                     if edge.target == function.return_cont {
                         edge.target = return_bridge;
@@ -139,21 +139,21 @@ pub(super) fn contify_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNo
     let initial = module.reserve_node();
     module.nodes.define(
         initial,
-        CpsNode::ApplyCont(CpsEdge {
+        Node::ApplyCont(Edge {
             target: loop_cont,
             args,
         }),
     );
     module.nodes.define(
         return_body,
-        CpsNode::ApplyCont(CpsEdge {
+        Node::ApplyCont(Edge {
             target: return_to,
-            args: vec![CpsAtom::Value(return_value)],
+            args: vec![Atom::Value(return_value)],
         }),
     );
     module.continuations.define(
         return_bridge,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("contified return".into()),
             params: vec![return_value],
             body: return_body,
@@ -161,14 +161,14 @@ pub(super) fn contify_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNo
     );
     module.nodes.define(
         loop_scope,
-        CpsNode::LetCont {
+        Node::LetCont {
             continuations: vec![return_bridge],
             body: function.body,
         },
     );
     module.continuations.define(
         loop_cont,
-        CpsContinuation {
+        Continuation {
             debug_name: function.debug_name,
             params: function.params,
             body: loop_scope,
@@ -176,14 +176,14 @@ pub(super) fn contify_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNo
     );
     module.nodes.set(
         call,
-        CpsNode::LetCont {
+        Node::LetCont {
             continuations: vec![loop_cont],
             body: initial,
         },
     );
     module.functions.remove(callee);
     for (_, node) in module.nodes.iter_live_mut() {
-        if let CpsNode::LetFun { functions, .. } = node {
+        if let Node::LetFun { functions, .. } = node {
             functions.retain(|function| *function != callee);
         }
     }

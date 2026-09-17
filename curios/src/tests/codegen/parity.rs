@@ -118,9 +118,9 @@ fn operations(dump: &str) -> Vec<String> {
 
 /// The instruction whose operand list opens at `at`, when the text before it is in instruction position.
 ///
-/// Position is what decides it, not the bracket: `apply Known(CpsFunId(13))[…]` and `apply Closure(CpsValueId(95))[…]` end in a bracketed operand list too, and their heads are entropy-derived ids that differ between any two compilations. Accepting those would compare the numbering rather than the code. So the head must sit where `curios_cont::CpsNode`'s `Display` puts an operation: after a `let` binding's `= `, or behind a `cell.`/`intrinsic.` qualifier.
+/// Position is what decides it, not the bracket: `apply Known(FunctionId(13))[…]` and `apply Closure(ValueId(95))[…]` end in a bracketed operand list too, and their heads are entropy-derived ids that differ between any two compilations. Accepting those would compare the numbering rather than the code. So the head must sit where `curios_cont::Node`'s `Display` puts an operation: after a `let` binding's `= `, or behind a `cell.`/`intrinsic.` qualifier.
 ///
-/// The qualifier is kept because it selects a different operation enum — `CpsIntrinsic::ListMap` and an intrinsic of the same name would otherwise read alike.
+/// The qualifier is kept because it selects a different operation enum — `curios_cont::Intrinsic::ListMap` and an intrinsic of the same name would otherwise read alike.
 fn operation_ending_at(dump: &str, at: usize) -> Option<String> {
     let head = &dump[..at];
     // `TupleGet(0)`, `BinLen(X)`, `BinConcat(X, 2)`: step over the parenthesized argument to reach the name.

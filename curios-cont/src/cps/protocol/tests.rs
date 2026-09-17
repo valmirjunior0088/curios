@@ -3,30 +3,30 @@ use curios_num::Natural;
 use {
     super::{ReturnProtocol, ReturnShape, return_protocols, split_returns},
     crate::{
-        CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
-        CpsIntrinsic, CpsLiteral, CpsModule, CpsNode, CpsRow, CpsRowId, CpsSlot, CpsValueExpr,
+        Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
+        Module, Node, Row, RowId, Slot, ValueExpr,
     },
 };
 
 /// A function returning a one-field tuple through its own return continuation — the shape a caller takes apart.
-fn returning_callee(module: &mut CpsModule, name: &str) -> CpsFunId {
+fn returning_callee(module: &mut Module, name: &str) -> FunctionId {
     let field = module.add_value(Some(format!("{name}/field")));
     let built = module.add_value(Some(format!("{name}/built")));
     let function = module.reserve_function();
     let sentinel = module.reserve_continuation();
 
-    let ret = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let ret = module.add_node(Node::ApplyCont(Edge {
         target: sentinel,
-        args: vec![CpsAtom::Value(built)],
+        args: vec![Atom::Value(built)],
     }));
-    let body = module.add_node(CpsNode::LetValue {
+    let body = module.add_node(Node::LetValue {
         result: built,
-        value: CpsValueExpr::Tuple(vec![CpsAtom::Value(field)]),
+        value: ValueExpr::Tuple(vec![Atom::Value(field)]),
         next: ret,
     });
     module.define_function(
         function,
-        CpsFunction {
+        Function {
             debug_name: Some(name.into()),
             params: vec![field],
             return_cont: sentinel,
@@ -37,28 +37,28 @@ fn returning_callee(module: &mut CpsModule, name: &str) -> CpsFunId {
 }
 
 /// A resume continuation that reads its one parameter only through `TupleGet(0)` and `TupleGet(1)`, then exits.
-fn projecting_resume(module: &mut CpsModule, name: &str) -> CpsContId {
+fn projecting_resume(module: &mut Module, name: &str) -> ContinuationId {
     let result = module.add_value(Some(format!("{name}/result")));
     let tag = module.add_value(Some(format!("{name}/tag")));
     let payload = module.add_value(Some(format!("{name}/payload")));
     let resume = module.reserve_continuation();
 
-    let exit = module.add_node(CpsNode::Exit { value: None });
-    let second = module.add_node(CpsNode::LetIntrinsic {
+    let exit = module.add_node(Node::Exit { value: None });
+    let second = module.add_node(Node::LetIntrinsic {
         result: payload,
-        op: CpsIntrinsic::TupleGet(1),
-        args: vec![CpsAtom::Value(result)],
+        op: Intrinsic::TupleGet(1),
+        args: vec![Atom::Value(result)],
         next: exit,
     });
-    let first = module.add_node(CpsNode::LetIntrinsic {
+    let first = module.add_node(Node::LetIntrinsic {
         result: tag,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(result)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(result)],
         next: second,
     });
     module.define_continuation(
         resume,
-        CpsContinuation {
+        Continuation {
             debug_name: Some(name.into()),
             params: vec![result],
             body: first,
@@ -68,20 +68,20 @@ fn projecting_resume(module: &mut CpsModule, name: &str) -> CpsContId {
 }
 
 /// A resume continuation that consumes its one parameter whole, by building a tuple around it.
-fn opaque_resume(module: &mut CpsModule, name: &str) -> CpsContId {
+fn opaque_resume(module: &mut Module, name: &str) -> ContinuationId {
     let result = module.add_value(Some(format!("{name}/result")));
     let held = module.add_value(Some(format!("{name}/held")));
     let resume = module.reserve_continuation();
 
-    let exit = module.add_node(CpsNode::Exit { value: None });
-    let hold = module.add_node(CpsNode::LetValue {
+    let exit = module.add_node(Node::Exit { value: None });
+    let hold = module.add_node(Node::LetValue {
         result: held,
-        value: CpsValueExpr::Tuple(vec![CpsAtom::Value(result)]),
+        value: ValueExpr::Tuple(vec![Atom::Value(result)]),
         next: exit,
     });
     module.define_continuation(
         resume,
-        CpsContinuation {
+        Continuation {
             debug_name: Some(name.into()),
             params: vec![result],
             body: hold,
@@ -92,22 +92,22 @@ fn opaque_resume(module: &mut CpsModule, name: &str) -> CpsContId {
 
 /// A function whose whole body is one call to `callee`. `resume` names where the result lands; `None` returns it straight to this function's caller, which is what makes the call a tail call.
 fn calling_function(
-    module: &mut CpsModule,
+    module: &mut Module,
     name: &str,
-    callee: CpsFunId,
-    resume: Option<CpsContId>,
-) -> CpsFunId {
+    callee: FunctionId,
+    resume: Option<ContinuationId>,
+) -> FunctionId {
     let argument = module.add_value(Some(format!("{name}/argument")));
     let function = module.reserve_function();
     let sentinel = module.reserve_continuation();
 
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(callee),
-        args: vec![CpsAtom::Value(argument)],
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(argument)],
         return_to: resume.unwrap_or(sentinel),
     });
     let body = match resume {
-        Some(resume) => module.add_node(CpsNode::LetCont {
+        Some(resume) => module.add_node(Node::LetCont {
             continuations: vec![resume],
             body: call,
         }),
@@ -115,7 +115,7 @@ fn calling_function(
     };
     module.define_function(
         function,
-        CpsFunction {
+        Function {
             debug_name: Some(name.into()),
             params: vec![argument],
             return_cont: sentinel,
@@ -127,7 +127,7 @@ fn calling_function(
 
 #[test]
 fn a_result_read_only_through_projections_is_returned_as_its_fields() {
-    let mut module = CpsModule::default();
+    let mut module = Module::default();
     let callee = returning_callee(&mut module, "callee");
     let resume = projecting_resume(&mut module, "resume");
     let caller = calling_function(&mut module, "caller", callee, Some(resume));
@@ -142,19 +142,19 @@ fn a_result_read_only_through_projections_is_returned_as_its_fields() {
 /// The interprocedural read: the resume itself projects nothing — it hands its parameter to a join point, and the projections live there. Deferred demand carries the refinement back through the jump, so the callee is split exactly as if the projections were local.
 #[test]
 fn a_result_projected_only_behind_a_forwarding_jump_is_returned_as_its_fields() {
-    let mut module = CpsModule::default();
+    let mut module = Module::default();
     let callee = returning_callee(&mut module, "callee");
     let downstream = projecting_resume(&mut module, "downstream");
 
     let result = module.add_value(Some("resume/result".into()));
     let resume = module.reserve_continuation();
-    let forward = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let forward = module.add_node(Node::ApplyCont(Edge {
         target: downstream,
-        args: vec![CpsAtom::Value(result)],
+        args: vec![Atom::Value(result)],
     }));
     module.define_continuation(
         resume,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("resume".into()),
             params: vec![result],
             body: forward,
@@ -164,18 +164,18 @@ fn a_result_projected_only_behind_a_forwarding_jump_is_returned_as_its_fields() 
     let argument = module.add_value(Some("caller/argument".into()));
     let caller = module.reserve_function();
     let sentinel = module.reserve_continuation();
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(callee),
-        args: vec![CpsAtom::Value(argument)],
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(argument)],
         return_to: resume,
     });
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![downstream, resume],
         body: call,
     });
     module.define_function(
         caller,
-        CpsFunction {
+        Function {
             debug_name: Some("caller".into()),
             params: vec![argument],
             return_cont: sentinel,
@@ -192,7 +192,7 @@ fn a_result_projected_only_behind_a_forwarding_jump_is_returned_as_its_fields() 
 
 #[test]
 fn a_result_consumed_whole_stays_a_tuple() {
-    let mut module = CpsModule::default();
+    let mut module = Module::default();
     let callee = returning_callee(&mut module, "callee");
     let resume = opaque_resume(&mut module, "resume");
     let caller = calling_function(&mut module, "caller", callee, Some(resume));
@@ -202,8 +202,8 @@ fn a_result_consumed_whole_stays_a_tuple() {
 }
 
 /// `callee` is read only through projections and would be split on its own; `forwarder` is consumed whole and would not. `tail` decides whether the forwarder's call to it is a tail call, and so whether the two are one equivalence class or two.
-fn chain(tail: bool) -> (CpsModule, CpsFunId, CpsFunId) {
-    let mut module = CpsModule::default();
+fn chain(tail: bool) -> (Module, FunctionId, FunctionId) {
+    let mut module = Module::default();
     let callee = returning_callee(&mut module, "callee");
     let inner = (!tail).then(|| projecting_resume(&mut module, "inner"));
     let forwarder = calling_function(&mut module, "forwarder", callee, inner);
@@ -230,7 +230,7 @@ fn a_tail_call_chain_is_decided_together() {
 
 #[test]
 fn a_callee_the_entry_tail_calls_keeps_the_host_protocol() {
-    let mut module = CpsModule::default();
+    let mut module = Module::default();
     let callee = returning_callee(&mut module, "callee");
     let inner = projecting_resume(&mut module, "inner");
     let reader = calling_function(&mut module, "reader", callee, Some(inner));
@@ -242,31 +242,31 @@ fn a_callee_the_entry_tail_calls_keeps_the_host_protocol() {
     let sentinel = module.reserve_continuation();
     let resume = module.reserve_continuation();
 
-    let tail = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(callee),
-        args: vec![CpsAtom::Value(argument)],
+    let tail = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(argument)],
         return_to: sentinel,
     });
     module.define_continuation(
         resume,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("entry/resume".into()),
             params: vec![result],
             body: tail,
         },
     );
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(reader),
-        args: vec![CpsAtom::Value(argument)],
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(reader),
+        args: vec![Atom::Value(argument)],
         return_to: resume,
     });
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![resume],
         body: call,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("entry".into()),
             params: vec![argument],
             return_cont: sentinel,
@@ -283,7 +283,7 @@ fn a_callee_the_entry_tail_calls_keeps_the_host_protocol() {
 
 #[test]
 fn an_escaping_callee_stays_a_tuple() {
-    let mut module = CpsModule::default();
+    let mut module = Module::default();
     let callee = returning_callee(&mut module, "callee");
     let resume = projecting_resume(&mut module, "resume");
 
@@ -293,23 +293,23 @@ fn an_escaping_callee_stays_a_tuple() {
     let entry = module.reserve_function();
     let sentinel = module.reserve_continuation();
 
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(callee),
-        args: vec![CpsAtom::Value(argument)],
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(argument)],
         return_to: resume,
     });
-    let bind = module.add_node(CpsNode::LetCont {
+    let bind = module.add_node(Node::LetCont {
         continuations: vec![resume],
         body: call,
     });
-    let capture = module.add_node(CpsNode::LetValue {
+    let capture = module.add_node(Node::LetValue {
         result: closure,
-        value: CpsValueExpr::Tuple(vec![CpsAtom::Fun(callee)]),
+        value: ValueExpr::Tuple(vec![Atom::Fun(callee)]),
         next: bind,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("entry".into()),
             params: vec![argument],
             return_cont: sentinel,
@@ -323,38 +323,38 @@ fn an_escaping_callee_stays_a_tuple() {
 }
 
 /// A two-slot row — a tag and one payload, the shape of `/std/Option` — minted for the fixtures below.
-fn option_row(module: &mut CpsModule) -> CpsRowId {
-    module.add_row(CpsRow {
+fn option_row(module: &mut Module) -> RowId {
+    module.add_row(Row {
         debug_name: Some("Option".into()),
-        slots: vec![CpsSlot::Tag, CpsSlot::Opaque],
+        slots: vec![Slot::Tag, Slot::Opaque],
     })
 }
 
 /// [`returning_callee`] over a row: the construction it returns is `Row(row, [1, field])`.
-fn row_returning_callee(module: &mut CpsModule, name: &str, row: CpsRowId) -> CpsFunId {
+fn row_returning_callee(module: &mut Module, name: &str, row: RowId) -> FunctionId {
     let field = module.add_value(Some(format!("{name}/field")));
     let built = module.add_value(Some(format!("{name}/built")));
     let function = module.reserve_function();
     let sentinel = module.reserve_continuation();
 
-    let ret = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let ret = module.add_node(Node::ApplyCont(Edge {
         target: sentinel,
-        args: vec![CpsAtom::Value(built)],
+        args: vec![Atom::Value(built)],
     }));
-    let body = module.add_node(CpsNode::LetValue {
+    let body = module.add_node(Node::LetValue {
         result: built,
-        value: CpsValueExpr::Row(
+        value: ValueExpr::Row(
             row,
             vec![
-                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-                CpsAtom::Value(field),
+                Atom::Literal(Literal::Nat(Natural::from(1u32))),
+                Atom::Value(field),
             ],
         ),
         next: ret,
     });
     module.define_function(
         function,
-        CpsFunction {
+        Function {
             debug_name: Some(name.into()),
             params: vec![field],
             return_cont: sentinel,
@@ -365,28 +365,28 @@ fn row_returning_callee(module: &mut CpsModule, name: &str, row: CpsRowId) -> Cp
 }
 
 /// [`projecting_resume`] in the row vocabulary: both reads are `RowGet`.
-fn row_projecting_resume(module: &mut CpsModule, name: &str, row: CpsRowId) -> CpsContId {
+fn row_projecting_resume(module: &mut Module, name: &str, row: RowId) -> ContinuationId {
     let result = module.add_value(Some(format!("{name}/result")));
     let tag = module.add_value(Some(format!("{name}/tag")));
     let payload = module.add_value(Some(format!("{name}/payload")));
     let resume = module.reserve_continuation();
 
-    let exit = module.add_node(CpsNode::Exit { value: None });
-    let second = module.add_node(CpsNode::LetIntrinsic {
+    let exit = module.add_node(Node::Exit { value: None });
+    let second = module.add_node(Node::LetIntrinsic {
         result: payload,
-        op: CpsIntrinsic::RowGet(row, 1),
-        args: vec![CpsAtom::Value(result)],
+        op: Intrinsic::RowGet(row, 1),
+        args: vec![Atom::Value(result)],
         next: exit,
     });
-    let first = module.add_node(CpsNode::LetIntrinsic {
+    let first = module.add_node(Node::LetIntrinsic {
         result: tag,
-        op: CpsIntrinsic::RowGet(row, 0),
-        args: vec![CpsAtom::Value(result)],
+        op: Intrinsic::RowGet(row, 0),
+        args: vec![Atom::Value(result)],
         next: second,
     });
     module.define_continuation(
         resume,
-        CpsContinuation {
+        Continuation {
             debug_name: Some(name.into()),
             params: vec![result],
             body: first,
@@ -400,7 +400,7 @@ fn row_projecting_resume(module: &mut CpsModule, name: &str, row: CpsRowId) -> C
 /// Mutation-checked by reverting the shape to the per-function derivation: the protocol alone still reads `Fields(2, …)`, and what fails is the verifier on the rebuilt `Tuple` — which is the other half of the fix, and why the fixture asserts both.
 #[test]
 fn a_forwarder_rebuilds_in_its_class_vocabulary() {
-    let mut module = CpsModule::default();
+    let mut module = Module::default();
     let row = option_row(&mut module);
     let callee = row_returning_callee(&mut module, "callee", row);
     let forwarder = calling_function(&mut module, "forwarder", callee, None);
@@ -408,7 +408,7 @@ fn a_forwarder_rebuilds_in_its_class_vocabulary() {
     let entry = calling_function(&mut module, "entry", forwarder, Some(outer));
     // Bound lexically, unlike the other fixtures here, because this one runs the verifier and the verifier reads scope.
     let inner = module.function(entry).unwrap().body;
-    let bound = module.add_node(CpsNode::LetFun {
+    let bound = module.add_node(Node::LetFun {
         functions: vec![callee, forwarder],
         body: inner,
     });
@@ -435,8 +435,8 @@ fn a_forwarder_rebuilds_in_its_class_vocabulary() {
     assert!(
         matches!(
             rebuilt,
-            CpsNode::LetValue {
-                value: CpsValueExpr::Row(rebuilt_row, _),
+            Node::LetValue {
+                value: ValueExpr::Row(rebuilt_row, _),
                 ..
             } if rebuilt_row == row
         ),

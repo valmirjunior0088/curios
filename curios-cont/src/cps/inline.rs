@@ -9,17 +9,17 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-pub(super) fn inline_known_calls(module: &mut CpsModule) -> bool {
+pub(super) fn inline_known_calls(module: &mut Module) -> bool {
     let mut changed = false;
     // Inline in sweeps: build the whole-module call analysis once, then inline every candidate it exposes before rebuilding. Rebuilding per inline is what made this quadratic on a large unoptimized module. Per-callee facts (the body's shape and extent) are stable across a sweep because inlining a call copies the callee rather than mutating it, and a surviving call node keeps its owner; only the site counts go stale within a sweep, and a stale count only tightens the size budget, so the calls it defers are picked up by the next sweep's fresh analysis. Inlining that exposes a call inside a copied body is likewise handled by the following sweep.
     for _ in 0..10_000 {
         let analysis = analyze_calls(module);
         let mut inlined_any = false;
         for index in 0..module.nodes.len() {
-            let node_id = CpsNodeId(index as u32);
+            let node_id = NodeId(index as u32);
             // Re-read: an earlier inline in this sweep may have removed or rewritten this node.
-            let Some(CpsNode::ApplyFun {
-                callee: CpsCallee::Known(callee),
+            let Some(Node::ApplyFun {
+                callee: Callee::Known(callee),
                 args,
                 return_to,
             }) = module.node(node_id)
@@ -58,14 +58,14 @@ pub(super) fn inline_known_calls(module: &mut CpsModule) -> bool {
     }
     changed
 }
-pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
+pub(super) fn inline_single_use_continuations(module: &mut Module) -> bool {
     let mut changed = false;
     // Inline in sweeps: build the transfer index once per sweep rather than once per inline. Inlining a single-use continuation moves its one transfer without duplicating it, so it never changes another continuation's transfer count — the snapshot stays valid for the rest of the sweep. Each candidate is re-read against the live module, and the module is pruned once at the end of each sweep rather than after every inline.
     for _ in 0..10_000 {
         let transfers_by_target = continuation_transfers(module);
         let mut inlined_any = false;
         for index in 0..module.continuations.len() {
-            let target = CpsContId(index as u32);
+            let target = ContinuationId(index as u32);
             // Re-read: an earlier inline (and its prune) in this sweep may have removed or rewritten this continuation.
             let Some(continuation) = module.continuation(target) else {
                 continue;
@@ -78,7 +78,7 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
             }
             let call = transfers[0];
             let params_len = continuation.params.len();
-            let Some(CpsNode::ApplyCont(edge)) = module.node(call) else {
+            let Some(Node::ApplyCont(edge)) = module.node(call) else {
                 continue;
             };
             if edge.target != target || edge.args.len() != params_len {
@@ -99,8 +99,8 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
     changed
 }
 /// Index every continuation to the nodes that transfer control to it, one entry per referencing node in ascending node order. Building this once per rewrite pass keeps single-use detection linear instead of rescanning every node for each continuation.
-pub(super) fn continuation_transfers(module: &CpsModule) -> BTreeMap<CpsContId, Vec<CpsNodeId>> {
-    let mut transfers: BTreeMap<CpsContId, Vec<CpsNodeId>> = BTreeMap::new();
+pub(super) fn continuation_transfers(module: &Module) -> BTreeMap<ContinuationId, Vec<NodeId>> {
+    let mut transfers: BTreeMap<ContinuationId, Vec<NodeId>> = BTreeMap::new();
     let mut targets = BTreeSet::new();
     for (id, node) in module.nodes.iter_live() {
         targets.clear();
@@ -111,34 +111,34 @@ pub(super) fn continuation_transfers(module: &CpsModule) -> BTreeMap<CpsContId, 
     }
     transfers
 }
-fn collect_control_targets(node: &CpsNode, targets: &mut BTreeSet<CpsContId>) {
+fn collect_control_targets(node: &Node, targets: &mut BTreeSet<ContinuationId>) {
     match node {
-        CpsNode::ApplyFun { return_to, .. }
-        | CpsNode::Foreign { return_to, .. }
-        | CpsNode::Cell { return_to, .. }
-        | CpsNode::Intrinsic { return_to, .. } => {
+        Node::ApplyFun { return_to, .. }
+        | Node::Foreign { return_to, .. }
+        | Node::Cell { return_to, .. }
+        | Node::Intrinsic { return_to, .. } => {
             targets.insert(*return_to);
         }
-        CpsNode::ApplyCont(edge) => {
+        Node::ApplyCont(edge) => {
             targets.insert(edge.target);
         }
-        CpsNode::Switch { cases, default, .. } => {
+        Node::Switch { cases, default, .. } => {
             targets.extend(cases.values().chain(default.iter()).map(|edge| edge.target));
         }
-        CpsNode::LetValue { .. }
-        | CpsNode::LetIntrinsic { .. }
-        | CpsNode::LetFun { .. }
-        | CpsNode::LetCont { .. }
-        | CpsNode::Exit { .. }
-        | CpsNode::Panic(_)
-        | CpsNode::Unreachable => {}
+        Node::LetValue { .. }
+        | Node::LetIntrinsic { .. }
+        | Node::LetFun { .. }
+        | Node::LetCont { .. }
+        | Node::Exit { .. }
+        | Node::Panic(_)
+        | Node::Unreachable => {}
     }
 }
 pub(super) fn inline_continuation(
-    module: &mut CpsModule,
-    continuation: CpsContId,
-    call: CpsNodeId,
-    args: &[CpsAtom],
+    module: &mut Module,
+    continuation: ContinuationId,
+    call: NodeId,
+    args: &[Atom],
 ) -> bool {
     let definition = module.continuation(continuation).unwrap().clone();
     let substitutions = definition
@@ -152,7 +152,7 @@ pub(super) fn inline_continuation(
     let mut function_work = body_nodes
         .iter()
         .filter_map(|node| match module.node(*node).unwrap() {
-            CpsNode::LetFun { functions, .. } => Some(functions.as_slice()),
+            Node::LetFun { functions, .. } => Some(functions.as_slice()),
             _ => None,
         })
         .flatten()
@@ -165,7 +165,7 @@ pub(super) fn inline_continuation(
         }
         for node in function_nodes(module, function) {
             if substitution_nodes.insert(node)
-                && let CpsNode::LetFun { functions, .. } = module.node(node).unwrap()
+                && let Node::LetFun { functions, .. } = module.node(node).unwrap()
             {
                 function_work.extend(functions.iter().copied());
             }
@@ -174,12 +174,12 @@ pub(super) fn inline_continuation(
     if substitution_nodes.iter().any(|node| {
         matches!(
             module.node(*node),
-            Some(CpsNode::ApplyFun {
-                callee: CpsCallee::Closure(value),
+            Some(Node::ApplyFun {
+                callee: Callee::Closure(value),
                 ..
             }) if matches!(
                 substitutions.get(value),
-                Some(CpsAtom::Literal(_) | CpsAtom::Filler)
+                Some(Atom::Literal(_) | Atom::Filler)
             )
         )
     }) {
@@ -189,20 +189,20 @@ pub(super) fn inline_continuation(
     for &node in &substitution_nodes {
         let node = module.nodes.get_mut(node).unwrap();
         visit_atoms_mut(node, &mut |atom| {
-            if let CpsAtom::Value(value) = atom
+            if let Atom::Value(value) = atom
                 && let Some(replacement) = substitutions.get(value)
             {
                 *atom = replacement.clone();
             }
         });
-        if let CpsNode::ApplyFun { callee, .. } = node
-            && let CpsCallee::Closure(value) = *callee
+        if let Node::ApplyFun { callee, .. } = node
+            && let Callee::Closure(value) = *callee
             && let Some(replacement) = substitutions.get(&value)
         {
             *callee = match replacement {
-                CpsAtom::Value(value) => CpsCallee::Closure(*value),
-                CpsAtom::Fun(function) => CpsCallee::Known(*function),
-                CpsAtom::Literal(_) | CpsAtom::Filler => unreachable!(),
+                Atom::Value(value) => Callee::Closure(*value),
+                Atom::Fun(function) => Callee::Known(*function),
+                Atom::Literal(_) | Atom::Filler => unreachable!(),
             };
         }
     }
@@ -217,16 +217,16 @@ pub(super) fn inline_continuation(
     true
 }
 pub(super) fn inline_call(
-    module: &mut CpsModule,
-    call: CpsNodeId,
-    callee: CpsFunId,
-    args: &[CpsAtom],
-    return_to: CpsContId,
+    module: &mut Module,
+    call: NodeId,
+    callee: FunctionId,
+    args: &[Atom],
+    return_to: ContinuationId,
 ) -> bool {
     let function = module.function(callee).unwrap().clone();
     let (extent, nested) = copied_extent(module, function_nodes(module, callee));
-    let node_ids: Vec<CpsNodeId> = extent.into_iter().collect();
-    let nested_defs: BTreeMap<CpsFunId, CpsFunction> = nested
+    let node_ids: Vec<NodeId> = extent.into_iter().collect();
+    let nested_defs: BTreeMap<FunctionId, Function> = nested
         .iter()
         .map(|&id| (id, module.function(id).unwrap().clone()))
         .collect();
@@ -237,7 +237,7 @@ pub(super) fn inline_call(
     let local_continuations = nodes
         .values()
         .filter_map(|node| match node {
-            CpsNode::LetCont { continuations, .. } => Some(continuations.as_slice()),
+            Node::LetCont { continuations, .. } => Some(continuations.as_slice()),
             _ => None,
         })
         .flatten()
@@ -253,16 +253,16 @@ pub(super) fn inline_call(
 
     // Bail before minting anything: only a parameter can map a closure callee to a literal or a filler (locals map to fresh values below), so this check is complete against the parameter substitutions alone, and an aborted attempt must leave no orphaned arena entries behind. The filler half is what `split_workers`' padding and dead-parameter elimination can put in an argument position; neither is a callee `map_callee` could name, and reaching it there would panic after minting rather than declining here.
     if nodes.values().any(|node| {
-        matches!(node, CpsNode::ApplyFun { callee: CpsCallee::Closure(value), .. }
-            if matches!(values.get(value), Some(CpsAtom::Literal(_) | CpsAtom::Filler)))
+        matches!(node, Node::ApplyFun { callee: Callee::Closure(value), .. }
+            if matches!(values.get(value), Some(Atom::Literal(_) | Atom::Filler)))
     }) {
         return false;
     }
 
-    let mut owned: Vec<CpsValueId> = Vec::new();
+    let mut owned: Vec<ValueId> = Vec::new();
     for node in nodes.values() {
         match node {
-            CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
+            Node::LetValue { result, .. } | Node::LetIntrinsic { result, .. } => {
                 owned.push(*result)
             }
             _ => {}
@@ -275,10 +275,10 @@ pub(super) fn inline_call(
     for old in owned {
         let definition = module.values.get(old).unwrap().clone();
         let fresh = module.add_value(definition.debug_name);
-        values.insert(old, CpsAtom::Value(fresh));
+        values.insert(old, Atom::Value(fresh));
     }
-    let mut functions: BTreeMap<CpsFunId, CpsFunId> = BTreeMap::new();
-    let mut returns: BTreeMap<CpsContId, CpsContId> = BTreeMap::new();
+    let mut functions: BTreeMap<FunctionId, FunctionId> = BTreeMap::new();
+    let mut returns: BTreeMap<ContinuationId, ContinuationId> = BTreeMap::new();
     for (&id, definition) in &nested_defs {
         functions.insert(id, module.reserve_function());
         returns.insert(definition.return_cont, module.reserve_continuation());
@@ -295,7 +295,7 @@ pub(super) fn inline_call(
         for &param in &continuation.params {
             let definition = module.values.get(param).unwrap().clone();
             let fresh = module.add_value(definition.debug_name);
-            values.insert(param, CpsAtom::Value(fresh));
+            values.insert(param, Atom::Value(fresh));
         }
     }
 
@@ -306,18 +306,18 @@ pub(super) fn inline_call(
         }
     }
 
-    let map_function = |id: CpsFunId| functions.get(&id).copied().unwrap_or(id);
+    let map_function = |id: FunctionId| functions.get(&id).copied().unwrap_or(id);
     // A nested definition is copied, so every reference to it inside the copy has to name the copy — as an atom, and as a direct callee.
-    let map_atom = |atom: &CpsAtom| match atom {
-        CpsAtom::Value(value) => values.get(value).cloned().unwrap_or(CpsAtom::Value(*value)),
-        CpsAtom::Fun(function) => CpsAtom::Fun(map_function(*function)),
-        CpsAtom::Literal(_) | CpsAtom::Filler => atom.clone(),
+    let map_atom = |atom: &Atom| match atom {
+        Atom::Value(value) => values.get(value).cloned().unwrap_or(Atom::Value(*value)),
+        Atom::Fun(function) => Atom::Fun(map_function(*function)),
+        Atom::Literal(_) | Atom::Filler => atom.clone(),
     };
-    let map_value = |value: CpsValueId| match values.get(&value) {
-        Some(CpsAtom::Value(value)) => *value,
+    let map_value = |value: ValueId| match values.get(&value) {
+        Some(Atom::Value(value)) => *value,
         _ => value,
     };
-    let map_cont = |target: CpsContId| {
+    let map_cont = |target: ContinuationId| {
         if target == function.return_cont {
             return_to
         } else {
@@ -330,13 +330,13 @@ pub(super) fn inline_call(
     };
 
     // A callee parameter may map to a function reference, which turns an indirect call in the body into a direct one as the copy is made.
-    let map_callee = |callee: &CpsCallee| match callee {
-        CpsCallee::Known(function) => CpsCallee::Known(map_function(*function)),
-        CpsCallee::Closure(value) => match map_atom(&CpsAtom::Value(*value)) {
-            CpsAtom::Value(value) => CpsCallee::Closure(value),
-            CpsAtom::Fun(function) => CpsCallee::Known(function),
+    let map_callee = |callee: &Callee| match callee {
+        Callee::Known(function) => Callee::Known(map_function(*function)),
+        Callee::Closure(value) => match map_atom(&Atom::Value(*value)) {
+            Atom::Value(value) => Callee::Closure(value),
+            Atom::Fun(function) => Callee::Known(function),
             // The pre-minting bail above already rejected every closure callee a parameter maps to a literal or a filler, and bailing here would leak the minted values and reserved slots.
-            CpsAtom::Literal(_) | CpsAtom::Filler => unreachable!(),
+            Atom::Literal(_) | Atom::Filler => unreachable!(),
         },
     };
     let map = Mapping {
@@ -355,7 +355,7 @@ pub(super) fn inline_call(
     for (&old, continuation) in &continuation_defs {
         module.continuations.define(
             continuations[&old],
-            CpsContinuation {
+            Continuation {
                 debug_name: continuation.debug_name.clone(),
                 params: continuation
                     .params
@@ -370,7 +370,7 @@ pub(super) fn inline_call(
     for (&old, definition) in &nested_defs {
         module.define_function(
             functions[&old],
-            CpsFunction {
+            Function {
                 debug_name: definition.debug_name.clone(),
                 params: definition.params.iter().map(|id| map_value(*id)).collect(),
                 return_cont: returns[&definition.return_cont],

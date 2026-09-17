@@ -54,7 +54,7 @@ use super::test_support::*;
 ///
 /// # Family keying, 2026-08-20
 ///
-/// A variant family is one final struct at its own width — `CpsValueExpr::Variant`/`CpsIntrinsic::VariantGet`, minted by the Ersd door and padded to the family's width — so a family read is one exact cast where it was a `ref.test` cascade over the arity roster. Same method as above, but **interleaved run-by-run** (before, after, before, after) rather than arm-by-arm, min of 7 each, taken at a one-minute load average under 1.0. Two independent passes, reported together because they agree:
+/// A variant family is one final struct at its own width — `curios_cont::ValueExpr::Variant`/`curios_cont::Intrinsic::VariantGet`, minted by the Ersd door and padded to the family's width — so a family read is one exact cast where it was a `ref.test` cascade over the arity roster. Same method as above, but **interleaved run-by-run** (before, after, before, after) rather than arm-by-arm, min of 7 each, taken at a one-minute load average under 1.0. Two independent passes, reported together because they agree:
 ///
 /// | Program | before | after | pass 1 | pass 2 |
 /// | --- | ---: | ---: | ---: | ---: |

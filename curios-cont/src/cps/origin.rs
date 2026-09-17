@@ -12,7 +12,7 @@
 
 use {
     super::{
-        CpsAtom, CpsCallee, CpsEdge, CpsModule, CpsNode, CpsValueExpr, CpsValueId, Lattice, Solver,
+        Atom, Callee, Edge, Lattice, Module, Node, Solver, ValueExpr, ValueId,
         analysis::analyze_calls,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -25,8 +25,8 @@ pub(crate) enum Origin {
     Unreached,
     /// Every flow reaching it is a tuple construction, or an alias of one, and these are the widths they carry. One width is an exact product; several are a variant, which travels as its widest constructor with each narrower edge filled.
     Constructed(BTreeSet<usize>),
-    /// Every flow reaching it is a [`CpsValueExpr::Row`] of this row, or an alias of one — all at the row's width, carried here so the rewrite needs no module access. Always settled, because the door pads every construction; a merge with a different row or with a structural tuple is `Opaque`, which upstream typing makes unreachable and this lattice makes safe anyway.
-    Row(super::CpsRowId, usize),
+    /// Every flow reaching it is a [`ValueExpr::Row`] of this row, or an alias of one — all at the row's width, carried here so the rewrite needs no module access. Always settled, because the door pads every construction; a merge with a different row or with a structural tuple is `Opaque`, which upstream typing makes unreachable and this lattice makes safe anyway.
+    Row(super::RowId, usize),
     /// Some flow is not a visible construction — a call result, a literal, a closure, a projection.
     Opaque,
 }
@@ -66,7 +66,7 @@ impl Origin {
     }
 
     /// The row this origin's flows construct, where they are variant constructions at all.
-    pub(crate) fn row(&self) -> Option<super::CpsRowId> {
+    pub(crate) fn row(&self) -> Option<super::RowId> {
         match self {
             Origin::Row(row, _) => Some(*row),
             Origin::Unreached | Origin::Constructed(_) | Origin::Opaque => None,
@@ -97,16 +97,16 @@ impl Lattice for Origin {
 }
 
 /// Join `atom`'s fact into `target`: a value hands its own fact forward, and anything that is not a value is not a construction.
-fn flow(solver: &mut Solver<Origin>, atom: &CpsAtom, target: CpsValueId) {
+fn flow(solver: &mut Solver<Origin>, atom: &Atom, target: ValueId) {
     let incoming = match atom {
-        CpsAtom::Value(value) => solver.facts().get(value).cloned().unwrap_or(Origin::Opaque),
-        CpsAtom::Fun(_) | CpsAtom::Literal(_) | CpsAtom::Filler => Origin::Opaque,
+        Atom::Value(value) => solver.facts().get(value).cloned().unwrap_or(Origin::Opaque),
+        Atom::Fun(_) | Atom::Literal(_) | Atom::Filler => Origin::Opaque,
     };
     solver.join(target, incoming);
 }
 
 /// Push an edge's arguments into its target's parameters. A target without a definition is a return sentinel; its values are delivered through the return interface, whose resume parameters are already seeded opaque.
-fn flow_edge(module: &CpsModule, solver: &mut Solver<Origin>, edge: &CpsEdge) {
+fn flow_edge(module: &Module, solver: &mut Solver<Origin>, edge: &Edge) {
     let Some(continuation) = module.continuation(edge.target) else {
         return;
     };
@@ -116,7 +116,7 @@ fn flow_edge(module: &CpsModule, solver: &mut Solver<Origin>, edge: &CpsEdge) {
 }
 
 /// What flows into every value, to its least fixpoint.
-pub(crate) fn origins(module: &CpsModule) -> BTreeMap<CpsValueId, Origin> {
+pub(crate) fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
     let escaping = analyze_calls(module).escaping;
     let seeds = module.values.live_ids().collect::<Vec<_>>();
 
@@ -132,18 +132,18 @@ pub(crate) fn origins(module: &CpsModule) -> BTreeMap<CpsValueId, Origin> {
 
         for (_, node) in module.nodes.iter_live() {
             match node {
-                CpsNode::LetValue { result, value, .. } => {
+                Node::LetValue { result, value, .. } => {
                     let origin = match value {
-                        CpsValueExpr::Tuple(atoms) => Origin::of_width(atoms.len()),
-                        CpsValueExpr::Row(row, atoms) => Origin::Row(*row, atoms.len()),
-                        CpsValueExpr::List(_) | CpsValueExpr::Literal(_) => Origin::Opaque,
+                        ValueExpr::Tuple(atoms) => Origin::of_width(atoms.len()),
+                        ValueExpr::Row(row, atoms) => Origin::Row(*row, atoms.len()),
+                        ValueExpr::List(_) | ValueExpr::Literal(_) => Origin::Opaque,
                     };
                     solver.join(*result, origin);
                 }
-                CpsNode::LetIntrinsic { result, .. } => {
+                Node::LetIntrinsic { result, .. } => {
                     solver.join(*result, Origin::Opaque);
                 }
-                CpsNode::ApplyFun {
+                Node::ApplyFun {
                     callee,
                     args,
                     return_to,
@@ -153,7 +153,7 @@ pub(crate) fn origins(module: &CpsModule) -> BTreeMap<CpsValueId, Origin> {
                             solver.join(*param, Origin::Opaque);
                         }
                     }
-                    if let CpsCallee::Known(callee) = callee
+                    if let Callee::Known(callee) = callee
                         && let Some(function) = module.function(*callee)
                     {
                         for (atom, param) in args.iter().zip(function.params.iter().copied()) {
@@ -161,26 +161,26 @@ pub(crate) fn origins(module: &CpsModule) -> BTreeMap<CpsValueId, Origin> {
                         }
                     }
                 }
-                CpsNode::ApplyCont(edge) => flow_edge(module, solver, edge),
-                CpsNode::Switch { cases, default, .. } => {
+                Node::ApplyCont(edge) => flow_edge(module, solver, edge),
+                Node::Switch { cases, default, .. } => {
                     for edge in cases.values().chain(default.as_ref()) {
                         flow_edge(module, solver, edge);
                     }
                 }
-                CpsNode::Foreign { return_to, .. }
-                | CpsNode::Cell { return_to, .. }
-                | CpsNode::Intrinsic { return_to, .. } => {
+                Node::Foreign { return_to, .. }
+                | Node::Cell { return_to, .. }
+                | Node::Intrinsic { return_to, .. } => {
                     if let Some(resume) = module.continuation(*return_to) {
                         for param in &resume.params {
                             solver.join(*param, Origin::Opaque);
                         }
                     }
                 }
-                CpsNode::LetFun { .. }
-                | CpsNode::LetCont { .. }
-                | CpsNode::Exit { .. }
-                | CpsNode::Panic(_)
-                | CpsNode::Unreachable => {}
+                Node::LetFun { .. }
+                | Node::LetCont { .. }
+                | Node::Exit { .. }
+                | Node::Panic(_)
+                | Node::Unreachable => {}
             }
         }
     })

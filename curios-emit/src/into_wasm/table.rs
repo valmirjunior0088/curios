@@ -209,7 +209,7 @@ fn max_value_tuple_arity(value: &EmissionValue) -> usize {
         EmissionValue::Pure(data) => max_tuple_arity(data),
         // Projecting field `index` reads through a tuple type of arity at least `index + 1`, even when no tuple of that arity is ever *built* in the module (e.g. the projected tuple only ever arrives from outside, or the producing array is empty). Sizing the tuple types from constructions alone misses it.
         EmissionValue::Eval(EmissionCode::Intrinsic(
-            curios_cont::CpsIntrinsic::TupleGet(index),
+            curios_cont::Intrinsic::TupleGet(index),
             _,
         )) => index + 1,
         _ => 0,
@@ -276,7 +276,7 @@ pub(crate) struct Table<'a> {
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
     tuple_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// One final struct type per nominal row, keyed by the row's identity rather than by an arity — which is what makes a row read an exact cast and gives Binaryen's closed-world passes distinct types to refine. Widths come from the Cont module's own row table, so a row whose constructions were all optimized away still declares its type (harmless, and a projection can outlive its constructions).
-    row_types: BTreeMap<curios_cont::CpsRowId, (curios_wasm::TypeName, Vec<curios_cont::CpsSlot>)>,
+    row_types: BTreeMap<curios_cont::RowId, (curios_wasm::TypeName, Vec<curios_cont::Slot>)>,
     envr_types: BTreeMap<usize, curios_wasm::TypeName>,
     clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// Keyed by the pair a wasm function type actually is — parameter count *and* result count — rather than by parameter count alone, so two functions of the same arity delivering different result shapes cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
@@ -843,9 +843,9 @@ impl<'a> Table<'a> {
         &self,
     ) -> impl Iterator<
         Item = (
-            curios_cont::CpsRowId,
+            curios_cont::RowId,
             curios_wasm::TypeName,
-            &[curios_cont::CpsSlot],
+            &[curios_cont::Slot],
         ),
     > {
         self.row_types
@@ -856,22 +856,20 @@ impl<'a> Table<'a> {
     /// How a value is loaded to fill `slot`, and how a read of it is coerced back.
     ///
     /// A typed reference slot admits null, because the slots a narrow constructor leaves unwritten hold one; every other carrier is loaded exactly as any position naming it.
-    pub(crate) fn slot_load_as(&self, slot: curios_cont::CpsSlot) -> LoadAs {
+    pub(crate) fn slot_load_as(&self, slot: curios_cont::Slot) -> LoadAs {
         match slot {
-            curios_cont::CpsSlot::Tag | curios_cont::CpsSlot::Nat => LoadAs::Nat,
-            curios_cont::CpsSlot::Int => LoadAs::Int,
-            curios_cont::CpsSlot::Flt => LoadAs::Flt,
-            curios_cont::CpsSlot::List => LoadAs::ConcreteOrNull(self.list_rope().base.clone()),
-            curios_cont::CpsSlot::Closure(arity) => {
-                LoadAs::ConcreteOrNull(self.find_envr_type(arity))
-            }
-            curios_cont::CpsSlot::Row(row) => LoadAs::ConcreteOrNull(self.find_row_type(row)),
-            curios_cont::CpsSlot::Opaque => LoadAs::Null,
+            curios_cont::Slot::Tag | curios_cont::Slot::Nat => LoadAs::Nat,
+            curios_cont::Slot::Int => LoadAs::Int,
+            curios_cont::Slot::Flt => LoadAs::Flt,
+            curios_cont::Slot::List => LoadAs::ConcreteOrNull(self.list_rope().base.clone()),
+            curios_cont::Slot::Closure(arity) => LoadAs::ConcreteOrNull(self.find_envr_type(arity)),
+            curios_cont::Slot::Row(row) => LoadAs::ConcreteOrNull(self.find_row_type(row)),
+            curios_cont::Slot::Opaque => LoadAs::Null,
         }
     }
 
     /// The carriers of `row`'s slots.
-    pub(crate) fn row_slots(&self, row: curios_cont::CpsRowId) -> &[curios_cont::CpsSlot] {
+    pub(crate) fn row_slots(&self, row: curios_cont::RowId) -> &[curios_cont::Slot] {
         &self
             .row_types
             .get(&row)
@@ -879,7 +877,7 @@ impl<'a> Table<'a> {
             .1
     }
 
-    pub(crate) fn find_row_type(&self, row: curios_cont::CpsRowId) -> curios_wasm::TypeName {
+    pub(crate) fn find_row_type(&self, row: curios_cont::RowId) -> curios_wasm::TypeName {
         self.row_types
             .get(&row)
             .unwrap_or_else(|| panic!("`Table` lacks a type for row `{}`", row))

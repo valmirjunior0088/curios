@@ -2,9 +2,8 @@ use curios_num::Natural;
 
 use {
     super::{
-        CpsAtom, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsic,
-        CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsRow, CpsSlot, CpsUseTarget, CpsValueExpr,
-        CpsValueId, FieldGroup,
+        Atom, Continuation, ContinuationId, Edge, FieldGroup, Function, FunctionId, Intrinsic,
+        Literal, Module, Node, NodeId, Row, Slot, UseTarget, ValueExpr, ValueId,
     },
     std::collections::BTreeMap,
 };
@@ -12,8 +11,8 @@ use {
 /// Splitting a lower parameter after a higher one moves the higher group along: recording a start without shifting what follows it leaves a record the verifier reads as overlapping, which is how this was found.
 #[test]
 fn a_later_split_moves_every_group_past_it() {
-    let mut module = CpsModule::new();
-    let continuation = CpsContId(0);
+    let mut module = Module::new();
+    let continuation = ContinuationId(0);
     module.record_split(continuation, 3, 3);
     module.record_split(continuation, 1, 3);
     assert_eq!(
@@ -25,23 +24,23 @@ fn a_later_split_moves_every_group_past_it() {
     );
 }
 
-fn minimal_module() -> CpsModule {
-    let mut module = CpsModule::new();
+fn minimal_module() -> Module {
+    let mut module = Module::new();
     let fun = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let result = module.add_value(Some("result".into()));
-    let return_node = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let return_node = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(result)],
+        args: vec![Atom::Value(result)],
     }));
-    let body = module.add_node(CpsNode::LetValue {
+    let body = module.add_node(Node::LetValue {
         result,
-        value: CpsValueExpr::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+        value: ValueExpr::Literal(Literal::Nat(Natural::from(0u32))),
         next: return_node,
     });
     module.define_function(
         fun,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -61,7 +60,7 @@ fn registers_and_rewires_uses() {
         .enumerate()
         .find_map(|(index, value)| {
             (value.as_ref()?.debug_name.as_deref() == Some("result"))
-                .then_some(CpsValueId(index as u32))
+                .then_some(ValueId(index as u32))
         })
         .unwrap();
     let replacement = module.add_value(Some("replacement".into()));
@@ -72,9 +71,9 @@ fn registers_and_rewires_uses() {
         .unwrap()
         .params
         .push(replacement);
-    let count = |module: &CpsModule, value| module.value_use_counts().get(&value).copied();
+    let count = |module: &Module, value| module.value_use_counts().get(&value).copied();
     assert_eq!(count(&module, old), Some(1));
-    module.replace_atom(CpsUseTarget::Value(old), CpsAtom::Value(replacement));
+    module.replace_atom(UseTarget::Value(old), Atom::Value(replacement));
     assert_eq!(count(&module, old), None);
     assert_eq!(count(&module, replacement), Some(1));
     module.verify().unwrap();
@@ -89,11 +88,11 @@ fn verifier_rejects_an_existing_but_out_of_scope_value() {
         .enumerate()
         .find_map(|(index, value)| {
             (value.as_ref()?.debug_name.as_deref() == Some("result"))
-                .then_some(CpsValueId(index as u32))
+                .then_some(ValueId(index as u32))
         })
         .unwrap();
     let orphan = module.add_value(Some("orphan".into()));
-    module.replace_atom(CpsUseTarget::Value(result), CpsAtom::Value(orphan));
+    module.replace_atom(UseTarget::Value(result), Atom::Value(orphan));
 
     let error = module.verify().unwrap_err();
     assert!(error.to_string().contains("out-of-scope"));
@@ -102,9 +101,9 @@ fn verifier_rejects_an_existing_but_out_of_scope_value() {
 #[test]
 fn node_ids_are_not_reused_after_tombstoning() {
     let mut module = minimal_module();
-    let removed = CpsNodeId(0);
+    let removed = NodeId(0);
     module.remove_node(removed).unwrap();
-    let fresh = module.add_node(CpsNode::Unreachable);
+    let fresh = module.add_node(Node::Unreachable);
     assert!(fresh.0 > removed.0);
 }
 
@@ -112,15 +111,15 @@ fn node_ids_are_not_reused_after_tombstoning() {
 fn verifier_rejects_intrinsic_arity_mismatch() {
     let mut module = minimal_module();
     let result = module.add_value(None);
-    let next = module.add_node(CpsNode::Unreachable);
-    module.add_node(CpsNode::LetIntrinsic {
+    let next = module.add_node(Node::Unreachable);
+    module.add_node(Node::LetIntrinsic {
         result,
-        op: CpsIntrinsic::NatAdd,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
+        op: Intrinsic::NatAdd,
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
         next,
     });
-    let bad = CpsNodeId((module.nodes.len() - 1) as u32);
-    module.functions.get_mut(CpsFunId(0)).unwrap().body = bad;
+    let bad = NodeId((module.nodes.len() - 1) as u32);
+    module.functions.get_mut(FunctionId(0)).unwrap().body = bad;
     assert!(
         module
             .verify()
@@ -135,36 +134,36 @@ fn verifier_rejects_intrinsic_arity_mismatch() {
 fn verifier_rejects_a_read_in_the_other_vocabulary() {
     for (minted_as_row, read_as_row) in [(false, true), (true, false)] {
         let mut module = minimal_module();
-        let row = module.add_row(CpsRow {
+        let row = module.add_row(Row {
             debug_name: Some("Option".into()),
-            slots: vec![CpsSlot::Tag, CpsSlot::Opaque],
+            slots: vec![Slot::Tag, Slot::Opaque],
         });
         let built = module.add_value(Some("built".into()));
         let field = module.add_value(Some("field".into()));
         // Ahead of the minimal body rather than in place of it, so every other clause of the verifier is satisfied and the vocabulary one is the only thing left to refuse.
-        let next = module.function(CpsFunId(0)).unwrap().body;
+        let next = module.function(FunctionId(0)).unwrap().body;
         let atoms = vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            Atom::Literal(Literal::Nat(Natural::from(0u32))),
+            Atom::Literal(Literal::Nat(Natural::from(0u32))),
         ];
-        let read = module.add_node(CpsNode::LetIntrinsic {
+        let read = module.add_node(Node::LetIntrinsic {
             result: field,
             op: match read_as_row {
-                true => CpsIntrinsic::RowGet(row, 1),
-                false => CpsIntrinsic::TupleGet(1),
+                true => Intrinsic::RowGet(row, 1),
+                false => Intrinsic::TupleGet(1),
             },
-            args: vec![CpsAtom::Value(built)],
+            args: vec![Atom::Value(built)],
             next,
         });
-        let construction = module.add_node(CpsNode::LetValue {
+        let construction = module.add_node(Node::LetValue {
             result: built,
             value: match minted_as_row {
-                true => CpsValueExpr::Row(row, atoms),
-                false => CpsValueExpr::Tuple(atoms),
+                true => ValueExpr::Row(row, atoms),
+                false => ValueExpr::Tuple(atoms),
             },
             next: read,
         });
-        module.functions.get_mut(CpsFunId(0)).unwrap().body = construction;
+        module.functions.get_mut(FunctionId(0)).unwrap().body = construction;
 
         let error = module.verify().unwrap_err().0;
         assert!(
@@ -178,31 +177,31 @@ fn verifier_rejects_a_read_in_the_other_vocabulary() {
 #[test]
 fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
     let mut module = minimal_module();
-    let row = module.add_row(CpsRow {
+    let row = module.add_row(Row {
         debug_name: Some("Refusal".into()),
-        slots: vec![CpsSlot::Tag, CpsSlot::Opaque],
+        slots: vec![Slot::Tag, Slot::Opaque],
     });
     let built = module.add_value(Some("built".into()));
     let field = module.add_value(Some("field".into()));
-    let live_body = module.function(CpsFunId(0)).unwrap().body;
-    let return_cont = module.function(CpsFunId(0)).unwrap().return_cont;
+    let live_body = module.function(FunctionId(0)).unwrap().body;
+    let return_cont = module.function(FunctionId(0)).unwrap().return_cont;
 
     // The dead arm reads the value in the row vocabulary its live construction below does not carry.
     let dead = module.reserve_continuation();
     let live = module.reserve_continuation();
-    let dead_return = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let dead_return = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(field)],
+        args: vec![Atom::Value(field)],
     }));
-    let dead_read = module.add_node(CpsNode::LetIntrinsic {
+    let dead_read = module.add_node(Node::LetIntrinsic {
         result: field,
-        op: CpsIntrinsic::RowGet(row, 1),
-        args: vec![CpsAtom::Value(built)],
+        op: Intrinsic::RowGet(row, 1),
+        args: vec![Atom::Value(built)],
         next: dead_return,
     });
     module.define_continuation(
         dead,
-        CpsContinuation {
+        Continuation {
             debug_name: None,
             params: vec![],
             body: dead_read,
@@ -210,26 +209,26 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
     );
     module.define_continuation(
         live,
-        CpsContinuation {
+        Continuation {
             debug_name: None,
             params: vec![],
             body: live_body,
         },
     );
 
-    let switch = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+    let switch = module.add_node(Node::Switch {
+        scrutinee: Atom::Literal(Literal::Nat(Natural::from(0u32))),
         cases: BTreeMap::from([
             (
                 0,
-                CpsEdge {
+                Edge {
                     target: live,
                     args: vec![],
                 },
             ),
             (
                 1,
-                CpsEdge {
+                Edge {
                     target: dead,
                     args: vec![],
                 },
@@ -237,19 +236,19 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
         ]),
         default: None,
     });
-    let let_cont = module.add_node(CpsNode::LetCont {
+    let let_cont = module.add_node(Node::LetCont {
         continuations: vec![live, dead],
         body: switch,
     });
-    let construction = module.add_node(CpsNode::LetValue {
+    let construction = module.add_node(Node::LetValue {
         result: built,
-        value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+        value: ValueExpr::Tuple(vec![
+            Atom::Literal(Literal::Nat(Natural::from(0u32))),
+            Atom::Literal(Literal::Nat(Natural::from(0u32))),
         ]),
         next: let_cont,
     });
-    module.functions.get_mut(CpsFunId(0)).unwrap().body = construction;
+    module.functions.get_mut(FunctionId(0)).unwrap().body = construction;
 
     // The full set refuses the mismatch; the boundary set accepts everything else about the module and leaves the mismatch to the exit gate.
     assert!(module.verify().unwrap_err().0.contains("was built as"));
@@ -260,27 +259,27 @@ fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
 
 #[test]
 fn list_map_is_not_an_intrinsic_opcode() {
-    assert!(CpsIntrinsic::ListAppend.allocates());
-    assert!(!CpsIntrinsic::NatAdd.is_total());
+    assert!(Intrinsic::ListAppend.allocates());
+    assert!(!Intrinsic::NatAdd.is_total());
 }
 
 #[test]
 fn every_guarded_operation_is_classified_as_trapping() {
     // Found by reading `into_wasm`'s emission against this table rather than by a failure: each of these emits a guard — the first through the same checked helper as siblings already listed, the last three through an inline `Unreachable` — while the wildcard this match replaced answered `Total` for all of them, which is `eliminate_dead_bindings` deleting a refusal.
     for op in [
-        CpsIntrinsic::IntShl,
-        CpsIntrinsic::NatToInt,
-        CpsIntrinsic::IntToNat,
-        CpsIntrinsic::FltOfLeBytes,
+        Intrinsic::IntShl,
+        Intrinsic::NatToInt,
+        Intrinsic::IntToNat,
+        Intrinsic::FltOfLeBytes,
     ] {
         assert!(op.may_trap(), "{op:?} emits a guard but is not `MayTrap`");
         assert!(!op.is_total(), "{op:?} must not be deletable when dead");
     }
 
     // The controls that keep the rule from being "guard everything": monus saturates and a right shift only clears bits, so neither can leave the envelope.
-    assert!(CpsIntrinsic::NatSub.is_total());
-    assert!(CpsIntrinsic::NatShr.is_total());
-    assert!(CpsIntrinsic::IntShr.is_total());
+    assert!(Intrinsic::NatSub.is_total());
+    assert!(Intrinsic::NatShr.is_total());
+    assert!(Intrinsic::IntShr.is_total());
 }
 
 #[test]
@@ -300,13 +299,13 @@ fn verifier_rejects_shared_return_continuations() {
         .unwrap()
         .return_cont;
     let second = module.reserve_function();
-    let body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let body = module.add_node(Node::ApplyCont(Edge {
         target: shared_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
     }));
     module.define_function(
         second,
-        CpsFunction {
+        Function {
             debug_name: Some("second".into()),
             params: vec![],
             return_cont: shared_return,
@@ -327,13 +326,13 @@ fn verifier_rejects_another_functions_return_target() {
     let mut module = minimal_module();
     let second = module.reserve_function();
     let second_return = module.reserve_continuation();
-    let second_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let second_body = module.add_node(Node::ApplyCont(Edge {
         target: second_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
     }));
     module.define_function(
         second,
-        CpsFunction {
+        Function {
             debug_name: Some("second".into()),
             params: vec![],
             return_cont: second_return,
@@ -344,9 +343,9 @@ fn verifier_rejects_another_functions_return_target() {
     let entry_body = module.function(entry).unwrap().body;
     module.nodes.set(
         entry_body,
-        CpsNode::ApplyCont(CpsEdge {
+        Node::ApplyCont(Edge {
             target: second_return,
-            args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
+            args: vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))],
         }),
     );
     assert!(
@@ -366,7 +365,7 @@ fn verifier_rejects_undefined_non_return_continuation() {
     let entry_body = module.function(entry).unwrap().body;
     module.nodes.set(
         entry_body,
-        CpsNode::ApplyCont(CpsEdge {
+        Node::ApplyCont(Edge {
             target: undefined,
             args: vec![],
         }),
@@ -385,10 +384,10 @@ fn verifier_rejects_local_body_at_return_id() {
     let mut module = minimal_module();
     let entry = module.entry().unwrap();
     let return_cont = module.function(entry).unwrap().return_cont;
-    let local_body = module.add_node(CpsNode::Unreachable);
+    let local_body = module.add_node(Node::Unreachable);
     module.define_continuation(
         return_cont,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("invalid-return-body".into()),
             params: vec![],
             body: local_body,

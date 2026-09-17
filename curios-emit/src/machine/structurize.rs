@@ -7,7 +7,7 @@ use {
         MachineWrapper,
     },
     crate::into_wasm::{
-        EmissionArg, EmissionArgument, EmissionBlock, EmissionBlockName, EmissionBody,
+        EmissionArg, EmissionBinder, EmissionBlock, EmissionBlockName, EmissionBody,
         EmissionCallTarget, EmissionCellTarget, EmissionClosure, EmissionClosureName, EmissionCode,
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionHostTarget,
         EmissionJumpTarget, EmissionMatchTarget, EmissionModule, EmissionTail, EmissionValue,
@@ -36,7 +36,7 @@ pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
             .chain(&function.params)
             .copied()
             .map(value_name)
-            .map(EmissionArgument::from)
+            .map(EmissionBinder::from)
             .collect();
         output.add_func(
             function_name(machine, *id),
@@ -59,13 +59,13 @@ fn convert_wrapper(machine: &MachineModule, wrapper: &MachineWrapper) -> Emissio
         .iter()
         .copied()
         .map(value_name)
-        .map(EmissionArgument::from)
+        .map(EmissionBinder::from)
         .collect::<Vec<_>>();
     let params = (0..wrapper.arity)
         .map(|index| {
             EmissionValueName::from(format!("wrapper/{}/arg/{index}", wrapper.function.index()))
         })
-        .map(EmissionArgument::from)
+        .map(EmissionBinder::from)
         .collect::<Vec<_>>();
     let call_params = fields
         .iter()
@@ -90,7 +90,7 @@ fn convert_wrapper(machine: &MachineModule, wrapper: &MachineWrapper) -> Emissio
 
 struct MachineFunctionBridge<'a> {
     machine: &'a MachineModule,
-    function_id: curios_cont::CpsFunId,
+    function_id: curios_cont::FunctionId,
     function: &'a MachineFunction,
     resume: EmissionBlockName,
     literal_entropy: Entropy,
@@ -100,7 +100,7 @@ struct MachineFunctionBridge<'a> {
 impl<'a> MachineFunctionBridge<'a> {
     fn new(
         machine: &'a MachineModule,
-        function_id: curios_cont::CpsFunId,
+        function_id: curios_cont::FunctionId,
         function: &'a MachineFunction,
         resume: EmissionBlockName,
     ) -> Self {
@@ -289,7 +289,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 self.cell(*op, args, self.resume.clone(), values)
             }
             MachineTerminator::Intrinsic {
-                op: curios_cont::CpsIntrinsicCall::ListMap,
+                op: curios_cont::IntrinsicCall::ListMap,
                 args,
                 resume,
             } => {
@@ -297,13 +297,13 @@ impl<'a> MachineFunctionBridge<'a> {
                 self.list_map(args, resume, values)
             }
             MachineTerminator::IntrinsicReturn {
-                op: curios_cont::CpsIntrinsicCall::ListMap,
+                op: curios_cont::IntrinsicCall::ListMap,
                 args,
             } => self.list_map(args, self.resume.clone(), values),
             MachineTerminator::Exit(value) => {
                 let code = match value {
                     Some(value) => self.operand(value, values),
-                    None => self.literal(&curios_cont::CpsLiteral::Nat(Natural::zero()), values),
+                    None => self.literal(&curios_cont::Literal::Nat(Natural::zero()), values),
                 };
                 EmissionTail::Host(EmissionHostTarget::Exit { code })
             }
@@ -366,24 +366,24 @@ impl<'a> MachineFunctionBridge<'a> {
 
     fn cell(
         &mut self,
-        op: curios_cont::CpsCellOp,
+        op: curios_cont::CellOp,
         args: &[MachineOperand],
         resume: EmissionBlockName,
         values: &mut Vec<(EmissionValueName, EmissionValue)>,
     ) -> EmissionTail {
         let args = self.operands(args, values);
         EmissionTail::Cell(match op {
-            curios_cont::CpsCellOp::New => EmissionCellTarget::New {
+            curios_cont::CellOp::New => EmissionCellTarget::New {
                 init: args[0].clone(),
                 resume,
             },
-            curios_cont::CpsCellOp::Reserve => EmissionCellTarget::Reserve { resume },
-            curios_cont::CpsCellOp::Set => EmissionCellTarget::Set {
+            curios_cont::CellOp::Reserve => EmissionCellTarget::Reserve { resume },
+            curios_cont::CellOp::Set => EmissionCellTarget::Set {
                 cell: args[0].clone(),
                 value: args[1].clone(),
                 resume,
             },
-            curios_cont::CpsCellOp::Get => EmissionCellTarget::Get {
+            curios_cont::CellOp::Get => EmissionCellTarget::Get {
                 cell: args[0].clone(),
                 resume,
             },
@@ -468,14 +468,14 @@ impl<'a> MachineFunctionBridge<'a> {
             MachineOperand::Literal(literal) => self.literal(literal, values),
             // Every transfer defers its fillers through `jump_args`; the positions left to this arm read a scalar — an intrinsic operand, a host operand, an exit code — and a filler never reaches one.
             MachineOperand::Filler => {
-                self.literal(&curios_cont::CpsLiteral::Nat(Natural::zero()), values)
+                self.literal(&curios_cont::Literal::Nat(Natural::zero()), values)
             }
         }
     }
 
     fn literal(
         &mut self,
-        literal: &curios_cont::CpsLiteral,
+        literal: &curios_cont::Literal,
         values: &mut Vec<(EmissionValueName, EmissionValue)>,
     ) -> EmissionValueName {
         let synthetic = self.literal_entropy.fresh();
@@ -612,12 +612,12 @@ fn block_successors(terminator: &MachineTerminator) -> Vec<MachineBlockId> {
     }
 }
 
-fn literal_data(literal: &curios_cont::CpsLiteral) -> EmissionData {
+fn literal_data(literal: &curios_cont::Literal) -> EmissionData {
     match literal {
-        curios_cont::CpsLiteral::Nat(value) => EmissionData::Nat(value.clone()),
-        curios_cont::CpsLiteral::Int(value) => EmissionData::Int(value.clone()),
-        curios_cont::CpsLiteral::Flt(value) => EmissionData::Flt(value.to_f64()),
-        curios_cont::CpsLiteral::Bin(grain, value) => EmissionData::Bin(*grain, value.clone()),
+        curios_cont::Literal::Nat(value) => EmissionData::Nat(value.clone()),
+        curios_cont::Literal::Int(value) => EmissionData::Int(value.clone()),
+        curios_cont::Literal::Flt(value) => EmissionData::Flt(value.to_f64()),
+        curios_cont::Literal::Bin(grain, value) => EmissionData::Bin(*grain, value.clone()),
     }
 }
 
@@ -631,16 +631,19 @@ fn hinted(index: usize, hint: Option<&str>) -> String {
 pub(crate) fn value_name(value: MachineValueId) -> EmissionValueName {
     EmissionValueName::from(format!("m{}", value.0))
 }
-fn direct_name(machine: &MachineModule, function: curios_cont::CpsFunId) -> EmissionFunctionName {
+fn direct_name(machine: &MachineModule, function: curios_cont::FunctionId) -> EmissionFunctionName {
     EmissionFunctionName::from(hinted(function.index(), machine.function_hint(function)))
 }
-fn wrapper_name(machine: &MachineModule, function: curios_cont::CpsFunId) -> EmissionClosureName {
+fn wrapper_name(machine: &MachineModule, function: curios_cont::FunctionId) -> EmissionClosureName {
     EmissionClosureName::from(hinted(function.index(), machine.function_hint(function)))
 }
-fn return_name(function: curios_cont::CpsFunId) -> EmissionBlockName {
+fn return_name(function: curios_cont::FunctionId) -> EmissionBlockName {
     EmissionBlockName::from(format!("return/{}", function.index()))
 }
-fn function_name(machine: &MachineModule, function: curios_cont::CpsFunId) -> EmissionFunctionName {
+fn function_name(
+    machine: &MachineModule,
+    function: curios_cont::FunctionId,
+) -> EmissionFunctionName {
     if function == machine.entry {
         EmissionFunctionName::from("main")
     } else {

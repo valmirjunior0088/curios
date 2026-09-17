@@ -3,7 +3,7 @@ use {
     std::collections::{BTreeSet, VecDeque},
 };
 
-pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
+pub(super) fn prune_unreachable(module: &mut Module) -> bool {
     let Some(entry) = module.entry else {
         return false;
     };
@@ -27,11 +27,11 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
         }
         let node = module.node(node_id).unwrap();
         for atom in atoms(node) {
-            if let CpsAtom::Fun(function) = atom {
+            if let Atom::Fun(function) = atom {
                 function_work.push_back(*function);
             }
         }
-        let mut queue_cont = |target: CpsContId| {
+        let mut queue_cont = |target: ContinuationId| {
             if let Some(continuation) = module.continuation(target)
                 && continuations.insert(target)
             {
@@ -39,29 +39,29 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
             }
         };
         match node {
-            CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
+            Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
                 node_work.push_back(*next)
             }
-            CpsNode::LetFun { body, .. } => node_work.push_back(*body),
-            CpsNode::LetCont { body, .. } => node_work.push_back(*body),
-            CpsNode::ApplyFun {
+            Node::LetFun { body, .. } => node_work.push_back(*body),
+            Node::LetCont { body, .. } => node_work.push_back(*body),
+            Node::ApplyFun {
                 callee, return_to, ..
             } => {
-                if let CpsCallee::Known(function) = callee {
+                if let Callee::Known(function) = callee {
                     function_work.push_back(*function);
                 }
                 queue_cont(*return_to);
             }
-            CpsNode::ApplyCont(edge) => queue_cont(edge.target),
-            CpsNode::Switch { cases, default, .. } => {
+            Node::ApplyCont(edge) => queue_cont(edge.target),
+            Node::Switch { cases, default, .. } => {
                 for edge in cases.values().chain(default.iter()) {
                     queue_cont(edge.target);
                 }
             }
-            CpsNode::Foreign { return_to, .. }
-            | CpsNode::Cell { return_to, .. }
-            | CpsNode::Intrinsic { return_to, .. } => queue_cont(*return_to),
-            CpsNode::Exit { .. } | CpsNode::Panic(_) | CpsNode::Unreachable => {}
+            Node::Foreign { return_to, .. }
+            | Node::Cell { return_to, .. }
+            | Node::Intrinsic { return_to, .. } => queue_cont(*return_to),
+            Node::Exit { .. } | Node::Panic(_) | Node::Unreachable => {}
         }
     }
 
@@ -79,10 +79,10 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
     module.nodes.retain(&nodes);
     for (_, node) in module.nodes.iter_live_mut() {
         match node {
-            CpsNode::LetFun {
+            Node::LetFun {
                 functions: members, ..
             } => members.retain(|function| functions.contains(function)),
-            CpsNode::LetCont {
+            Node::LetCont {
                 continuations: members,
                 ..
             } => members.retain(|continuation| continuations.contains(continuation)),
@@ -98,7 +98,7 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
     }
     for (_, node) in module.nodes.iter_live() {
         match node {
-            CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
+            Node::LetValue { result, .. } | Node::LetIntrinsic { result, .. } => {
                 values.insert(*result);
             }
             _ => {}

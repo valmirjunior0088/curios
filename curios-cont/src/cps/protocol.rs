@@ -6,7 +6,7 @@
 //!
 //! **A function must not escape, for two independent reasons.** Its call sites have to be visible, and they are exactly the `Known` ones only when the function never becomes a value. And an escaping function additionally acquires a retained-ABI closure wrapper, which reaches it by a tail call at the shared `clsr/{arity}` type — a type this work deliberately does not re-key, so the wrapper would disagree with anything wider.
 //!
-//! **The shape a resume rebuilds in is part of the decision, not something the rewrite reads off the callee.** A class's return edges agree on one construction vocabulary — a row, or a structural tuple — and the reads below every resume are in that vocabulary, so the rebuild must be too. The rewrite used to recover it per *function*, from that function's own return edges; a member that returns only by tail-calling a class-mate has none, so its callers rebuilt a `Tuple` for a class that hands back a row, and the first `RowGet` below cast the wrong final type. Exactly the failure co-location was supposed to prevent, and what prevents it is the decision's return type being complete: `ReturnProtocol::Fields` carries the [`ReturnShape`] alongside the width, both joined over the class, and a class whose edges disagree is declined — the direction that only ever costs an allocation. [`CpsModule::verify`] holds the same line from below, refusing a read whose operand was minted in the other vocabulary.
+//! **The shape a resume rebuilds in is part of the decision, not something the rewrite reads off the callee.** A class's return edges agree on one construction vocabulary — a row, or a structural tuple — and the reads below every resume are in that vocabulary, so the rebuild must be too. The rewrite used to recover it per *function*, from that function's own return edges; a member that returns only by tail-calling a class-mate has none, so its callers rebuilt a `Tuple` for a class that hands back a row, and the first `RowGet` below cast the wrong final type. Exactly the failure co-location was supposed to prevent, and what prevents it is the decision's return type being complete: `ReturnProtocol::Fields` carries the [`ReturnShape`] alongside the width, both joined over the class, and a class whose edges disagree is declined — the direction that only ever costs an allocation. [`Module::verify`] holds the same line from below, refusing a read whose operand was minted in the other vocabulary.
 //!
 //! **Tail calls make the decision an equivalence class rather than a per-function one.** A call whose return continuation is its function's return sentinel lowers to `return_call`, which requires the callee's results to match the caller's exactly. Agreement is symmetric, so the classes are the *undirected* connected components of the tail-call graph: a function is decided together with everything it tail-calls and with everything that tail-calls it, however the edges point.
 //!
@@ -14,7 +14,7 @@
 //!
 //! **Every return edge must carry a construction the rewrite can read fields off.** A returned value that is merely some other value — `/std/Str/fold` returns a projection of its accumulator — has no statically known field count, so delivering *n* slots from it would mean projecting indices that need not exist at runtime. This is the condition that keeps a generic combinator out, and it is why a component containing one cannot be split however uniform its callers look.
 //!
-//! **A construction shorter than the width fills the rest with the slot's pad** — its zero for a register slot, [`CpsAtom::Filler`] for a reference, the same the door wrote into the construction — because the slot is still *passed*. A caller reading slot *i* does so through a projection that already had to be reachable only where the tuple has that field, since the same projection on the same value is what runs today, but a result position is filled either way, and null is what a result admits. `fields.rs` is where a pad at a guessed carrier became a trap.
+//! **A construction shorter than the width fills the rest with the slot's pad** — its zero for a register slot, [`Atom::Filler`] for a reference, the same the door wrote into the construction — because the slot is still *passed*. A caller reading slot *i* does so through a projection that already had to be reachable only where the tuple has that field, since the same projection on the same value is what runs today, but a result position is filled either way, and null is what a result admits. `fields.rs` is where a pad at a guessed carrier became a trap.
 //!
 //! **A resume continuation is only widened when every entry to it is a call inside the same class.** A continuation has one arity, so one shared between a split call and anything else could not serve both — and since a split callee's every call site *must* be rewritten, one unwidenable site pins the whole class rather than being skipped.
 //!
@@ -39,18 +39,18 @@ pub(super) enum ReturnProtocol {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ReturnShape {
     Tuple,
-    Row(CpsRowId),
+    Row(RowId),
 }
 
 /// What every live function's return protocol may be, total over the module's functions.
-pub(super) fn return_protocols(module: &CpsModule) -> BTreeMap<CpsFunId, ReturnProtocol> {
+pub(super) fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnProtocol> {
     let calls = analyze_calls(module);
     let demands = demands(module);
     let constructions = constructions(module);
-    let mut tail_calls = BTreeMap::<CpsFunId, BTreeSet<CpsFunId>>::new();
-    let mut pinned = BTreeSet::<CpsFunId>::new();
-    let mut demanded = BTreeMap::<CpsFunId, Demand>::new();
-    let mut resumes = BTreeMap::<CpsFunId, BTreeSet<CpsContId>>::new();
+    let mut tail_calls = BTreeMap::<FunctionId, BTreeSet<FunctionId>>::new();
+    let mut pinned = BTreeSet::<FunctionId>::new();
+    let mut demanded = BTreeMap::<FunctionId, Demand>::new();
+    let mut resumes = BTreeMap::<FunctionId, BTreeSet<ContinuationId>>::new();
     let entries = entries(module);
 
     for owner in module.functions.live_ids().collect::<Vec<_>>() {
@@ -66,7 +66,7 @@ pub(super) fn return_protocols(module: &CpsModule) -> BTreeMap<CpsFunId, ReturnP
                 // A return edge whose value is not a construction leaves the rewrite nothing to read, and pinning the component is the only answer that stays correct at runtime.
                 let visible = matches!(
                     edge.args.as_slice(),
-                    [CpsAtom::Value(value)] if constructions.contains_key(value)
+                    [Atom::Value(value)] if constructions.contains_key(value)
                 );
                 if !visible {
                     pinned.insert(owner);
@@ -74,16 +74,16 @@ pub(super) fn return_protocols(module: &CpsModule) -> BTreeMap<CpsFunId, ReturnP
             }
 
             match node {
-                CpsNode::ApplyFun {
-                    callee: CpsCallee::Known(callee),
+                Node::ApplyFun {
+                    callee: Callee::Known(callee),
                     return_to,
                     ..
                 } if *return_to == sentinel => {
                     tail_calls.entry(owner).or_default().insert(*callee);
                     tail_calls.entry(*callee).or_default().insert(owner);
                 }
-                CpsNode::ApplyFun {
-                    callee: CpsCallee::Known(callee),
+                Node::ApplyFun {
+                    callee: Callee::Known(callee),
                     return_to,
                     ..
                 } => {
@@ -99,14 +99,14 @@ pub(super) fn return_protocols(module: &CpsModule) -> BTreeMap<CpsFunId, ReturnP
                         .join(demand);
                     resumes.entry(*callee).or_default().insert(*return_to);
                 }
-                CpsNode::ApplyFun {
-                    callee: CpsCallee::Closure(_),
+                Node::ApplyFun {
+                    callee: Callee::Closure(_),
                     return_to,
                     ..
                 }
-                | CpsNode::Foreign { return_to, .. }
-                | CpsNode::Cell { return_to, .. }
-                | CpsNode::Intrinsic { return_to, .. }
+                | Node::Foreign { return_to, .. }
+                | Node::Cell { return_to, .. }
+                | Node::Intrinsic { return_to, .. }
                     if *return_to == sentinel =>
                 {
                     pinned.insert(owner);
@@ -125,7 +125,7 @@ pub(super) fn return_protocols(module: &CpsModule) -> BTreeMap<CpsFunId, ReturnP
             let sentinel = module.function(function).unwrap().return_cont;
             for node_id in function_nodes(module, function) {
                 for edge in return_edges(module.node(node_id).unwrap(), sentinel) {
-                    let [CpsAtom::Value(value)] = edge.args.as_slice() else {
+                    let [Atom::Value(value)] = edge.args.as_slice() else {
                         continue;
                     };
                     let Some((_, row)) = constructions.get(value) else {
@@ -177,7 +177,7 @@ pub(super) fn return_protocols(module: &CpsModule) -> BTreeMap<CpsFunId, ReturnP
 /// Deliver the leading fields of a returned construction as several results, wherever [`return_protocols`] finds a class every caller takes apart.
 ///
 /// Both sides are stated as local edits and the existing chain finishes the job. A return edge names the construction's fields instead of the construction, leaving that construction unread and so removable. A resume continuation takes the fields as parameters and rebuilds the tuple at its head, leaving the projections below to be forwarded through a construction that is now visible to them — which is precisely what they could not do while it was built inside the callee. Nothing here splices a node out of a chain, and nothing here deletes: the tuple that survives at each end is dead, and dead is what the following passes already handle.
-pub(super) fn split_returns(module: &mut CpsModule) -> bool {
+pub(super) fn split_returns(module: &mut Module) -> bool {
     let widths = return_protocols(module)
         .into_iter()
         .filter_map(|(function, protocol)| match protocol {
@@ -209,8 +209,8 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
 
     let mut resuming = BTreeMap::new();
     for (_, node) in module.nodes.iter_live() {
-        if let CpsNode::ApplyFun {
-            callee: CpsCallee::Known(callee),
+        if let Node::ApplyFun {
+            callee: Callee::Known(callee),
             return_to,
             ..
         } = node
@@ -231,16 +231,16 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
         let params = (0..width)
             .map(|index| module.add_value(Some(format!("resume/{}/{index}", resume.index()))))
             .collect::<Vec<_>>();
-        let mut atoms: Vec<CpsAtom> = params.iter().copied().map(CpsAtom::Value).collect();
-        let rebuilt = module.add_node(CpsNode::LetValue {
+        let mut atoms: Vec<Atom> = params.iter().copied().map(Atom::Value).collect();
+        let rebuilt = module.add_node(Node::LetValue {
             result: held,
             value: match shape {
                 ReturnShape::Row(row) => {
                     // The protocol carries only the slots the demand asked for, so the rebuild fills the row's remaining width rather than widening the interface — a narrower interface is the whole point of splitting, and the slots past the demand are by construction unread.
-                    atoms.resize(module.row(row).width(), CpsAtom::Filler);
-                    CpsValueExpr::Row(row, atoms)
+                    atoms.resize(module.row(row).width(), Atom::Filler);
+                    ValueExpr::Row(row, atoms)
                 }
-                ReturnShape::Tuple => CpsValueExpr::Tuple(atoms),
+                ReturnShape::Tuple => ValueExpr::Tuple(atoms),
             },
             next: body,
         });
@@ -253,12 +253,12 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
 
 /// The first `width` fields of the construction `args` names, filled out where the constructor is shorter than the class's width.
 fn split_fields(
-    module: &CpsModule,
-    constructions: &BTreeMap<CpsValueId, (Vec<CpsAtom>, Option<CpsRowId>)>,
-    args: &[CpsAtom],
+    module: &Module,
+    constructions: &BTreeMap<ValueId, (Vec<Atom>, Option<RowId>)>,
+    args: &[Atom],
     width: usize,
-) -> Vec<CpsAtom> {
-    let [CpsAtom::Value(value)] = args else {
+) -> Vec<Atom> {
+    let [Atom::Value(value)] = args else {
         return args.to_vec();
     };
     let Some((fields, row)) = constructions.get(value) else {
@@ -275,26 +275,26 @@ fn split_fields(
 }
 
 /// What transfers into each continuation: the known function whose call resumes there, or `None` for an entry that is anything else.
-fn entries(module: &CpsModule) -> BTreeMap<CpsContId, Vec<Option<CpsFunId>>> {
-    let mut output = BTreeMap::<CpsContId, Vec<Option<CpsFunId>>>::new();
+fn entries(module: &Module) -> BTreeMap<ContinuationId, Vec<Option<FunctionId>>> {
+    let mut output = BTreeMap::<ContinuationId, Vec<Option<FunctionId>>>::new();
     for (_, node) in module.nodes.iter_live() {
         match node {
-            CpsNode::ApplyFun {
+            Node::ApplyFun {
                 callee, return_to, ..
             } => {
                 let from = match callee {
-                    CpsCallee::Known(callee) => Some(*callee),
-                    CpsCallee::Closure(_) => None,
+                    Callee::Known(callee) => Some(*callee),
+                    Callee::Closure(_) => None,
                 };
                 output.entry(*return_to).or_default().push(from);
             }
-            CpsNode::Foreign { return_to, .. }
-            | CpsNode::Cell { return_to, .. }
-            | CpsNode::Intrinsic { return_to, .. } => {
+            Node::Foreign { return_to, .. }
+            | Node::Cell { return_to, .. }
+            | Node::Intrinsic { return_to, .. } => {
                 output.entry(*return_to).or_default().push(None);
             }
-            CpsNode::ApplyCont(edge) => output.entry(edge.target).or_default().push(None),
-            CpsNode::Switch { cases, default, .. } => {
+            Node::ApplyCont(edge) => output.entry(edge.target).or_default().push(None),
+            Node::Switch { cases, default, .. } => {
                 for edge in cases.values().chain(default.as_ref()) {
                     output.entry(edge.target).or_default().push(None);
                 }
@@ -306,12 +306,10 @@ fn entries(module: &CpsModule) -> BTreeMap<CpsContId, Vec<Option<CpsFunId>>> {
 }
 
 /// The edges of `node` that transfer to `sentinel`, to be rewritten in place.
-fn return_edges_mut(node: &mut CpsNode, sentinel: CpsContId) -> Vec<&mut CpsEdge> {
-    let edges: Vec<&mut CpsEdge> = match node {
-        CpsNode::ApplyCont(edge) => vec![edge],
-        CpsNode::Switch { cases, default, .. } => {
-            cases.values_mut().chain(default.as_mut()).collect()
-        }
+fn return_edges_mut(node: &mut Node, sentinel: ContinuationId) -> Vec<&mut Edge> {
+    let edges: Vec<&mut Edge> = match node {
+        Node::ApplyCont(edge) => vec![edge],
+        Node::Switch { cases, default, .. } => cases.values_mut().chain(default.as_mut()).collect(),
         _ => vec![],
     };
     edges
@@ -321,10 +319,10 @@ fn return_edges_mut(node: &mut CpsNode, sentinel: CpsContId) -> Vec<&mut CpsEdge
 }
 
 /// The edges of `node` that transfer to `sentinel` — a function's returns, whether it jumps to one or switches into several.
-fn return_edges(node: &CpsNode, sentinel: CpsContId) -> Vec<&CpsEdge> {
-    let edges: Vec<&CpsEdge> = match node {
-        CpsNode::ApplyCont(edge) => vec![edge],
-        CpsNode::Switch { cases, default, .. } => cases.values().chain(default.as_ref()).collect(),
+fn return_edges(node: &Node, sentinel: ContinuationId) -> Vec<&Edge> {
+    let edges: Vec<&Edge> = match node {
+        Node::ApplyCont(edge) => vec![edge],
+        Node::Switch { cases, default, .. } => cases.values().chain(default.as_ref()).collect(),
         _ => vec![],
     };
     edges
@@ -334,20 +332,20 @@ fn return_edges(node: &CpsNode, sentinel: CpsContId) -> Vec<&CpsEdge> {
 }
 
 /// The fields of every aggregate built in the module, by the value the construction binds, with the row a variant construction belongs to. A variant is visible here for the same reason a tuple is — a return edge naming one is a class this rewrite can split — and the row rides along so the resume rebuilds in the vocabulary the reads below it use.
-fn constructions(module: &CpsModule) -> BTreeMap<CpsValueId, (Vec<CpsAtom>, Option<CpsRowId>)> {
+fn constructions(module: &Module) -> BTreeMap<ValueId, (Vec<Atom>, Option<RowId>)> {
     let mut output = BTreeMap::new();
     for (_, node) in module.nodes.iter_live() {
         match node {
-            CpsNode::LetValue {
+            Node::LetValue {
                 result,
-                value: CpsValueExpr::Tuple(fields),
+                value: ValueExpr::Tuple(fields),
                 ..
             } => {
                 output.insert(*result, (fields.clone(), None));
             }
-            CpsNode::LetValue {
+            Node::LetValue {
                 result,
-                value: CpsValueExpr::Row(row, fields),
+                value: ValueExpr::Row(row, fields),
                 ..
             } => {
                 output.insert(*result, (fields.clone(), Some(*row)));
@@ -358,8 +356,8 @@ fn constructions(module: &CpsModule) -> BTreeMap<CpsValueId, (Vec<CpsAtom>, Opti
     output
 }
 
-/// The connected components of an undirected graph given as its adjacency, each listed in `CpsFunId` order.
-fn components(edges: &BTreeMap<CpsFunId, BTreeSet<CpsFunId>>) -> Vec<Vec<CpsFunId>> {
+/// The connected components of an undirected graph given as its adjacency, each listed in `FunctionId` order.
+fn components(edges: &BTreeMap<FunctionId, BTreeSet<FunctionId>>) -> Vec<Vec<FunctionId>> {
     let mut seen = BTreeSet::new();
     let mut output = Vec::new();
 

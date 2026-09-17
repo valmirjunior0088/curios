@@ -3,8 +3,8 @@ use curios_num::Natural;
 use {
     super::{uncurry_returns, uncurryable},
     crate::{
-        CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral, CpsModule,
-        CpsNode, CpsNodeId, CpsValueExpr,
+        Atom, Callee, Continuation, Edge, Function, FunctionId, Literal, Module, Node, NodeId,
+        ValueExpr,
     },
 };
 
@@ -26,20 +26,20 @@ enum Use {
 /// A two-member tail-forwarding chain: `forwarder` returns whatever `leader` returns, by tail-calling it.
 ///
 /// Each member also has its own non-tail caller, so each is observable on its own and the class is a *decision* rather than the only reading available. `use_of` says how each caller treats what it receives, which is what lets one member disagree with the other.
-fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId) {
-    let mut module = CpsModule::default();
+fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId) {
+    let mut module = Module::default();
 
     // The closure both members hand back: it takes the argument the callers apply.
     let step_param = module.add_value(Some("s".into()));
     let step = module.reserve_function();
     let step_sentinel = module.reserve_continuation();
-    let step_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let step_body = module.add_node(Node::ApplyCont(Edge {
         target: step_sentinel,
-        args: vec![CpsAtom::Value(step_param)],
+        args: vec![Atom::Value(step_param)],
     }));
     module.define_function(
         step,
-        CpsFunction {
+        Function {
             debug_name: Some("step".into()),
             params: vec![step_param],
             return_cont: step_sentinel,
@@ -50,17 +50,17 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
     let leader_param = module.add_value(Some("n".into()));
     let leader = module.reserve_function();
     let leader_sentinel = module.reserve_continuation();
-    let returns = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let returns = module.add_node(Node::ApplyCont(Edge {
         target: leader_sentinel,
-        args: vec![CpsAtom::Fun(step)],
+        args: vec![Atom::Fun(step)],
     }));
-    let leader_body = module.add_node(CpsNode::LetFun {
+    let leader_body = module.add_node(Node::LetFun {
         functions: vec![step],
         body: returns,
     });
     module.define_function(
         leader,
-        CpsFunction {
+        Function {
             debug_name: Some("leader".into()),
             params: vec![leader_param],
             return_cont: leader_sentinel,
@@ -72,14 +72,14 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
     let forwarder_param = module.add_value(Some("n".into()));
     let forwarder = module.reserve_function();
     let forwarder_sentinel = module.reserve_continuation();
-    let forwarder_body = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(leader),
-        args: vec![CpsAtom::Value(forwarder_param)],
+    let forwarder_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(leader),
+        args: vec![Atom::Value(forwarder_param)],
         return_to: forwarder_sentinel,
     });
     module.define_function(
         forwarder,
-        CpsFunction {
+        Function {
             debug_name: Some("forwarder".into()),
             params: vec![forwarder_param],
             return_cont: forwarder_sentinel,
@@ -92,7 +92,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
     let entry_sentinel = module.reserve_continuation();
     let argument = module.add_value(Some("argument".into()));
 
-    let caller = |module: &mut CpsModule, callee: CpsFunId, use_of: Use, next: CpsNodeId| {
+    let caller = |module: &mut Module, callee: FunctionId, use_of: Use, next: NodeId| {
         let received = module.add_value(Some("received".into()));
         let resume = module.reserve_continuation();
         let mut bound = vec![resume];
@@ -100,15 +100,15 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
             Use::Applied => {
                 // The application resumes past the call, which is the shape `Resume::Retarget` is written for.
                 let ignored = module.add_value(Some("ignored".into()));
-                let after = module.add_continuation(CpsContinuation {
+                let after = module.add_continuation(Continuation {
                     debug_name: None,
                     params: vec![ignored],
                     body: next,
                 });
                 bound.push(after);
-                module.add_node(CpsNode::ApplyFun {
-                    callee: CpsCallee::Closure(received),
-                    args: vec![CpsAtom::Value(argument)],
+                module.add_node(Node::ApplyFun {
+                    callee: Callee::Closure(received),
+                    args: vec![Atom::Value(argument)],
                     return_to: after,
                 })
             }
@@ -117,14 +117,14 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
                 let ignored = module.add_value(Some("ignored".into()));
                 let nested = module.reserve_function();
                 let nested_sentinel = module.reserve_continuation();
-                let nested_body = module.add_node(CpsNode::ApplyFun {
-                    callee: CpsCallee::Closure(received),
-                    args: vec![CpsAtom::Value(argument)],
+                let nested_body = module.add_node(Node::ApplyFun {
+                    callee: Callee::Closure(received),
+                    args: vec![Atom::Value(argument)],
                     return_to: nested_sentinel,
                 });
                 module.define_function(
                     nested,
-                    CpsFunction {
+                    Function {
                         debug_name: Some("nested".into()),
                         params: vec![],
                         return_cont: nested_sentinel,
@@ -132,27 +132,27 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
                     },
                 );
                 let kept = module.add_value(Some("kept".into()));
-                let keep = module.add_node(CpsNode::LetValue {
+                let keep = module.add_node(Node::LetValue {
                     result: kept,
-                    value: CpsValueExpr::Tuple(vec![CpsAtom::Fun(nested)]),
+                    value: ValueExpr::Tuple(vec![Atom::Fun(nested)]),
                     next,
                 });
-                let define = module.add_node(CpsNode::LetFun {
+                let define = module.add_node(Node::LetFun {
                     functions: vec![nested],
                     body: keep,
                 });
                 // Bound inside the resume rather than beside it, since the nested function names the resume's parameter — the `LetCont`-then-site shape `Resume::Jump` is written for.
-                let after = module.add_continuation(CpsContinuation {
+                let after = module.add_continuation(Continuation {
                     debug_name: None,
                     params: vec![ignored],
                     body: define,
                 });
-                let apply = module.add_node(CpsNode::ApplyFun {
-                    callee: CpsCallee::Closure(received),
-                    args: vec![CpsAtom::Value(argument)],
+                let apply = module.add_node(Node::ApplyFun {
+                    callee: Callee::Closure(received),
+                    args: vec![Atom::Value(argument)],
                     return_to: after,
                 });
-                module.add_node(CpsNode::LetCont {
+                module.add_node(Node::LetCont {
                     continuations: vec![after],
                     body: apply,
                 })
@@ -160,22 +160,22 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
             Use::AppliedAndStored => {
                 let ignored = module.add_value(Some("ignored".into()));
                 let kept = module.add_value(Some("kept".into()));
-                let keep = module.add_node(CpsNode::LetValue {
+                let keep = module.add_node(Node::LetValue {
                     result: kept,
-                    value: CpsValueExpr::Tuple(vec![CpsAtom::Value(received)]),
+                    value: ValueExpr::Tuple(vec![Atom::Value(received)]),
                     next,
                 });
-                let after = module.add_continuation(CpsContinuation {
+                let after = module.add_continuation(Continuation {
                     debug_name: None,
                     params: vec![ignored],
                     body: keep,
                 });
-                let apply = module.add_node(CpsNode::ApplyFun {
-                    callee: CpsCallee::Closure(received),
-                    args: vec![CpsAtom::Value(argument)],
+                let apply = module.add_node(Node::ApplyFun {
+                    callee: Callee::Closure(received),
+                    args: vec![Atom::Value(argument)],
                     return_to: after,
                 });
-                module.add_node(CpsNode::LetCont {
+                module.add_node(Node::LetCont {
                     continuations: vec![after],
                     body: apply,
                 })
@@ -184,35 +184,35 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
             // A tuple field is a use the lattice cannot call an application, which is exactly what makes the member inadmissible.
             Use::Stored => {
                 let kept = module.add_value(Some("kept".into()));
-                module.add_node(CpsNode::LetValue {
+                module.add_node(Node::LetValue {
                     result: kept,
-                    value: CpsValueExpr::Tuple(vec![CpsAtom::Value(received)]),
+                    value: ValueExpr::Tuple(vec![Atom::Value(received)]),
                     next,
                 })
             }
         };
         module.define_continuation(
             resume,
-            CpsContinuation {
+            Continuation {
                 debug_name: None,
                 params: vec![received],
                 body,
             },
         );
-        let call = module.add_node(CpsNode::ApplyFun {
-            callee: CpsCallee::Known(callee),
-            args: vec![CpsAtom::Value(argument)],
+        let call = module.add_node(Node::ApplyFun {
+            callee: Callee::Known(callee),
+            args: vec![Atom::Value(argument)],
             return_to: resume,
         });
-        module.add_node(CpsNode::LetCont {
+        module.add_node(Node::LetCont {
             continuations: bound,
             body: call,
         })
     };
 
-    let done = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let done = module.add_node(Node::ApplyCont(Edge {
         target: entry_sentinel,
-        args: vec![CpsAtom::Value(argument)],
+        args: vec![Atom::Value(argument)],
     }));
     let second = match forwarder_use {
         Use::Unobserved => done,
@@ -222,19 +222,19 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
         Use::Unobserved => second,
         use_of => caller(&mut module, leader, use_of, second),
     };
-    let bound = module.add_node(CpsNode::LetValue {
+    let bound = module.add_node(Node::LetValue {
         result: argument,
-        value: CpsValueExpr::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+        value: ValueExpr::Literal(Literal::Nat(Natural::from(1u32))),
         next: first,
     });
     // Both members are introduced here, or a `Known` call to either names a function out of scope.
-    let entry_body = module.add_node(CpsNode::LetFun {
+    let entry_body = module.add_node(Node::LetFun {
         functions: vec![leader, forwarder],
         body: bound,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("entry".into()),
             params: vec![],
             return_cont: entry_sentinel,
@@ -249,7 +249,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (CpsModule, CpsFunId, CpsFunId)
 }
 
 /// How many parameters each member gained.
-fn widths(module: &CpsModule, leader: CpsFunId, forwarder: CpsFunId) -> (usize, usize) {
+fn widths(module: &Module, leader: FunctionId, forwarder: FunctionId) -> (usize, usize) {
     (
         module.function(leader).unwrap().params.len(),
         module.function(forwarder).unwrap().params.len(),
@@ -425,15 +425,15 @@ fn a_closure_applied_and_also_kept_declines_the_class() {
 /// The returned closure is applied — but behind a forwarding jump, in a join point the resume hands it to. The interprocedural demand lattice reads that as `Applied`; this transform moves the application it finds in the resume itself, so admission must recompute the sole-local-application fact syntactically and decline here.
 #[test]
 fn a_forwarded_application_declines_uncurrying() {
-    let mut module = CpsModule::default();
+    let mut module = Module::default();
 
     let inner_param = module.add_value(Some("inner/param".into()));
     let inner = module.reserve_function();
     let inner_ret = module.reserve_continuation();
-    let inner_exit = module.add_node(CpsNode::Exit { value: None });
+    let inner_exit = module.add_node(Node::Exit { value: None });
     module.define_function(
         inner,
-        CpsFunction {
+        Function {
             debug_name: Some("inner".into()),
             params: vec![inner_param],
             return_cont: inner_ret,
@@ -444,13 +444,13 @@ fn a_forwarded_application_declines_uncurrying() {
     let produced_param = module.add_value(Some("producer/param".into()));
     let producer = module.reserve_function();
     let producer_ret = module.reserve_continuation();
-    let producer_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let producer_body = module.add_node(Node::ApplyCont(Edge {
         target: producer_ret,
-        args: vec![CpsAtom::Fun(inner)],
+        args: vec![Atom::Fun(inner)],
     }));
     module.define_function(
         producer,
-        CpsFunction {
+        Function {
             debug_name: Some("producer".into()),
             params: vec![produced_param],
             return_cont: producer_ret,
@@ -466,43 +466,43 @@ fn a_forwarded_application_declines_uncurrying() {
     let resume = module.reserve_continuation();
     let join = module.reserve_continuation();
 
-    let apply = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Closure(forwarded),
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
+    let apply = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(forwarded),
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
         return_to: caller_ret,
     });
     module.define_continuation(
         join,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("join".into()),
             params: vec![forwarded],
             body: apply,
         },
     );
-    let forward = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let forward = module.add_node(Node::ApplyCont(Edge {
         target: join,
-        args: vec![CpsAtom::Value(received)],
+        args: vec![Atom::Value(received)],
     }));
     module.define_continuation(
         resume,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("resume".into()),
             params: vec![received],
             body: forward,
         },
     );
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(producer),
-        args: vec![CpsAtom::Value(argument)],
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(producer),
+        args: vec![Atom::Value(argument)],
         return_to: resume,
     });
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![join, resume],
         body: call,
     });
     module.define_function(
         caller,
-        CpsFunction {
+        Function {
             debug_name: Some("caller".into()),
             params: vec![argument],
             return_cont: caller_ret,

@@ -12,12 +12,12 @@ use {
 #[derive(Clone, PartialEq)]
 pub(super) enum Knowledge {
     Unknown,
-    Known(CpsAtom),
+    Known(Atom),
     Conflict,
 }
 impl Knowledge {
     /// Fold one transfer in: `None` is a transfer whose arguments cannot be seen — an escaping reference, an operation delivering its result — and it is a conflict from whatever state, not only from `Known`. It once left `Unknown` standing, so a join that was first an operation's `return_to` and then a jump's target learned the jump's literal as if it were the only way in, and the order the arena happened to list the two decided what the program computed.
-    fn merge(&mut self, incoming: Option<&CpsAtom>) {
+    fn merge(&mut self, incoming: Option<&Atom>) {
         match (&*self, incoming) {
             (Self::Conflict, _) => {}
             (_, None) => *self = Self::Conflict,
@@ -56,11 +56,11 @@ impl Lattice for Knowledge {
 ///
 /// A function reference counts only where the member's body may name it (`CallAnalysis::lexical_scope`); one from outside that scope leaves the parameter unknown rather than forwarding a call the body cannot legally make. That scope is the walk the verifier performs, so a reference bound earlier in an enclosing body chain counts as much as one in the member's own group — the site passing the reference and the body receiving it sit at different points of that chain, and only the receiving body's point decides.
 pub(super) fn scc_invariant_knowns(
-    module: &CpsModule,
+    module: &Module,
     analysis: &CallAnalysis,
-    known_literals: &BTreeMap<CpsValueId, CpsAtom>,
-) -> BTreeMap<CpsValueId, CpsAtom> {
-    let mut params_of: BTreeMap<CpsFunId, Vec<CpsValueId>> = BTreeMap::new();
+    known_literals: &BTreeMap<ValueId, Atom>,
+) -> BTreeMap<ValueId, Atom> {
+    let mut params_of: BTreeMap<FunctionId, Vec<ValueId>> = BTreeMap::new();
     for members in eligible_sccs(module, analysis) {
         for &function in &members {
             params_of.insert(function, module.function(function).unwrap().params.clone());
@@ -70,10 +70,10 @@ pub(super) fn scc_invariant_knowns(
         return BTreeMap::new();
     }
 
-    let mut constraints: Vec<(CpsFunId, Vec<CpsAtom>)> = Vec::new();
+    let mut constraints: Vec<(FunctionId, Vec<Atom>)> = Vec::new();
     for (_, node) in module.nodes.iter_live() {
-        if let CpsNode::ApplyFun {
-            callee: CpsCallee::Known(callee),
+        if let Node::ApplyFun {
+            callee: Callee::Known(callee),
             args,
             ..
         } = node
@@ -86,23 +86,23 @@ pub(super) fn scc_invariant_knowns(
     let class = invariant_fixpoint(&params_of, &constraints, known_literals);
 
     // A function reference is forwarded into a member only where the member's body may name it. `rewrite_atoms` turns the member's closure call on the parameter into a known call, and a recursive callee is exactly the one the inliner then declines to bring into scope — so a reference from outside the member's lexical scope stood as an out-of-scope call at the round's close. Out of scope, the closure call stays a closure call.
-    let owner_of_param: BTreeMap<CpsValueId, CpsFunId> = params_of
+    let owner_of_param: BTreeMap<ValueId, FunctionId> = params_of
         .iter()
         .flat_map(|(function, params)| params.iter().map(move |param| (*param, *function)))
         .collect();
     useful_knowns(class)
         .into_iter()
         .filter(|(param, atom)| match atom {
-            CpsAtom::Fun(function) => analysis
+            Atom::Fun(function) => analysis
                 .lexical_scope
                 .get(&owner_of_param[param])
                 .is_some_and(|scope| scope.contains(function)),
-            CpsAtom::Literal(_) | CpsAtom::Value(_) | CpsAtom::Filler => true,
+            Atom::Literal(_) | Atom::Value(_) | Atom::Filler => true,
         })
         .collect()
 }
 /// The members of every SCC eligible for known-argument analysis: recursive, and containing neither an escaping member nor the program entry, because those receive arguments the analysis cannot observe.
-pub(super) fn eligible_sccs(module: &CpsModule, analysis: &CallAnalysis) -> Vec<Vec<CpsFunId>> {
+pub(super) fn eligible_sccs(module: &Module, analysis: &CallAnalysis) -> Vec<Vec<FunctionId>> {
     analysis
         .sccs
         .members
@@ -125,10 +125,10 @@ pub(super) fn eligible_sccs(module: &CpsModule, analysis: &CallAnalysis) -> Vec<
 }
 /// Run the monotone `Unknown < Known < Conflict` join to a fixpoint over the given parameter positions and call constraints.
 pub(super) fn invariant_fixpoint(
-    params_of: &BTreeMap<CpsFunId, Vec<CpsValueId>>,
-    constraints: &[(CpsFunId, Vec<CpsAtom>)],
-    known_literals: &BTreeMap<CpsValueId, CpsAtom>,
-) -> BTreeMap<CpsValueId, Knowledge> {
+    params_of: &BTreeMap<FunctionId, Vec<ValueId>>,
+    constraints: &[(FunctionId, Vec<Atom>)],
+    known_literals: &BTreeMap<ValueId, Atom>,
+) -> BTreeMap<ValueId, Knowledge> {
     Solver::solve(params_of.values().flatten().copied(), |solver| {
         for (callee, args) in constraints {
             let Some(params) = params_of.get(callee) else {
@@ -145,12 +145,10 @@ pub(super) fn invariant_fixpoint(
     })
 }
 /// Extract the parameters resolved to a single literal or function reference.
-pub(super) fn useful_knowns(
-    class: BTreeMap<CpsValueId, Knowledge>,
-) -> BTreeMap<CpsValueId, CpsAtom> {
+pub(super) fn useful_knowns(class: BTreeMap<ValueId, Knowledge>) -> BTreeMap<ValueId, Atom> {
     let mut result = BTreeMap::new();
     for (param, knowledge) in class {
-        if let Knowledge::Known(atom @ (CpsAtom::Literal(_) | CpsAtom::Fun(_))) = knowledge {
+        if let Knowledge::Known(atom @ (Atom::Literal(_) | Atom::Fun(_))) = knowledge {
             result.insert(param, atom);
         }
     }
@@ -159,7 +157,7 @@ pub(super) fn useful_knowns(
 /// Specialize a recursive SCC for one external call context whose known arguments the module-wide analysis cannot use because other callers disagree.
 ///
 /// The SCC is cloned verbatim and the disagreeing call site (with any siblings passing the same arguments) is repointed to the private copy. The clone then has a single agreeing external caller, so the ordinary invariant-known propagation folds those arguments in place on a later iteration while the original stays polymorphic for its other callers. At most `SCC_CLONE_LIMIT` clones are made per module and only SCCs within `SCC_CLONE_NODE_LIMIT` live nodes are cloned. One clone is performed per call so the outer fixpoint stays deterministic.
-pub(super) fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -> bool {
+pub(super) fn specialize_scc_calls(module: &mut Module, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
     }
@@ -168,7 +166,7 @@ pub(super) fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -
     let global = scc_invariant_knowns(module, &analysis, &literals);
 
     for members in eligible_sccs(module, &analysis) {
-        let member_set: BTreeSet<CpsFunId> = members.iter().copied().collect();
+        let member_set: BTreeSet<FunctionId> = members.iter().copied().collect();
         let node_count: usize = members
             .iter()
             .map(|&m| function_nodes(module, m).len())
@@ -180,15 +178,15 @@ pub(super) fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -
             continue;
         };
 
-        let params_of: BTreeMap<CpsFunId, Vec<CpsValueId>> = members
+        let params_of: BTreeMap<FunctionId, Vec<ValueId>> = members
             .iter()
             .map(|&m| (m, module.function(m).unwrap().params.clone()))
             .collect();
-        let mut internal: Vec<(CpsFunId, Vec<CpsAtom>)> = Vec::new();
-        let mut external: Vec<(CpsNodeId, CpsFunId, Vec<CpsAtom>)> = Vec::new();
+        let mut internal: Vec<(FunctionId, Vec<Atom>)> = Vec::new();
+        let mut external: Vec<(NodeId, FunctionId, Vec<Atom>)> = Vec::new();
         for (&node_id, &owner) in &analysis.node_owners {
-            let Some(CpsNode::ApplyFun {
-                callee: CpsCallee::Known(callee),
+            let Some(Node::ApplyFun {
+                callee: Callee::Known(callee),
                 args,
                 ..
             }) = module.node(node_id)
@@ -206,7 +204,7 @@ pub(super) fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -
         }
 
         // Find the first external context that unlocks a known the module-wide analysis could not, in deterministic call-site order.
-        let mut chosen: Option<(CpsFunId, Vec<CpsAtom>)> = None;
+        let mut chosen: Option<(FunctionId, Vec<Atom>)> = None;
         for (_, callee, args) in &external {
             let mut constraints = internal.clone();
             constraints.push((*callee, args.clone()));
@@ -226,15 +224,15 @@ pub(super) fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -
         let clones = clone_scc(module, &member_set);
         let clone_entry = clones[&entry];
         // Only the requested members are bound here. A copy of a *nested* definition is introduced by the copied `LetFun` inside its own member's body, so binding it out here as well would bind it twice.
-        if let Some(CpsNode::LetFun { functions, .. }) = module.nodes.get_mut(intro) {
+        if let Some(Node::LetFun { functions, .. }) = module.nodes.get_mut(intro) {
             functions.extend(member_set.iter().filter_map(|m| clones.get(m).copied()));
         }
         for (node_id, callee, args) in &external {
             if *callee == entry
                 && *args == context_args
-                && let Some(CpsNode::ApplyFun { callee, .. }) = module.nodes.get_mut(*node_id)
+                && let Some(Node::ApplyFun { callee, .. }) = module.nodes.get_mut(*node_id)
             {
-                *callee = CpsCallee::Known(clone_entry);
+                *callee = Callee::Known(clone_entry);
             }
         }
         *budget -= 1;
@@ -243,7 +241,7 @@ pub(super) fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -
     false
 }
 /// SpecConstr-style call-pattern specialization. When a known-callee call passes a statically-known tagged tuple into a parameter the callee deconstructs, clone the callee with that constructor rebuilt at its entry so the existing aggregate-projection and known-switch simplifications collapse the deconstruction on a later iteration. The constructor's dynamic fields are threaded as fresh parameters (a worker/wrapper rebuild) and the clone's recursive self-calls fall back to the general function, so it peels the one matched level rather than assuming the recursion stays in pattern. Every call sharing the `(callee, index, tag, arity)` pattern repoints to the single clone, so equivalent sites specialize once. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
-pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usize) -> bool {
+pub(super) fn specialize_call_patterns(module: &mut Module, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
     }
@@ -253,10 +251,10 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
     }
 
     // The first specializable pattern in deterministic (node, then argument) order: a known-callee call whose argument is a known tagged tuple that the callee deconstructs, whose callee has a lexical `LetFun` owner and a clonable body within the growth budget.
-    let mut chosen: Option<(CpsFunId, usize, u32, usize, Option<CpsRowId>)> = None;
+    let mut chosen: Option<(FunctionId, usize, u32, usize, Option<RowId>)> = None;
     'search: for (_, node) in module.nodes.iter_live() {
-        let CpsNode::ApplyFun {
-            callee: CpsCallee::Known(callee),
+        let Node::ApplyFun {
+            callee: Callee::Known(callee),
             args,
             ..
         } = node
@@ -268,7 +266,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
         }
         let params = &module.function(*callee).unwrap().params;
         for (index, arg) in args.iter().enumerate() {
-            let CpsAtom::Value(value) = arg else { continue };
+            let Atom::Value(value) = arg else { continue };
             let Some((tag, fields, row)) = constructors.get(value) else {
                 continue;
             };
@@ -309,8 +307,8 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
         .collect::<Vec<_>>();
     for node_id in peeled {
         let node = module.nodes.get_mut(node_id).unwrap();
-        if let CpsNode::ApplyFun {
-            callee: CpsCallee::Known(target),
+        if let Node::ApplyFun {
+            callee: Callee::Known(target),
             ..
         } = node
             && *target == clone
@@ -318,10 +316,10 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
             *target = callee;
         }
         visit_atoms_mut(node, &mut |atom| {
-            if let CpsAtom::Fun(function) = atom
+            if let Atom::Fun(function) = atom
                 && *function == clone
             {
-                *atom = CpsAtom::Fun(callee);
+                *atom = Atom::Fun(callee);
             }
         });
     }
@@ -331,17 +329,17 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
     let mut params = clone_function.params.clone();
     let clone_body = clone_function.body;
     let old_param = params[index];
-    let field_params: Vec<CpsValueId> = (1..arity)
+    let field_params: Vec<ValueId> = (1..arity)
         .map(|field| module.add_value(Some(format!("field#{field}"))))
         .collect();
     let mut rebuilt = Vec::with_capacity(arity);
-    rebuilt.push(CpsAtom::Literal(CpsLiteral::Nat(Natural::from(tag))));
-    rebuilt.extend(field_params.iter().map(|&p| CpsAtom::Value(p)));
-    let entry = module.add_node(CpsNode::LetValue {
+    rebuilt.push(Atom::Literal(Literal::Nat(Natural::from(tag))));
+    rebuilt.extend(field_params.iter().map(|&p| Atom::Value(p)));
+    let entry = module.add_node(Node::LetValue {
         result: old_param,
         value: match row {
-            Some(row) => CpsValueExpr::Row(row, rebuilt),
-            None => CpsValueExpr::Tuple(rebuilt),
+            Some(row) => ValueExpr::Row(row, rebuilt),
+            None => ValueExpr::Tuple(rebuilt),
         },
         next: clone_body,
     });
@@ -351,24 +349,24 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
     clone_function.body = entry;
 
     // Introduce the clone in the callee's lexical scope.
-    if let Some(CpsNode::LetFun { functions, .. }) = module.nodes.get_mut(intro) {
+    if let Some(Node::LetFun { functions, .. }) = module.nodes.get_mut(intro) {
         functions.push(clone);
     }
 
     // Repoint every call sharing the pattern to the single clone, splicing each site's own constructor fields in place of the tuple argument.
     for node_id in 0..module.nodes.len() {
-        let Some(CpsNode::ApplyFun {
-            callee: CpsCallee::Known(target),
+        let Some(Node::ApplyFun {
+            callee: Callee::Known(target),
             args,
             ..
-        }) = module.node(CpsNodeId(node_id as u32))
+        }) = module.node(NodeId(node_id as u32))
         else {
             continue;
         };
         if *target != callee {
             continue;
         }
-        let Some(CpsAtom::Value(value)) = args.get(index) else {
+        let Some(Atom::Value(value)) = args.get(index) else {
             continue;
         };
         let Some((site_tag, site_fields, _)) = constructors.get(value) else {
@@ -378,15 +376,15 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
             continue;
         }
         let spliced = site_fields[1..].to_vec();
-        let Some(CpsNode::ApplyFun {
+        let Some(Node::ApplyFun {
             callee: target,
             args,
             ..
-        }) = module.nodes.get_mut(CpsNodeId(node_id as u32))
+        }) = module.nodes.get_mut(NodeId(node_id as u32))
         else {
             unreachable!()
         };
-        *target = CpsCallee::Known(clone);
+        *target = Callee::Known(clone);
         args.splice(index..=index, spliced);
     }
 
@@ -395,24 +393,24 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
 }
 /// The `LetValue`-bound tagged tuples: values whose defining expression is a tuple whose first field is a `Nat` literal tag. These are the constructor call patterns branch specialization can bake into a callee.
 pub(super) fn tagged_tuple_values(
-    module: &CpsModule,
-) -> BTreeMap<CpsValueId, (u32, Vec<CpsAtom>, Option<CpsRowId>)> {
+    module: &Module,
+) -> BTreeMap<ValueId, (u32, Vec<Atom>, Option<RowId>)> {
     let mut result = BTreeMap::new();
     for (_, node) in module.nodes.iter_live() {
         let (value, fields, row) = match node {
-            CpsNode::LetValue {
+            Node::LetValue {
                 result: value,
-                value: CpsValueExpr::Tuple(fields),
+                value: ValueExpr::Tuple(fields),
                 ..
             } => (value, fields, None),
-            CpsNode::LetValue {
+            Node::LetValue {
                 result: value,
-                value: CpsValueExpr::Row(row, fields),
+                value: ValueExpr::Row(row, fields),
                 ..
             } => (value, fields, Some(*row)),
             _ => continue,
         };
-        if let Some(CpsAtom::Literal(CpsLiteral::Nat(tag))) = fields.first()
+        if let Some(Atom::Literal(Literal::Nat(tag))) = fields.first()
             && let Some(tag) = tag.to_u32()
         {
             result.insert(*value, (tag, fields.clone(), row));
@@ -421,45 +419,41 @@ pub(super) fn tagged_tuple_values(
     result
 }
 /// Whether `function` projects a field out of `param`, i.e. contains a projection on it — a `TupleGet` for a structural product, a `RowGet` for a row. This is the profitability gate: baking a known constructor into a parameter only pays off when the body actually deconstructs it, and a gate that knew only one of the two vocabularies would silently decline every variant.
-pub(super) fn deconstructs_param(
-    module: &CpsModule,
-    function: CpsFunId,
-    param: CpsValueId,
-) -> bool {
+pub(super) fn deconstructs_param(module: &Module, function: FunctionId, param: ValueId) -> bool {
     function_nodes(module, function).iter().any(|&id| {
         matches!(
             module.node(id),
-            Some(CpsNode::LetIntrinsic {
-                op: CpsIntrinsic::TupleGet(_) | CpsIntrinsic::RowGet(..),
+            Some(Node::LetIntrinsic {
+                op: Intrinsic::TupleGet(_) | Intrinsic::RowGet(..),
                 args,
                 ..
-            }) if args.first() == Some(&CpsAtom::Value(param))
+            }) if args.first() == Some(&Atom::Value(param))
         )
     })
 }
 /// The literal results of `LetValue` bindings, used to resolve caller values already known to be constant.
-pub(super) fn literal_value_map(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {
+pub(super) fn literal_value_map(module: &Module) -> BTreeMap<ValueId, Atom> {
     let mut literals = BTreeMap::new();
     for (_, node) in module.nodes.iter_live() {
-        if let CpsNode::LetValue {
+        if let Node::LetValue {
             result,
-            value: CpsValueExpr::Literal(literal),
+            value: ValueExpr::Literal(literal),
             ..
         } = node
         {
-            literals.insert(*result, CpsAtom::Literal(literal.clone()));
+            literals.insert(*result, Atom::Literal(literal.clone()));
         }
     }
     literals
 }
 /// The single `LetFun` node introducing every member, or `None` if the members are split across nodes. The clones are added to this node so they share the members' lexical scope.
 pub(super) fn introducing_letfun(
-    module: &CpsModule,
-    members: &BTreeSet<CpsFunId>,
-) -> Option<CpsNodeId> {
+    module: &Module,
+    members: &BTreeSet<FunctionId>,
+) -> Option<NodeId> {
     for (id, node) in module.nodes.iter_live() {
-        if let CpsNode::LetFun { functions, .. } = node {
-            let introduced: BTreeSet<CpsFunId> = functions.iter().copied().collect();
+        if let Node::LetFun { functions, .. } = node {
+            let introduced: BTreeSet<FunctionId> = functions.iter().copied().collect();
             if members.is_subset(&introduced) {
                 return Some(id);
             }
@@ -469,13 +463,13 @@ pub(super) fn introducing_letfun(
 }
 /// Copy every member of an SCC, and every definition nested inside them, into fresh functions with fresh return continuations, local continuations, owned values, and nodes. Internal known-callee edges and return continuations are rewired to the copies while free values, external callees, and external continuations are shared.
 pub(super) fn clone_scc(
-    module: &mut CpsModule,
-    members: &BTreeSet<CpsFunId>,
-) -> BTreeMap<CpsFunId, CpsFunId> {
+    module: &mut Module,
+    members: &BTreeSet<FunctionId>,
+) -> BTreeMap<FunctionId, FunctionId> {
     copy_bodies(module, members, &BTreeSet::new()).functions
 }
 /// SpecConstr for continuation joins — the join-point analogue of [`specialize_call_patterns`]. When an edge jumps a statically-known tagged tuple into a multi-transfer continuation that deconstructs it, clone the continuation with the constructor rebuilt at its entry and its dynamic fields threaded as parameters, so the existing aggregate-projection and known-switch simplifications collapse the deconstruction — and usually the allocation and the branch — on a later iteration. Every edge sharing the `(target, index, tag, arity)` pattern repoints to the single clone. Single-transfer joins are excluded: `inline_single_use_continuations` already collapses them outright. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
-pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usize) -> bool {
+pub(super) fn specialize_jump_patterns(module: &mut Module, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
     }
@@ -486,13 +480,11 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
     let transfers = continuation_transfers(module);
 
     // The first specializable pattern in deterministic (node, then edge, then argument) order.
-    let mut chosen: Option<(CpsContId, usize, u32, usize, Option<CpsRowId>)> = None;
+    let mut chosen: Option<(ContinuationId, usize, u32, usize, Option<RowId>)> = None;
     'search: for (_, node) in module.nodes.iter_live() {
-        let edges: Vec<&CpsEdge> = match node {
-            CpsNode::ApplyCont(edge) => vec![edge],
-            CpsNode::Switch { cases, default, .. } => {
-                cases.values().chain(default.iter()).collect()
-            }
+        let edges: Vec<&Edge> = match node {
+            Node::ApplyCont(edge) => vec![edge],
+            Node::Switch { cases, default, .. } => cases.values().chain(default.iter()).collect(),
             _ => continue,
         };
         for edge in edges {
@@ -506,7 +498,7 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
                 continue;
             }
             for (index, arg) in edge.args.iter().enumerate() {
-                let CpsAtom::Value(value) = arg else { continue };
+                let Atom::Value(value) = arg else { continue };
                 let Some((tag, fields, row)) = constructors.get(value) else {
                     continue;
                 };
@@ -541,17 +533,17 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
     let mut params = clone_definition.params.clone();
     let clone_body = clone_definition.body;
     let old_param = params[index];
-    let field_params: Vec<CpsValueId> = (1..arity)
+    let field_params: Vec<ValueId> = (1..arity)
         .map(|field| module.add_value(Some(format!("field#{field}"))))
         .collect();
     let mut rebuilt = Vec::with_capacity(arity);
-    rebuilt.push(CpsAtom::Literal(CpsLiteral::Nat(Natural::from(tag))));
-    rebuilt.extend(field_params.iter().map(|&p| CpsAtom::Value(p)));
-    let entry = module.add_node(CpsNode::LetValue {
+    rebuilt.push(Atom::Literal(Literal::Nat(Natural::from(tag))));
+    rebuilt.extend(field_params.iter().map(|&p| Atom::Value(p)));
+    let entry = module.add_node(Node::LetValue {
         result: old_param,
         value: match row {
-            Some(row) => CpsValueExpr::Row(row, rebuilt),
-            None => CpsValueExpr::Tuple(rebuilt),
+            Some(row) => ValueExpr::Row(row, rebuilt),
+            None => ValueExpr::Tuple(rebuilt),
         },
         next: clone_body,
     });
@@ -561,18 +553,18 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
     clone_definition.body = entry;
 
     // Introduce the clone beside the original, so it shares the original's lexical scope.
-    if let Some(CpsNode::LetCont { continuations, .. }) = module.nodes.get_mut(intro) {
+    if let Some(Node::LetCont { continuations, .. }) = module.nodes.get_mut(intro) {
         continuations.push(clone);
     }
 
     // Repoint every edge sharing the pattern, splicing each edge's own constructor fields in place of the tuple argument.
-    let repoint = |edge: &mut CpsEdge,
-                   constructors: &BTreeMap<CpsValueId, (u32, Vec<CpsAtom>, Option<CpsRowId>)>|
+    let repoint = |edge: &mut Edge,
+                   constructors: &BTreeMap<ValueId, (u32, Vec<Atom>, Option<RowId>)>|
      -> bool {
         if edge.target != target {
             return false;
         }
-        let Some(CpsAtom::Value(value)) = edge.args.get(index) else {
+        let Some(Atom::Value(value)) = edge.args.get(index) else {
             return false;
         };
         let Some((site_tag, site_fields, _)) = constructors.get(value) else {
@@ -587,15 +579,15 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
         true
     };
     for node_index in 0..module.nodes.len() {
-        let node_id = CpsNodeId(node_index as u32);
+        let node_id = NodeId(node_index as u32);
         let Some(node) = module.nodes.get_mut(node_id) else {
             continue;
         };
         match node {
-            CpsNode::ApplyCont(edge) => {
+            Node::ApplyCont(edge) => {
                 repoint(edge, &constructors);
             }
-            CpsNode::Switch { cases, default, .. } => {
+            Node::Switch { cases, default, .. } => {
                 for edge in cases.values_mut().chain(default.iter_mut()) {
                     repoint(edge, &constructors);
                 }
@@ -609,53 +601,50 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
 }
 /// Whether `continuation`'s body projects a field out of `param` — the profitability gate matching [`deconstructs_param`], over a continuation body.
 pub(super) fn continuation_projects(
-    module: &CpsModule,
-    continuation: CpsContId,
-    param: CpsValueId,
+    module: &Module,
+    continuation: ContinuationId,
+    param: ValueId,
 ) -> bool {
     nodes_from(module, module.continuation(continuation).unwrap().body)
         .iter()
         .any(|&id| {
             matches!(
                 module.node(id),
-                Some(CpsNode::LetIntrinsic {
-                    op: CpsIntrinsic::TupleGet(_) | CpsIntrinsic::RowGet(..),
+                Some(Node::LetIntrinsic {
+                    op: Intrinsic::TupleGet(_) | Intrinsic::RowGet(..),
                     args,
                     ..
-                }) if args.first() == Some(&CpsAtom::Value(param))
+                }) if args.first() == Some(&Atom::Value(param))
             )
         })
 }
 /// The `LetCont` node introducing `continuation`. Every live local continuation has exactly one (the verifier's lexical-binding check), so `None` only means the module is mid-rewrite.
-pub(super) fn introducing_letcont(
-    module: &CpsModule,
-    continuation: CpsContId,
-) -> Option<CpsNodeId> {
+pub(super) fn introducing_letcont(module: &Module, continuation: ContinuationId) -> Option<NodeId> {
     module.nodes.iter_live().find_map(|(id, node)| {
         matches!(
             node,
-            CpsNode::LetCont { continuations, .. } if continuations.contains(&continuation)
+            Node::LetCont { continuations, .. } if continuations.contains(&continuation)
         )
         .then_some(id)
     })
 }
 /// Copy one continuation's body subtree, and every definition nested inside it, into a fresh continuation with fresh parameters, owned values, nested continuations, and nodes. External values, functions, and continuations — including the owning function's return — are shared.
-pub(super) fn clone_continuation(module: &mut CpsModule, target: CpsContId) -> CpsContId {
+pub(super) fn clone_continuation(module: &mut Module, target: ContinuationId) -> ContinuationId {
     copy_bodies(module, &BTreeSet::new(), &BTreeSet::from([target])).continuations[&target]
 }
-pub(super) fn merge_inputs(inputs: &mut [Knowledge], args: Option<&[CpsAtom]>) {
+pub(super) fn merge_inputs(inputs: &mut [Knowledge], args: Option<&[Atom]>) {
     for (index, input) in inputs.iter_mut().enumerate() {
         input.merge(args.and_then(|args| args.get(index)));
     }
 }
 pub(super) fn record_known_literals(
-    params: &[CpsValueId],
+    params: &[ValueId],
     inputs: &[Knowledge],
-    known: &mut BTreeMap<CpsValueId, CpsAtom>,
+    known: &mut BTreeMap<ValueId, Atom>,
 ) {
     for (&param, input) in params.iter().zip(inputs) {
-        if let Knowledge::Known(CpsAtom::Literal(literal)) = input {
-            known.insert(param, CpsAtom::Literal(literal.clone()));
+        if let Knowledge::Known(Atom::Literal(literal)) = input {
+            known.insert(param, Atom::Literal(literal.clone()));
         }
     }
 }

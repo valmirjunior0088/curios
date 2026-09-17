@@ -3,7 +3,7 @@
 use {
     super::test_support::{PolymorphicLoop, polymorphic_loop, tagged_consumer, tagged_join},
     crate::cps::optimize::optimize,
-    crate::{CpsCallee, CpsIntrinsic, CpsNode, CpsValueExpr},
+    crate::{Callee, Intrinsic, Node, ValueExpr},
 };
 
 #[test]
@@ -15,8 +15,8 @@ fn optimization_specializes_away_the_polymorphic_indirect_call() {
     assert!(
         module.nodes().iter().flatten().all(|node| !matches!(
             node,
-            CpsNode::ApplyFun {
-                callee: CpsCallee::Closure(_),
+            Node::ApplyFun {
+                callee: Callee::Closure(_),
                 ..
             }
         )),
@@ -35,7 +35,7 @@ fn optimization_eliminates_a_constructor_dispatch() {
             .nodes()
             .iter()
             .flatten()
-            .all(|node| !matches!(node, CpsNode::Switch { .. })),
+            .all(|node| !matches!(node, Node::Switch { .. })),
         "specialization and folding leave no residual tag dispatch"
     );
 }
@@ -50,11 +50,11 @@ fn optimization_collapses_the_tagged_join_outright() {
         assert!(
             !matches!(
                 node,
-                CpsNode::LetValue {
-                    value: CpsValueExpr::Tuple(_),
+                Node::LetValue {
+                    value: ValueExpr::Tuple(_),
                     ..
-                } | CpsNode::LetIntrinsic {
-                    op: CpsIntrinsic::TupleGet(_),
+                } | Node::LetIntrinsic {
+                    op: Intrinsic::TupleGet(_),
                     ..
                 }
             ),

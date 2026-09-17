@@ -243,7 +243,7 @@ macro_rules! radix_format {
 
 radix_format!(Display, Binary, UpperHex);
 
-/// The number, not the wrapper around the bignum holding it. Written rather than derived because the erased stages render their IR with `{:?}` — `curios-cont` prints a `CpsLiteral` that way, and `wonder stage cont` is read by people — so a derived `Natural { value: 4 }` would put the representation in every dump where the carrier used to print `4`.
+/// The number, not the wrapper around the bignum holding it. Written rather than derived because the erased stages render their IR with `{:?}` — `curios-cont` prints its `Literal` that way, and `wonder stage cont` is read by people — so a derived `Natural { value: 4 }` would put the representation in every dump where the carrier used to print `4`.
 impl fmt::Debug for Natural {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)

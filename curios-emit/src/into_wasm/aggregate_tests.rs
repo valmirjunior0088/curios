@@ -1,6 +1,6 @@
 //! Tuples, list and packed literals, cells and variants — built and read at their own carriers.
 
-//! Backend lowering coverage: build a [`curios_cont::CpsModule`](curios_cont::CpsModule) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
+//! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
 use curios_utilities::{Grain, PackedBin};
 
@@ -22,16 +22,16 @@ fn list_literal_builds_a_rope_leaf() {
 
 #[test]
 fn small_packed_literal_rides_the_immediate() {
-    let mut module = curios_cont::CpsModule::new();
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let bin = module.add_value(Some("bin".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(bin)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(bin)),
     });
-    let build = module.add_node(curios_cont::CpsNode::LetValue {
+    let build = module.add_node(curios_cont::Node::LetValue {
         result: bin,
-        value: curios_cont::CpsValueExpr::Literal(curios_cont::CpsLiteral::Bin(
+        value: curios_cont::ValueExpr::Literal(curios_cont::Literal::Bin(
             Grain::X,
             PackedBin::from_bytes(vec![1, 2, 3]),
         )),
@@ -39,7 +39,7 @@ fn small_packed_literal_rides_the_immediate() {
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: Vec::new(),
             return_cont,
@@ -75,13 +75,13 @@ fn cell_new_and_get_use_the_cell_struct() {
 ///
 /// The positive control for `Context::refuse_raw_aggregate`, and the reason that guard is an assertion in the emitter rather than a remark in the door. A continuation parameter offers `Offer::Open`, so a raw demand from *any* of its uses settles it raw whatever flows in — the aggregate's own `Offer::Never` never enters the question, because the coercion happens on the edge rather than at the aggregate's definition. The edge then loads its argument at that carrier, and an aggregate argument becomes `ref.cast (ref i31)` over a `struct.new`: a module that verifies, emits, and traps.
 ///
-/// This is that shape stated directly — a continuation whose parameter feeds `NatAdd`, entered with a tuple. `curios-ersd`'s door no longer produces it (an immediate arm's binder was aliased to its scrutinee and now gets a definition of its own, `CpsIntrinsic::ImmediateGet`), but the IR still permits it, so the guard is what keeps the class from returning silently. Observed against the pre-fix door on 2026-08-20: `` `m869` is a `Tuple`/`List` construction loaded at the raw carrier Nat`` — the same value the emitted wasm had been casting.
+/// This is that shape stated directly — a continuation whose parameter feeds `NatAdd`, entered with a tuple. `curios-ersd`'s door no longer produces it (an immediate arm's binder was aliased to its scrutinee and now gets a definition of its own, `curios_cont::Intrinsic::ImmediateGet`), but the IR still permits it, so the guard is what keeps the class from returning silently. Observed against the pre-fix door on 2026-08-20: `` `m869` is a `Tuple`/`List` construction loaded at the raw carrier Nat`` — the same value the emitted wasm had been casting.
 ///
 /// The tuple here is closed, so `hoist` lifts it to a module const: this covers the const half of the population. [`a_region_aggregate_reaching_a_raw_parameter_is_refused`] covers the other.
 #[test]
 #[should_panic = "loaded at the raw carrier"]
 fn an_aggregate_reaching_a_raw_parameter_is_refused() {
-    let mut module = curios_cont::CpsModule::new();
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
 
@@ -90,38 +90,38 @@ fn an_aggregate_reaching_a_raw_parameter_is_refused() {
     let aggregate = module.add_value(Some("aggregate".into()));
 
     // The parameter's one use demands a raw `Nat`, which is what raises it out of a reference.
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(sum)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(sum)),
     });
-    let add = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let add = module.add_node(curios_cont::Node::LetIntrinsic {
         result: sum,
-        op: curios_cont::CpsIntrinsic::NatAdd,
-        args: vec![curios_cont::CpsAtom::Value(param), nat(1)],
+        op: curios_cont::Intrinsic::NatAdd,
+        args: vec![curios_cont::Atom::Value(param), nat(1)],
         next: exit,
     });
-    let raised = module.add_continuation(curios_cont::CpsContinuation {
+    let raised = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("raised".into()),
         params: vec![param],
         body: add,
     });
 
-    let enter = module.add_node(curios_cont::CpsNode::ApplyCont(curios_cont::CpsEdge {
+    let enter = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
         target: raised,
-        args: vec![curios_cont::CpsAtom::Value(aggregate)],
+        args: vec![curios_cont::Atom::Value(aggregate)],
     }));
-    let scope = module.add_node(curios_cont::CpsNode::LetCont {
+    let scope = module.add_node(curios_cont::Node::LetCont {
         continuations: vec![raised],
         body: enter,
     });
-    let body = module.add_node(curios_cont::CpsNode::LetValue {
+    let body = module.add_node(curios_cont::Node::LetValue {
         result: aggregate,
-        value: curios_cont::CpsValueExpr::Tuple(vec![nat(1), nat(2)]),
+        value: curios_cont::ValueExpr::Tuple(vec![nat(1), nat(2)]),
         next: scope,
     });
 
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -139,7 +139,7 @@ fn an_aggregate_reaching_a_raw_parameter_is_refused() {
 #[test]
 #[should_panic = "loaded at the raw carrier"]
 fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
-    let mut module = curios_cont::CpsModule::new();
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
 
@@ -148,52 +148,52 @@ fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
     let sum = module.add_value(Some("sum".into()));
     let aggregate = module.add_value(Some("aggregate".into()));
 
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(sum)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(sum)),
     });
-    let add = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let add = module.add_node(curios_cont::Node::LetIntrinsic {
         result: sum,
-        op: curios_cont::CpsIntrinsic::NatAdd,
-        args: vec![curios_cont::CpsAtom::Value(param), nat(1)],
+        op: curios_cont::Intrinsic::NatAdd,
+        args: vec![curios_cont::Atom::Value(param), nat(1)],
         next: exit,
     });
-    let raised = module.add_continuation(curios_cont::CpsContinuation {
+    let raised = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("raised".into()),
         params: vec![param],
         body: add,
     });
 
-    let enter = module.add_node(curios_cont::CpsNode::ApplyCont(curios_cont::CpsEdge {
+    let enter = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
         target: raised,
-        args: vec![curios_cont::CpsAtom::Value(aggregate)],
+        args: vec![curios_cont::Atom::Value(aggregate)],
     }));
-    let scope = module.add_node(curios_cont::CpsNode::LetCont {
+    let scope = module.add_node(curios_cont::Node::LetCont {
         continuations: vec![raised],
         body: enter,
     });
-    let built = module.add_node(curios_cont::CpsNode::LetValue {
+    let built = module.add_node(curios_cont::Node::LetValue {
         result: aggregate,
-        value: curios_cont::CpsValueExpr::Tuple(vec![curios_cont::CpsAtom::Value(cell), nat(2)]),
+        value: curios_cont::ValueExpr::Tuple(vec![curios_cont::Atom::Value(cell), nat(2)]),
         next: scope,
     });
-    let made = module.add_continuation(curios_cont::CpsContinuation {
+    let made = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("made".into()),
         params: vec![cell],
         body: built,
     });
-    let new = module.add_node(curios_cont::CpsNode::Cell {
-        op: curios_cont::CpsCellOp::New,
+    let new = module.add_node(curios_cont::Node::Cell {
+        op: curios_cont::CellOp::New,
         args: vec![nat(0)],
         return_to: made,
     });
-    let body = module.add_node(curios_cont::CpsNode::LetCont {
+    let body = module.add_node(curios_cont::Node::LetCont {
         continuations: vec![made],
         body: new,
     });
 
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -208,39 +208,36 @@ fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
 /// A variant is constructed at its row's own final type and read back with one exact cast — no roster cascade, because a row value's type is a fact of the row rather than of the constructor that built it.
 #[test]
 fn a_variant_is_built_and_read_at_its_family_type() {
-    let mut module = curios_cont::CpsModule::new();
-    let row = module.add_row(curios_cont::CpsRow {
+    let mut module = curios_cont::Module::new();
+    let row = module.add_row(curios_cont::Row {
         debug_name: Some("Shape".into()),
         slots: vec![
-            curios_cont::CpsSlot::Tag,
-            curios_cont::CpsSlot::Opaque,
-            curios_cont::CpsSlot::Opaque,
+            curios_cont::Slot::Tag,
+            curios_cont::Slot::Opaque,
+            curios_cont::Slot::Opaque,
         ],
     });
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let built = module.add_value(Some("built".into()));
     let field = module.add_value(Some("field".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(field)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(field)),
     });
-    let read = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let read = module.add_node(curios_cont::Node::LetIntrinsic {
         result: field,
-        op: curios_cont::CpsIntrinsic::RowGet(row, 1),
-        args: vec![curios_cont::CpsAtom::Value(built)],
+        op: curios_cont::Intrinsic::RowGet(row, 1),
+        args: vec![curios_cont::Atom::Value(built)],
         next: exit,
     });
-    let build = module.add_node(curios_cont::CpsNode::LetValue {
+    let build = module.add_node(curios_cont::Node::LetValue {
         result: built,
-        value: curios_cont::CpsValueExpr::Row(
-            row,
-            vec![nat(0), nat(7), curios_cont::CpsAtom::Filler],
-        ),
+        value: curios_cont::ValueExpr::Row(row, vec![nat(0), nat(7), curios_cont::Atom::Filler]),
         next: read,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -265,27 +262,27 @@ fn a_variant_is_built_and_read_at_its_family_type() {
 #[test]
 #[should_panic = "the row is 3 wide"]
 fn a_short_variant_construction_is_refused() {
-    let mut module = curios_cont::CpsModule::new();
-    let row = module.add_row(curios_cont::CpsRow {
+    let mut module = curios_cont::Module::new();
+    let row = module.add_row(curios_cont::Row {
         debug_name: Some("Shape".into()),
         slots: vec![
-            curios_cont::CpsSlot::Tag,
-            curios_cont::CpsSlot::Opaque,
-            curios_cont::CpsSlot::Opaque,
+            curios_cont::Slot::Tag,
+            curios_cont::Slot::Opaque,
+            curios_cont::Slot::Opaque,
         ],
     });
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let built = module.add_value(Some("built".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit { value: None });
-    let build = module.add_node(curios_cont::CpsNode::LetValue {
+    let exit = module.add_node(curios_cont::Node::Exit { value: None });
+    let build = module.add_node(curios_cont::Node::LetValue {
         result: built,
-        value: curios_cont::CpsValueExpr::Row(row, vec![nat(0)]),
+        value: curios_cont::ValueExpr::Row(row, vec![nat(0)]),
         next: exit,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,

@@ -4,7 +4,7 @@
 //!
 //! **A variant is the same rewrite at the widest of several widths.** Where the constructions reaching a parameter disagree about arity — a tagged row's nullary constructor arriving as a one-tuple beside its three-payload sibling's four — the region travels as the widest, and each narrower edge carries its own fields followed by filler. The per-edge width is the same forward fact read at that edge's argument, so a projection is never emitted past what a construction carries.
 //!
-//! What makes the filler safe is that it *inhabits* the slot with what the field would hold, not that nothing reads it. Unreadness was the stated justification and it is false: the value is passed, and an edge into a raw-carried parameter coerces every argument to that carrier before the discriminant is consulted, so a zero at a guessed carrier trapped on the `ref.cast`. The Ersd door pads a register slot with its zero literal and a reference slot with [`CpsAtom::Filler`], which every reference position admits as null; the one carrier not known here — a parameter the analysis later raises into a register — is the emitter's, and it materialises the filler as that register's zero.
+//! What makes the filler safe is that it *inhabits* the slot with what the field would hold, not that nothing reads it. Unreadness was the stated justification and it is false: the value is passed, and an edge into a raw-carried parameter coerces every argument to that carrier before the discriminant is consulted, so a zero at a guessed carrier trapped on the `ref.cast`. The Ersd door pads a register slot with its zero literal and a reference slot with [`Atom::Filler`], which every reference position admits as null; the one carrier not known here — a parameter the analysis later raises into a register — is the emitter's, and it materialises the filler as that register's zero.
 //!
 //! The rewrite is three local edits, and the existing chain finishes the job, exactly as `split_returns` works: the parameter list is spliced and the group recorded; the continuation's head rebuilds the aggregate from the new field parameters and every occurrence of the old parameter is redirected to that rebuild; and every incoming edge projects its argument into fields above the jump. Projection forwarding then collapses the inserted reads through the constructions they see, dead-binding elimination removes the constructions nothing reads any more — and the head rebuild survives exactly where a whole-value use survives, which makes it the materialization boundary the cost contract prescribes rather than a leak. For a variant that materialization is *wider* than the constructor that travelled, which is the one place the rewrite spends rather than saves: a surviving whole-value use of a narrow constructor gets its widest sibling's object. It is bounded by the same demand condition that admits the region at all — every use a projection or an eligible transfer — so the rebuild survives only where a boundary the region cannot cross keeps it.
 //!
@@ -15,10 +15,9 @@ mod tests;
 
 use {
     super::{
-        CpsAtom, CpsCallee, CpsContId, CpsEdge, CpsFunId, CpsIntrinsic, CpsLiteral, CpsModule,
-        CpsNode, CpsNodeId, CpsUseTarget, CpsValueExpr, CpsValueId, Demand, Origin,
-        analysis::analyze_calls, demand_of, demands, optimize::PARAM_SPLIT_GROWTH_LIMIT, origins,
-        simplify::rewire_node,
+        Atom, Callee, ContinuationId, Demand, Edge, FunctionId, Intrinsic, Literal, Module, Node,
+        NodeId, Origin, UseTarget, ValueExpr, ValueId, analysis::analyze_calls, demand_of, demands,
+        optimize::PARAM_SPLIT_GROWTH_LIMIT, origins, simplify::rewire_node,
     },
     curios_num::Natural,
     curios_utilities::Grain,
@@ -27,52 +26,50 @@ use {
 
 /// One admitted split: which parameter of which continuation, and the width every flow travels at — the widest construction reaching it, which is the region's own arity where they agree and the class-merged variant width where they do not.
 struct Split {
-    continuation: CpsContId,
+    continuation: ContinuationId,
     position: usize,
-    param: CpsValueId,
+    param: ValueId,
     width: usize,
     /// The row, where every flow into the parameter is a variant construction of one. Carried from the same origin fact that gave the width, so the head rebuild and the per-edge projections stay in the vocabulary the reads below them use — a variant rebuilt as a structural tuple would trap at the next exact cast.
-    row: Option<super::CpsRowId>,
+    row: Option<super::RowId>,
 }
 
 /// Whether a site may take `source` apart into fields.
 ///
 /// A source the fixpoint reports at several widths is a variant whose constructor is undecided *there*, so no fixed number of projections is safe: the widest reads past a narrower constructor and traps, and the narrowest drops fields the wider one carries. Such a source is a region of its own, and a round that splits it first turns it into a materialization of one settled width — which is why this is a decline rather than a disqualification. The region's own parameter is the exception it looks like: by the time the edges are rewritten it names the head rebuild, whose width is the region's by construction.
-fn takeable(origins: &BTreeMap<CpsValueId, Origin>, param: CpsValueId, source: &CpsAtom) -> bool {
+fn takeable(origins: &BTreeMap<ValueId, Origin>, param: ValueId, source: &Atom) -> bool {
     match source {
-        CpsAtom::Value(value) => {
-            *value == param || origins.get(value).is_none_or(Origin::is_settled)
-        }
-        CpsAtom::Fun(_) | CpsAtom::Literal(_) | CpsAtom::Filler => false,
+        Atom::Value(value) => *value == param || origins.get(value).is_none_or(Origin::is_settled),
+        Atom::Fun(_) | Atom::Literal(_) | Atom::Filler => false,
     }
 }
 
 /// The construction a rebuild emits: the row's own, where one was carried, and a structural tuple otherwise.
-fn rebuild_of(row: Option<super::CpsRowId>, fields: &[CpsValueId]) -> CpsValueExpr {
-    let atoms = fields.iter().copied().map(CpsAtom::Value).collect();
+fn rebuild_of(row: Option<super::RowId>, fields: &[ValueId]) -> ValueExpr {
+    let atoms = fields.iter().copied().map(Atom::Value).collect();
     match row {
-        Some(row) => CpsValueExpr::Row(row, atoms),
-        None => CpsValueExpr::Tuple(atoms),
+        Some(row) => ValueExpr::Row(row, atoms),
+        None => ValueExpr::Tuple(atoms),
     }
 }
 
 /// The projection a split emits, in the vocabulary its source was built in.
-fn projection_of(row: Option<super::CpsRowId>, index: usize) -> CpsIntrinsic {
+fn projection_of(row: Option<super::RowId>, index: usize) -> Intrinsic {
     match row {
-        Some(row) => CpsIntrinsic::RowGet(row, index),
-        None => CpsIntrinsic::TupleGet(index),
+        Some(row) => Intrinsic::RowGet(row, index),
+        None => Intrinsic::TupleGet(index),
     }
 }
 
 /// Every admissible split, in deterministic order: continuations by identity, positions ascending within each.
-fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Vec<Split> {
+fn admit(module: &Module, origins: &BTreeMap<ValueId, Origin>) -> Vec<Split> {
     let demands = demands(module);
 
     // A resume's parameters are the call interface the return protocol owns, whatever their demand says.
     let resumes = resume_targets(module);
 
     // Every edge into each continuation, so the per-position source check below is one pass rather than one per candidate parameter.
-    let mut incoming = BTreeMap::<CpsContId, Vec<&CpsEdge>>::new();
+    let mut incoming = BTreeMap::<ContinuationId, Vec<&Edge>>::new();
     for (_, node) in module.nodes.iter_live() {
         for edge in edges_of(node) {
             incoming.entry(edge.target).or_default().push(edge);
@@ -130,9 +127,9 @@ fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Vec<Spli
 ///
 /// The live parameter list is re-read for the same reason: an earlier split of the same continuation at a higher position has already grown it, and the ceiling is a fact of the list as it stands.
 fn still_admissible(
-    module: &CpsModule,
-    origins: &BTreeMap<CpsValueId, Origin>,
-    carriers: &[CpsNodeId],
+    module: &Module,
+    origins: &BTreeMap<ValueId, Origin>,
+    carriers: &[NodeId],
     split: &Split,
 ) -> bool {
     let Some(definition) = module.continuation(split.continuation) else {
@@ -150,7 +147,7 @@ fn still_admissible(
         .flat_map(edges_of)
         .filter(|edge| edge.target == split.continuation)
         .all(|edge| match edge.args.get(split.position) {
-            Some(CpsAtom::Value(value)) => {
+            Some(Atom::Value(value)) => {
                 *value == split.param || origins.get(value).is_some_and(Origin::is_settled)
             }
             _ => false,
@@ -160,14 +157,14 @@ fn still_admissible(
 /// Split every admissible continuation parameter into its fields against one forward snapshot, record each group, and leave the cleanup to the chain.
 ///
 /// It was one split per call, on the reasoning that the optimizer's own fixpoint would drive region-wide convergence — and it did, at one round of every pass per split: `fixpoint_pass_measurements` found this pass firing on 54 of a `Toml/decode` compile's 57 rounds, with most of the fixpoint's time going to passes that rewrote nothing on any of them. A sweep applies what one snapshot admits and [`still_admissible`] declines what an earlier split in the sweep has since touched, so the rounds that remain are the ones a split genuinely depends on. Determinism is the order below; termination is unchanged, since every split still consumes an unrecorded aggregate parameter under the growth ceiling.
-pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
+pub(super) fn split_parameters(module: &mut Module) -> bool {
     let origins = origins(module);
     let mut admitted = admit(module, &origins);
     // Highest position first within a continuation, so an earlier position's index survives a later one's splice — the order `split_windows` applies its positions in, for the same reason.
     admitted.sort_by_key(|split| (split.continuation, std::cmp::Reverse(split.position)));
 
     // The nodes carrying an edge into each continuation, indexed once for the sweep. A split repoints a carrier's predecessors at its projection chain and sets the carrier in place, so the index holds across the sweep — and it is what keeps a sweep of a hundred splits from walking the module a hundred times to find the few nodes each one rewrites.
-    let mut carriers = BTreeMap::<CpsContId, Vec<CpsNodeId>>::new();
+    let mut carriers = BTreeMap::<ContinuationId, Vec<NodeId>>::new();
     for (id, node) in module.nodes.iter_live() {
         for edge in edges_of(node) {
             let entry = carriers.entry(edge.target).or_default();
@@ -193,9 +190,9 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
 
 /// The three local edits of one split: splice the parameter list and record the group, rebuild the aggregate at the head and redirect the old parameter to it, and project every incoming edge's argument into fields above the jump — `carriers` being the nodes that hold those edges.
 fn apply_split(
-    module: &mut CpsModule,
-    origins: &BTreeMap<CpsValueId, Origin>,
-    carriers: &[CpsNodeId],
+    module: &mut Module,
+    origins: &BTreeMap<ValueId, Origin>,
+    carriers: &[NodeId],
     split: &Split,
 ) {
     // The field parameters, and the group that records them.
@@ -219,7 +216,7 @@ fn apply_split(
 
     // The head rebuild: the aggregate reconstructed from its fields, standing in for the old parameter everywhere. It survives exactly where a whole-value use survives, and is the materialization the cost contract allows at such a boundary.
     let rebuilt = module.add_value(Some(format!("rebuilt/{}", split.continuation.index())));
-    let head = module.add_node(CpsNode::LetValue {
+    let head = module.add_node(Node::LetValue {
         result: rebuilt,
         value: rebuild_of(split.row, &fields),
         next: body,
@@ -229,7 +226,7 @@ fn apply_split(
         .get_mut(split.continuation)
         .expect("admitted continuation is live")
         .body = head;
-    module.replace_atom(CpsUseTarget::Value(split.param), CpsAtom::Value(rebuilt));
+    module.replace_atom(UseTarget::Value(split.param), Atom::Value(rebuilt));
     module.values.remove(split.param);
 
     // Every incoming edge projects its argument into fields above the jump; forwarding collapses the reads through visible constructions on the next rounds.
@@ -240,7 +237,7 @@ fn apply_split(
             if edge.target != split.continuation {
                 continue;
             }
-            let CpsAtom::Value(source) = &edge.args[split.position] else {
+            let Atom::Value(source) = &edge.args[split.position] else {
                 unreachable!("a construction origin admits only value arguments");
             };
             let source = *source;
@@ -254,7 +251,7 @@ fn apply_split(
                 let projection =
                     module.add_value(Some(format!("field/{}/{index}", carrier.index())));
                 chain.push((projection, index, source));
-                replacement.push(CpsAtom::Value(projection));
+                replacement.push(Atom::Value(projection));
             }
             replacement.extend((carried..split.width).map(|index| module.pad(split.row, index)));
             edge.args
@@ -271,10 +268,10 @@ fn apply_split(
             let next = ids.get(offset + 1).copied().unwrap_or(carrier);
             module.define_node(
                 ids[offset],
-                CpsNode::LetIntrinsic {
+                Node::LetIntrinsic {
                     result: projection,
                     op: projection_of(split.row, index),
-                    args: vec![CpsAtom::Value(source)],
+                    args: vec![Atom::Value(source)],
                     next,
                 },
             );
@@ -293,16 +290,16 @@ fn apply_split(
 
 /// One admitted worker split: which parameter of which known function, and the width its flows travel at.
 struct Worker {
-    function: CpsFunId,
+    function: FunctionId,
     position: usize,
-    param: CpsValueId,
+    param: ValueId,
     width: usize,
     /// See [`Split::row`].
-    row: Option<super::CpsRowId>,
+    row: Option<super::RowId>,
 }
 
 /// The first admissible worker split in deterministic order, if any.
-fn admit_worker(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Option<Worker> {
+fn admit_worker(module: &Module, origins: &BTreeMap<ValueId, Origin>) -> Option<Worker> {
     let demands = demands(module);
     let calls = analyze_calls(module);
 
@@ -330,7 +327,7 @@ fn admit_worker(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> O
                 .map_or(&[][..], Vec::as_slice)
                 .iter()
                 .all(|site| match module.node(*site) {
-                    Some(CpsNode::ApplyFun { args, .. }) => args
+                    Some(Node::ApplyFun { args, .. }) => args
                         .get(position)
                         .is_some_and(|atom| takeable(origins, param, atom)),
                     _ => false,
@@ -351,7 +348,7 @@ fn admit_worker(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> O
 }
 
 /// Split one admissible known function's parameter into its fields, and leave the cleanup to the chain — the same three local edits [`split_parameters`] performs, with call sites in place of edges.
-pub(super) fn split_workers(module: &mut CpsModule) -> bool {
+pub(super) fn split_workers(module: &mut Module) -> bool {
     let origins = origins(module);
     let Some(worker) = admit_worker(module, &origins) else {
         return false;
@@ -371,7 +368,7 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
 
     // The head rebuild, standing in for the old parameter everywhere. Projection forwarding erases it wherever the body only reads fields, which the admitted demand guarantees it does.
     let rebuilt = module.add_value(Some(format!("rebuilt/{}", worker.function.index())));
-    let head = module.add_node(CpsNode::LetValue {
+    let head = module.add_node(Node::LetValue {
         result: rebuilt,
         value: rebuild_of(worker.row, &fields),
         next: body,
@@ -381,7 +378,7 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
         .get_mut(worker.function)
         .expect("admitted function is live")
         .body = head;
-    module.replace_atom(CpsUseTarget::Value(worker.param), CpsAtom::Value(rebuilt));
+    module.replace_atom(UseTarget::Value(worker.param), Atom::Value(rebuilt));
     module.values.remove(worker.param);
 
     // Every call site projects its argument into fields above the call, filling what its own construction does not carry.
@@ -391,17 +388,17 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
         .filter(|(_, node)| {
             matches!(
                 node,
-                CpsNode::ApplyFun { callee: CpsCallee::Known(callee), .. } if *callee == worker.function
+                Node::ApplyFun { callee: Callee::Known(callee), .. } if *callee == worker.function
             )
         })
         .map(|(id, _)| id)
         .collect::<Vec<_>>();
     for caller in callers {
         let mut node = module.node(caller).expect("caller is live").clone();
-        let CpsNode::ApplyFun { args, .. } = &mut node else {
+        let Node::ApplyFun { args, .. } = &mut node else {
             unreachable!("the callers were selected as known applications");
         };
-        let CpsAtom::Value(source) = &args[worker.position] else {
+        let Atom::Value(source) = &args[worker.position] else {
             unreachable!("a construction origin admits only value arguments");
         };
         let source = *source;
@@ -413,16 +410,16 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
         let mut replacement = Vec::with_capacity(worker.width);
         for index in 0..carried {
             let projection = module.add_value(Some(format!("worker/{}/{index}", caller.index())));
-            inserted.push(CpsNode::LetIntrinsic {
+            inserted.push(Node::LetIntrinsic {
                 result: projection,
                 op: projection_of(worker.row, index),
-                args: vec![CpsAtom::Value(source)],
+                args: vec![Atom::Value(source)],
                 next: caller,
             });
-            replacement.push(CpsAtom::Value(projection));
+            replacement.push(Atom::Value(projection));
         }
         replacement.extend((carried..worker.width).map(|index| module.pad(worker.row, index)));
-        let CpsNode::ApplyFun { args, .. } = &mut node else {
+        let Node::ApplyFun { args, .. } = &mut node else {
             unreachable!("the callers were selected as known applications");
         };
         args.splice(worker.position..=worker.position, replacement);
@@ -445,31 +442,31 @@ enum WindowFamily {
 }
 
 impl WindowFamily {
-    fn of(op: CpsIntrinsic) -> Option<(Self, WindowRead)> {
+    fn of(op: Intrinsic) -> Option<(Self, WindowRead)> {
         match op {
-            CpsIntrinsic::BinLen(grain) => Some((Self::Bin(grain), WindowRead::Len)),
-            CpsIntrinsic::BinGet(grain) => Some((Self::Bin(grain), WindowRead::Get)),
-            CpsIntrinsic::BinSlice(grain) => Some((Self::Bin(grain), WindowRead::Slice)),
-            CpsIntrinsic::BinRest(grain) => Some((Self::Bin(grain), WindowRead::Rest)),
-            CpsIntrinsic::ListLen => Some((Self::List, WindowRead::Len)),
-            CpsIntrinsic::ListGet => Some((Self::List, WindowRead::Get)),
-            CpsIntrinsic::ListSlice => Some((Self::List, WindowRead::Slice)),
-            CpsIntrinsic::ListRest => Some((Self::List, WindowRead::Rest)),
+            Intrinsic::BinLen(grain) => Some((Self::Bin(grain), WindowRead::Len)),
+            Intrinsic::BinGet(grain) => Some((Self::Bin(grain), WindowRead::Get)),
+            Intrinsic::BinSlice(grain) => Some((Self::Bin(grain), WindowRead::Slice)),
+            Intrinsic::BinRest(grain) => Some((Self::Bin(grain), WindowRead::Rest)),
+            Intrinsic::ListLen => Some((Self::List, WindowRead::Len)),
+            Intrinsic::ListGet => Some((Self::List, WindowRead::Get)),
+            Intrinsic::ListSlice => Some((Self::List, WindowRead::Slice)),
+            Intrinsic::ListRest => Some((Self::List, WindowRead::Rest)),
             _ => None,
         }
     }
 
-    fn len_op(self) -> CpsIntrinsic {
+    fn len_op(self) -> Intrinsic {
         match self {
-            Self::Bin(grain) => CpsIntrinsic::BinLen(grain),
-            Self::List => CpsIntrinsic::ListLen,
+            Self::Bin(grain) => Intrinsic::BinLen(grain),
+            Self::List => Intrinsic::ListLen,
         }
     }
 
-    fn get_op(self) -> CpsIntrinsic {
+    fn get_op(self) -> Intrinsic {
         match self {
-            Self::Bin(grain) => CpsIntrinsic::BinGet(grain),
-            Self::List => CpsIntrinsic::ListGet,
+            Self::Bin(grain) => Intrinsic::BinGet(grain),
+            Self::List => Intrinsic::ListGet,
         }
     }
 }
@@ -486,22 +483,22 @@ enum WindowRead {
 /// One occurrence of a value the window walk classifies.
 #[derive(Debug, Clone, Copy)]
 enum WindowUse {
-    Len(CpsNodeId),
-    Get(CpsNodeId),
-    Slice(CpsNodeId),
-    Transfer(CpsContId, usize),
+    Len(NodeId),
+    Get(NodeId),
+    Slice(NodeId),
+    Transfer(ContinuationId, usize),
     Hostile,
 }
 
 /// Every value's window-relevant occurrences, in one pass over the module.
-fn window_uses(module: &CpsModule) -> BTreeMap<CpsValueId, Vec<WindowUse>> {
-    let mut uses = BTreeMap::<CpsValueId, Vec<WindowUse>>::new();
-    let mut record = |value: CpsValueId, this: WindowUse| uses.entry(value).or_default().push(this);
+fn window_uses(module: &Module) -> BTreeMap<ValueId, Vec<WindowUse>> {
+    let mut uses = BTreeMap::<ValueId, Vec<WindowUse>>::new();
+    let mut record = |value: ValueId, this: WindowUse| uses.entry(value).or_default().push(this);
     for (id, node) in module.nodes.iter_live() {
         match node {
-            CpsNode::LetIntrinsic { op, args, .. } => {
+            Node::LetIntrinsic { op, args, .. } => {
                 for (position, atom) in args.iter().enumerate() {
-                    let CpsAtom::Value(value) = atom else {
+                    let Atom::Value(value) = atom else {
                         continue;
                     };
                     let this = match (WindowFamily::of(*op), position) {
@@ -515,16 +512,16 @@ fn window_uses(module: &CpsModule) -> BTreeMap<CpsValueId, Vec<WindowUse>> {
                     record(*value, this);
                 }
             }
-            CpsNode::ApplyCont(_) | CpsNode::Switch { .. } => {
-                if let CpsNode::Switch { scrutinee, .. } = node
-                    && let CpsAtom::Value(value) = scrutinee
+            Node::ApplyCont(_) | Node::Switch { .. } => {
+                if let Node::Switch { scrutinee, .. } = node
+                    && let Atom::Value(value) = scrutinee
                 {
                     record(*value, WindowUse::Hostile);
                 }
                 for edge in edges_of(node) {
                     let defined = module.continuation(edge.target).is_some();
                     for (position, atom) in edge.args.iter().enumerate() {
-                        if let CpsAtom::Value(value) = atom {
+                        if let Atom::Value(value) = atom {
                             let this = if defined {
                                 WindowUse::Transfer(edge.target, position)
                             } else {
@@ -537,12 +534,12 @@ fn window_uses(module: &CpsModule) -> BTreeMap<CpsValueId, Vec<WindowUse>> {
             }
             _ => {
                 for atom in super::atoms(node) {
-                    if let CpsAtom::Value(value) = atom {
+                    if let Atom::Value(value) = atom {
                         record(*value, WindowUse::Hostile);
                     }
                 }
-                if let CpsNode::ApplyFun {
-                    callee: CpsCallee::Closure(value),
+                if let Node::ApplyFun {
+                    callee: Callee::Closure(value),
                     ..
                 } = node
                 {
@@ -557,17 +554,17 @@ fn window_uses(module: &CpsModule) -> BTreeMap<CpsValueId, Vec<WindowUse>> {
 /// One admitted window region: the continuation parameters it spans, the slice nodes it consumes, and the row every read agrees on.
 struct WindowRegion {
     row: WindowFamily,
-    params: Vec<(CpsContId, usize, CpsValueId)>,
-    slices: Vec<CpsNodeId>,
-    members: BTreeSet<CpsValueId>,
+    params: Vec<(ContinuationId, usize, ValueId)>,
+    slices: Vec<NodeId>,
+    members: BTreeSet<ValueId>,
 }
 
 /// Grow a region from `seed` or refuse it: every member's every use must be a window read or a transfer into a splittable parameter, and the region must consume at least one slice — a rope that is only read is not paying the cost this rewrite removes.
 fn grow_window_region(
-    module: &CpsModule,
-    uses: &BTreeMap<CpsValueId, Vec<WindowUse>>,
-    resumes: &BTreeSet<CpsContId>,
-    seed: (CpsContId, usize, CpsValueId),
+    module: &Module,
+    uses: &BTreeMap<ValueId, Vec<WindowUse>>,
+    resumes: &BTreeSet<ContinuationId>,
+    seed: (ContinuationId, usize, ValueId),
 ) -> Option<WindowRegion> {
     let mut row = None;
     let mut params = vec![seed];
@@ -575,7 +572,7 @@ fn grow_window_region(
     let mut members = BTreeSet::from([seed.2]);
     let mut work = vec![seed.2];
 
-    let unify = |row: &mut Option<WindowFamily>, op: CpsIntrinsic| {
+    let unify = |row: &mut Option<WindowFamily>, op: Intrinsic| {
         let (this, _) = WindowFamily::of(op)?;
         match row {
             None => {
@@ -590,13 +587,13 @@ fn grow_window_region(
         for this in uses.get(&value).map_or(&[][..], Vec::as_slice) {
             match this {
                 WindowUse::Len(node) | WindowUse::Get(node) => {
-                    let CpsNode::LetIntrinsic { op, .. } = module.node(*node)? else {
+                    let Node::LetIntrinsic { op, .. } = module.node(*node)? else {
                         return None;
                     };
                     unify(&mut row, *op)?;
                 }
                 WindowUse::Slice(node) => {
-                    let CpsNode::LetIntrinsic { op, result, .. } = module.node(*node)? else {
+                    let Node::LetIntrinsic { op, result, .. } = module.node(*node)? else {
                         return None;
                     };
                     unify(&mut row, *op)?;
@@ -630,7 +627,7 @@ fn grow_window_region(
         return None;
     }
     // The ceiling is a fact of each continuation's whole list after the split, so a region spanning two of one continuation's parameters is measured with both splits applied: the per-parameter check above admitted each one alone, and let a pair land two past the limit.
-    let mut widened = BTreeMap::<CpsContId, usize>::new();
+    let mut widened = BTreeMap::<ContinuationId, usize>::new();
     for &(continuation, ..) in &params {
         *widened.entry(continuation).or_default() += 2;
     }
@@ -648,7 +645,7 @@ fn grow_window_region(
 }
 
 /// Whether `position` of `continuation` lies inside a recorded field group.
-fn grouped(module: &CpsModule, continuation: CpsContId, position: usize) -> bool {
+fn grouped(module: &Module, continuation: ContinuationId, position: usize) -> bool {
     module
         .field_groups()
         .get(&continuation)
@@ -660,15 +657,15 @@ fn grouped(module: &CpsModule, continuation: CpsContId, position: usize) -> bool
 }
 
 /// Insert `nodes` above `carrier`, in order, and return nothing: references to the carrier are repointed at the head of the chain before any link is defined, so the chain's own tail reference survives.
-fn insert_above(module: &mut CpsModule, carrier: CpsNodeId, nodes: Vec<CpsNode>) {
+fn insert_above(module: &mut Module, carrier: NodeId, nodes: Vec<Node>) {
     if nodes.is_empty() {
         return;
     }
-    let ids: Vec<CpsNodeId> = nodes.iter().map(|_| module.reserve_node()).collect();
+    let ids: Vec<NodeId> = nodes.iter().map(|_| module.reserve_node()).collect();
     rewire_node(module, carrier, ids[0]);
     for (index, node) in nodes.into_iter().enumerate() {
         let mut node = node;
-        if let CpsNode::LetIntrinsic { next, .. } | CpsNode::LetValue { next, .. } = &mut node {
+        if let Node::LetIntrinsic { next, .. } | Node::LetValue { next, .. } = &mut node {
             *next = ids.get(index + 1).copied().unwrap_or(carrier);
         }
         module.define_node(ids[index], node);
@@ -676,7 +673,7 @@ fn insert_above(module: &mut CpsModule, carrier: CpsNodeId, nodes: Vec<CpsNode>)
 }
 
 /// Virtualize one whole window region: every parameter becomes `(base, offset, length)` under a recorded group, every slice becomes a guarded extent plus an offset sum, every read reaches the base directly, and every entry edge opens its rope as a whole window. The physical views and the helper calls that built them are simply never emitted — nothing here deletes them, they are unread.
-pub(super) fn split_windows(module: &mut CpsModule) -> bool {
+pub(super) fn split_windows(module: &mut Module) -> bool {
     let uses = window_uses(module);
     let resumes = resume_targets(module);
 
@@ -711,7 +708,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
     };
 
     // 1. Split the parameters, highest position first within each continuation so earlier positions stay stable, and record each group.
-    let mut fields = BTreeMap::<CpsValueId, [CpsAtom; 3]>::new();
+    let mut fields = BTreeMap::<ValueId, [Atom; 3]>::new();
     let mut splits = region.params.clone();
     splits.sort_by_key(|(continuation, position, _)| (*continuation, std::cmp::Reverse(*position)));
     for &(continuation, position, param) in &splits {
@@ -728,11 +725,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
         module.record_split(continuation, position, 3);
         fields.insert(
             param,
-            [
-                CpsAtom::Value(base),
-                CpsAtom::Value(offset),
-                CpsAtom::Value(length),
-            ],
+            [Atom::Value(base), Atom::Value(offset), Atom::Value(length)],
         );
     }
 
@@ -741,7 +734,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
     while !pending.is_empty() {
         let before = pending.len();
         pending.retain(|&slice| {
-            let CpsNode::LetIntrinsic {
+            let Node::LetIntrinsic {
                 op,
                 result,
                 args,
@@ -750,7 +743,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
             else {
                 unreachable!("the region collected only slice intrinsics");
             };
-            let CpsAtom::Value(source) = &args[0] else {
+            let Atom::Value(source) = &args[0] else {
                 unreachable!("a region slice reads a region member");
             };
             let Some([base, offset, length]) = fields.get(source).cloned() else {
@@ -764,9 +757,9 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
             match matches!(WindowFamily::of(op), Some((_, WindowRead::Rest))) {
                 false => module.nodes.set(
                     slice,
-                    CpsNode::LetIntrinsic {
+                    Node::LetIntrinsic {
                         result: extent,
-                        op: CpsIntrinsic::WindowExtent,
+                        op: Intrinsic::WindowExtent,
                         args: vec![args[1].clone(), args[2].clone(), length],
                         next: add,
                     },
@@ -778,19 +771,19 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
 
                     module.nodes.set(
                         slice,
-                        CpsNode::LetIntrinsic {
+                        Node::LetIntrinsic {
                             result: remaining,
-                            op: CpsIntrinsic::NatSub,
+                            op: Intrinsic::NatSub,
                             args: vec![length.clone(), args[1].clone()],
                             next: guard,
                         },
                     );
                     module.define_node(
                         guard,
-                        CpsNode::LetIntrinsic {
+                        Node::LetIntrinsic {
                             result: extent,
-                            op: CpsIntrinsic::WindowExtent,
-                            args: vec![args[1].clone(), CpsAtom::Value(remaining), length.clone()],
+                            op: Intrinsic::WindowExtent,
+                            args: vec![args[1].clone(), Atom::Value(remaining), length.clone()],
                             next: add,
                         },
                     );
@@ -798,14 +791,14 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
             }
             module.define_node(
                 add,
-                CpsNode::LetIntrinsic {
+                Node::LetIntrinsic {
                     result: sum,
-                    op: CpsIntrinsic::NatAdd,
+                    op: Intrinsic::NatAdd,
                     args: vec![offset, args[1].clone()],
                     next,
                 },
             );
-            fields.insert(result, [base, CpsAtom::Value(sum), CpsAtom::Value(extent)]);
+            fields.insert(result, [base, Atom::Value(sum), Atom::Value(extent)]);
             false
         });
         assert!(
@@ -819,18 +812,18 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
         for this in uses.get(&member).map_or(&[][..], Vec::as_slice) {
             match this {
                 WindowUse::Len(node) => {
-                    let CpsNode::LetIntrinsic { result, next, .. } =
+                    let Node::LetIntrinsic { result, next, .. } =
                         module.node(*node).expect("len node is live").clone()
                     else {
                         unreachable!("the region collected only len intrinsics");
                     };
                     rewire_node(module, *node, next);
                     module.remove_node(*node);
-                    module.replace_atom(CpsUseTarget::Value(result), fields[&member][2].clone());
+                    module.replace_atom(UseTarget::Value(result), fields[&member][2].clone());
                     module.values.remove(result);
                 }
                 WindowUse::Get(node) => {
-                    let CpsNode::LetIntrinsic {
+                    let Node::LetIntrinsic {
                         result, args, next, ..
                     } = module.node(*node).expect("get node is live").clone()
                     else {
@@ -840,19 +833,19 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
                     insert_above(
                         module,
                         *node,
-                        vec![CpsNode::LetIntrinsic {
+                        vec![Node::LetIntrinsic {
                             result: sum,
-                            op: CpsIntrinsic::NatAdd,
+                            op: Intrinsic::NatAdd,
                             args: vec![fields[&member][1].clone(), args[1].clone()],
                             next: *node,
                         }],
                     );
                     module.nodes.set(
                         *node,
-                        CpsNode::LetIntrinsic {
+                        Node::LetIntrinsic {
                             result,
                             op: region.row.get_op(),
-                            args: vec![fields[&member][0].clone(), CpsAtom::Value(sum)],
+                            args: vec![fields[&member][0].clone(), Atom::Value(sum)],
                             next,
                         },
                     );
@@ -864,7 +857,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
     }
 
     // 4. Rewrite every edge into a split continuation, highest position first: a member argument travels as its fields, and any other rope opens as its own whole window with one length read above the jump.
-    let carriers: Vec<CpsNodeId> = module
+    let carriers: Vec<NodeId> = module
         .nodes
         .iter_live()
         .filter(|(_, node)| {
@@ -886,11 +879,11 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
                 }
                 let atom = edge.args[position].clone();
                 let replacement = match &atom {
-                    CpsAtom::Value(value) if fields.contains_key(value) => fields[value].to_vec(),
+                    Atom::Value(value) if fields.contains_key(value) => fields[value].to_vec(),
                     _ => {
                         let length =
                             module.add_value(Some(format!("window/{}/open", carrier.index())));
-                        openings.push(CpsNode::LetIntrinsic {
+                        openings.push(Node::LetIntrinsic {
                             result: length,
                             op: region.row.len_op(),
                             args: vec![atom.clone()],
@@ -898,8 +891,8 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
                         });
                         vec![
                             atom,
-                            CpsAtom::Literal(CpsLiteral::Nat(Natural::zero())),
-                            CpsAtom::Value(length),
+                            Atom::Literal(Literal::Nat(Natural::zero())),
+                            Atom::Value(length),
                         ]
                     }
                 };
@@ -919,36 +912,34 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
 }
 
 /// The continuations that receive call results — the interface the return protocol owns.
-fn resume_targets(module: &CpsModule) -> BTreeSet<CpsContId> {
+fn resume_targets(module: &Module) -> BTreeSet<ContinuationId> {
     module
         .nodes
         .slots()
         .iter()
         .flatten()
         .filter_map(|node| match node {
-            CpsNode::ApplyFun { return_to, .. }
-            | CpsNode::Foreign { return_to, .. }
-            | CpsNode::Cell { return_to, .. }
-            | CpsNode::Intrinsic { return_to, .. } => Some(*return_to),
+            Node::ApplyFun { return_to, .. }
+            | Node::Foreign { return_to, .. }
+            | Node::Cell { return_to, .. }
+            | Node::Intrinsic { return_to, .. } => Some(*return_to),
             _ => None,
         })
         .collect()
 }
 
-fn edges_of(node: &CpsNode) -> Vec<&CpsEdge> {
+fn edges_of(node: &Node) -> Vec<&Edge> {
     match node {
-        CpsNode::ApplyCont(edge) => vec![edge],
-        CpsNode::Switch { cases, default, .. } => cases.values().chain(default.as_ref()).collect(),
+        Node::ApplyCont(edge) => vec![edge],
+        Node::Switch { cases, default, .. } => cases.values().chain(default.as_ref()).collect(),
         _ => vec![],
     }
 }
 
-fn edges_of_mut(node: &mut CpsNode) -> Vec<&mut CpsEdge> {
+fn edges_of_mut(node: &mut Node) -> Vec<&mut Edge> {
     match node {
-        CpsNode::ApplyCont(edge) => vec![edge],
-        CpsNode::Switch { cases, default, .. } => {
-            cases.values_mut().chain(default.as_mut()).collect()
-        }
+        Node::ApplyCont(edge) => vec![edge],
+        Node::Switch { cases, default, .. } => cases.values_mut().chain(default.as_mut()).collect(),
         _ => vec![],
     }
 }

@@ -5,11 +5,11 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-pub(super) fn rewrite_atoms(module: &mut CpsModule, known: &BTreeMap<CpsValueId, CpsAtom>) -> bool {
+pub(super) fn rewrite_atoms(module: &mut Module, known: &BTreeMap<ValueId, Atom>) -> bool {
     let mut changed = false;
     for (_, node) in module.nodes.iter_live_mut() {
         visit_atoms_mut(node, &mut |atom| {
-            if let CpsAtom::Value(value) = atom
+            if let Atom::Value(value) = atom
                 && let Some(replacement) = known.get(value)
                 && atom != replacement
             {
@@ -19,16 +19,16 @@ pub(super) fn rewrite_atoms(module: &mut CpsModule, known: &BTreeMap<CpsValueId,
         });
 
         // A closure callee holds its callee in a value, which `visit_atoms_mut` does not reach. Remap it here: a known function devirtualizes the call, and a forwarded value (e.g. a projected constructor field) keeps the callee pointing at a live value rather than a deleted one.
-        if let CpsNode::ApplyFun { callee, .. } = node
-            && let CpsCallee::Closure(value) = *callee
+        if let Node::ApplyFun { callee, .. } = node
+            && let Callee::Closure(value) = *callee
         {
             match known.get(&value) {
-                Some(CpsAtom::Fun(function)) => {
-                    *callee = CpsCallee::Known(*function);
+                Some(Atom::Fun(function)) => {
+                    *callee = Callee::Known(*function);
                     changed = true;
                 }
-                Some(CpsAtom::Value(replacement)) if *replacement != value => {
-                    *callee = CpsCallee::Closure(*replacement);
+                Some(Atom::Value(replacement)) if *replacement != value => {
+                    *callee = Callee::Closure(*replacement);
                     changed = true;
                 }
                 _ => {}
@@ -37,12 +37,12 @@ pub(super) fn rewrite_atoms(module: &mut CpsModule, known: &BTreeMap<CpsValueId,
     }
     changed
 }
-pub(super) fn forward_continuations(module: &mut CpsModule) -> bool {
+pub(super) fn forward_continuations(module: &mut Module) -> bool {
     let forwarding = module
         .continuations
         .iter_live()
         .filter_map(|(id, continuation)| {
-            let CpsNode::ApplyCont(edge) = module.node(continuation.body)? else {
+            let Node::ApplyCont(edge) = module.node(continuation.body)? else {
                 return None;
             };
             module.continuation(edge.target)?;
@@ -60,11 +60,11 @@ pub(super) fn forward_continuations(module: &mut CpsModule) -> bool {
                 && params
                     .iter()
                     .zip(&edge.args)
-                    .all(|(param, arg)| arg == &CpsAtom::Value(*param)))
+                    .all(|(param, arg)| arg == &Atom::Value(*param)))
             .then_some((continuation, edge.target))
         })
         .collect::<BTreeMap<_, _>>();
-    let resolve_identity = |original: CpsContId| {
+    let resolve_identity = |original: ContinuationId| {
         let mut target = original;
         let mut seen = BTreeSet::new();
         loop {
@@ -82,18 +82,18 @@ pub(super) fn forward_continuations(module: &mut CpsModule) -> bool {
     let mut changed = false;
     for (_, node) in module.nodes.iter_live_mut() {
         match node {
-            CpsNode::ApplyCont(edge) => {
+            Node::ApplyCont(edge) => {
                 thread_edge(edge, &forwarding, &mut changed);
             }
-            CpsNode::Switch { cases, default, .. } => {
+            Node::Switch { cases, default, .. } => {
                 for edge in cases.values_mut().chain(default.iter_mut()) {
                     thread_edge(edge, &forwarding, &mut changed);
                 }
             }
-            CpsNode::ApplyFun { return_to, .. }
-            | CpsNode::Foreign { return_to, .. }
-            | CpsNode::Cell { return_to, .. }
-            | CpsNode::Intrinsic { return_to, .. } => {
+            Node::ApplyFun { return_to, .. }
+            | Node::Foreign { return_to, .. }
+            | Node::Cell { return_to, .. }
+            | Node::Intrinsic { return_to, .. } => {
                 retarget(return_to, &resolve_identity, &mut changed);
             }
             _ => {}
@@ -102,8 +102,8 @@ pub(super) fn forward_continuations(module: &mut CpsModule) -> bool {
     changed
 }
 pub(super) fn thread_edge(
-    edge: &mut CpsEdge,
-    forwarding: &BTreeMap<CpsContId, (Vec<CpsValueId>, CpsEdge)>,
+    edge: &mut Edge,
+    forwarding: &BTreeMap<ContinuationId, (Vec<ValueId>, Edge)>,
     changed: &mut bool,
 ) {
     let original = edge.clone();
@@ -124,13 +124,13 @@ pub(super) fn thread_edge(
             .copied()
             .zip(replacement.args.iter().cloned())
             .collect::<BTreeMap<_, _>>();
-        replacement = CpsEdge {
+        replacement = Edge {
             target: outgoing.target,
             args: outgoing
                 .args
                 .iter()
                 .map(|arg| match arg {
-                    CpsAtom::Value(value) => substitutions
+                    Atom::Value(value) => substitutions
                         .get(value)
                         .cloned()
                         .unwrap_or_else(|| arg.clone()),
@@ -145,8 +145,8 @@ pub(super) fn thread_edge(
     }
 }
 pub(super) fn retarget(
-    target: &mut CpsContId,
-    resolve: &impl Fn(CpsContId) -> CpsContId,
+    target: &mut ContinuationId,
+    resolve: &impl Fn(ContinuationId) -> ContinuationId,
     changed: &mut bool,
 ) {
     let replacement = resolve(*target);
@@ -155,27 +155,27 @@ pub(super) fn retarget(
         *changed = true;
     }
 }
-pub(super) fn simplify_nodes(module: &mut CpsModule) -> bool {
+pub(super) fn simplify_nodes(module: &mut Module) -> bool {
     let mut changed = false;
     for (_, node) in module.nodes.iter_live_mut() {
         match node {
-            CpsNode::LetIntrinsic {
+            Node::LetIntrinsic {
                 result,
                 op,
                 args,
                 next,
             } => {
                 if let Some(literal) = evaluate(*op, args) {
-                    *node = CpsNode::LetValue {
+                    *node = Node::LetValue {
                         result: *result,
-                        value: CpsValueExpr::Literal(literal),
+                        value: ValueExpr::Literal(literal),
                         next: *next,
                     };
                     changed = true;
                 }
             }
-            CpsNode::Switch {
-                scrutinee: CpsAtom::Literal(CpsLiteral::Nat(tag)),
+            Node::Switch {
+                scrutinee: Atom::Literal(Literal::Nat(tag)),
                 cases,
                 default,
             } => {
@@ -185,7 +185,7 @@ pub(super) fn simplify_nodes(module: &mut CpsModule) -> bool {
                     .or(default.as_ref())
                     .cloned()
                 {
-                    *node = CpsNode::ApplyCont(edge);
+                    *node = Node::ApplyCont(edge);
                     changed = true;
                 }
             }
@@ -196,22 +196,22 @@ pub(super) fn simplify_nodes(module: &mut CpsModule) -> bool {
 }
 /// The two rewrite shapes an identity law produces: forward the surviving operand, or pin the absorbed result as a literal.
 enum IdentityFold {
-    Operand(CpsAtom),
-    Literal(CpsLiteral),
+    Operand(Atom),
+    Literal(Literal),
 }
 
 /// Match one `Nat`/`Int` identity or absorption law on a binary intrinsic with a literal neutral or absorbing operand: `x + 0`, `x - 0`, `x * 1`, `x * 0`, `x / 1`, `x % 1`, `x & 0`, `x | 0`, `x ^ 0`, and shifts by zero.
 ///
 /// Trap discipline: `nat_add`/`nat_mul` wrap and `nat_sub` is monus, so the only runtime trap of the `MayTrap` members is the backend's i31 range check on the result. Every fold here returns either an operand that is already a live in-range value or a literal inside the envelope, and a `/ 1` or `% 1` divisor can never be the trapping zero, so no trap is added or dropped. `Flt` deliberately has no laws here: `x + 0.0` is not the identity on `-0.0`.
-fn identity_fold(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<IdentityFold> {
+fn identity_fold(op: Intrinsic, args: &[Atom]) -> Option<IdentityFold> {
     let [left, right] = args else { return None };
     // The carriers are unbounded, so a law tests a literal against a value rather than reading a machine scalar out of it.
-    let nat = |atom: &CpsAtom, expected: u32| matches!(atom, CpsAtom::Literal(CpsLiteral::Nat(value)) if *value == Natural::from(expected));
-    let int = |atom: &CpsAtom, expected: i32| matches!(atom, CpsAtom::Literal(CpsLiteral::Int(value)) if *value == Integer::from(expected));
-    let operand = |atom: &CpsAtom| Some(IdentityFold::Operand(atom.clone()));
+    let nat = |atom: &Atom, expected: u32| matches!(atom, Atom::Literal(Literal::Nat(value)) if *value == Natural::from(expected));
+    let int = |atom: &Atom, expected: i32| matches!(atom, Atom::Literal(Literal::Int(value)) if *value == Integer::from(expected));
+    let operand = |atom: &Atom| Some(IdentityFold::Operand(atom.clone()));
 
     match op {
-        CpsIntrinsic::NatAdd | CpsIntrinsic::NatOr | CpsIntrinsic::NatXor => {
+        Intrinsic::NatAdd | Intrinsic::NatOr | Intrinsic::NatXor => {
             if nat(right, 0) {
                 operand(left)
             } else if nat(left, 0) {
@@ -220,7 +220,7 @@ fn identity_fold(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<IdentityFold> {
                 None
             }
         }
-        CpsIntrinsic::IntAdd | CpsIntrinsic::IntOr | CpsIntrinsic::IntXor => {
+        Intrinsic::IntAdd | Intrinsic::IntOr | Intrinsic::IntXor => {
             if int(right, 0) {
                 operand(left)
             } else if int(left, 0) {
@@ -230,56 +230,56 @@ fn identity_fold(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<IdentityFold> {
             }
         }
         // A shift count is a `Nat` on both carriers.
-        CpsIntrinsic::NatSub
-        | CpsIntrinsic::NatShl
-        | CpsIntrinsic::NatShr
-        | CpsIntrinsic::IntShl
-        | CpsIntrinsic::IntShr => (nat(right, 0)).then(|| operand(left)).flatten(),
-        CpsIntrinsic::IntSub => (int(right, 0)).then(|| operand(left)).flatten(),
-        CpsIntrinsic::NatMul => {
+        Intrinsic::NatSub
+        | Intrinsic::NatShl
+        | Intrinsic::NatShr
+        | Intrinsic::IntShl
+        | Intrinsic::IntShr => (nat(right, 0)).then(|| operand(left)).flatten(),
+        Intrinsic::IntSub => (int(right, 0)).then(|| operand(left)).flatten(),
+        Intrinsic::NatMul => {
             if nat(right, 1) {
                 operand(left)
             } else if nat(left, 1) {
                 operand(right)
             } else if nat(right, 0) || nat(left, 0) {
-                Some(IdentityFold::Literal(CpsLiteral::Nat(Natural::zero())))
+                Some(IdentityFold::Literal(Literal::Nat(Natural::zero())))
             } else {
                 None
             }
         }
-        CpsIntrinsic::IntMul => {
+        Intrinsic::IntMul => {
             if int(right, 1) {
                 operand(left)
             } else if int(left, 1) {
                 operand(right)
             } else if int(right, 0) || int(left, 0) {
-                Some(IdentityFold::Literal(CpsLiteral::Int(Integer::from(0u32))))
+                Some(IdentityFold::Literal(Literal::Int(Integer::from(0u32))))
             } else {
                 None
             }
         }
-        CpsIntrinsic::NatDiv => (nat(right, 1)).then(|| operand(left)).flatten(),
-        CpsIntrinsic::IntDiv => (int(right, 1)).then(|| operand(left)).flatten(),
-        CpsIntrinsic::NatRem => {
-            (nat(right, 1)).then_some(IdentityFold::Literal(CpsLiteral::Nat(Natural::zero())))
+        Intrinsic::NatDiv => (nat(right, 1)).then(|| operand(left)).flatten(),
+        Intrinsic::IntDiv => (int(right, 1)).then(|| operand(left)).flatten(),
+        Intrinsic::NatRem => {
+            (nat(right, 1)).then_some(IdentityFold::Literal(Literal::Nat(Natural::zero())))
         }
-        CpsIntrinsic::IntRem => {
-            (int(right, 1)).then_some(IdentityFold::Literal(CpsLiteral::Int(Integer::from(0u32))))
+        Intrinsic::IntRem => {
+            (int(right, 1)).then_some(IdentityFold::Literal(Literal::Int(Integer::from(0u32))))
         }
-        CpsIntrinsic::NatAnd => (nat(right, 0) || nat(left, 0))
-            .then_some(IdentityFold::Literal(CpsLiteral::Nat(Natural::zero()))),
-        CpsIntrinsic::IntAnd => (int(right, 0) || int(left, 0))
-            .then_some(IdentityFold::Literal(CpsLiteral::Int(Integer::from(0u32)))),
+        Intrinsic::NatAnd => (nat(right, 0) || nat(left, 0))
+            .then_some(IdentityFold::Literal(Literal::Nat(Natural::zero()))),
+        Intrinsic::IntAnd => (int(right, 0) || int(left, 0))
+            .then_some(IdentityFold::Literal(Literal::Int(Integer::from(0u32)))),
         _ => None,
     }
 }
 
 /// Fold intrinsic identity and absorption laws with one literal operand, which all-literal folding (`evaluate`) cannot reach. An operand fold forwards the surviving value and deletes the binding; an absorption fold pins the result as a literal in place.
-pub(super) fn fold_intrinsic_identities(module: &mut CpsModule) -> bool {
+pub(super) fn fold_intrinsic_identities(module: &mut Module) -> bool {
     let mut changed = false;
     loop {
         let selected = module.nodes.iter_live().find_map(|(id, node)| {
-            let CpsNode::LetIntrinsic {
+            let Node::LetIntrinsic {
                 result,
                 op,
                 args,
@@ -305,9 +305,9 @@ pub(super) fn fold_intrinsic_identities(module: &mut CpsModule) -> bool {
             IdentityFold::Literal(literal) => {
                 module.nodes.set(
                     node,
-                    CpsNode::LetValue {
+                    Node::LetValue {
                         result,
-                        value: CpsValueExpr::Literal(literal),
+                        value: ValueExpr::Literal(literal),
                         next,
                     },
                 );
@@ -319,7 +319,7 @@ pub(super) fn fold_intrinsic_identities(module: &mut CpsModule) -> bool {
 }
 
 /// Fuse a chain of packed appends into one flat chunk build. A literal with non-constant atoms lowers to appends onto whatever precedes it — the free monoid's honest spelling — and each append allocates a one-element leaf and a node the first read then gathers. Where the chain is local and unshared, the elements build one exact flat leaf instead: `BinChunk` alone when the chain is rooted at the empty packed value, or the root concatenated with the chunk otherwise. Only an intermediate append nothing else reads may fuse — a shared intermediate is a value the program observes — and a lone append onto a non-empty root stays as written, since a one-element chunk beside a concat node buys back exactly what it costs.
-pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
+pub(super) fn fuse_append_chains(module: &mut Module) -> bool {
     let counts = module.value_use_counts();
 
     // Every packed append by its result — node, grain, base, element, successor — and every packed literal binding, so a chain rooted at an interned empty is recognized.
@@ -327,9 +327,9 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
     let mut literals = BTreeMap::new();
     for (id, node) in module.nodes.iter_live() {
         match node {
-            CpsNode::LetIntrinsic {
+            Node::LetIntrinsic {
                 result,
-                op: CpsIntrinsic::BinAppend(grain),
+                op: Intrinsic::BinAppend(grain),
                 args,
                 next,
             } => {
@@ -338,9 +338,9 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
                     (id, *grain, args[0].clone(), args[1].clone(), *next),
                 );
             }
-            CpsNode::LetValue {
+            Node::LetValue {
                 result,
-                value: CpsValueExpr::Literal(CpsLiteral::Bin(grain, value)),
+                value: ValueExpr::Literal(Literal::Bin(grain, value)),
                 ..
             } => {
                 literals.insert(*result, (*grain, value.clone()));
@@ -350,13 +350,13 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
     }
 
     // An interior link is an append result whose one use is the base of a same-grain append; a chain is walked from each tip — an append that is no interior link — down through interior links to its root atom.
-    let interior = |value: &CpsValueId, grain: Grain| {
+    let interior = |value: &ValueId, grain: Grain| {
         counts.get(value).copied().unwrap_or(0) == 1
             && appends.get(value).is_some_and(|(_, g, ..)| *g == grain)
     };
-    let is_empty_literal = |atom: &CpsAtom, grain: Grain| match atom {
-        CpsAtom::Literal(CpsLiteral::Bin(g, value)) => *g == grain && value.len(grain) == 0,
-        CpsAtom::Value(value) => literals
+    let is_empty_literal = |atom: &Atom, grain: Grain| match atom {
+        Atom::Literal(Literal::Bin(g, value)) => *g == grain && value.len(grain) == 0,
+        Atom::Value(value) => literals
             .get(value)
             .is_some_and(|(g, value)| *g == grain && value.len(grain) == 0),
         _ => false,
@@ -366,7 +366,7 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
     for (&tip, &(tip_node, grain, ref tip_base, ref tip_elem, tip_next)) in &appends {
         let consumed_as_base = appends
             .values()
-            .any(|(_, g, base, ..)| *g == grain && *base == CpsAtom::Value(tip));
+            .any(|(_, g, base, ..)| *g == grain && *base == Atom::Value(tip));
         if interior(&tip, grain) && consumed_as_base {
             continue;
         }
@@ -374,7 +374,7 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
         let mut chain = Vec::new();
         let mut elems = vec![tip_elem.clone()];
         let mut root = tip_base.clone();
-        while let CpsAtom::Value(value) = &root
+        while let Atom::Value(value) = &root
             && interior(value, grain)
         {
             let (node, _, base, elem, _) = &appends[value];
@@ -389,11 +389,11 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
             continue;
         }
 
-        let chunk = CpsIntrinsic::BinChunk(grain, elems.len());
+        let chunk = Intrinsic::BinChunk(grain, elems.len());
         if rooted_empty {
             module.nodes.set(
                 tip_node,
-                CpsNode::LetIntrinsic {
+                Node::LetIntrinsic {
                     result: tip,
                     op: chunk,
                     args: elems,
@@ -402,15 +402,15 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
             );
         } else {
             let chunk_result = module.add_value(None);
-            let concat = module.add_node(CpsNode::LetIntrinsic {
+            let concat = module.add_node(Node::LetIntrinsic {
                 result: tip,
-                op: CpsIntrinsic::BinConcat(grain, 2),
-                args: vec![root, CpsAtom::Value(chunk_result)],
+                op: Intrinsic::BinConcat(grain, 2),
+                args: vec![root, Atom::Value(chunk_result)],
                 next: tip_next,
             });
             module.nodes.set(
                 tip_node,
-                CpsNode::LetIntrinsic {
+                Node::LetIntrinsic {
                     result: chunk_result,
                     op: chunk,
                     args: elems,
@@ -439,20 +439,20 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
 
 /// The kinds of piece a flattened construction tree contributes: a whole list operand, or a single element an append wrote.
 enum FlatPiece {
-    List(CpsAtom),
-    Elem(CpsAtom),
+    List(Atom),
+    Elem(Atom),
 }
 
 /// Collect the maximal unshared construction tree under `atom`: a single-use concat contributes its operands' trees in order, a single-use append its base's tree then its element, and anything else — shared, literal, or not a construction — stands as a whole operand. `consumed` receives the tree's own nodes, which the caller splices out.
 fn collect_flat_tree(
-    atom: &CpsAtom,
-    counts: &BTreeMap<CpsValueId, usize>,
-    concats: &BTreeMap<CpsValueId, (CpsNodeId, Vec<CpsAtom>, CpsNodeId)>,
-    appends: &BTreeMap<CpsValueId, (CpsNodeId, CpsAtom, CpsAtom, CpsNodeId)>,
-    consumed: &mut Vec<(CpsNodeId, CpsValueId, CpsNodeId)>,
+    atom: &Atom,
+    counts: &BTreeMap<ValueId, usize>,
+    concats: &BTreeMap<ValueId, (NodeId, Vec<Atom>, NodeId)>,
+    appends: &BTreeMap<ValueId, (NodeId, Atom, Atom, NodeId)>,
+    consumed: &mut Vec<(NodeId, ValueId, NodeId)>,
     out: &mut Vec<FlatPiece>,
 ) {
-    if let CpsAtom::Value(value) = atom
+    if let Atom::Value(value) = atom
         && counts.get(value).copied().unwrap_or(0) == 1
     {
         if let Some((node, args, next)) = concats.get(value) {
@@ -474,20 +474,20 @@ fn collect_flat_tree(
 
 /// Turn the collected pieces into `ListFlat` operands, interning each run of appended elements as one list literal. Returns the operands and the literal bindings the rewrite chains in front.
 fn flat_operands(
-    module: &mut CpsModule,
+    module: &mut Module,
     pieces: Vec<FlatPiece>,
-) -> (Vec<CpsAtom>, Vec<(CpsValueId, Vec<CpsAtom>)>) {
+) -> (Vec<Atom>, Vec<(ValueId, Vec<Atom>)>) {
     let mut operands = Vec::new();
     let mut literals = Vec::new();
-    let mut run: Vec<CpsAtom> = Vec::new();
-    let flush = |run: &mut Vec<CpsAtom>,
-                 operands: &mut Vec<CpsAtom>,
-                 literals: &mut Vec<(CpsValueId, Vec<CpsAtom>)>,
-                 module: &mut CpsModule| {
+    let mut run: Vec<Atom> = Vec::new();
+    let flush = |run: &mut Vec<Atom>,
+                 operands: &mut Vec<Atom>,
+                 literals: &mut Vec<(ValueId, Vec<Atom>)>,
+                 module: &mut Module| {
         if !run.is_empty() {
             let value = module.add_value(None);
             literals.push((value, std::mem::take(run)));
-            operands.push(CpsAtom::Value(value));
+            operands.push(Atom::Value(value));
         }
     };
     for piece in pieces {
@@ -505,35 +505,35 @@ fn flat_operands(
 
 /// Rewrite the node at `site` into the literal bindings followed by a `ListFlat` binding `result`, keeping `site`'s identity as the chain's head so every incoming edge stays valid, and splice the consumed tree out.
 fn install_flat(
-    module: &mut CpsModule,
-    site: CpsNodeId,
-    result: CpsValueId,
-    next: CpsNodeId,
+    module: &mut Module,
+    site: NodeId,
+    result: ValueId,
+    next: NodeId,
     pieces: Vec<FlatPiece>,
-    consumed: Vec<(CpsNodeId, CpsValueId, CpsNodeId)>,
+    consumed: Vec<(NodeId, ValueId, NodeId)>,
 ) {
     let (operands, literals) = flat_operands(module, pieces);
-    let mut tail = module.add_node(CpsNode::LetIntrinsic {
+    let mut tail = module.add_node(Node::LetIntrinsic {
         result,
-        op: CpsIntrinsic::ListFlat(operands.len()),
+        op: Intrinsic::ListFlat(operands.len()),
         args: operands,
         next,
     });
     let mut literals = literals.into_iter();
     let head = literals.next();
     for (value, elems) in literals.rev() {
-        tail = module.add_node(CpsNode::LetValue {
+        tail = module.add_node(Node::LetValue {
             result: value,
-            value: CpsValueExpr::List(elems),
+            value: ValueExpr::List(elems),
             next: tail,
         });
     }
     match head {
         Some((value, elems)) => module.nodes.set(
             site,
-            CpsNode::LetValue {
+            Node::LetValue {
                 result: value,
-                value: CpsValueExpr::List(elems),
+                value: ValueExpr::List(elems),
                 next: tail,
             },
         ),
@@ -560,39 +560,39 @@ fn install_flat(
 }
 
 /// Flatten the list constructions whose reads are already in evidence, so the values a program only ever indexes are flat at birth instead of node-rooted with a gather on first read. Two admissions and no others — the demand route's rules, per the map-wall spec's list-half refinement. A settle (inserted by the door on stores into census-marked fields) over a statically flat value forwards the value, and over an unshared construction tree becomes the tree's one exact flat build. A construction whose own demand is `Indexed` — every use an element, length, window, or settle, interprocedurally — builds flat likewise, since its reads would have paid the gather anyway. Growth-shaped consumption is untouched, which is what keeps the builder and patchwork idioms at their O(1) steps.
-pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
+pub(super) fn flatten_indexed_lists(module: &mut Module) -> bool {
     let mut changed = false;
 
-    let collect = |module: &CpsModule| {
+    let collect = |module: &Module| {
         let mut concats = BTreeMap::new();
         let mut appends = BTreeMap::new();
         let mut flat = BTreeSet::new();
         for (id, node) in module.nodes.iter_live() {
             match node {
-                CpsNode::LetIntrinsic {
+                Node::LetIntrinsic {
                     result,
-                    op: CpsIntrinsic::ListConcat(_),
+                    op: Intrinsic::ListConcat(_),
                     args,
                     next,
                 } => {
                     concats.insert(*result, (id, args.clone(), *next));
                 }
-                CpsNode::LetIntrinsic {
+                Node::LetIntrinsic {
                     result,
-                    op: CpsIntrinsic::ListAppend,
+                    op: Intrinsic::ListAppend,
                     args,
                     next,
                 } => {
                     appends.insert(*result, (id, args[0].clone(), args[1].clone(), *next));
                 }
-                CpsNode::LetIntrinsic {
+                Node::LetIntrinsic {
                     result,
-                    op: CpsIntrinsic::ListFlat(_) | CpsIntrinsic::ListSettle,
+                    op: Intrinsic::ListFlat(_) | Intrinsic::ListSettle,
                     ..
                 }
-                | CpsNode::LetValue {
+                | Node::LetValue {
                     result,
-                    value: CpsValueExpr::List(_),
+                    value: ValueExpr::List(_),
                     ..
                 } => {
                     flat.insert(*result);
@@ -604,14 +604,14 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
     };
 
     // Settle sites first. Each is re-read at its turn, so a settle-of-settle chain resolves in any order.
-    let settle_sites: Vec<CpsNodeId> = module
+    let settle_sites: Vec<NodeId> = module
         .nodes
         .iter_live()
         .filter_map(|(id, node)| {
             matches!(
                 node,
-                CpsNode::LetIntrinsic {
-                    op: CpsIntrinsic::ListSettle,
+                Node::LetIntrinsic {
+                    op: Intrinsic::ListSettle,
                     ..
                 }
             )
@@ -619,9 +619,9 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
         })
         .collect();
     for site in settle_sites {
-        let Some(CpsNode::LetIntrinsic {
+        let Some(Node::LetIntrinsic {
             result,
-            op: CpsIntrinsic::ListSettle,
+            op: Intrinsic::ListSettle,
             args,
             next,
         }) = module.node(site).cloned()
@@ -632,14 +632,14 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
         let (concats, appends, flat) = collect(module);
         let operand = args[0].clone();
         match &operand {
-            CpsAtom::Value(value) if flat.contains(value) => {
+            Atom::Value(value) if flat.contains(value) => {
                 rewrite_atoms(module, &BTreeMap::from([(result, operand.clone())]));
                 rewire_node(module, site, next);
                 module.nodes.remove(site);
                 module.values.remove(result);
                 changed = true;
             }
-            CpsAtom::Value(value)
+            Atom::Value(value)
                 if counts.get(value).copied().unwrap_or(0) == 1
                     && (concats.contains_key(value) || appends.contains_key(value)) =>
             {
@@ -662,20 +662,20 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
 
     // Then the demand rule, over what remains.
     let demands = super::demand::demands(module);
-    let roots: Vec<CpsNodeId> = module
+    let roots: Vec<NodeId> = module
         .nodes
         .iter_live()
         .filter_map(|(id, node)| match node {
-            CpsNode::LetIntrinsic {
+            Node::LetIntrinsic {
                 result,
-                op: CpsIntrinsic::ListConcat(_) | CpsIntrinsic::ListAppend,
+                op: Intrinsic::ListConcat(_) | Intrinsic::ListAppend,
                 ..
             } if demand_of(&demands, *result) == Demand::Indexed => Some(id),
             _ => None,
         })
         .collect();
     for site in roots {
-        let Some(CpsNode::LetIntrinsic {
+        let Some(Node::LetIntrinsic {
             result,
             op,
             args,
@@ -689,12 +689,12 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
         let mut consumed = Vec::new();
         let mut pieces = Vec::new();
         match op {
-            CpsIntrinsic::ListConcat(_) => {
+            Intrinsic::ListConcat(_) => {
                 for arg in &args {
                     collect_flat_tree(arg, &counts, &concats, &appends, &mut consumed, &mut pieces);
                 }
             }
-            CpsIntrinsic::ListAppend => {
+            Intrinsic::ListAppend => {
                 collect_flat_tree(
                     &args[0],
                     &counts,
@@ -717,21 +717,21 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
 /// Forward every projection of a visible construction to the field it reads, in one sweep.
 ///
 /// One snapshot of the module's constructions admits every forwardable projection; the replacements are then collapsed through each other, as `known_values` collapses its substitutions, so a projection of a construction whose field is itself a forwarded projection resolves to what that one forwards rather than to a value this sweep deletes. One `rewrite_atoms` walk then substitutes them all, and the dead projection nodes are spliced out in one pass. It was one projection per call — rescan, rebuild the construction map with every field vector cloned, rewrite the whole module, repeat — which `fixpoint_pass_measurements` found costing 225 ms of the fixpoint's first round on a `Toml/decode` compile, and growing as the split sweeps it cleans up after landed their projections together.
-pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
+pub(super) fn forward_aggregate_projections(module: &mut Module) -> bool {
     // Keyed by the vocabulary the construction was built in, so a read only ever forwards through a matching construction — a `RowGet` never folds through a structural tuple, nor a `TupleGet` through a row's.
-    let mut aggregates = BTreeMap::<(CpsValueId, Option<CpsRowId>), &[CpsAtom]>::new();
+    let mut aggregates = BTreeMap::<(ValueId, Option<RowId>), &[Atom]>::new();
     for (_, node) in module.nodes.iter_live() {
         match node {
-            CpsNode::LetValue {
+            Node::LetValue {
                 result,
-                value: CpsValueExpr::Tuple(fields),
+                value: ValueExpr::Tuple(fields),
                 ..
             } => {
                 aggregates.insert((*result, None), fields);
             }
-            CpsNode::LetValue {
+            Node::LetValue {
                 result,
-                value: CpsValueExpr::Row(row, fields),
+                value: ValueExpr::Row(row, fields),
                 ..
             } => {
                 aggregates.insert((*result, Some(*row)), fields);
@@ -740,10 +740,10 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
         }
     }
 
-    let mut forwarded = BTreeMap::<CpsValueId, CpsAtom>::new();
-    let mut redirect = BTreeMap::<CpsNodeId, CpsNodeId>::new();
+    let mut forwarded = BTreeMap::<ValueId, Atom>::new();
+    let mut redirect = BTreeMap::<NodeId, NodeId>::new();
     for (id, node) in module.nodes.iter_live() {
-        let CpsNode::LetIntrinsic {
+        let Node::LetIntrinsic {
             result,
             op,
             args,
@@ -753,11 +753,11 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
             continue;
         };
         let (row, field) = match op {
-            CpsIntrinsic::TupleGet(field) => (None, *field),
-            CpsIntrinsic::RowGet(row, field) => (Some(*row), *field),
+            Intrinsic::TupleGet(field) => (None, *field),
+            Intrinsic::RowGet(row, field) => (Some(*row), *field),
             _ => continue,
         };
-        let [CpsAtom::Value(tuple)] = args.as_slice() else {
+        let [Atom::Value(tuple)] = args.as_slice() else {
             continue;
         };
         let Some(replacement) = aggregates
@@ -778,7 +778,7 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
     for result in results {
         let mut value = forwarded[&result].clone();
         let mut seen = BTreeSet::new();
-        while let CpsAtom::Value(next) = value {
+        while let Atom::Value(next) = value {
             if !seen.insert(next) {
                 break;
             }
@@ -800,27 +800,27 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
     }
     true
 }
-pub(super) fn eliminate_dead_bindings(module: &mut CpsModule) -> bool {
+pub(super) fn eliminate_dead_bindings(module: &mut Module) -> bool {
     let mut changed = false;
     // Remove dead bindings in sweeps: count value uses once, collect every binding the snapshot proves dead, and splice them all out in a single chain-resolving pass rather than recomputing the counts and rewiring the whole module for one removal at a time. Removing a binding only ever lowers another value's use count, so a value dead in the snapshot stays dead; a binding that a removal newly exposes is collected by the next sweep.
     loop {
         let counts = module.value_use_counts();
-        let mut redirect = BTreeMap::<CpsNodeId, CpsNodeId>::new();
-        let mut dead_values = Vec::<CpsValueId>::new();
+        let mut redirect = BTreeMap::<NodeId, NodeId>::new();
+        let mut dead_values = Vec::<ValueId>::new();
         for (id, node) in module.nodes.iter_live() {
             let removal = match node {
-                CpsNode::LetValue { result, next, .. }
+                Node::LetValue { result, next, .. }
                     if counts.get(result).copied().unwrap_or(0) == 0 =>
                 {
                     Some((*next, Some(*result)))
                 }
-                CpsNode::LetIntrinsic {
+                Node::LetIntrinsic {
                     result, op, next, ..
                 } if op.is_total() && counts.get(result).copied().unwrap_or(0) == 0 => {
                     Some((*next, Some(*result)))
                 }
-                CpsNode::LetFun { functions, body } if functions.is_empty() => Some((*body, None)),
-                CpsNode::LetCont {
+                Node::LetFun { functions, body } if functions.is_empty() => Some((*body, None)),
+                Node::LetCont {
                     continuations,
                     body,
                 } if continuations.is_empty() => Some((*body, None)),
@@ -849,7 +849,7 @@ pub(super) fn eliminate_dead_bindings(module: &mut CpsModule) -> bool {
 }
 
 /// Redirect every control edge that targets a spliced-out node to the first surviving node in its chain. `redirect` maps each removed node to its immediate successor; following the chain skips runs of consecutive removed nodes, so the result is the same as rewiring one node at a time.
-fn splice_dead_nodes(module: &mut CpsModule, redirect: &BTreeMap<CpsNodeId, CpsNodeId>) {
+fn splice_dead_nodes(module: &mut Module, redirect: &BTreeMap<NodeId, NodeId>) {
     for (_, function) in module.functions.iter_live_mut() {
         function.body = resolve_redirect(redirect, function.body);
     }
@@ -858,32 +858,32 @@ fn splice_dead_nodes(module: &mut CpsModule, redirect: &BTreeMap<CpsNodeId, CpsN
     }
     for (_, node) in module.nodes.iter_live_mut() {
         match node {
-            CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
+            Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
                 *next = resolve_redirect(redirect, *next);
             }
-            CpsNode::LetFun { body, .. } | CpsNode::LetCont { body, .. } => {
+            Node::LetFun { body, .. } | Node::LetCont { body, .. } => {
                 *body = resolve_redirect(redirect, *body);
             }
-            CpsNode::ApplyFun { .. }
-            | CpsNode::ApplyCont(_)
-            | CpsNode::Switch { .. }
-            | CpsNode::Foreign { .. }
-            | CpsNode::Cell { .. }
-            | CpsNode::Intrinsic { .. }
-            | CpsNode::Exit { .. }
-            | CpsNode::Panic(_)
-            | CpsNode::Unreachable => {}
+            Node::ApplyFun { .. }
+            | Node::ApplyCont(_)
+            | Node::Switch { .. }
+            | Node::Foreign { .. }
+            | Node::Cell { .. }
+            | Node::Intrinsic { .. }
+            | Node::Exit { .. }
+            | Node::Panic(_)
+            | Node::Unreachable => {}
         }
     }
 }
 
-fn resolve_redirect(redirect: &BTreeMap<CpsNodeId, CpsNodeId>, mut id: CpsNodeId) -> CpsNodeId {
+fn resolve_redirect(redirect: &BTreeMap<NodeId, NodeId>, mut id: NodeId) -> NodeId {
     while let Some(&next) = redirect.get(&id) {
         id = next;
     }
     id
 }
-pub(super) fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId) {
+pub(super) fn rewire_node(module: &mut Module, from: NodeId, to: NodeId) {
     for (_, function) in module.functions.iter_live_mut() {
         if function.body == from {
             function.body = to;
@@ -896,25 +896,25 @@ pub(super) fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId
     }
     for (_, node) in module.nodes.iter_live_mut() {
         match node {
-            CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
+            Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
                 if *next == from {
                     *next = to;
                 }
             }
-            CpsNode::LetFun { body, .. } | CpsNode::LetCont { body, .. } => {
+            Node::LetFun { body, .. } | Node::LetCont { body, .. } => {
                 if *body == from {
                     *body = to;
                 }
             }
-            CpsNode::ApplyFun { .. }
-            | CpsNode::ApplyCont(_)
-            | CpsNode::Switch { .. }
-            | CpsNode::Foreign { .. }
-            | CpsNode::Cell { .. }
-            | CpsNode::Intrinsic { .. }
-            | CpsNode::Exit { .. }
-            | CpsNode::Panic(_)
-            | CpsNode::Unreachable => {}
+            Node::ApplyFun { .. }
+            | Node::ApplyCont(_)
+            | Node::Switch { .. }
+            | Node::Foreign { .. }
+            | Node::Cell { .. }
+            | Node::Intrinsic { .. }
+            | Node::Exit { .. }
+            | Node::Panic(_)
+            | Node::Unreachable => {}
         }
     }
 }
@@ -923,10 +923,10 @@ pub(super) fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId
 /// Deadness is read from [`super::demand`]'s lattice rather than from a use count, which is the same question asked at the bottom point of a richer order — the one whose `Projected` point a return protocol needs. The lattice defers an argument's demand to the receiving parameter, so `Unused` here reaches further than a zero use count: a value threaded only into parameters nobody reads is dead however many edges carry it, and this pass deleting such a chain is the code motion the strengthening was scheduled to cause. The deletion stays well-formed because a parameter is always removed together with the argument every incoming edge passes into it, so no occurrence survives its binding.
 ///
 /// One snapshot of the lattice serves every entity, because removing a parameter only ever removes uses: a verdict of `Unused` cannot be falsified by an earlier removal in the same sweep, and each entity's edit touches its own parameter list and the edges or calls into it alone. It was one entity per call, which `fixpoint_pass_measurements` found firing on 44 of a `Toml/decode` compile's 45 rounds once `split_parameters` stopped setting the count — each round of every pass bought one continuation's cleanup.
-pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
+pub(super) fn eliminate_dead_parameters(module: &mut Module) -> bool {
     let demands = demands(module);
-    let dead_value = |value: &CpsValueId| demand_of(&demands, *value) == Demand::Unused;
-    let dead_indices = |params: &[CpsValueId]| {
+    let dead_value = |value: &ValueId| demand_of(&demands, *value) == Demand::Unused;
+    let dead_indices = |params: &[ValueId]| {
         params
             .iter()
             .enumerate()
@@ -942,10 +942,10 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
         .iter()
         .flatten()
         .filter_map(|node| match node {
-            CpsNode::ApplyFun { return_to, .. }
-            | CpsNode::Foreign { return_to, .. }
-            | CpsNode::Cell { return_to, .. }
-            | CpsNode::Intrinsic { return_to, .. } => Some(*return_to),
+            Node::ApplyFun { return_to, .. }
+            | Node::Foreign { return_to, .. }
+            | Node::Cell { return_to, .. }
+            | Node::Intrinsic { return_to, .. } => Some(*return_to),
             _ => None,
         })
         .collect::<BTreeSet<_>>();
@@ -966,10 +966,10 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
         module.remove_params_from_record(continuation, &dead);
         for (_, node) in module.nodes.iter_live_mut() {
             match node {
-                CpsNode::ApplyCont(edge) if edge.target == continuation => {
+                Node::ApplyCont(edge) if edge.target == continuation => {
                     remove_parameter_indices(&mut edge.args, &dead);
                 }
-                CpsNode::Switch { cases, default, .. } => {
+                Node::Switch { cases, default, .. } => {
                     for edge in cases.values_mut().chain(default.iter_mut()) {
                         if edge.target == continuation {
                             remove_parameter_indices(&mut edge.args, &dead);
@@ -981,7 +981,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
         }
         // `Unused` means never *consumed*, not never occurring: the deferral arms of the demand walk leave a dropped parameter standing as a known call's argument, or in an edge into some other continuation whose receiving parameter is itself unused. Those occurrences are proven inert, so they become fillers — arity intact, and the receiving side's own dead-parameter drop erases them on a later round.
         for &value in &removed {
-            module.replace_atom(CpsUseTarget::Value(value), CpsAtom::Filler);
+            module.replace_atom(UseTarget::Value(value), Atom::Filler);
         }
         for value in removed {
             module.values.remove(value);
@@ -996,7 +996,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
         .flatten()
         .flat_map(atoms)
         .filter_map(|atom| match atom {
-            CpsAtom::Fun(function) => Some(*function),
+            Atom::Fun(function) => Some(*function),
             _ => None,
         })
         .collect::<BTreeSet<_>>();
@@ -1015,8 +1015,8 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
             &dead,
         );
         for (_, node) in module.nodes.iter_live_mut() {
-            if let CpsNode::ApplyFun {
-                callee: CpsCallee::Known(callee),
+            if let Node::ApplyFun {
+                callee: Callee::Known(callee),
                 args,
                 ..
             } = node
@@ -1027,7 +1027,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
         }
         // The same inert occurrences as the continuation half above — see its comment.
         for &value in &removed {
-            module.replace_atom(CpsUseTarget::Value(value), CpsAtom::Filler);
+            module.replace_atom(UseTarget::Value(value), Atom::Filler);
         }
         for value in removed {
             module.values.remove(value);

@@ -22,17 +22,17 @@ id!(MachineValueId, "~v", mint);
 #[derive(Debug, Clone)]
 pub(crate) enum MachineOperand {
     Value(MachineValueId),
-    Literal(curios_cont::CpsLiteral),
-    /// [`curios_cont::CpsAtom::Filler`] carried through unchanged: null, unless the destination turns out to be a register-held parameter, which is known only once `represent` has run.
+    Literal(curios_cont::Literal),
+    /// [`curios_cont::Atom::Filler`] carried through unchanged: null, unless the destination turns out to be a register-held parameter, which is known only once `represent` has run.
     Filler,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum MachineConstruct {
-    Literal(curios_cont::CpsLiteral),
+    Literal(curios_cont::Literal),
     List(Vec<MachineOperand>),
     Tuple(Vec<MachineOperand>),
-    Row(curios_cont::CpsRowId, Vec<MachineOperand>),
+    Row(curios_cont::RowId, Vec<MachineOperand>),
 }
 
 #[derive(Debug, Clone)]
@@ -43,13 +43,13 @@ pub(crate) enum MachineInstruction {
     },
     Intrinsic {
         result: MachineValueId,
-        op: curios_cont::CpsIntrinsic,
+        op: curios_cont::Intrinsic,
         args: Vec<MachineOperand>,
     },
     /// Retained-ABI closure wrapper around direct code. The wrapper unpacks these captures and tail-calls `function`.
     MakeClosure {
         result: MachineValueId,
-        function: curios_cont::CpsFunId,
+        function: curios_cont::FunctionId,
         captures: Vec<MachineOperand>,
     },
 }
@@ -71,12 +71,12 @@ pub(crate) enum MachineTerminator {
         default: Option<MachineEdge>,
     },
     DirectCall {
-        function: curios_cont::CpsFunId,
+        function: curios_cont::FunctionId,
         args: Vec<MachineOperand>,
         resume: MachineBlockId,
     },
     TailDirectCall {
-        function: curios_cont::CpsFunId,
+        function: curios_cont::FunctionId,
         args: Vec<MachineOperand>,
     },
     IndirectCall {
@@ -98,25 +98,25 @@ pub(crate) enum MachineTerminator {
         args: Vec<MachineOperand>,
     },
     Cell {
-        op: curios_cont::CpsCellOp,
+        op: curios_cont::CellOp,
         args: Vec<MachineOperand>,
         resume: MachineBlockId,
     },
     CellReturn {
-        op: curios_cont::CpsCellOp,
+        op: curios_cont::CellOp,
         args: Vec<MachineOperand>,
     },
     Intrinsic {
-        op: curios_cont::CpsIntrinsicCall,
+        op: curios_cont::IntrinsicCall,
         args: Vec<MachineOperand>,
         resume: MachineBlockId,
     },
     IntrinsicReturn {
-        op: curios_cont::CpsIntrinsicCall,
+        op: curios_cont::IntrinsicCall,
         args: Vec<MachineOperand>,
     },
     Exit(Option<MachineOperand>),
-    /// A deliberate failure of the given class; see [`curios_cont::CpsNode::Panic`].
+    /// A deliberate failure of the given class; see [`curios_cont::Node::Panic`].
     Panic(curios_cont::Panic),
     Unreachable,
 }
@@ -141,29 +141,29 @@ pub(crate) struct MachineFunction {
 
 #[derive(Debug, Clone)]
 pub(crate) struct MachineWrapper {
-    function: curios_cont::CpsFunId,
+    function: curios_cont::FunctionId,
     captures: Vec<MachineValueId>,
     arity: usize,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct MachineModule {
-    functions: BTreeMap<curios_cont::CpsFunId, MachineFunction>,
-    wrappers: BTreeMap<curios_cont::CpsFunId, MachineWrapper>,
-    entry: curios_cont::CpsFunId,
-    /// Each function's source hint, carried from the Cont module so emission names can spell a function's origin (`func/{index}$hint`). A hint never affects identity — the `CpsFunId` index does — so a missing entry only omits the hint.
-    function_hints: BTreeMap<curios_cont::CpsFunId, String>,
+    functions: BTreeMap<curios_cont::FunctionId, MachineFunction>,
+    wrappers: BTreeMap<curios_cont::FunctionId, MachineWrapper>,
+    entry: curios_cont::FunctionId,
+    /// Each function's source hint, carried from the Cont module so emission names can spell a function's origin (`func/{index}$hint`). A hint never affects identity — the `curios_cont::FunctionId` index does — so a missing entry only omits the hint.
+    function_hints: BTreeMap<curios_cont::FunctionId, String>,
     /// Every nominal row the Cont module declared, with its debug name and slot carriers — carried whole rather than collected from constructions, so a row whose constructions were all optimized away still declares a type for the projections that may outlive them.
-    rows: Vec<(curios_cont::CpsRowId, curios_cont::CpsRow)>,
+    rows: Vec<(curios_cont::RowId, curios_cont::Row)>,
 }
 
 impl MachineModule {
     /// The source hint of a function, if it carries one.
-    pub(crate) fn function_hint(&self, id: curios_cont::CpsFunId) -> Option<&str> {
+    pub(crate) fn function_hint(&self, id: curios_cont::FunctionId) -> Option<&str> {
         self.function_hints.get(&id).map(String::as_str)
     }
 
-    pub(crate) fn rows(&self) -> &[(curios_cont::CpsRowId, curios_cont::CpsRow)] {
+    pub(crate) fn rows(&self) -> &[(curios_cont::RowId, curios_cont::Row)] {
         &self.rows
     }
 }
@@ -177,7 +177,7 @@ impl fmt::Display for MachineVerifyError {
     }
 }
 
-pub(crate) fn lower(source: &curios_cont::CpsModule) -> MachineModule {
+pub(crate) fn lower(source: &curios_cont::Module) -> MachineModule {
     source
         .verify()
         .expect("invalid high CPS at machine boundary");
@@ -187,7 +187,7 @@ pub(crate) fn lower(source: &curios_cont::CpsModule) -> MachineModule {
         .enumerate()
         .filter_map(|(index, function)| {
             function.as_ref()?;
-            let function = curios_cont::CpsFunId::from_index(index);
+            let function = curios_cont::FunctionId::from_index(index);
             Some((function, free_runtime_values(source, function)))
         })
         .collect::<BTreeMap<_, _>>();
@@ -235,7 +235,7 @@ pub(crate) fn lower(source: &curios_cont::CpsModule) -> MachineModule {
     let mut functions = BTreeMap::new();
     for (index, function) in source.functions().iter().enumerate() {
         let Some(function) = function else { continue };
-        let id = curios_cont::CpsFunId::from_index(index);
+        let id = curios_cont::FunctionId::from_index(index);
         let results = arities.get(&id).copied().unwrap_or(1);
         let lowered =
             MachineFunctionLowerer::new(source, id, function, &free_values, results).lower();
@@ -247,7 +247,7 @@ pub(crate) fn lower(source: &curios_cont::CpsModule) -> MachineModule {
         .enumerate()
         .filter_map(|(index, function)| {
             let name = function.as_ref()?.debug_name.clone()?;
-            Some((curios_cont::CpsFunId::from_index(index), name))
+            Some((curios_cont::FunctionId::from_index(index), name))
         })
         .collect();
     let rows = source.rows().map(|(id, row)| (id, row.clone())).collect();
@@ -262,11 +262,11 @@ pub(crate) fn lower(source: &curios_cont::CpsModule) -> MachineModule {
     module
 }
 
-fn escaping_functions(source: &curios_cont::CpsModule) -> BTreeSet<curios_cont::CpsFunId> {
+fn escaping_functions(source: &curios_cont::Module) -> BTreeSet<curios_cont::FunctionId> {
     let mut escaping = BTreeSet::new();
     for node in source.nodes().iter().flatten() {
         for atom in curios_cont::atoms(node) {
-            if let curios_cont::CpsAtom::Fun(function) = atom {
+            if let curios_cont::Atom::Fun(function) = atom {
                 escaping.insert(*function);
             }
         }
@@ -275,8 +275,8 @@ fn escaping_functions(source: &curios_cont::CpsModule) -> BTreeSet<curios_cont::
 }
 
 fn free_runtime_values(
-    source: &curios_cont::CpsModule,
-    function: curios_cont::CpsFunId,
+    source: &curios_cont::Module,
+    function: curios_cont::FunctionId,
 ) -> Vec<MachineValueId> {
     let definition = source.function(function).unwrap();
     let mut bound = definition
@@ -293,25 +293,25 @@ fn free_runtime_values(
         }
         let node = source.node(node_id).unwrap();
         for atom in curios_cont::atoms(node) {
-            if let curios_cont::CpsAtom::Value(value) = atom {
+            if let curios_cont::Atom::Value(value) = atom {
                 used.insert(value_id(*value));
             }
         }
-        if let curios_cont::CpsNode::ApplyFun {
-            callee: curios_cont::CpsCallee::Closure(value),
+        if let curios_cont::Node::ApplyFun {
+            callee: curios_cont::Callee::Closure(value),
             ..
         } = node
         {
             used.insert(value_id(*value));
         }
         match node {
-            curios_cont::CpsNode::LetValue { result, next, .. }
-            | curios_cont::CpsNode::LetIntrinsic { result, next, .. } => {
+            curios_cont::Node::LetValue { result, next, .. }
+            | curios_cont::Node::LetIntrinsic { result, next, .. } => {
                 bound.insert(value_id(*result));
                 work.push(*next);
             }
-            curios_cont::CpsNode::LetFun { body, .. } => work.push(*body),
-            curios_cont::CpsNode::LetCont {
+            curios_cont::Node::LetFun { body, .. } => work.push(*body),
+            curios_cont::Node::LetCont {
                 continuations,
                 body,
             } => {
@@ -329,8 +329,8 @@ fn free_runtime_values(
 }
 
 fn owned_runtime_values(
-    source: &curios_cont::CpsModule,
-    function: curios_cont::CpsFunId,
+    source: &curios_cont::Module,
+    function: curios_cont::FunctionId,
 ) -> BTreeSet<MachineValueId> {
     let definition = source.function(function).unwrap();
     let mut owned = definition
@@ -340,11 +340,11 @@ fn owned_runtime_values(
         .collect::<BTreeSet<_>>();
     for node_id in function_nodes(source, function) {
         match source.node(node_id).unwrap() {
-            curios_cont::CpsNode::LetValue { result, .. }
-            | curios_cont::CpsNode::LetIntrinsic { result, .. } => {
+            curios_cont::Node::LetValue { result, .. }
+            | curios_cont::Node::LetIntrinsic { result, .. } => {
                 owned.insert(value_id(*result));
             }
-            curios_cont::CpsNode::LetCont { continuations, .. } => {
+            curios_cont::Node::LetCont { continuations, .. } => {
                 for continuation in continuations {
                     owned.extend(
                         source
@@ -363,21 +363,21 @@ fn owned_runtime_values(
 }
 
 fn referenced_functions(
-    source: &curios_cont::CpsModule,
-    function: curios_cont::CpsFunId,
-) -> BTreeSet<curios_cont::CpsFunId> {
+    source: &curios_cont::Module,
+    function: curios_cont::FunctionId,
+) -> BTreeSet<curios_cont::FunctionId> {
     let mut dependencies = BTreeSet::new();
     for node_id in function_nodes(source, function) {
         let node = source.node(node_id).unwrap();
-        if let curios_cont::CpsNode::ApplyFun {
-            callee: curios_cont::CpsCallee::Known(function),
+        if let curios_cont::Node::ApplyFun {
+            callee: curios_cont::Callee::Known(function),
             ..
         } = node
         {
             dependencies.insert(*function);
         }
         for atom in curios_cont::atoms(node) {
-            if let curios_cont::CpsAtom::Fun(function) = atom {
+            if let curios_cont::Atom::Fun(function) = atom {
                 dependencies.insert(*function);
             }
         }
@@ -386,9 +386,9 @@ fn referenced_functions(
 }
 
 fn function_nodes(
-    source: &curios_cont::CpsModule,
-    function: curios_cont::CpsFunId,
-) -> Vec<curios_cont::CpsNodeId> {
+    source: &curios_cont::Module,
+    function: curios_cont::FunctionId,
+) -> Vec<curios_cont::NodeId> {
     let mut nodes = Vec::new();
     let mut work = vec![source.function(function).unwrap().body];
     let mut visited = BTreeSet::new();
@@ -398,10 +398,10 @@ fn function_nodes(
         }
         nodes.push(node_id);
         match source.node(node_id).unwrap() {
-            curios_cont::CpsNode::LetValue { next, .. }
-            | curios_cont::CpsNode::LetIntrinsic { next, .. } => work.push(*next),
-            curios_cont::CpsNode::LetFun { body, .. } => work.push(*body),
-            curios_cont::CpsNode::LetCont {
+            curios_cont::Node::LetValue { next, .. }
+            | curios_cont::Node::LetIntrinsic { next, .. } => work.push(*next),
+            curios_cont::Node::LetFun { body, .. } => work.push(*body),
+            curios_cont::Node::LetCont {
                 continuations,
                 body,
             } => {
@@ -417,26 +417,26 @@ fn function_nodes(
 }
 
 pub(crate) struct MachineFunctionLowerer<'a> {
-    source: &'a curios_cont::CpsModule,
-    id: curios_cont::CpsFunId,
-    function: &'a curios_cont::CpsFunction,
-    free_values: &'a BTreeMap<curios_cont::CpsFunId, Vec<MachineValueId>>,
+    source: &'a curios_cont::Module,
+    id: curios_cont::FunctionId,
+    function: &'a curios_cont::Function,
+    free_values: &'a BTreeMap<curios_cont::FunctionId, Vec<MachineValueId>>,
     results: usize,
     blocks: BTreeMap<MachineBlockId, MachineBlock>,
     block_scopes: BTreeMap<MachineBlockId, Vec<MachineBlockId>>,
-    continuation_blocks: BTreeMap<curios_cont::CpsContId, MachineBlockId>,
-    materialized_closures: BTreeMap<curios_cont::CpsFunId, MachineValueId>,
-    work: VecDeque<(MachineBlockId, curios_cont::CpsNodeId, Vec<MachineValueId>)>,
+    continuation_blocks: BTreeMap<curios_cont::ContinuationId, MachineBlockId>,
+    materialized_closures: BTreeMap<curios_cont::FunctionId, MachineValueId>,
+    work: VecDeque<(MachineBlockId, curios_cont::NodeId, Vec<MachineValueId>)>,
     block_entropy: Entropy<MachineBlockId>,
     value_entropy: Entropy<MachineValueId>,
 }
 
 impl<'a> MachineFunctionLowerer<'a> {
     fn new(
-        source: &'a curios_cont::CpsModule,
-        id: curios_cont::CpsFunId,
-        function: &'a curios_cont::CpsFunction,
-        free_values: &'a BTreeMap<curios_cont::CpsFunId, Vec<MachineValueId>>,
+        source: &'a curios_cont::Module,
+        id: curios_cont::FunctionId,
+        function: &'a curios_cont::Function,
+        free_values: &'a BTreeMap<curios_cont::FunctionId, Vec<MachineValueId>>,
         results: usize,
     ) -> Self {
         let block_entropy = Entropy::new();
@@ -487,7 +487,7 @@ impl<'a> MachineFunctionLowerer<'a> {
     fn lower_block(
         &mut self,
         block: MachineBlockId,
-        mut node_id: curios_cont::CpsNodeId,
+        mut node_id: curios_cont::NodeId,
         params: Vec<MachineValueId>,
     ) -> MachineBlock {
         // Closure materializations are reused only within the block that defines them: cross-block values flow through explicit block parameters, so a materialized closure is in scope only for the rest of its own block.
@@ -495,28 +495,28 @@ impl<'a> MachineFunctionLowerer<'a> {
         let mut instructions = Vec::new();
         loop {
             match self.source.node(node_id).unwrap() {
-                curios_cont::CpsNode::LetValue {
+                curios_cont::Node::LetValue {
                     result,
                     value,
                     next,
                 } => {
                     let value = match value {
-                        curios_cont::CpsValueExpr::Literal(literal) => {
+                        curios_cont::ValueExpr::Literal(literal) => {
                             MachineConstruct::Literal(literal.clone())
                         }
-                        curios_cont::CpsValueExpr::List(values) => MachineConstruct::List(
+                        curios_cont::ValueExpr::List(values) => MachineConstruct::List(
                             values
                                 .iter()
                                 .map(|atom| self.lower_atom(atom, &mut instructions))
                                 .collect(),
                         ),
-                        curios_cont::CpsValueExpr::Tuple(values) => MachineConstruct::Tuple(
+                        curios_cont::ValueExpr::Tuple(values) => MachineConstruct::Tuple(
                             values
                                 .iter()
                                 .map(|atom| self.lower_atom(atom, &mut instructions))
                                 .collect(),
                         ),
-                        curios_cont::CpsValueExpr::Row(row, values) => MachineConstruct::Row(
+                        curios_cont::ValueExpr::Row(row, values) => MachineConstruct::Row(
                             *row,
                             values
                                 .iter()
@@ -530,7 +530,7 @@ impl<'a> MachineFunctionLowerer<'a> {
                     });
                     node_id = *next;
                 }
-                curios_cont::CpsNode::LetIntrinsic {
+                curios_cont::Node::LetIntrinsic {
                     result,
                     op,
                     args,
@@ -544,8 +544,8 @@ impl<'a> MachineFunctionLowerer<'a> {
                     });
                     node_id = *next;
                 }
-                curios_cont::CpsNode::LetFun { body, .. } => node_id = *body,
-                curios_cont::CpsNode::LetCont {
+                curios_cont::Node::LetFun { body, .. } => node_id = *body,
+                curios_cont::Node::LetCont {
                     continuations,
                     body,
                 } => {
@@ -578,7 +578,7 @@ impl<'a> MachineFunctionLowerer<'a> {
         }
     }
 
-    fn queue_continuation(&mut self, continuation: curios_cont::CpsContId) -> MachineBlockId {
+    fn queue_continuation(&mut self, continuation: curios_cont::ContinuationId) -> MachineBlockId {
         if let Some(block) = self.continuation_blocks.get(&continuation) {
             return *block;
         }
@@ -595,7 +595,7 @@ impl<'a> MachineFunctionLowerer<'a> {
 
     fn lower_edge(
         &mut self,
-        edge: &curios_cont::CpsEdge,
+        edge: &curios_cont::Edge,
         instructions: &mut Vec<MachineInstruction>,
     ) -> MachineEdge {
         MachineEdge {
@@ -606,11 +606,11 @@ impl<'a> MachineFunctionLowerer<'a> {
 
     fn lower_terminator(
         &mut self,
-        node: &curios_cont::CpsNode,
+        node: &curios_cont::Node,
         instructions: &mut Vec<MachineInstruction>,
     ) -> MachineTerminator {
         match node {
-            curios_cont::CpsNode::ApplyCont(edge) if edge.target == self.function.return_cont => {
+            curios_cont::Node::ApplyCont(edge) if edge.target == self.function.return_cont => {
                 MachineTerminator::Return(
                     edge.args
                         .iter()
@@ -618,10 +618,10 @@ impl<'a> MachineFunctionLowerer<'a> {
                         .collect(),
                 )
             }
-            curios_cont::CpsNode::ApplyCont(edge) => {
+            curios_cont::Node::ApplyCont(edge) => {
                 MachineTerminator::Jump(self.lower_edge(edge, instructions))
             }
-            curios_cont::CpsNode::Switch {
+            curios_cont::Node::Switch {
                 scrutinee,
                 cases,
                 default,
@@ -635,14 +635,14 @@ impl<'a> MachineFunctionLowerer<'a> {
                     .as_ref()
                     .map(|edge| self.lower_edge(edge, instructions)),
             },
-            curios_cont::CpsNode::ApplyFun {
+            curios_cont::Node::ApplyFun {
                 callee,
                 args,
                 return_to,
             } => {
                 let returns = *return_to == self.function.return_cont;
                 match callee {
-                    curios_cont::CpsCallee::Known(function) => {
+                    curios_cont::Callee::Known(function) => {
                         let mut lowered = self.free_values[function]
                             .iter()
                             .copied()
@@ -662,7 +662,7 @@ impl<'a> MachineFunctionLowerer<'a> {
                             }
                         }
                     }
-                    curios_cont::CpsCallee::Closure(closure) => {
+                    curios_cont::Callee::Closure(closure) => {
                         let args = self.lower_atoms(args, instructions);
                         if returns {
                             MachineTerminator::TailIndirectCall {
@@ -679,7 +679,7 @@ impl<'a> MachineFunctionLowerer<'a> {
                     }
                 }
             }
-            curios_cont::CpsNode::Foreign {
+            curios_cont::Node::Foreign {
                 function,
                 args,
                 return_to,
@@ -698,7 +698,7 @@ impl<'a> MachineFunctionLowerer<'a> {
                     }
                 }
             }
-            curios_cont::CpsNode::Cell {
+            curios_cont::Node::Cell {
                 op,
                 args,
                 return_to,
@@ -714,7 +714,7 @@ impl<'a> MachineFunctionLowerer<'a> {
                     }
                 }
             }
-            curios_cont::CpsNode::Intrinsic {
+            curios_cont::Node::Intrinsic {
                 op,
                 args,
                 return_to,
@@ -730,20 +730,20 @@ impl<'a> MachineFunctionLowerer<'a> {
                     }
                 }
             }
-            curios_cont::CpsNode::Exit { value } => MachineTerminator::Exit(
+            curios_cont::Node::Exit { value } => MachineTerminator::Exit(
                 value
                     .as_ref()
                     .map(|value| self.lower_atom(value, instructions)),
             ),
-            curios_cont::CpsNode::Panic(panic) => MachineTerminator::Panic(*panic),
-            curios_cont::CpsNode::Unreachable => MachineTerminator::Unreachable,
+            curios_cont::Node::Panic(panic) => MachineTerminator::Panic(*panic),
+            curios_cont::Node::Unreachable => MachineTerminator::Unreachable,
             _ => unreachable!("non-terminal CPS node reached terminal lowering"),
         }
     }
 
     fn lower_atoms(
         &mut self,
-        atoms: &[curios_cont::CpsAtom],
+        atoms: &[curios_cont::Atom],
         instructions: &mut Vec<MachineInstruction>,
     ) -> Vec<MachineOperand> {
         atoms
@@ -754,14 +754,14 @@ impl<'a> MachineFunctionLowerer<'a> {
 
     fn lower_atom(
         &mut self,
-        atom: &curios_cont::CpsAtom,
+        atom: &curios_cont::Atom,
         instructions: &mut Vec<MachineInstruction>,
     ) -> MachineOperand {
         match atom {
-            curios_cont::CpsAtom::Value(value) => MachineOperand::Value(value_id(*value)),
-            curios_cont::CpsAtom::Literal(literal) => MachineOperand::Literal(literal.clone()),
-            curios_cont::CpsAtom::Filler => MachineOperand::Filler,
-            curios_cont::CpsAtom::Fun(function) => {
+            curios_cont::Atom::Value(value) => MachineOperand::Value(value_id(*value)),
+            curios_cont::Atom::Literal(literal) => MachineOperand::Literal(literal.clone()),
+            curios_cont::Atom::Filler => MachineOperand::Filler,
+            curios_cont::Atom::Fun(function) => {
                 if let Some(existing) = self.materialized_closures.get(function) {
                     return MachineOperand::Value(*existing);
                 }
@@ -783,7 +783,7 @@ impl<'a> MachineFunctionLowerer<'a> {
     }
 }
 
-pub(crate) fn value_id(value: curios_cont::CpsValueId) -> MachineValueId {
+pub(crate) fn value_id(value: curios_cont::ValueId) -> MachineValueId {
     MachineValueId(value.index() as u32)
 }
 
@@ -827,7 +827,7 @@ impl MachineModule {
     }
 
     fn verify_block_scopes(
-        owner: curios_cont::CpsFunId,
+        owner: curios_cont::FunctionId,
         function: &MachineFunction,
     ) -> Result<(), MachineVerifyError> {
         let mut parents = BTreeMap::new();
@@ -882,7 +882,7 @@ impl MachineModule {
 
     fn verify_closure_construction(
         &self,
-        owner: curios_cont::CpsFunId,
+        owner: curios_cont::FunctionId,
         function: &MachineFunction,
     ) -> Result<(), MachineVerifyError> {
         for instruction in function
@@ -911,7 +911,7 @@ impl MachineModule {
 
     fn verify_block(
         &self,
-        owner: curios_cont::CpsFunId,
+        owner: curios_cont::FunctionId,
         function: &MachineFunction,
         block: &MachineBlock,
     ) -> Result<(), MachineVerifyError> {
@@ -986,7 +986,7 @@ impl MachineModule {
                 verify_block_resume(function, *resume, 1)?
             }
             MachineTerminator::Intrinsic {
-                op: curios_cont::CpsIntrinsicCall::ListMap,
+                op: curios_cont::IntrinsicCall::ListMap,
                 args,
                 resume,
             } => {
@@ -1000,7 +1000,7 @@ impl MachineModule {
             // Every tail position hands its own results straight out of the function, as a tail direct call does, so each is held to the function's result count: a closure call and a `ListMap` produce one, a host or cell operation what its row says.
             MachineTerminator::TailIndirectCall { .. } => tail_returns(owner, function, 1)?,
             MachineTerminator::IntrinsicReturn {
-                op: curios_cont::CpsIntrinsicCall::ListMap,
+                op: curios_cont::IntrinsicCall::ListMap,
                 args,
             } if args.len() != 2 => {
                 return Err(MachineVerifyError(format!(
@@ -1058,7 +1058,7 @@ impl MachineModule {
 
 /// A tail position produces `results` values straight out of `function`, so the two counts must agree — the check `TailDirectCall` makes against its callee, stated once for the positions whose count is fixed by an operation rather than a callee.
 fn tail_returns(
-    owner: curios_cont::CpsFunId,
+    owner: curios_cont::FunctionId,
     function: &MachineFunction,
     results: usize,
 ) -> Result<(), MachineVerifyError> {

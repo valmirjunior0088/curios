@@ -3,10 +3,7 @@
 use {
     super::test_support::duplicate_pair_module,
     crate::cps::cse::dedupe_intrinsics,
-    crate::{
-        CpsAtom, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsic, CpsLiteral, CpsModule,
-        CpsNode, CpsValueId,
-    },
+    crate::{Atom, Continuation, Edge, Function, Intrinsic, Literal, Module, Node, ValueId},
     curios_utilities::{Grain, PackedBin},
     std::collections::BTreeMap,
 };
@@ -14,19 +11,19 @@ use {
 #[test]
 fn merges_dominated_duplicates_onto_the_first_binder() {
     let (mut module, first_node, second_node, add) =
-        duplicate_pair_module(CpsIntrinsic::NatMul, CpsIntrinsic::NatMul, false);
+        duplicate_pair_module(Intrinsic::NatMul, Intrinsic::NatMul, false);
 
     assert!(dedupe_intrinsics(&mut module));
     assert!(matches!(
         module.node(first_node),
-        Some(CpsNode::LetIntrinsic { .. })
+        Some(Node::LetIntrinsic { .. })
     ));
     assert!(module.node(second_node).is_none());
-    let first = CpsValueId(2);
+    let first = ValueId(2);
     assert!(matches!(
         module.node(add),
-        Some(CpsNode::LetIntrinsic { args, .. })
-            if args == &[CpsAtom::Value(first), CpsAtom::Value(first)]
+        Some(Node::LetIntrinsic { args, .. })
+            if args == &[Atom::Value(first), Atom::Value(first)]
     ));
     module.verify().unwrap();
     assert!(
@@ -38,7 +35,7 @@ fn merges_dominated_duplicates_onto_the_first_binder() {
 #[test]
 fn normalizes_commutative_operand_order() {
     let (mut module, _, second_node, _) =
-        duplicate_pair_module(CpsIntrinsic::NatAdd, CpsIntrinsic::NatAdd, true);
+        duplicate_pair_module(Intrinsic::NatAdd, Intrinsic::NatAdd, true);
 
     assert!(dedupe_intrinsics(&mut module));
     assert!(module.node(second_node).is_none());
@@ -48,7 +45,7 @@ fn normalizes_commutative_operand_order() {
 #[test]
 fn keeps_noncommutative_swapped_operands_distinct() {
     let (mut module, first_node, second_node, _) =
-        duplicate_pair_module(CpsIntrinsic::NatSub, CpsIntrinsic::NatSub, true);
+        duplicate_pair_module(Intrinsic::NatSub, Intrinsic::NatSub, true);
 
     assert!(!dedupe_intrinsics(&mut module));
     assert!(module.node(first_node).is_some());
@@ -58,7 +55,7 @@ fn keeps_noncommutative_swapped_operands_distinct() {
 #[test]
 fn reuses_a_dominating_may_trap_result() {
     let (mut module, first_node, second_node, _) =
-        duplicate_pair_module(CpsIntrinsic::NatDiv, CpsIntrinsic::NatDiv, false);
+        duplicate_pair_module(Intrinsic::NatDiv, Intrinsic::NatDiv, false);
 
     assert!(dedupe_intrinsics(&mut module));
     assert!(module.node(first_node).is_some());
@@ -69,7 +66,7 @@ fn reuses_a_dominating_may_trap_result() {
 #[test]
 fn keeps_allocating_ops_distinct() {
     let (mut module, first_node, second_node, _) =
-        duplicate_pair_module(CpsIntrinsic::ListAppend, CpsIntrinsic::ListAppend, false);
+        duplicate_pair_module(Intrinsic::ListAppend, Intrinsic::ListAppend, false);
 
     assert!(!dedupe_intrinsics(&mut module));
     assert!(module.node(first_node).is_some());
@@ -78,7 +75,7 @@ fn keeps_allocating_ops_distinct() {
 
 #[test]
 fn reaches_a_dominated_continuation_but_not_a_sibling() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let x = module.add_value(Some("x".into()));
@@ -89,25 +86,25 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
     // Reached continuation: recomputes the dominating op (must merge) and binds the first sibling occurrence of the shift (must stay).
     let shl_first = module.add_value(Some("shl first".into()));
     let reached = module.reserve_continuation();
-    let reached_return = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let reached_return = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(dominated)],
+        args: vec![Atom::Value(dominated)],
     }));
-    let reached_shl = module.add_node(CpsNode::LetIntrinsic {
+    let reached_shl = module.add_node(Node::LetIntrinsic {
         result: shl_first,
-        op: CpsIntrinsic::NatShl,
-        args: vec![CpsAtom::Value(x), CpsAtom::Value(x)],
+        op: Intrinsic::NatShl,
+        args: vec![Atom::Value(x), Atom::Value(x)],
         next: reached_return,
     });
-    let reached_body = module.add_node(CpsNode::LetIntrinsic {
+    let reached_body = module.add_node(Node::LetIntrinsic {
         result: dominated,
-        op: CpsIntrinsic::NatMul,
-        args: vec![CpsAtom::Value(x), CpsAtom::Value(x)],
+        op: Intrinsic::NatMul,
+        args: vec![Atom::Value(x), Atom::Value(x)],
         next: reached_shl,
     });
     module.define_continuation(
         reached,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("reached".into()),
             params: vec![],
             body: reached_body,
@@ -116,19 +113,19 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
 
     // Sibling continuation: computes the same shift as its sibling with no occurrence dominating both — must stay.
     let other = module.reserve_continuation();
-    let other_return = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let other_return = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(sibling)],
+        args: vec![Atom::Value(sibling)],
     }));
-    let other_body = module.add_node(CpsNode::LetIntrinsic {
+    let other_body = module.add_node(Node::LetIntrinsic {
         result: sibling,
-        op: CpsIntrinsic::NatShl,
-        args: vec![CpsAtom::Value(x), CpsAtom::Value(x)],
+        op: Intrinsic::NatShl,
+        args: vec![Atom::Value(x), Atom::Value(x)],
         next: other_return,
     });
     module.define_continuation(
         other,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("other".into()),
             params: vec![],
             body: other_body,
@@ -136,33 +133,33 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
     );
 
     // The dominating binding sits above the `LetCont`, so it is in scope — and dominates — both members; a binding inside the `LetCont`'s own body subtree would be neither.
-    let switch = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(x),
+    let switch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(x),
         cases: BTreeMap::from([(
             0,
-            CpsEdge {
+            Edge {
                 target: reached,
                 args: vec![],
             },
         )]),
-        default: Some(CpsEdge {
+        default: Some(Edge {
             target: other,
             args: vec![],
         }),
     });
-    let letcont = module.add_node(CpsNode::LetCont {
+    let letcont = module.add_node(Node::LetCont {
         continuations: vec![reached, other],
         body: switch,
     });
-    let bind = module.add_node(CpsNode::LetIntrinsic {
+    let bind = module.add_node(Node::LetIntrinsic {
         result: dominating,
-        op: CpsIntrinsic::NatMul,
-        args: vec![CpsAtom::Value(x), CpsAtom::Value(x)],
+        op: Intrinsic::NatMul,
+        args: vec![Atom::Value(x), Atom::Value(x)],
         next: letcont,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![x],
             return_cont,
@@ -182,7 +179,7 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
         "second sibling shl stays"
     );
     let forwards = module.nodes().iter().flatten().any(|node| {
-        matches!(node, CpsNode::ApplyCont(edge) if edge.target == return_cont && edge.args == vec![CpsAtom::Value(dominating)])
+        matches!(node, Node::ApplyCont(edge) if edge.target == return_cont && edge.args == vec![Atom::Value(dominating)])
     });
     assert!(forwards, "the merged use forwards the dominating result");
     module.verify().unwrap();
@@ -191,41 +188,38 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
 /// `b[1]` and `b[1, 0]` pack into the same byte, so an operand key built from packed bytes made these two comparisons duplicates and the second answered the first's result. Compiled, the program printed `false` for `x == b[1, 0]` where `x` was `b[1, 0]`.
 #[test]
 fn keeps_bit_literals_of_equal_packing_and_unequal_length_distinct() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let x = module.add_value(Some("x".into()));
     let first = module.add_value(Some("first".into()));
     let second = module.add_value(Some("second".into()));
 
-    let return_node = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let return_node = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(second)],
+        args: vec![Atom::Value(second)],
     }));
-    let second_node = module.add_node(CpsNode::LetIntrinsic {
+    let second_node = module.add_node(Node::LetIntrinsic {
         result: second,
-        op: CpsIntrinsic::BinEql(Grain::B),
+        op: Intrinsic::BinEql(Grain::B),
         args: vec![
-            CpsAtom::Value(x),
-            CpsAtom::Literal(CpsLiteral::Bin(
-                Grain::B,
-                PackedBin::from_bits([true, false]),
-            )),
+            Atom::Value(x),
+            Atom::Literal(Literal::Bin(Grain::B, PackedBin::from_bits([true, false]))),
         ],
         next: return_node,
     });
-    let first_node = module.add_node(CpsNode::LetIntrinsic {
+    let first_node = module.add_node(Node::LetIntrinsic {
         result: first,
-        op: CpsIntrinsic::BinEql(Grain::B),
+        op: Intrinsic::BinEql(Grain::B),
         args: vec![
-            CpsAtom::Value(x),
-            CpsAtom::Literal(CpsLiteral::Bin(Grain::B, PackedBin::from_bits([true]))),
+            Atom::Value(x),
+            Atom::Literal(Literal::Bin(Grain::B, PackedBin::from_bits([true]))),
         ],
         next: second_node,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![x],
             return_cont,

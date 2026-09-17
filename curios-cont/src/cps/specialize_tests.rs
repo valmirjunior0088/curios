@@ -16,28 +16,27 @@ use {
         specialize::{specialize_call_patterns, specialize_jump_patterns, specialize_scc_calls},
     },
     crate::{
-        CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsic, CpsLiteral,
-        CpsModule, CpsNode, CpsValueExpr,
+        Atom, Callee, Continuation, Edge, Function, Intrinsic, Literal, Module, Node, ValueExpr,
     },
     std::collections::BTreeMap,
 };
 
 #[test]
 fn scc_invariant_known_argument_propagates_into_recursive_member() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
 
     // A trivial helper used only as an invariant first-class argument.
     let helper = module.reserve_function();
     let helper_return = module.reserve_continuation();
-    let helper_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let helper_body = module.add_node(Node::ApplyCont(Edge {
         target: helper_return,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))],
     }));
     module.define_function(
         helper,
-        CpsFunction {
+        Function {
             debug_name: Some("helper".into()),
             params: vec![],
             return_cont: helper_return,
@@ -52,40 +51,40 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
     let counter = module.add_value(Some("counter".into()));
     let recur = module.reserve_continuation();
     let recur_param = module.add_value(Some("recur".into()));
-    let recur_body = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(loop_function),
-        args: vec![CpsAtom::Value(invariant), CpsAtom::Value(recur_param)],
+    let recur_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(loop_function),
+        args: vec![Atom::Value(invariant), Atom::Value(recur_param)],
         return_to: loop_return,
     });
     module.define_continuation(
         recur,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("recur".into()),
             params: vec![recur_param],
             body: recur_body,
         },
     );
-    let switch = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(counter),
+    let switch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(counter),
         cases: BTreeMap::from([(
             0,
-            CpsEdge {
+            Edge {
                 target: loop_return,
-                args: vec![CpsAtom::Value(counter)],
+                args: vec![Atom::Value(counter)],
             },
         )]),
-        default: Some(CpsEdge {
+        default: Some(Edge {
             target: recur,
-            args: vec![CpsAtom::Value(counter)],
+            args: vec![Atom::Value(counter)],
         }),
     });
-    let loop_body = module.add_node(CpsNode::LetCont {
+    let loop_body = module.add_node(Node::LetCont {
         continuations: vec![recur],
         body: switch,
     });
     module.define_function(
         loop_function,
-        CpsFunction {
+        Function {
             debug_name: Some("loop".into()),
             params: vec![invariant, counter],
             return_cont: loop_return,
@@ -93,21 +92,21 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
         },
     );
 
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(loop_function),
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(loop_function),
         args: vec![
-            CpsAtom::Fun(helper),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(3u32))),
+            Atom::Fun(helper),
+            Atom::Literal(Literal::Nat(Natural::from(3u32))),
         ],
         return_to: entry_return,
     });
-    let body = module.add_node(CpsNode::LetFun {
+    let body = module.add_node(Node::LetFun {
         functions: vec![loop_function, helper],
         body: call,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -120,7 +119,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
     let known = known_values(&module);
     assert_eq!(
         known.get(&invariant),
-        Some(&CpsAtom::Fun(helper)),
+        Some(&Atom::Fun(helper)),
         "the invariant recursive parameter is recognized as the known function"
     );
     assert!(
@@ -337,7 +336,7 @@ fn call_pattern_specialization_is_deterministic() {
 #[test]
 fn specialization_peels_a_recursive_callee_into_the_general_function() {
     // consume(t): leaf returns the field; node recurses on the child.
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
 
@@ -348,64 +347,64 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
     let child = module.add_value(Some("child".into()));
     let leaf = module.reserve_continuation();
     let node = module.reserve_continuation();
-    let leaf_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let leaf_body = module.add_node(Node::ApplyCont(Edge {
         target: consume_return,
-        args: vec![CpsAtom::Value(child)],
+        args: vec![Atom::Value(child)],
     }));
     module.define_continuation(
         leaf,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("leaf".into()),
             params: vec![],
             body: leaf_body,
         },
     );
-    let node_body = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(consume),
-        args: vec![CpsAtom::Value(child)],
+    let node_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(consume),
+        args: vec![Atom::Value(child)],
         return_to: consume_return,
     });
     module.define_continuation(
         node,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("node".into()),
             params: vec![],
             body: node_body,
         },
     );
-    let switch = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(tag),
+    let switch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(tag),
         cases: BTreeMap::from([(
             0,
-            CpsEdge {
+            Edge {
                 target: leaf,
                 args: vec![],
             },
         )]),
-        default: Some(CpsEdge {
+        default: Some(Edge {
             target: node,
             args: vec![],
         }),
     });
-    let scope = module.add_node(CpsNode::LetCont {
+    let scope = module.add_node(Node::LetCont {
         continuations: vec![leaf, node],
         body: switch,
     });
-    let project_child = module.add_node(CpsNode::LetIntrinsic {
+    let project_child = module.add_node(Node::LetIntrinsic {
         result: child,
-        op: CpsIntrinsic::TupleGet(1),
-        args: vec![CpsAtom::Value(t)],
+        op: Intrinsic::TupleGet(1),
+        args: vec![Atom::Value(t)],
         next: scope,
     });
-    let project_tag = module.add_node(CpsNode::LetIntrinsic {
+    let project_tag = module.add_node(Node::LetIntrinsic {
         result: tag,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(t)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(t)],
         next: project_child,
     });
     module.define_function(
         consume,
-        CpsFunction {
+        Function {
             debug_name: Some("consume".into()),
             params: vec![t],
             return_cont: consume_return,
@@ -414,26 +413,26 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
     );
 
     let root = module.add_value(Some("root".into()));
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(consume),
-        args: vec![CpsAtom::Value(root)],
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(consume),
+        args: vec![Atom::Value(root)],
         return_to: entry_return,
     });
-    let ctor = module.add_node(CpsNode::LetValue {
+    let ctor = module.add_node(Node::LetValue {
         result: root,
-        value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(5u32))),
+        value: ValueExpr::Tuple(vec![
+            Atom::Literal(Literal::Nat(Natural::from(0u32))),
+            Atom::Literal(Literal::Nat(Natural::from(5u32))),
         ]),
         next: call,
     });
-    let body = module.add_node(CpsNode::LetFun {
+    let body = module.add_node(Node::LetFun {
         functions: vec![consume],
         body: ctor,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -453,8 +452,8 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
         function_nodes(&module, clone)
             .into_iter()
             .find_map(|id| match module.node(id) {
-                Some(CpsNode::ApplyFun {
-                    callee: CpsCallee::Known(target),
+                Some(Node::ApplyFun {
+                    callee: Callee::Known(target),
                     ..
                 }) => Some(*target),
                 _ => None,
@@ -473,12 +472,12 @@ fn jump_specialization_threads_a_known_tag_edge_through_its_join() {
 
     assert!(specialize_jump_patterns(&mut module, &mut budget));
     // The some-edge repoints to a clone carrying the payload directly; the none-edge is a different (tag, arity) pattern and waits its turn.
-    let Some(CpsNode::ApplyCont(some_edge)) = module.node(some_jump) else {
+    let Some(Node::ApplyCont(some_edge)) = module.node(some_jump) else {
         panic!("some jump survives as a jump")
     };
     assert_ne!(some_edge.target, join);
-    assert_eq!(some_edge.args, vec![CpsAtom::Value(x)]);
-    let Some(CpsNode::ApplyCont(none_edge)) = module.node(none_jump) else {
+    assert_eq!(some_edge.args, vec![Atom::Value(x)]);
+    let Some(Node::ApplyCont(none_edge)) = module.node(none_jump) else {
         panic!("none jump survives as a jump")
     };
     assert_eq!(none_edge.target, join);

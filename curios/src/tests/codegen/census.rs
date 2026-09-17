@@ -7,8 +7,8 @@
 
 use {
     curios_cont::{
-        CpsAtom, CpsCallee, CpsContId, CpsEdge, CpsFunId, CpsIntrinsic, CpsLiteral, CpsModule,
-        CpsNode, CpsNodeId, CpsValueExpr, CpsValueId,
+        Atom, Callee, ContinuationId, Edge, FunctionId, Intrinsic, Literal, Module, Node, NodeId,
+        ValueExpr, ValueId,
     },
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
@@ -118,7 +118,7 @@ const CORPUS: [(&str, &str); 14] = [
 ];
 
 /// The optimized CPS `source` compiles to, captured at the `cont-optm` stage.
-fn cont_optm_module(source: &str) -> CpsModule {
+fn cont_optm_module(source: &str) -> Module {
     let entrypoint = source.parse::<Entrypoint>().expect("corpus program parses");
 
     let mut captured = None;
@@ -145,8 +145,8 @@ enum Consumption {
     RopeLen,
     RopeGet,
     RopeSlice,
-    ContinuationTransfer(CpsContId, usize),
-    KnownFunctionTransfer(CpsFunId, usize),
+    ContinuationTransfer(ContinuationId, usize),
+    KnownFunctionTransfer(FunctionId, usize),
     Return,
     HeapStorage,
     UnknownCall,
@@ -162,7 +162,7 @@ enum Consumption {
 /// The leading literal is what a variant classification rests on: `curios-ersd`'s door lowers a tagged constructor to `(tag, payload…)` with the tag a literal `Nat`, so a construction whose slot zero is a literal is one a family's discriminant travels in front of. A construction whose slot zero is a *value* is either an ordinary product or a variant the return protocol already rebuilt from fields — which is why the count of those is reported rather than assumed to be zero.
 #[derive(Debug, Clone, Copy)]
 struct TupleSite {
-    node: CpsNodeId,
+    node: NodeId,
     arity: usize,
     tag: Option<u32>,
 }
@@ -181,34 +181,34 @@ enum ReturnShape {
 /// Where a value is introduced, for the free-crossing check: the function whose frame it belongs to.
 #[derive(Debug, Clone, Copy)]
 enum Home {
-    Fun(CpsFunId),
-    Cont(CpsContId),
-    Node(CpsNodeId),
+    Fun(FunctionId),
+    Cont(ContinuationId),
+    Node(NodeId),
 }
 
 /// The derived per-module facts the survey classifies over. Everything is read off the public module surface in one pass each.
 struct Census<'m> {
-    module: &'m CpsModule,
-    owner_of_node: BTreeMap<CpsNodeId, CpsFunId>,
-    owner_of_cont: BTreeMap<CpsContId, CpsFunId>,
-    declared_in: BTreeMap<CpsFunId, CpsFunId>,
-    sentinels: BTreeMap<CpsContId, CpsFunId>,
-    result_conts: BTreeSet<CpsContId>,
-    closure_funs: BTreeSet<CpsFunId>,
-    uses: BTreeMap<CpsValueId, Vec<(CpsNodeId, Consumption)>>,
-    tuple_sites: BTreeMap<CpsValueId, TupleSite>,
-    slice_sites: BTreeMap<CpsValueId, CpsNodeId>,
-    home_of_value: BTreeMap<CpsValueId, Home>,
-    incoming_cont: BTreeMap<(CpsContId, usize), Vec<CpsAtom>>,
-    incoming_fun: BTreeMap<(CpsFunId, usize), Vec<CpsAtom>>,
+    module: &'m Module,
+    owner_of_node: BTreeMap<NodeId, FunctionId>,
+    owner_of_cont: BTreeMap<ContinuationId, FunctionId>,
+    declared_in: BTreeMap<FunctionId, FunctionId>,
+    sentinels: BTreeMap<ContinuationId, FunctionId>,
+    result_conts: BTreeSet<ContinuationId>,
+    closure_funs: BTreeSet<FunctionId>,
+    uses: BTreeMap<ValueId, Vec<(NodeId, Consumption)>>,
+    tuple_sites: BTreeMap<ValueId, TupleSite>,
+    slice_sites: BTreeMap<ValueId, NodeId>,
+    home_of_value: BTreeMap<ValueId, Home>,
+    incoming_cont: BTreeMap<(ContinuationId, usize), Vec<Atom>>,
+    incoming_fun: BTreeMap<(FunctionId, usize), Vec<Atom>>,
 }
 
 /// One merged flow: the constructions, slice results, and parameters a candidate value travels between, with everything its members' uses revealed.
 #[derive(Debug, Default)]
 struct Region {
-    tuple_sites: Vec<CpsValueId>,
-    slice_sites: Vec<CpsValueId>,
-    params: Vec<CpsValueId>,
+    tuple_sites: Vec<ValueId>,
+    slice_sites: Vec<ValueId>,
+    params: Vec<ValueId>,
     arities: BTreeSet<usize>,
     /// The distinct literal discriminants the region's constructions lead with — its roster, as far as the flow reveals one.
     tags: BTreeSet<u32>,
@@ -310,7 +310,7 @@ impl Region {
 }
 
 impl<'m> Census<'m> {
-    fn of(module: &'m CpsModule) -> Self {
+    fn of(module: &'m Module) -> Self {
         let mut census = Self {
             module,
             owner_of_node: BTreeMap::new(),
@@ -336,7 +336,7 @@ impl<'m> Census<'m> {
         let module = self.module;
         for (index, slot) in module.functions().iter().enumerate() {
             let Some(function) = slot else { continue };
-            let fun = CpsFunId::from_index(index);
+            let fun = FunctionId::from_index(index);
             self.sentinels.insert(function.return_cont, fun);
             for param in &function.params {
                 self.home_of_value.insert(*param, Home::Fun(fun));
@@ -348,16 +348,16 @@ impl<'m> Census<'m> {
                     continue;
                 }
                 match module.node(node_id).expect("live node") {
-                    CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
+                    Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. } => {
                         stack.push(*next);
                     }
-                    CpsNode::LetFun { functions, body } => {
+                    Node::LetFun { functions, body } => {
                         for declared in functions {
                             self.declared_in.entry(*declared).or_insert(fun);
                         }
                         stack.push(*body);
                     }
-                    CpsNode::LetCont {
+                    Node::LetCont {
                         continuations,
                         body,
                     } => {
@@ -378,7 +378,7 @@ impl<'m> Census<'m> {
         }
     }
 
-    fn record(&mut self, value: CpsValueId, node: CpsNodeId, consumption: Consumption) {
+    fn record(&mut self, value: ValueId, node: NodeId, consumption: Consumption) {
         self.uses
             .entry(value)
             .or_default()
@@ -386,11 +386,11 @@ impl<'m> Census<'m> {
     }
 
     /// One edge's arguments: continuation transfers, or the return class when the target is a sentinel. Incoming atoms are recorded per parameter position for the exclusivity check.
-    fn record_edge(&mut self, node: CpsNodeId, edge: &CpsEdge) {
+    fn record_edge(&mut self, node: NodeId, edge: &Edge) {
         let returning = self.sentinels.contains_key(&edge.target);
         for (position, atom) in edge.args.iter().enumerate() {
             match atom {
-                CpsAtom::Value(value) => {
+                Atom::Value(value) => {
                     let consumption = if returning {
                         Consumption::Return
                     } else {
@@ -398,10 +398,10 @@ impl<'m> Census<'m> {
                     };
                     self.record(*value, node, consumption);
                 }
-                CpsAtom::Fun(fun) => {
+                Atom::Fun(fun) => {
                     self.closure_funs.insert(*fun);
                 }
-                CpsAtom::Literal(_) | CpsAtom::Filler => {}
+                Atom::Literal(_) | Atom::Filler => {}
             }
             if !returning {
                 self.incoming_cont
@@ -417,13 +417,13 @@ impl<'m> Census<'m> {
         let module = self.module;
         for (index, slot) in module.nodes().iter().enumerate() {
             let Some(node) = slot else { continue };
-            let node_id = CpsNodeId::from_index(index);
+            let node_id = NodeId::from_index(index);
             match node {
-                CpsNode::LetValue { result, value, .. } => {
+                Node::LetValue { result, value, .. } => {
                     // A tagged constructor is a `Variant` since family keying, and it is exactly the shape this census counts as a tuple site — the tag still sits at slot 0.
-                    if let CpsValueExpr::Tuple(atoms) | CpsValueExpr::Row(_, atoms) = value {
+                    if let ValueExpr::Tuple(atoms) | ValueExpr::Row(_, atoms) = value {
                         let tag = match atoms.first() {
-                            Some(CpsAtom::Literal(CpsLiteral::Nat(tag))) => tag.to_u32(),
+                            Some(Atom::Literal(Literal::Nat(tag))) => tag.to_u32(),
                             _ => None,
                         };
                         self.tuple_sites.insert(
@@ -437,73 +437,73 @@ impl<'m> Census<'m> {
                         self.home_of_value.insert(*result, Home::Node(node_id));
                     }
                     let atoms = match value {
-                        CpsValueExpr::Tuple(atoms)
-                        | CpsValueExpr::List(atoms)
-                        | CpsValueExpr::Row(_, atoms) => atoms.as_slice(),
-                        CpsValueExpr::Literal(_) => &[],
+                        ValueExpr::Tuple(atoms)
+                        | ValueExpr::List(atoms)
+                        | ValueExpr::Row(_, atoms) => atoms.as_slice(),
+                        ValueExpr::Literal(_) => &[],
                     };
                     for atom in atoms {
                         match atom {
-                            CpsAtom::Value(operand) => {
+                            Atom::Value(operand) => {
                                 self.record(*operand, node_id, Consumption::HeapStorage);
                             }
-                            CpsAtom::Fun(fun) => {
+                            Atom::Fun(fun) => {
                                 self.closure_funs.insert(*fun);
                             }
-                            CpsAtom::Literal(_) | CpsAtom::Filler => {}
+                            Atom::Literal(_) | Atom::Filler => {}
                         }
                     }
                 }
-                CpsNode::LetIntrinsic {
+                Node::LetIntrinsic {
                     result, op, args, ..
                 } => {
-                    if matches!(op, CpsIntrinsic::BinSlice(_) | CpsIntrinsic::ListSlice) {
+                    if matches!(op, Intrinsic::BinSlice(_) | Intrinsic::ListSlice) {
                         self.slice_sites.insert(*result, node_id);
                         self.home_of_value.insert(*result, Home::Node(node_id));
                     }
                     for (position, atom) in args.iter().enumerate() {
                         match atom {
-                            CpsAtom::Value(operand) => {
+                            Atom::Value(operand) => {
                                 let consumption = match (op, position) {
-                                    (CpsIntrinsic::TupleGet(field), 0) => {
+                                    (Intrinsic::TupleGet(field), 0) => {
                                         Consumption::Projection(*field)
                                     }
-                                    (CpsIntrinsic::BinLen(_) | CpsIntrinsic::ListLen, 0) => {
+                                    (Intrinsic::BinLen(_) | Intrinsic::ListLen, 0) => {
                                         Consumption::RopeLen
                                     }
-                                    (CpsIntrinsic::BinGet(_) | CpsIntrinsic::ListGet, 0) => {
+                                    (Intrinsic::BinGet(_) | Intrinsic::ListGet, 0) => {
                                         Consumption::RopeGet
                                     }
-                                    (CpsIntrinsic::BinSlice(_) | CpsIntrinsic::ListSlice, 0) => {
+                                    (Intrinsic::BinSlice(_) | Intrinsic::ListSlice, 0) => {
                                         Consumption::RopeSlice
                                     }
                                     _ => Consumption::OpaqueIntrinsic,
                                 };
                                 self.record(*operand, node_id, consumption);
                             }
-                            CpsAtom::Fun(fun) => {
+                            Atom::Fun(fun) => {
                                 self.closure_funs.insert(*fun);
                             }
-                            CpsAtom::Literal(_) | CpsAtom::Filler => {}
+                            Atom::Literal(_) | Atom::Filler => {}
                         }
                     }
                 }
-                CpsNode::ApplyFun {
+                Node::ApplyFun {
                     callee,
                     args,
                     return_to,
                 } => {
                     self.result_conts.insert(*return_to);
                     let known = match callee {
-                        CpsCallee::Known(fun) => Some(*fun),
-                        CpsCallee::Closure(closure) => {
+                        Callee::Known(fun) => Some(*fun),
+                        Callee::Closure(closure) => {
                             self.record(*closure, node_id, Consumption::UnknownCall);
                             None
                         }
                     };
                     for (position, atom) in args.iter().enumerate() {
                         match atom {
-                            CpsAtom::Value(operand) => match known {
+                            Atom::Value(operand) => match known {
                                 Some(fun) => {
                                     self.record(
                                         *operand,
@@ -513,10 +513,10 @@ impl<'m> Census<'m> {
                                 }
                                 None => self.record(*operand, node_id, Consumption::UnknownCall),
                             },
-                            CpsAtom::Fun(fun) => {
+                            Atom::Fun(fun) => {
                                 self.closure_funs.insert(*fun);
                             }
-                            CpsAtom::Literal(_) | CpsAtom::Filler => {}
+                            Atom::Literal(_) | Atom::Filler => {}
                         }
                         if let Some(fun) = known {
                             self.incoming_fun
@@ -526,61 +526,59 @@ impl<'m> Census<'m> {
                         }
                     }
                 }
-                CpsNode::ApplyCont(edge) => self.record_edge(node_id, edge),
-                CpsNode::Switch {
+                Node::ApplyCont(edge) => self.record_edge(node_id, edge),
+                Node::Switch {
                     scrutinee,
                     cases,
                     default,
                 } => {
-                    if let CpsAtom::Value(value) = scrutinee {
+                    if let Atom::Value(value) = scrutinee {
                         self.record(*value, node_id, Consumption::Scrutinee);
                     }
                     for edge in cases.values().chain(default.as_ref()) {
                         self.record_edge(node_id, edge);
                     }
                 }
-                CpsNode::Foreign {
+                Node::Foreign {
                     args, return_to, ..
                 } => {
                     self.result_conts.insert(*return_to);
                     self.record_atoms(node_id, args, Consumption::ForeignCall);
                 }
-                CpsNode::Cell {
+                Node::Cell {
                     args, return_to, ..
                 } => {
                     self.result_conts.insert(*return_to);
                     self.record_atoms(node_id, args, Consumption::CellOperation);
                 }
-                CpsNode::Intrinsic {
+                Node::Intrinsic {
                     args, return_to, ..
                 } => {
                     self.result_conts.insert(*return_to);
                     self.record_atoms(node_id, args, Consumption::UnknownCall);
                 }
-                CpsNode::Exit { value } => {
-                    if let Some(CpsAtom::Value(value)) = value {
+                Node::Exit { value } => {
+                    if let Some(Atom::Value(value)) = value {
                         self.record(*value, node_id, Consumption::ExitValue);
                     }
-                    if let Some(CpsAtom::Fun(fun)) = value {
+                    if let Some(Atom::Fun(fun)) = value {
                         self.closure_funs.insert(*fun);
                     }
                 }
-                CpsNode::LetFun { .. }
-                | CpsNode::LetCont { .. }
-                | CpsNode::Panic(_)
-                | CpsNode::Unreachable => {}
+                Node::LetFun { .. } | Node::LetCont { .. } | Node::Panic(_) | Node::Unreachable => {
+                }
             }
         }
     }
 
-    fn record_atoms(&mut self, node: CpsNodeId, atoms: &[CpsAtom], consumption: Consumption) {
+    fn record_atoms(&mut self, node: NodeId, atoms: &[Atom], consumption: Consumption) {
         for atom in atoms {
             match atom {
-                CpsAtom::Value(value) => self.record(*value, node, consumption),
-                CpsAtom::Fun(fun) => {
+                Atom::Value(value) => self.record(*value, node, consumption),
+                Atom::Fun(fun) => {
                     self.closure_funs.insert(*fun);
                 }
-                CpsAtom::Literal(_) | CpsAtom::Filler => {}
+                Atom::Literal(_) | Atom::Filler => {}
             }
         }
     }
@@ -588,11 +586,11 @@ impl<'m> Census<'m> {
     /// What each live function's return edges hand back, one entry per distinct shape.
     ///
     /// Return components are surveyed apart from the merged regions above because a variant-width *return* need not contain a construction at all: an immediate family's bare constructor returns its payload, which seeds no region and would be invisible to a walk that starts at tuple sites. This is the measurement M2's gate reads.
-    fn return_shapes(&self) -> BTreeMap<CpsFunId, BTreeSet<ReturnShape>> {
-        let mut shapes = BTreeMap::<CpsFunId, BTreeSet<ReturnShape>>::new();
-        let mut record = |owner: CpsFunId, edge: &CpsEdge, census: &Self| {
+    fn return_shapes(&self) -> BTreeMap<FunctionId, BTreeSet<ReturnShape>> {
+        let mut shapes = BTreeMap::<FunctionId, BTreeSet<ReturnShape>>::new();
+        let mut record = |owner: FunctionId, edge: &Edge, census: &Self| {
             let shape = match edge.args.as_slice() {
-                [CpsAtom::Value(value)] => match census.tuple_sites.get(value) {
+                [Atom::Value(value)] => match census.tuple_sites.get(value) {
                     Some(site) => ReturnShape::Tuple(site.arity),
                     None => ReturnShape::Bare,
                 },
@@ -603,9 +601,9 @@ impl<'m> Census<'m> {
         };
         for slot in self.module.nodes().iter() {
             let Some(node) = slot else { continue };
-            let edges: Vec<&CpsEdge> = match node {
-                CpsNode::ApplyCont(edge) => vec![edge],
-                CpsNode::Switch { cases, default, .. } => {
+            let edges: Vec<&Edge> = match node {
+                Node::ApplyCont(edge) => vec![edge],
+                Node::Switch { cases, default, .. } => {
                     cases.values().chain(default.as_ref()).collect()
                 }
                 _ => continue,
@@ -620,7 +618,7 @@ impl<'m> Census<'m> {
     }
 
     /// The live nodes cloning `fun` would copy: its own body's, plus — recursively — those of every function declared inside it, which is the accounting `curios-cont`'s `copied_extent` prices a specialization clone at.
-    fn extent(&self, fun: CpsFunId) -> usize {
+    fn extent(&self, fun: FunctionId) -> usize {
         let own = self
             .owner_of_node
             .values()
@@ -634,14 +632,14 @@ impl<'m> Census<'m> {
             .sum::<usize>()
     }
 
-    fn owner_name(&self, fun: CpsFunId) -> String {
+    fn owner_name(&self, fun: FunctionId) -> String {
         self.module
             .function(fun)
             .and_then(|function| function.debug_name.clone())
             .unwrap_or_else(|| fun.to_string())
     }
 
-    fn home_owner(&self, home: Home) -> Option<CpsFunId> {
+    fn home_owner(&self, home: Home) -> Option<FunctionId> {
         match home {
             Home::Fun(fun) => Some(fun),
             Home::Cont(cont) => self.owner_of_cont.get(&cont).copied(),
@@ -652,8 +650,8 @@ impl<'m> Census<'m> {
     /// Group every candidate and every parameter it flows through into merged regions, then classify each region's uses, ownership, and exclusivity.
     fn regions(&self) -> Vec<Region> {
         // Union-find over aggregate transfers: a value and the parameter receiving it are one flow.
-        let mut parent = BTreeMap::<CpsValueId, CpsValueId>::new();
-        fn find(parent: &mut BTreeMap<CpsValueId, CpsValueId>, value: CpsValueId) -> CpsValueId {
+        let mut parent = BTreeMap::<ValueId, ValueId>::new();
+        fn find(parent: &mut BTreeMap<ValueId, ValueId>, value: ValueId) -> ValueId {
             let mut root = value;
             while let Some(next) = parent.get(&root).copied() {
                 root = next;
@@ -665,7 +663,7 @@ impl<'m> Census<'m> {
             }
             root
         }
-        let union = |parent: &mut BTreeMap<CpsValueId, CpsValueId>, a: CpsValueId, b| {
+        let union = |parent: &mut BTreeMap<ValueId, ValueId>, a: ValueId, b| {
             let (a, b) = (find(parent, a), find(parent, b));
             if a != b {
                 parent.insert(a, b);
@@ -693,8 +691,8 @@ impl<'m> Census<'m> {
         }
 
         // Collect the members of every flow containing a candidate site.
-        let mut members = BTreeMap::<CpsValueId, Vec<CpsValueId>>::new();
-        let all: BTreeSet<CpsValueId> = self
+        let mut members = BTreeMap::<ValueId, Vec<ValueId>>::new();
+        let all: BTreeSet<ValueId> = self
             .tuple_sites
             .keys()
             .chain(self.slice_sites.keys())
@@ -738,7 +736,7 @@ impl<'m> Census<'m> {
                 continue;
             }
 
-            let group_set: BTreeSet<CpsValueId> = group.iter().copied().collect();
+            let group_set: BTreeSet<ValueId> = group.iter().copied().collect();
             for value in &group {
                 let home = self.home_of_value.get(value).copied();
                 for (node, consumption) in self.uses.get(value).map_or(&[][..], Vec::as_slice) {
@@ -804,7 +802,7 @@ impl<'m> Census<'m> {
                             .map_or(&[][..], Vec::as_slice)
                         {
                             match atom {
-                                CpsAtom::Value(value) if group_set.contains(value) => {}
+                                Atom::Value(value) if group_set.contains(value) => {}
                                 other => {
                                     region
                                         .mixed
@@ -831,7 +829,7 @@ impl<'m> Census<'m> {
                             .map_or(&[][..], Vec::as_slice)
                         {
                             match atom {
-                                CpsAtom::Value(value) if group_set.contains(value) => {}
+                                Atom::Value(value) if group_set.contains(value) => {}
                                 other => {
                                     region
                                         .mixed
@@ -1109,7 +1107,7 @@ fn step_specialization_extent() {
             .iter()
             .any(|hint| name.contains(hint))
         {
-            let fun = CpsFunId::from_index(index);
+            let fun = FunctionId::from_index(index);
             println!("{name}: extent {}", census.extent(fun));
         }
     }
@@ -1176,8 +1174,8 @@ struct Rebirth {
 
 /// A value whose every recorded use takes it apart — projection or scrutinee — inside one function: the death half of a pair, with its width known exactly when it is itself a visible construction and by its widest projection otherwise.
 struct Dying {
-    value: CpsValueId,
-    fun: CpsFunId,
+    value: ValueId,
+    fun: FunctionId,
     constructed: Option<usize>,
     projected: Option<usize>,
 }
@@ -1252,17 +1250,17 @@ fn rebirth(census: &Census) -> Rebirth {
     // The rope substrate needs no pairing search: an extend consumes its base into a same-layout successor by construction, so the only question is whether the base was threaded linearly — one use, this extend — or shared.
     for (index, slot) in census.module.nodes().iter().enumerate() {
         let Some(node) = slot else { continue };
-        let node_id = CpsNodeId::from_index(index);
-        let CpsNode::LetIntrinsic { op, args, .. } = node else {
+        let node_id = NodeId::from_index(index);
+        let Node::LetIntrinsic { op, args, .. } = node else {
             continue;
         };
-        let bases: &[CpsAtom] = match op {
-            CpsIntrinsic::BinAppend(_) | CpsIntrinsic::ListAppend => &args[..1],
-            CpsIntrinsic::BinConcat(_, _) | CpsIntrinsic::ListConcat(_) => args.as_slice(),
+        let bases: &[Atom] = match op {
+            Intrinsic::BinAppend(_) | Intrinsic::ListAppend => &args[..1],
+            Intrinsic::BinConcat(_, _) | Intrinsic::ListConcat(_) => args.as_slice(),
             _ => continue,
         };
         for base in bases {
-            let CpsAtom::Value(base) = base else { continue };
+            let Atom::Value(base) = base else { continue };
             tally.extends += 1;
             let uses = census.uses.get(base).map_or(&[][..], Vec::as_slice);
             if let [(node, _)] = uses

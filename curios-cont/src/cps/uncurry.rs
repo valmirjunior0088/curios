@@ -14,15 +14,15 @@ use {
 /// Each function some caller observes, with the width every one of its call sites is admitted at — or `None` where a site refuses.
 ///
 /// The three answers are three different things, and [`uncurry_returns`] needs them apart: `Some(width)` is a function whose every non-tail caller applies what it returns, at that one width; `None` is one with a caller that does something else, which no class-mate's width may overrule; and absence is a function reached only by a class-mate's tail call — *unobserved*, with no caller of its own to disagree, taking its width from the class. Both halves of a verdict are [`admit_site`]'s, per site, and [`rewritable`]'s, per function; nothing here judges a site a second way.
-pub(super) fn uncurryable(module: &CpsModule) -> BTreeMap<CpsFunId, Option<usize>> {
+pub(super) fn uncurryable(module: &Module) -> BTreeMap<FunctionId, Option<usize>> {
     let calls = analyze_calls(module);
-    let mut verdicts = BTreeMap::<CpsFunId, Option<usize>>::new();
+    let mut verdicts = BTreeMap::<FunctionId, Option<usize>>::new();
 
     for owner in module.functions.live_ids().collect::<Vec<_>>() {
         let sentinel = module.function(owner).unwrap().return_cont;
         for node_id in function_nodes(module, owner) {
-            let Some(CpsNode::ApplyFun {
-                callee: CpsCallee::Known(callee),
+            let Some(Node::ApplyFun {
+                callee: Callee::Known(callee),
                 return_to,
                 ..
             }) = module.node(node_id)
@@ -53,7 +53,7 @@ pub(super) fn uncurryable(module: &CpsModule) -> BTreeMap<CpsFunId, Option<usize
 /// Whether `function` could be rewritten at all, on grounds that have nothing to do with what its callers do.
 ///
 /// Separated out because it has to be asked of every member of a class, including the ones no caller observes. Those take their width from the class rather than from a site of their own, and none of the three facts below is implied by that width: an escaping member reaches its callers through the arity-keyed `clsr/{arity}` supertype, which the rewrite changes; the entry is called by the host; and a member whose return edges do not all carry a function reference has an edge the rewrite cannot turn into a call, which would leave it handing back a raw value where its class-mates hand back a called one.
-fn rewritable(module: &CpsModule, calls: &CallAnalysis, function: CpsFunId) -> bool {
+fn rewritable(module: &Module, calls: &CallAnalysis, function: FunctionId) -> bool {
     !calls.escaping.contains(&function)
         && module.entry() != Some(function)
         && returns_functions(module, function)
@@ -62,18 +62,16 @@ fn rewritable(module: &CpsModule, calls: &CallAnalysis, function: CpsFunId) -> b
 /// Whether every edge `function` returns on carries a function reference — what the rewrite turns into a tail call.
 ///
 /// Vacuously true for a function with no return edge at all, which returns only by tail-forwarding. Such a member has nothing of its own to rewrite and takes its whole answer from the class it forwards into.
-fn returns_functions(module: &CpsModule, function: CpsFunId) -> bool {
+fn returns_functions(module: &Module, function: FunctionId) -> bool {
     let sentinel = module.function(function).unwrap().return_cont;
     for node_id in function_nodes(module, function) {
-        let edges: Vec<&CpsEdge> = match module.node(node_id).unwrap() {
-            CpsNode::ApplyCont(edge) => vec![edge],
-            CpsNode::Switch { cases, default, .. } => {
-                cases.values().chain(default.as_ref()).collect()
-            }
+        let edges: Vec<&Edge> = match module.node(node_id).unwrap() {
+            Node::ApplyCont(edge) => vec![edge],
+            Node::Switch { cases, default, .. } => cases.values().chain(default.as_ref()).collect(),
             _ => continue,
         };
         for edge in edges.into_iter().filter(|edge| edge.target == sentinel) {
-            if !matches!(edge.args.as_slice(), [CpsAtom::Fun(_)]) {
+            if !matches!(edge.args.as_slice(), [Atom::Fun(_)]) {
                 return false;
             }
         }
@@ -83,7 +81,7 @@ fn returns_functions(module: &CpsModule, function: CpsFunId) -> bool {
 
 /// One call site the rewrite can absorb: what the callee takes over, and how the site resumes without the closure.
 struct Site {
-    passed: Vec<CpsAtom>,
+    passed: Vec<Atom>,
     resume: Resume,
 }
 
@@ -92,7 +90,7 @@ struct Site {
 /// **Every condition on a site is here, and nowhere else.** Admission ([`uncurryable`]) and planning ([`plan_class`]) each walked the resume with a list of their own, and each list had a clause the other lacked — the plan counted application sites and never asked whether the closure was also kept, so a member the admission had refused was planned on its class-mate's width and rewritten, and the tuple that had held the closure held the applied answer. One judgment consumed twice cannot disagree with itself.
 ///
 /// The conditions: the resume receives the one value the tuple protocol delivers; that value's only use is a single application, which [`sole_application`] establishes over the whole region, nested functions included; the application's arguments exist where the call is rather than being bound inside the resume, or moving the application above the call would move a computation with it; and the application is reached from the resume's head through `LetCont`s alone, which is what [`Resume`] needs. A width of zero is refused because it is a different transform wearing this one's clothes: with no argument to absorb, the closure is a *thunk* and the rewrite would only decide when it runs — which for an `Io` description is the one thing its meaning rests on.
-fn admit_site(module: &CpsModule, return_to: CpsContId) -> Option<Site> {
+fn admit_site(module: &Module, return_to: ContinuationId) -> Option<Site> {
     let resume = module.continuation(return_to)?;
     let [result] = resume.params.as_slice() else {
         return None;
@@ -104,14 +102,14 @@ fn admit_site(module: &CpsModule, return_to: CpsContId) -> Option<Site> {
     let bound = values_bound_in(module, resume.body);
     if passed
         .iter()
-        .any(|atom| matches!(atom, CpsAtom::Value(value) if bound.contains(value)))
+        .any(|atom| matches!(atom, Atom::Value(value) if bound.contains(value)))
     {
         return None;
     }
     if !reached_directly(module, resume.body, site) {
         return None;
     }
-    let CpsNode::ApplyFun {
+    let Node::ApplyFun {
         return_to: after, ..
     } = *module.node(site).unwrap()
     else {
@@ -133,28 +131,24 @@ fn admit_site(module: &CpsModule, return_to: CpsContId) -> Option<Site> {
 /// The one application of `value` beneath `body`, with its arguments, when that application is the value's only use — or `None` when any use does anything else: a second application, an ordinary operand, which would dangle once the callee returns the answer instead of the closure, or any mention inside a function defined beneath `body`, which captures the closure and outlives the site.
 ///
 /// The capture rule is what [`free_values`](super::analysis::free_values) warns a pass about to remove a binding of: [`nodes_from`] enters a `LetFun`'s continuation and not its members, so a lambda defined below the application that applied the closure again was invisible here. The site was admitted on its one visible application, the callee absorbed it, and the lambda went on applying what was by then the applied answer — a trap where the program printed a number.
-fn sole_application(
-    module: &CpsModule,
-    body: CpsNodeId,
-    value: CpsValueId,
-) -> Option<(CpsNodeId, Vec<CpsAtom>)> {
+fn sole_application(module: &Module, body: NodeId, value: ValueId) -> Option<(NodeId, Vec<Atom>)> {
     let mut found = None;
     for node_id in nodes_from(module, body) {
         let node = module.node(node_id).unwrap();
         for atom in atoms(node) {
-            if matches!(atom, CpsAtom::Value(used) if *used == value) {
+            if matches!(atom, Atom::Value(used) if *used == value) {
                 return None;
             }
         }
-        if let CpsNode::LetFun { functions, .. } = node
+        if let Node::LetFun { functions, .. } = node
             && functions
                 .iter()
                 .any(|function| mentioned_in(module, *function, value))
         {
             return None;
         }
-        if let CpsNode::ApplyFun {
-            callee: CpsCallee::Closure(callee),
+        if let Node::ApplyFun {
+            callee: Callee::Closure(callee),
             args,
             ..
         } = node
@@ -170,28 +164,28 @@ fn sole_application(
 }
 
 /// Whether `function` mentions `value` anywhere in its region — as an operand, as a closure callee, or inside a function it defines in turn.
-fn mentioned_in(module: &CpsModule, function: CpsFunId, value: CpsValueId) -> bool {
+fn mentioned_in(module: &Module, function: FunctionId, value: ValueId) -> bool {
     region_nodes(module, module.function(function).unwrap().body)
         .into_iter()
         .any(|node_id| match module.node(node_id).unwrap() {
-            CpsNode::ApplyFun {
-                callee: CpsCallee::Closure(callee),
+            Node::ApplyFun {
+                callee: Callee::Closure(callee),
                 ..
             } if *callee == value => true,
             node => atoms(node)
                 .into_iter()
-                .any(|atom| matches!(atom, CpsAtom::Value(used) if *used == value)),
+                .any(|atom| matches!(atom, Atom::Value(used) if *used == value)),
         })
 }
 
 /// Every node beneath `body`, the bodies of the functions defined beneath it included, transitively — the whole region a site's rewrite reaches, where [`nodes_from`] stops at a nested function.
-fn region_nodes(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> {
+fn region_nodes(module: &Module, body: NodeId) -> Vec<NodeId> {
     let mut nodes = BTreeSet::new();
     let mut work = vec![body];
     while let Some(body) = work.pop() {
         for node_id in nodes_from(module, body) {
             if nodes.insert(node_id)
-                && let CpsNode::LetFun { functions, .. } = module.node(node_id).unwrap()
+                && let Node::LetFun { functions, .. } = module.node(node_id).unwrap()
             {
                 work.extend(
                     functions
@@ -206,14 +200,14 @@ fn region_nodes(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> {
 }
 
 /// The values a continuation's own body binds — what the call site above it cannot see.
-fn values_bound_in(module: &CpsModule, body: CpsNodeId) -> BTreeSet<CpsValueId> {
+fn values_bound_in(module: &Module, body: NodeId) -> BTreeSet<ValueId> {
     let mut bound = BTreeSet::new();
     for node_id in nodes_from(module, body) {
         match module.node(node_id).unwrap() {
-            CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
+            Node::LetValue { result, .. } | Node::LetIntrinsic { result, .. } => {
                 bound.insert(*result);
             }
-            CpsNode::LetCont { continuations, .. } => {
+            Node::LetCont { continuations, .. } => {
                 for continuation in continuations {
                     if let Some(definition) = module.continuation(*continuation) {
                         bound.extend(definition.params.iter().copied());
@@ -231,21 +225,21 @@ enum Resume {
     /// Resume where the *application* did, bypassing the continuation that received the closure.
     ///
     /// Admissible only when that continuation's body is the application and nothing else, which is what makes the bypass total rather than a skipped computation — and which also proves the target is in scope at the call: with no `LetCont` of its own to introduce it, the target was already bound where the receiving continuation was.
-    Retarget(CpsContId),
+    Retarget(ContinuationId),
     /// Keep that continuation, and turn the application inside it into a jump carrying what the callee now returns directly.
     ///
     /// Always well-formed, because nothing moves. It costs one live frame per call, which matters only in a loop — and in a loop the application is itself in tail position, so its target is the caller's own sentinel and [`Resume::Retarget`] takes the site instead.
     Jump {
-        site: CpsNodeId,
-        result: CpsValueId,
-        after: CpsContId,
+        site: NodeId,
+        result: ValueId,
+        after: ContinuationId,
     },
 }
 
 /// Absorb the application, for the first class every one of whose sites [`admit_site`] admits.
 ///
 /// Each member takes the applied arguments as extra parameters; each return edge `jump k[Fun(g)]` becomes the tail call `apply Known(g)` on them; and each call site passes them and resumes by whichever [`Resume`] form its shape admits.
-pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
+pub(super) fn uncurry_returns(module: &mut Module) -> bool {
     let verdicts = uncurryable(module);
     if !verdicts.values().any(Option::is_some) {
         return false;
@@ -286,12 +280,12 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
         let carried = extra[&member]
             .iter()
             .copied()
-            .map(CpsAtom::Value)
+            .map(Atom::Value)
             .collect::<Vec<_>>();
         for node_id in function_nodes(module, member) {
             // A member that returns by tail-calling another forwards what it was given, or the callee gains a parameter nothing passes.
-            if let CpsNode::ApplyFun {
-                callee: CpsCallee::Known(onward),
+            if let Node::ApplyFun {
+                callee: Callee::Known(onward),
                 args,
                 return_to,
             } = module.node(node_id).unwrap()
@@ -302,8 +296,8 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
                 args.extend(carried.iter().cloned());
                 module.nodes.set(
                     node_id,
-                    CpsNode::ApplyFun {
-                        callee: CpsCallee::Known(onward),
+                    Node::ApplyFun {
+                        callee: Callee::Known(onward),
                         args,
                         return_to: sentinel,
                     },
@@ -311,15 +305,15 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
                 continue;
             }
             // A return edge hands back a function this class no longer builds a closure for; calling it here is what absorbs the application.
-            if let CpsNode::ApplyCont(edge) = module.node(node_id).unwrap()
+            if let Node::ApplyCont(edge) = module.node(node_id).unwrap()
                 && edge.target == sentinel
-                && let [CpsAtom::Fun(returned)] = edge.args.as_slice()
+                && let [Atom::Fun(returned)] = edge.args.as_slice()
             {
                 let returned = *returned;
                 module.nodes.set(
                     node_id,
-                    CpsNode::ApplyFun {
-                        callee: CpsCallee::Known(returned),
+                    Node::ApplyFun {
+                        callee: Callee::Known(returned),
                         args: carried.clone(),
                         return_to: sentinel,
                     },
@@ -329,7 +323,7 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
     }
 
     for (node_id, Site { passed, resume }) in plan {
-        let Some(CpsNode::ApplyFun {
+        let Some(Node::ApplyFun {
             callee,
             args,
             return_to,
@@ -348,9 +342,9 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
             } => {
                 module.nodes.set(
                     site,
-                    CpsNode::ApplyCont(CpsEdge {
+                    Node::ApplyCont(Edge {
                         target: after,
-                        args: vec![CpsAtom::Value(result)],
+                        args: vec![Atom::Value(result)],
                     }),
                 );
                 return_to
@@ -358,7 +352,7 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
         };
         module.nodes.set(
             node_id,
-            CpsNode::ApplyFun {
+            Node::ApplyFun {
                 callee,
                 args,
                 return_to,
@@ -371,11 +365,11 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
 /// Every call site the rewrite must change, each with what [`admit_site`] admitted at it, or `None` if any of them refuses.
 ///
 /// Parameters are added to a whole class at once, so a site discovered later to be unrewritable would leave a callee expecting an argument nobody passes. The transform has to be decided before it is begun — and it is decided by the same judgment that observed the widths, so nothing a site refused can be planned on its class-mates' account.
-fn plan_class(module: &CpsModule, members: &[CpsFunId]) -> Option<Vec<(CpsNodeId, Site)>> {
+fn plan_class(module: &Module, members: &[FunctionId]) -> Option<Vec<(NodeId, Site)>> {
     let mut plan = Vec::new();
     for node_id in module.nodes.live_ids().collect::<Vec<_>>() {
-        let Some(CpsNode::ApplyFun {
-            callee: CpsCallee::Known(callee),
+        let Some(Node::ApplyFun {
+            callee: Callee::Known(callee),
             return_to,
             ..
         }) = module.node(node_id)
@@ -397,28 +391,28 @@ fn plan_class(module: &CpsModule, members: &[CpsFunId]) -> Option<Vec<(CpsNodeId
 /// Whether `site` is reached from `body` by binding continuations and doing nothing else.
 ///
 /// [`Resume::Jump`] leaves the application where it stands but has the callee perform it before returning, so whatever the receiving continuation evaluates *ahead* of the application would move behind it. A `LetCont` introduces names without evaluating anything, which is why the shape that motivates the form — a join point bound for the application's own result — is admissible where a preceding `let` is not. It also rules out an application reached through a branch or a loop: one syntactic site inside a loop is many forcings, and the rewrite would leave one.
-fn reached_directly(module: &CpsModule, body: CpsNodeId, site: CpsNodeId) -> bool {
+fn reached_directly(module: &Module, body: NodeId, site: NodeId) -> bool {
     let mut node = body;
     loop {
         if node == site {
             return true;
         }
         match module.node(node) {
-            Some(CpsNode::LetCont { body, .. }) => node = *body,
+            Some(Node::LetCont { body, .. }) => node = *body,
             _ => return false,
         }
     }
 }
 
 /// The undirected connected components of the tail-call graph, which a shared return obliges to decide together.
-fn tail_classes(module: &CpsModule) -> Vec<Vec<CpsFunId>> {
-    let mut edges = BTreeMap::<CpsFunId, BTreeSet<CpsFunId>>::new();
+fn tail_classes(module: &Module) -> Vec<Vec<FunctionId>> {
+    let mut edges = BTreeMap::<FunctionId, BTreeSet<FunctionId>>::new();
     for owner in module.functions.live_ids().collect::<Vec<_>>() {
         let sentinel = module.function(owner).unwrap().return_cont;
         edges.entry(owner).or_default();
         for node_id in function_nodes(module, owner) {
-            if let Some(CpsNode::ApplyFun {
-                callee: CpsCallee::Known(callee),
+            if let Some(Node::ApplyFun {
+                callee: Callee::Known(callee),
                 return_to,
                 ..
             }) = module.node(node_id)

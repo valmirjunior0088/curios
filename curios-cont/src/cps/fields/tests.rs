@@ -3,15 +3,14 @@ use curios_num::Natural;
 use {
     super::{split_parameters, split_workers},
     crate::{
-        CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
-        CpsIntrinsic, CpsLiteral, CpsModule, CpsNode, CpsRow, CpsSlot, CpsValueExpr, CpsValueId,
-        FieldGroup, optimize,
+        Atom, Callee, Continuation, ContinuationId, Edge, FieldGroup, Function, FunctionId,
+        Intrinsic, Literal, Module, Node, Row, Slot, ValueExpr, ValueId, optimize,
     },
 };
 
 /// The canonical loop-carried product: a seed pair enters a header, one arm projects field 0 and jumps back with a fresh pair, the other hands the parameter to an exit that projects field 0 and nothing else. The accumulator of `/std/Str/fold`, in miniature.
-fn loop_module() -> (CpsModule, CpsFunId, CpsContId, CpsValueId) {
-    let mut module = CpsModule::default();
+fn loop_module() -> (Module, FunctionId, ContinuationId, ValueId) {
+    let mut module = Module::default();
     let seed = module.add_value(Some("seed".into()));
     let carried = module.add_value(Some("carried".into()));
     let read = module.add_value(Some("read".into()));
@@ -27,19 +26,19 @@ fn loop_module() -> (CpsModule, CpsFunId, CpsContId, CpsValueId) {
     let exit = module.reserve_continuation();
 
     // exit(out): result = out.0; return result
-    let deliver = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let deliver = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(result)],
+        args: vec![Atom::Value(result)],
     }));
-    let take = module.add_node(CpsNode::LetIntrinsic {
+    let take = module.add_node(Node::LetIntrinsic {
         result,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(out)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(out)],
         next: deliver,
     });
     module.define_continuation(
         exit,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("exit".into()),
             params: vec![out],
             body: take,
@@ -47,47 +46,47 @@ fn loop_module() -> (CpsModule, CpsFunId, CpsContId, CpsValueId) {
     );
 
     // header(carried): read = carried.0; bumped = read + 1; next = (bumped, 7); switch scrutinee { 0 => header(next), _ => exit(carried) }
-    let spin = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(scrutinee),
+    let spin = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(scrutinee),
         cases: [(
             0,
-            CpsEdge {
+            Edge {
                 target: header,
-                args: vec![CpsAtom::Value(next)],
+                args: vec![Atom::Value(next)],
             },
         )]
         .into(),
-        default: Some(CpsEdge {
+        default: Some(Edge {
             target: exit,
-            args: vec![CpsAtom::Value(carried)],
+            args: vec![Atom::Value(carried)],
         }),
     });
-    let build = module.add_node(CpsNode::LetValue {
+    let build = module.add_node(Node::LetValue {
         result: next,
-        value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Value(bumped),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
+        value: ValueExpr::Tuple(vec![
+            Atom::Value(bumped),
+            Atom::Literal(Literal::Nat(Natural::from(7u32))),
         ]),
         next: spin,
     });
-    let bump = module.add_node(CpsNode::LetIntrinsic {
+    let bump = module.add_node(Node::LetIntrinsic {
         result: bumped,
-        op: CpsIntrinsic::NatAdd,
+        op: Intrinsic::NatAdd,
         args: vec![
-            CpsAtom::Value(read),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            Atom::Value(read),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
         ],
         next: build,
     });
-    let project = module.add_node(CpsNode::LetIntrinsic {
+    let project = module.add_node(Node::LetIntrinsic {
         result: read,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(carried)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(carried)],
         next: bump,
     });
     module.define_continuation(
         header,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("header".into()),
             params: vec![carried],
             body: project,
@@ -95,25 +94,25 @@ fn loop_module() -> (CpsModule, CpsFunId, CpsContId, CpsValueId) {
     );
 
     // main(scrutinee): seed = (0, 7); header(seed)
-    let enter = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let enter = module.add_node(Node::ApplyCont(Edge {
         target: header,
-        args: vec![CpsAtom::Value(seed)],
+        args: vec![Atom::Value(seed)],
     }));
-    let plant = module.add_node(CpsNode::LetValue {
+    let plant = module.add_node(Node::LetValue {
         result: seed,
-        value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
+        value: ValueExpr::Tuple(vec![
+            Atom::Literal(Literal::Nat(Natural::from(0u32))),
+            Atom::Literal(Literal::Nat(Natural::from(7u32))),
         ]),
         next: enter,
     });
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![header, exit],
         body: plant,
     });
     module.define_function(
         function,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![scrutinee],
             return_cont,
@@ -153,8 +152,8 @@ fn a_split_records_the_group_and_verifies() {
 }
 
 /// Two join points, each handed its own pair by the entry and each projecting field 0 — candidates with nothing between them. `chained` instead routes one pair through both: the first join hands its parameter whole to the second, so the second's only incoming edge carries the first's parameter.
-fn two_joins_module(chained: bool) -> (CpsModule, CpsContId, CpsContId) {
-    let mut module = CpsModule::default();
+fn two_joins_module(chained: bool) -> (Module, ContinuationId, ContinuationId) {
+    let mut module = Module::default();
     let scrutinee = module.add_value(Some("scrutinee".into()));
     let first_pair = module.add_value(Some("first_pair".into()));
     let second_pair = module.add_value(Some("second_pair".into()));
@@ -169,19 +168,19 @@ fn two_joins_module(chained: bool) -> (CpsModule, CpsContId, CpsContId) {
     let second = module.reserve_continuation();
 
     // second(second_param): second_read = second_param.0; return second_read
-    let deliver = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let deliver = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(second_read)],
+        args: vec![Atom::Value(second_read)],
     }));
-    let take = module.add_node(CpsNode::LetIntrinsic {
+    let take = module.add_node(Node::LetIntrinsic {
         result: second_read,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(second_param)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(second_param)],
         next: deliver,
     });
     module.define_continuation(
         second,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("second".into()),
             params: vec![second_param],
             body: take,
@@ -190,24 +189,24 @@ fn two_joins_module(chained: bool) -> (CpsModule, CpsContId, CpsContId) {
 
     // first(first_param): first_read = first_param.0; then either return first_read, or second(first_param) when chained
     let leave = match chained {
-        true => module.add_node(CpsNode::ApplyCont(CpsEdge {
+        true => module.add_node(Node::ApplyCont(Edge {
             target: second,
-            args: vec![CpsAtom::Value(first_param)],
+            args: vec![Atom::Value(first_param)],
         })),
-        false => module.add_node(CpsNode::ApplyCont(CpsEdge {
+        false => module.add_node(Node::ApplyCont(Edge {
             target: return_cont,
-            args: vec![CpsAtom::Value(first_read)],
+            args: vec![Atom::Value(first_read)],
         })),
     };
-    let read = module.add_node(CpsNode::LetIntrinsic {
+    let read = module.add_node(Node::LetIntrinsic {
         result: first_read,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(first_param)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(first_param)],
         next: leave,
     });
     module.define_continuation(
         first,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("first".into()),
             params: vec![first_param],
             body: read,
@@ -216,49 +215,49 @@ fn two_joins_module(chained: bool) -> (CpsModule, CpsContId, CpsContId) {
 
     // main(scrutinee): first_pair = (0, 7); second_pair = (1, 8); switch scrutinee { 0 => first(first_pair), _ => second(second_pair) } — or first(first_pair) alone when chained
     let enter = match chained {
-        true => module.add_node(CpsNode::ApplyCont(CpsEdge {
+        true => module.add_node(Node::ApplyCont(Edge {
             target: first,
-            args: vec![CpsAtom::Value(first_pair)],
+            args: vec![Atom::Value(first_pair)],
         })),
-        false => module.add_node(CpsNode::Switch {
-            scrutinee: CpsAtom::Value(scrutinee),
+        false => module.add_node(Node::Switch {
+            scrutinee: Atom::Value(scrutinee),
             cases: [(
                 0,
-                CpsEdge {
+                Edge {
                     target: first,
-                    args: vec![CpsAtom::Value(first_pair)],
+                    args: vec![Atom::Value(first_pair)],
                 },
             )]
             .into(),
-            default: Some(CpsEdge {
+            default: Some(Edge {
                 target: second,
-                args: vec![CpsAtom::Value(second_pair)],
+                args: vec![Atom::Value(second_pair)],
             }),
         }),
     };
-    let plant_second = module.add_node(CpsNode::LetValue {
+    let plant_second = module.add_node(Node::LetValue {
         result: second_pair,
-        value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(8u32))),
+        value: ValueExpr::Tuple(vec![
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+            Atom::Literal(Literal::Nat(Natural::from(8u32))),
         ]),
         next: enter,
     });
-    let plant_first = module.add_node(CpsNode::LetValue {
+    let plant_first = module.add_node(Node::LetValue {
         result: first_pair,
-        value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
+        value: ValueExpr::Tuple(vec![
+            Atom::Literal(Literal::Nat(Natural::from(0u32))),
+            Atom::Literal(Literal::Nat(Natural::from(7u32))),
         ]),
         next: plant_second,
     });
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![first, second],
         body: plant_first,
     });
     module.define_function(
         function,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![scrutinee],
             return_cont,
@@ -341,8 +340,8 @@ fn a_loop_carried_product_erases_through_the_chain() {
         .filter(|node| {
             matches!(
                 node,
-                CpsNode::LetValue {
-                    value: CpsValueExpr::Tuple(atoms),
+                Node::LetValue {
+                    value: ValueExpr::Tuple(atoms),
                     ..
                 } if atoms.len() == 2
             )
@@ -357,7 +356,7 @@ fn a_loop_carried_product_erases_through_the_chain() {
 /// A parameter that sometimes receives a call result is not a candidate: the forward half declines what the backward half would admit.
 #[test]
 fn a_mixed_origin_is_declined() {
-    let mut module = CpsModule::default();
+    let mut module = Module::default();
     let built = module.add_value(Some("built".into()));
     let landed = module.add_value(Some("landed".into()));
     let read = module.add_value(Some("read".into()));
@@ -367,10 +366,10 @@ fn a_mixed_origin_is_declined() {
     let callee_param = module.add_value(Some("callee/param".into()));
     let callee = module.reserve_function();
     let callee_ret = module.reserve_continuation();
-    let callee_exit = module.add_node(CpsNode::Exit { value: None });
+    let callee_exit = module.add_node(Node::Exit { value: None });
     module.define_function(
         callee,
-        CpsFunction {
+        Function {
             debug_name: Some("callee".into()),
             params: vec![callee_param],
             return_cont: callee_ret,
@@ -383,66 +382,66 @@ fn a_mixed_origin_is_declined() {
     let join = module.reserve_continuation();
     let resume = module.reserve_continuation();
 
-    let join_exit = module.add_node(CpsNode::Exit { value: None });
-    let project = module.add_node(CpsNode::LetIntrinsic {
+    let join_exit = module.add_node(Node::Exit { value: None });
+    let project = module.add_node(Node::LetIntrinsic {
         result: read,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(landed)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(landed)],
         next: join_exit,
     });
     module.define_continuation(
         join,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("join".into()),
             params: vec![landed],
             body: project,
         },
     );
-    let forward = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let forward = module.add_node(Node::ApplyCont(Edge {
         target: join,
-        args: vec![CpsAtom::Value(received)],
+        args: vec![Atom::Value(received)],
     }));
     module.define_continuation(
         resume,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("resume".into()),
             params: vec![received],
             body: forward,
         },
     );
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(callee),
-        args: vec![CpsAtom::Value(argument)],
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(argument)],
         return_to: resume,
     });
-    let split_paths = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(argument),
+    let split_paths = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(argument),
         cases: [(
             0,
-            CpsEdge {
+            Edge {
                 target: join,
-                args: vec![CpsAtom::Value(built)],
+                args: vec![Atom::Value(built)],
             },
         )]
         .into(),
         default: None,
     });
     let _ = call;
-    let build = module.add_node(CpsNode::LetValue {
+    let build = module.add_node(Node::LetValue {
         result: built,
-        value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
+        value: ValueExpr::Tuple(vec![
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+            Atom::Literal(Literal::Nat(Natural::from(2u32))),
         ]),
         next: split_paths,
     });
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![join, resume],
         body: build,
     });
     module.define_function(
         caller,
-        CpsFunction {
+        Function {
             debug_name: Some("caller".into()),
             params: vec![argument],
             return_cont: caller_ret,
@@ -458,8 +457,8 @@ fn a_mixed_origin_is_declined() {
 }
 
 /// The loop-carried *variant*: a one-tuple nullary constructor enters the header and a four-tuple payload constructor circulates through it, so no exact product ever described the parameter. The UTF-8 scan state of `/std/Str`, in miniature.
-fn variant_loop_module() -> (CpsModule, CpsContId, CpsValueId) {
-    let mut module = CpsModule::default();
+fn variant_loop_module() -> (Module, ContinuationId, ValueId) {
+    let mut module = Module::default();
     let narrow = module.add_value(Some("narrow".into()));
     let wide = module.add_value(Some("wide".into()));
     let carried = module.add_value(Some("carried".into()));
@@ -473,19 +472,19 @@ fn variant_loop_module() -> (CpsModule, CpsContId, CpsValueId) {
     let exit = module.reserve_continuation();
 
     // exit(out): result = out.0; return result
-    let deliver = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let deliver = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(result)],
+        args: vec![Atom::Value(result)],
     }));
-    let take = module.add_node(CpsNode::LetIntrinsic {
+    let take = module.add_node(Node::LetIntrinsic {
         result,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(out)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(out)],
         next: deliver,
     });
     module.define_continuation(
         exit,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("exit".into()),
             params: vec![out],
             body: take,
@@ -493,40 +492,40 @@ fn variant_loop_module() -> (CpsModule, CpsContId, CpsValueId) {
     );
 
     // header(carried): tag = carried.0; switch tag { 0 => wide = (1, 7, 8, 9); header(wide), _ => exit(carried) }
-    let spin = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(tag),
+    let spin = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(tag),
         cases: [(
             0,
-            CpsEdge {
+            Edge {
                 target: header,
-                args: vec![CpsAtom::Value(wide)],
+                args: vec![Atom::Value(wide)],
             },
         )]
         .into(),
-        default: Some(CpsEdge {
+        default: Some(Edge {
             target: exit,
-            args: vec![CpsAtom::Value(carried)],
+            args: vec![Atom::Value(carried)],
         }),
     });
-    let build = module.add_node(CpsNode::LetValue {
+    let build = module.add_node(Node::LetValue {
         result: wide,
-        value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(8u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(9u32))),
+        value: ValueExpr::Tuple(vec![
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+            Atom::Literal(Literal::Nat(Natural::from(7u32))),
+            Atom::Literal(Literal::Nat(Natural::from(8u32))),
+            Atom::Literal(Literal::Nat(Natural::from(9u32))),
         ]),
         next: spin,
     });
-    let dispatch = module.add_node(CpsNode::LetIntrinsic {
+    let dispatch = module.add_node(Node::LetIntrinsic {
         result: tag,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(carried)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(carried)],
         next: build,
     });
     module.define_continuation(
         header,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("header".into()),
             params: vec![carried],
             body: dispatch,
@@ -534,22 +533,22 @@ fn variant_loop_module() -> (CpsModule, CpsContId, CpsValueId) {
     );
 
     // main(): narrow = (0); header(narrow)
-    let enter = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let enter = module.add_node(Node::ApplyCont(Edge {
         target: header,
-        args: vec![CpsAtom::Value(narrow)],
+        args: vec![Atom::Value(narrow)],
     }));
-    let plant = module.add_node(CpsNode::LetValue {
+    let plant = module.add_node(Node::LetValue {
         result: narrow,
-        value: CpsValueExpr::Tuple(vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))]),
+        value: ValueExpr::Tuple(vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))]),
         next: enter,
     });
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![header, exit],
         body: plant,
     });
     module.define_function(
         function,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -591,19 +590,17 @@ fn a_variant_splits_at_its_widest_constructor_with_per_edge_filler() {
         .iter()
         .flatten()
         .find_map(|node| match node {
-            CpsNode::ApplyCont(edge) if edge.target == header => Some(edge.args.clone()),
+            Node::ApplyCont(edge) if edge.target == header => Some(edge.args.clone()),
             _ => None,
         })
         .expect("the entry edge survives");
     assert_eq!(entry.len(), 4, "the edge carries the region's width");
     assert!(
-        matches!(entry[0], CpsAtom::Value(_)),
+        matches!(entry[0], Atom::Value(_)),
         "slot zero is the narrow constructor's own field: {entry:?}",
     );
     assert!(
-        entry[1..]
-            .iter()
-            .all(|atom| matches!(atom, CpsAtom::Filler)),
+        entry[1..].iter().all(|atom| matches!(atom, Atom::Filler)),
         "and the slots it does not carry are filler: {entry:?}",
     );
 
@@ -615,8 +612,8 @@ fn a_variant_splits_at_its_widest_constructor_with_per_edge_filler() {
         .filter(|node| {
             matches!(
                 node,
-                CpsNode::LetIntrinsic { op: CpsIntrinsic::TupleGet(index), args, .. }
-                    if *index >= 1 && matches!(args.as_slice(), [CpsAtom::Value(value)] if *value == narrow)
+                Node::LetIntrinsic { op: Intrinsic::TupleGet(index), args, .. }
+                    if *index >= 1 && matches!(args.as_slice(), [Atom::Value(value)] if *value == narrow)
             )
         })
         .count();
@@ -639,8 +636,8 @@ fn a_loop_carried_variant_erases_through_the_chain() {
         .filter(|node| {
             matches!(
                 node,
-                CpsNode::LetValue {
-                    value: CpsValueExpr::Tuple(_),
+                Node::LetValue {
+                    value: ValueExpr::Tuple(_),
                     ..
                 }
             )
@@ -653,27 +650,27 @@ fn a_loop_carried_variant_erases_through_the_chain() {
 }
 
 /// A known function whose variant argument is *itself* a merged flow — `Handle/Read`'s three constructors joining at a `choose` before the call, which is where this fixture comes from.
-fn merged_argument_module() -> (CpsModule, CpsFunId, CpsValueId) {
-    let mut module = CpsModule::default();
+fn merged_argument_module() -> (Module, FunctionId, ValueId) {
+    let mut module = Module::default();
     let callee_param = module.add_value(Some("callee/param".into()));
     let callee_read = module.add_value(Some("callee/read".into()));
     let callee = module.reserve_function();
     let callee_ret = module.reserve_continuation();
 
     // callee(r): x = r.0; return x
-    let callee_return = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let callee_return = module.add_node(Node::ApplyCont(Edge {
         target: callee_ret,
-        args: vec![CpsAtom::Value(callee_read)],
+        args: vec![Atom::Value(callee_read)],
     }));
-    let callee_body = module.add_node(CpsNode::LetIntrinsic {
+    let callee_body = module.add_node(Node::LetIntrinsic {
         result: callee_read,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(callee_param)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(callee_param)],
         next: callee_return,
     });
     module.define_function(
         callee,
-        CpsFunction {
+        Function {
             debug_name: Some("callee".into()),
             params: vec![callee_param],
             return_cont: callee_ret,
@@ -691,13 +688,13 @@ fn merged_argument_module() -> (CpsModule, CpsFunId, CpsValueId) {
     let join = module.reserve_continuation();
     let resume = module.reserve_continuation();
 
-    let done = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let done = module.add_node(Node::ApplyCont(Edge {
         target: caller_ret,
-        args: vec![CpsAtom::Value(received)],
+        args: vec![Atom::Value(received)],
     }));
     module.define_continuation(
         resume,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("resume".into()),
             params: vec![received],
             body: done,
@@ -705,14 +702,14 @@ fn merged_argument_module() -> (CpsModule, CpsFunId, CpsValueId) {
     );
 
     // join(merged): callee(merged) -> resume
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(callee),
-        args: vec![CpsAtom::Value(merged)],
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
+        args: vec![Atom::Value(merged)],
         return_to: resume,
     });
     module.define_continuation(
         join,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("join".into()),
             params: vec![merged],
             body: call,
@@ -720,45 +717,45 @@ fn merged_argument_module() -> (CpsModule, CpsFunId, CpsValueId) {
     );
 
     // caller(scrutinee): narrow = (1); wide = (0, 5); switch scrutinee { 0 => join(wide), _ => join(narrow) }
-    let pick = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(scrutinee),
+    let pick = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(scrutinee),
         cases: [(
             0,
-            CpsEdge {
+            Edge {
                 target: join,
-                args: vec![CpsAtom::Value(wide)],
+                args: vec![Atom::Value(wide)],
             },
         )]
         .into(),
-        default: Some(CpsEdge {
+        default: Some(Edge {
             target: join,
-            args: vec![CpsAtom::Value(narrow)],
+            args: vec![Atom::Value(narrow)],
         }),
     });
-    let build_wide = module.add_node(CpsNode::LetValue {
+    let build_wide = module.add_node(Node::LetValue {
         result: wide,
-        value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(5u32))),
+        value: ValueExpr::Tuple(vec![
+            Atom::Literal(Literal::Nat(Natural::from(0u32))),
+            Atom::Literal(Literal::Nat(Natural::from(5u32))),
         ]),
         next: pick,
     });
-    let build_narrow = module.add_node(CpsNode::LetValue {
+    let build_narrow = module.add_node(Node::LetValue {
         result: narrow,
-        value: CpsValueExpr::Tuple(vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))]),
+        value: ValueExpr::Tuple(vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))]),
         next: build_wide,
     });
-    let scope = module.add_node(CpsNode::LetCont {
+    let scope = module.add_node(Node::LetCont {
         continuations: vec![join, resume],
         body: build_narrow,
     });
-    let body = module.add_node(CpsNode::LetFun {
+    let body = module.add_node(Node::LetFun {
         functions: vec![callee],
         body: scope,
     });
     module.define_function(
         caller,
-        CpsFunction {
+        Function {
             debug_name: Some("caller".into()),
             params: vec![scrutinee],
             return_cont: caller_ret,
@@ -770,27 +767,27 @@ fn merged_argument_module() -> (CpsModule, CpsFunId, CpsValueId) {
 }
 
 /// Every projection in `module` that reads a visible construction, paired with that construction's arity. A read past the arity is the miscompile a site-blind width would produce: `$tuple/n` extends `$tuple/(n-1)`, so the emitter casts a projection's operand to the tuple type of `index + 1` and a narrower object fails that cast at runtime rather than at build time.
-fn projections_within_bounds(module: &CpsModule) -> bool {
+fn projections_within_bounds(module: &Module) -> bool {
     let built = module
         .nodes()
         .iter()
         .flatten()
         .filter_map(|node| match node {
-            CpsNode::LetValue {
+            Node::LetValue {
                 result,
-                value: CpsValueExpr::Tuple(atoms),
+                value: ValueExpr::Tuple(atoms),
                 ..
             } => Some((*result, atoms.len())),
             _ => None,
         })
         .collect::<std::collections::BTreeMap<_, _>>();
     module.nodes().iter().flatten().all(|node| match node {
-        CpsNode::LetIntrinsic {
-            op: CpsIntrinsic::TupleGet(index),
+        Node::LetIntrinsic {
+            op: Intrinsic::TupleGet(index),
             args,
             ..
         } => match args.as_slice() {
-            [CpsAtom::Value(value)] => built.get(value).is_none_or(|arity| *index < *arity),
+            [Atom::Value(value)] => built.get(value).is_none_or(|arity| *index < *arity),
             _ => true,
         },
         _ => true,
@@ -867,8 +864,8 @@ fn optimization_maintains_every_record() {
 }
 
 /// The suffix walk in miniature: a rope enters a loop as a whole window, each iteration reads its head and recurses on its tail slice. After the window split the loop carries `(base, offset, length)`, the slice is an extent guard plus an offset sum, and no physical view is ever constructed.
-fn walk_module() -> (CpsModule, crate::CpsContId) {
-    let mut module = CpsModule::default();
+fn walk_module() -> (Module, crate::ContinuationId) {
+    let mut module = Module::default();
     let rope = module.add_value(Some("rope".into()));
     let scrutinee = module.add_value(Some("scrutinee".into()));
     let window = module.add_value(Some("window".into()));
@@ -880,65 +877,65 @@ fn walk_module() -> (CpsModule, crate::CpsContId) {
     let return_cont = module.reserve_continuation();
     let header = module.reserve_continuation();
 
-    let spin = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(scrutinee),
+    let spin = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(scrutinee),
         cases: [(
             0,
-            CpsEdge {
+            Edge {
                 target: header,
-                args: vec![CpsAtom::Value(tail)],
+                args: vec![Atom::Value(tail)],
             },
         )]
         .into(),
-        default: Some(CpsEdge {
+        default: Some(Edge {
             target: return_cont,
-            args: vec![CpsAtom::Value(head)],
+            args: vec![Atom::Value(head)],
         }),
     });
     // A *suffix*, which is what `into_cont`'s peel emits: no count operand, so the fixture exercises the shape the compiler actually produces rather than one it no longer can.
-    let slice = module.add_node(CpsNode::LetIntrinsic {
+    let slice = module.add_node(Node::LetIntrinsic {
         result: tail,
-        op: CpsIntrinsic::BinRest(curios_utilities::Grain::X),
+        op: Intrinsic::BinRest(curios_utilities::Grain::X),
         args: vec![
-            CpsAtom::Value(window),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+            Atom::Value(window),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
         ],
         next: spin,
     });
-    let read = module.add_node(CpsNode::LetIntrinsic {
+    let read = module.add_node(Node::LetIntrinsic {
         result: head,
-        op: CpsIntrinsic::BinGet(curios_utilities::Grain::X),
+        op: Intrinsic::BinGet(curios_utilities::Grain::X),
         args: vec![
-            CpsAtom::Value(window),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            Atom::Value(window),
+            Atom::Literal(Literal::Nat(Natural::from(0u32))),
         ],
         next: slice,
     });
-    let measure = module.add_node(CpsNode::LetIntrinsic {
+    let measure = module.add_node(Node::LetIntrinsic {
         result: length,
-        op: CpsIntrinsic::BinLen(curios_utilities::Grain::X),
-        args: vec![CpsAtom::Value(window)],
+        op: Intrinsic::BinLen(curios_utilities::Grain::X),
+        args: vec![Atom::Value(window)],
         next: read,
     });
     module.define_continuation(
         header,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("header".into()),
             params: vec![window],
             body: measure,
         },
     );
-    let enter = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let enter = module.add_node(Node::ApplyCont(Edge {
         target: header,
-        args: vec![CpsAtom::Value(rope)],
+        args: vec![Atom::Value(rope)],
     }));
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![header],
         body: enter,
     });
     module.define_function(
         function,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![rope, scrutinee],
             return_cont,
@@ -972,13 +969,13 @@ fn a_suffix_walk_virtualizes_its_windows() {
     let mut slices = 0;
     let mut extents = 0;
     for node in module.nodes().iter().flatten() {
-        if let CpsNode::LetIntrinsic { op, .. } = node {
+        if let Node::LetIntrinsic { op, .. } = node {
             match op {
-                CpsIntrinsic::BinSlice(_)
-                | CpsIntrinsic::BinRest(_)
-                | CpsIntrinsic::ListSlice
-                | CpsIntrinsic::ListRest => slices += 1,
-                CpsIntrinsic::WindowExtent => extents += 1,
+                Intrinsic::BinSlice(_)
+                | Intrinsic::BinRest(_)
+                | Intrinsic::ListSlice
+                | Intrinsic::ListRest => slices += 1,
+                Intrinsic::WindowExtent => extents += 1,
                 _ => {}
             }
         }
@@ -1001,15 +998,15 @@ fn a_window_region_with_a_hostile_use_declines() {
         .params[0];
     let mut hostile = None;
     for (id, node) in module.nodes().iter().enumerate() {
-        if let Some(CpsNode::Switch {
+        if let Some(Node::Switch {
             default: Some(_), ..
         }) = node
         {
-            hostile = Some(crate::CpsNodeId(id as u32));
+            hostile = Some(crate::NodeId(id as u32));
         }
     }
     let hostile = hostile.expect("the fixture switches");
-    let Some(CpsNode::Switch {
+    let Some(Node::Switch {
         scrutinee,
         cases,
         default: Some(default),
@@ -1018,10 +1015,10 @@ fn a_window_region_with_a_hostile_use_declines() {
         unreachable!()
     };
     let mut default = default;
-    default.args = vec![CpsAtom::Value(escape)];
+    default.args = vec![Atom::Value(escape)];
     module.nodes.set(
         hostile,
-        CpsNode::Switch {
+        Node::Switch {
             scrutinee,
             cases,
             default: Some(default),
@@ -1035,9 +1032,9 @@ fn a_window_region_with_a_hostile_use_declines() {
 }
 
 /// `main` calls `consume(r)` twice with a construction of `row` each time — once full, once padded with a filler in slot 1 — and `consume` reads slot 1 under the tag.
-fn row_consumer(slots: Vec<CpsSlot>, pad_second: bool) -> (CpsModule, CpsFunId) {
-    let mut module = CpsModule::default();
-    let row = module.add_row(CpsRow {
+fn row_consumer(slots: Vec<Slot>, pad_second: bool) -> (Module, FunctionId) {
+    let mut module = Module::default();
+    let row = module.add_row(Row {
         debug_name: Some("Thing".into()),
         slots,
     });
@@ -1045,19 +1042,19 @@ fn row_consumer(slots: Vec<CpsSlot>, pad_second: bool) -> (CpsModule, CpsFunId) 
     let read = module.add_value(Some("read".into()));
     let consume = module.reserve_function();
     let consume_ret = module.reserve_continuation();
-    let done = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let done = module.add_node(Node::ApplyCont(Edge {
         target: consume_ret,
-        args: vec![CpsAtom::Value(read)],
+        args: vec![Atom::Value(read)],
     }));
-    let body = module.add_node(CpsNode::LetIntrinsic {
+    let body = module.add_node(Node::LetIntrinsic {
         result: read,
-        op: CpsIntrinsic::RowGet(row, 1),
-        args: vec![CpsAtom::Value(param)],
+        op: Intrinsic::RowGet(row, 1),
+        args: vec![Atom::Value(param)],
         next: done,
     });
     module.define_function(
         consume,
-        CpsFunction {
+        Function {
             debug_name: Some("consume".into()),
             params: vec![param],
             return_cont: consume_ret,
@@ -1070,70 +1067,70 @@ fn row_consumer(slots: Vec<CpsSlot>, pad_second: bool) -> (CpsModule, CpsFunId) 
     let second = module.add_value(Some("second".into()));
     let first_result = module.add_value(Some("first".into()));
     let second_result = module.add_value(Some("second result".into()));
-    let exit = module.add_node(CpsNode::Exit {
-        value: Some(CpsAtom::Value(second_result)),
+    let exit = module.add_node(Node::Exit {
+        value: Some(Atom::Value(second_result)),
     });
-    let second_resume = module.add_continuation(CpsContinuation {
+    let second_resume = module.add_continuation(Continuation {
         debug_name: None,
         params: vec![second_result],
         body: exit,
     });
-    let call_second = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(consume),
-        args: vec![CpsAtom::Value(second)],
+    let call_second = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(consume),
+        args: vec![Atom::Value(second)],
         return_to: second_resume,
     });
-    let build_second = module.add_node(CpsNode::LetValue {
+    let build_second = module.add_node(Node::LetValue {
         result: second,
-        value: CpsValueExpr::Row(
+        value: ValueExpr::Row(
             row,
             vec![
-                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+                Atom::Literal(Literal::Nat(Natural::from(1u32))),
                 match pad_second {
-                    true => CpsAtom::Filler,
-                    false => CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
+                    true => Atom::Filler,
+                    false => Atom::Literal(Literal::Nat(Natural::from(2u32))),
                 },
             ],
         ),
         next: call_second,
     });
-    let scope_second = module.add_node(CpsNode::LetCont {
+    let scope_second = module.add_node(Node::LetCont {
         continuations: vec![second_resume],
         body: build_second,
     });
-    let first_resume = module.add_continuation(CpsContinuation {
+    let first_resume = module.add_continuation(Continuation {
         debug_name: None,
         params: vec![first_result],
         body: scope_second,
     });
     let first = module.add_value(Some("first".into()));
-    let call_first = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(consume),
-        args: vec![CpsAtom::Value(first)],
+    let call_first = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(consume),
+        args: vec![Atom::Value(first)],
         return_to: first_resume,
     });
-    let build_first = module.add_node(CpsNode::LetValue {
+    let build_first = module.add_node(Node::LetValue {
         result: first,
-        value: CpsValueExpr::Row(
+        value: ValueExpr::Row(
             row,
             vec![
-                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
-                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
+                Atom::Literal(Literal::Nat(Natural::from(0u32))),
+                Atom::Literal(Literal::Nat(Natural::from(7u32))),
             ],
         ),
         next: call_first,
     });
-    let scope_first = module.add_node(CpsNode::LetCont {
+    let scope_first = module.add_node(Node::LetCont {
         continuations: vec![first_resume],
         body: build_first,
     });
-    let group = module.add_node(CpsNode::LetFun {
+    let group = module.add_node(Node::LetFun {
         functions: vec![consume],
         body: scope_first,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_ret,
@@ -1150,7 +1147,7 @@ fn row_consumer(slots: Vec<CpsSlot>, pad_second: bool) -> (CpsModule, CpsFunId) 
 /// **A regression fixture with a runtime failure behind it.** `/std/Tui`'s command type was an inductive whose `issue` was split into a worker over its three slots once its callers' arguments became visible constructions, and the call site projected every slot of a nullary constructor — two of them the fillers the door pads one with — into what were then non-null parameters: `null reference` in `drain`, before `issue` could dispatch on the tag. The split was declined for families until every parameter became nullable; this pins that it is admitted again. That type is a struct now and pads nothing, so the end-to-end half of this pin is `a_padded_variant_survives_a_split_join_at_run_time`, which writes its own family rather than borrowing a library's.
 #[test]
 fn a_family_parameter_is_split_into_a_worker() {
-    let (mut module, consume) = row_consumer(vec![CpsSlot::Tag, CpsSlot::Opaque], true);
+    let (mut module, consume) = row_consumer(vec![Slot::Tag, Slot::Opaque], true);
     assert!(
         split_workers(&mut module),
         "a padded constructor's slot crosses a function boundary as null"
@@ -1158,7 +1155,7 @@ fn a_family_parameter_is_split_into_a_worker() {
     assert_eq!(module.function(consume).unwrap().params.len(), 2);
     module.verify().expect("the split preserves the module");
 
-    let (mut module, consume) = row_consumer(vec![CpsSlot::Nat, CpsSlot::Nat], false);
+    let (mut module, consume) = row_consumer(vec![Slot::Nat, Slot::Nat], false);
     assert!(split_workers(&mut module), "a product row has no padding");
     assert_eq!(module.function(consume).unwrap().params.len(), 2);
     module.verify().expect("the split preserves the module");

@@ -1,6 +1,6 @@
 //! The driver's introspection surface: one borrowed view per intermediate representation, and the stage names `wonder stage`'s rungs are derived from.
 
-use {curios_cont::CpsModule, curios_text::Entrypoint, std::fmt};
+use {curios_text::Entrypoint, std::fmt};
 
 /// A borrowed view of one intermediate representation, handed to the caller's `observe` callback the moment that stage is produced. This is the pipeline's only introspection surface — `wonder stage`'s dumps and the test suites' IR assertions both hang off it — and borrowing keeps the driver from retaining any stage it has already lowered past.
 ///
@@ -15,8 +15,8 @@ pub enum Stage<'a> {
     CoreElab(&'a curios_core::Module),
     Ersd(&'a curios_ersd::Module),
     ErsdOptm(&'a curios_ersd::Module),
-    Cont(&'a CpsModule),
-    ContOptm(&'a CpsModule),
+    Cont(&'a curios_cont::Module),
+    ContOptm(&'a curios_cont::Module),
     Wasm(&'a curios_wasm::Module),
     /// The Binaryen-optimized module, rendered by Binaryen's own text writer — ground truth from the session that optimized it, not a reader's reconstruction. The native product's `wasm_optm` emits it, mirroring the driver's own observe-at-production idiom; `compile_entrypoint` never does, and `every_stage_is_observed_once_in_names_order` pins that deliberate absence.
     WasmOptm(&'a str),

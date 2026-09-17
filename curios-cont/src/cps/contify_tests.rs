@@ -5,15 +5,13 @@ use curios_num::Natural;
 use {
     super::test_support::{capture_unmentioned_by_owner, helper_called},
     crate::cps::{contify::contify_calls, optimize::optimize},
-    crate::{
-        CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsLiteral, CpsModule, CpsNode,
-    },
+    crate::{Atom, Callee, Continuation, Edge, Function, Literal, Module, Node},
     std::collections::BTreeMap,
 };
 
 #[test]
 fn contifies_a_single_entry_tail_loop_and_bridges_switch_returns() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
     let loop_function = module.reserve_function();
@@ -21,58 +19,58 @@ fn contifies_a_single_entry_tail_loop_and_bridges_switch_returns() {
     let loop_param = module.add_value(Some("loop argument".into()));
     let recur = module.reserve_continuation();
     let recur_param = module.add_value(Some("recur argument".into()));
-    let recur_body = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(loop_function),
-        args: vec![CpsAtom::Value(recur_param)],
+    let recur_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(loop_function),
+        args: vec![Atom::Value(recur_param)],
         return_to: loop_return,
     });
     module.define_continuation(
         recur,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("recur".into()),
             params: vec![recur_param],
             body: recur_body,
         },
     );
-    let switch = module.add_node(CpsNode::Switch {
-        scrutinee: CpsAtom::Value(loop_param),
+    let switch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(loop_param),
         cases: BTreeMap::from([(
             0,
-            CpsEdge {
+            Edge {
                 target: loop_return,
-                args: vec![CpsAtom::Value(loop_param)],
+                args: vec![Atom::Value(loop_param)],
             },
         )]),
-        default: Some(CpsEdge {
+        default: Some(Edge {
             target: recur,
-            args: vec![CpsAtom::Value(loop_param)],
+            args: vec![Atom::Value(loop_param)],
         }),
     });
-    let loop_body = module.add_node(CpsNode::LetCont {
+    let loop_body = module.add_node(Node::LetCont {
         continuations: vec![recur],
         body: switch,
     });
     module.define_function(
         loop_function,
-        CpsFunction {
+        Function {
             debug_name: Some("loop".into()),
             params: vec![loop_param],
             return_cont: loop_return,
             body: loop_body,
         },
     );
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(loop_function),
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))],
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(loop_function),
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
         return_to: entry_return,
     });
-    let body = module.add_node(CpsNode::LetFun {
+    let body = module.add_node(Node::LetFun {
         functions: vec![loop_function],
         body: call,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,
@@ -99,9 +97,9 @@ fn contifies_a_single_entry_tail_loop_and_bridges_switch_returns() {
         .unwrap();
     assert!(matches!(
         module.node(return_bridge.body),
-        Some(CpsNode::ApplyCont(CpsEdge { target, .. })) if *target == entry_return
+        Some(Node::ApplyCont(Edge { target, .. })) if *target == entry_return
     ));
-    let CpsNode::Switch { cases, .. } = module.node(switch).unwrap() else {
+    let Node::Switch { cases, .. } = module.node(switch).unwrap() else {
         panic!("loop switch changed shape")
     };
     assert_ne!(cases[&0].target, entry_return);
@@ -125,7 +123,7 @@ fn contifies_a_nonrecursive_single_call_function() {
 /// `main` calls `outer` once, `outer` calls `inner` once, and `outer` is minted first so the sweep reaches it first: by `inner`'s turn the function the snapshot names as its owner is gone, contified under `main`. One call contifies both — the owner is resolved through the sweep's own record rather than deferred a round.
 #[test]
 fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
     let outer = module.reserve_function();
@@ -135,13 +133,13 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
 
     // inner(y) = y
     let y = module.add_value(Some("y".into()));
-    let inner_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let inner_body = module.add_node(Node::ApplyCont(Edge {
         target: inner_return,
-        args: vec![CpsAtom::Value(y)],
+        args: vec![Atom::Value(y)],
     }));
     module.define_function(
         inner,
-        CpsFunction {
+        Function {
             debug_name: Some("inner".into()),
             params: vec![y],
             return_cont: inner_return,
@@ -151,18 +149,18 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
 
     // outer(x) = inner(x)
     let x = module.add_value(Some("x".into()));
-    let call_inner = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(inner),
-        args: vec![CpsAtom::Value(x)],
+    let call_inner = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(inner),
+        args: vec![Atom::Value(x)],
         return_to: outer_return,
     });
-    let outer_body = module.add_node(CpsNode::LetFun {
+    let outer_body = module.add_node(Node::LetFun {
         functions: vec![inner],
         body: call_inner,
     });
     module.define_function(
         outer,
-        CpsFunction {
+        Function {
             debug_name: Some("outer".into()),
             params: vec![x],
             return_cont: outer_return,
@@ -171,18 +169,18 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
     );
 
     // main() = outer(0)
-    let call_outer = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(outer),
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
+    let call_outer = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(outer),
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))],
         return_to: entry_return,
     });
-    let body = module.add_node(CpsNode::LetFun {
+    let body = module.add_node(Node::LetFun {
         functions: vec![outer],
         body: call_outer,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: entry_return,

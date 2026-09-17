@@ -52,7 +52,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     /// Load one operand at the representation `intrinsic` declares for that position.
     fn emit_operand(
         &mut self,
-        intrinsic: &curios_cont::CpsIntrinsic,
+        intrinsic: &curios_cont::Intrinsic,
         index: usize,
         name: &EmissionValueName,
     ) {
@@ -79,7 +79,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_unary_op(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::CpsIntrinsic,
+        intrinsic: &curios_cont::Intrinsic,
         operand: &EmissionValueName,
         instr: curios_wasm::Instr,
     ) {
@@ -92,7 +92,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_binary_op(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::CpsIntrinsic,
+        intrinsic: &curios_cont::Intrinsic,
         left: &EmissionValueName,
         right: &EmissionValueName,
         instr: curios_wasm::Instr,
@@ -109,7 +109,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_checked_nat_op(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::CpsIntrinsic,
+        intrinsic: &curios_cont::Intrinsic,
         left: &EmissionValueName,
         right: &EmissionValueName,
         name: &str,
@@ -154,7 +154,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_checked_int_op(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::CpsIntrinsic,
+        intrinsic: &curios_cont::Intrinsic,
         left: &EmissionValueName,
         right: &EmissionValueName,
         name: &str,
@@ -205,7 +205,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     /// **The clamp is what makes one test decide every count.** Wasm's shifts reduce their count modulo the operand width — `i32.shl` by 32, `i64.shl` by 64 — so a count of 40 becomes a count of 8 and the result is a value the program never asked for. Clamping instead of masking is sound because 31 is already past the envelope: any nonzero value shifted 31 places leaves it, so the check below reaches the same verdict for 31 as for any larger count, and zero shifted anywhere is still zero.
     fn emit_clamped_shift(
         &mut self,
-        intrinsic: &curios_cont::CpsIntrinsic,
+        intrinsic: &curios_cont::Intrinsic,
         count: &EmissionValueName,
         name: &str,
     ) {
@@ -240,7 +240,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_shift_left(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::CpsIntrinsic,
+        intrinsic: &curios_cont::Intrinsic,
         value: &EmissionValueName,
         count: &EmissionValueName,
         name: &str,
@@ -307,7 +307,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_shift_right(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::CpsIntrinsic,
+        intrinsic: &curios_cont::Intrinsic,
         value: &EmissionValueName,
         count: &EmissionValueName,
         name: &str,
@@ -1090,7 +1090,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_intrinsic(
         &mut self,
         dest: &Dest<'a>,
-        op: curios_cont::CpsIntrinsic,
+        op: curios_cont::Intrinsic,
         args: &'a [EmissionValueName],
     ) {
         let (value_name, result_local) = (dest.value_name, dest.local.clone());
@@ -1098,7 +1098,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         // Every store below may assume this: a local held in a register is held at exactly the carrier this op produces, so no path has to coerce on the way in. What makes it true is that the representation analysis only offers a register to a value whose own definition produces that carrier — see `Offer` in `cps::represent`.
         let result_repr = match op {
             // A row read produces its slot's carrier, which is a fact of the row rather than of the operation.
-            curios_cont::CpsIntrinsic::RowGet(row, index) => {
+            curios_cont::Intrinsic::RowGet(row, index) => {
                 self.context.table().row_slots(row)[index].repr()
             }
             _ => op.result_repr(),
@@ -1113,13 +1113,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         );
 
         match op {
-            curios_cont::CpsIntrinsic::NatEql => {
+            curios_cont::Intrinsic::NatEql => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Eq)
             }
-            curios_cont::CpsIntrinsic::NatNeq => {
+            curios_cont::Intrinsic::NatNeq => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Ne)
             }
-            curios_cont::CpsIntrinsic::NatAdd => self.emit_checked_nat_op(
+            curios_cont::Intrinsic::NatAdd => self.emit_checked_nat_op(
                 dest,
                 &op,
                 &args[0],
@@ -1127,7 +1127,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 "nat_add",
                 curios_wasm::Instr::I32Add,
             ),
-            curios_cont::CpsIntrinsic::NatSub => {
+            curios_cont::Intrinsic::NatSub => {
                 let (left, right) = (&args[0], &args[1]);
                 // Monus: 0 if left < right, else left - right. select [val1=0, val2=left-right, cond=left<right] returns val1 when cond != 0.
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
@@ -1140,7 +1140,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::Select { val_types: vec![] });
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::NatMul => {
+            curios_cont::Intrinsic::NatMul => {
                 let (left, right) = (&args[0], &args[1]);
                 let local_name = self.context.push_local(
                     "nat_mul",
@@ -1173,7 +1173,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_store(dest, &op.result_repr());
             }
             // The virtual-window bounds guard, kept at the original evaluation point — the eager trap a physical slice would have performed. Its operands are a start and a *count*, so the reversed range the `(start, end)` window also had to reject cannot be spelled, and the extent is the count itself rather than a difference. `s > len || n > len - s` rather than `s + n > len`, because the sum is i32 arithmetic and would wrap; the subtraction underflows only in the case the first test has already decided.
-            curios_cont::CpsIntrinsic::WindowExtent => {
+            curios_cont::Intrinsic::WindowExtent => {
                 let (start, count, len) = (&args[0], &args[1], &args[2]);
                 self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
                 self.emit_instrs(self.context.load_value_instrs(len, LoadAs::Nat));
@@ -1196,25 +1196,25 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Nat));
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::NatLt => {
+            curios_cont::Intrinsic::NatLt => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LtU)
             }
-            curios_cont::CpsIntrinsic::NatDiv => {
+            curios_cont::Intrinsic::NatDiv => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32DivU)
             }
-            curios_cont::CpsIntrinsic::NatRem => {
+            curios_cont::Intrinsic::NatRem => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32RemU)
             }
-            curios_cont::CpsIntrinsic::NatLe => {
+            curios_cont::Intrinsic::NatLe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LeU)
             }
-            curios_cont::CpsIntrinsic::IntEql => {
+            curios_cont::Intrinsic::IntEql => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Eq)
             }
-            curios_cont::CpsIntrinsic::IntNeq => {
+            curios_cont::Intrinsic::IntNeq => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Ne)
             }
-            curios_cont::CpsIntrinsic::IntAdd => self.emit_checked_int_op(
+            curios_cont::Intrinsic::IntAdd => self.emit_checked_int_op(
                 dest,
                 &op,
                 &args[0],
@@ -1222,7 +1222,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 "int_add",
                 curios_wasm::Instr::I32Add,
             ),
-            curios_cont::CpsIntrinsic::IntSub => self.emit_checked_int_op(
+            curios_cont::Intrinsic::IntSub => self.emit_checked_int_op(
                 dest,
                 &op,
                 &args[0],
@@ -1230,7 +1230,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 "int_sub",
                 curios_wasm::Instr::I32Sub,
             ),
-            curios_cont::CpsIntrinsic::IntMul => {
+            curios_cont::Intrinsic::IntMul => {
                 let (left, right) = (&args[0], &args[1]);
                 let local_name = self.context.push_local(
                     "int_mul",
@@ -1265,7 +1265,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::I32WrapI64);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::IntDiv => self.emit_checked_int_op(
+            curios_cont::Intrinsic::IntDiv => self.emit_checked_int_op(
                 dest,
                 &op,
                 &args[0],
@@ -1273,28 +1273,28 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 "int_div",
                 curios_wasm::Instr::I32DivS,
             ),
-            curios_cont::CpsIntrinsic::IntRem => {
+            curios_cont::Intrinsic::IntRem => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32RemS)
             }
-            curios_cont::CpsIntrinsic::IntLt => {
+            curios_cont::Intrinsic::IntLt => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LtS)
             }
-            curios_cont::CpsIntrinsic::IntLe => {
+            curios_cont::Intrinsic::IntLe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LeS)
             }
-            curios_cont::CpsIntrinsic::NatAnd => {
+            curios_cont::Intrinsic::NatAnd => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32And)
             }
-            curios_cont::CpsIntrinsic::NatOr => {
+            curios_cont::Intrinsic::NatOr => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Or)
             }
-            curios_cont::CpsIntrinsic::NatXor => {
+            curios_cont::Intrinsic::NatXor => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Xor)
             }
-            curios_cont::CpsIntrinsic::NatShl => {
+            curios_cont::Intrinsic::NatShl => {
                 self.emit_shift_left(dest, &op, &args[0], &args[1], "nat_shl", false)
             }
-            curios_cont::CpsIntrinsic::NatShr => self.emit_shift_right(
+            curios_cont::Intrinsic::NatShr => self.emit_shift_right(
                 dest,
                 &op,
                 &args[0],
@@ -1302,22 +1302,22 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 "nat_shr",
                 curios_wasm::Instr::I32ShrU,
             ),
-            curios_cont::CpsIntrinsic::NatEqz => {
+            curios_cont::Intrinsic::NatEqz => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Eqz)
             }
-            curios_cont::CpsIntrinsic::IntAnd => {
+            curios_cont::Intrinsic::IntAnd => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32And)
             }
-            curios_cont::CpsIntrinsic::IntOr => {
+            curios_cont::Intrinsic::IntOr => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Or)
             }
-            curios_cont::CpsIntrinsic::IntXor => {
+            curios_cont::Intrinsic::IntXor => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Xor)
             }
-            curios_cont::CpsIntrinsic::IntShl => {
+            curios_cont::Intrinsic::IntShl => {
                 self.emit_shift_left(dest, &op, &args[0], &args[1], "int_shl", true)
             }
-            curios_cont::CpsIntrinsic::IntShr => self.emit_shift_right(
+            curios_cont::Intrinsic::IntShr => self.emit_shift_right(
                 dest,
                 &op,
                 &args[0],
@@ -1325,23 +1325,23 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 "int_shr",
                 curios_wasm::Instr::I32ShrS,
             ),
-            curios_cont::CpsIntrinsic::IntEqz => {
+            curios_cont::Intrinsic::IntEqz => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Eqz)
             }
-            curios_cont::CpsIntrinsic::FltAdd => {
+            curios_cont::Intrinsic::FltAdd => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Add)
             }
-            curios_cont::CpsIntrinsic::FltSub => {
+            curios_cont::Intrinsic::FltSub => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Sub)
             }
-            curios_cont::CpsIntrinsic::FltMul => {
+            curios_cont::Intrinsic::FltMul => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Mul)
             }
-            curios_cont::CpsIntrinsic::FltDiv => {
+            curios_cont::Intrinsic::FltDiv => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Div)
             }
             // WebAssembly has no `f64.rem`; the shared helper computes the exact `fmod` the folders compute (see `Table::flt_rem_func`).
-            curios_cont::CpsIntrinsic::FltRem => {
+            curios_cont::Intrinsic::FltRem => {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Flt));
                 self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Flt));
                 self.emit_instr(curios_wasm::Instr::Call {
@@ -1349,47 +1349,47 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::FltEql => {
+            curios_cont::Intrinsic::FltEql => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Eq)
             }
-            curios_cont::CpsIntrinsic::FltNeq => {
+            curios_cont::Intrinsic::FltNeq => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Ne)
             }
-            curios_cont::CpsIntrinsic::FltLt => {
+            curios_cont::Intrinsic::FltLt => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Lt)
             }
-            curios_cont::CpsIntrinsic::FltLe => {
+            curios_cont::Intrinsic::FltLe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Le)
             }
-            curios_cont::CpsIntrinsic::FltMin => {
+            curios_cont::Intrinsic::FltMin => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Min)
             }
-            curios_cont::CpsIntrinsic::FltMax => {
+            curios_cont::Intrinsic::FltMax => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Max)
             }
-            curios_cont::CpsIntrinsic::FltNeg => {
+            curios_cont::Intrinsic::FltNeg => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Neg)
             }
-            curios_cont::CpsIntrinsic::FltAbs => {
+            curios_cont::Intrinsic::FltAbs => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Abs)
             }
-            curios_cont::CpsIntrinsic::FltSqrt => {
+            curios_cont::Intrinsic::FltSqrt => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Sqrt)
             }
-            curios_cont::CpsIntrinsic::FltFloor => {
+            curios_cont::Intrinsic::FltFloor => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Floor)
             }
-            curios_cont::CpsIntrinsic::FltCeil => {
+            curios_cont::Intrinsic::FltCeil => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Ceil)
             }
-            curios_cont::CpsIntrinsic::FltTrunc => {
+            curios_cont::Intrinsic::FltTrunc => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Trunc)
             }
-            curios_cont::CpsIntrinsic::FltNearest => {
+            curios_cont::Intrinsic::FltNearest => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Nearest)
             }
             // One of the two operations whose non-NaN result would otherwise read a NaN's bits, and so one of the two the engine must be held to the model at. `Flt` has exactly one NaN, which has no sign; Wasm's `f64.copysign` reads the sign bit of whatever pattern the hardware produced, and x86's default NaN is negative where ARM's is positive. Substituting `+0.0` for a NaN sign operand answers `abs(x)`, which is what the model says and what every engine then computes.
-            curios_cont::CpsIntrinsic::FltCopysign => {
+            curios_cont::Intrinsic::FltCopysign => {
                 let sign_local = self.context.push_local(
                     "copysign_sign",
                     curios_wasm::ValType::Num(curios_wasm::NumType::F64),
@@ -1414,7 +1414,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::F64Copysign);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::NatToInt => {
+            curios_cont::Intrinsic::NatToInt => {
                 let operand = &args[0];
                 // The conversion preserves the number: below 2^30 the i31 bits already spell the same value, and a `Nat` at or above it has no signed-i31 `Int` holding it, so it traps at the boundary rather than silently reloading negative.
                 let local_name = self.context.push_local(
@@ -1439,10 +1439,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::NatToFlt => {
+            curios_cont::Intrinsic::NatToFlt => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64ConvertI32U)
             }
-            curios_cont::CpsIntrinsic::IntToNat => {
+            curios_cont::Intrinsic::IntToNat => {
                 let operand = &args[0];
                 // The conversion preserves the number: a negative `Int` is a value no `Nat` holds, so it traps at the boundary rather than silently dropping the sign bit.
                 let local_name = self.context.push_local(
@@ -1469,10 +1469,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::IntToFlt => {
+            curios_cont::Intrinsic::IntToFlt => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64ConvertI32S)
             }
-            curios_cont::CpsIntrinsic::FltToLeBytes => {
+            curios_cont::Intrinsic::FltToLeBytes => {
                 let operand = &args[0];
                 // Reinterpret the f64 as its IEEE-754 bit pattern and split it into the eight little-endian bytes. The `$bytes` payload is `i8`-packed, so `array.new_fixed` truncates each wrapped i32 to its low byte -- byte-for-byte `f64::to_le_bytes`, with no host round-trip. The pattern is sixty-four bits wide, so each byte is shifted out in i64 and wrapped, rather than shifted in i32 as binary64's was.
                 let bits_local = self.context.push_local(
@@ -1527,7 +1527,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::FltOfLeBytes => {
+            curios_cont::Intrinsic::FltOfLeBytes => {
                 let operand = &args[0];
                 // The inverse of `FltToLeBytes`: trap (via the special label) unless the `Bin` is exactly 8 bytes, then OR the bytes back into an i64 -- each `$bytes/read` zero-extends its packed byte to i32, which is widened again before it is shifted into place -- and reinterpret. Byte-for-byte `f64::from_le_bytes`, no host round-trip.
                 let rope = self.context.table().bin_rope();
@@ -1569,7 +1569,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::F64ReinterpretI64);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::FltToNat => {
+            curios_cont::Intrinsic::FltToNat => {
                 let local_name = self.context.push_local(
                     "flt_to_nat",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
@@ -1595,7 +1595,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::FltToInt => {
+            curios_cont::Intrinsic::FltToInt => {
                 let local_name = self.context.push_local(
                     "flt_to_int",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
@@ -1627,19 +1627,19 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::BinLen(grain) => {
+            curios_cont::Intrinsic::BinLen(grain) => {
                 self.emit_bin_len(grain, &args[0]);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::BinEql(grain) => {
+            curios_cont::Intrinsic::BinEql(grain) => {
                 self.emit_bin_eql(grain, &args[0], &args[1]);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::BinGet(grain) => {
+            curios_cont::Intrinsic::BinGet(grain) => {
                 self.emit_bin_get(grain, &args[0], &args[1]);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::BinSlice(grain) => {
+            curios_cont::Intrinsic::BinSlice(grain) => {
                 let funcs = match grain {
                     Grain::B => WindowFuncs {
                         slice: self.context.table().bits_slice_func(),
@@ -1659,7 +1659,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     funcs,
                 );
             }
-            curios_cont::CpsIntrinsic::BinRest(grain) => {
+            curios_cont::Intrinsic::BinRest(grain) => {
                 let funcs = match grain {
                     Grain::B => WindowFuncs {
                         slice: self.context.table().bits_slice_func(),
@@ -1680,14 +1680,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     funcs,
                 );
             }
-            curios_cont::CpsIntrinsic::BinAppend(grain) => {
+            curios_cont::Intrinsic::BinAppend(grain) => {
                 let elem_instrs = self.context.load_value_instrs(&args[1], LoadAs::Nat);
                 self.emit_bin_append(grain, &args[0], elem_instrs);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::CpsIntrinsic::BinConcat(grain, _) => {
+            curios_cont::Intrinsic::BinConcat(grain, _) => {
                 let norm = match grain {
                     Grain::B => Some(self.context.table().bits_norm_func()),
                     Grain::X => Some(self.context.table().bytes_norm_func()),
@@ -1695,7 +1695,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 let rope = self.context.table().bin_rope();
                 self.emit_rope_concat(&result_local, args, LoadAs::Bin(grain), &rope, norm);
             }
-            curios_cont::CpsIntrinsic::BinChunk(grain, arity) => {
+            curios_cont::Intrinsic::BinChunk(grain, arity) => {
                 let rope = self.context.table().bin_rope();
                 // A small chunk is its immediate, built by ORing each (wrapped) element at its constant slot — no allocation, no call. The envelope and the slot stride are the grain's.
                 let layout = ImmediateLayout::of(grain);
@@ -1764,17 +1764,17 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::CpsIntrinsic::ListLen => {
+            curios_cont::Intrinsic::ListLen => {
                 let rope = self.context.table().list_rope();
                 self.emit_unary_op(dest, &op, &args[0], Self::rope_get(&rope, &rope.len_field));
             }
-            curios_cont::CpsIntrinsic::ListGet => {
+            curios_cont::Intrinsic::ListGet => {
                 let rope = self.context.table().list_rope();
                 let read = self.context.table().list_read_func();
                 self.emit_seq_get(&args[0], &args[1], LoadAs::List, &rope, read);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::CpsIntrinsic::ListSlice => {
+            curios_cont::Intrinsic::ListSlice => {
                 let funcs = WindowFuncs {
                     slice: self.context.table().list_slice_func(),
                     norm: None,
@@ -1788,7 +1788,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     funcs,
                 );
             }
-            curios_cont::CpsIntrinsic::ListRest => {
+            curios_cont::Intrinsic::ListRest => {
                 let funcs = WindowFuncs {
                     slice: self.context.table().list_slice_func(),
                     norm: None,
@@ -1803,16 +1803,16 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     funcs,
                 );
             }
-            curios_cont::CpsIntrinsic::ListAppend => {
+            curios_cont::Intrinsic::ListAppend => {
                 let rope = self.context.table().list_rope();
                 let elem_instrs = self.context.load_value_instrs(&args[1], LoadAs::Null);
                 self.emit_rope_append(&result_local, &args[0], elem_instrs, LoadAs::List, &rope);
             }
-            curios_cont::CpsIntrinsic::ListConcat(_) => {
+            curios_cont::Intrinsic::ListConcat(_) => {
                 let rope = self.context.table().list_rope();
                 self.emit_rope_concat(&result_local, args, LoadAs::List, &rope, None);
             }
-            curios_cont::CpsIntrinsic::ListSettle => {
+            curios_cont::Intrinsic::ListSettle => {
                 let rope = self.context.table().list_rope();
                 let force = self.context.table().list_force_func();
                 let base_ref = curios_wasm::ValType::Ref(curios_wasm::RefType {
@@ -1842,7 +1842,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::CpsIntrinsic::ListFlat(_) => {
+            curios_cont::Intrinsic::ListFlat(_) => {
                 let rope = self.context.table().list_rope();
                 let force = self.context.table().list_force_func();
                 let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
@@ -1922,7 +1922,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::CpsIntrinsic::TupleGet(index) => {
+            curios_cont::Intrinsic::TupleGet(index) => {
                 // Widest first: widening only ever widens, and in every row measured the wide
                 // constructor is the hot one — `fork` over `leaf`, `cons` over `nil`, `some` over
                 // `none` — so the first test usually hits. The roster is module-global and small
@@ -1941,7 +1941,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_store(dest, &op.result_repr());
             }
             // One exact cast, no cascade: a row value's heap type is a fact of the row, because the door pads every construction to the row's width and the row's type is final. This is what the whole keying buys — the roster search `TupleGet` performs above has nothing to search here. The slot then hands back its own carrier: a scalar arrives in a register with nothing to unbox, and the tag comes out of its packed byte through `struct.get_u`.
-            curios_cont::CpsIntrinsic::RowGet(row, index) => {
+            curios_cont::Intrinsic::RowGet(row, index) => {
                 let family_type = self.context.table().find_row_type(row);
                 let slot = self.context.table().row_slots(row)[index];
                 self.emit_instrs(
@@ -1950,7 +1950,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 );
                 let field_name = Table::tuple_field(index);
                 self.emit_instr(match slot {
-                    curios_cont::CpsSlot::Tag => curios_wasm::Instr::StructGetU {
+                    curios_cont::Slot::Tag => curios_wasm::Instr::StructGetU {
                         type_name: family_type,
                         field_name,
                     },
@@ -1961,7 +1961,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
                 self.emit_store(dest, &slot.repr());
             }
-            curios_cont::CpsIntrinsic::IsImmediate => {
+            curios_cont::Intrinsic::IsImmediate => {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::NonNull));
                 self.emit_instr(curios_wasm::Instr::RefTest {
                     ref_type: Table::int_type(false),
@@ -1969,7 +1969,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_store(dest, &op.result_repr());
             }
             // The identity on the reference — it computes nothing, and exists so the payload has a definition of its own rather than aliasing the scrutinee. `LoadAs::Null` is what `Repr::Ref` resolves to: the value is handed on exactly as stored, and each use coerces at its own site.
-            curios_cont::CpsIntrinsic::ImmediateGet => {
+            curios_cont::Intrinsic::ImmediateGet => {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Null));
                 self.emit_store(dest, &op.result_repr());
             }

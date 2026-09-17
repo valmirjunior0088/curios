@@ -2,30 +2,30 @@ use curios_num::Natural;
 
 use {
     super::*,
-    crate::{CpsAtom, CpsEdge, CpsLiteral, CpsNode, CpsValueExpr},
+    crate::{Atom, Edge, Literal, Node, ValueExpr},
 };
 
 /// A module holding one function per name given, plus one unnamed function — which is what a compiler-minted shell looks like to [`descendants`].
-fn module_naming(names: &[Option<&str>]) -> CpsModule {
-    let mut module = CpsModule::new();
+fn module_naming(names: &[Option<&str>]) -> Module {
+    let mut module = Module::new();
 
     for name in names {
         let function = module.reserve_function();
         let return_cont = module.reserve_continuation();
         let result = module.add_value(None);
-        let return_node = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        let return_node = module.add_node(Node::ApplyCont(Edge {
             target: return_cont,
-            args: vec![CpsAtom::Value(result)],
+            args: vec![Atom::Value(result)],
         }));
-        let body = module.add_node(CpsNode::LetValue {
+        let body = module.add_node(Node::LetValue {
             result,
-            value: CpsValueExpr::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            value: ValueExpr::Literal(Literal::Nat(Natural::from(0u32))),
             next: return_node,
         });
 
         module.define_function(
             function,
-            CpsFunction {
+            Function {
                 debug_name: name.map(str::to_string),
                 params: vec![],
                 return_cont,

@@ -9,8 +9,8 @@ use {
         forward_aggregate_projections, forward_continuations, rewrite_atoms,
     },
     crate::{
-        CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsic, CpsLiteral,
-        CpsModule, CpsNode, CpsValueExpr, CpsValueId,
+        Atom, Callee, Continuation, Edge, Function, Intrinsic, Literal, Module, Node, ValueExpr,
+        ValueId,
     },
     curios_num::Floating,
     std::collections::BTreeMap,
@@ -18,36 +18,36 @@ use {
 
 #[test]
 fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
-    let return_node = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let return_node = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32)))],
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))],
     }));
     let dead_total = module.add_value(Some("dead total".into()));
-    let total_node = module.add_node(CpsNode::LetIntrinsic {
+    let total_node = module.add_node(Node::LetIntrinsic {
         result: dead_total,
-        op: CpsIntrinsic::NatEql,
+        op: Intrinsic::NatEql,
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+            Atom::Literal(Literal::Nat(Natural::from(2u32))),
         ],
         next: return_node,
     });
     let dead_trap = module.add_value(Some("dead trap".into()));
-    let trap_node = module.add_node(CpsNode::LetIntrinsic {
+    let trap_node = module.add_node(Node::LetIntrinsic {
         result: dead_trap,
-        op: CpsIntrinsic::NatDiv,
+        op: Intrinsic::NatDiv,
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+            Atom::Literal(Literal::Nat(Natural::from(0u32))),
         ],
         next: total_node,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -60,8 +60,8 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
     assert!(module.node(total_node).is_none());
     assert!(matches!(
         module.node(trap_node),
-        Some(CpsNode::LetIntrinsic {
-            op: CpsIntrinsic::NatDiv,
+        Some(Node::LetIntrinsic {
+            op: Intrinsic::NatDiv,
             next,
             ..
         }) if *next == return_node
@@ -71,19 +71,19 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
 
 #[test]
 fn dead_parameter_elimination_rewrites_known_calls() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let main = module.reserve_function();
     let callee = module.reserve_function();
     let kept = module.add_value(Some("kept".into()));
     let removed = module.add_value(Some("removed".into()));
     let callee_return = module.reserve_continuation();
-    let callee_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let callee_body = module.add_node(Node::ApplyCont(Edge {
         target: callee_return,
-        args: vec![CpsAtom::Value(kept)],
+        args: vec![Atom::Value(kept)],
     }));
     module.define_function(
         callee,
-        CpsFunction {
+        Function {
             debug_name: Some("callee".into()),
             params: vec![kept, removed],
             return_cont: callee_return,
@@ -91,21 +91,21 @@ fn dead_parameter_elimination_rewrites_known_calls() {
         },
     );
     let main_return = module.reserve_continuation();
-    let call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Known(callee),
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(callee),
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+            Atom::Literal(Literal::Nat(Natural::from(2u32))),
         ],
         return_to: main_return,
     });
-    let body = module.add_node(CpsNode::LetFun {
+    let body = module.add_node(Node::LetFun {
         functions: vec![callee],
         body: call,
     });
     module.define_function(
         main,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -118,27 +118,27 @@ fn dead_parameter_elimination_rewrites_known_calls() {
     assert_eq!(module.function(callee).unwrap().params, vec![kept]);
     assert!(matches!(
         module.node(call),
-        Some(CpsNode::ApplyFun { args, .. })
-            if args == &[CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32)))]
+        Some(Node::ApplyFun { args, .. })
+            if args == &[Atom::Literal(Literal::Nat(Natural::from(1u32)))]
     ));
     module.verify().unwrap();
 }
 
 #[test]
 fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let target = module.reserve_continuation();
     let target_left = module.add_value(Some("target left".into()));
     let target_right = module.add_value(Some("target right".into()));
-    let target_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let target_body = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(target_right)],
+        args: vec![Atom::Value(target_right)],
     }));
     module.define_continuation(
         target,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("target".into()),
             params: vec![target_left, target_right],
             body: target_body,
@@ -146,32 +146,32 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
     );
     let forwarding = module.reserve_continuation();
     let forwarded = module.add_value(Some("forwarded".into()));
-    let forwarding_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let forwarding_body = module.add_node(Node::ApplyCont(Edge {
         target,
         args: vec![
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-            CpsAtom::Value(forwarded),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
+            Atom::Value(forwarded),
         ],
     }));
     module.define_continuation(
         forwarding,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("forwarding".into()),
             params: vec![forwarded],
             body: forwarding_body,
         },
     );
-    let call = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let call = module.add_node(Node::ApplyCont(Edge {
         target: forwarding,
-        args: vec![CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32)))],
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(7u32)))],
     }));
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![forwarding, target],
         body: call,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -183,31 +183,31 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
     assert!(forward_continuations(&mut module));
     assert!(matches!(
         module.node(call),
-        Some(CpsNode::ApplyCont(CpsEdge { target: actual, args }))
+        Some(Node::ApplyCont(Edge { target: actual, args }))
             if *actual == target
                 && args == &[
-                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
-                    CpsAtom::Literal(CpsLiteral::Nat(Natural::from(7u32))),
+                    Atom::Literal(Literal::Nat(Natural::from(1u32))),
+                    Atom::Literal(Literal::Nat(Natural::from(7u32))),
                 ]
     ));
     module.verify().unwrap();
 }
 
-/// A NaN literal riding a jump used to keep `forward_continuations` reporting a change on every round: `thread_edge` compared the edge it rebuilt against the edge it read, and under IEEE equality on an `f32` literal a NaN is unequal to itself, so an untouched edge read as rewritten and the fixpoint ran to its backstop. `CpsLiteral::Flt` is bitwise now, and this pins the consequence — the second call over a settled module reports nothing.
+/// A NaN literal riding a jump used to keep `forward_continuations` reporting a change on every round: `thread_edge` compared the edge it rebuilt against the edge it read, and under IEEE equality on an `f32` literal a NaN is unequal to itself, so an untouched edge read as rewritten and the fixpoint ran to its backstop. `Literal::Flt` is bitwise now, and this pins the consequence — the second call over a settled module reports nothing.
 #[test]
 fn forwarding_a_nan_literal_settles_in_one_round() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let target = module.reserve_continuation();
     let received = module.add_value(Some("received".into()));
-    let target_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let target_body = module.add_node(Node::ApplyCont(Edge {
         target: return_cont,
-        args: vec![CpsAtom::Value(received)],
+        args: vec![Atom::Value(received)],
     }));
     module.define_continuation(
         target,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("target".into()),
             params: vec![received],
             body: target_body,
@@ -215,30 +215,30 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
     );
     let forwarding = module.reserve_continuation();
     let forwarded = module.add_value(Some("forwarded".into()));
-    let forwarding_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let forwarding_body = module.add_node(Node::ApplyCont(Edge {
         target,
-        args: vec![CpsAtom::Value(forwarded)],
+        args: vec![Atom::Value(forwarded)],
     }));
     module.define_continuation(
         forwarding,
-        CpsContinuation {
+        Continuation {
             debug_name: Some("forwarding".into()),
             params: vec![forwarded],
             body: forwarding_body,
         },
     );
-    let nan = CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f64(f64::NAN)));
-    let call = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let nan = Atom::Literal(Literal::Flt(Floating::from_f64(f64::NAN)));
+    let call = module.add_node(Node::ApplyCont(Edge {
         target: forwarding,
         args: vec![nan.clone()],
     }));
-    let body = module.add_node(CpsNode::LetCont {
+    let body = module.add_node(Node::LetCont {
         continuations: vec![forwarding, target],
         body: call,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -250,7 +250,7 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
     assert!(forward_continuations(&mut module));
     assert!(matches!(
         module.node(call),
-        Some(CpsNode::ApplyCont(CpsEdge { target: actual, args }))
+        Some(Node::ApplyCont(Edge { target: actual, args }))
             if *actual == target && args == std::slice::from_ref(&nan)
     ));
     assert!(
@@ -263,37 +263,37 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
 #[test]
 fn rewrite_atoms_remaps_and_devirtualizes_a_closure_callee() {
     // The closure callee holds its target in a value that `visit_atoms_mut` never reaches. A forwarded value must follow (else the callee dangles when the original value is deleted), and a known function devirtualizes.
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let ret = module.reserve_continuation();
     let old = module.add_value(Some("old".into()));
     let new = module.add_value(Some("new".into()));
     let target = module.reserve_function();
 
-    let value_call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Closure(old),
+    let value_call = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(old),
         args: vec![],
         return_to: ret,
     });
     assert!(rewrite_atoms(
         &mut module,
-        &BTreeMap::from([(old, CpsAtom::Value(new))]),
+        &BTreeMap::from([(old, Atom::Value(new))]),
     ));
     assert!(
-        matches!(module.node(value_call), Some(CpsNode::ApplyFun { callee: CpsCallee::Closure(v), .. }) if *v == new),
+        matches!(module.node(value_call), Some(Node::ApplyFun { callee: Callee::Closure(v), .. }) if *v == new),
         "a forwarded value keeps the closure callee pointing at a live value"
     );
 
-    let fun_call = module.add_node(CpsNode::ApplyFun {
-        callee: CpsCallee::Closure(new),
+    let fun_call = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(new),
         args: vec![],
         return_to: ret,
     });
     assert!(rewrite_atoms(
         &mut module,
-        &BTreeMap::from([(new, CpsAtom::Fun(target))]),
+        &BTreeMap::from([(new, Atom::Fun(target))]),
     ));
     assert!(
-        matches!(module.node(fun_call), Some(CpsNode::ApplyFun { callee: CpsCallee::Known(f), .. }) if *f == target),
+        matches!(module.node(fun_call), Some(Node::ApplyFun { callee: Callee::Known(f), .. }) if *f == target),
         "a known function devirtualizes the closure call"
     );
 }
@@ -301,7 +301,7 @@ fn rewrite_atoms_remaps_and_devirtualizes_a_closure_callee() {
 /// `main(a)`: `t1 = (a, 1); p = t1.0; t2 = (p, 2); q = t2.0; return q`. One sweep forwards both projections and the return carries `a` — not `p`, which the same sweep deletes — because the replacements are collapsed through each other before anything is rewritten.
 #[test]
 fn forwards_a_chain_of_projections_in_one_sweep() {
-    let mut module = CpsModule::new();
+    let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
     let a = module.add_value(Some("a".into()));
@@ -310,41 +310,41 @@ fn forwards_a_chain_of_projections_in_one_sweep() {
     let t2 = module.add_value(Some("t2".into()));
     let q = module.add_value(Some("q".into()));
 
-    let deliver = module.add_node(CpsNode::ApplyCont(CpsEdge {
+    let deliver = module.add_node(Node::ApplyCont(Edge {
         target: entry_return,
-        args: vec![CpsAtom::Value(q)],
+        args: vec![Atom::Value(q)],
     }));
-    let read_q = module.add_node(CpsNode::LetIntrinsic {
+    let read_q = module.add_node(Node::LetIntrinsic {
         result: q,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(t2)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(t2)],
         next: deliver,
     });
-    let build_t2 = module.add_node(CpsNode::LetValue {
+    let build_t2 = module.add_node(Node::LetValue {
         result: t2,
-        value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Value(p),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
+        value: ValueExpr::Tuple(vec![
+            Atom::Value(p),
+            Atom::Literal(Literal::Nat(Natural::from(2u32))),
         ]),
         next: read_q,
     });
-    let read_p = module.add_node(CpsNode::LetIntrinsic {
+    let read_p = module.add_node(Node::LetIntrinsic {
         result: p,
-        op: CpsIntrinsic::TupleGet(0),
-        args: vec![CpsAtom::Value(t1)],
+        op: Intrinsic::TupleGet(0),
+        args: vec![Atom::Value(t1)],
         next: build_t2,
     });
-    let build_t1 = module.add_node(CpsNode::LetValue {
+    let build_t1 = module.add_node(Node::LetValue {
         result: t1,
-        value: CpsValueExpr::Tuple(vec![
-            CpsAtom::Value(a),
-            CpsAtom::Literal(CpsLiteral::Nat(Natural::from(1u32))),
+        value: ValueExpr::Tuple(vec![
+            Atom::Value(a),
+            Atom::Literal(Literal::Nat(Natural::from(1u32))),
         ]),
         next: read_p,
     });
     module.define_function(
         entry,
-        CpsFunction {
+        Function {
             debug_name: Some("main".into()),
             params: vec![a],
             return_cont: entry_return,
@@ -359,7 +359,7 @@ fn forwards_a_chain_of_projections_in_one_sweep() {
     assert!(
         matches!(
             module.node(deliver),
-            Some(CpsNode::ApplyCont(CpsEdge { args, .. })) if args == &[CpsAtom::Value(a)]
+            Some(Node::ApplyCont(Edge { args, .. })) if args == &[Atom::Value(a)]
         ),
         "the return carries the origin of the chain:\n{module}"
     );
@@ -376,78 +376,26 @@ fn forwards_a_chain_of_projections_in_one_sweep() {
 #[test]
 fn identity_folds_forward_the_surviving_operand() {
     let cases = [
-        (
-            CpsIntrinsic::NatAdd,
-            CpsLiteral::Nat(Natural::from(0u32)),
-            true,
-        ),
-        (
-            CpsIntrinsic::NatAdd,
-            CpsLiteral::Nat(Natural::from(0u32)),
-            false,
-        ),
-        (
-            CpsIntrinsic::NatSub,
-            CpsLiteral::Nat(Natural::from(0u32)),
-            true,
-        ),
-        (
-            CpsIntrinsic::NatMul,
-            CpsLiteral::Nat(Natural::from(1u32)),
-            true,
-        ),
-        (
-            CpsIntrinsic::NatMul,
-            CpsLiteral::Nat(Natural::from(1u32)),
-            false,
-        ),
-        (
-            CpsIntrinsic::NatDiv,
-            CpsLiteral::Nat(Natural::from(1u32)),
-            true,
-        ),
-        (
-            CpsIntrinsic::NatOr,
-            CpsLiteral::Nat(Natural::from(0u32)),
-            true,
-        ),
-        (
-            CpsIntrinsic::NatXor,
-            CpsLiteral::Nat(Natural::from(0u32)),
-            false,
-        ),
-        (
-            CpsIntrinsic::NatShl,
-            CpsLiteral::Nat(Natural::from(0u32)),
-            true,
-        ),
-        (
-            CpsIntrinsic::IntAdd,
-            CpsLiteral::Int(Integer::from(0)),
-            false,
-        ),
-        (
-            CpsIntrinsic::IntSub,
-            CpsLiteral::Int(Integer::from(0)),
-            true,
-        ),
-        (
-            CpsIntrinsic::IntMul,
-            CpsLiteral::Int(Integer::from(1)),
-            true,
-        ),
-        (
-            CpsIntrinsic::IntShr,
-            CpsLiteral::Nat(Natural::from(0u32)),
-            true,
-        ),
+        (Intrinsic::NatAdd, Literal::Nat(Natural::from(0u32)), true),
+        (Intrinsic::NatAdd, Literal::Nat(Natural::from(0u32)), false),
+        (Intrinsic::NatSub, Literal::Nat(Natural::from(0u32)), true),
+        (Intrinsic::NatMul, Literal::Nat(Natural::from(1u32)), true),
+        (Intrinsic::NatMul, Literal::Nat(Natural::from(1u32)), false),
+        (Intrinsic::NatDiv, Literal::Nat(Natural::from(1u32)), true),
+        (Intrinsic::NatOr, Literal::Nat(Natural::from(0u32)), true),
+        (Intrinsic::NatXor, Literal::Nat(Natural::from(0u32)), false),
+        (Intrinsic::NatShl, Literal::Nat(Natural::from(0u32)), true),
+        (Intrinsic::IntAdd, Literal::Int(Integer::from(0)), false),
+        (Intrinsic::IntSub, Literal::Int(Integer::from(0)), true),
+        (Intrinsic::IntMul, Literal::Int(Integer::from(1)), true),
+        (Intrinsic::IntShr, Literal::Nat(Natural::from(0u32)), true),
     ];
     for (op, literal, literal_on_right) in cases {
-        let x = CpsValueId(0);
+        let x = ValueId(0);
         let args = if literal_on_right {
-            vec![CpsAtom::Value(x), CpsAtom::Literal(literal.clone())]
+            vec![Atom::Value(x), Atom::Literal(literal.clone())]
         } else {
-            vec![CpsAtom::Literal(literal.clone()), CpsAtom::Value(x)]
+            vec![Atom::Literal(literal.clone()), Atom::Value(x)]
         };
         let (mut module, intrinsic) = unary_intrinsic_module(op, args);
 
@@ -456,9 +404,10 @@ fn identity_folds_forward_the_surviving_operand() {
             "{op:?} with {literal:?} must fold"
         );
         assert!(module.node(intrinsic).is_none(), "{op:?} binding survives");
-        let returns_x = module.nodes().iter().flatten().any(
-            |node| matches!(node, CpsNode::ApplyCont(edge) if edge.args == vec![CpsAtom::Value(x)]),
-        );
+        let returns_x =
+            module.nodes().iter().flatten().any(
+                |node| matches!(node, Node::ApplyCont(edge) if edge.args == vec![Atom::Value(x)]),
+            );
         assert!(returns_x, "{op:?} must forward the surviving operand");
         module.verify().unwrap();
     }
@@ -468,34 +417,34 @@ fn identity_folds_forward_the_surviving_operand() {
 fn identity_folds_pin_absorbing_results() {
     let cases = [
         (
-            CpsIntrinsic::NatMul,
-            CpsLiteral::Nat(Natural::from(0u32)),
-            CpsLiteral::Nat(Natural::from(0u32)),
+            Intrinsic::NatMul,
+            Literal::Nat(Natural::from(0u32)),
+            Literal::Nat(Natural::from(0u32)),
         ),
         (
-            CpsIntrinsic::NatAnd,
-            CpsLiteral::Nat(Natural::from(0u32)),
-            CpsLiteral::Nat(Natural::from(0u32)),
+            Intrinsic::NatAnd,
+            Literal::Nat(Natural::from(0u32)),
+            Literal::Nat(Natural::from(0u32)),
         ),
         (
-            CpsIntrinsic::NatRem,
-            CpsLiteral::Nat(Natural::from(1u32)),
-            CpsLiteral::Nat(Natural::from(0u32)),
+            Intrinsic::NatRem,
+            Literal::Nat(Natural::from(1u32)),
+            Literal::Nat(Natural::from(0u32)),
         ),
         (
-            CpsIntrinsic::IntMul,
-            CpsLiteral::Int(Integer::from(0)),
-            CpsLiteral::Int(Integer::from(0)),
+            Intrinsic::IntMul,
+            Literal::Int(Integer::from(0)),
+            Literal::Int(Integer::from(0)),
         ),
         (
-            CpsIntrinsic::IntRem,
-            CpsLiteral::Int(Integer::from(1)),
-            CpsLiteral::Int(Integer::from(0)),
+            Intrinsic::IntRem,
+            Literal::Int(Integer::from(1)),
+            Literal::Int(Integer::from(0)),
         ),
     ];
     for (op, literal, expected) in cases {
-        let x = CpsValueId(0);
-        let args = vec![CpsAtom::Value(x), CpsAtom::Literal(literal.clone())];
+        let x = ValueId(0);
+        let args = vec![Atom::Value(x), Atom::Literal(literal.clone())];
         let (mut module, intrinsic) = unary_intrinsic_module(op, args);
 
         assert!(
@@ -505,8 +454,8 @@ fn identity_folds_pin_absorbing_results() {
         assert!(
             matches!(
                 module.node(intrinsic),
-                Some(CpsNode::LetValue {
-                    value: CpsValueExpr::Literal(pinned),
+                Some(Node::LetValue {
+                    value: ValueExpr::Literal(pinned),
                     ..
                 }) if *pinned == expected
             ),
@@ -518,34 +467,34 @@ fn identity_folds_pin_absorbing_results() {
 
 #[test]
 fn identity_folds_leave_traps_and_flt_untouched() {
-    let x = CpsValueId(0);
+    let x = ValueId(0);
     let cases = [
         (
-            CpsIntrinsic::NatDiv,
+            Intrinsic::NatDiv,
             vec![
-                CpsAtom::Value(x),
-                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(0u32))),
+                Atom::Value(x),
+                Atom::Literal(Literal::Nat(Natural::from(0u32))),
             ],
         ),
         (
-            CpsIntrinsic::NatAdd,
+            Intrinsic::NatAdd,
             vec![
-                CpsAtom::Value(x),
-                CpsAtom::Literal(CpsLiteral::Nat(Natural::from(2u32))),
+                Atom::Value(x),
+                Atom::Literal(Literal::Nat(Natural::from(2u32))),
             ],
         ),
         (
-            CpsIntrinsic::FltAdd,
+            Intrinsic::FltAdd,
             vec![
-                CpsAtom::Value(x),
-                CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f64(0.0))),
+                Atom::Value(x),
+                Atom::Literal(Literal::Flt(Floating::from_f64(0.0))),
             ],
         ),
         (
-            CpsIntrinsic::FltMul,
+            Intrinsic::FltMul,
             vec![
-                CpsAtom::Value(x),
-                CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f64(1.0))),
+                Atom::Value(x),
+                Atom::Literal(Literal::Flt(Floating::from_f64(1.0))),
             ],
         ),
     ];
@@ -554,7 +503,7 @@ fn identity_folds_leave_traps_and_flt_untouched() {
 
         assert!(!fold_intrinsic_identities(&mut module), "{op:?} must stay");
         assert!(
-            matches!(module.node(intrinsic), Some(CpsNode::LetIntrinsic { .. })),
+            matches!(module.node(intrinsic), Some(Node::LetIntrinsic { .. })),
             "{op:?} binding must survive"
         );
     }

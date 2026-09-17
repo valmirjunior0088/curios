@@ -3,7 +3,7 @@
 //! The pipeline never keys on input names: every rewrite depends only on graph structure and the enforced budget constants below, so the same module always optimizes identically. Every pass carries a permanent span and a sample of whether it fired, as `curios-profile` prescribes for optimizer passes: the span's `calls` is the round count and its total the pass's share, and the sample's total is the number of rounds that pass kept the fixpoint alive. Anything finer is investigated with revision worktrees and temporary instrumentation, never a permanent metrics API.
 
 use super::{
-    CpsModule,
+    Module,
     analysis::known_values,
     contify::contify_calls,
     cse::dedupe_intrinsics,
@@ -42,7 +42,7 @@ pub(super) const JUMP_CLONE_LIMIT: usize = 64;
 pub(super) const ROUND_LIMIT: usize = 1024;
 
 /// Run the verifier-delimited, FIFO high-CPS simplifier. Phase analyses are rebuilt at deterministic boundaries instead of being kept as shadow state.
-pub fn optimize(module: &mut CpsModule) {
+pub fn optimize(module: &mut Module) {
     curios_profile::profile!("cont_optimize");
     module
         .verify()

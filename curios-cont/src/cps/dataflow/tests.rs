@@ -14,8 +14,8 @@ impl Lattice for Height {
     }
 }
 
-fn value(index: u32) -> CpsValueId {
-    CpsValueId(index)
+fn value(index: u32) -> ValueId {
+    ValueId(index)
 }
 
 #[test]

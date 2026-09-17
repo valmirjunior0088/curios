@@ -1,4 +1,4 @@
-//! The Curios WebAssembly emission: [`into_wasm`](into_wasm()) lowers an optimized `curios_cont::CpsModule` to a WebAssembly-GC module, performing delayed closure conversion, verifying a private closed machine CFG, structurizing reducible control into Wasm blocks and loops, and localizing dispatcher fallback to irreducible scopes.
+//! The Curios WebAssembly emission: [`into_wasm`](into_wasm()) lowers an optimized `curios_cont::Module` to a WebAssembly-GC module, performing delayed closure conversion, verifying a private closed machine CFG, structurizing reducible control into Wasm blocks and loops, and localizing dispatcher fallback to irreducible scopes.
 //!
 //! Machine lowering recognizes a function's bodyless return continuation in the current-function context, so an ordinary return, `ApplyCont(function.return_cont, [value])`, is emitted as `Return` without allocating a block.
 //!

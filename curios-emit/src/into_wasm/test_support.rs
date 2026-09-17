@@ -2,7 +2,7 @@
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
-//! Backend lowering coverage: build a [`curios_cont::CpsModule`](curios_cont::CpsModule) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
+//! Backend lowering coverage: build a [`curios_cont::Module`](curios_cont::Module) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
 use curios_num::{Integer, Natural};
 
@@ -15,7 +15,7 @@ use {
 };
 
 /// The emitted module rendered as WAT text — the public inspection surface (`Module`'s items are private; `Display` is how consumers read it back).
-pub(super) fn wat(module: &curios_cont::CpsModule) -> String {
+pub(super) fn wat(module: &curios_cont::Module) -> String {
     into_wasm(module).to_string()
 }
 
@@ -51,31 +51,31 @@ pub(super) fn assert_total(wat: &str) {
     );
 }
 
-pub(super) fn nat(value: u32) -> curios_cont::CpsAtom {
-    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(Natural::from(value)))
+pub(super) fn nat(value: u32) -> curios_cont::Atom {
+    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(value)))
 }
 
-pub(super) fn int(value: i32) -> curios_cont::CpsAtom {
-    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Int(Integer::from(value)))
+pub(super) fn int(value: i32) -> curios_cont::Atom {
+    curios_cont::Atom::Literal(curios_cont::Literal::Int(Integer::from(value)))
 }
 
-pub(super) fn flt(value: f64) -> curios_cont::CpsAtom {
-    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Flt(Floating::from_f64(value)))
+pub(super) fn flt(value: f64) -> curios_cont::Atom {
+    curios_cont::Atom::Literal(curios_cont::Literal::Flt(Floating::from_f64(value)))
 }
 
 /// A nullary `main` that binds one intrinsic over `args` and exits with the result — the CPS analogue of the deleted fixtures' "compute one thing, exit with it". `into_wasm` does not fold, so the op lowers verbatim.
 pub(super) fn intrinsic_main(
-    op: curios_cont::CpsIntrinsic,
-    args: Vec<curios_cont::CpsAtom>,
-) -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+    op: curios_cont::Intrinsic,
+    args: Vec<curios_cont::Atom>,
+) -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let result = module.add_value(Some("result".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(result)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(result)),
     });
-    let body = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let body = module.add_node(curios_cont::Node::LetIntrinsic {
         result,
         op,
         args,
@@ -83,7 +83,7 @@ pub(super) fn intrinsic_main(
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -97,29 +97,29 @@ pub(super) fn intrinsic_main(
 // --- Aggregates / packed / cells -----------------------------------------
 
 /// Construct a tuple then project field 0 from it.
-pub(super) fn tuple_project() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn tuple_project() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let tuple = module.add_value(Some("tuple".into()));
     let field = module.add_value(Some("field".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(field)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(field)),
     });
-    let project = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let project = module.add_node(curios_cont::Node::LetIntrinsic {
         result: field,
-        op: curios_cont::CpsIntrinsic::TupleGet(0),
-        args: vec![curios_cont::CpsAtom::Value(tuple)],
+        op: curios_cont::Intrinsic::TupleGet(0),
+        args: vec![curios_cont::Atom::Value(tuple)],
         next: exit,
     });
-    let build = module.add_node(curios_cont::CpsNode::LetValue {
+    let build = module.add_node(curios_cont::Node::LetValue {
         result: tuple,
-        value: curios_cont::CpsValueExpr::Tuple(vec![nat(1), nat(2)]),
+        value: curios_cont::ValueExpr::Tuple(vec![nat(1), nat(2)]),
         next: project,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -131,29 +131,29 @@ pub(super) fn tuple_project() -> curios_cont::CpsModule {
 }
 
 /// A list literal then its length.
-pub(super) fn list_len() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn list_len() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let list = module.add_value(Some("list".into()));
     let len = module.add_value(Some("len".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(len)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(len)),
     });
-    let measure = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let measure = module.add_node(curios_cont::Node::LetIntrinsic {
         result: len,
-        op: curios_cont::CpsIntrinsic::ListLen,
-        args: vec![curios_cont::CpsAtom::Value(list)],
+        op: curios_cont::Intrinsic::ListLen,
+        args: vec![curios_cont::Atom::Value(list)],
         next: exit,
     });
-    let build = module.add_node(curios_cont::CpsNode::LetValue {
+    let build = module.add_node(curios_cont::Node::LetValue {
         result: list,
-        value: curios_cont::CpsValueExpr::List(vec![nat(1), nat(2), nat(3)]),
+        value: curios_cont::ValueExpr::List(vec![nat(1), nat(2), nat(3)]),
         next: measure,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -165,25 +165,25 @@ pub(super) fn list_len() -> curios_cont::CpsModule {
 }
 
 /// A packed-bytes literal then its length.
-pub(super) fn bin_len() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn bin_len() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let bin = module.add_value(Some("bin".into()));
     let len = module.add_value(Some("len".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(len)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(len)),
     });
-    let measure = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let measure = module.add_node(curios_cont::Node::LetIntrinsic {
         result: len,
-        op: curios_cont::CpsIntrinsic::BinLen(Grain::X),
-        args: vec![curios_cont::CpsAtom::Value(bin)],
+        op: curios_cont::Intrinsic::BinLen(Grain::X),
+        args: vec![curios_cont::Atom::Value(bin)],
         next: exit,
     });
-    let build = module.add_node(curios_cont::CpsNode::LetValue {
+    let build = module.add_node(curios_cont::Node::LetValue {
         result: bin,
         // Four bytes: one past the small-canonical envelope, so the literal exercises the rope path these fixtures pin rather than the immediate a smaller value now rides.
-        value: curios_cont::CpsValueExpr::Literal(curios_cont::CpsLiteral::Bin(
+        value: curios_cont::ValueExpr::Literal(curios_cont::Literal::Bin(
             Grain::X,
             PackedBin::from_bytes(vec![1, 2, 3, 4]),
         )),
@@ -191,7 +191,7 @@ pub(super) fn bin_len() -> curios_cont::CpsModule {
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -203,42 +203,42 @@ pub(super) fn bin_len() -> curios_cont::CpsModule {
 }
 
 /// Allocate a cell, read it back, and exit with the value.
-pub(super) fn cell_roundtrip() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn cell_roundtrip() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let cell = module.add_value(Some("cell".into()));
     let value = module.add_value(Some("value".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(value)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(value)),
     });
-    let get_k = module.add_continuation(curios_cont::CpsContinuation {
+    let get_k = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("got".into()),
         params: vec![value],
         body: exit,
     });
-    let get = module.add_node(curios_cont::CpsNode::Cell {
-        op: curios_cont::CpsCellOp::Get,
-        args: vec![curios_cont::CpsAtom::Value(cell)],
+    let get = module.add_node(curios_cont::Node::Cell {
+        op: curios_cont::CellOp::Get,
+        args: vec![curios_cont::Atom::Value(cell)],
         return_to: get_k,
     });
-    let new_k = module.add_continuation(curios_cont::CpsContinuation {
+    let new_k = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("made".into()),
         params: vec![cell],
         body: get,
     });
-    let new = module.add_node(curios_cont::CpsNode::Cell {
-        op: curios_cont::CpsCellOp::New,
+    let new = module.add_node(curios_cont::Node::Cell {
+        op: curios_cont::CellOp::New,
         args: vec![nat(0)],
         return_to: new_k,
     });
-    let body = module.add_node(curios_cont::CpsNode::LetCont {
+    let body = module.add_node(curios_cont::Node::LetCont {
         continuations: vec![new_k, get_k],
         body: new,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -252,7 +252,7 @@ pub(super) fn cell_roundtrip() -> curios_cont::CpsModule {
 // --- Foreign ABI ----------------------------------------------------------
 
 /// A host call whose signature has `results` results, resuming into a continuation that binds them all and exits with the first.
-pub(super) fn foreign_call(name: &str) -> curios_cont::CpsModule {
+pub(super) fn foreign_call(name: &str) -> curios_cont::Module {
     let function = host_ops()
         .get(name)
         .unwrap_or_else(|| panic!("host_ops defines {name}"))
@@ -260,32 +260,32 @@ pub(super) fn foreign_call(name: &str) -> curios_cont::CpsModule {
     let arity = function.signature.params.len();
     let results = function.signature.results.len();
 
-    let mut module = curios_cont::CpsModule::new();
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let bound = (0..results)
         .map(|i| module.add_value(Some(format!("result{i}"))))
         .collect::<Vec<_>>();
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: bound.first().copied().map(curios_cont::CpsAtom::Value),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: bound.first().copied().map(curios_cont::Atom::Value),
     });
-    let resume = module.add_continuation(curios_cont::CpsContinuation {
+    let resume = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("resume".into()),
         params: bound,
         body: exit,
     });
-    let call = module.add_node(curios_cont::CpsNode::Foreign {
+    let call = module.add_node(curios_cont::Node::Foreign {
         function,
         args: (0..arity).map(|_| nat(0)).collect(),
         return_to: resume,
     });
-    let body = module.add_node(curios_cont::CpsNode::LetCont {
+    let body = module.add_node(curios_cont::Node::LetCont {
         continuations: vec![resume],
         body: call,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -299,20 +299,20 @@ pub(super) fn foreign_call(name: &str) -> curios_cont::CpsModule {
 // --- Higher-order / closure ABI + module wiring ---------------------------
 
 /// `main` builds a closure of `target` and passes it to `apply`, which invokes it indirectly — an unknown callee that must go through the closure ABI.
-pub(super) fn indirect_apply() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn indirect_apply() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let target = module.reserve_function();
     let apply = module.reserve_function();
 
     let target_return = module.reserve_continuation();
-    let target_body = module.add_node(curios_cont::CpsNode::ApplyCont(curios_cont::CpsEdge {
+    let target_body = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
         target: target_return,
         args: vec![nat(0)],
     }));
     module.define_function(
         target,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("target".into()),
             params: vec![],
             return_cont: target_return,
@@ -322,14 +322,14 @@ pub(super) fn indirect_apply() -> curios_cont::CpsModule {
 
     let closure = module.add_value(Some("closure".into()));
     let apply_return = module.reserve_continuation();
-    let apply_body = module.add_node(curios_cont::CpsNode::ApplyFun {
-        callee: curios_cont::CpsCallee::Closure(closure),
+    let apply_body = module.add_node(curios_cont::Node::ApplyFun {
+        callee: curios_cont::Callee::Closure(closure),
         args: vec![],
         return_to: apply_return,
     });
     module.define_function(
         apply,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("apply".into()),
             params: vec![closure],
             return_cont: apply_return,
@@ -338,18 +338,18 @@ pub(super) fn indirect_apply() -> curios_cont::CpsModule {
     );
 
     let main_return = module.reserve_continuation();
-    let call = module.add_node(curios_cont::CpsNode::ApplyFun {
-        callee: curios_cont::CpsCallee::Known(apply),
-        args: vec![curios_cont::CpsAtom::Fun(target)],
+    let call = module.add_node(curios_cont::Node::ApplyFun {
+        callee: curios_cont::Callee::Known(apply),
+        args: vec![curios_cont::Atom::Fun(target)],
         return_to: main_return,
     });
-    let body = module.add_node(curios_cont::CpsNode::LetFun {
+    let body = module.add_node(curios_cont::Node::LetFun {
         functions: vec![target, apply],
         body: call,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -362,37 +362,37 @@ pub(super) fn indirect_apply() -> curios_cont::CpsModule {
 
 // --- Rope operations ------------------------------------------------------
 
-pub(super) fn bin_lit(bytes: Vec<u8>) -> curios_cont::CpsAtom {
-    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Bin(
+pub(super) fn bin_lit(bytes: Vec<u8>) -> curios_cont::Atom {
+    curios_cont::Atom::Literal(curios_cont::Literal::Bin(
         Grain::X,
         PackedBin::from_bytes(bytes),
     ))
 }
 
 /// A list literal read at an index — the list-rope read helper.
-pub(super) fn list_read() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn list_read() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let list = module.add_value(Some("list".into()));
     let elem = module.add_value(Some("elem".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(elem)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(elem)),
     });
-    let read = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let read = module.add_node(curios_cont::Node::LetIntrinsic {
         result: elem,
-        op: curios_cont::CpsIntrinsic::ListGet,
-        args: vec![curios_cont::CpsAtom::Value(list), nat(0)],
+        op: curios_cont::Intrinsic::ListGet,
+        args: vec![curios_cont::Atom::Value(list), nat(0)],
         next: exit,
     });
-    let build = module.add_node(curios_cont::CpsNode::LetValue {
+    let build = module.add_node(curios_cont::Node::LetValue {
         result: list,
-        value: curios_cont::CpsValueExpr::List(vec![nat(7), nat(8)]),
+        value: curios_cont::ValueExpr::List(vec![nat(7), nat(8)]),
         next: read,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -404,20 +404,20 @@ pub(super) fn list_read() -> curios_cont::CpsModule {
 }
 
 /// Map a closure over a list literal — the `list/map` intrinsic, which threads the mapping function through as a closure and services the fill via the shared helper.
-pub(super) fn list_map() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn list_map() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let mapper = module.reserve_function();
 
     let mapper_return = module.reserve_continuation();
     let element = module.add_value(Some("element".into()));
-    let mapper_body = module.add_node(curios_cont::CpsNode::ApplyCont(curios_cont::CpsEdge {
+    let mapper_body = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
         target: mapper_return,
-        args: vec![curios_cont::CpsAtom::Value(element)],
+        args: vec![curios_cont::Atom::Value(element)],
     }));
     module.define_function(
         mapper,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("mapper".into()),
             params: vec![element],
             return_cont: mapper_return,
@@ -427,39 +427,39 @@ pub(super) fn list_map() -> curios_cont::CpsModule {
 
     let list = module.add_value(Some("list".into()));
     let mapped = module.add_value(Some("mapped".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(mapped)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(mapped)),
     });
-    let resume = module.add_continuation(curios_cont::CpsContinuation {
+    let resume = module.add_continuation(curios_cont::Continuation {
         debug_name: Some("mapped".into()),
         params: vec![mapped],
         body: exit,
     });
-    let map = module.add_node(curios_cont::CpsNode::Intrinsic {
-        op: curios_cont::CpsIntrinsicCall::ListMap,
+    let map = module.add_node(curios_cont::Node::Intrinsic {
+        op: curios_cont::IntrinsicCall::ListMap,
         args: vec![
-            curios_cont::CpsAtom::Value(list),
-            curios_cont::CpsAtom::Fun(mapper),
+            curios_cont::Atom::Value(list),
+            curios_cont::Atom::Fun(mapper),
         ],
         return_to: resume,
     });
-    let with_cont = module.add_node(curios_cont::CpsNode::LetCont {
+    let with_cont = module.add_node(curios_cont::Node::LetCont {
         continuations: vec![resume],
         body: map,
     });
-    let build = module.add_node(curios_cont::CpsNode::LetValue {
+    let build = module.add_node(curios_cont::Node::LetValue {
         result: list,
-        value: curios_cont::CpsValueExpr::List(vec![nat(1), nat(2)]),
+        value: curios_cont::ValueExpr::List(vec![nat(1), nat(2)]),
         next: with_cont,
     });
-    let body = module.add_node(curios_cont::CpsNode::LetFun {
+    let body = module.add_node(curios_cont::Node::LetFun {
         functions: vec![mapper],
         body: build,
     });
     let return_cont = module.reserve_continuation();
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -471,32 +471,32 @@ pub(super) fn list_map() -> curios_cont::CpsModule {
 }
 
 /// A long left-leaning chain of appends, each over the previous result — the compile-time analogue of the deleted deep-rope fixtures. Lowering must stay on the default test-thread stack (iterative, never widened), so the only assertion that matters is that `into_wasm` returns at all.
-pub(super) fn deep_bin_chain(depth: usize) -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn deep_bin_chain(depth: usize) -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let values = (0..depth)
         .map(|i| module.add_value(Some(format!("v{i}"))))
         .collect::<Vec<_>>();
-    let mut next = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(values[depth - 1])),
+    let mut next = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(values[depth - 1])),
     });
     for i in (0..depth).rev() {
         let carrier = if i == 0 {
             bin_lit(vec![0])
         } else {
-            curios_cont::CpsAtom::Value(values[i - 1])
+            curios_cont::Atom::Value(values[i - 1])
         };
-        next = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+        next = module.add_node(curios_cont::Node::LetIntrinsic {
             result: values[i],
-            op: curios_cont::CpsIntrinsic::BinAppend(Grain::X),
+            op: curios_cont::Intrinsic::BinAppend(Grain::X),
             args: vec![carrier, nat(1)],
             next,
         });
     }
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -510,35 +510,35 @@ pub(super) fn deep_bin_chain(depth: usize) -> curios_cont::CpsModule {
 // --- Control-flow structuring (loops vs. localized dispatch) ---------------
 
 /// A single self-recursive continuation: one entry, so a reducible natural loop.
-pub(super) fn reducible_loop() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn reducible_loop() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let loop_cont = module.reserve_continuation();
     let counter = module.add_value(Some("counter".into()));
-    let again = module.add_node(curios_cont::CpsNode::ApplyCont(curios_cont::CpsEdge {
+    let again = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
         target: loop_cont,
-        args: vec![curios_cont::CpsAtom::Value(counter)],
+        args: vec![curios_cont::Atom::Value(counter)],
     }));
     module.define_continuation(
         loop_cont,
-        curios_cont::CpsContinuation {
+        curios_cont::Continuation {
             debug_name: Some("loop".into()),
             params: vec![counter],
             body: again,
         },
     );
-    let enter = module.add_node(curios_cont::CpsNode::ApplyCont(curios_cont::CpsEdge {
+    let enter = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
         target: loop_cont,
         args: vec![nat(0)],
     }));
-    let body = module.add_node(curios_cont::CpsNode::LetCont {
+    let body = module.add_node(curios_cont::Node::LetCont {
         continuations: vec![loop_cont],
         body: enter,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -550,51 +550,51 @@ pub(super) fn reducible_loop() -> curios_cont::CpsModule {
 }
 
 /// Two continuations that jump to each other, entered from *both* arms of a switch — a two-entry (irreducible) component that only a localized dispatcher can structure.
-pub(super) fn irreducible_pair() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn irreducible_pair() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let k1 = module.reserve_continuation();
     let k2 = module.reserve_continuation();
 
-    let to_k2 = module.add_node(curios_cont::CpsNode::ApplyCont(curios_cont::CpsEdge {
+    let to_k2 = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
         target: k2,
         args: vec![],
     }));
     module.define_continuation(
         k1,
-        curios_cont::CpsContinuation {
+        curios_cont::Continuation {
             debug_name: Some("k1".into()),
             params: vec![],
             body: to_k2,
         },
     );
-    let to_k1 = module.add_node(curios_cont::CpsNode::ApplyCont(curios_cont::CpsEdge {
+    let to_k1 = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
         target: k1,
         args: vec![],
     }));
     module.define_continuation(
         k2,
-        curios_cont::CpsContinuation {
+        curios_cont::Continuation {
             debug_name: Some("k2".into()),
             params: vec![],
             body: to_k1,
         },
     );
 
-    let switch = module.add_node(curios_cont::CpsNode::Switch {
+    let switch = module.add_node(curios_cont::Node::Switch {
         scrutinee: nat(0),
         cases: BTreeMap::from([
             (
                 0,
-                curios_cont::CpsEdge {
+                curios_cont::Edge {
                     target: k1,
                     args: vec![],
                 },
             ),
             (
                 1,
-                curios_cont::CpsEdge {
+                curios_cont::Edge {
                     target: k2,
                     args: vec![],
                 },
@@ -602,13 +602,13 @@ pub(super) fn irreducible_pair() -> curios_cont::CpsModule {
         ]),
         default: None,
     });
-    let body = module.add_node(curios_cont::CpsNode::LetCont {
+    let body = module.add_node(curios_cont::Node::LetCont {
         continuations: vec![k1, k2],
         body: switch,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -620,35 +620,35 @@ pub(super) fn irreducible_pair() -> curios_cont::CpsModule {
 }
 
 /// Two bindings of the same constant tuple, the second projected — the hoister must intern both to one global.
-pub(super) fn constant_tuple_pair() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn constant_tuple_pair() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let first = module.add_value(Some("first".into()));
     let second = module.add_value(Some("second".into()));
     let got = module.add_value(Some("got".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(got)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(got)),
     });
-    let project = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let project = module.add_node(curios_cont::Node::LetIntrinsic {
         result: got,
-        op: curios_cont::CpsIntrinsic::TupleGet(0),
-        args: vec![curios_cont::CpsAtom::Value(second)],
+        op: curios_cont::Intrinsic::TupleGet(0),
+        args: vec![curios_cont::Atom::Value(second)],
         next: exit,
     });
-    let build_second = module.add_node(curios_cont::CpsNode::LetValue {
+    let build_second = module.add_node(curios_cont::Node::LetValue {
         result: second,
-        value: curios_cont::CpsValueExpr::Tuple(vec![nat(2)]),
+        value: curios_cont::ValueExpr::Tuple(vec![nat(2)]),
         next: project,
     });
-    let build_first = module.add_node(curios_cont::CpsNode::LetValue {
+    let build_first = module.add_node(curios_cont::Node::LetValue {
         result: first,
-        value: curios_cont::CpsValueExpr::Tuple(vec![nat(2)]),
+        value: curios_cont::ValueExpr::Tuple(vec![nat(2)]),
         next: build_second,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -660,36 +660,36 @@ pub(super) fn constant_tuple_pair() -> curios_cont::CpsModule {
 }
 
 /// A tuple over a computed element — not constant, so it must stay an inline allocation.
-pub(super) fn runtime_tuple() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn runtime_tuple() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let sum = module.add_value(Some("sum".into()));
     let tuple = module.add_value(Some("tuple".into()));
     let got = module.add_value(Some("got".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(got)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(got)),
     });
-    let project = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let project = module.add_node(curios_cont::Node::LetIntrinsic {
         result: got,
-        op: curios_cont::CpsIntrinsic::TupleGet(0),
-        args: vec![curios_cont::CpsAtom::Value(tuple)],
+        op: curios_cont::Intrinsic::TupleGet(0),
+        args: vec![curios_cont::Atom::Value(tuple)],
         next: exit,
     });
-    let build = module.add_node(curios_cont::CpsNode::LetValue {
+    let build = module.add_node(curios_cont::Node::LetValue {
         result: tuple,
-        value: curios_cont::CpsValueExpr::Tuple(vec![curios_cont::CpsAtom::Value(sum)]),
+        value: curios_cont::ValueExpr::Tuple(vec![curios_cont::Atom::Value(sum)]),
         next: project,
     });
-    let compute = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let compute = module.add_node(curios_cont::Node::LetIntrinsic {
         result: sum,
-        op: curios_cont::CpsIntrinsic::NatAdd,
+        op: curios_cont::Intrinsic::NatAdd,
         args: vec![nat(1), nat(2)],
         next: build,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -701,29 +701,29 @@ pub(super) fn runtime_tuple() -> curios_cont::CpsModule {
 }
 
 /// A tuple over an i31-overflowing scalar — its materialization is a trap, which must stay at its execution point instead of failing validation inside a global initializer.
-pub(super) fn overflowing_tuple() -> curios_cont::CpsModule {
-    let mut module = curios_cont::CpsModule::new();
+pub(super) fn overflowing_tuple() -> curios_cont::Module {
+    let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let tuple = module.add_value(Some("tuple".into()));
     let got = module.add_value(Some("got".into()));
-    let exit = module.add_node(curios_cont::CpsNode::Exit {
-        value: Some(curios_cont::CpsAtom::Value(got)),
+    let exit = module.add_node(curios_cont::Node::Exit {
+        value: Some(curios_cont::Atom::Value(got)),
     });
-    let project = module.add_node(curios_cont::CpsNode::LetIntrinsic {
+    let project = module.add_node(curios_cont::Node::LetIntrinsic {
         result: got,
-        op: curios_cont::CpsIntrinsic::TupleGet(0),
-        args: vec![curios_cont::CpsAtom::Value(tuple)],
+        op: curios_cont::Intrinsic::TupleGet(0),
+        args: vec![curios_cont::Atom::Value(tuple)],
         next: exit,
     });
-    let build = module.add_node(curios_cont::CpsNode::LetValue {
+    let build = module.add_node(curios_cont::Node::LetValue {
         result: tuple,
-        value: curios_cont::CpsValueExpr::Tuple(vec![nat(0x8000_0000)]),
+        value: curios_cont::ValueExpr::Tuple(vec![nat(0x8000_0000)]),
         next: project,
     });
     module.define_function(
         main,
-        curios_cont::CpsFunction {
+        curios_cont::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,

@@ -12,8 +12,8 @@
 
 use {
     super::{
-        CpsAtom, CpsContId, CpsEdge, CpsLiteral, CpsModule, CpsNode, CpsValueExpr, CpsValueId,
-        Lattice, Repr, Solver, analysis::free_values,
+        Atom, ContinuationId, Edge, Lattice, Literal, Module, Node, Repr, Solver, ValueExpr,
+        ValueId, analysis::free_values,
     },
     curios_abi::WireType,
     std::collections::{BTreeMap, BTreeSet},
@@ -92,17 +92,17 @@ fn offer_of(repr: Repr) -> Offer {
 }
 
 /// The representation a literal is materialised at.
-fn literal_repr(literal: &CpsLiteral) -> Repr {
+fn literal_repr(literal: &Literal) -> Repr {
     match literal {
-        CpsLiteral::Nat(_) => Repr::Nat,
-        CpsLiteral::Int(_) => Repr::Int,
-        CpsLiteral::Flt(_) => Repr::Flt,
-        CpsLiteral::Bin(grain, _) => Repr::Bin(*grain),
+        Literal::Nat(_) => Repr::Nat,
+        Literal::Int(_) => Repr::Int,
+        Literal::Flt(_) => Repr::Flt,
+        Literal::Bin(grain, _) => Repr::Bin(*grain),
     }
 }
 
 /// Withdraw every parameter of `cont`, which receives a result the emitter hands over as a reference.
-fn withdraw_params(module: &CpsModule, cont: CpsContId, withdrawn: &mut BTreeSet<CpsValueId>) {
+fn withdraw_params(module: &Module, cont: ContinuationId, withdrawn: &mut BTreeSet<ValueId>) {
     let Some(continuation) = module.continuation(cont) else {
         return;
     };
@@ -113,7 +113,7 @@ fn withdraw_params(module: &CpsModule, cont: CpsContId, withdrawn: &mut BTreeSet
 /// What each value's definition can hand to a register.
 ///
 /// Offers are collected first and withdrawals applied over them at the end, rather than both being written into one map as they are found. The order matters and this is what makes it not depend on traversal: a value can perfectly well bind a scalar an intrinsic produced *and* escape into another function's body, and it must settle on the withdrawal whichever the walk reached first.
-fn offers(module: &CpsModule) -> BTreeMap<CpsValueId, Offer> {
+fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
     let mut offers = BTreeMap::new();
     let mut withdrawn = BTreeSet::new();
 
@@ -127,35 +127,33 @@ fn offers(module: &CpsModule) -> BTreeMap<CpsValueId, Offer> {
     for (_, node) in module.nodes.iter_live() {
         match node {
             // A row read is the one operation whose result carrier is a fact of the module rather than of the operation: the slot it names says whether a register can hold it.
-            CpsNode::LetIntrinsic { result, op, .. } => {
+            Node::LetIntrinsic { result, op, .. } => {
                 offers.insert(*result, offer_of(module.result_repr(op)));
             }
 
-            CpsNode::LetValue { result, value, .. } => {
+            Node::LetValue { result, value, .. } => {
                 let offer = match value {
-                    CpsValueExpr::Literal(literal) => offer_of(literal_repr(literal)),
-                    CpsValueExpr::List(_) | CpsValueExpr::Tuple(_) | CpsValueExpr::Row(..) => {
-                        Offer::Never
-                    }
+                    ValueExpr::Literal(literal) => offer_of(literal_repr(literal)),
+                    ValueExpr::List(_) | ValueExpr::Tuple(_) | ValueExpr::Row(..) => Offer::Never,
                 };
                 offers.insert(*result, offer);
             }
 
             // A result returning from a call, a host import, a cell operation or a call-shaped intrinsic is already a reference by the time it reaches its continuation's parameter.
-            CpsNode::ApplyFun { return_to, .. }
-            | CpsNode::Foreign { return_to, .. }
-            | CpsNode::Cell { return_to, .. }
-            | CpsNode::Intrinsic { return_to, .. } => {
+            Node::ApplyFun { return_to, .. }
+            | Node::Foreign { return_to, .. }
+            | Node::Cell { return_to, .. }
+            | Node::Intrinsic { return_to, .. } => {
                 withdraw_params(module, *return_to, &mut withdrawn)
             }
 
-            CpsNode::LetFun { .. }
-            | CpsNode::LetCont { .. }
-            | CpsNode::ApplyCont(_)
-            | CpsNode::Switch { .. }
-            | CpsNode::Exit { .. }
-            | CpsNode::Panic(_)
-            | CpsNode::Unreachable => {}
+            Node::LetFun { .. }
+            | Node::LetCont { .. }
+            | Node::ApplyCont(_)
+            | Node::Switch { .. }
+            | Node::Exit { .. }
+            | Node::Panic(_)
+            | Node::Unreachable => {}
         }
     }
 
@@ -193,7 +191,7 @@ fn wire_carrier(wire: &WireType) -> Option<Repr> {
 }
 
 /// Decide the storage of every value in the module: which values `curios-emit` may hold in a machine register, and at which carrier.
-pub fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
+pub fn storage(module: &Module) -> BTreeMap<ValueId, Storage> {
     let offers = offers(module);
     let seeds = module.values.live_ids().collect::<Vec<_>>();
 
@@ -201,14 +199,14 @@ pub fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
         for (_, node) in module.nodes.iter_live() {
             match node {
                 // The roster states what each operand position reads.
-                CpsNode::LetIntrinsic { op, args, .. } => {
+                Node::LetIntrinsic { op, args, .. } => {
                     for (index, arg) in args.iter().enumerate() {
                         demand(arg, raw_carrier(&op.operand_repr(index)), &offers, solver);
                     }
                 }
 
                 // A tag is read as a raw unsigned scalar; the edges' arguments are handled below with every other edge.
-                CpsNode::Switch {
+                Node::Switch {
                     scrutinee,
                     cases,
                     default,
@@ -219,25 +217,25 @@ pub fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
                     }
                 }
 
-                CpsNode::ApplyCont(edge) => edge_demands(module, edge, &offers, solver),
+                Node::ApplyCont(edge) => edge_demands(module, edge, &offers, solver),
 
                 // The exit code crosses as a raw `i32`.
-                CpsNode::Exit { value } => {
+                Node::Exit { value } => {
                     if let Some(value) = value {
                         demand(value, Some(Repr::Nat), &offers, solver);
                     }
                 }
 
                 // A host call reads its scalar parameters raw and its reference parameters as shapes.
-                CpsNode::Foreign { function, args, .. } => {
+                Node::Foreign { function, args, .. } => {
                     for (arg, (_, wire)) in args.iter().zip(&function.signature.params) {
                         demand(arg, wire_carrier(wire), &offers, solver);
                     }
                 }
 
                 // A variant construction stores each atom into a slot whose carrier the row declares, so a scalar slot demands its atom raw — the store side of the same fact the read side offers above.
-                CpsNode::LetValue {
-                    value: CpsValueExpr::Row(row, atoms),
+                Node::LetValue {
+                    value: ValueExpr::Row(row, atoms),
                     ..
                 } => {
                     for (index, atom) in atoms.iter().enumerate() {
@@ -251,19 +249,19 @@ pub fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
                 }
 
                 // Everything else stores or passes a reference: call arguments cross a `func/N` signature that is uniformly `anyref`, a list's elements and a tuple's fields are held uninterpreted, and every cell operation works on shapes. None of these demands a raw carrier, so none contributes.
-                CpsNode::LetValue { value, .. } => match value {
-                    CpsValueExpr::Literal(_)
-                    | CpsValueExpr::List(_)
-                    | CpsValueExpr::Tuple(_)
-                    | CpsValueExpr::Row(..) => {}
+                Node::LetValue { value, .. } => match value {
+                    ValueExpr::Literal(_)
+                    | ValueExpr::List(_)
+                    | ValueExpr::Tuple(_)
+                    | ValueExpr::Row(..) => {}
                 },
-                CpsNode::ApplyFun { .. }
-                | CpsNode::Cell { .. }
-                | CpsNode::Intrinsic { .. }
-                | CpsNode::LetFun { .. }
-                | CpsNode::LetCont { .. }
-                | CpsNode::Panic(_)
-                | CpsNode::Unreachable => {}
+                Node::ApplyFun { .. }
+                | Node::Cell { .. }
+                | Node::Intrinsic { .. }
+                | Node::LetFun { .. }
+                | Node::LetCont { .. }
+                | Node::Panic(_)
+                | Node::Unreachable => {}
             }
         }
     })
@@ -271,12 +269,12 @@ pub fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
 
 /// Demand `carrier` of `atom`, where its definition can supply it. An atom that is not a value, a position that reads a reference, and a definition that cannot reach a register all contribute nothing.
 fn demand(
-    atom: &CpsAtom,
+    atom: &Atom,
     carrier: Option<Repr>,
-    offers: &BTreeMap<CpsValueId, Offer>,
+    offers: &BTreeMap<ValueId, Offer>,
     solver: &mut Solver<Storage>,
 ) {
-    let (CpsAtom::Value(value), Some(carrier)) = (atom, carrier) else {
+    let (Atom::Value(value), Some(carrier)) = (atom, carrier) else {
         return;
     };
 
@@ -287,9 +285,9 @@ fn demand(
 
 /// An edge's arguments inherit the storage of the parameters they feed — the rule that carries a decision around a loop.
 fn edge_demands(
-    module: &CpsModule,
-    edge: &CpsEdge,
-    offers: &BTreeMap<CpsValueId, Offer>,
+    module: &Module,
+    edge: &Edge,
+    offers: &BTreeMap<ValueId, Offer>,
     solver: &mut Solver<Storage>,
 ) {
     let Some(target) = module.continuation(edge.target) else {

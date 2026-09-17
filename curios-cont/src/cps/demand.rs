@@ -5,10 +5,7 @@
 //! **The fact is interprocedural.** A value passed to a known call or jumped along an edge asks exactly what the receiving parameter's own uses ask, so an argument's demand defers to that parameter and the round becomes a genuine fixpoint under the shared solver. Two transfers deliberately keep the syntactic reading: an argument to a closure call crosses an indirection this walk does not resolve, and a value on an edge into a bodyless return sentinel is consumed by the caller's resume, whose linkage belongs to the return protocol rather than to this lattice.
 
 use {
-    super::{
-        CpsAtom, CpsCallee, CpsEdge, CpsIntrinsic, CpsModule, CpsNode, CpsValueId, Lattice, Solver,
-        atoms,
-    },
+    super::{Atom, Callee, Edge, Intrinsic, Lattice, Module, Node, Solver, ValueId, atoms},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -58,17 +55,17 @@ impl Lattice for Demand {
 /// The demand on `value`, reading absence as `Opaque`.
 ///
 /// The conservative direction here is the opposite of the representation client's, which forces the *top* for an unseeded value because it cannot be held in a register. Here the top is what keeps a value alive: answering `Unused` for one the walk never reached would delete a live parameter.
-pub(crate) fn demand_of(demands: &BTreeMap<CpsValueId, Demand>, value: CpsValueId) -> Demand {
+pub(crate) fn demand_of(demands: &BTreeMap<ValueId, Demand>, value: ValueId) -> Demand {
     demands.get(&value).cloned().unwrap_or(Demand::Opaque)
 }
 
 /// Join each of an edge's arguments with the demand established so far on the parameter receiving it. A target without a definition is a return sentinel, whose arguments stay opaque — see the module documentation.
-fn defer_edge(module: &CpsModule, solver: &mut Solver<Demand>, edge: &CpsEdge) {
+fn defer_edge(module: &Module, solver: &mut Solver<Demand>, edge: &Edge) {
     let params = module
         .continuation(edge.target)
         .map(|continuation| continuation.params.as_slice());
     for (position, atom) in edge.args.iter().enumerate() {
-        if let CpsAtom::Value(value) = atom {
+        if let Atom::Value(value) = atom {
             let deferred = params
                 .and_then(|params| params.get(position))
                 .and_then(|param| solver.facts().get(param).cloned())
@@ -79,36 +76,36 @@ fn defer_edge(module: &CpsModule, solver: &mut Solver<Demand>, edge: &CpsEdge) {
 }
 
 /// What every value's uses ask of it.
-pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
+pub(crate) fn demands(module: &Module) -> BTreeMap<ValueId, Demand> {
     let seeds = module.values.live_ids().collect::<Vec<_>>();
 
     Solver::solve(seeds, |solver| {
         for (_, node) in module.nodes.iter_live() {
             match node {
                 // A projection reads one field and nothing else — the only use that does not consume the whole value. It is taken before the general fallback below, which would otherwise report `Opaque` for the same operand and erase the refinement.
-                CpsNode::LetIntrinsic {
-                    op: CpsIntrinsic::TupleGet(index) | CpsIntrinsic::RowGet(_, index),
+                Node::LetIntrinsic {
+                    op: Intrinsic::TupleGet(index) | Intrinsic::RowGet(_, index),
                     args,
                     ..
-                } if matches!(args.as_slice(), [CpsAtom::Value(_)]) => {
-                    if let [CpsAtom::Value(value)] = args.as_slice() {
+                } if matches!(args.as_slice(), [Atom::Value(_)]) => {
+                    if let [Atom::Value(value)] = args.as_slice() {
                         solver.join(*value, Demand::Projected(BTreeSet::from([*index])));
                     }
                 }
 
                 // A sequence read consumes only elements, lengths, or windows of its carrier operand: the carrier's demand stays `Indexed`, while every other operand — an index, a count, an appended element — is consumed whole. `ListSettle` joins the reads because settling is exactly what an `Indexed` construction would have done to itself. The growth forms — concat, append, chunk, flat — are deliberately absent: their carrier operands are consumed into a new value, which is the escape the lattice point exists to exclude.
-                CpsNode::LetIntrinsic {
+                Node::LetIntrinsic {
                     op:
-                        CpsIntrinsic::BinLen(_)
-                        | CpsIntrinsic::BinEql(_)
-                        | CpsIntrinsic::BinGet(_)
-                        | CpsIntrinsic::BinSlice(_)
-                        | CpsIntrinsic::BinRest(_)
-                        | CpsIntrinsic::ListLen
-                        | CpsIntrinsic::ListGet
-                        | CpsIntrinsic::ListSlice
-                        | CpsIntrinsic::ListRest
-                        | CpsIntrinsic::ListSettle,
+                        Intrinsic::BinLen(_)
+                        | Intrinsic::BinEql(_)
+                        | Intrinsic::BinGet(_)
+                        | Intrinsic::BinSlice(_)
+                        | Intrinsic::BinRest(_)
+                        | Intrinsic::ListLen
+                        | Intrinsic::ListGet
+                        | Intrinsic::ListSlice
+                        | Intrinsic::ListRest
+                        | Intrinsic::ListSettle,
                     args,
                     ..
                 } => {
@@ -116,8 +113,8 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
                         // Equality reads both sides.
                         2 if matches!(
                             node,
-                            CpsNode::LetIntrinsic {
-                                op: CpsIntrinsic::BinEql(_),
+                            Node::LetIntrinsic {
+                                op: Intrinsic::BinEql(_),
                                 ..
                             }
                         ) =>
@@ -127,7 +124,7 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
                         _ => 1,
                     };
                     for (position, atom) in args.iter().enumerate() {
-                        if let CpsAtom::Value(value) = atom {
+                        if let Atom::Value(value) = atom {
                             let demand = match position < carriers {
                                 true => Demand::Indexed,
                                 false => Demand::Opaque,
@@ -138,8 +135,8 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
                 }
 
                 // The deferral: a known call's argument asks what the receiving parameter's uses ask. A parameter is a seeded live value, so an absent fact can only mean a malformed call, and opaque is the reading that only ever excludes.
-                CpsNode::ApplyFun {
-                    callee: CpsCallee::Known(callee),
+                Node::ApplyFun {
+                    callee: Callee::Known(callee),
                     args,
                     ..
                 } => {
@@ -147,7 +144,7 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
                         .function(*callee)
                         .map(|function| function.params.as_slice());
                     for (position, atom) in args.iter().enumerate() {
-                        if let CpsAtom::Value(value) = atom {
+                        if let Atom::Value(value) = atom {
                             let deferred = params
                                 .and_then(|params| params.get(position))
                                 .and_then(|param| solver.facts().get(param).cloned())
@@ -158,27 +155,27 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
                 }
 
                 // A closure callee is a *use of the whole* value but not an opaque one: the arity is what a caller would have to pass if the application moved into whatever produced it. Its arguments stay opaque — the callee is not resolved here, so no parameter exists to defer to.
-                CpsNode::ApplyFun {
-                    callee: CpsCallee::Closure(closure),
+                Node::ApplyFun {
+                    callee: Callee::Closure(closure),
                     args,
                     ..
                 } => {
                     for atom in args {
-                        if let CpsAtom::Value(value) = atom {
+                        if let Atom::Value(value) = atom {
                             solver.join(*value, Demand::Opaque);
                         }
                     }
                     solver.join(*closure, Demand::Applied(args.len()));
                 }
 
-                CpsNode::ApplyCont(edge) => defer_edge(module, solver, edge),
+                Node::ApplyCont(edge) => defer_edge(module, solver, edge),
 
-                CpsNode::Switch {
+                Node::Switch {
                     scrutinee,
                     cases,
                     default,
                 } => {
-                    if let CpsAtom::Value(value) = scrutinee {
+                    if let Atom::Value(value) = scrutinee {
                         solver.join(*value, Demand::Opaque);
                     }
                     for edge in cases.values().chain(default.as_ref()) {
@@ -188,7 +185,7 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
 
                 _ => {
                     for atom in atoms(node) {
-                        if let CpsAtom::Value(value) = atom {
+                        if let Atom::Value(value) = atom {
                             solver.join(*value, Demand::Opaque);
                         }
                     }
