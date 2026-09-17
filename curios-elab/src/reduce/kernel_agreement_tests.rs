@@ -7,12 +7,13 @@
 use curios_core::*;
 use {
     super::test_support::{context, nat, nominal},
+    curios_analysis::fixture::SYNTAX,
     curios_cert::Kernel,
 };
 
 /// A kernel minting above every binder these fixtures use.
 fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(100_000, crate::SYNTAX);
+    let mut kernel = Kernel::new(100_000, SYNTAX);
     kernel.set_local_floor(10_000);
     kernel
 }

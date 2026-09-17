@@ -6,6 +6,7 @@
 
 use {
     crate::{Globals, KernelError},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{Global, Intrinsic, Term},
     curios_utilities::Qualifier,
 };
@@ -30,7 +31,7 @@ fn a_forged_foreign_row_cannot_inhabit_a_proposition() {
         &forged_foreign(&false_type, &false_name),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -54,7 +55,7 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
             ),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX,
+            SYNTAX,
         ),
         Vec::new(),
         "the boundary refused a host call at the type its own wire signature denotes",

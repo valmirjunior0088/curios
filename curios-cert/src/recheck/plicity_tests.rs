@@ -7,6 +7,7 @@
 use crate::Globals;
 
 use super::test_support::*;
+use curios_analysis::fixture::SYNTAX;
 
 /// `plicities` is the one field on a registry entry that no clause of `check_induct_decl` establishes, and the stated reason it needs none is that this kernel never reads it — its only consumer is `curios-elab`'s `payload_plicities`. Its *length* is no longer anyone's to check: `InductParam::new` pairs the vector with its telescope at the one door that builds one, so since 2026-08-30 a short vector is unrepresentable rather than a panic waiting in the elaborator.
 ///
@@ -22,13 +23,13 @@ fn a_registry_plicity_vector_is_read_by_no_kernel_rule() {
             &plicity_module(true, 1),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX
+            SYNTAX
         ),
         fixture_verdicts(
             &plicity_module(false, 1),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX
+            SYNTAX
         ),
         "a plicity vector no kernel rule reads changed a verdict",
     );
@@ -37,7 +38,7 @@ fn a_registry_plicity_vector_is_read_by_no_kernel_rule() {
             &plicity_module(false, 1),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX
+            SYNTAX
         ),
         Vec::new(),
         "both sides must be accepted, or the equality above is two refusals agreeing",
@@ -52,7 +53,7 @@ fn a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector() {
             &plicity_module(false, 0),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX
+            SYNTAX
         )
         .is_empty(),
         "the kernel accepted a constructor application at the wrong payload count",

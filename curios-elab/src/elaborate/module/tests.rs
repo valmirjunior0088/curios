@@ -2,13 +2,14 @@
 
 use {
     crate::*,
+    curios_analysis::fixture::SYNTAX,
     curios_core::*,
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
 
 fn context() -> Context {
-    Context::with_default_budget(crate::SYNTAX)
+    Context::with_default_budget(SYNTAX)
 }
 
 fn nominal(path: &str) -> Global {

@@ -6,6 +6,7 @@
 
 use {
     crate::{Globals, KernelError},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{
         Atom, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global, InductParam,
         Intrinsic, Item, Module, Nat, StructType, Subterm, Telescope, Term, Totality,
@@ -36,7 +37,7 @@ fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
             &occurrence_module(params, indices),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX,
+            SYNTAX,
         );
 
         assert!(
@@ -57,7 +58,7 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
     );
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "the boundary refused an occurrence at exactly the arity its declaration states",
     );
@@ -77,7 +78,7 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
 #[test]
 fn a_nominal_value_whose_arity_is_not_its_declarations_is_refused() {
     for (label, module) in nominal_value_cases() {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts
@@ -98,7 +99,7 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
             &struct_value_module(vec![nat.clone()]),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX,
+            SYNTAX,
         ),
         Vec::new(),
         "a record literal at exactly its declared parameters was refused",
@@ -108,7 +109,7 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
             &variant_value_module(vec![nat]),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX,
+            SYNTAX,
         ),
         Vec::new(),
         "a constructor application at exactly its declared parameters was refused",
@@ -131,7 +132,7 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
 #[test]
 fn a_count_a_term_carries_is_refused_rather_than_indexed_with() {
     for (label, module) in unsaturated_cases() {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts.iter().any(|verdict| matches!(
@@ -203,7 +204,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     };
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "a saturated application in a type position was refused",
     );
@@ -227,7 +228,7 @@ fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
     for (label, module) in unguarded_opener_cases() {
         // The demonstrated defect is the *abort*: `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others, and a panic makes that false.
         let verdicts = catch_unwind(AssertUnwindSafe(|| {
-            fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX)
+            fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX)
         }))
         .unwrap_or_else(|_| panic!("{label}: reduction aborted the walk instead of refusing"));
 
@@ -244,7 +245,7 @@ fn an_arm_matching_its_payload_still_reduces() {
     let module = arm_module(vec![(Plicity::Explicit, Free::local(996, Some("a")))]);
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "an arm binding exactly its payload was refused",
     );
@@ -261,12 +262,7 @@ fn an_arm_matching_its_payload_still_reduces() {
 /// Its control is [`an_indexed_occurrence_at_a_well_typed_index_is_accepted`], which keeps the same family at an index that genuinely inhabits `Nat`: without it, refusing every indexed occurrence would pass this.
 #[test]
 fn a_nominal_occurrence_types_its_arguments() {
-    let verdicts = fixture_verdicts(
-        &index_forgery(),
-        1_000_000,
-        &Globals::default(),
-        crate::SYNTAX,
-    );
+    let verdicts = fixture_verdicts(&index_forgery(), 1_000_000, &Globals::default(), SYNTAX);
 
     assert!(
         !verdicts.is_empty(),
@@ -317,7 +313,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
     };
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new()
     );
 }
@@ -379,7 +375,7 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         }),
     };
 
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 
     assert!(
         !verdicts.is_empty(),
@@ -439,7 +435,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
     };
 
     assert_eq!(
-        refusal.format_with(&module, &[], &crate::SYNTAX),
+        refusal.format_with(&module, &[], &SYNTAX),
         "expected `Nat`, found `Box(@Nat)`"
     );
     // The faithful rendering keeps the qualified path and drops the mark, which is what makes the axes worth supplying.

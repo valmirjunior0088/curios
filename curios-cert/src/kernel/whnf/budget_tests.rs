@@ -2,6 +2,7 @@
 
 use {
     crate::{Kernel, whnf},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{Category, Cost, ReduceError, Reducer, Term},
 };
 
@@ -10,7 +11,7 @@ use super::test_support::*;
 /// The kernel is not strongly normalizing, and the budget is what makes every judgment terminate anyway. A group that consumes nothing spins until it runs out, which is an answer rather than a hang.
 #[test]
 fn a_non_productive_recursion_exhausts_the_budget() {
-    let mut kernel = Kernel::new(1_000, crate::SYNTAX);
+    let mut kernel = Kernel::new(1_000, SYNTAX);
     kernel.set_local_floor(1_000);
     let loop_ = binder(0, "loop");
     let n = binder(1, "n");
@@ -45,7 +46,7 @@ fn a_non_productive_recursion_exhausts_the_budget() {
 /// Three *different* binders, because a term reduced once is remembered for the rest of the declaration — a local-bearing one too — and a second look at the same one would be a free hit rather than the reduction whose refusal this is about.
 #[test]
 fn restoring_the_budget_refills_it() {
-    let mut kernel = Kernel::new(Cost::FRAME.get() + Cost::STEP.get(), crate::SYNTAX);
+    let mut kernel = Kernel::new(Cost::FRAME.get() + Cost::STEP.get(), SYNTAX);
     kernel.set_local_floor(1_000);
     let occurrence = |index: u32| Term::free_var(&binder(index, "x"));
 
@@ -61,7 +62,7 @@ fn restoring_the_budget_refills_it() {
 /// The subject is a chain of nested intrinsic operands over an *open* tip — a term the closed machine's gate declines, so the recursive strategy re-enters reduction once per link and the budget affords a handful of levels and no more. The closed twin of this chain no longer trips the row at all, which is the machine's whole yield and is asserted by its own tests.
 #[test]
 fn a_deep_reduction_is_refused_and_the_refusal_names_depth() {
-    let mut kernel = Kernel::new(Cost::FRAME.get() * 4, crate::SYNTAX);
+    let mut kernel = Kernel::new(Cost::FRAME.get() * 4, SYNTAX);
     kernel.set_local_floor(1_000);
     let tip = binder(0, "tip");
 
@@ -87,7 +88,7 @@ fn a_deep_reduction_is_refused_and_the_refusal_names_depth() {
 #[test]
 fn an_exhausted_retention_quota_leaves_the_answer_alone() {
     let mut warm = kernel();
-    let mut cold = Kernel::with_retention(1_000_000, 0, crate::SYNTAX);
+    let mut cold = Kernel::with_retention(1_000_000, 0, SYNTAX);
     cold.set_local_floor(1_000);
 
     let term = chain(64);
@@ -109,7 +110,7 @@ fn the_allowance_does_not_decide_a_second_reduction_within_a_declaration() {
     spent(&mut warm, term.clone());
     let warm_again = spent(&mut warm, term.clone());
 
-    let mut unallowed = Kernel::with_retention(1_000_000, 0, crate::SYNTAX);
+    let mut unallowed = Kernel::with_retention(1_000_000, 0, SYNTAX);
     unallowed.set_local_floor(1_000);
     spent(&mut unallowed, term.clone());
     let unallowed_again = spent(&mut unallowed, term);

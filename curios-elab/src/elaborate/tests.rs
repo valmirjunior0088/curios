@@ -1,6 +1,7 @@
 use curios_core::*;
 use {
     crate::*,
+    curios_analysis::fixture::SYNTAX,
     curios_num::Floating,
     curios_num::Natural,
     curios_utilities::{Plicity, Qualifier},
@@ -12,7 +13,7 @@ fn nominal(path: &str) -> Global {
 }
 
 fn context() -> Context {
-    Context::with_default_budget(crate::SYNTAX)
+    Context::with_default_budget(SYNTAX)
 }
 
 // Only the witness lowering mints a `Derive`, always in checked position against a concept application; met in inference, or checked against anything else, the transient has nothing to derive from and refuses rather than passing through.

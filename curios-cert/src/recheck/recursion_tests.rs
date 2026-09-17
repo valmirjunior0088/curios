@@ -6,6 +6,7 @@
 
 use {
     crate::Globals,
+    curios_analysis::fixture::SYNTAX,
     curios_core::{
         Entrypoint, Free, Global, Intrinsic, Many, Module, RecGroup, RecMemberScopes, Scope, Term,
     },
@@ -44,7 +45,7 @@ fn a_recursive_member_is_certified_only_with_its_group() {
             &selection_module(body),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX,
+            SYNTAX,
         );
 
         assert!(
@@ -102,7 +103,7 @@ fn a_member_of_a_legal_group_is_still_accepted() {
     };
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "general recursion at a relevant type is legal however it is spelled",
     );

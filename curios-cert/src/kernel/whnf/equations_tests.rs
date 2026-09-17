@@ -2,6 +2,7 @@
 
 use {
     crate::{Kernel, whnf},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{Cost, Intrinsic, Reducer, Term},
 };
 
@@ -66,7 +67,7 @@ fn a_case_equation_reaches_the_reduct_and_not_the_memos() {
     );
     assert_eq!(outside_closed, untouched_closed);
 
-    let mut uncached = Kernel::uncached(1_000_000, crate::SYNTAX);
+    let mut uncached = Kernel::uncached(1_000_000, SYNTAX);
     uncached.set_local_floor(1_000);
 
     assert_eq!(
@@ -110,7 +111,7 @@ fn a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under() {
     );
     assert_eq!(after, before, "and its answer does not outlive it");
 
-    let mut uncached = Kernel::uncached(1_000_000, crate::SYNTAX);
+    let mut uncached = Kernel::uncached(1_000_000, SYNTAX);
     uncached.set_local_floor(1_000);
     assert_eq!(
         sequence(&mut uncached),
@@ -145,7 +146,7 @@ fn a_case_equation_answers_a_term_the_budget_cannot_reduce() {
     let n = binder(1, "n");
     let key = Term::intrinsic(Intrinsic::nat_add(chain(100_000), Term::free_var(&n)));
 
-    let mut control = Kernel::new(budget, crate::SYNTAX);
+    let mut control = Kernel::new(budget, SYNTAX);
     control.set_local_floor(1_000);
     control.assume(&n, &nat_type());
     assert!(
@@ -153,7 +154,7 @@ fn a_case_equation_answers_a_term_the_budget_cannot_reduce() {
         "the fold has to be unaffordable, or the subject's answer proves nothing"
     );
 
-    let mut subject = Kernel::new(budget, crate::SYNTAX);
+    let mut subject = Kernel::new(budget, SYNTAX);
     subject.set_local_floor(1_000);
     subject.assume(&n, &nat_type());
     let answered = subject.scoped(|kernel| {

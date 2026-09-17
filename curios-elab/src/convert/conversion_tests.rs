@@ -4,6 +4,7 @@ use super::test_support::*;
 use curios_core::*;
 use {
     crate::*,
+    curios_analysis::fixture::SYNTAX,
     curios_num::Integer,
     curios_utilities::{Grain, PackedBin, Plicity, Qualifier},
 };
@@ -111,7 +112,7 @@ fn value_conversion_does_not_identify_distinct_type_payloads() {
     let one = Level::zero().succ().expect("level zero has a successor");
 
     // The differential's fixed side: the kernel, handed the identical declaration and the identical goal, refuses it at the payloads.
-    let mut kernel = curios_cert::Kernel::new(100_000, crate::SYNTAX);
+    let mut kernel = curios_cert::Kernel::new(100_000, SYNTAX);
     kernel.set_local_floor(1_000);
     kernel.declare_induct(&e, &declaration);
     assert!(
@@ -494,7 +495,7 @@ fn distinct_recursive_heads_with_differing_bodies_is_false() {
 #[test]
 fn growing_recursive_unfolding_spends_the_budget() {
     // Its own small budget: the subject here is that the budget stops an unfolding that grows without bound, and this shape drives native recursion deep enough to overflow the stack somewhere above 20,000 steps — well under the shipped default. See the note in `Context::new`.
-    let mut context = Context::new(20_000, crate::SYNTAX);
+    let mut context = Context::new(20_000, SYNTAX);
     let x = context.fresh(Some("x"));
     let m = context.fresh(Some("m"));
     let s = context.fresh(Some("s"));

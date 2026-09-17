@@ -2,6 +2,7 @@
 
 use {
     crate::{Globals, KernelError},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{
         Atom, Entrypoint, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Nat,
         RecGroup, RecMemberScopes, ReduceError, Scope, Telescope, Term, UniverseContext,
@@ -84,7 +85,7 @@ fn positivity_is_judged_on_its_own_budget() {
         &spent_entry_beside_an_aliased_payload(),
         100_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(

@@ -7,6 +7,7 @@
 use {
     crate::{Globals, KernelError},
     curios_analysis::Erased,
+    curios_analysis::fixture::SYNTAX,
     curios_core::{Atom, Entrypoint, Global, InductParam, Intrinsic, Module, Telescope, Term},
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
@@ -21,7 +22,7 @@ use super::test_support::*;
 /// While the hole was open `recheck_module_verdicts` returned zero refusals for exactly this module, with the evaluation memos on and off, and `check_induct_decl` accepted the declaration. It never compiled and never ran: `curios-elab`'s `singleton_eliminable` refused `unbox` at every surface spelling, which is what kept the certifier's copy of the rule unobserved. The fixtures in `crate::kernel::infer::eliminate::tests` pin the predicate; this pins the consequence, and it is the reason the predicate's two call sites are worth guarding separately.
 #[test]
 fn a_derivation_through_a_type_carrying_proposition_is_refused() {
-    let verdicts = fixture_verdicts(&forgery(), 1_000_000, &Globals::default(), crate::SYNTAX);
+    let verdicts = fixture_verdicts(&forgery(), 1_000_000, &Globals::default(), SYNTAX);
 
     assert!(
         verdicts
@@ -44,7 +45,7 @@ fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
         &proof_carrying_unit(true),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -67,7 +68,7 @@ fn a_proof_carrying_the_unit_value_is_accepted() {
             &proof_carrying_unit(false),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX
+            SYNTAX
         ),
         Vec::new(),
         "an ordinary proof at a unit-carrying proposition was refused",
@@ -93,7 +94,7 @@ fn a_proposition_may_not_carry_a_computed_relevant_field() {
         &computed_field_forgery(),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
     let wrap = Global::Authored(Qualifier::from(["Wrap"]));
 
@@ -143,7 +144,7 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     };
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new()
     );
 }

@@ -3,7 +3,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across `reduce`, and nothing outside it.
 
 use curios_core::*;
-use {crate::*, curios_utilities::Qualifier};
+use {crate::*, curios_analysis::fixture::SYNTAX, curios_utilities::Qualifier};
 
 /// A declaration's name, from the path a test writes. Fixture-only.
 pub(super) fn nominal(path: &str) -> Global {
@@ -16,7 +16,7 @@ pub(crate) fn qed() -> Term {
 }
 
 pub(super) fn context() -> Context {
-    Context::new(100_000, crate::SYNTAX)
+    Context::new(100_000, SYNTAX)
 }
 
 pub(super) fn nat(n: usize) -> Term {

@@ -1,6 +1,7 @@
 use curios_core::*;
 use {
     crate::*,
+    curios_analysis::fixture::SYNTAX,
     curios_cert::{Kernel, carries_information},
     curios_utilities::Qualifier,
 };
@@ -55,8 +56,8 @@ fn display_parameterless_witness_concept_states_the_rule() {
 /// The table spans the shapes the rule turns on: both universes, a proof, an impredicative `Π` into a proposition beside a `Π` into a *universe* — a type family, not a proposition — a `Σ` whose fields are all propositions, and the unit type, which is `Type`-sorted deliberately, being what an effect returns, so calling it a proposition would erase it.
 #[test]
 fn both_checkers_decide_non_informativeness_alike() {
-    let mut context = Context::new(100_000, crate::SYNTAX);
-    let mut kernel = Kernel::new(100_000, crate::SYNTAX);
+    let mut context = Context::new(100_000, SYNTAX);
+    let mut kernel = Kernel::new(100_000, SYNTAX);
     kernel.set_local_floor(1_000);
 
     let nat = || Term::intrinsic(Intrinsic::NatType);

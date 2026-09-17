@@ -1,5 +1,6 @@
 use {
     crate::{Kernel, KernelError, Sort},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, Many, RecGroup, RecMemberScopes, Scope,
         Telescope, Term, UniverseContext, UniverseParam,
@@ -8,7 +9,7 @@ use {
 };
 
 fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(100_000, crate::SYNTAX);
+    let mut kernel = Kernel::new(100_000, SYNTAX);
     kernel.set_local_floor(1_000);
     kernel
 }

@@ -6,6 +6,7 @@
 
 use {
     crate::{Globals, KernelError},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{Free, Level, Term},
 };
 
@@ -24,7 +25,7 @@ use super::test_support::*;
 fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
     let module = shadowing_items();
 
-    let alone = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+    let alone = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
     assert!(
         alone
             .iter()
@@ -38,7 +39,7 @@ fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
             &module,
             1_000_000,
             &already_judged(&judged_environment()),
-            crate::SYNTAX
+            SYNTAX
         ),
         Vec::new(),
         "the skip is what this measures: a verdict here means the walk no longer drops an item whose name the environment answers for",
@@ -58,7 +59,7 @@ fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
 fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
     let oversized = shadowing_registry(Term::type_at(Level::constant(5)));
 
-    let alone = fixture_verdicts(&oversized, 1_000_000, &Globals::default(), crate::SYNTAX);
+    let alone = fixture_verdicts(&oversized, 1_000_000, &Globals::default(), SYNTAX);
     assert!(
         alone
             .iter()
@@ -71,7 +72,7 @@ fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
             &oversized,
             1_000_000,
             &already_judged(&judged_environment()),
-            crate::SYNTAX,
+            SYNTAX,
         ),
         Vec::new(),
         "the skip is what this measures: a verdict here means `check_induct_decl` no longer passes over a colliding entry",
@@ -87,7 +88,7 @@ fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
         &negative,
         1_000_000,
         &already_judged(&judged_environment()),
-        crate::SYNTAX,
+        SYNTAX,
     );
     assert!(
         verdicts

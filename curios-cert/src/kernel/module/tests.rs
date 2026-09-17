@@ -1,5 +1,6 @@
 use {
     crate::{Kernel, KernelError, check_induct_decl, check_struct_decl},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, StructDecl, Telescope, Term,
         UniverseContext,
@@ -8,7 +9,7 @@ use {
 };
 
 fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(100_000, crate::SYNTAX);
+    let mut kernel = Kernel::new(100_000, SYNTAX);
     kernel.set_local_floor(1_000);
     kernel
 }

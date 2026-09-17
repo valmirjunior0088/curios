@@ -5,12 +5,13 @@ use super::test_support::qed;
 use curios_core::*;
 use {
     crate::{Context, reduce},
+    curios_analysis::fixture::SYNTAX,
     curios_num::Natural,
     curios_utilities::{Grain, PackedBin},
 };
 
 fn context() -> Context {
-    Context::with_default_budget(crate::SYNTAX)
+    Context::with_default_budget(SYNTAX)
 }
 
 fn lit(n: u32) -> Term {

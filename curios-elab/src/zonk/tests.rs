@@ -1,7 +1,7 @@
-use {crate::*, curios_core::*, curios_utilities::Qualifier};
+use {crate::*, curios_analysis::fixture::SYNTAX, curios_core::*, curios_utilities::Qualifier};
 
 fn context() -> Context {
-    Context::with_default_budget(crate::SYNTAX)
+    Context::with_default_budget(SYNTAX)
 }
 
 fn nat() -> Term {

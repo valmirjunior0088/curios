@@ -2,6 +2,7 @@
 
 use {
     crate::Kernel,
+    curios_analysis::fixture::SYNTAX,
     curios_core::{Cost, Intrinsic, Reducer, Term, UniverseContext},
 };
 
@@ -123,7 +124,7 @@ fn cached_spend_never_exceeds_uncached() {
     let repeated = chain(32);
 
     let mut cached = kernel();
-    let mut uncached = Kernel::uncached(1_000_000, crate::SYNTAX);
+    let mut uncached = Kernel::uncached(1_000_000, SYNTAX);
     uncached.set_local_floor(1_000);
 
     let with_memos = spent(&mut cached, repeated.clone()) + spent(&mut cached, repeated.clone());

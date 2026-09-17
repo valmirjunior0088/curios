@@ -2,6 +2,7 @@
 
 use {
     crate::{KernelError, infer},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{Free, Intrinsic, Term, UniverseContext},
     curios_num::Integer,
 };
@@ -32,7 +33,7 @@ fn a_narrowing_to_nat_is_refused_without_its_bound() {
     let mut kernel = kernel();
     let int_type = Term::intrinsic(Intrinsic::IntType);
 
-    let holds = Free::global(crate::SYNTAX.proof.holds.qualifier());
+    let holds = Free::global(SYNTAX.proof.holds.qualifier());
     kernel.declare(
         &holds,
         &Term::func_type([(binder(0, "b"), bool_type())], Term::prop()),

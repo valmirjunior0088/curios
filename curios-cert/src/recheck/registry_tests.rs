@@ -6,6 +6,7 @@
 
 use {
     crate::{Globals, KernelError},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{
         Definition, DefinitionKind, Entrypoint, Global, InductDecl, Intrinsic, Item, Level, Module,
         Nat, Telescope, Term, Totality, UniverseContext, UniverseParam,
@@ -31,7 +32,7 @@ fn a_registry_index_target_is_checked_rather_than_believed() {
         &indexed_module(Term::hole(7_usize)),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -52,7 +53,7 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
             &indexed_module(target),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX
+            SYNTAX
         ),
         Vec::new(),
         "the boundary pass refused a registry entry that carries nothing elaboration-only",
@@ -77,7 +78,7 @@ fn a_partial_proof_in_a_registry_index_target_is_refused() {
         &indexed_by_proof(true),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -97,7 +98,7 @@ fn a_real_proof_in_a_registry_index_target_is_accepted() {
             &indexed_by_proof(false),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX
+            SYNTAX
         ),
         Vec::new(),
         "a constructor aimed at a genuine proof was refused",
@@ -125,7 +126,7 @@ fn a_registry_and_its_type_former_may_declare_different_schemes() {
                 &disagreeing_schemes(registry, definition),
                 1_000_000,
                 &Globals::default(),
-                crate::SYNTAX,
+                SYNTAX,
             ),
             Vec::new(),
             "{label}: the kernel refused a disagreement it never consults",
@@ -186,7 +187,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         }),
     };
 
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 
     assert!(
         verdicts

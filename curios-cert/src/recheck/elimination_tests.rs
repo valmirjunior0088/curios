@@ -6,6 +6,7 @@
 
 use {
     crate::{Globals, KernelError},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{
         Atom, Entrypoint, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Scope,
         Subterm, Telescope, Term, UniverseContext,
@@ -31,7 +32,7 @@ fn a_result_sort_that_only_reduces_to_a_sort_is_refused() {
         &aliased_sort_forgery(),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -48,7 +49,7 @@ fn a_vacuous_elimination_at_a_relevant_index_is_still_accepted() {
         &relevant_index_control(),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -72,7 +73,7 @@ fn a_family_that_declares_one_tag_twice_is_refused() {
         &shadowed_constructor(["mk", "mk"]),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -89,7 +90,7 @@ fn a_vacuous_elimination_over_two_distinct_tags_is_still_accepted() {
         &shadowed_constructor(["mk", "mk2"]),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -117,7 +118,7 @@ fn a_motive_that_misreports_its_sort_does_not_skip_the_large_elimination_guard()
         &lying_motive(Term::prop()),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -135,7 +136,7 @@ fn an_honest_motive_still_refuses_the_large_elimination() {
         &lying_motive(Term::type_ground()),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -255,7 +256,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         }),
     };
 
-    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 
     assert!(
         verdicts
@@ -279,7 +280,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
 #[test]
 fn no_type_position_admits_a_lying_motive() {
     for (position, module) in lying_type_positions() {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts.iter().any(|verdict| matches!(
@@ -302,7 +303,7 @@ fn a_fold_motive_that_captures_its_scrutinee_is_refused() {
         &fold_motive(FoldMotive::Captured),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -319,7 +320,7 @@ fn a_fold_motive_that_binds_its_scrutinee_types_the_hypothesis_at_the_tail() {
         &fold_motive(FoldMotive::Honest),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     // The successor arm's hypothesis is `Eq(k, 0)` and its goal `Eq(k + 1, 0)`: refused as the mismatch it is, at the successor.
@@ -339,7 +340,7 @@ fn a_fold_motive_that_binds_its_scrutinee_is_accepted_at_an_inhabited_goal() {
         &fold_motive(FoldMotive::Reflexive),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(

@@ -4,6 +4,7 @@ use super::test_support::{context, nat, nominal, qed};
 use curios_core::*;
 use {
     crate::*,
+    curios_analysis::fixture::SYNTAX,
     curios_num::{Floating, Integer},
     curios_utilities::{Grain, PackedBin},
 };
@@ -326,7 +327,7 @@ fn let_shadowing_value_sees_the_outer_binding() {
 fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
     // A long straight-line `let` sequence must lower to a single flat `Let` block, not a nest: `Term::let_` merges each binding into the block already built for its tail, so folding the chain bottom-up (as `into_core` and the elaborator's rebuild both do) yields one node. That flatness is what bounds every walk over it — `reduce` here, and `traverse` via `reach` — to a loop instead of one native stack frame per binding.
     let depth = 1000;
-    let mut context = Context::with_default_budget(crate::SYNTAX);
+    let mut context = Context::with_default_budget(SYNTAX);
     let binders = (0..depth)
         .map(|i| context.fresh(Some(&format!("x{i}"))))
         .collect::<Vec<_>>();
@@ -372,7 +373,7 @@ fn a_match_tower_reduces_without_overflowing() {
     // **The stated budget is the part that changed with pricing, and it is not incidental.** A guarded level now charges `Cost::FRAME` when it is a new peak, so depth is a priced resource and the default would decide this test rather than the stack: ten thousand levels cost about 10.2 million units of frames alone, which is past what the compiler ships. A test whose subject is the stack has to take the budget out of the answer, and stating one is how.
     const DEEP: usize = 10_000;
 
-    let mut context = Context::new(100_000_000, crate::SYNTAX);
+    let mut context = Context::new(100_000_000, SYNTAX);
     let bool_type = Term::intrinsic(Intrinsic::BoolType);
     let true_ = || Term::intrinsic(Intrinsic::Bool(true));
 

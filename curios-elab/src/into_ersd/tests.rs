@@ -3,6 +3,7 @@ use curios_core::Zonked;
 use curios_core::*;
 use {
     crate::*,
+    curios_analysis::fixture::SYNTAX,
     curios_utilities::{Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -13,7 +14,7 @@ fn nominal(path: &str) -> Global {
 }
 
 fn context() -> Context {
-    Context::with_default_budget(crate::SYNTAX)
+    Context::with_default_budget(SYNTAX)
 }
 
 /// A top-level definition's identity, from the path a test writes — the same name [`definition`] declares it under. Fixture-only.

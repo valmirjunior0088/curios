@@ -7,6 +7,7 @@
 use {
     crate::{Globals, KernelError},
     curios_analysis::Erased,
+    curios_analysis::fixture::SYNTAX,
     curios_core::{Global, Totality},
     curios_utilities::Qualifier,
 };
@@ -24,7 +25,7 @@ fn a_totality_stamp_contradicted_only_by_the_closure_is_refused() {
         &stamp_trial_module(Totality::Total, false),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -50,7 +51,7 @@ fn an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted() {
             &stamp_trial_module(Totality::Partial, false),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX,
+            SYNTAX,
         ),
         Vec::new(),
         "an honestly stamped definition reaching a partial one was refused",
@@ -66,7 +67,7 @@ fn a_lying_totality_stamp_is_believed_when_carried_and_refused_when_judged() {
         &carried_proof_module(),
         1_000_000,
         &Globals::of(&stamp_trial_module(Totality::Total, false), 1_000),
-        crate::SYNTAX,
+        SYNTAX,
     );
     assert_eq!(
         carried,
@@ -78,7 +79,7 @@ fn a_lying_totality_stamp_is_believed_when_carried_and_refused_when_judged() {
         &stamp_trial_module(Totality::Total, true),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
     assert!(
         judged.iter().any(|verdict| {

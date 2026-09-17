@@ -3,6 +3,7 @@
 use super::test_support::*;
 use {
     crate::{Kernel, convert},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{
         Free, Intrinsic, Level, Term, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseParam,
@@ -84,7 +85,7 @@ fn two_alpha_variant_recursive_groups_convert() {
 /// A recursive call applied to a symbolic argument stays folded, and comparing it with itself terminates rather than unfolding in lockstep forever.
 #[test]
 fn a_folded_recursive_call_converts_without_unfolding_forever() {
-    let mut kernel = Kernel::new(10_000, crate::SYNTAX);
+    let mut kernel = Kernel::new(10_000, SYNTAX);
     kernel.set_local_floor(1_000);
 
     let n = binder(0, "n");
@@ -146,12 +147,12 @@ fn a_folded_recursive_call_converts_without_unfolding_forever() {
 #[test]
 fn conversion_separates_a_constant_from_the_identity_at_a_zero_floor() {
     let colliding = {
-        let mut scout = Kernel::new(100_000, crate::SYNTAX);
+        let mut scout = Kernel::new(100_000, SYNTAX);
         scout.set_local_floor(0);
         scout.fresh(Some("y"))
     };
 
-    let mut kernel = Kernel::new(100_000, crate::SYNTAX);
+    let mut kernel = Kernel::new(100_000, SYNTAX);
     kernel.set_local_floor(0);
 
     let nat = Term::intrinsic(Intrinsic::NatType);
@@ -230,7 +231,7 @@ fn two_instances_of_one_recursive_group_convert_when_their_levels_are_equal_unde
 /// Two instances of one recursive group whose levels the hypotheses do not force equal are refused at the head, without an unfolding: each unfolding reproduces the same two instances on the recursive call, so a retry could only recurse. With the guard removed from the `Apply` arm and from `unfolded_retry` this exhausts the small budget here, and at the compile budget it is the walk that grew until the host died. The elaborator's twin shares the name.
 #[test]
 fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_unfolding() {
-    let mut kernel = Kernel::new(10_000, crate::SYNTAX);
+    let mut kernel = Kernel::new(10_000, SYNTAX);
     kernel.set_local_floor(1_000);
     kernel.assume_universes(&UniverseContext {
         parameter_count: 2,

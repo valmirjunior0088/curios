@@ -6,6 +6,7 @@
 
 use {
     crate::{Globals, KernelError},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{
         Definition, DefinitionKind, Entrypoint, Free, Global, Intrinsic, Item, Level, Module, Nat,
         Term, Totality, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
@@ -61,7 +62,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
     };
 
     assert!(
-        !fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX).is_empty(),
+        !fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
         "the kernel assumed a contradiction as a hypothesis without noticing",
     );
 }
@@ -108,7 +109,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
     };
 
     assert!(
-        !fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX).is_empty(),
+        !fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
         "the kernel assumed a constraint about a parameter the declaration does not have",
     );
 }
@@ -130,7 +131,7 @@ fn a_level_holding_an_unsolved_universe_metavariable_is_refused() {
         ("a definition's declared type", level_definition(&residue)),
         ("a registry entry's result sort", level_registry(&residue)),
     ] {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts
@@ -151,7 +152,7 @@ fn a_ground_level_in_the_same_positions_is_accepted() {
         ("a registry entry's result sort", level_registry(&ground)),
     ] {
         assert_eq!(
-            fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+            fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
             Vec::new(),
             "{label}: the boundary pass refused a level that holds no residue",
         );
@@ -181,7 +182,7 @@ fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
             scheme_registry(&escaping, 0),
         ),
     ] {
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts
@@ -208,7 +209,7 @@ fn a_level_naming_a_declared_universe_parameter_is_accepted() {
         ),
     ] {
         assert_eq!(
-            fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+            fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
             Vec::new(),
             "{label}: the boundary pass refused a parameter the declaration declares",
         );
@@ -230,7 +231,7 @@ fn a_universe_instance_narrower_than_its_scheme_is_refused() {
         &instance_of_width(1),
         1_000_000,
         &Globals::default(),
-        crate::SYNTAX,
+        SYNTAX,
     );
 
     assert!(
@@ -249,7 +250,7 @@ fn a_universe_instance_of_the_declared_width_is_accepted() {
             &instance_of_width(2),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX
+            SYNTAX
         ),
         Vec::new(),
         "the boundary refused an occurrence that supplies exactly the levels its scheme declares",
@@ -278,7 +279,7 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
         ),
     ] {
         let module = universe_scheme_module(Some((open_context(), body)));
-        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts
@@ -301,7 +302,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
             &universe_scheme_module(None),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX,
+            SYNTAX,
         ),
         Vec::new(),
         "the universe scheme was refused standing alone",
@@ -312,7 +313,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
             &universe_scheme_module(Some((scheme_context(), instance))),
             1_000_000,
             &Globals::default(),
-            crate::SYNTAX,
+            SYNTAX,
         ),
         Vec::new(),
         "an occurrence discharging its scheme's constraint was refused",
@@ -347,7 +348,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
     };
 
     assert_eq!(
-        fixture_verdicts(&monomorphic, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&monomorphic, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "a bare occurrence of a monomorphic definition was refused",
     );
@@ -371,7 +372,7 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
         ("with no arm open", Route::Direct),
     ] {
         let module = universe_refinement_module(one.clone(), route);
-        let verdicts = fixture_verdicts(&module, 10_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 10_000_000, &Globals::default(), SYNTAX);
 
         assert!(
             verdicts.iter().any(|verdict| {
@@ -393,7 +394,7 @@ fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
     let module = universe_refinement_module(Level::zero(), Route::DependentMotive);
 
     assert_eq!(
-        fixture_verdicts(&module, 10_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 10_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "the arm's own case equation stopped refining its scrutinee",
     );
@@ -430,7 +431,7 @@ fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_
     };
 
     assert_eq!(
-        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "the declared type reduces through the dissolving instance to `Nat`, which `5` inhabits",
     );

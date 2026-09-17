@@ -4,12 +4,13 @@
 
 use {
     crate::Kernel,
+    curios_analysis::fixture::SYNTAX,
     curios_core::{Free, Intrinsic, Nat, Reducer, Term, UniverseContext},
 };
 
 /// The kernel every test starts from. The floor keeps the identities minted below out of the range the kernel mints from for eta-contraction, exactly as a real caller must seed it above the lowerer's and the elaborator's binders.
 pub(super) fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(1_000_000, crate::SYNTAX);
+    let mut kernel = Kernel::new(1_000_000, SYNTAX);
     kernel.set_local_floor(1_000);
     kernel
 }
