@@ -43,7 +43,7 @@ CRS
 
 ## System at a glance
 
-Curios is a functional, dependently typed language implemented in Rust 2024. It compiles `.crs` source through several intermediate representations to WebAssembly and executes precompiled modules with Wasmtime: `curios-text` parses and lowers to core, `curios-elab` elaborates and erases, `curios-ersd` optimizes and lowers to continuations, `curios-cont` optimizes and emits WebAssembly, `curios-wasm` encodes it. Beside that chain, `curios-core` owns the term representation, `curios-analysis` the rules both checkers run over it, and `curios-cert` the kernel that only one of them does.
+Curios is a functional, dependently typed language implemented in Rust 2024. It compiles `.crs` source through several intermediate representations to WebAssembly and executes precompiled modules with Wasmtime: `curios-text` parses and lowers to core, `curios-elab` elaborates and erases, `curios-ersd` optimizes and lowers to continuations, `curios-cont` optimizes them, `curios-emit` lowers them to WebAssembly, `curios-wasm` encodes it. Beside that chain, `curios-core` owns the term representation, `curios-analysis` the rules both checkers run over it, and `curios-cert` the kernel that only one of them does.
 
 Data flows downward; Rust dependencies between stages point **upward**, because a lowering depends on the representation it constructs. `curios-elab` takes `curios-cert` as a *dev*-dependency only, so nothing whose build script reaches elaboration reaches the kernel through it.
 
@@ -73,10 +73,11 @@ The obligations below are the ones a search does not reveal.
 
 ## Architectural invariants
 
-- Compiler stages own their representations. A lowering belongs to the crate holding the source representation and depends on the crate holding the destination representation.
+- Compiler stages own their representations. A lowering belongs to the crate holding its source representation, or to the stage crate built over it — `into_ersd` in `curios-elab`, `into_wasm` in `curios-emit` — and depends on the crate holding the destination representation.
 - `curios-pipeline` is the compiler boundary: no dependency on Binaryen, Wasmtime, the runtime or the CLI. It may name the fixed prelude in `standard.rs` alone; `compile_entrypoint` takes a scope and cannot tell which unit is `/std`.
 - `curios-package` sits beside that boundary, never under it. `curios-pipeline` must not depend on it, and `curios-js` must not touch it.
 - `curios-verdicts` and `curios-wonder` sit above `curios-pipeline` and `curios-package` and below `curios`: `cargo tree -p <crate> --edges normal` must contain neither `curios-binaryen` nor `curios-runtime`, so neither a store read nor a question links a back end. What each needs from above is handed in — the engine a payload is addressed under by `curios`, which owns the runtime, and the rendering of the `wasm-optm` rung by the transport that owns Binaryen.
+- `curios-emit` sits beside the prelude build, never under it: `cargo tree -p curios-prelude-archive --edges build` must contain neither `curios-emit` nor `curios-wasm`, because the erased stage lowers into `curios-cont` and a build script that reached the emitter would re-elaborate the whole standard library on every emitter edit. The optimizer stays in `curios-cont` because its passes rewrite the representation's private arenas.
 - `curios-unit` sits below the kernel: `cargo tree -p curios-unit --edges normal` must not contain `curios-cert`, because a build script that reached the certifier would re-elaborate the whole standard library on every kernel edit.
 - `curios-runtime` is runtime-only in its default feature set: no `curios`, no Binaryen, and no Cranelift. Its `cranelift` feature exists for `curios` and never enters `default`; `curios/src/bundle.rs` enforces this on the shipped launcher image.
 - `curios` is the only crate combining Binaryen with Cranelift-enabled Wasmtime. It names no wasmtime type, reaching the runtime through `curios_runtime::validate` and `curios_runtime::precompile`. The Wasmtime pin lives in `curios-runtime/Cargo.toml` and nowhere else.
@@ -101,7 +102,7 @@ The build recipes are `cargo x <recipe>`, reached through the alias in `.cargo/c
 - Keep the feature set constant within a work session: `--all-features` enables `profile` and a plain `cargo build` does not, and alternating maintains two prelude archives that evict each other.
 - The full suite can take more than five minutes. Run it in the background with output redirected to a file, and read the file after completion.
 
-`cargo x clippy` already elaborates every `/std` module, erases them through `erase_unit`, and certifies the whole module with the kernel. A change on the Text, Core, Ersd or certification path is therefore exercised over the entire standard library by a step already in the gate, and needs only its own crate's tests beside it. Nothing below Ersd is reached, so `curios-cont` and `curios-wasm` are detected only by the cross-stage corpus in `curios`.
+`cargo x clippy` already elaborates every `/std` module, erases them through `erase_unit`, and certifies the whole module with the kernel. A change on the Text, Core, Ersd or certification path is therefore exercised over the entire standard library by a step already in the gate, and needs only its own crate's tests beside it. Nothing below Ersd is reached, so `curios-cont`, `curios-emit` and `curios-wasm` are detected only by the cross-stage corpus in `curios`.
 
 ### Before handing off code changes
 

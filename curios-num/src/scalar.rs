@@ -1,6 +1,6 @@
 //! Exact scalar semantics of the erased numeric carriers — `Nat` as [`Natural`], `Int` as [`Integer`], `Flt` as binary64 — shared by every stage's constant folder so their arithmetic cannot drift. The runtime's i31 envelope appears nowhere in this module: a value the backend cannot box traps at the Wasm boundary instead of changing.
 //!
-//! **The erased carriers are unbounded, and that is what makes a folder agree with Core by construction rather than by differential.** They were `u32` and `i32`, a width that named no target: the runtime's envelope is 31 bits, so a value in the `2³¹ .. 2³²−1` band folded to a number the same expression would have trapped on had an operand been live. Two widths remain — the unbounded one every layer above the emitter computes in, and the envelope `curios-cont` materializes into — and only the second refuses.
+//! **The erased carriers are unbounded, and that is what makes a folder agree with Core by construction rather than by differential.** They were `u32` and `i32`, a width that named no target: the runtime's envelope is 31 bits, so a value in the `2³¹ .. 2³²−1` band folded to a number the same expression would have trapped on had an operand been live. Two widths remain — the unbounded one every layer above the emitter computes in, and the envelope `curios-emit` materializes into — and only the second refuses.
 //!
 //! Only operations with semantic freedom live here: the monus, the trap conditions, the left shifts whose growth needs an allowance, and the conversions whose domain excludes an operand. Addition, subtraction on `Int`, the right shifts and the bitwise operations are total over an unbounded carrier and stay as ordinary arithmetic at their use sites, as the comparisons already did.
 //!
@@ -15,7 +15,7 @@ use crate::{Floating, Integer, Natural};
 
 /// Why an operation traps in its carrier: an operand the operation's precondition excludes and the runtime refuses.
 ///
-/// There is no overflow variant. An erased carrier holds whatever the theory computes, and the one width that refuses a magnitude is the emitter's envelope, which `curios-cont` raises as its own panic.
+/// There is no overflow variant. An erased carrier holds whatever the theory computes, and the one width that refuses a magnitude is the emitter's envelope, which `curios-emit` raises as its own panic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScalarTrap {
     DivisionByZero,

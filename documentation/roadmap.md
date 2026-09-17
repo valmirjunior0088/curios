@@ -130,6 +130,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Full table and element section support in `curios-wasm` (plural tables, every segment mode)
 - [x] `Stage::WasmOptm`: the Binaryen-optimized module observable through `wonder stage`
 - [x] Crate split keeping `curios-verdicts` and `curios-wonder` off the native back end
+- [x] Crate split keeping WebAssembly emission (`curios-emit`) and `curios-wasm` out of the prelude build
+- [x] `curios-text` off the elaborator, with the term builders in `curios-core`
 
 ## Optimizations
 
@@ -169,7 +171,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] [The map wall falls by classes, not by symptom](design/toolchain/the-map-wall-falls-by-classes-not-by-symptom.md)
 - [x] [A monomorphic field carries its own type](design/toolchain/a-field-is-declared-at-the-carrier-its-shape-names.md)
 - [x] The map's remaining distance is decomposed before it is spent
-- [x] [A closure carries its code as a table index](../curios-cont/README.md)
+- [x] [A closure carries its code as a table index](../curios-emit/README.md)
 - [x] [Recursion restored to the defunctionalized walks](design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)
 - [x] Wasm-emission optimizations
   - [x] `struct.new` construction with immutable fields

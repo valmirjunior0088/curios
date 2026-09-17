@@ -230,7 +230,7 @@ impl Region {
 
     /// The class-merged width one region would travel at: a discriminant slot plus the payload slots its widest constructor carries.
     ///
-    /// It is the plain maximum because there is exactly one representation class to merge. `curios-cont` types every tuple field `(ref null any)`, so GHC's per-kind slot merge has nothing to distinguish here; the merge becomes interesting only when field representation stops being uniform, which the encoding decision names as `represent.rs`'s successor's subject rather than this one's.
+    /// It is the plain maximum because there is exactly one representation class to merge. `curios-emit` types every tuple field `(ref null any)`, so GHC's per-kind slot merge has nothing to distinguish here; the merge becomes interesting only when field representation stops being uniform, which the encoding decision names as `represent.rs`'s successor's subject rather than this one's.
     fn width(&self) -> usize {
         self.arities.last().copied().unwrap_or(0)
     }
@@ -965,7 +965,7 @@ fn survey(label: &str, source: &str) -> Survey {
 ///
 /// That last line is the campaign's central reading and it corrects the specification twice. The discriminant is **not** a literal on every edge — a rebuilt return carries it as a parameter — so an origin lattice that demanded a tag-led construction would decline the one flow the campaign exists for. And the scan's flow class is **known-call**, not continuation-only: the region crosses a known call, so continuation splitting alone leaves a materialization at that boundary rather than clearing the per-character path.
 ///
-/// The class merge is degenerate, which is why no width budget is selected here: `curios-cont` types every tuple field `(ref null any)`, so there is exactly one representation class and the class-merged width is the plain maximum arity. The largest observed is 4, against a `PARAM_SPLIT_GROWTH_LIMIT` of 16, so the existing ceiling clears every candidate and no second budget was invented to sit beside it.
+/// The class merge is degenerate, which is why no width budget is selected here: `curios-emit` types every tuple field `(ref null any)`, so there is exactly one representation class and the class-merged width is the plain maximum arity. The largest observed is 4, against a `PARAM_SPLIT_GROWTH_LIMIT` of 16, so the existing ceiling clears every candidate and no second budget was invented to sit beside it.
 ///
 /// **The M2 gate — variant-width return components — is three functions corpus-wide, and none of them is evidence for a return-side mechanism.** `/decode/1` and `/std/Nat/of_str/1` hand back `{Tuple(1), Tuple(2)}` and both *escape*, so the protocol declines them for the escaping reason and no width class would reach them. `/build` hands back `{Tuple(4), Bare}` — the immediate-family shape the encoding decision created, and the acceptance case M2 was written for — but a `trees` node is stored in its parent, so its values rest: splitting that return relocates the allocation into the caller rather than removing it, which is the reboxing balance the specification's own M3 clause names as disqualifying.
 ///

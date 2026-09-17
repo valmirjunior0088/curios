@@ -7,7 +7,7 @@ use {
     curios_utilities::Grain,
 };
 
-/// The `Nat` half of the Core border, which no longer narrows: the erased carriers are unbounded too, so a numeral crosses whole and only materialization in `curios-cont` refuses one the envelope cannot box.
+/// The `Nat` half of the Core border, which no longer narrows: the erased carriers are unbounded too, so a numeral crosses whole and only materialization in `curios-emit` refuses one the envelope cannot box.
 ///
 /// `pub(super)` because it is not this module's alone — `eliminate`'s switch narrows its case keys through it. Core keys a `Cases::Switch` by `Natural`, so the width is chosen here, at the one boundary that owns it, and every literal reaching Ersd is narrowed by the same routine.
 /// A natural-dispatch case key as `curios-ersd`'s `NatCase` carries it, refusing one no branch table indexes.

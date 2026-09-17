@@ -228,7 +228,7 @@ fn ordinary_corpus_uses_no_irreducible_fallback() {
     }
 }
 
-/// G5: the one-localized-dispatcher guarantee. Curios surface syntax has no unstructured jump, so even mutual recursion entered from two arms is structured reducibly (no `$dispatch/`) — there is no `.crs` program that produces a genuine irreducible cycle. The dispatcher path (exactly one `loop $$dispatch/` per irreducible component) is therefore owned and asserted at the backend-unit level by `curios-cont`'s `an_irreducible_component_uses_exactly_one_localized_dispatcher` in `into_wasm::emit_tests`; this test pins the surface-level fact that motivates that ownership boundary.
+/// G5: the one-localized-dispatcher guarantee. Curios surface syntax has no unstructured jump, so even mutual recursion entered from two arms is structured reducibly (no `$dispatch/`) — there is no `.crs` program that produces a genuine irreducible cycle. The dispatcher path (exactly one `loop $$dispatch/` per irreducible component) is therefore owned and asserted at the backend-unit level by `curios-emit`'s `an_irreducible_component_uses_exactly_one_localized_dispatcher` in `into_wasm::module_tests`; this test pins the surface-level fact that motivates that ownership boundary.
 #[test]
 fn mutual_recursion_stays_reducible() {
     assert!(

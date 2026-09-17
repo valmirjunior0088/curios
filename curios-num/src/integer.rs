@@ -8,7 +8,7 @@ use {
     },
 };
 
-/// A type-level integer. Unbounded — the type level pretends ℤ, the way [`Natural`] pretends ℕ; the runtime's 31-bit envelope is enforced only where a value must materialize, by `curios-cont`'s refusal at emission and by the runtime's own overflow traps.
+/// A type-level integer. Unbounded — the type level pretends ℤ, the way [`Natural`] pretends ℕ; the runtime's 31-bit envelope is enforced only where a value must materialize, by `curios-emit`'s refusal at emission and by the runtime's own overflow traps.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub struct Integer {
