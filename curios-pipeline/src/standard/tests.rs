@@ -191,7 +191,7 @@ fn the_withheld_root_is_offered_as_the_baseline() {
             offered
         }
 
-        fn put(&self, _: &UnitSource<'_>, _: &Unit) {}
+        fn put(&self, _: &UnitSource<'_>, _: &Unit, _: bool) {}
     }
 
     with_stored(|stored| {

@@ -44,12 +44,10 @@ impl Findings {
     }
 }
 
-/// What checking a program decides: the entry's findings, the last mounted unit's when the question is about a library, and the verdict — which is a `Result` of its own because a lint is not a refusal, and an entry that lowers has findings whatever elaboration then says about it.
+/// What checking a program decides: the entry's findings, and the verdict — which is a `Result` of its own because a lint is not a refusal, and an entry that lowers has findings whatever elaboration then says about it.
 #[derive(Debug)]
 pub struct Checked {
     pub entry: Findings,
-    /// The last of the mounted units' findings — the subject of a question about a library, which is checked through an empty entry. `None` when nothing is mounted.
-    pub unit: Option<Findings>,
     pub verdict: Result<curios_core::Module, CompileError>,
 }
 
@@ -526,11 +524,7 @@ pub fn check_entrypoint(
         },
     );
 
-    Ok(Checked {
-        entry,
-        unit: None,
-        verdict,
-    })
+    Ok(Checked { entry, verdict })
 }
 
 /// The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
@@ -733,7 +727,9 @@ pub trait Cache {
     }
 
     /// Record what `source` compiled to. Best effort — a store that cannot be written costs the next compilation the work, and nothing else.
-    fn put(&self, source: &UnitSource<'_>, unit: &Unit);
+    ///
+    /// `followed` is whether another unit follows this one in the fold, which is the one reader a placement has *within* it: the next unit's slot is addressed after this one's. A cache that files, or whose chain is read after the fold — a payload is filed under the whole chain — places either way; one that only answers a question has no use for the placement of a unit nothing follows, and a placement serializes the unit whole.
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit, followed: bool);
 }
 
 /// Compile `sources` in dependency order, each against `base` and everything before it — the fold this whole design is named for.
@@ -754,7 +750,7 @@ where
 {
     let mut produced: Vec<Unit> = Vec::new();
 
-    for source in sources {
+    for (index, source) in sources.iter().enumerate() {
         // Announced *after* the cache is consulted and *before* the work, so a reported operation is one that is actually about to happen and its timing starts where it does.
         if let Some(unit) = cache.and_then(|cache| cache.get(source)) {
             progress(Progress::Reused(&source.prefix()));
@@ -786,7 +782,7 @@ where
         progress(Progress::Compiled);
 
         if let Some(cache) = cache {
-            cache.put(source, &unit);
+            cache.put(source, &unit, index + 1 < sources.len());
         }
 
         produced.push(unit);

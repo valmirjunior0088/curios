@@ -3,7 +3,9 @@
 use {
     crate::{Diagnostic, STDIN_MOUNT, Severity},
     curios_package::Unlinked,
-    curios_pipeline::{Cache, Checked, CompileError, EntryTail, Findings, check_with_units},
+    curios_pipeline::{
+        Cache, Checked, CompileError, EntryTail, Findings, check_with_units, with_units,
+    },
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
     curios_utilities::{Qualifier, Report, Source, Span},
@@ -103,9 +105,9 @@ pub enum Origin {
 
 /// Every diagnostic and goal `subject` reports when lowered, elaborated and judged against the prelude — empty when it compiles. `overlay` is consulted before the disk for every file read, the entry included.
 ///
-/// **A library is asked through the tail `curios test` compiles it with.** It has no written program of its own, so the question is put to the same `()` entry under [`EntryTail::LastUnitTests`], scheduling the last unit's tests; the fold that compiles the units is one and the same, and a unit with no tests gets `Test/main([])`, which costs nothing. A loose file written as a module is asked the same way, as a unit of its own.
+/// **A library is asked through the fold alone.** It has no written program, and none is synthesized for it: the subject is the fold's last unit, and what the fold decided about it is the answer — its refusal, or its lints. A loose file written as a module is asked the same way, as a unit of its own. An entry is asked under its written tail alone.
 ///
-/// An entry is asked under its written tail alone. A unit's tests are ordinary items and are elaborated whatever the policy, so a fault in one is reported either way; the synthesized tail over them pairs each declaration with its path and raises nothing of its own, which is what a test taking no parameters leaves it with. A policy that checked both tails existed while that was untrue and was removed with the parameters.
+/// `curios test` compiles the same unit under a synthesized `Test/main([...])` over its tests, and a question does not, because that tail raises nothing of its own: a test's body is an item checked at `/std/Test` like any other, so a fault in one is the unit's refusal, and a tail over tests that were accepted is one that is accepted. Compiling it anyway cost every question about a library the tail's elaboration, its kernel recheck, and its erasure over the unit's whole arena — about 120 ms a check, which was most of what a check of a small library cost. A policy that checked the written and the synthesized tail both existed while a test could take parameters, and was removed with them.
 ///
 /// **Every refused declaration is reported, and a declaration reaching a refused one is not.** Elaboration recovers per item, so a file with three mistakes answers with three records in one check, each classified on its own — a refusal beside a goal batch keeps the goal records at their goals — and nothing for a dependent, whose record could only restate the refusal (the rule is `curios-elab`'s README's). A parse failure in one declaration is that declaration's record — the parser resynchronizes at the next item, and the rest of the file is read, elaborated and reported as if the broken one were a refused one — while a failure the item grammar never committed to still ends the file where it stopped, since past that point nothing says what an item is.
 ///
@@ -137,17 +139,22 @@ pub fn diagnosed(
     let mut diagnosed = match subject.formed(overlay) {
         Subject::Unit { units } => {
             let units = overlaid(units, overlay);
-            // A unit has no written entry, so it is asked through the trivial one, which the tests tail then replaces — the subject is the scope's final unit, exactly as `curios test` compiles a library.
-            let checked = check_with_units(
+            let found = with_units(
                 budget,
                 &units,
-                &Entrypoint::trivial(),
-                &RootSource::none(),
                 cache,
-                EntryTail::LastUnitTests,
                 |_| {},
+                |_, produced| {
+                    Ok(produced
+                        .last()
+                        .map(|unit| Findings::of_text(unit.text()))
+                        .unwrap_or_default())
+                },
             );
-            answered(checked, true)
+            match found {
+                Ok(findings) => Diagnosed::found(None, findings),
+                Err(error) => Diagnosed::refused(error),
+            }
         }
         Subject::Entry {
             units,
@@ -166,7 +173,7 @@ pub fn diagnosed(
                     EntryTail::Authored,
                     |_| {},
                 );
-                answered(checked, false)
+                answered(checked)
             }
             Err(refusal) => Diagnosed {
                 diagnostics: refusal,
@@ -183,30 +190,27 @@ pub fn diagnosed(
     diagnosed
 }
 
-/// What one check reports: its verdict's records and its lints, read off the unit it was asked about when `is_unit`, and off the entry otherwise.
-fn answered(checked: Result<Checked, CompileError>, is_unit: bool) -> Diagnosed {
+/// What a program's check reports: its verdict's records, and the lints its entry's lowering found.
+fn answered(checked: Result<Checked, CompileError>) -> Diagnosed {
     match checked {
-        Ok(Checked {
-            entry,
-            unit,
-            verdict,
-        }) => {
-            let Findings { lints, reached } = match is_unit {
-                true => unit.unwrap_or_default(),
-                false => entry,
-            };
-            let mut diagnostics = verdict.err().map(of_error).unwrap_or_default();
-            diagnostics.extend(lints.into_iter().map(Diagnostic::lint));
-            Diagnosed {
-                diagnostics,
-                reached,
-            }
-        }
+        Ok(Checked { entry, verdict }) => Diagnosed::found(verdict.err(), entry),
         Err(error) => Diagnosed::refused(error),
     }
 }
 
 impl Diagnosed {
+    /// A subject that lowered: whatever stopped it, then its lints, and what it reached.
+    fn found(stopped: Option<CompileError>, findings: Findings) -> Self {
+        let Findings { lints, reached } = findings;
+        let mut diagnostics = stopped.map(of_error).unwrap_or_default();
+        diagnostics.extend(lints.into_iter().map(Diagnostic::lint));
+
+        Self {
+            diagnostics,
+            reached,
+        }
+    }
+
     /// A compilation that stopped before its subject was lowered: the error, and nothing reached.
     fn refused(error: CompileError) -> Self {
         Self {
@@ -306,13 +310,17 @@ impl Cache for ReadOnly<'_> {
             .or(offered)
     }
 
-    /// Placed, not filed — and this is why the store itself is held rather than a `dyn Cache`.
+    /// Kept, and placed where something follows — never filed. This is why the store itself is held rather than a `dyn Cache`.
     ///
     /// Dropping the write is the whole of what read-only means. Dropping the *placement* with it is a second thing nobody asked for: a slot is addressed after the units placed before it, so a unit missing from that chain shifts every later address by one, and one declined hit becomes a miss for every unit after it. A `dyn Cache` has no way to say the first without the second.
     ///
+    /// **A unit nothing follows is not placed.** Its placement would address no slot, and a question files no payload that would read the chain after the fold — so the one thing placing it would buy is a serialization of the whole unit and a digest of the bytes, which on the standard library is most of what this cache costs a keystroke.
+    ///
     /// Kept before it is placed: a kept unit is addressed after the units placed ahead of it, which is exactly the chain the next question will have built when it asks.
-    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit, followed: bool) {
         self.cache.keep(source, unit);
-        self.cache.place(source, unit);
+        if followed {
+            self.cache.place(source, unit);
+        }
     }
 }

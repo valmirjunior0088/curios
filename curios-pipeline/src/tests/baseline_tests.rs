@@ -15,7 +15,8 @@ const BASE: &str = "use /std/{Nat};\n\npub let answer: Nat = 42;\n";
 struct Stub {
     hit: Option<Unit>,
     baseline: Option<Unit>,
-    put: RefCell<usize>,
+    /// What `put` was told about each unit it was handed: whether another unit follows it.
+    put: RefCell<Vec<bool>>,
 }
 
 impl Cache for Stub {
@@ -31,14 +32,23 @@ impl Cache for Stub {
         self.baseline.clone().or(offered)
     }
 
-    fn put(&self, _: &UnitSource<'_>, _: &Unit) {
-        *self.put.borrow_mut() += 1;
+    fn put(&self, _: &UnitSource<'_>, _: &Unit, followed: bool) {
+        self.put.borrow_mut().push(followed);
     }
 }
 
 /// What the fold reported for the one unit, folded through `cache`.
 fn folded(cache: &dyn Cache) -> Vec<String> {
-    let modules = mounted("lib", BASE);
+    folded_all(cache, &[("lib", BASE)])
+}
+
+/// What the fold reported for `units`, each a prefix and the source mounted at it, folded through `cache` in the order given.
+fn folded_all(cache: &dyn Cache, units: &[(&str, &str)]) -> Vec<String> {
+    let modules = units
+        .iter()
+        .map(|(prefix, source)| mounted(prefix, source))
+        .collect::<Vec<_>>();
+    let sources = modules.iter().map(UnitSource::mounted).collect::<Vec<_>>();
     let mut events = Vec::new();
 
     with_prelude(|prelude| {
@@ -46,7 +56,7 @@ fn folded(cache: &dyn Cache) -> Vec<String> {
             DEFAULT_STEP_BUDGET,
             Prefix::over(prelude),
             &SYNTAX,
-            &[UnitSource::mounted(&modules)],
+            &sources,
             Some(cache),
             |progress| {
                 events.push(match progress {
@@ -59,7 +69,7 @@ fn folded(cache: &dyn Cache) -> Vec<String> {
             },
         )
     })
-    .expect("the unit compiles");
+    .expect("the units compile");
 
     events
 }
@@ -69,11 +79,11 @@ fn a_hit_is_reused_before_a_baseline_is_asked_for() {
     let stub = Stub {
         hit: Some(unit_of(BASE)),
         baseline: None,
-        put: RefCell::new(0),
+        put: RefCell::new(Vec::new()),
     };
 
     assert_eq!(folded(&stub), ["reused /lib"]);
-    assert_eq!(*stub.put.borrow(), 0, "a hit is not handed back");
+    assert!(stub.put.borrow().is_empty(), "a hit is not handed back");
 }
 
 #[test]
@@ -81,13 +91,13 @@ fn a_miss_with_a_baseline_is_announced_as_a_recompile_and_handed_to_put() {
     let stub = Stub {
         hit: None,
         baseline: Some(unit_of(BASE)),
-        put: RefCell::new(0),
+        put: RefCell::new(Vec::new()),
     };
 
     assert_eq!(folded(&stub), ["recompiling /lib", "compiled"]);
     assert_eq!(
         *stub.put.borrow(),
-        1,
+        [false],
         "what was compiled over a baseline is placed like any unit"
     );
 }
@@ -97,9 +107,32 @@ fn a_miss_without_a_baseline_compiles_whole() {
     let stub = Stub {
         hit: None,
         baseline: None,
-        put: RefCell::new(0),
+        put: RefCell::new(Vec::new()),
     };
 
     assert_eq!(folded(&stub), ["compiling /lib", "compiled"]);
-    assert_eq!(*stub.put.borrow(), 1);
+    assert_eq!(*stub.put.borrow(), [false]);
+}
+
+/// `put` is told which units have another after them, which is what lets a cache that files nothing skip the placement of the last: a placement is read by the next unit's address and nothing else within a fold.
+#[test]
+fn put_is_told_every_unit_but_the_last_is_followed() {
+    let stub = Stub {
+        hit: None,
+        baseline: None,
+        put: RefCell::new(Vec::new()),
+    };
+
+    assert_eq!(
+        folded_all(&stub, &[("lib", BASE), ("app", BASE), ("end", BASE)]),
+        [
+            "compiling /lib",
+            "compiled",
+            "compiling /app",
+            "compiled",
+            "compiling /end",
+            "compiled"
+        ]
+    );
+    assert_eq!(*stub.put.borrow(), [true, true, false]);
 }

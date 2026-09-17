@@ -317,7 +317,8 @@ impl Cache for Verdicts {
         self.hit(source, None)
     }
 
-    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+    /// Filed and placed whether anything follows or not: filing is the point of this cache, and [`Verdicts::payload_put`] files a payload under the whole chain the fold placed.
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit, _followed: bool) {
         let Some((placed, bytes)) = self.placement(source, unit) else {
             return;
         };

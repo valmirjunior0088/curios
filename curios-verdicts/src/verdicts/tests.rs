@@ -45,7 +45,7 @@ impl Cache for Overlaid<'_> {
         self.0.earlier(source).or(offered)
     }
 
-    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit, _followed: bool) {
         self.0.place(source, unit);
     }
 }

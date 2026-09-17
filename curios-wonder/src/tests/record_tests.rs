@@ -189,6 +189,37 @@ fn a_library_reports_its_own_lints() {
     );
 }
 
+/// A library's ill-typed test is its own record, though no tail is compiled over the library's tests.
+///
+/// **The premise a question about a library rests on.** `curios test` compiles a library under a synthesized `Test/main([...])`, and a question compiles no entry at all — which is sound only because that tail raises nothing of its own: a test's body is an item checked at `/std/Test` like any other, so a fault in one is the unit's refusal.
+#[test]
+fn a_library_reports_an_ill_typed_test_without_compiling_a_tail() {
+    let root = mounted_project("library-test");
+    write(
+        &root,
+        "b/lib.crs",
+        "use /std/{Test};\n\ntest broken =\n    Test/assert(\"no\");\n",
+    );
+    let diagnostics = diagnostics(
+        DEFAULT_STEP_BUDGET,
+        Subject::Unit {
+            units: mounted(&root),
+        },
+        &Overlay::default(),
+        None,
+    );
+
+    let [report] = diagnostics.as_slice() else {
+        panic!("one refusal, got {diagnostics:?}");
+    };
+    assert_eq!(report.severity, Severity::Error);
+    assert!(
+        report.render().contains("lib.crs:4:17"),
+        "{}",
+        report.render()
+    );
+}
+
 /// Elaboration recovers past a refusal, so a file with two answers with two — each an error at its own term — and a declaration reaching a refused one is not in the answer.
 #[test]
 fn every_refusal_in_a_broken_file_is_listed() {
