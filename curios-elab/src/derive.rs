@@ -15,13 +15,10 @@
 //! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `tied` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it.
 
 use {
-    super::{
-        Context, Error, Mode, Sort, TermBuilders, Underivable, elaborate, reduce_with, str_literal,
-        syn_call,
-    },
+    super::{Context, Error, Mode, Sort, Underivable, elaborate, reduce_with},
     curios_core::{
         Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many, MetavarOrigin, Scope,
-        StructDecl, StructType, Subterm, Term, WitnessOrigin,
+        StructDecl, StructType, Subterm, Term, WitnessOrigin, str_literal, syn_call,
     },
     curios_num::Natural,
     curios_utilities::{

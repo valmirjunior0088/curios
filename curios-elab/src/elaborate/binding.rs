@@ -1,8 +1,7 @@
 use {
     super::*,
     crate::{
-        HeadKey, TermBuilders, WitnessKey, convert::convert, typing::display_mismatch,
-        zonk_solved_term_metas,
+        HeadKey, WitnessKey, convert::convert, typing::display_mismatch, zonk_solved_term_metas,
     },
     curios_core::Global,
     curios_utilities::Span,

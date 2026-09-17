@@ -1,7 +1,5 @@
 //! Goals, `!`, `choose`, match compilation, and the packed runs constant atoms fold into.
 
-use curios_elab::TermBuilders;
-
 use super::test_support::*;
 
 #[test]

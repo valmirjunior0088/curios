@@ -4,7 +4,7 @@
 //!
 //! The judgments live on either side of it. `curios-analysis` holds the rules both checkers run and `curios-cert` the kernel that only one of them does — together, every rule that can admit a program — and `curios-elab` holds everything that makes the *surface language* work: elaboration, unification, zonking, witness resolution, erasure, and the universe *solver*. Solving and satisfiability part company here: a [`UniverseContext`] is data, and *inferring* the instance a program meant is inference over that data, so it sits with the elaborator; deciding whether the resulting constraint set is satisfiable admits a program, so it is shared. Both depend on this crate and never the reverse. The intrinsic folds are the boundary case, and [`Reducer`] is where the line is drawn: what `2 + 2` folds to is arithmetic on the representation and belongs here, while how far an operand reduces before a fold sees it is a strategy each checker supplies for itself.
 //!
-//! One module is not trusted and is here only because the representation needs it: `print` renders terms for diagnostics. Printing cannot admit a bad program, and it lives here solely because [`Term`]'s `Display` is used throughout the elaborator's error paths.
+//! Two modules are not trusted and are here only because the representation's consumers need them. `print` renders terms for diagnostics, and lives here because [`Term`]'s `Display` is used throughout the elaborator's error paths. `builders` holds the constructors the surface lowering and the elaborator both build terms with, such as [`str_literal`] and [`Term::num_lit`], and lives here because neither stage owns what a term is. Neither module can admit a bad program: no judgment calls a builder, and printing decides nothing.
 //!
 //! The crate is a flat module space: every module re-exports at the root, so consumers use `curios_core::Term`, not paths into the modules.
 
@@ -70,6 +70,9 @@ pub use polarity::*;
 
 mod print;
 pub use print::*;
+
+mod builders;
+pub use builders::*;
 
 // A namespace rather than a root export, for `curios-runtime`'s `test_support` reason: `curios_core::test_support::into_nested_term` says at its use site that the caller reached for scaffolding rather than product API. The path is the warning label.
 #[cfg(feature = "test-support")]

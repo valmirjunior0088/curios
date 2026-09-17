@@ -2,10 +2,7 @@
 
 use super::test_support::*;
 use curios_core::*;
-use {
-    crate::*,
-    curios_utilities::{Grain, PackedBin},
-};
+use curios_utilities::{Grain, PackedBin};
 
 #[test]
 fn intrinsic_nat_add_recurses_into_operands() {

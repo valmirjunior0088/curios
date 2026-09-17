@@ -327,7 +327,7 @@ impl DerivationSyntax {
 
 /// The names a derived `Spell` witness body is written with: the concept's `spell` method, applied to each payload and resolved like any written call; the two renderers the body applies over the spelled pieces — `call` for a constructor over its explicit payloads, `record` for a struct over its labeled fields; and the string machinery every rendered piece is built out of. The re-parse grammar is spelled once, in `/std/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
 ///
-/// The string machinery is carried by the row rather than reached out of the registry at the emitter, because it is part of what *this* body writes: `curios_elab::str_literal` names the scan certificate and constructs the carrier at every rendered piece. A row that emits a literal therefore cannot forget to order it, and one that emits none — as `Eql` does, building a `Bool` — does not carry it.
+/// The string machinery is carried by the row rather than reached out of the registry at the emitter, because it is part of what *this* body writes: `curios_core::str_literal` names the scan certificate and constructs the carrier at every rendered piece. A row that emits a literal therefore cannot forget to order it, and one that emits none — as `Eql` does, building a `Bool` — does not carry it.
 #[derive(Debug, Clone, Copy)]
 pub struct SpellDerivation {
     pub spell: ConceptField,

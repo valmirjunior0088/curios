@@ -10,8 +10,6 @@ use occurrence::*;
 mod sort;
 pub(crate) use sort::*;
 
-use crate::TermBuilders;
-
 #[cfg(test)]
 mod conversion_tests;
 #[cfg(test)]

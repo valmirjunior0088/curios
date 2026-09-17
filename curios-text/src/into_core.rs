@@ -3,7 +3,6 @@ use audit::*;
 
 mod context;
 use context::*;
-use curios_elab::TermBuilders;
 
 mod lowerer;
 use lowerer::*;

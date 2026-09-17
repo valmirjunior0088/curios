@@ -1,9 +1,6 @@
 use {
     super::{Context, Error, Mode, check, elaborate, expect},
-    crate::{
-        MotiveShape, TermBuilders, check_intrinsic_head, check_motive, is_prop, reduce_with,
-        refine_head,
-    },
+    crate::{MotiveShape, check_intrinsic_head, check_motive, is_prop, reduce_with, refine_head},
     curios_analysis::{Invert, case_target_indices, invert_indices, pinned_by_targets},
     curios_core::{
         Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic, IntrinsicHead,

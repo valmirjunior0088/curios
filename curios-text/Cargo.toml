@@ -9,7 +9,7 @@ description = "The Curios surface syntax: lexer, parser, printer, module resolut
 workspace = true
 
 [features]
-archive = ["curios-archive/enabled", "curios-abi/archive", "curios-utilities/archive", "curios-elab/archive", "curios-num/archive", "curios-document/archive"]
+archive = ["curios-archive/enabled", "curios-abi/archive", "curios-utilities/archive", "curios-num/archive", "curios-document/archive"]
 profile = ["curios-profile/enabled", "curios-parse/profile"]
 
 [dependencies]
@@ -21,11 +21,12 @@ curios-utilities = { workspace = true }
 curios-parse = { workspace = true }
 curios-print = { workspace = true }
 curios-core = { workspace = true }
-curios-elab = { workspace = true }
 curios-num = { workspace = true }
 
 [dev-dependencies]
 # `curios_core::test_support::into_nested_term`, which the lowering suite folds a finished module with. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
 curios-core = { workspace = true, features = ["test-support"] }
+# The elaborator the lowering suites run their output through: `into_core/test_support.rs` checks what a lowering produced. A dev-dependency, because the lowering itself builds terms with `curios-core`'s constructors and never names the elaborator.
+curios-elab = { workspace = true }
 # The directory of its own every suite here works in, canonical and removed however the test ends.
 curios-utilities = { workspace = true, features = ["test-support"] }

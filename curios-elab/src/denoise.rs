@@ -14,7 +14,7 @@
 mod tests;
 
 use {
-    super::{Context, TermBuilders},
+    super::Context,
     curios_core::{
         Apply, Bound, Field, Free, Global, Instance, InstanceHead, Metavar, MetavarOrigin, Proj,
         Rec, RecGroup, StructType, Subterm, Term, Var, Visit,

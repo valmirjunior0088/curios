@@ -1,4 +1,3 @@
-use curios_elab::TermBuilders;
 use {
     super::{Hoisted, Lowerer},
     crate::{
