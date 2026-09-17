@@ -102,6 +102,9 @@ COPY curios-text curios-text
 COPY curios-unit curios-unit
 COPY curios-pipeline curios-pipeline
 COPY curios-package curios-package
+COPY curios-verdicts curios-verdicts
+COPY curios-wonder curios-wonder
+COPY curios-document curios-document
 COPY curios-profile curios-profile
 COPY curios-js curios-js
 COPY curios curios
