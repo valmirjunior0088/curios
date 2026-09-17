@@ -15,6 +15,8 @@
 //! What is *not* re-judged is decided by name. An item whose declared names the environment already answers for was judged by the walk that built the environment; every other item is judged here. Nothing reads a length, and nothing requires the already-judged items to sit anywhere in particular — which is the difference between an environment and a prefix.
 
 #[cfg(test)]
+mod budget_tests;
+#[cfg(test)]
 mod elimination_tests;
 #[cfg(test)]
 mod foreign_tests;
@@ -42,7 +44,9 @@ use {
         Globals, Kernel, KernelError, check_definition, check_entrypoint, check_induct_decl,
         check_positions, check_rec_group, check_struct_decl, partial_definitions,
     },
-    curios_analysis::{Coverage, Declarations, Erased, positivity_vectors, satisfiable},
+    curios_analysis::{
+        Coverage, Declarations, Erased, PositivityRefusal, positivity_vectors, satisfiable,
+    },
     curios_core::{
         Bound, Definition, Free, Global, InductDecl, Item, Level, MetavarId, Module, StructDecl,
         Term, UniverseContext, Zonked, derived_binder_floor_outside,
@@ -537,6 +541,9 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> V
     }
 
     // Declaration acceptance, after the item walk rather than before it: a registry telescope may mention any top-level definition — a type alias, a type constructor's own `rec` group — and those names are only defined as the walk proceeds. Every item defines whether or not it checked, so by this point the environment is complete. Strict positivity runs over the *full* declaration set — the registries are merged even though the items are not, because a user declaration may reach a prelude one — so the analysis recomputes every vector rather than reading any from the archive; then the size condition, the clause the item walk cannot supply, because it computes each signature's sort and compares it to nothing.
+    //
+    // Positivity is a judgment of its own and gets its own budget, as the elaborator's pass does. It reduces payload types across every declaration in the program, and on what the entrypoint and the two obligations above left, whether it finished depended on how much they had spent.
+    kernel.restore_budget();
     if let Err(refusal) = positivity_vectors(
         kernel,
         Declarations::extending(
@@ -547,12 +554,18 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> V
         ),
         Coverage::Complete,
     ) {
-        verdicts.push(Verdict {
-            name: Some(refusal.name.clone()),
-            error: KernelError::NotPositive {
-                name: refusal.name,
-                part: refusal.part,
-                polarity: refusal.polarity,
+        verdicts.push(match refusal {
+            PositivityRefusal::NotPositive(refusal) => Verdict {
+                name: Some(refusal.name.clone()),
+                error: KernelError::NotPositive {
+                    name: refusal.name,
+                    part: refusal.part,
+                    polarity: refusal.polarity,
+                },
+            },
+            PositivityRefusal::Exhausted { name, error } => Verdict {
+                name: Some(name),
+                error,
             },
         });
     }

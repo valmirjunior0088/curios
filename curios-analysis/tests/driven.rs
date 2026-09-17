@@ -8,8 +8,8 @@
 
 use {
     curios_analysis::{
-        Coverage, Declarations, Invert, fixture::SYNTAX, group_totality, invert_indices,
-        positivity_vectors,
+        Coverage, Declarations, Invert, PositivityRefusal, fixture::SYNTAX, group_totality,
+        invert_indices, positivity_vectors,
     },
     curios_cert::Kernel,
     curios_core::{
@@ -271,10 +271,13 @@ fn a_negative_self_occurrence_is_refused() {
         Coverage::Complete,
     )
     .expect_err("a negative self-occurrence must be refused");
-    assert_eq!(refusal.name, bad_name);
+    assert!(
+        matches!(&refusal, PositivityRefusal::NotPositive(refusal) if refusal.name == bad_name),
+        "refused by the rule, at `Bad`: {refusal:?}",
+    );
 }
 
-/// The same route to `False` behind an alias the driver cannot unfold: `Bad`'s constructor takes `D`, a definition standing for `(Bad) -> False`, and the kernel is given no budget to unfold it. A refused reduction has to leave the analysis in the refusing direction — the walk follows what the name defines at `Mixed` — where a bare name that recorded nothing admitted the declaration outright.
+/// The same route to `False` behind an alias the driver cannot unfold: `Bad`'s constructor takes `D`, a definition standing for `(Bad) -> False`, and the kernel is given no budget to unfold it. A refused reduction has to leave the analysis in the refusing direction — the walk follows what the name defines at `Mixed` — where a bare name that recorded nothing admitted the declaration outright. The refusal is the budget's: the alias was never read, so the analysis has no verdict of its own to give.
 #[test]
 fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
     let mut kernel = Kernel::new(0, SYNTAX);
@@ -315,7 +318,56 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
         Coverage::Complete,
     )
     .expect_err("an alias the driver cannot unfold is followed, not admitted");
-    assert_eq!(refusal.name, bad_name);
+    assert!(
+        matches!(&refusal, PositivityRefusal::Exhausted { name, .. } if *name == bad_name),
+        "refused for the budget `Bad`'s walk ran out of: {refusal:?}",
+    );
+}
+
+/// An alias standing for the declaration itself is a strict occurrence, and with no budget to unfold it the set is still refused — the alias is read at `Mixed`, a non-strict path back to `Good` — but for the budget, which is all the verdict rests on. With the budget to unfold it the same set is admitted, and that control is what says the refusal was the budget's.
+///
+/// Reported as not strictly positive before the analysis carried the driver's refusal, which is how a kernel out of budget came to blame `/std/Toml/Toml`, whose recursion reaches the walk through `Map`.
+#[test]
+fn a_strict_payload_the_driver_cannot_reduce_is_refused_for_the_budget() {
+    let good_name = Global::Authored(Qualifier::from(["Good"]));
+
+    for budget in [0, 100_000] {
+        let mut kernel = Kernel::new(budget, SYNTAX);
+        kernel.set_local_floor(1_000);
+
+        let alias = Free::local(1, Some("D"));
+        kernel.define(
+            &alias,
+            &Term::type_ground(),
+            &Term::induct_type(good_name.clone(), Vec::<Term>::new(), Vec::<Term>::new()),
+            &UniverseContext::default(),
+        );
+
+        let mut inducts = BTreeMap::new();
+        inducts.insert(
+            good_name.clone(),
+            single_payload(Term::free_var(&alias), Term::type_ground()),
+        );
+        for (name, entry) in &inducts {
+            kernel.declare_induct(name, entry);
+        }
+
+        let verdict = positivity_vectors(
+            &mut kernel,
+            Declarations::of(&inducts, &BTreeMap::new()),
+            Coverage::Complete,
+        );
+        match budget {
+            0 => assert!(
+                matches!(&verdict, Err(PositivityRefusal::Exhausted { name, .. }) if *name == good_name),
+                "with no budget, refused for the budget rather than by the rule: {verdict:?}",
+            ),
+            _ => assert!(
+                verdict.is_ok(),
+                "with the budget to unfold the alias, `Good` is strictly positive: {verdict:?}",
+            ),
+        }
+    }
 }
 
 /// A strictly positive self-occurrence — the payload *is* the family — is the ordinary recursive datatype and is admitted.

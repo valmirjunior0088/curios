@@ -10,7 +10,7 @@
 //!
 //! # Shared, not duplicated
 //!
-//! Both checkers run *this* analysis, through [`Env`]. It is a total function of post-zonk declarations, so a second implementation would be a second run of the same function on the same input rather than a second opinion; what each side supplies for itself is reduction, unfolding, and the registry fallback for declarations outside the analyzed set. The analysis is infallible by construction — a reduction the driver refuses leaves the term opaque, which is the conservative direction — so its only failure is the refusal it exists to produce.
+//! Both checkers run *this* analysis, through [`Env`]. It is a total function of post-zonk declarations, so a second implementation would be a second run of the same function on the same input rather than a second opinion; what each side supplies for itself is reduction, unfolding, and the registry fallback for declarations outside the analyzed set. A reduction the driver refuses does not stop the walk — the term is read as opaque, which is the conservative direction — but it is kept: a set refused after one is reported as the driver's refusal, since reading the term at `Mixed` may be all that refused it. So the analysis fails in exactly two ways, the refusal it exists to produce and a budget that ran out before it could decide.
 //!
 //! Two obligations are deliberately out of scope. A declaration that takes a *type-former* parameter — `induct Mu(F : (Type) -> Type) | fix(F(Mu(F))) end` — cannot be checked from its own body, because `F` is a binder with no known polarity; discharging that needs an inferred per-binder obligation in a side store, never a field on `FuncType`. And termination and productivity for `rec` remain unchecked at both the type and value layers. Nothing in the corpus takes a type-former parameter, so the first is co-scheduled with `Mu`; the second is a separate mechanism, not a refinement of this one.
 
@@ -26,7 +26,18 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Why a declaration set was refused: `name`'s `part` reaches back to `name` at a non-accepting `polarity`. The driver owns the rendering; `type_` is the offending part's type, for a diagnostic that points at real source.
+/// Why a declaration set was refused.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PositivityRefusal<E> {
+    /// A declaration reaches itself through a non-strict path.
+    NotPositive(NotPositive),
+    /// The driver refused a reduction while `name` was being walked — its budget ran out — and the set was then refused.
+    ///
+    /// Reported instead of the positivity verdict, which may be the refusal's own doing: the term the driver could not reduce was read at `Mixed`, and a recursion through it that would have read `Strict` reads as a non-strict path back. `name` is where the budget went, not necessarily the declaration the verdict fell on, since a `Mixed` vector reaches every declaration that composes through it.
+    Exhausted { name: Global, error: E },
+}
+
+/// A declaration refused by the rule itself: `name`'s `part` reaches back to `name` at a non-accepting `polarity`. The driver owns the rendering; `type_` is the offending part's type, for a diagnostic that points at real source.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NotPositive {
     pub name: Global,
@@ -120,14 +131,14 @@ impl<'a> Declarations<'a> {
     }
 }
 
-/// Analyze every declaration in `declarations` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order.
+/// Analyze every declaration in `declarations` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order — reported as [`PositivityRefusal::Exhausted`] when the driver refused a reduction on the way to it.
 ///
 /// The set is exactly what to analyze: the whole program when the kernel re-checks or the prelude is being built, and the unit's own declarations alone when the elaborator replays a prelude. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was — sound at the replay boundary because prelude items cannot mention user code, so every out-of-set declaration is a sink of the occurrence relation.
 pub fn positivity_vectors<E: Env>(
     env: &mut E,
     declarations: Declarations<'_>,
     coverage: Coverage,
-) -> Result<BTreeMap<Global, Vec<Polarity>>, NotPositive> {
+) -> Result<BTreeMap<Global, Vec<Polarity>>, PositivityRefusal<E::Error>> {
     curios_profile::profile!("positivity_vectors");
     if declarations.is_empty() {
         return Ok(BTreeMap::new());
@@ -140,7 +151,7 @@ pub fn positivity_vectors<E: Env>(
         split.insert(name.clone(), Split::of(env, declarations, name));
     }
 
-    let (vectors, closed) = fixpoint(env, &split, coverage);
+    let (vectors, closed, exhausted) = fixpoint(env, &split, coverage);
 
     for name in &names {
         let diagonal = closed
@@ -148,9 +159,20 @@ pub fn positivity_vectors<E: Env>(
             .and_then(|reached| reached.get(name))
             .copied()
             .unwrap_or(Polarity::Unused);
-        if !diagonal.accepting() {
-            return Err(refusal(env, &split, &vectors, &closed, name, diagonal));
+        if diagonal.accepting() {
+            continue;
         }
+
+        // An acceptance survives a refused reduction, because reading the term at `Mixed` only ever refuses more. A refusal does not: it may be that reading's alone, so the budget is what is reported.
+        return Err(match exhausted {
+            Some((walked, error)) => PositivityRefusal::Exhausted {
+                name: walked,
+                error,
+            },
+            None => PositivityRefusal::NotPositive(refusal(
+                env, &split, &vectors, &closed, name, diagonal,
+            )),
+        });
     }
 
     Ok(vectors.computed)
@@ -238,9 +260,14 @@ fn labelled<E: Env, B: Bound>(env: &mut E, telescope: Telescope<B>) -> Vec<(Stri
     entries
 }
 
-/// One declaration's occurrences under the current parameter estimates.
-fn sweep<E: Env>(env: &mut E, vectors: &Vectors, split: &Split) -> BTreeMap<Target, Polarity> {
+/// One declaration's occurrences under the current parameter estimates, and the first reduction the driver refused while finding them.
+fn sweep<E: Env>(
+    env: &mut E,
+    vectors: &Vectors,
+    split: &Split,
+) -> (BTreeMap<Target, Polarity>, Option<E::Error>) {
     let mut found = BTreeMap::new();
+    let mut refused = None;
     for part in &split.parts {
         let mut walk = Walk {
             env,
@@ -249,6 +276,7 @@ fn sweep<E: Env>(env: &mut E, vectors: &Vectors, split: &Split) -> BTreeMap<Targ
             unfolded: BTreeSet::new(),
             forcing: Vec::new(),
             found: BTreeMap::new(),
+            refused: None,
         };
         walk.walk(&part.type_, Polarity::Strict);
         for (target, polarity) in walk.found {
@@ -257,18 +285,19 @@ fn sweep<E: Env>(env: &mut E, vectors: &Vectors, split: &Split) -> BTreeMap<Targ
                 .and_modify(|entry: &mut Polarity| *entry = entry.join(polarity))
                 .or_insert(polarity);
         }
+        refused = refused.or(walk.refused);
     }
-    found
+    (found, refused)
 }
 
-/// The two fixpoints, run together over the whole declaration set to stability, then the occurrence relation closed transitively.
+/// The two fixpoints, run together over the whole declaration set to stability, then the occurrence relation closed transitively — beside the first reduction the driver refused, and the declaration whose walk it was.
 ///
 /// Whole-set rather than declaration-by-declaration because a single ordered pass gets the wrong answer twice over. `Node(V)` mentions itself, so its own vector is an input to computing it; and in the mutual pair `A(X) | a(B(X))` / `B(X) | b(f : (X) -> Nat)`, `A` only learns that it is negative in `X` on the round after `B` does. Seeding at `Unused` and joining upward computes the least fixpoint, which is the right one: an inductive declaration *is* the least fixpoint of its own unfolding.
 fn fixpoint<E: Env>(
     env: &mut E,
     split: &BTreeMap<Global, Split>,
     coverage: Coverage,
-) -> (Vectors, Occurrences) {
+) -> (Vectors, Occurrences, Option<(Global, E::Error)>) {
     let mut vectors = Vectors {
         computed: split
             .iter()
@@ -277,11 +306,17 @@ fn fixpoint<E: Env>(
         coverage,
     };
     let mut direct: Occurrences = BTreeMap::new();
+    let mut exhausted = None;
 
     loop {
         let mut changed = false;
         for (name, entry) in split {
-            let found = sweep(env, &vectors, entry);
+            let (found, refused) = sweep(env, &vectors, entry);
+            if exhausted.is_none()
+                && let Some(error) = refused
+            {
+                exhausted = Some((name.clone(), error));
+            }
 
             let mut vector = vec![Polarity::Unused; entry.params.len()];
             let mut edges: BTreeMap<Global, Polarity> = BTreeMap::new();
@@ -311,7 +346,7 @@ fn fixpoint<E: Env>(
         }
     }
 
-    (vectors, close(&direct))
+    (vectors, close(&direct), exhausted)
 }
 
 /// Transitively close the occurrence relation under composition: if `middle` occurs in `owner` at `first` and `target` occurs in `middle` at `second`, then `target` occurs in `owner` at `first ∘ second`.
@@ -351,6 +386,8 @@ fn close(direct: &Occurrences) -> Occurrences {
 /// Name the piece of `name` that a non-strict path back to `name` starts from.
 ///
 /// Runs only on the error path, which is why the fixpoint above can stay a plain polarity join with no provenance threaded through it. Re-walking one declaration part by part is cheap here and gives a message that points at real source: `Toml`, rejected through `Toml → Map → Node → Toml`, still names the `table` payload the path leaves from.
+///
+/// Reached only when the fixpoint refused no reduction, so the verdict is the rule's. A reduction this re-walk has refused can only cost the message its part, which the fallback below covers.
 fn refusal<E: Env>(
     env: &mut E,
     split: &BTreeMap<Global, Split>,
@@ -368,6 +405,7 @@ fn refusal<E: Env>(
             unfolded: BTreeSet::new(),
             forcing: Vec::new(),
             found: BTreeMap::new(),
+            refused: None,
         };
         walk.walk(&part.type_, Polarity::Strict);
 
@@ -469,6 +507,8 @@ struct Walk<'a, E: Env> {
     /// [`Self::unfolded`] cannot serve. It keys on `Free`, and the recursive occurrence [`curios_core::RecGroup::member_body`] substitutes is an inline `rec` node with no name to key on. A stack rather than a set because it is popped on the way out: two *sibling* occurrences of one member sit on different paths and must each still force, or an occurrence that is `Strict` would read `Mixed` and the declaration holding it would be refused.
     forcing: Vec<(RecGroup, usize)>,
     found: BTreeMap<Target, Polarity>,
+    /// The first reduction the driver refused on this traversal, kept for [`positivity_vectors`] to report.
+    refused: Option<E::Error>,
 }
 
 /// The `rec` member `term` is a folded call to, if it is one: the node [`Term::rec_proj`] builds, standing bare or under an application.
@@ -496,14 +536,19 @@ impl<E: Env> Walk<'_, E> {
     ///
     /// Forces a `rec` head rather than leaving it stuck, because a mutually recursive `induct` group lowers its *type constructors* into a top-level `rec`: `Pause` inside `step(pause : Pause, …)` elaborates to a universe instance of a projection, and without forcing it the whole `Pause`/`Async` group reads as `Mixed` and is rejected.
     ///
-    /// Declines in two cases, both of which leave the term to be treated as opaque, which is conservative. [`forceable`] owns the first — a head that cannot move, or a term still under enclosing binders. And a reduction the driver refuses (an exhausted budget on a type-level `rec` that will not converge) reports nothing rather than failing the analysis — and says so, because [`Walk::walk`] then follows the term's definitions at `Mixed` itself: a refused name would otherwise stand as a bare `Var` that records nothing, and a payload type the driver could not read would be admitted through.
+    /// Declines in two cases, both of which leave the term to be treated as opaque, which is conservative. [`forceable`] owns the first — a head that cannot move, or a term still under enclosing binders. And a reduction the driver refuses (an exhausted budget on a type-level `rec` that will not converge) does not stop the walk: the refusal is kept in [`Walk::refused`], and the flag says so, because [`Walk::walk`] then follows the term's definitions at `Mixed` itself — a refused name would otherwise stand as a bare `Var` that records nothing, and a payload type the driver could not read would be admitted through.
     fn forced(&mut self, term: &Term) -> (Term, bool) {
         if !forceable(term) {
             return (term.clone(), false);
         }
         match self.env.force(term) {
             Ok(reduced) => (reduced, false),
-            Err(_) => (term.clone(), true),
+            Err(error) => {
+                if self.refused.is_none() {
+                    self.refused = Some(error);
+                }
+                (term.clone(), true)
+            }
         }
     }
 
