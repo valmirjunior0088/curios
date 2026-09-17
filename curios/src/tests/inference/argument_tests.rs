@@ -122,3 +122,46 @@ fn a_missing_witness_after_a_written_one_is_named_by_its_own_position() {
         "unexpected report:\n{report}"
     );
 }
+
+// An operator has no argument list, so its bound cannot be supplied where it is written. The report names the operator rather than its minted binder, spells the bound as the method it projects rather than the witness it projects from, and names the two ways that do establish it — the method call with its type argument first, since a leading `@` fills that slot.
+#[test]
+fn an_operators_undischarged_bound_names_the_operator_and_what_establishes_it() {
+    let report = error(
+        r#"
+        use /std/{Nat};
+        let halve(n: Nat) -> Nat = 7 / n;
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains(
+            "the bound of the '/' operator was not discharged\n  nothing discharged Div/Ok(n)"
+        ) && report.contains(
+            "decide the bound with a guard before the operation, or call Div/div(@T, a, b, @proof)"
+        ) && !report.contains("/(@")
+            && !report.contains("witness@"),
+        "unexpected report:\n{report}"
+    );
+}
+
+// A witness is never called, so a parameter of its telescope nothing discharged is named by the witness's concept and head, and the report suggests no call.
+#[test]
+fn a_witness_telescopes_undischarged_bound_names_the_witness() {
+    let report = error(
+        r#"
+        use /std/{Nat, Bool, Str, Show};
+        struct Small(n: Nat): pub Type { Nat }
+        satisfy (@n: Nat, @ok: Bool/Holds(n < 2)) => Show(Small(n)) { show(_s) = "small" }
+        let s: Str = Show/show(Small(3) { 0 });
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains(
+            "the implicit parameter 'ok' of the witness of 'Show' for head 'Small' was not inferred"
+        ) && report.contains("a witness is never called")
+            && !report.contains("supply it explicitly")
+            && !report.contains("witness@"),
+        "unexpected report:\n{report}"
+    );
+}

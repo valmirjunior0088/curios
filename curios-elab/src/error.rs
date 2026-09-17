@@ -12,7 +12,7 @@ use {
         display_names,
     },
     curios_num::{Integer, Natural},
-    curios_utilities::{Grain, Plicity, Qualifier, Report, Span, SyntaxRegistry},
+    curios_utilities::{Grain, InfixOp, Plicity, Qualifier, Report, Span, SyntaxRegistry},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         fmt,
@@ -100,6 +100,19 @@ pub struct ArgumentSite {
     pub position: usize,
     /// For a plain argument, a later explicit parameter whose type is a function type, with its name and 0-based position among the explicit parameters — the slot a misplaced lambda was meant for.
     pub function_typed: Option<(Option<String>, usize)>,
+}
+
+/// Who an inserted argument was inserted for, as a report names it.
+///
+/// Provenance travels as a string — a function's spelling, an operator's symbol, or an anonymous witness's minted name — and is read back into one of these where a report is built ([`callee`](crate::callee)), so no report spells a name a program cannot write or advises a call a program cannot make.
+#[derive(Debug, Clone)]
+pub enum Callee {
+    /// A function or constructor the program names, spelled as the provenance carried it.
+    Function(String),
+    /// An infix operator, beside the wrapper of the concept method it dispatches through — the call a program can write where the operator takes no argument.
+    Operator { op: InfixOp, method: Global },
+    /// An anonymous witness, named as coherence names it: by its concept and the key it occupies.
+    Witness { concept: Global, key: WitnessKey },
 }
 
 #[derive(Debug)]
@@ -409,7 +422,7 @@ pub enum Error {
     },
     /// An inserted implicit argument that unification never pinned. Carries the insertion provenance (the applied function and the binder it filled) so the report names the hole instead of a bare metavar id, and the binder's instantiated type — the `bound` nothing discharged — because naming the slot says where the refusal is and naming its type says what was asked for. A decided proposition is the case that needs both: `Has(layout, "sidebr")` is the whole of why the call was refused, and the binder alone reports a refusal the reader cannot act on. `proposition` is whether `bound` is one: a type argument nothing determined — `@T: Type`, `@n: Nat` — was never an obligation, and reporting it as one discharged by nothing named a fault the author cannot find.
     UninferredImplicit {
-        func: String,
+        callee: Callee,
         binder: String,
         bound: Box<Term>,
         proposition: bool,
@@ -430,10 +443,11 @@ pub enum Error {
         expected: usize,
         got: usize,
     },
-    /// A witness goal that resolution could not discharge: no matching local `use` binder, no superclass projection, and no witness-table entry. `func`/`binder` are the insertion provenance (the applied function and the `use` binder the goal fills).
+    /// A witness goal that resolution could not discharge: no matching local `use` binder, no superclass projection, and no witness-table entry. `callee`/`binder` are the insertion provenance (who the goal was inserted for and the `use` binder it fills).
     NoWitness {
         goal: Box<Term>,
-        func: String,
+        /// Boxed for the reason `shape` is: a witness callee's concept and key inline would push this variant, already the roster's largest, past what `result_large_err` admits.
+        callee: Box<Callee>,
         binder: String,
         /// Present when the goal is the registry's `Lift`: the embedding-specific half of the report.
         embedding: Option<EmbeddingDiagnosis>,
@@ -964,14 +978,14 @@ impl Error {
     }
 
     pub(crate) fn uninferred_implicit(
-        func: String,
+        callee: Callee,
         binder: String,
         bound: Term,
         proposition: bool,
         reduct: Option<Term>,
     ) -> Self {
         Self::UninferredImplicit {
-            func,
+            callee,
             binder,
             bound: Box::new(bound),
             proposition,
@@ -993,14 +1007,14 @@ impl Error {
 
     pub(crate) fn no_witness<T: Into<Term>>(
         goal: T,
-        func: String,
+        callee: Callee,
         binder: String,
         embedding: Option<EmbeddingDiagnosis>,
         shape: Option<Box<ShapeDiagnosis>>,
     ) -> Self {
         Self::NoWitness {
             goal: Box::new(goal.into()),
-            func,
+            callee: Box::new(callee),
             binder,
             embedding,
             shape,

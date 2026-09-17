@@ -11,14 +11,14 @@
 
 use {
     super::{
-        Context, EmbeddingDiagnosis, Error, HeadKey, ItemStamp, Outcome, ParkedProblem, ParkedWork,
-        ShapeDiagnosis, Witness, WitnessKey, convert_outcome, reduce_with,
+        Callee, Context, EmbeddingDiagnosis, Error, HeadKey, ItemStamp, Outcome, ParkedProblem,
+        ParkedWork, ShapeDiagnosis, Witness, WitnessKey, convert_outcome, reduce_with,
     },
     curios_core::{
         ConceptDecl, Enter, Field, Free, Global, ImplicitOrigin, Level, Metavar, MetavarId,
         StructType, Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
     },
-    curios_utilities::{Mount, Plicity, Qualifier},
+    curios_utilities::{InfixOp, Mount, Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 };
 
@@ -47,12 +47,31 @@ fn display_goal(context: &mut Context, goal: &Term) -> Term {
     super::resolved_for_display(context, goal)
 }
 
+/// Read an insertion provenance back into who it names ([`Callee`]). An operator's provenance is its symbol, which no qualified name can be; a witness's is its minted name, found among the registered witnesses so the report can name it by its concept and key instead. Error-path only: the witness lookup scans the table.
+pub(crate) fn callee(context: &Context, func: &str) -> Callee {
+    if let Some(op) = InfixOp::from_symbol(func) {
+        let method = context.syntax().operator.concept_field(op);
+        return Callee::Operator {
+            op,
+            method: Global::Authored(method.concept.qualifier().with(method.field)),
+        };
+    }
+    context
+        .witness_keyed_entries()
+        .find(|(_, _, witness)| witness.name.symbol() == func)
+        .map(|(concept, key, _)| Callee::Witness {
+            concept: concept.clone(),
+            key: key.clone(),
+        })
+        .unwrap_or_else(|| Callee::Function(func.to_string()))
+}
+
 fn no_witness_error(context: &mut Context, goal: &Term, provenance: &WitnessOrigin) -> Error {
     let embedding = diagnose_embedding(context, goal);
     let shape = diagnose_shape(context, goal);
     Error::no_witness(
         display_goal(context, goal),
-        provenance.func.clone(),
+        callee(context, &provenance.func),
         provenance.binder.clone(),
         embedding,
         shape,

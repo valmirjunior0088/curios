@@ -6,7 +6,7 @@
 mod tests;
 
 use {
-    super::{Erased, Error, GoalReport, HeadKey, ShapeDiagnosis, Underivable},
+    super::{Callee, Erased, Error, GoalReport, HeadKey, ShapeDiagnosis, Underivable, WitnessKey},
     crate::ordinal,
     curios_core::{Spelling, Subterm, Term},
     curios_utilities::{Grain, Plicity, Qualifier},
@@ -70,6 +70,40 @@ fn declaring_module(module: &Qualifier) -> String {
     match module.is_root() {
         true => "the entry module".to_string(),
         false => format!("module '{}'", module.join()),
+    }
+}
+
+/// What a diagnostic calls a witness key: a head when it has one parameter, a key when it has several.
+fn key_noun(key: &WitnessKey) -> &'static str {
+    match key.0.len() {
+        1 => "head",
+        _ => "key",
+    }
+}
+
+impl Callee {
+    /// This callee as a report's sentence names it: a function quoted as written, an operator and a witness described, since neither has a name a program writes.
+    pub(crate) fn phrase(&self, spelling: &Spelling) -> String {
+        match self {
+            Callee::Function(name) => format!("'{name}'"),
+            Callee::Operator { op, .. } => format!("the '{}' operator", op.symbol()),
+            Callee::Witness { concept, key } => format!(
+                "the witness of '{}' for {} '{}'",
+                spelling.symbol(concept),
+                key_noun(key),
+                key.spelled(spelling)
+            ),
+        }
+    }
+
+    /// One of this callee's slots as a report names it, `the bound 'ok' of '/f'`. An operator's slot is named by the operator alone: its binder is minted, and `'_'` names nothing a reader can find.
+    pub(crate) fn slot(&self, noun: &str, binder: &str, spelling: &Spelling) -> String {
+        match self {
+            Callee::Operator { .. } => format!("the {noun} of {}", self.phrase(spelling)),
+            Callee::Function(_) | Callee::Witness { .. } => {
+                format!("the {noun} '{binder}' of {}", self.phrase(spelling))
+            }
+        }
     }
 }
 
@@ -633,7 +667,7 @@ impl fmt::Display for Displayed<'_> {
                 write!(f, "operator '{symbol}' is not defined for type {type_}")
             }
             Error::UninferredImplicit {
-                func,
+                callee,
                 binder,
                 bound,
                 proposition,
@@ -653,10 +687,25 @@ impl fmt::Display for Displayed<'_> {
                         format!("no argument or expected type determined it (its type is {bound})")
                     }
                 };
-                write!(
-                    f,
-                    "implicit argument '{binder}' of '{func}' was not inferred\n  {why}\n  supply it explicitly: {func}(@...)"
-                )
+                match callee {
+                    Callee::Function(func) => write!(
+                        f,
+                        "implicit argument '{binder}' of '{func}' was not inferred\n  {why}\n  supply it explicitly: {func}(@...)"
+                    ),
+                    // An operator has no argument list to write the bound into, so the report names the two places it can be established: a guard before the operation, or the method call the operator stands for — with its type argument first, since a leading `@` fills that slot and not the bound.
+                    Callee::Operator { method, .. } => write!(
+                        f,
+                        "{} was not discharged\n  {why}\n  an operator takes no written arguments: decide the bound with a guard before the operation, or call {}(@T, a, b, @proof)",
+                        callee.slot("bound", binder, spelling),
+                        spelling.symbol(method)
+                    ),
+                    // A witness is never called, so there is no argument to supply: its parameters are filled from the goal it answers.
+                    Callee::Witness { .. } => write!(
+                        f,
+                        "{} was not inferred\n  {why}\n  a witness is never called: its parameters are filled from the goal it is resolved for",
+                        callee.slot("implicit parameter", binder, spelling)
+                    ),
+                }
             }
             Error::DomainNeverDetermined { binder } => {
                 write!(
@@ -686,7 +735,7 @@ impl fmt::Display for Displayed<'_> {
             }
             Error::NoWitness {
                 goal,
-                func,
+                callee,
                 binder,
                 embedding,
                 shape,
@@ -711,7 +760,7 @@ impl fmt::Display for Displayed<'_> {
                     }
                 }
                 match embedding {
-                    None => write!(f, "\n  needed by '{func}' for {binder}"),
+                    None => write!(f, "\n  needed by {} for {binder}", callee.phrase(spelling)),
                     Some(diagnosis) => {
                         let source = diagnosis.source.spelled(spelling).to_string();
                         let target = diagnosis.target.spelled(spelling);
@@ -783,10 +832,7 @@ impl fmt::Display for Displayed<'_> {
                 second,
             } => {
                 let concept = spelling.symbol(concept);
-                let noun = match key.0.len() {
-                    1 => "head",
-                    _ => "key",
-                };
+                let noun = key_noun(key);
                 let key = key.spelled(spelling);
                 // One clause when both sit in the same module, which is the common case while a program is being written: naming that module twice reads as two coordinates and is one. The carets on each declaration are what separate them.
                 let where_ = match first == second {
@@ -809,10 +855,7 @@ impl fmt::Display for Displayed<'_> {
                 witness,
             } => {
                 let concept = spelling.symbol(concept);
-                let noun = match key.0.len() {
-                    1 => "head",
-                    _ => "key",
-                };
+                let noun = key_noun(key);
                 let key = key.spelled(spelling);
                 write!(
                     f,

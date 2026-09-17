@@ -4,8 +4,9 @@ mod tests;
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
 use curios_core::{
     Apply, Bound, Field, Free, Func, FuncType, Global, ImplicitOrigin, Intrinsic, IntrinsicHead,
-    Level, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError, Scope, Subterm, Telescope,
-    Term, Transient, UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole, Visit,
+    Level, Many, Metavar, MetavarId, MetavarOrigin, Proj, ReduceError, Scope, Spelling, Subterm,
+    Telescope, Term, Transient, UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole,
+    Visit,
 };
 use curios_utilities::Span;
 use std::{
@@ -86,13 +87,13 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
 
 /// Best-effort display form for a mismatch report: substitute the solutions that have landed, so the message names the actual disagreement rather than the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize) the result so a stuck concept-method projection standing in an index position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))` → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery. Materialization is tolerant: a metavariable still open spells `?` while every solved one beside it shows its value — the strict `zonk` used here refused the whole term on the first open hole, so one unsolved `f` rendered `?(?)` where `?(double(p))` was known. Universe levels come through verbatim and the report's spelling erases them. A normalization that exhausts its budget falls back to the merely-materialized form.
 ///
-/// Normalization is the whole denoising story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator, so the structural fold the goal reports use runs afterwards over the live local scope — the same three witness forms, the same infix spelling.
+/// Normalization is the whole denoising story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator, so the structural fold the goal reports use runs afterwards over the live local scope — the same three witness forms, the same source spelling.
 pub(crate) fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
     // Refolded on both sides of normalization. Before: a committed solution spells a stuck recursive call as its canonical neutral, the `Rec` node itself, and `normalize` keeps a name only where the *written* head is one (`stalled_unfolding`) — so the node is first given back its name, which the stall rule then holds. After: whatever normalization exposed elsewhere.
     let zonked = super::refold_recs(context, &super::zonk_solved_term_metas(context, term));
     let resolved = super::normalize(context, zonked.clone()).unwrap_or(zonked);
     let resolved = super::refold_recs(context, &resolved);
-    let operators = super::operator_table(context);
+    let methods = super::method_table(context);
     let binders = Rc::new(
         context
             .locals()
@@ -100,7 +101,7 @@ pub(crate) fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
             .map(|(name, type_)| (name.clone(), type_.clone()))
             .collect(),
     );
-    super::denoise_for_display(&operators, &binders, &resolved)
+    super::denoise_for_display(&methods, &binders, &resolved)
 }
 
 /// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]) — unless `term`, the node the conversion was about, is the `/std/Monad/bind` application a postfix `!` desugars to and the region it hoisted to has nothing to sequence in.
@@ -587,7 +588,7 @@ impl Context {
                                     let shape = super::diagnose_shape(self, &witness_goal);
                                     Error::no_witness(
                                         resolved_for_display(self, &witness_goal),
-                                        origin.func,
+                                        super::callee(self, &origin.func),
                                         origin.binder,
                                         embedding,
                                         shape,
@@ -642,7 +643,7 @@ impl Context {
                             let shape = super::diagnose_shape(self, &goal);
                             Error::no_witness(
                                 resolved_for_display(self, &goal),
-                                provenance.func,
+                                super::callee(self, &provenance.func),
                                 provenance.binder,
                                 embedding,
                                 shape,
@@ -686,22 +687,19 @@ fn watched_blockers(
     that: &Term,
 ) -> Vec<String> {
     let origins = metavar_origins(&[this, that]);
+    // Rendered before the report's own spelling exists, so a witness callee reads at its full names.
+    let spelling = Spelling::default();
     watching
         .iter()
         .filter(|id| context.metavar_solution(**id).is_none())
         .map(|id| match origins.get(id) {
-            Some((MetavarOrigin::Implicit(origin), _)) => {
-                format!(
-                    "the implicit argument '{}' of '{}'",
-                    origin.binder, origin.func
-                )
-            }
-            Some((MetavarOrigin::Witness(origin), _)) => {
-                format!(
-                    "the witness argument '{}' of '{}'",
-                    origin.binder, origin.func
-                )
-            }
+            Some((MetavarOrigin::Implicit(origin), _)) => super::callee(context, &origin.func)
+                .slot("implicit argument", &origin.binder, &spelling),
+            Some((MetavarOrigin::Witness(origin), _)) => super::callee(context, &origin.func).slot(
+                "witness argument",
+                &origin.binder,
+                &spelling,
+            ),
             // Named by the span the goal was born with, never by an occurrence's: substituted into a declaration's type, the goal rides the span of the binder it replaced, which would name the declaration rather than the `?`.
             Some((MetavarOrigin::Goal, _)) => match context.goal_span(*id) {
                 Some(span) => {
@@ -1264,7 +1262,7 @@ fn root_blocker_error(
 
     Some(
         Error::uninferred_implicit(
-            origin.func,
+            super::callee(context, &origin.func),
             origin.binder,
             resolved_for_display(context, &bound),
             true,

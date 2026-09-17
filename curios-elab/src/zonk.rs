@@ -881,12 +881,12 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
         ));
     }
 
-    // Materialize committed substitutions tolerantly, erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved), then fold operator witness projections back to their infix spelling — solved witnesses arrive from the splice as globals, unsolved ones keep their origin, abstract ones are binders of the goal's own scope, and the fold handles all three.
-    let operators = super::operator_table(context);
+    // Materialize committed substitutions tolerantly, erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved), then fold concept-method witness projections back to their source spelling, an operator's to infix and any other method's to its call — solved witnesses arrive from the splice as globals, unsolved ones keep their origin, abstract ones are binders of the goal's own scope, and the fold handles all three.
+    let methods = super::method_table(context);
     let context = &*context;
     let display = |binders: &BinderTypes, term: &Term| {
         super::denoise_for_display(
-            &operators,
+            &methods,
             binders,
             &super::refold_recs(
                 context,
@@ -1002,8 +1002,25 @@ fn zonk_level(context: &Context, term: &Term) -> Result<Term, Error> {
                             .map(|entry| entry.result.clone())
                             .unwrap_or_else(Term::type_ground);
                         let bound = zonk_term(context, &bound).unwrap_or(bound);
+                        // Folded as a goal report's terms are, against the scope the hole was born in, so a concept method projected off a witness reads as the method's call rather than as the witness's minted name.
+                        let binders: BinderTypes = Rc::new(
+                            entry
+                                .map(|entry| {
+                                    entry
+                                        .telescope
+                                        .iter()
+                                        .map(|(name, type_)| (name.clone(), type_.clone()))
+                                        .collect()
+                                })
+                                .unwrap_or_default(),
+                        );
+                        let bound = super::denoise_for_display(
+                            &super::method_table(context),
+                            &binders,
+                            &bound,
+                        );
                         Error::uninferred_implicit(
-                            origin.func.clone(),
+                            super::callee(context, &origin.func),
                             origin.binder.clone(),
                             bound,
                             entry.is_some_and(|entry| entry.proposition),
@@ -1020,7 +1037,7 @@ fn zonk_level(context: &Context, term: &Term) -> Result<Term, Error> {
                         // No embedding or shape diagnosis on this path: both read the witness table through a mutable context to reduce, zonk holds it immutably, and a goal that survives to the splice report has already been reported richer by the resolution drains.
                         Error::no_witness(
                             goal,
-                            origin.func.clone(),
+                            super::callee(context, &origin.func),
                             origin.binder.clone(),
                             None,
                             None,

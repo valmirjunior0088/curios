@@ -111,3 +111,22 @@ fn a_missing_witness_over_a_nominal_type_spells_its_name() {
         "{report}"
     );
 }
+
+// A premise a witness could not have discharged is named by the witness that needed it. A witness is anonymous, so its minted name is nothing a reader can find; its concept and the head it occupies are what coherence names it by.
+#[test]
+fn a_missing_premise_names_the_witness_that_needed_it() {
+    let report = error(
+        r#"
+        use /std/{Nat, Str, Show, List};
+        struct Foo: Type { Nat }
+        let s: Str = Show/show([Foo { 1 }]);
+        /std/print("unreachable")
+        "#,
+    );
+    assert!(
+        report.contains(
+            "no witness of Show(Foo) found\n  needed by the witness of 'Show' for head 'List' for its 1st 'use' premise"
+        ) && !report.contains("witness@"),
+        "{report}"
+    );
+}

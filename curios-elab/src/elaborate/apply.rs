@@ -1,6 +1,7 @@
 use {
     super::*,
-    crate::{ArgumentSite, SettleTier, exhausted_bound},
+    crate::{ArgumentSite, SettleTier, callee, exhausted_bound},
+    curios_core::Spelling,
 };
 
 pub(super) fn elaborate_func_type(
@@ -127,12 +128,8 @@ pub(super) fn insert_auto_argument(
         // An obligation already decided in the goal's favour is filled here rather than deferred, because *here* is where the facts that decide it are in scope. A scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established at the call and nowhere afterwards — a hole minted now and swept at the item boundary would be reduced with the refinement already out of scope, and would report as uninferred against a caller who did establish it.
         Plicity::Implicit => {
             let (reduced, inhabitant) = trivially_inhabited(context, type_).map_err(|error| {
-                exhausted_bound(
-                    context,
-                    error,
-                    type_,
-                    format!("the bound '{binder}' of '{func}'"),
-                )
+                let site = callee(context, func).slot("bound", &binder, &Spelling::default());
+                exhausted_bound(context, error, type_, site)
             })?;
             Ok(inhabitant.unwrap_or_else(|| {
                 // Whether the slot is a bound or a value is decided here, where the sort can still be asked, and kept on the birth record for the report an unsolved one becomes — with what the bound reduced to, when that is an inductive type the report can name.
