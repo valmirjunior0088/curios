@@ -641,7 +641,6 @@ dependencies = [
  "curios-num",
  "curios-profile",
  "curios-utilities",
- "curios-wasm",
 ]
 
 [[package]]
@@ -681,6 +680,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "curios-emit"
+version = "0.14.3"
+dependencies = [
+ "curios-abi",
+ "curios-cont",
+ "curios-num",
+ "curios-profile",
+ "curios-utilities",
+ "curios-wasm",
+]
+
+[[package]]
 name = "curios-ersd"
 version = "0.14.3"
 dependencies = [
@@ -697,7 +708,7 @@ name = "curios-js"
 version = "0.14.3"
 dependencies = [
  "curios-abi",
- "curios-cont",
+ "curios-emit",
  "curios-pipeline",
  "curios-runtime",
  "curios-text",
@@ -742,6 +753,7 @@ dependencies = [
  "curios-cont",
  "curios-core",
  "curios-elab",
+ "curios-emit",
  "curios-ersd",
  "curios-prelude",
  "curios-profile",

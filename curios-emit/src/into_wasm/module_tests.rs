@@ -1,11 +1,8 @@
 //! The emitted module's exports and dispatch table, and the loop shapes that need a dispatcher.
 
-//! Backend lowering coverage: build a [`CpsModule`](crate::CpsModule) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
+//! Backend lowering coverage: build a [`curios_cont::CpsModule`](curios_cont::CpsModule) directly, lower it with [`into_wasm`](crate::into_wasm), and assert the *shape* of the emitted wasm (its WAT text). These are the shape half of a split: the fixtures that once built the old region API and *executed* the module became shape inspection here, and end-to-end semantics in `curios/src/tests/codegen` and the native `.crs` corpus. `into_wasm` performs no optimization, so a `LetIntrinsic` over literal operands lowers one-for-one without constant folding, and the emitted instruction is exactly what codegen chose.
 
-use {
-    super::test_support::*,
-    crate::{CpsFunction, CpsIntrinsic, CpsModule, CpsNode, Panic},
-};
+use super::test_support::*;
 
 #[test]
 fn unknown_callee_dispatches_through_the_closure_table() {
@@ -57,7 +54,10 @@ fn an_irreducible_component_uses_exactly_one_localized_dispatcher() {
 /// A refusal reaches the user as a sentence: every module declares the `sys.panic` import and carries one message per refusal class, and a checked operation's overflow branch hands its class's message to the import before the `unreachable` — never a bare trap.
 #[test]
 fn a_refusal_calls_the_panic_import_with_its_class_message() {
-    let wat = wat(&intrinsic_main(CpsIntrinsic::NatAdd, vec![nat(1), nat(2)]));
+    let wat = wat(&intrinsic_main(
+        curios_cont::CpsIntrinsic::NatAdd,
+        vec![nat(1), nat(2)],
+    ));
     assert_contains(&wat, "(import \"sys\" \"panic\"");
     assert_eq!(
         count(&wat, "(global $refusal/"),
@@ -79,13 +79,13 @@ fn a_refusal_calls_the_panic_import_with_its_class_message() {
 /// A `Panic` node a lowering seated — the knot's forcing state — ends its block by handing its class's message to the import, the same sequence a refusal decided in the emitter emits.
 #[test]
 fn a_panic_node_reports_its_class() {
-    let mut module = CpsModule::new();
+    let mut module = curios_cont::CpsModule::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
-    let body = module.add_node(CpsNode::Panic(Panic::Cycle));
+    let body = module.add_node(curios_cont::CpsNode::Panic(curios_cont::Panic::Cycle));
     module.define_function(
         main,
-        CpsFunction {
+        curios_cont::CpsFunction {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,

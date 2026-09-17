@@ -1,7 +1,7 @@
-//! The wire-ABI bridge: a tiny GC module giving JavaScript accessors over the compiler's `$bytes` heap type — the flat payload every object-language `Bytes` value crosses the host boundary as — and over the uniform `$elems` list type a `List(T)` crosses as, with the i31 box a `Nat` element rides in. JS cannot touch wasm-GC arrays directly, so the harness instantiates this module and reads/builds byte strings and lists through its exports. It declares the compiler's own payload shapes (`curios_cont::bytes_sub_type`, `curios_cont::elems_sub_type`) — wasm-GC canonicalizes structural types, so the refs it produces and consumes are interchangeable with a compiled program's, no matter that the two modules were instantiated separately.
+//! The wire-ABI bridge: a tiny GC module giving JavaScript accessors over the compiler's `$bytes` heap type — the flat payload every object-language `Bytes` value crosses the host boundary as — and over the uniform `$elems` list type a `List(T)` crosses as, with the i31 box a `Nat` element rides in. JS cannot touch wasm-GC arrays directly, so the harness instantiates this module and reads/builds byte strings and lists through its exports. It declares the compiler's own payload shapes (`curios_emit::bytes_sub_type`, `curios_emit::elems_sub_type`) — wasm-GC canonicalizes structural types, so the refs it produces and consumes are interchangeable with a compiled program's, no matter that the two modules were instantiated separately.
 
 use {
-    curios_cont::{bytes_sub_type, elems_sub_type},
+    curios_emit::{bytes_sub_type, elems_sub_type},
     curios_wasm::{
         AbsHeapType, AddressType, BlockType, CompType, Export, Expr, Func, FuncName, FuncType,
         HeapType, Instr, LabelName, Limits, LocalName, MemArg, MemName, MemType, Module, NumType,

@@ -1,8 +1,5 @@
 use {
-    crate::{
-        CpsIntrinsic, CpsModule, CpsRow, CpsRowId, CpsSlot, Panic, Repr, cps::represent,
-        machine::lower, machine::structurize, machine::value_id, machine::value_name,
-    },
+    crate::machine::{lower, structurize, value_id, value_name},
     curios_abi::ForeignFunction,
     curios_num::{Integer, Natural},
     curios_utilities::{Grain, PackedBin, grown},
@@ -40,6 +37,7 @@ mod immediate;
 use immediate::*;
 
 mod refusal;
+use refusal::*;
 
 mod module_emitter;
 use module_emitter::*;
@@ -66,12 +64,12 @@ mod rope_tests;
 mod test_support;
 
 /// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built and its reducible control structurized into blocks and loops, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
-pub fn into_wasm(module: &CpsModule) -> curios_wasm::Module {
+pub fn into_wasm(module: &curios_cont::CpsModule) -> curios_wasm::Module {
     // On a segment of its own, as every other stage enters: the emitter below recurses per nested region, and its frames are large enough that a knot's few thousand lines of CPS outgrew the default test-thread stack.
     grown(|| into_wasm_within(module))
 }
 
-fn into_wasm_within(module: &CpsModule) -> curios_wasm::Module {
+fn into_wasm_within(module: &curios_cont::CpsModule) -> curios_wasm::Module {
     curios_profile::profile!("into_wasm");
     let raw = raw_locals(module);
     let machine = lower(module);
@@ -86,8 +84,8 @@ fn into_wasm_within(module: &CpsModule) -> curios_wasm::Module {
 /// The emission names the representation analysis decided to hold raw, and at which carrier.
 ///
 /// Translated here rather than threaded through the lowerings because both hops are total functions of an index: a machine value *is* its CPS value, and its emission name is that index spelled. Nothing has to be carried along to reconstruct it. A name codegen mints for itself — a hoisted literal, a wrapper argument, a closure shell — is not a CPS value, is therefore absent, and is held behind a reference, which is the correct default.
-fn raw_locals(module: &CpsModule) -> HashMap<EmissionValueName, Repr> {
-    represent::storage(module)
+fn raw_locals(module: &curios_cont::CpsModule) -> HashMap<EmissionValueName, curios_cont::Repr> {
+    curios_cont::storage(module)
         .into_iter()
         .filter_map(|(value, storage)| {
             storage
@@ -107,17 +105,17 @@ pub(crate) enum EmissionData {
     List(Vec<EmissionValueName>),
     Tuple(Vec<EmissionValueName>),
     /// A nominal row's construction, at that row's full width. Emitted as the row's own final struct type rather than an arity-keyed `$tuple/N`, which is what makes every read of it an exact cast.
-    Row(CpsRowId, Vec<EmissionArg>),
+    Row(curios_cont::CpsRowId, Vec<EmissionArg>),
     Closure(EmissionClosureName, Vec<EmissionValueName>),
 }
 
 /// One pure intrinsic computation over already-bound values — the expression vocabulary of the IR. Every variant produces exactly one value and has no effects (anything stateful is a [`EmissionTail`], per the IR's atomicity law), which is what licenses the optimizer to fold, dedupe, hoist, and drop `Eval` bindings freely.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCode {
-    /// One [`CpsIntrinsic`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar rows (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bin*`/`List*` rows are rope operations codegen services through shared helper functions.
-    Intrinsic(CpsIntrinsic, Vec<EmissionValueName>),
+    /// One [`curios_cont::CpsIntrinsic`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar rows (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bin*`/`List*` rows are rope operations codegen services through shared helper functions.
+    Intrinsic(curios_cont::CpsIntrinsic, Vec<EmissionValueName>),
     // `ListMap(src, f)`: map closure `f` over list `src` into a fresh list of the same length. Codegen lowers it to the shared `$list/map` rope helper: one allocation, one fill loop applying `f` per slot via `call_indirect`.
-    /// The list-map runtime helper call: list first, mapper second. Not an [`Intrinsic`](Self::Intrinsic) member because it is no [`CpsIntrinsic`] upstream — it runs a closure, so CPS carries it as the call-shaped `CpsIntrinsicCall` with a return continuation, and only structurization collapses it to a pure helper call.
+    /// The list-map runtime helper call: list first, mapper second. Not an [`Intrinsic`](Self::Intrinsic) member because it is no [`curios_cont::CpsIntrinsic`] upstream — it runs a closure, so CPS carries it as the call-shaped `CpsIntrinsicCall` with a return continuation, and only structurization collapses it to a pure helper call.
     ListMap(EmissionValueName, EmissionValueName),
 }
 
@@ -228,7 +226,7 @@ pub(crate) enum EmissionTail {
     Call(EmissionCallTarget),
     Host(EmissionHostTarget),
     Cell(EmissionCellTarget),
-    Panic(Panic),
+    Panic(curios_cont::Panic),
     Unreachable,
 }
 
@@ -292,7 +290,7 @@ pub(crate) struct EmissionModule {
     funcs: Vec<(EmissionFunctionName, EmissionFunction)>,
     entry: Option<EmissionFunctionName>,
     /// The nominal rows this module constructs and reads, each with its debug name and slot carriers. See [`EmissionData::Row`].
-    rows: Vec<(CpsRowId, CpsRow)>,
+    rows: Vec<(curios_cont::CpsRowId, curios_cont::CpsRow)>,
 }
 
 impl EmissionModule {
@@ -301,11 +299,11 @@ impl EmissionModule {
         Self::default()
     }
 
-    pub(crate) fn rows(&self) -> &[(CpsRowId, CpsRow)] {
+    pub(crate) fn rows(&self) -> &[(curios_cont::CpsRowId, curios_cont::CpsRow)] {
         &self.rows
     }
 
-    pub(crate) fn set_rows(&mut self, rows: Vec<(CpsRowId, CpsRow)>) {
+    pub(crate) fn set_rows(&mut self, rows: Vec<(curios_cont::CpsRowId, curios_cont::CpsRow)>) {
         self.rows = rows;
     }
 
@@ -340,7 +338,7 @@ impl EmissionModule {
         // A row slot declared at a closure arity names that arity's environment type, so the roster has to reach it whether or not the module ever builds a closure of that arity.
         for (_, row) in &self.rows {
             for slot in &row.slots {
-                if let CpsSlot::Closure(arity) = slot {
+                if let curios_cont::CpsSlot::Closure(arity) = slot {
                     arities.insert(*arity);
                 }
             }

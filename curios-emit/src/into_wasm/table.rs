@@ -2,9 +2,8 @@ use {
     super::{
         EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName, EmissionCode,
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
-        EmissionValueName, LoadAs, Panic,
+        EmissionValueName, LoadAs, refusal_const_name,
     },
-    crate::{CpsIntrinsic, CpsRowId, CpsSlot, Repr},
     curios_abi::ForeignFunction,
     std::{
         cell::{OnceCell, RefCell},
@@ -209,7 +208,10 @@ fn max_value_tuple_arity(value: &EmissionValue) -> usize {
     match value {
         EmissionValue::Pure(data) => max_tuple_arity(data),
         // Projecting field `index` reads through a tuple type of arity at least `index + 1`, even when no tuple of that arity is ever *built* in the module (e.g. the projected tuple only ever arrives from outside, or the producing array is empty). Sizing the tuple types from constructions alone misses it.
-        EmissionValue::Eval(EmissionCode::Intrinsic(CpsIntrinsic::TupleGet(index), _)) => index + 1,
+        EmissionValue::Eval(EmissionCode::Intrinsic(
+            curios_cont::CpsIntrinsic::TupleGet(index),
+            _,
+        )) => index + 1,
         _ => 0,
     }
 }
@@ -274,7 +276,7 @@ pub(crate) struct Table<'a> {
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
     tuple_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// One final struct type per nominal row, keyed by the row's identity rather than by an arity — which is what makes a row read an exact cast and gives Binaryen's closed-world passes distinct types to refine. Widths come from the Cont module's own row table, so a row whose constructions were all optimized away still declares its type (harmless, and a projection can outlive its constructions).
-    row_types: BTreeMap<CpsRowId, (curios_wasm::TypeName, Vec<CpsSlot>)>,
+    row_types: BTreeMap<curios_cont::CpsRowId, (curios_wasm::TypeName, Vec<curios_cont::CpsSlot>)>,
     envr_types: BTreeMap<usize, curios_wasm::TypeName>,
     clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// Keyed by the pair a wasm function type actually is — parameter count *and* result count — rather than by parameter count alone, so two functions of the same arity delivering different result shapes cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
@@ -285,13 +287,13 @@ pub(crate) struct Table<'a> {
     clsrs: HashMap<&'a EmissionClosureName, ClsrData<'a>>,
     funcs: HashMap<&'a EmissionFunctionName, FuncData<'a>>,
     /// The values the representation analysis decided to hold in a register, and at which carrier. A name absent here is held behind a reference, which is every synthetic name codegen mints for itself.
-    raw: &'a HashMap<EmissionValueName, Repr>,
+    raw: &'a HashMap<EmissionValueName, curios_cont::Repr>,
 }
 
 impl<'a> Table<'a> {
     pub(crate) fn new(
         module: &'a EmissionModule,
-        raw: &'a HashMap<EmissionValueName, Repr>,
+        raw: &'a HashMap<EmissionValueName, curios_cont::Repr>,
     ) -> Self {
         Self {
             raw,
@@ -586,11 +588,11 @@ impl<'a> Table<'a> {
             .clone()
     }
 
-    /// The instruction sequence a refusal is: the class's message, forced to its payload, handed to `sys.panic`, and the `unreachable` that keeps the block's type. Spelled once for the code emitter, the region context and the rope helpers alike. The message const is a rope leaf — [`Panic::data`] asserts as much — so it forces through `$bytes/force` exactly as a `Bytes` host operand does.
-    pub(crate) fn refuse_instrs(&self, panic: Panic) -> Vec<curios_wasm::Instr> {
+    /// The instruction sequence a refusal is: the class's message, forced to its payload, handed to `sys.panic`, and the `unreachable` that keeps the block's type. Spelled once for the code emitter, the region context and the rope helpers alike. The message const is a rope leaf — [`refusal_data`] asserts as much — so it forces through `$bytes/force` exactly as a `Bytes` host operand does.
+    pub(crate) fn refuse_instrs(&self, panic: curios_cont::Panic) -> Vec<curios_wasm::Instr> {
         vec![
             curios_wasm::Instr::GlobalGet {
-                global_name: self.find_const(&panic.const_name()),
+                global_name: self.find_const(&refusal_const_name(panic)),
             },
             curios_wasm::Instr::Call {
                 func_name: self.bytes_force_func(),
@@ -839,7 +841,13 @@ impl<'a> Table<'a> {
     /// Every declared row type, with the carrier of each slot its struct holds.
     pub(crate) fn row_types(
         &self,
-    ) -> impl Iterator<Item = (CpsRowId, curios_wasm::TypeName, &[CpsSlot])> {
+    ) -> impl Iterator<
+        Item = (
+            curios_cont::CpsRowId,
+            curios_wasm::TypeName,
+            &[curios_cont::CpsSlot],
+        ),
+    > {
         self.row_types
             .iter()
             .map(|(row, (type_name, slots))| (*row, type_name.clone(), slots.as_slice()))
@@ -848,20 +856,22 @@ impl<'a> Table<'a> {
     /// How a value is loaded to fill `slot`, and how a read of it is coerced back.
     ///
     /// A typed reference slot admits null, because the slots a narrow constructor leaves unwritten hold one; every other carrier is loaded exactly as any position naming it.
-    pub(crate) fn slot_load_as(&self, slot: CpsSlot) -> LoadAs {
+    pub(crate) fn slot_load_as(&self, slot: curios_cont::CpsSlot) -> LoadAs {
         match slot {
-            CpsSlot::Tag | CpsSlot::Nat => LoadAs::Nat,
-            CpsSlot::Int => LoadAs::Int,
-            CpsSlot::Flt => LoadAs::Flt,
-            CpsSlot::List => LoadAs::ConcreteOrNull(self.list_rope().base.clone()),
-            CpsSlot::Closure(arity) => LoadAs::ConcreteOrNull(self.find_envr_type(arity)),
-            CpsSlot::Row(row) => LoadAs::ConcreteOrNull(self.find_row_type(row)),
-            CpsSlot::Opaque => LoadAs::Null,
+            curios_cont::CpsSlot::Tag | curios_cont::CpsSlot::Nat => LoadAs::Nat,
+            curios_cont::CpsSlot::Int => LoadAs::Int,
+            curios_cont::CpsSlot::Flt => LoadAs::Flt,
+            curios_cont::CpsSlot::List => LoadAs::ConcreteOrNull(self.list_rope().base.clone()),
+            curios_cont::CpsSlot::Closure(arity) => {
+                LoadAs::ConcreteOrNull(self.find_envr_type(arity))
+            }
+            curios_cont::CpsSlot::Row(row) => LoadAs::ConcreteOrNull(self.find_row_type(row)),
+            curios_cont::CpsSlot::Opaque => LoadAs::Null,
         }
     }
 
     /// The carriers of `row`'s slots.
-    pub(crate) fn row_slots(&self, row: CpsRowId) -> &[CpsSlot] {
+    pub(crate) fn row_slots(&self, row: curios_cont::CpsRowId) -> &[curios_cont::CpsSlot] {
         &self
             .row_types
             .get(&row)
@@ -869,7 +879,7 @@ impl<'a> Table<'a> {
             .1
     }
 
-    pub(crate) fn find_row_type(&self, row: CpsRowId) -> curios_wasm::TypeName {
+    pub(crate) fn find_row_type(&self, row: curios_cont::CpsRowId) -> curios_wasm::TypeName {
         self.row_types
             .get(&row)
             .unwrap_or_else(|| panic!("`Table` lacks a type for row `{}`", row))
@@ -958,7 +968,7 @@ impl<'a> Table<'a> {
 
     /// Deliberately no iterating accessor: these are `HashMap`s, so iteration order varies per process, and every consumer here emits into the module — where order is load-bearing for a reproducible build. Walk [`EmissionModule`]'s own ordered sequence and resolve each name through this index instead, which is what `curios-utilities`'s `name!` means by carrying an explicit sequence where the order matters.
     /// The carrier this value is held at in a register, or `None` when it is held behind a reference.
-    pub(crate) fn raw_carrier(&self, value_name: &EmissionValueName) -> Option<Repr> {
+    pub(crate) fn raw_carrier(&self, value_name: &EmissionValueName) -> Option<curios_cont::Repr> {
         self.raw.get(value_name).copied()
     }
 
@@ -967,9 +977,12 @@ impl<'a> Table<'a> {
     /// The reference arms are unreachable — the analysis only ever answers a scalar carrier, since those are the only ones a register holds — and they answer `top_type` rather than panicking because a representation that cannot be held raw and a value that was never offered one are the same fact, and this function's job is to state it once.
     pub(crate) fn local_type(&self, value_name: &EmissionValueName) -> curios_wasm::ValType {
         match self.raw_carrier(value_name) {
-            Some(Repr::Nat | Repr::Int) => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
-            Some(Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
-            Some(Repr::Bin(_) | Repr::List | Repr::Ref) | None => Table::top_type(true),
+            Some(curios_cont::Repr::Nat | curios_cont::Repr::Int) => {
+                curios_wasm::ValType::Num(curios_wasm::NumType::I32)
+            }
+            Some(curios_cont::Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
+            Some(curios_cont::Repr::Bin(_) | curios_cont::Repr::List | curios_cont::Repr::Ref)
+            | None => Table::top_type(true),
         }
     }
 

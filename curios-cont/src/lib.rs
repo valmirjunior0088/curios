@@ -1,18 +1,11 @@
-//! Arena-backed pre-closure CPS and its Wasm backend.
+//! The Curios continuation IR: the arena-backed, pre-closure CPS graph the erased stage lowers into, and the optimizer that rewrites it.
 //!
-//! `curios_ersd::lower_to_cont` constructs the public [`CpsModule`]. [`optimize`] rewrites that high-CPS graph before [`into_wasm`](into_wasm()) performs delayed closure conversion, verifies a private closed machine CFG, structurizes reducible control into Wasm blocks and loops, and localizes dispatcher fallback to irreducible scopes.
+//! `curios_ersd::lower_to_cont` constructs the public [`CpsModule`], and [`optimize`] rewrites that high-CPS graph. Lowering it to WebAssembly is `curios-emit`'s, which depends on this crate rather than the reverse, so the erased stage that lowers into this IR never builds the emitter or `curios-wasm`. [`storage`] is the one decision this crate makes on the emitter's behalf: which values a machine register can hold, read off the same dataflow solver the passes share.
 //!
-//! Every CPS function owns a globally unique bodyless return continuation. Ordinary return is `ApplyCont(function.return_cont, [value])`; machine lowering recognizes that ID in the current-function context and emits `Return` without allocating a block. `Exit` is reserved for direct process termination.
-//!
-//! Every program value this crate emits lives in a GC reference — a struct, an array, or an `i31` — and never in linear memory. That is [WebAssembly-GC is the only target](../../documentation/design/toolchain/webassembly-gc-is-the-only-target.md), and this crate is where it is decided: `curios-wasm` models the whole envelope's linear-memory surface and refuses nothing, so a module emitted here declares no memory at all rather than being kept out of one.
+//! Every CPS function owns a globally unique bodyless return continuation. Ordinary return is `ApplyCont(function.return_cont, [value])`; `Exit` is reserved for direct process termination.
 
 mod cps;
 pub use cps::*;
-
-mod machine;
-
-mod into_wasm;
-pub use into_wasm::*;
 
 mod survey;
 pub use survey::*;

@@ -21,9 +21,9 @@ use {
 
 /// How one value is held between its definition and its uses.
 ///
-/// Ordered `Boxed < Raw(_) < Conflict`, with `Conflict` meaning "no single raw carrier serves every use", which the backend reads as boxed. Only an [`Offer::Open`] value can reach the top: everything else admits exactly one carrier, so a second demand is either that same carrier or filtered out. Answering a disagreement by dropping back to `Boxed` would move a fact *down* the order, and [`Solver::solve`] terminates on nothing having changed — so the conservative answer has to be a third point above both, not a return to the bottom.
+/// Ordered `Boxed < Raw(_) < Conflict`, with `Conflict` meaning "no single raw carrier serves every use", which the backend reads as boxed. Only an `Offer::Open` value can reach the top: everything else admits exactly one carrier, so a second demand is either that same carrier or filtered out. Answering a disagreement by dropping back to `Boxed` would move a fact *down* the order, and `Solver::solve` terminates on nothing having changed — so the conservative answer has to be a third point above both, not a return to the bottom.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Storage {
+pub enum Storage {
     /// Behind a reference — an `i31`, a `Flt` struct, or a heap shape.
     Boxed,
     /// In a machine register, at the named carrier.
@@ -34,7 +34,7 @@ pub(crate) enum Storage {
 
 impl Storage {
     /// The carrier to declare this value's local at, or `None` when it stays a reference.
-    pub(crate) fn raw_carrier(self) -> Option<Repr> {
+    pub fn raw_carrier(self) -> Option<Repr> {
         match self {
             Storage::Raw(carrier) => Some(carrier),
             Storage::Boxed | Storage::Conflict => None,
@@ -192,8 +192,8 @@ fn wire_carrier(wire: &WireType) -> Option<Repr> {
     }
 }
 
-/// Decide the storage of every value in the module.
-pub(crate) fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
+/// Decide the storage of every value in the module: which values `curios-emit` may hold in a machine register, and at which carrier.
+pub fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
     let offers = offers(module);
     let seeds = module.values.live_ids().collect::<Vec<_>>();
 

@@ -3,9 +3,8 @@ use {
         BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
         EmissionCellTarget, EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget,
         EmissionMatchTarget, EmissionTail, EmissionValueName, FieldData, Frame, FuncData,
-        LocalData, Panic, Table,
+        LocalData, Table,
     },
-    crate::{CpsSlot, Repr},
     curios_abi::{WireLeaf, WireReference, WireType},
     curios_utilities::{Entropy, Grain},
     std::{
@@ -306,9 +305,15 @@ impl<'a, 'b> Context<'a, 'b> {
     /// Coerce a value already on the stack in the register carrier its local is declared at, to what the reading position demands.
     ///
     /// The positions the analysis decided the carrier *for* want exactly what the register holds, and cost nothing — that is the whole point of deciding it. Every other position boxes the value back and then reads it the ordinary way, which is the "coercion at the disagreeing use" the analysis is built around: one `ref.i31` or one `struct.new`, set against the `ref.cast` plus `i31.get_u` that holding it boxed would have cost at *every* arithmetic use.
-    fn raw_as_instrs(&self, carrier: Repr, load_as: LoadAs) -> Vec<curios_wasm::Instr> {
+    fn raw_as_instrs(
+        &self,
+        carrier: curios_cont::Repr,
+        load_as: LoadAs,
+    ) -> Vec<curios_wasm::Instr> {
         match (carrier, &load_as) {
-            (Repr::Nat, LoadAs::Nat) | (Repr::Int, LoadAs::Int) | (Repr::Flt, LoadAs::Flt) => {
+            (curios_cont::Repr::Nat, LoadAs::Nat)
+            | (curios_cont::Repr::Int, LoadAs::Int)
+            | (curios_cont::Repr::Flt, LoadAs::Flt) => {
                 vec![]
             }
             _ => box_instr(&carrier, self.table())
@@ -446,12 +451,12 @@ impl<'a, 'b> Context<'a, 'b> {
     pub(crate) fn match_instrs(&self, target: &'a EmissionMatchTarget) -> Vec<curios_wasm::Instr> {
         // A match with no arm at all, or a tag outside every case with no default, is an arm the theory proved impossible: reaching it is the compiler's fault, and the refusal says so.
         if target.cases.is_empty() && target.default.is_none() {
-            return self.table().refuse_instrs(Panic::Invariant);
+            return self.table().refuse_instrs(curios_cont::Panic::Invariant);
         }
 
         let default_instructions = match &target.default {
             Some(target) => self.jump_instrs(target),
-            None => self.table().refuse_instrs(Panic::Invariant),
+            None => self.table().refuse_instrs(curios_cont::Panic::Invariant),
         };
 
         let sorted: Vec<(u32, &EmissionJumpTarget)> =
@@ -686,7 +691,7 @@ impl<'a, 'b> Context<'a, 'b> {
             EmissionTail::Cell(cell) => self.cell_instrs(cell),
             EmissionTail::Panic(panic) => self.table().refuse_instrs(*panic),
             // An arm the theory proved impossible, carried down as `CpsNode::Unreachable`; reaching it is a compiler bug, which is what the refusal reports.
-            EmissionTail::Unreachable => self.table().refuse_instrs(Panic::Invariant),
+            EmissionTail::Unreachable => self.table().refuse_instrs(curios_cont::Panic::Invariant),
         }
     }
 
@@ -879,20 +884,23 @@ pub(crate) enum LoadAs {
 
 /// How a value in its register carrier is boxed back into a reference: an `i31ref` for the scalar carriers, the `Flt` struct for `f64`, and nothing at all for a representation that already names one.
 ///
-/// The dual of [`LoadAs::of`], and the reason this reads a [`Repr`] rather than a dedicated two-variant enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
+/// The dual of [`LoadAs::of`], and the reason this reads a [`curios_cont::Repr`] rather than a dedicated two-variant enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
 /// The zero of `carrier`, or the boxed zero when the destination holds a reference.
 ///
 /// This is what a filler is materialised as, and the reason it is a function of the *destination* rather than of the filler: a slot's carrier is settled by the representation analysis from the uses of the parameter it feeds, long after the pass that placed the filler. The arms mirror [`Table::local_type`] exactly, including the reference carriers that analysis never answers — a local declared at the top reference type takes the boxed zero, whichever way it got there.
 /// The zero of one row slot: the register zero for a scalar carrier, a null for a declared heap type, and the boxed zero for the uniform reference.
 ///
 /// A typed reference slot takes `ref.null none` rather than the boxed zero because the boxed zero is not of its type — and because null is what a filler *means*, where an `i31` zero is a perfectly good `Nat` standing in a position that holds no value at all.
-pub(crate) fn slot_zero_instrs(slot: CpsSlot) -> Vec<curios_wasm::Instr> {
+pub(crate) fn slot_zero_instrs(slot: curios_cont::CpsSlot) -> Vec<curios_wasm::Instr> {
     match slot {
-        CpsSlot::Tag | CpsSlot::Nat | CpsSlot::Int => {
+        curios_cont::CpsSlot::Tag | curios_cont::CpsSlot::Nat | curios_cont::CpsSlot::Int => {
             vec![curios_wasm::Instr::I32Const { value: 0 }]
         }
-        CpsSlot::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
-        CpsSlot::List | CpsSlot::Closure(_) | CpsSlot::Row(_) | CpsSlot::Opaque => null_instrs(),
+        curios_cont::CpsSlot::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
+        curios_cont::CpsSlot::List
+        | curios_cont::CpsSlot::Closure(_)
+        | curios_cont::CpsSlot::Row(_)
+        | curios_cont::CpsSlot::Opaque => null_instrs(),
     }
 }
 
@@ -904,42 +912,44 @@ pub(crate) fn null_instrs() -> Vec<curios_wasm::Instr> {
 }
 
 /// Absence in a register: the zero of the carrier, since a register has no null. A packed carrier is small-canonical, so its zero is the empty immediate.
-pub(crate) fn zero_instrs(carrier: Repr) -> Vec<curios_wasm::Instr> {
+pub(crate) fn zero_instrs(carrier: curios_cont::Repr) -> Vec<curios_wasm::Instr> {
     match carrier {
-        Repr::Nat | Repr::Int => vec![curios_wasm::Instr::I32Const { value: 0 }],
-        Repr::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
-        Repr::Bin(_) => vec![
+        curios_cont::Repr::Nat | curios_cont::Repr::Int => {
+            vec![curios_wasm::Instr::I32Const { value: 0 }]
+        }
+        curios_cont::Repr::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
+        curios_cont::Repr::Bin(_) => vec![
             curios_wasm::Instr::I32Const { value: 0 },
             curios_wasm::Instr::RefI31,
         ],
-        Repr::List | Repr::Ref => null_instrs(),
+        curios_cont::Repr::List | curios_cont::Repr::Ref => null_instrs(),
     }
 }
 
-pub(crate) fn box_instr(repr: &Repr, table: &Table) -> Option<curios_wasm::Instr> {
+pub(crate) fn box_instr(repr: &curios_cont::Repr, table: &Table) -> Option<curios_wasm::Instr> {
     match repr {
-        Repr::Nat | Repr::Int => Some(curios_wasm::Instr::RefI31),
-        Repr::Flt => Some(curios_wasm::Instr::StructNew {
+        curios_cont::Repr::Nat | curios_cont::Repr::Int => Some(curios_wasm::Instr::RefI31),
+        curios_cont::Repr::Flt => Some(curios_wasm::Instr::StructNew {
             type_name: table.flt_type(),
         }),
-        Repr::Bin(_) | Repr::List | Repr::Ref => None,
+        curios_cont::Repr::Bin(_) | curios_cont::Repr::List | curios_cont::Repr::Ref => None,
     }
 }
 
 impl LoadAs {
     /// The load that realises a representation the IR states.
     ///
-    /// This is the whole of the translation between [`Repr`] — what an operation declares it reads — and the instructions that deliver it. Every operand load in the emitter resolves through here rather than naming a `LoadAs` directly, so the demand has one statement (the intrinsic roster) and one realisation (this function), and the two cannot drift apart.
+    /// This is the whole of the translation between [`curios_cont::Repr`] — what an operation declares it reads — and the instructions that deliver it. Every operand load in the emitter resolves through here rather than naming a `LoadAs` directly, so the demand has one statement (the intrinsic roster) and one realisation (this function), and the two cannot drift apart.
     ///
     /// `Repr::Ref` maps to `Null` rather than `NonNull`: an uninterpreted operand is passed along exactly as stored, and asserting non-nullness of a value nothing reads would emit an instruction for no reader.
-    pub(crate) fn of(repr: &Repr) -> Self {
+    pub(crate) fn of(repr: &curios_cont::Repr) -> Self {
         match repr {
-            Repr::Nat => Self::Nat,
-            Repr::Int => Self::Int,
-            Repr::Flt => Self::Flt,
-            Repr::Bin(grain) => Self::Bin(*grain),
-            Repr::List => Self::List,
-            Repr::Ref => Self::Null,
+            curios_cont::Repr::Nat => Self::Nat,
+            curios_cont::Repr::Int => Self::Int,
+            curios_cont::Repr::Flt => Self::Flt,
+            curios_cont::Repr::Bin(grain) => Self::Bin(*grain),
+            curios_cont::Repr::List => Self::List,
+            curios_cont::Repr::Ref => Self::Null,
         }
     }
 }

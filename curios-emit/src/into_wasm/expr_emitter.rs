@@ -2,9 +2,8 @@ use {
     super::{
         BlockData, CodeEmitter, Context, EmissionArg, EmissionBlockName, EmissionBody,
         EmissionData, EmissionValue, EmissionValueName, Frame, ImmediateLayout, LayoutItem, LoadAs,
-        LocalData, Panic, region_layout, slot_zero_instrs,
+        LocalData, region_layout, slot_zero_instrs,
     },
-    crate::cps::{int_fits_envelope, nat_fits_envelope},
     curios_utilities::{Grain, recurse},
     std::collections::{BTreeMap, HashMap, HashSet},
 };
@@ -62,8 +61,15 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         match value {
             EmissionData::Nat(value) => {
                 // The carriers are unbounded from here up, so a value the envelope cannot box traps at its materialization point — the same backend boundary where the checked runtime computation of it would have trapped.
-                let Some(value) = nat_fits_envelope(value).then(|| value.to_u32()).flatten() else {
-                    self.emit_instrs(self.context.table().refuse_instrs(Panic::NatCarrier));
+                let Some(value) = curios_cont::nat_fits_envelope(value)
+                    .then(|| value.to_u32())
+                    .flatten()
+                else {
+                    self.emit_instrs(
+                        self.context
+                            .table()
+                            .refuse_instrs(curios_cont::Panic::NatCarrier),
+                    );
                     return;
                 };
 
@@ -76,8 +82,15 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             }
             EmissionData::Int(value) => {
                 // In range exactly when the bit below the sign agrees with it — the signed analogue of the `Nat` check above; out of range traps at the materialization point instead of silently wrapping to the envelope.
-                let Some(value) = int_fits_envelope(value).then(|| value.to_i32()).flatten() else {
-                    self.emit_instrs(self.context.table().refuse_instrs(Panic::IntCarrier));
+                let Some(value) = curios_cont::int_fits_envelope(value)
+                    .then(|| value.to_i32())
+                    .flatten()
+                else {
+                    self.emit_instrs(
+                        self.context
+                            .table()
+                            .refuse_instrs(curios_cont::Panic::IntCarrier),
+                    );
                     return;
                 };
 
@@ -216,17 +229,31 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     fn emit_let_pure(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
         match (self.context.table().raw_carrier(value_name), value) {
             (Some(_), EmissionData::Nat(value)) => {
-                match nat_fits_envelope(value).then(|| value.to_u32()).flatten() {
+                match curios_cont::nat_fits_envelope(value)
+                    .then(|| value.to_u32())
+                    .flatten()
+                {
                     Some(value) => self.emit_instr(curios_wasm::Instr::I32Const {
                         value: value as i32,
                     }),
-                    None => self.emit_instrs(self.context.table().refuse_instrs(Panic::NatCarrier)),
+                    None => self.emit_instrs(
+                        self.context
+                            .table()
+                            .refuse_instrs(curios_cont::Panic::NatCarrier),
+                    ),
                 }
             }
             (Some(_), EmissionData::Int(value)) => {
-                match int_fits_envelope(value).then(|| value.to_i32()).flatten() {
+                match curios_cont::int_fits_envelope(value)
+                    .then(|| value.to_i32())
+                    .flatten()
+                {
                     Some(value) => self.emit_instr(curios_wasm::Instr::I32Const { value }),
-                    None => self.emit_instrs(self.context.table().refuse_instrs(Panic::IntCarrier)),
+                    None => self.emit_instrs(
+                        self.context
+                            .table()
+                            .refuse_instrs(curios_cont::Panic::IntCarrier),
+                    ),
                 }
             }
             (Some(_), &EmissionData::Flt(value)) => {

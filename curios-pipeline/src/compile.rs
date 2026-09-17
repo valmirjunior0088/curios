@@ -4,12 +4,12 @@ use {
     super::{Stage, compile_unit_over},
     curios_abi::ForeignStore,
     curios_cert::{Globals, Kernel, Verdict, recheck_module_measured, recheck_module_verdicts},
-    curios_cont::into_wasm,
     curios_core::{Consumption, Intrinsic, Term, derived_binder_floor},
     curios_elab::{
         Context, Established, FinalizedModule, Mode, Resumed, Tail, elaborate_and_zonk_unit,
         elaborate_and_zonk_unit_reporting, erase_unit,
     },
+    curios_emit::into_wasm,
     curios_ersd::lower_to_cont,
     curios_text::{
         BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, UnitSource,

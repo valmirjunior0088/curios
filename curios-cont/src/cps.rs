@@ -1,6 +1,6 @@
 //! Arena-backed high CPS.
 //!
-//! The surface of this module is intentionally small: Ersd lowering constructs a [`CpsModule`], the optimizer mutates that graph through its checked mutation API, and backend lowering consumes it. Stable integer identities, tombstoned arena entries, and deterministic traversal are representation invariants rather than optimizer conventions. Use information is derived on demand (see [`CpsModule::value_use_counts`]) rather than maintained as a shadow arena.
+//! The surface of this module is intentionally small: Ersd lowering constructs a [`CpsModule`], the optimizer mutates that graph through its checked mutation API, and `curios-emit`'s lowering to WebAssembly consumes it. Stable integer identities, tombstoned arena entries, and deterministic traversal are representation invariants rather than optimizer conventions. Use information is derived on demand (see [`CpsModule::value_use_counts`]) rather than maintained as a shadow arena.
 
 use {
     curios_abi::ForeignFunction,
@@ -15,20 +15,20 @@ use {
 
 /// How many value bits the scalar envelope holds — the width of an `i31ref`'s payload, and the one width in the whole pipeline that is a fact about the target rather than about the language.
 ///
-/// It is named here rather than at each use because two readers need it and they are not the same kind of reader: [`CpsIntrinsic::effect`] states *which* operations it makes partial, and `into_wasm` emits the guards that enforce it. Above this crate nothing knows the number — `curios-core` computes unbounded and `curios-ersd`'s constants carry whatever the theory produced — which is why every guard for it lives below, and why this constant may not travel upward.
-pub(crate) const ENVELOPE_BITS: i32 = 31;
+/// It is named here rather than at each use because two readers need it and they are not the same kind of reader: [`CpsIntrinsic::effect`] states *which* operations it makes partial, and `curios-emit`'s `into_wasm` emits the guards that enforce it. Above this crate nothing knows the number — `curios-core` computes unbounded and `curios-ersd`'s constants carry whatever the theory produced — which is why every guard for it lives below, and why this constant may not travel upward.
+pub const ENVELOPE_BITS: i32 = 31;
 
 /// Whether `value` is a `Nat` the envelope can box.
 ///
 /// Stated here beside the width rather than at the materialization site, because two readers ask it — the emitter, which must raise a refusal instead of a constant, and constant hoisting, which must keep such a value out of the const table since a trap is no constant instruction.
-pub(crate) fn nat_fits_envelope(value: &Natural) -> bool {
+pub fn nat_fits_envelope(value: &Natural) -> bool {
     value
         .to_u32()
         .is_some_and(|value| value >> ENVELOPE_BITS == 0)
 }
 
 /// Whether `value` is an `Int` the envelope can box: in range exactly when the bit below the sign agrees with it.
-pub(crate) fn int_fits_envelope(value: &Integer) -> bool {
+pub fn int_fits_envelope(value: &Integer) -> bool {
     value
         .to_i32()
         .is_some_and(|value| value >> (ENVELOPE_BITS - 1) == value >> ENVELOPE_BITS)
@@ -42,7 +42,7 @@ id!(CpsContId, "~k");
 id!(CpsRowId, "~r");
 
 impl CpsFunId {
-    pub(crate) fn from_index(index: usize) -> Self {
+    pub fn from_index(index: usize) -> Self {
         Self(index as u32)
     }
 }
@@ -320,7 +320,7 @@ impl CpsIntrinsic {
 
     /// What this operation does beyond producing its result, *as emitted* — which is not what it means in the language.
     ///
-    /// The `MayTrap` set is the union of two unrelated reasons, and both belong at this layer rather than above it. A division, a float-to-integer conversion, an index and a projection are partial in the language, and `curios-ersd`'s `Semantics` says so too. The arithmetic entries are not: `Nat` addition wraps its `u32` carrier and cannot fail, and it is *this crate's* i31 envelope that makes a result leaving 31 bits trap instead of changing, per `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`. So every operation `into_wasm` guards belongs here, and none of it may travel upward.
+    /// The `MayTrap` set is the union of two unrelated reasons, and both belong at this layer rather than above it. A division, a float-to-integer conversion, an index and a projection are partial in the language, and `curios-ersd`'s `Semantics` says so too. The arithmetic entries are not: `Nat` addition wraps its `u32` carrier and cannot fail, and it is *this crate's* i31 envelope that makes a result leaving 31 bits trap instead of changing, per `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`. So every operation `curios-emit`'s `into_wasm` guards belongs here, and none of it may travel upward.
     ///
     /// Exhaustive on purpose. This was a wildcard defaulting to `Total`, which silently classified seven guarded operations as deletable — the same hazard the representation table is exhaustive to avoid, one accessor over.
     pub fn effect(self) -> CpsIntrinsicEffect {
@@ -549,7 +549,7 @@ pub enum CpsNode {
     Unreachable,
 }
 
-/// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `CpsNode::Panic` carries one; the emitter's own checks — an overflow, a read past the end, a `Flt` decode — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`into_wasm/refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
+/// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `CpsNode::Panic` carries one; the emitter's own checks — an overflow, a read past the end, a `Flt` decode — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`curios-emit`'s `into_wasm/refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panic {
     /// A `Nat` result or conversion the i31 carrier cannot hold.
@@ -564,6 +564,18 @@ pub enum Panic {
     Cycle,
     /// An arm the theory proved impossible was taken: a compiler bug, never the program's.
     Invariant,
+}
+
+impl Panic {
+    /// Every class, in declaration order: the emitter mints one message constant for each.
+    pub const ALL: [Panic; 6] = [
+        Panic::NatCarrier,
+        Panic::IntCarrier,
+        Panic::OutOfBounds,
+        Panic::FltDecode,
+        Panic::Cycle,
+        Panic::Invariant,
+    ];
 }
 
 impl fmt::Display for Panic {
@@ -970,7 +982,7 @@ impl CpsModule {
     /// A function's returns are its edges to its own return sentinel, so the arity those edges carry *is* its result count — nothing declares it, and adding a field to say so would mean restating it at every construction site rather than reading it off the one place that already knows. A function with no such edge returns through some tail position instead: a foreign call, a cell operation, or a `ListMap` hands back what that operation produces, a closure call hands back the one value its shared type carries, and a tail call to a known function hands back whatever *that* function does — which is why the last of those is resolved by propagation rather than locally. A function with none of those neither returns nor is called for a result, and takes the one value every function carried before any protocol widened it.
     ///
     /// Where a function has both a return edge and a constrained tail position, the edge is taken and the disagreement is left to [`CpsModule::verify`], whose business it is to report rather than to paper over.
-    pub(crate) fn return_arities(&self) -> BTreeMap<CpsFunId, usize> {
+    pub fn return_arities(&self) -> BTreeMap<CpsFunId, usize> {
         let mut settled = BTreeMap::<CpsFunId, usize>::new();
         let mut inherits = BTreeMap::<CpsFunId, BTreeSet<CpsFunId>>::new();
 
@@ -1899,7 +1911,7 @@ impl CpsModule {
     }
 }
 
-pub(crate) fn atoms(node: &CpsNode) -> Vec<&CpsAtom> {
+pub fn atoms(node: &CpsNode) -> Vec<&CpsAtom> {
     let mut output = Vec::new();
     match node {
         CpsNode::LetValue { value, .. } => match value {
@@ -1988,7 +2000,7 @@ mod optimize;
 mod origin;
 mod protocol;
 mod reachable;
-pub(crate) mod represent;
+mod represent;
 mod simplify;
 mod specialize;
 mod uncurry;
@@ -2017,6 +2029,7 @@ pub(crate) use dataflow::*;
 pub(crate) use demand::*;
 pub use optimize::optimize;
 pub(crate) use origin::*;
+pub use represent::*;
 
 impl fmt::Display for CpsModule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

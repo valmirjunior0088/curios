@@ -6,9 +6,8 @@ use {
     super::{
         EmissionArg, EmissionBody, EmissionCallTarget, EmissionCellTarget, EmissionCode,
         EmissionData, EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue,
-        EmissionValueName, Panic,
+        EmissionValueName, refusal_const_name, refusal_data,
     },
-    crate::cps::{int_fits_envelope, nat_fits_envelope},
     curios_utilities::{Grain, PackedBin},
     std::collections::HashMap,
 };
@@ -64,10 +63,10 @@ pub(crate) fn hoist_consts(module: &mut EmissionModule) {
         hoist_region(&mut func.region, &mut interner);
     }
     module.consts = interner.consts;
-    // The refusal messages, after everything the program hoisted: `Table` reads its const index off this vector, and the code emitter loads a message by the name `Panic::const_name` spells.
-    module
-        .consts
-        .extend(Panic::ALL.map(|class| (class.const_name(), class.data())));
+    // The refusal messages, after everything the program hoisted: `Table` reads its const index off this vector, and the code emitter loads a message by the name `refusal_const_name` spells.
+    module.consts.extend(
+        curios_cont::Panic::ALL.map(|class| (refusal_const_name(class), refusal_data(class))),
+    );
 }
 
 /// Hoist one function's region tree: collect and intern its constants, then drop the hoisted bindings and rename every surviving occurrence. Two phases because a scalar may be demanded by an aggregate bound after uses of the scalar were already walked.
@@ -85,14 +84,20 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
         match data {
             // An out-of-range scalar materialises as a trap, which is no constant instruction and must stay at its execution point rather than fail validation or trap at instantiation — so it is never a candidate, which also keeps every aggregate over it inline.
             EmissionData::Nat(value) => {
-                if let Some(value) = nat_fits_envelope(value).then(|| value.to_u32()).flatten() {
+                if let Some(value) = curios_cont::nat_fits_envelope(value)
+                    .then(|| value.to_u32())
+                    .flatten()
+                {
                     consts
                         .scalars
                         .insert(name.clone(), (ConstKey::Nat(value), data.clone()));
                 }
             }
             EmissionData::Int(value) => {
-                if let Some(value) = int_fits_envelope(value).then(|| value.to_i32()).flatten() {
+                if let Some(value) = curios_cont::int_fits_envelope(value)
+                    .then(|| value.to_i32())
+                    .flatten()
+                {
                     consts
                         .scalars
                         .insert(name.clone(), (ConstKey::Int(value), data.clone()));

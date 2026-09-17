@@ -5,7 +5,6 @@ use {
         RopeEmitter, Table, bytes_sub_type, cell_sub_type, elems_sub_type, flt_sub_type,
         rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
     },
-    crate::CpsSlot,
     curios_abi::{ENTRY, EXIT, Namespace, PANIC, WireType},
     curios_utilities::{Grain, PackedBin},
     std::iter,
@@ -258,7 +257,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// One final struct per nominal row: for a family, slot zero the tag and the rest the payload slots its constructors share; for a product, the schema's row outright. Final and unrelated to every other type, so a read of one is an exact cast — the reason rows are keyed here rather than by arity — and each field is declared at the carrier [`CpsSlot`] names rather than uniformly `anyref`, which is what lets a scalar payload live in a register and a list payload arrive already at its rope base.
+    /// One final struct per nominal row: for a family, slot zero the tag and the rest the payload slots its constructors share; for a product, the schema's row outright. Final and unrelated to every other type, so a read of one is an exact cast — the reason rows are keyed here rather than by arity — and each field is declared at the carrier [`curios_cont::CpsSlot`] names rather than uniformly `anyref`, which is what lets a scalar payload live in a register and a list payload arrive already at its rope base.
     ///
     /// A family's tag is `i8`. Its constructor count is bounded by its declaration and no corpus family approaches the byte, so the discriminant packs into one and reads back through `struct.get_u` with no unboxing at all — the store side is the raw index, where a uniform slot wrote an `i31` reference.
     fn emit_row_types(&mut self) {
@@ -307,7 +306,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     /// The wasm storage type one row slot is declared at.
-    fn slot_storage_type(&self, slot: CpsSlot) -> curios_wasm::StorageType {
+    fn slot_storage_type(&self, slot: curios_cont::CpsSlot) -> curios_wasm::StorageType {
         let reference = |type_name| {
             curios_wasm::StorageType::Val(curios_wasm::ValType::Ref(curios_wasm::RefType {
                 is_nullable: true,
@@ -315,17 +314,19 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             }))
         };
         match slot {
-            CpsSlot::Tag => curios_wasm::StorageType::Packed(curios_wasm::PackedType::I8),
-            CpsSlot::Nat | CpsSlot::Int => {
+            curios_cont::CpsSlot::Tag => {
+                curios_wasm::StorageType::Packed(curios_wasm::PackedType::I8)
+            }
+            curios_cont::CpsSlot::Nat | curios_cont::CpsSlot::Int => {
                 curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::I32))
             }
-            CpsSlot::Flt => {
+            curios_cont::CpsSlot::Flt => {
                 curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::F64))
             }
-            CpsSlot::List => reference(self.table.list_rope().base.clone()),
-            CpsSlot::Closure(arity) => reference(self.table.find_envr_type(arity)),
-            CpsSlot::Row(row) => reference(self.table.find_row_type(row)),
-            CpsSlot::Opaque => curios_wasm::StorageType::Val(Table::top_type(true)),
+            curios_cont::CpsSlot::List => reference(self.table.list_rope().base.clone()),
+            curios_cont::CpsSlot::Closure(arity) => reference(self.table.find_envr_type(arity)),
+            curios_cont::CpsSlot::Row(row) => reference(self.table.find_row_type(row)),
+            curios_cont::CpsSlot::Opaque => curios_wasm::StorageType::Val(Table::top_type(true)),
         }
     }
 

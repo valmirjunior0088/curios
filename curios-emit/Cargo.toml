@@ -1,9 +1,9 @@
 [package]
-name = "curios-cont"
+name = "curios-emit"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios continuation-passing IR: the arena-backed CPS graph and its optimization"
+description = "The Curios WebAssembly emission: lowering an optimized continuation module to a WebAssembly-GC module"
 
 [lints]
 workspace = true
@@ -16,3 +16,5 @@ curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-utilities = { workspace = true }
 curios-num = { workspace = true }
+curios-cont = { workspace = true }
+curios-wasm = { workspace = true }
