@@ -204,7 +204,7 @@ fn bin_slice_is_a_monoid_citizen() {
                 x[
                     ..Bytes/slice(
                         b, s, l1,
-                        @Nat/Le/trans(Nat/Le/of_ind(Nat/Le/Ind/add_r(s + l1, l2)), total)),
+                        @Nat/Le/trans(Nat/Le/add_r(s + l1, l2), total)),
                     ..Bytes/slice(b, s + l1, l2, @total)],
                 Bytes/slice(b, s, l1 + l2, @total)) =
             Eq/refl();
@@ -248,7 +248,7 @@ fn list_slice_is_a_monoid_citizen() {
                 [
                     ..List/slice(
                         @T, a, s, l1,
-                        @Nat/Le/trans(Nat/Le/of_ind(Nat/Le/Ind/add_r(s + l1, l2)), total)),
+                        @Nat/Le/trans(Nat/Le/add_r(s + l1, l2), total)),
                     ..List/slice(@T, a, s + l1, l2, @total)],
                 List/slice(@T, a, s, l1 + l2, @total)) =
             Eq/refl();

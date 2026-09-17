@@ -396,10 +396,14 @@ fn type_level_operator_indices_stay_convertible() {
     assert_eq!(
         run(r#"
             use /std/{Nat, Str, Io};
-            pub let step(@a : Nat, @b : Nat, p : Nat/Le/Ind(a, b)) -> Nat/Le/Ind(a + 1, b + 1) =
-                Nat/Le/Ind/s(p);
-            let base : Nat/Le/Ind(0, 1) = Nat/Le/Ind/z();
-            let bumped : Nat/Le/Ind(1, 2) = step(base);
+            pub induct Le: (Nat, Nat) -> pub Prop
+            | z(@n : Nat): (0, n)
+            | s(@a : Nat, @b : Nat, prev : Le(a, b)): (a + 1, b + 1)
+            end
+            pub let step(@a : Nat, @b : Nat, p : Le(a, b)) -> Le(a + 1, b + 1) =
+                Le/s(p);
+            let base : Le(0, 1) = Le/z();
+            let bumped : Le(1, 2) = step(base);
             let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
             /std/Io/pure(())
         "#),

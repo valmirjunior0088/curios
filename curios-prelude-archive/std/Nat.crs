@@ -145,12 +145,12 @@ satisfy Ord(Nat) {
     ord = cmp,
 }
 
---- `a < b`'s bridges to the inductive order.
+--- `a < b`'s laws, and its crossings with `a <= b`.
 ---
---- Where a proof has to recurse, `ind_of_lt` crosses into `Le/Ind`.
+--- Proved by recursion on the numbers rather than on evidence: one more on each side of a decided comparison cancels, so the hypothesis about `a + 1` and `b + 1` already is the one about `a` and `b`.
 pub mod Lt;
 
---- `a <= b`'s crossings with the inductive form beneath it.
+--- `a <= b`'s laws.
 ---
---- Decided, so a guard already taken discharges it for free but nothing can recurse over it; `Ind` is the same relation by induction, which a proof can walk. `of_ind` and `to_ind` are the passage between the two.
+--- Decided, so a guard already taken discharges it for free; a proof that has to recurse walks the numbers, as `Lt`'s do.
 pub mod Le;

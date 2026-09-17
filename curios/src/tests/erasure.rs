@@ -10,7 +10,11 @@ fn prop_irrelevance_equates_distinct_proofs() {
     // Definitional proof irrelevance: `Le` is a strict proposition, so any two proofs of `Le(a, b)` are convertible — `refl` checks at `Eq(p, q)` even though `p` and `q` are distinct binders. Without the `Prop` short-circuit in `convert`, `refl : Eq(p, p)` would not check against `Eq(p, q)`.
     let source = r#"
         use /std/{Str, Eq, Nat, Io};
-        let irrelevant(a : Nat, b : Nat, p : Nat/Le/Ind(a, b), q : Nat/Le/Ind(a, b))
+        induct Le: (Nat, Nat) -> pub Prop
+        | z(@n : Nat): (0, n)
+        | s(@a : Nat, @b : Nat, prev : Le(a, b)): (a + 1, b + 1)
+        end
+        let irrelevant(a : Nat, b : Nat, p : Le(a, b), q : Le(a, b))
             -> Eq(p, q) =
             Eq/refl();
         let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
@@ -47,15 +51,23 @@ fn large_elimination_of_a_prop_is_rejected() {
     // The large-elimination guard: `Le` is a multi-constructor proposition, so matching it into `Nat` (data) would observe which constructor it was, breaking irrelevance — rejected. The permitted cases (empty `False` via `absurd`, singleton `Eq` via `subst`, and prop→prop) are exercised by std.
     let source = r#"
         use /std/{Str, Nat, Io};
-        let bad(a : Nat, b : Nat, p : Nat/Le/Ind(a, b)) -> Nat =
-            match p : (_) => Nat
-            | z(_) => 0
-            | s(_, _, _) => 1
+        induct Le: (Nat, Nat) -> pub Prop
+        | z(@n : Nat): (0, n)
+        | s(@a : Nat, @b : Nat, prev : Le(a, b)): (a + 1, b + 1)
+        end
+        let bad(a : Nat, b : Nat, p : Le(a, b)) -> Nat =
+            match p : (_, _, _) => Nat
+            | z(@_) => 0
+            | s(@_, @_, _) => 1
             end;
         let _ = Io/write(Io/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
-    error(source);
+    let error = error(source);
+    assert!(
+        error.contains("cannot eliminate the proposition"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]

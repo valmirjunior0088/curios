@@ -116,7 +116,7 @@ pub let take_continuations(
     off: Nat,
     remaining: Nat,
     acc: Nat,
-    bound: Nat/Le/Ind(off + remaining, Bytes/len(b)),
+    bound: Nat/Le(off + remaining, Bytes/len(b)),
 ) -> {Nat, Nat} =
     match remaining
     | 0 => (acc, off)
@@ -130,8 +130,12 @@ pub let take_continuations(
                     Bytes/get(
                         b,
                         off,
-                        @Nat/Lt/of_ind_succ(
-                            Nat/Le/Ind/trans(Nat/Le/Ind/s(Nat/Le/Ind/add_r(off, pred)), bound))))
+                        @Nat/Lt/lt_of_lt_le(
+                            off,
+                            off + (pred + 1),
+                            Bytes/len(b),
+                            True/qed(),
+                            bound)))
                     - 0x80),
             bound)
     end;
@@ -334,28 +338,22 @@ pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
         b: Bytes,
         valid: Valid/from(sc, b),
         i: Nat,
-        le: Nat/Le/Ind(i + 1, count_scalars(sc, b)),
+        within: Nat/Lt(i, count_scalars(sc, b)),
     ) -> Char =
         match b
-        | x[] => match le end
+        | x[] => match within end
         | x[h, ..t] =>
             match sc
             | lead() =>
                 match i
                 | 0 => Valid/decode_head(h, valid)
-                | pred + 1 =>
-                    go(step(h, Scan/lead()), t, valid, pred, match le | s(@_, @_, prev) => prev end)
+                | pred + 1 => go(step(h, Scan/lead()), t, valid, pred, within)
                 end
-            | cont(_, _, _) => go(step(h, sc), t, valid, i, le)
-            | bad() => go(step(h, Scan/bad()), t, valid, i, le)
+            | cont(_, _, _) => go(step(h, sc), t, valid, i, within)
+            | bad() => go(step(h, Scan/bad()), t, valid, i, within)
             end
         end;
-    go(
-        Scan/lead(),
-        s.bytes,
-        s.valid,
-        i,
-        Nat/Lt/ind_succ_of_lt(i, count_scalars(Scan/lead(), s.bytes), ok));
+    go(Scan/lead(), s.bytes, s.valid, i, ok);
 
 --- `parts` with `sep` between each pair.
 pub let join(sep: Str, parts: List(Str)) -> Str =

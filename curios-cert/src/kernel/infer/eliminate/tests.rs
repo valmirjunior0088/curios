@@ -9,7 +9,7 @@ use {
 
 /// The arm rule specializes the *context*, not just the motive. Matching `s(p) : Ix(p + 1)` against a scrutinee typed `Ix(b)` forces `b ≡ p + 1`, so a hypothesis at `P(b)` inhabits the arm's expectation `P(p + 1)`.
 ///
-/// This is the shape `/std/Nat/Le/Ind/trans` needs: the equation refines an *outer* binder, which no motive opening reaches and no arm binder owns.
+/// This is the shape transitivity over an inductive order needs, where matching the first proof pins the index the second proof's type names: the equation refines an *outer* binder, which no motive opening reaches and no arm binder owns.
 #[test]
 fn a_forced_index_equation_refines_an_outer_hypothesis() {
     let mut kernel = kernel();

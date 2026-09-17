@@ -1,32 +1,24 @@
 use /std/{Nat, Bool, Option, True, Eq};
 use /std/Nat/{Le};
 
---- `a <= b` as an inductive proposition: `z` proves `0 <= n` and `s` lifts `a <= b` to `a + 1 <= b + 1`, so a proof can recurse over the evidence.
-pub mod Ind;
-pub use Ind/{let Ind};
-
 --- `n <= n`.
 pub let refl(n: Nat) -> Le(n, n) =
     True/qed();
 
---- The inductive form as the decided one.
-pub let of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Le(a, b) =
-    match p | z(@_) => True/qed() | s(@_, @_, prev) => of_ind(prev) end;
-
---- The decided form as the inductive one.
-pub let to_ind(a: Nat, b: Nat, p: Le(a, b)) -> Ind(a, b) =
+--- `a <= b` gives `a <= b + 1`.
+pub let succ_r(a: Nat, b: Nat, p: Le(a, b)) -> Le(a, b + 1) =
     match a
-    | 0 => Ind/z()
+    | 0 => True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end
-        | bp + 1 => Ind/s(to_ind(ap, bp, p))
+        | bp + 1 => succ_r(ap, bp, p)
         end
     end;
 
---- `a <= b` gives `a <= b + 1`.
-pub let succ_r(a: Nat, b: Nat, p: Le(a, b)) -> Le(a, b + 1) =
-    of_ind(Ind/succ_r(to_ind(a, b, p)));
+--- `a <= a + k`.
+pub let add_r(a: Nat, k: Nat) -> Le(a, a + k) =
+    True/qed();
 
 --- The procedure that decides `a <= b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Nat, b: Nat) -> Option(Le(a, b)) =
@@ -37,7 +29,35 @@ pub let try(a: Nat, b: Nat) -> Option(Le(a, b)) =
 
 --- Transitivity.
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
-    of_ind(Ind/trans(to_ind(a, b, p), to_ind(b, c, q)));
+    match a
+    | 0 => True/qed()
+    | ap + 1 =>
+        match b
+        | 0 => match p end
+        | bp + 1 =>
+            match c
+            | 0 => match q end
+            | cp + 1 => trans(@ap, @bp, @cp, p, q)
+            end
+        end
+    end;
+
+--- `a <= b` gives `n + a <= n + b`.
+pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Le(a, b)) -> Le(n + a, n + b) =
+    p;
+
+--- `a <= b` gives `a * k <= b * k`.
+---
+--- The successor case is one application of [`add_mono_l`]: `(a + 1) * k` is `k + a * k`, which is what that step has to produce.
+pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Le(a, b)) -> Le(a * k, b * k) =
+    match a
+    | 0 => True/qed()
+    | ap + 1 =>
+        match b
+        | 0 => match p end
+        | bp + 1 => add_mono_l(k, mul_mono_r(@ap, @bp, k, p))
+        end
+    end;
 
 --- Two bounds facing each other pin one value.
 pub let antisym(a: Nat, b: Nat, p: Le(a, b), q: Le(b, a)) -> Eq(a, b) =

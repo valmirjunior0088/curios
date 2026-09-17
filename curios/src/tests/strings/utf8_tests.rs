@@ -94,7 +94,7 @@ fn decode_lemmas_type_check() {
     let source = r#"
         use /std/{Str, Nat, Io};
         let lemmas = (Str/Valid/from_bad, Str/Valid/cont_len,
-            Nat/Le/Ind/trans, Nat/Lt/of_ind_succ, Nat/Le/Ind/add_mono_l, Str/count_scalars, Str/take_continuations, Str/Valid/decode_head);
+            Nat/Le/trans, Nat/Lt/lt_of_le_succ, Nat/Le/add_mono_l, Str/count_scalars, Str/take_continuations, Str/Valid/decode_head);
         /std/print("ok")
         "#;
 

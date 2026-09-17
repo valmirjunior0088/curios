@@ -99,21 +99,20 @@ pub let cont_len(
     @hi: Nat,
     @t: Bytes,
     w: from(Scan/cont(k, lo, hi), t),
-) -> Nat/Le/Ind(k, Bytes/len(t)) =
+) -> Nat/Le(k, Bytes/len(t)) =
     match k
-    | 0 => Nat/Le/Ind/z()
+    | 0 => True/qed()
     | kp + 1 =>
         match t
         | x[] => match w end
         | x[c, ..rest] =>
             match kp
-            | 0 => Nat/Le/Ind/s(Nat/Le/Ind/z())
+            | 0 => True/qed()
             | kpp + 1 =>
-                Nat/Le/Ind/s(
-                    match Nat/in_range(Byte/to_nat(c), lo, hi)
-                    | true => cont_len(kpp + 1, @0x80, @0xBF, @rest, w)
-                    | false => match from_bad(@rest, w) end
-                    end)
+                match Nat/in_range(Byte/to_nat(c), lo, hi)
+                | true => cont_len(kpp + 1, @0x80, @0xBF, @rest, w)
+                | false => match from_bad(@rest, w) end
+                end
             end
         end
     end;
