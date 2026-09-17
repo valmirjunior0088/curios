@@ -104,7 +104,7 @@ pub struct ArgumentSite {
 
 /// Who an inserted argument was inserted for, as a report names it.
 ///
-/// Provenance travels as a string — a function's spelling, an operator's symbol, or an anonymous witness's minted name — and is read back into one of these where a report is built ([`callee`](crate::callee)), so no report spells a name a program cannot write or advises a call a program cannot make.
+/// Provenance travels as a string — a function's spelling, an operator's symbol, or an anonymous witness's minted name — and is read back into one of these where a report is built (by `resolve`'s `callee`), so no report spells a name a program cannot write or advises a call a program cannot make.
 #[derive(Debug, Clone)]
 pub enum Callee {
     /// A function or constructor the program names, spelled as the provenance carried it.
