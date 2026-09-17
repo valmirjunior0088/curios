@@ -25,7 +25,10 @@ pub let of_str(s: Str) -> Option(Bool) =
 
 --- `false` and `true` are distinct: the absurdity every decision procedure over a `Bool` discharges its impossible arm with.
 pub let false_neq_true(p: Eq(false, true)) -> Bool/False =
-    Eq/subst((b: Bool) => match b | true => Bool/False | false => Bool/True end, p, Bool/True/qed());
+    Eq/subst(
+        (b: Bool) => match b | true => Bool/False | false => Bool/True end,
+        p,
+        Bool/True/qed());
 
 --- The decision as an equation: `Bool/Holds(b)` says `b` is `true`, and this says it the way `Eq/subst` rewrites with. By cases on `b`, since `Bool/Holds` reduces at each.
 pub let eq_of_holds(b: Bool, h: Bool/Holds(b)) -> Eq(b, true) =

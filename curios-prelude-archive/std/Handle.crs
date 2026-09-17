@@ -103,7 +103,10 @@ let write_parking(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
                 let _ = park_on(h, Interest/writable)!;
                 write_parking(
                     h,
-                    Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), Bool/True/qed())))
+                    Bytes/drop(
+                        b,
+                        r.written,
+                        @Nat/Lt/le_of_lt(r.written, Bytes/len(b), Bool/True/qed())))
             | false => Async/pure(Result/success(()))
             end
         end
