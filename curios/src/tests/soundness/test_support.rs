@@ -48,7 +48,7 @@ pub(super) fn rejected_as_a_type(source: &str) {
 /// The negative functor every exploit below is built from. It is *accepted* — strict positivity asks whether a declaration reaches itself, and `Sink` never does. Only tying `A` back to `Sink(A)` is dangerous, and no `induct` can express that.
 pub(super) const SINK: &str = r#"
     induct Sink(A : Type) : pub Type
-    | sink(f : (A) -> /std/False)
+    | sink(f : (A) -> /std/Bool/False)
     end
 "#;
 
@@ -73,7 +73,7 @@ pub(super) const SHAPE: &str = r#"
 /// The productive twin of [`SHAPE`], whose `Shape(inf)` unfolds to `Sink(Shape(inf))` forever rather than to itself.
 pub(super) const PRODUCTIVE_SHAPE: &str = r#"
     induct Sink(A : Type) : pub Type
-    | sink(f : (A) -> /std/False)
+    | sink(f : (A) -> /std/Bool/False)
     end
 
     induct F : pub Type
@@ -83,7 +83,7 @@ pub(super) const PRODUCTIVE_SHAPE: &str = r#"
 
     let Shape(f : F) -> Type =
         match f
-        | stop() => /std/False
+        | stop() => /std/Bool/False
         | more(rest) => Sink(Shape(rest))
         end;
 

@@ -6,8 +6,8 @@ use crate::tests::{error, run};
 #[test]
 fn gcd_is_refused_in_a_type_and_log2_is_accepted() {
     let refused = r#"
-        use /std/{Nat, Str, True};
-        let claim: Nat/Le(Nat/gcd(4, 6), 2) = True/qed();
+        use /std/{Nat, Str, Bool};
+        let claim: Nat/Le(Nat/gcd(4, 6), 2) = Bool/True/qed();
         /std/print("ok")
         "#;
     assert!(
@@ -16,8 +16,8 @@ fn gcd_is_refused_in_a_type_and_log2_is_accepted() {
     );
 
     let accepted = r#"
-        use /std/{Nat, Str, True};
-        let claim: Nat/Le(Nat/log2(1024), 10) = True/qed();
+        use /std/{Nat, Str, Bool};
+        let claim: Nat/Le(Nat/log2(1024), 10) = Bool/True/qed();
         /std/print("ok")
         "#;
     assert_eq!(run(accepted), b"ok");

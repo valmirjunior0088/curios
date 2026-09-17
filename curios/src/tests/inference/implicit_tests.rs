@@ -133,7 +133,7 @@ fn a_spine_mismatch_falls_through_to_unfolding() {
 fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Byte, Bytes, Str, Char, List, Option, True};
+        use /std/{Nat, Byte, Bytes, Str, Char, List, Option, Bool};
 
         induct Vec(T: Type): (n: Nat) -> pub Type
         | nil(): (0)
@@ -161,7 +161,7 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
                 match b
                 | x[] => acc
                 | x[_, ..t] =>
-                    let code = Byte/to_nat(Bytes/get(b, 0, @True/qed()));
+                    let code = Byte/to_nat(Bytes/get(b, 0, @Bool/True/qed()));
                     go(t, [..acc, Option/unwrap_or(Char/of_nat(code), '?')])
                 end;
             go(Str/to_bytes(s), []);

@@ -2,8 +2,7 @@ pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
 pub use /sys/Flt/{Finite, NonNeg};
-use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat, Show, Spell, Ord,
-    True};
+use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, BigNat, Show, Spell, Ord};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `b` is eight bytes long, decided.
@@ -29,21 +28,21 @@ pub let is_finite(f: Flt) -> Bool =
 --- The float whose little-endian bytes these are, or `none` unless there are exactly eight.
 pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
     match Nat/eql(Bytes/len(b), 8): (_) => Option(Flt)
-    | true => Option/some(of_le_bytes(b, @True/qed()))
+    | true => Option/some(of_le_bytes(b, @Bool/True/qed()))
     | false => Option/none()
     end;
 
 --- The procedure that decides `Finite(f)`: the evidence when `f` is a number, `none` otherwise.
 pub let finite(f: Flt) -> Option(Finite(f)) =
     match neg_inf < f && f < pos_inf: (r) => Option(Bool/Holds(r))
-    | true => Option/some(True/qed())
+    | true => Option/some(Bool/True/qed())
     | false => Option/none()
     end;
 
 --- The procedure that decides `NonNeg(f)`: the evidence when `f` is a non-negative number, `none` otherwise. `-0.0` qualifies.
 pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
     match f >= +0.0 && f < pos_inf: (r) => Option(Bool/Holds(r))
-    | true => Option/some(True/qed())
+    | true => Option/some(Bool/True/qed())
     | false => Option/none()
     end;
 
@@ -391,13 +390,13 @@ satisfy Mul(Flt) {
 
 --- No precondition: IEEE division is total.
 satisfy Div(Flt) {
-    Ok(_) = True,
+    Ok(_) = Bool/True,
     div(a, b) = div(a, b),
 }
 
 --- No precondition: IEEE remainder is total.
 satisfy Rem(Flt) {
-    Ok(_) = True,
+    Ok(_) = Bool/True,
     rem(a, b) = rem(a, b),
 }
 

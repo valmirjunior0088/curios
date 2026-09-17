@@ -1,4 +1,4 @@
-use /std/{Bool, Eq, False, Hash, Ord, Show, Spell};
+use /std/{Bool, Eq, Hash, Ord, Show, Spell};
 use /std/ops/{Eql};
 use /std/Bool/{false_neq_true};
 
@@ -43,27 +43,27 @@ pub let is_ge(r: Ordering) -> Bool =
     match r | lt() => false | eq() => true | gt() => true end;
 
 --- `lt` and `eq` are distinct.
-pub let lt_neq_eq(p: Eq(Ordering/lt(), Ordering/eq())) -> False =
+pub let lt_neq_eq(p: Eq(Ordering/lt(), Ordering/eq())) -> Bool/False =
     false_neq_true(match p: (s, t, _) => Eq(is_eq(s), is_eq(t)) | refl(@_) => Eq/refl() end);
 
 --- `gt` and `eq` are distinct.
-pub let gt_neq_eq(p: Eq(Ordering/gt(), Ordering/eq())) -> False =
+pub let gt_neq_eq(p: Eq(Ordering/gt(), Ordering/eq())) -> Bool/False =
     false_neq_true(match p: (s, t, _) => Eq(is_eq(s), is_eq(t)) | refl(@_) => Eq/refl() end);
 
 --- `eq` and `lt` are distinct.
-pub let eq_neq_lt(p: Eq(Ordering/eq(), Ordering/lt())) -> False =
+pub let eq_neq_lt(p: Eq(Ordering/eq(), Ordering/lt())) -> Bool/False =
     false_neq_true(match p: (s, t, _) => Eq(is_lt(s), is_lt(t)) | refl(@_) => Eq/refl() end);
 
 --- `gt` and `lt` are distinct.
-pub let gt_neq_lt(p: Eq(Ordering/gt(), Ordering/lt())) -> False =
+pub let gt_neq_lt(p: Eq(Ordering/gt(), Ordering/lt())) -> Bool/False =
     false_neq_true(match p: (s, t, _) => Eq(is_lt(s), is_lt(t)) | refl(@_) => Eq/refl() end);
 
 --- `eq` and `gt` are distinct.
-pub let eq_neq_gt(p: Eq(Ordering/eq(), Ordering/gt())) -> False =
+pub let eq_neq_gt(p: Eq(Ordering/eq(), Ordering/gt())) -> Bool/False =
     false_neq_true(match p: (s, t, _) => Eq(is_gt(s), is_gt(t)) | refl(@_) => Eq/refl() end);
 
 --- `lt` and `gt` are distinct.
-pub let lt_neq_gt(p: Eq(Ordering/lt(), Ordering/gt())) -> False =
+pub let lt_neq_gt(p: Eq(Ordering/lt(), Ordering/gt())) -> Bool/False =
     false_neq_true(match p: (s, t, _) => Eq(is_gt(s), is_gt(t)) | refl(@_) => Eq/refl() end);
 
 satisfy Eql(Ordering);

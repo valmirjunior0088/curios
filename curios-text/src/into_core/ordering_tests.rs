@@ -186,7 +186,7 @@ fn a_derived_spell_witness_orders_its_vocabulary_first() {
             pub mod Str
                 pub let Str : Type = Type;
             end
-            pub mod True
+            pub mod Bool
                 pub mod True
                     pub let qed : Type = Type;
                 end
@@ -215,7 +215,7 @@ fn a_derived_spell_witness_orders_its_vocabulary_first() {
 
     // The rendered pieces are string literals, so the carrier and the proof that closes its `Valid` field are as much a part of what the body writes as the renderers are.
     assert!(at("/std/Str/Str") < witness, "{names:?}");
-    assert!(at("/std/True/True/qed") < witness, "{names:?}");
+    assert!(at("/std/Bool/True/qed") < witness, "{names:?}");
 }
 
 /// The equality derivation applies its concept's own method and nothing else — no renderer, and no string machinery, since it builds a `Bool` rather than text.

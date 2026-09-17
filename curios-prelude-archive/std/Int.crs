@@ -1,7 +1,7 @@
 pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
     to_flt};
-use /std/{Nat, Bool, Str, Option, Ordering, Show, Spell, Ord, True};
+use /std/{Nat, Bool, Str, Option, Ordering, Show, Spell, Ord};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `a` is not zero, decided as `Nat/Lt` is — what `/` and `%` on `Int` ask of a divisor.
@@ -43,7 +43,7 @@ pub let of_str(s: Str) -> Option(Int) =
 --- The procedure that decides `0 <= n`: the evidence when it holds, `none` otherwise.
 pub let non_neg(n: Int) -> Option(NonNeg(n)) =
     match n >= +0: (r) => Option(Bool/Holds(r))
-    | true => Option/some(True/qed())
+    | true => Option/some(Bool/True/qed())
     | false => Option/none()
     end;
 

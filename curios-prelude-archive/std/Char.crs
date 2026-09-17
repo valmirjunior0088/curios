@@ -1,18 +1,13 @@
-use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, True, Str, Show, Spell, Ord};
+use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Ord};
 use /std/ops/{Eql, Cmp};
 
 --- Whether `code` is a Unicode scalar value: a code point up to `U+10FFFF` outside the surrogate range.
 let is_valid(code: Nat) -> Bool =
     code < 0xD800 || code >= 0xE000 && code <= 0x10FFFF;
 
---- That `code` is a Unicode scalar value, which is what `Char` carries.
----
---- Decided, so a literal or a guard already taken discharges it by reduction.
-pub let Valid(code: Nat) -> Prop =
-    Bool/Holds(is_valid(code));
-
---- Deciding `Valid` where no guard has.
+--- That a code point is a Unicode scalar value, which is what `Char` carries, and deciding it where no guard has.
 pub mod Valid;
+pub use Valid/{let Valid};
 
 --- One Unicode scalar value.
 pub struct Char: pub Type {
@@ -107,7 +102,7 @@ pub let to_ascii_upper(c: Char) -> Char =
     match is_lower(c) | true => Option/unwrap_or(of_nat(c.code - 0x20), c) | false => c end;
 
 let ascii_zero: Char =
-    Char { code = 0x30, valid = True/qed() };
+    Char { code = 0x30, valid = Bool/True/qed() };
 
 --- The lowercase hexadecimal digit for `nibble` modulo sixteen.
 pub let hex_digit(nibble: Nat) -> Char =

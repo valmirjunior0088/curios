@@ -1,4 +1,4 @@
-use /std/{Int, Bool, Option, True};
+use /std/{Int, Bool, Option};
 use /std/Toml/Date/{let Date};
 use /std/Toml/Time/{let Time};
 
@@ -28,7 +28,7 @@ pub let of(
 
 let try_valid(offset_minutes: Int) -> Option(Valid(offset_minutes)) =
     match sound(offset_minutes): (r) => Option(Bool/Holds(r))
-    | true => Option/some(True/qed())
+    | true => Option/some(Bool/True/qed())
     | false => Option/none()
     end;
 

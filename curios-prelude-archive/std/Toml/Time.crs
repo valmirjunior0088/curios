@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Option, True};
+use /std/{Nat, Bool, Option};
 
 let sound(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Bool =
     hour <= 23 && minute <= 59 && second <= 60 && nanosecond <= 999999999;
@@ -33,7 +33,7 @@ let try_valid(
     nanosecond: Nat,
 ) -> Option(Valid(hour, minute, second, nanosecond)) =
     match sound(hour, minute, second, nanosecond): (r) => Option(Bool/Holds(r))
-    | true => Option/some(True/qed())
+    | true => Option/some(Bool/True/qed())
     | false => Option/none()
     end;
 

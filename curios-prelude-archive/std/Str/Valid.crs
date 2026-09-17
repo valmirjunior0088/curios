@@ -1,6 +1,6 @@
-use /std/Str/{Class, classify, Scan, step, scan_from, Valid, drop_width, drop_width_within,
+use /std/Str/{Class, classify, Scan, step, scan_from, drop_width, drop_width_within,
     take_continuations, certify_decoded};
-use /std/{Bool, Byte, Bytes, Char, Eq, False, Nat, Option, True};
+use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option};
 
 --- Whether a scan has come to rest between characters.
 let at_lead(s: Scan) -> Bool =
@@ -11,6 +11,12 @@ let at_lead(s: Scan) -> Bool =
 --- Decided, so it has no constructors to walk. A proof walks the bytes instead: `from(s, x[c, ..t])` *is* `from(step(c, s), t)`, so the evidence for the whole is already the evidence for the tail. A recursive call writes the tail it moves to, as `@t`, since inferring it from the evidence would take the whole.
 pub let from(s: Scan, b: Bytes) -> Prop =
     Bool/Holds(at_lead(scan_from(s, b)));
+
+--- That `b` is well-formed UTF-8, which is what `Str` carries.
+---
+--- Decided: reading `b` from the first byte lands back between characters, so a literal discharges it by running the scan.
+pub let Valid(b: Bytes) -> Prop =
+    from(Scan/lead(), b);
 
 --- A scan at rest is at `lead`.
 let lead_of(s: Scan, h: Bool/Holds(at_lead(s))) -> Eq(s, Scan/lead()) =
@@ -31,7 +37,7 @@ let append(
 --- The procedure that decides whether `b` is well-formed from `s`: the evidence when it is, `none` otherwise.
 pub let try(s: Scan, b: Bytes) -> Option(from(s, b)) =
     match at_lead(scan_from(s, b)): (r) => Option(Bool/Holds(r))
-    | true => Option/some(True/qed())
+    | true => Option/some(Bool/True/qed())
     | false => Option/none()
     end;
 
@@ -55,7 +61,7 @@ pub let drop(
     match b
     | x[] =>
         match s
-        | lead() => True/qed()
+        | lead() => Bool/True/qed()
         | cont(_, _, _) => match d end
         | bad() => match d end
         end
@@ -79,14 +85,14 @@ pub let take(
     | x[c, ..t] =>
         match s
         | lead() =>
-            match n | 0 => True/qed() | pred + 1 => take(pred, step(c, Scan/lead()), @t, d) end
+            match n | 0 => Bool/True/qed() | pred + 1 => take(pred, step(c, Scan/lead()), @t, d) end
         | cont(_, _, _) => take(n, step(c, s), @t, d)
         | bad() => take(n, step(c, Scan/bad()), @t, d)
         end
     end;
 
 --- Nothing is valid from the bad state.
-pub let from_bad(@x: Bytes, w: from(Scan/bad(), x)) -> False =
+pub let from_bad(@x: Bytes, w: from(Scan/bad(), x)) -> Bool/False =
     match x
     | x[] => match w end
     | x[_, ..t] => from_bad(@t, w)
@@ -101,13 +107,13 @@ pub let cont_len(
     w: from(Scan/cont(k, lo, hi), t),
 ) -> Nat/Le(k, Bytes/len(t)) =
     match k
-    | 0 => True/qed()
+    | 0 => Bool/True/qed()
     | kp + 1 =>
         match t
         | x[] => match w end
         | x[c, ..rest] =>
             match kp
-            | 0 => True/qed()
+            | 0 => Bool/True/qed()
             | kpp + 1 =>
                 match Nat/in_range(Byte/to_nat(c), lo, hi)
                 | true => cont_len(kpp + 1, @0x80, @0xBF, @rest, w)

@@ -159,12 +159,12 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
 #[test]
 fn the_false_arm_of_a_comparison_proves_its_dual() {
     let source = r#"
-        use /std/{Nat, Option, True};
+        use /std/{Nat, Option, Bool};
 
         let at_least(n : Nat, m : Nat) -> Option(Nat/Le(m, n)) =
             match n < m
             | true => Option/none()
-            | false => Option/some(True/qed())
+            | false => Option/some(Bool/True/qed())
             end;
 
         let shown(n : Nat, m : Nat) -> Nat =

@@ -1,5 +1,5 @@
 pub use /sys/Bytes/{let Bytes, get, len, eql, slice};
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Ordering, Ord, True, False};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Ordering, Ord};
 use /std/ops/{Eql, Cmp};
 
 --- The byte at `i`, or `none` past the end.
@@ -38,8 +38,8 @@ let split(n: Nat) -> Split(n) =
                 Nat/Le/antisym(
                     Byte/to_nat(prev.low),
                     255,
-                    Nat/Lt/le_succ_of_lt(Byte/to_nat(prev.low), 256, True/qed()),
-                    Nat/Lt/le_of_not_lt(Byte/to_nat(prev.low), 255, True/qed()));
+                    Nat/Lt/le_succ_of_lt(Byte/to_nat(prev.low), 256, Bool/True/qed()),
+                    Nat/Lt/le_of_not_lt(Byte/to_nat(prev.low), 255, Bool/True/qed()));
             Split {
                 high = prev.high + 1,
                 low = 0,
@@ -63,7 +63,7 @@ let high_below(n: Nat, positive: Nat/Lt(0, n)) -> Nat/Lt(n / 256, n) =
     let inner: Nat/Lt(s.high, 256 * s.high + Byte/to_nat(s.low)) =
         match s.high: (h) => Nat/Lt(h, 256 * h + Byte/to_nat(s.low))
         | 0 => p
-        | _ + 1 => True/qed()
+        | _ + 1 => Bool/True/qed()
         end;
     Eq/subst((m) => Nat/Lt(m / 256, m), Eq/sym(s.joined), inner);
 
@@ -77,8 +77,8 @@ let last(z: Bytes) -> Byte =
     Option/unwrap_or(try_get(z, len(z) - 1), 0);
 
 -- An empty encoding is no encoding of a positive number: the lengths differ, and a length of zero against a successor is refuted by the comparison that decides it.
-let no_empty(p: Bytes, k: Byte, e: Eq(x[], x[..p, k])) -> False =
-    Eq/subst((m) => Bool/Holds(Nat/eql(0, m)), Eq/cong(len, e), True/qed());
+let no_empty(p: Bytes, k: Byte, e: Eq(x[], x[..p, k])) -> Bool/False =
+    Eq/subst((m) => Bool/Holds(Nat/eql(0, m)), Eq/cong(len, e), Bool/True/qed());
 
 --- Distinct numbers encode distinctly, which is what makes the encoding a key.
 ---
@@ -109,7 +109,7 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq(of_nat(a), of_nat(b))) -> Eq(a
                         let digits: Eq((np + 1) % 256, (dq + 1) % 256) =
                             Eq/cong(Byte/to_nat, Eq/cong(last, e));
                         let highs: Eq((np + 1) / 256, (dq + 1) / 256) =
-                            ih((np + 1) / 256, high_below(np + 1, True/qed()))(
+                            ih((np + 1) / 256, high_below(np + 1, Bool/True/qed()))(
                                 (dq + 1) / 256,
                                 heads);
                         let rejoined: Eq(
@@ -155,7 +155,7 @@ pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
         match k
         | 0 => acc
         | kp + 1 =>
-            let below = Eq/subst((x) => Nat/Lt(i, x), inv, True/qed());
+            let below = Eq/subst((x) => Nat/Lt(i, x), inv, Bool/True/qed());
             go(kp, i + 1, f(get(b, i, @below), acc), inv)
         end;
     go(n, 0, init, Eq/refl());

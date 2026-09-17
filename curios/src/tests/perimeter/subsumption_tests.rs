@@ -10,13 +10,13 @@ use crate::tests::{error, run};
 #[test]
 fn a_function_types_codomain_is_cumulative() {
     let source = r#"
-        use /std/{Bool, True, print};
+        use /std/{Bool, print};
 
         let apply(motive: (Bool) -> Type, b: Bool) -> Type =
             motive(b);
 
         let witnessed: apply(Bool/Holds, true) =
-            True/qed();
+            Bool/True/qed();
 
         let _ = witnessed;
         print("ok")

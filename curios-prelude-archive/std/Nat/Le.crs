@@ -1,14 +1,14 @@
-use /std/{Nat, Bool, Option, True, Eq};
+use /std/{Nat, Bool, Option, Eq};
 use /std/Nat/{Le};
 
 --- `n <= n`.
 pub let refl(n: Nat) -> Le(n, n) =
-    True/qed();
+    Bool/True/qed();
 
 --- `a <= b` gives `a <= b + 1`.
 pub let succ_r(a: Nat, b: Nat, p: Le(a, b)) -> Le(a, b + 1) =
     match a
-    | 0 => True/qed()
+    | 0 => Bool/True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end
@@ -18,19 +18,19 @@ pub let succ_r(a: Nat, b: Nat, p: Le(a, b)) -> Le(a, b + 1) =
 
 --- `a <= a + k`.
 pub let add_r(a: Nat, k: Nat) -> Le(a, a + k) =
-    True/qed();
+    Bool/True/qed();
 
 --- The procedure that decides `a <= b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Nat, b: Nat) -> Option(Le(a, b)) =
     match a <= b: (r) => Option(Bool/Holds(r))
-    | true => Option/some(True/qed())
+    | true => Option/some(Bool/True/qed())
     | false => Option/none()
     end;
 
 --- Transitivity.
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
     match a
-    | 0 => True/qed()
+    | 0 => Bool/True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end
@@ -51,7 +51,7 @@ pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Le(a, b)) -> Le(n + a, n + b) =
 --- The successor case is one application of [`add_mono_l`]: `(a + 1) * k` is `k + a * k`, which is what that step has to produce.
 pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Le(a, b)) -> Le(a * k, b * k) =
     match a
-    | 0 => True/qed()
+    | 0 => Bool/True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end

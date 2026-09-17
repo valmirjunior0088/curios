@@ -1,4 +1,4 @@
-use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Show, Spell, Ordering, Ord, True};
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Show, Spell, Ordering, Ord};
 use /std/ops/{Eql, Cmp};
 
 --- What a byte begins, as UTF-8 reads it.
@@ -61,14 +61,9 @@ pub let step(c: Byte, s: Scan) -> Scan =
 pub let scan_from(s: Scan, b: Bytes) -> Scan =
     match b | x[] => s | x[h, ..t] => scan_from(step(h, s), t) end;
 
---- That `b` is well-formed UTF-8, which is what `Str` carries.
----
---- Decided: reading `b` from the first byte lands back between characters, so a literal discharges it by running the scan.
-pub let Valid(b: Bytes) -> Prop =
-    Valid/from(Scan/lead(), b);
-
---- What `Valid` rests on, from any scan state, and what the operations carry it through.
+--- That bytes are well-formed UTF-8, which is what `Str` carries: what that rests on, from any scan state, and what the operations carry it through.
 pub mod Valid;
+pub use Valid/{let Valid};
 
 --- How many bytes the first `n` characters take from scan state `s`.
 pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
@@ -85,12 +80,12 @@ pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
 --- `drop_width` never passes the end.
 pub let drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, b), Bytes/len(b)) =
     match b
-    | x[] => True/qed()
+    | x[] => Bool/True/qed()
     | x[h, ..t] =>
         match s
         | lead() =>
             match n
-            | 0 => True/qed()
+            | 0 => Bool/True/qed()
             | pred + 1 => drop_width_within(pred, step(h, Scan/lead()), t)
             end
         | cont(_, _, _) => drop_width_within(n, step(h, s), t)
@@ -134,7 +129,7 @@ pub let take_continuations(
                             off,
                             off + (pred + 1),
                             Bytes/len(b),
-                            True/qed(),
+                            Bool/True/qed(),
                             bound)))
                     - 0x80),
             bound)

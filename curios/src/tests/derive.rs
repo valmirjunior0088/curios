@@ -742,13 +742,13 @@ fn a_derived_hash_encodes_a_struct_at_ordinal_zero() {
 #[test]
 fn a_proof_payload_takes_no_part_in_an_encoding() {
     let source = r#"
-        use /std/{Nat, Byte, Bytes, Str, Bool, True, Hash, print};
+        use /std/{Nat, Byte, Bytes, Str, Bool, Hash, print};
         struct Small: pub Type { value: Nat, ok: Bool/Holds(Nat/lt(value, 10)) }
         satisfy Hash(Small);
         let dots(b: Bytes) -> Str =
             Bytes/fold(b, "", (byte, acc) =>
                 Str/concat(Str/concat(acc, "."), Nat/to_str(Byte/to_nat(byte))));
-        print(dots(Hash/hash(Small { value = 3, ok = True/qed() })))
+        print(dots(Hash/hash(Small { value = 3, ok = Bool/True/qed() })))
         "#;
 
     assert_eq!(run(source), b".0.0.0.0.0.0.0.1.3");

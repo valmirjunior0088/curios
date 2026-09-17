@@ -53,11 +53,11 @@ fn string_literal_machinery_is_monomorphic() {
     // `Str` and `Char` are the carriers a literal builds; the rest is what its proof is discharged by running. None of the reduced names is in `curios-prelude-archive/src/syntax.rs`: nothing in Rust emits them, they are reached through the carriers' field types.
     let pinned = [
         "/std/Str/Str",
-        "/std/Str/Valid",
+        "/std/Str/Valid/Valid",
         "/std/Str/Valid/from",
         "/std/Str/scan_from",
         "/std/Char/Char",
-        "/std/Char/Valid",
+        "/std/Char/Valid/Valid",
     ];
 
     with_prelude(|prelude| {

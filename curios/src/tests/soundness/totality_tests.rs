@@ -21,12 +21,12 @@ fn a_type_level_rec_cannot_tie_the_negative_knot() {
 
         let Bad : Type = Sink(Bad);
 
-        let delta(x : Bad) -> /std/False =
+        let delta(x : Bad) -> /std/Bool/False =
             match x
             | sink(g) => g(x)
             end;
 
-        let boom : /std/False = delta(Sink/sink(delta));
+        let boom : /std/Bool/False = delta(Sink/sink(delta));
 
         /std/print("unreachable")
         "#
@@ -271,12 +271,12 @@ fn a_partial_type_behind_a_projection_is_still_a_type() {
 
         let P : {{Type, /std/Nat}} = (Sink(P.0), 0);
 
-        let delta(x : P.0) -> /std/False =
+        let delta(x : P.0) -> /std/Bool/False =
             match x
             | sink(g) => g(x)
             end;
 
-        let boom : /std/False = delta(Sink/sink(delta));
+        let boom : /std/Bool/False = delta(Sink/sink(delta));
 
         /std/print("unreachable")
         "#
@@ -297,18 +297,18 @@ fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
 
         let Shape(f : F) -> Type =
             match f
-            | stop() => /std/False
+            | stop() => /std/Bool/False
             | more(rest) => Sink(Shape(rest))
             end;
 
         let inf : F = F/more(inf);
 
-        let delta(x : Shape(inf)) -> /std/False =
+        let delta(x : Shape(inf)) -> /std/Bool/False =
             match x
             | sink(g) => g(x)
             end;
 
-        let boom : /std/False = delta(Sink/sink(delta));
+        let boom : /std/Bool/False = delta(Sink/sink(delta));
 
         /std/print("unreachable")
         "#
@@ -337,11 +337,11 @@ fn the_entrypoint_expression_is_not_a_blind_spot() {
 fn a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted() {
     rejected(
         r#"
-        let Bad : Type = (Bad) -> /std/False;
+        let Bad : Type = (Bad) -> /std/Bool/False;
 
-        let delta(x : Bad) -> /std/False = x(x);
+        let delta(x : Bad) -> /std/Bool/False = x(x);
 
-        let boom : /std/False = delta(delta);
+        let boom : /std/Bool/False = delta(delta);
 
         /std/print("unreachable")
         "#,
@@ -356,7 +356,7 @@ fn a_local_type_level_rec_through_an_arrow_is_diagnosed_too() {
         let consume(u : {}) -> {} = u;
 
         consume(
-            let forge(x : (let Bad : Type = (Bad) -> /std/False; Bad)) -> {} = ();
+            let forge(x : (let Bad : Type = (Bad) -> /std/Bool/False; Bad)) -> {} = ();
             ()
         )
         "#,
@@ -486,7 +486,7 @@ fn an_aliased_sort_that_descends_is_still_accepted() {
 #[test]
 fn a_call_through_a_constructor_payload_descends() {
     let source = r#"
-        use /std/{Nat, True};
+        use /std/{Nat};
 
         induct Accessible(@A : Type, R : (A, A) -> Prop) : (A) -> Prop
         | intro(@x : A, below : (y : A, r : R(y, x)) -> Accessible(R, y)) : (x)
@@ -526,9 +526,9 @@ fn a_call_through_a_parameter_bound_function_does_not_descend() {
 #[test]
 fn the_library_well_founded_recursion_serves_a_proof() {
     let source = r#"
-        use /std/{Nat, Str, True, WellFounded, Char};
+        use /std/{Nat, Str, Bool, WellFounded, Char};
         let two_more(n: Nat) -> Nat/Lt(n, n + 2) =
-            WellFounded/recurse((k) => Nat/Lt(k, k + 2), (k, ih) => True/qed(), n, WellFounded/lt(n));
+            WellFounded/recurse((k) => Nat/Lt(k, k + 2), (k, ih) => Bool/True/qed(), n, WellFounded/lt(n));
         let lt_is_well_founded: WellFounded((a: Nat, b: Nat) => Nat/Lt(a, b)) = WellFounded/lt;
         /std/print(Str/of_char(Str/get("abc", 1, two_more(1))))
         "#;

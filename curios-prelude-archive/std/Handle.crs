@@ -1,6 +1,6 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{close, stdin, stdout, stderr};
-use /std/{Bool, Bytes, Nat, Int, List, Result, Io, Async, True};
+use /std/{Bool, Bytes, Nat, Int, List, Result, Io, Async};
 
 --- What a park asks to be woken for.
 pub mod Interest;
@@ -70,7 +70,7 @@ let write_waiting(h: Handle, b: Bytes) -> Io(Result(Io/Error, {})) =
     | r.written < Bytes/len(b) =>
         write_waiting(
             h,
-            Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
+            Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), Bool/True/qed())))
     | _ => Io/pure(Result/success(()))
     end;
 
@@ -103,7 +103,7 @@ let write_parking(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
                 let _ = park_on(h, Interest/writable)!;
                 write_parking(
                     h,
-                    Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
+                    Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), Bool/True/qed())))
             | false => Async/pure(Result/success(()))
             end
         end

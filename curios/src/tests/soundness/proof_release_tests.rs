@@ -18,12 +18,12 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
     rejected_as_a_proof(
         r#"
         induct Box : pub Type
-        | box(p : /std/False)
+        | box(p : /std/Bool/False)
         end
 
         let forge(n : /std/Nat) -> Box = forge(n + 1);
 
-        let boom : /std/False =
+        let boom : /std/Bool/False =
             match forge(0)
             | box(p) => p
             end;
@@ -42,9 +42,9 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
 fn a_proof_at_a_polymorphic_head_is_rejected() {
     rejected_as_a_proof(
         r#"
-        let ignore(@A : Type, x : A, p : /std/False) -> A = x;
+        let ignore(@A : Type, x : A, p : /std/Bool/False) -> A = x;
 
-        let leak() -> /std/Nat = ignore(0, let b : /std/False = b; b);
+        let leak() -> /std/Nat = ignore(0, let b : /std/Bool/False = b; b);
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -57,14 +57,14 @@ fn a_proof_at_an_arm_binder_head_is_rejected() {
     rejected_as_a_proof(
         r#"
         induct Holder : pub Type
-        | hold(f : (/std/False) -> /std/Nat)
+        | hold(f : (/std/Bool/False) -> /std/Nat)
         end
 
         let make() -> Holder = Holder/hold((p) => 0);
 
         let leak(h : Holder) -> /std/Nat =
             match h
-            | hold(f) => f(let b : /std/False = b; b)
+            | hold(f) => f(let b : /std/Bool/False = b; b)
             end;
 
         /std/print(/std/Nat/to_str(leak(make())))
@@ -77,10 +77,10 @@ fn a_proof_at_an_arm_binder_head_is_rejected() {
 fn a_proof_at_a_fold_binder_head_is_rejected() {
     rejected_as_a_proof(
         r#"
-        let apply_it(fs : /std/List((/std/False) -> /std/Nat)) -> /std/Nat =
+        let apply_it(fs : /std/List((/std/Bool/False) -> /std/Nat)) -> /std/Nat =
             match fs
             | [] => 0
-            | [head, ..tail] => head(let b : /std/False = b; b)
+            | [head, ..tail] => head(let b : /std/Bool/False = b; b)
             end;
 
         /std/print(/std/Nat/to_str(apply_it([])))
@@ -94,12 +94,12 @@ fn a_proof_at_a_struct_projection_head_is_rejected() {
     rejected_as_a_proof(
         r#"
         struct Api : pub Type {
-            take : (/std/False) -> /std/Nat,
+            take : (/std/Bool/False) -> /std/Nat,
         }
 
         let api : Api = Api { take = (p) => 7 };
 
-        let leak() -> /std/Nat = api.take(let b : /std/False = b; b);
+        let leak() -> /std/Nat = api.take(let b : /std/Bool/False = b; b);
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -112,14 +112,14 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
     rejected_as_a_proof(
         r#"
         pub concept Sink(A : Type) : pub Type {
-            drain(x : A, p : /std/False) -> /std/Nat,
+            drain(x : A, p : /std/Bool/False) -> /std/Nat,
         }
 
         satisfy Sink(/std/Nat) {
             drain(x, p) = x,
         }
 
-        let leak() -> /std/Nat = Sink/drain(5, let b : /std/False = b; b);
+        let leak() -> /std/Nat = Sink/drain(5, let b : /std/Bool/False = b; b);
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -135,10 +135,10 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
 fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
     rejected_as_a_proof(
         r#"
-        use /std/{Nat, Str, False};
+        use /std/{Nat, Str, Bool};
 
-        let f(n : Nat) -> False =
-            (let g(m : Nat) -> False = f(m); g)(n);
+        let f(n : Nat) -> Bool/False =
+            (let g(m : Nat) -> Bool/False = f(m); g)(n);
 
         /std/print(match f(0) : (_) => Str end)
         "#,
@@ -149,15 +149,15 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
 #[test]
 fn a_proof_projecting_an_inner_group_that_does_not_call_back_is_accepted() {
     let source = r#"
-        use /std/{Nat, True};
+        use /std/{Nat, Bool};
 
-        let outer(n : Nat) -> True =
+        let outer(n : Nat) -> Bool/True =
             match n
-            | 0 => True/qed()
-            | p + 1; _ => (let keep(t : True) -> True = t; keep)(outer(p))
+            | 0 => Bool/True/qed()
+            | p + 1; _ => (let keep(t : Bool/True) -> Bool/True = t; keep)(outer(p))
             end;
 
-        let proved : True = outer(3);
+        let proved : Bool/True = outer(3);
 
         /std/print("kept")
         "#;
@@ -179,14 +179,14 @@ fn a_partial_value_reaching_a_type_through_an_argument_is_rejected() {
 #[test]
 fn a_partial_argument_to_an_erased_call_is_still_reached() {
     let source = r#"
-        use /std/{Nat, True};
+        use /std/{Nat, Bool};
 
         let spin(n : Nat) -> Nat = spin(n);
 
-        let mk_proof(n : Nat) -> True = True/qed();
+        let mk_proof(n : Nat) -> Bool/True = Bool/True/qed();
 
         let use_it(n : Nat) -> Nat =
-            let witness : True = mk_proof(spin(0));
+            let witness : Bool/True = mk_proof(spin(0));
             n;
 
         /std/print(Nat/to_str(use_it(5)))
@@ -219,11 +219,11 @@ fn a_partial_argument_to_a_proof_constructor_is_still_reached() {
 #[test]
 fn a_partial_erased_scrutinee_is_still_reached() {
     let source = r#"
-        use /std/{Nat, True};
+        use /std/{Nat, Bool};
 
         let spin(n : Nat) -> Nat = spin(n);
 
-        let mk(n : Nat) -> True = True/qed();
+        let mk(n : Nat) -> Bool/True = Bool/True/qed();
 
         let use_it(n : Nat) -> Nat =
             match mk(spin(0))
@@ -239,14 +239,14 @@ fn a_partial_erased_scrutinee_is_still_reached() {
 #[test]
 fn a_partial_proof_cannot_arrive_through_witness_resolution() {
     let source = r#"
-        use /std/{Nat, True};
+        use /std/{Nat, Bool};
 
         concept Trivial(A : Type) : pub Prop {
-            fact(A) -> True,
+            fact(A) -> Bool/True,
         }
 
         satisfy Trivial(Nat) {
-            fact(n) = let loop : True = loop; loop,
+            fact(n) = let loop : Bool/True = loop; loop,
         }
 
         let needs_witness(@A : Type, use Trivial(A), x : A) -> Nat = 0;

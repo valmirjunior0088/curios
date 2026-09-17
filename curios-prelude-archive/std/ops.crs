@@ -22,7 +22,7 @@ pub use Mul/{let Mul};
 
 --- Division: the concept `/` dispatches to, under the precondition `Ok` each carrier states on its divisor.
 ---
---- A literal divisor discharges the precondition by reduction and a computed one behind a guard. A carrier whose division is total states `True`.
+--- A literal divisor discharges the precondition by reduction and a computed one behind a guard. A carrier whose division is total states `Bool/True`.
 pub mod Div;
 pub use Div/{let Div};
 

@@ -31,10 +31,10 @@ fn long_str_literal_compiles_on_the_default_test_stack() {
 #[test]
 fn a_string_literal_spells_as_itself_in_a_report() {
     let source = r#"
-        use /std/{Str, True, False};
+        use /std/{Str, Bool};
 
         let Named(name: Str) -> Prop =
-            match Str/eql(name, "body") | true => True | false => False end;
+            match Str/eql(name, "body") | true => Bool/True | false => Bool/False end;
 
         let evidence: Named("body") = ?;
 

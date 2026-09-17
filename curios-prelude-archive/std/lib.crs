@@ -165,14 +165,6 @@ pub use WellFounded/{let WellFounded};
 pub mod Eq;
 pub use Eq/{let Eq};
 
---- The empty proposition, whose elimination proves anything.
-pub mod False;
-pub use False/{let False};
-
---- The trivial proposition, inhabited by `qed`: what a decided bound reduces to when it holds.
-pub mod True;
-pub use True/{let True};
-
 --- Text as certified UTF-8, counted in Unicode scalar values rather than bytes. Comparison is code-point order.
 pub mod Str;
 pub use Str/{let Str};
@@ -182,6 +174,8 @@ pub mod Path;
 pub use Path/{let Path};
 
 --- The two-valued type.
+---
+--- `Holds` beneath reflects a decision into a proposition: `True`, inhabited by `qed`, where it is `true`, and `False`, whose elimination proves anything, where it is not.
 pub mod Bool;
 pub use Bool/{let Bool};
 

@@ -68,12 +68,12 @@ fn a_self_reference_in_an_index_binder_type_does_not_elaborate() {
 fn an_index_domain_over_the_declaration_is_reachable_only_by_storing_its_witness() {
     rejected_by(
         r#"
-        use /std/{False};
+        use /std/{Bool};
 
         induct A : pub Type
-        | mk(@f : (A) -> False, b : B(f))
-        and B : (f : (A) -> False) -> pub Type
-        | unit(@g : (A) -> False) : (g)
+        | mk(@f : (A) -> Bool/False, b : B(f))
+        and B : (f : (A) -> Bool/False) -> pub Type
+        | unit(@g : (A) -> Bool/False) : (g)
         end
 
         /std/print("unreachable")
@@ -91,10 +91,10 @@ fn an_index_domain_over_the_declaration_is_reachable_only_by_storing_its_witness
 fn a_recursive_occurrence_in_an_index_target_is_admitted() {
     let source = r#"
         use /std/{Nat};
-        use /std/{False};
+        use /std/{Bool};
 
         induct Bad : (t : Type) -> pub Type
-        | c() : ((Bad(Nat)) -> False)
+        | c() : ((Bad(Nat)) -> Bool/False)
         end
 
         /std/print("indexed")

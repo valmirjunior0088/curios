@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Option, True};
+use /std/{Nat, Bool, Option};
 
 let leap(year: Nat) -> Bool =
     choose
@@ -39,7 +39,7 @@ pub let of(year: Nat, month: Nat, day: Nat, @ok: Valid(year, month, day)) -> Dat
 
 let try_valid(year: Nat, month: Nat, day: Nat) -> Option(Valid(year, month, day)) =
     match sound(year, month, day): (r) => Option(Bool/Holds(r))
-    | true => Option/some(True/qed())
+    | true => Option/some(Bool/True/qed())
     | false => Option/none()
     end;
 

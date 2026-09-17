@@ -1,10 +1,10 @@
-use /std/{Nat, Bool, Option, True};
+use /std/{Nat, Bool, Option};
 use /std/Nat/{Le, Lt};
 
 --- The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
     match a < b: (r) => Option(Bool/Holds(r))
-    | true => Option/some(True/qed())
+    | true => Option/some(Bool/True/qed())
     | false => Option/none()
     end;
 
@@ -12,13 +12,13 @@ pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
 pub let le_one_of_positive(@n: Nat, p: Lt(0, n)) -> Nat/Le(1, n) =
     match n
     | 0 => match p end
-    | _ + 1 => True/qed()
+    | _ + 1 => Bool/True/qed()
     end;
 
 --- `a < b` gives `a <= b`.
 pub let le_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Nat/Le(a, b) =
     match a
-    | 0 => True/qed()
+    | 0 => Bool/True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end
@@ -30,27 +30,27 @@ pub let le_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Nat/Le(a, b) =
 pub let le_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Nat/Le(i + 1, n) =
     match n
     | 0 => match p end
-    | np + 1 => match i | 0 => True/qed() | ip + 1 => le_succ_of_lt(ip, np, p) end
+    | np + 1 => match i | 0 => Bool/True/qed() | ip + 1 => le_succ_of_lt(ip, np, p) end
     end;
 
 --- `a + 1 <= b` gives `a < b`.
 pub let lt_of_le_succ(a: Nat, b: Nat, p: Nat/Le(a + 1, b)) -> Lt(a, b) =
     match b
     | 0 => match p end
-    | bp + 1 => match a | 0 => True/qed() | ap + 1 => lt_of_le_succ(ap, bp, p) end
+    | bp + 1 => match a | 0 => Bool/True/qed() | ap + 1 => lt_of_le_succ(ap, bp, p) end
     end;
 
 --- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
 ---
---- The decided pair is total, so refuting one settles the other — but only a proof can say so, because reduction reads terms and a guard's `false` arm is a fact about the scope. This is the bridge out of such an arm, where `True/qed()` inhabits the hypothesis and the conclusion is what the arm actually needed.
+--- The decided pair is total, so refuting one settles the other — but only a proof can say so, because reduction reads terms and a guard's `false` arm is a fact about the scope. This is the bridge out of such an arm, where `Bool/True/qed()` inhabits the hypothesis and the conclusion is what the arm actually needed.
 pub let le_of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Nat/Le(b, a) =
     match a
     | 0 =>
         match b
-        | 0 => True/qed()
+        | 0 => Bool/True/qed()
         | _ + 1 => match p end
         end
-    | ap + 1 => match b | 0 => True/qed() | bp + 1 => le_of_not_lt(ap, bp, p) end
+    | ap + 1 => match b | 0 => Bool/True/qed() | bp + 1 => le_of_not_lt(ap, bp, p) end
     end;
 
 --- A strict bound composed with a loose one stays strict.

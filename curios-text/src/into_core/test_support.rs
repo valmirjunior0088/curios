@@ -28,7 +28,7 @@ pub(super) const fn registry_field(
 /// Spelled once and used twice: the registry's own group, and the `Spell` derivation's row, which carries it because `str_literal` is what writes it into every rendered piece.
 const STRING: StringSyntax = StringSyntax {
     string: registry_name(&["std", "Str", "Str"]),
-    qed: registry_name(&["std", "True", "True", "qed"]),
+    qed: registry_name(&["std", "Bool", "True", "qed"]),
 };
 
 pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
@@ -58,8 +58,8 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     string: STRING,
     proof: ProofSyntax {
-        true_qed: registry_name(&["std", "True", "True", "qed"]),
-        true_type: registry_name(&["std", "True", "True"]),
+        true_qed: registry_name(&["std", "Bool", "True", "qed"]),
+        true_type: registry_name(&["std", "Bool", "True"]),
         holds: registry_name(&["std", "Bool", "Holds"]),
         flt_finite: registry_name(&["std", "Flt", "Finite"]),
         flt_non_neg: registry_name(&["std", "Flt", "NonNeg"]),
@@ -286,8 +286,8 @@ fn prelude_fixture() -> RootSource {
             end
             pub mod Bool
                 pub let Holds : Type = Type;
+                pub use /sys/Bool/{True};
             end
-            pub use /sys/{True};
         "#
         .parse()
         .unwrap(),

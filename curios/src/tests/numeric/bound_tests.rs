@@ -294,9 +294,9 @@ fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
 fn strong_induction_serves_a_proposition_and_a_computation() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Str, True, Char};
+        use /std/{Nat, Str, Bool, Char};
         let below(n: Nat) -> Nat/Lt(n, n + 3) =
-            Nat/Lt/strong((k) => Nat/Lt(k, k + 3), (k, ih) => True/qed(), n);
+            Nat/Lt/strong((k) => Nat/Lt(k, k + 3), (k, ih) => Bool/True/qed(), n);
         let fib(n: Nat) -> Nat =
             Nat/Lt/strong(
                 (k) => Nat,
@@ -306,7 +306,7 @@ fn strong_induction_serves_a_proposition_and_a_computation() {
                     | kp + 1 =>
                         match kp
                         | 0 => 1
-                        | kpp + 1 => ih(kp, True/qed()) + ih(kpp, True/qed())
+                        | kpp + 1 => ih(kp, Bool/True/qed()) + ih(kpp, Bool/True/qed())
                         end
                     end,
                 n);

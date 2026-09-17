@@ -61,7 +61,7 @@ fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
 fn a_conversion_parked_under_refinements_notes_the_dependence() {
     // `Below/mk`'s proof checks against `Holds(?c < 0xD800)` — a match stuck on the unsolved index — and parks under the `code < 0xD800` arm's refinement. Nothing ever pins `?c`, so the survivor's report must say the goal was postponed and note the refinement dependence.
     let source = r#"
-        use /std/{Nat, Bool, True, Io};
+        use /std/{Nat, Bool, Io};
 
         induct Below: (Nat) -> Prop
         | mk(@code: Nat, proof: Bool/Holds(code < 0xD800)): (code)
@@ -70,7 +70,7 @@ fn a_conversion_parked_under_refinements_notes_the_dependence() {
         let f(code: Nat) -> {} =
             match code < 0xD800
             | true =>
-                let s = Below/mk(True/qed());
+                let s = Below/mk(Bool/True/qed());
                 ()
             | false => ()
             end;
@@ -93,12 +93,12 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
     // The Item 2 acceptance shape: the proof argument is checked before anything pins `@b`, against `Nat/Lt(0, Bytes/len(?b))` — a match stuck on the metavariable. The goal must park and discharge once the witness argument solves `?b`, in either argument order.
     let source = r#"
         use /std/Str/{Valid};
-        use /std/{Nat, Byte, Bytes, True, Io};
+        use /std/{Nat, Byte, Bytes, Bool, Io};
 
         let proof_first(@b: Bytes, nz: Nat/Lt(0, Bytes/len(b)), w: Valid(b)) -> {} = ();
 
         let call(h: Byte, t: Bytes, valid: Valid(x[h, ..t])) -> {} =
-            proof_first(True/qed(), valid);
+            proof_first(Bool/True/qed(), valid);
 
         Io/pure(())
     "#;
@@ -109,7 +109,7 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
 fn a_packed_literal_decomposes_against_its_folded_spine() {
     // The packed-literal view's acceptance shape, distilled from `BigNat/succ.crs`: `raw(b[])` folds to the literal `b[1]`, so recovering the injectivity lemma's implicits needs `append(b[], ?h) ≡ b[1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bin` to `BinAppend`/`BinConcat`.
     let source = r#"
-        use /std/{Bool, Bits, Eq, False, True, Io};
+        use /std/{Bool, Bits, Eq, Io};
         use /std/Bool/{false_neq_true};
 
         let head_of(x: Bits) -> Bool =
@@ -130,7 +130,7 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
             | b[h, ..t] => match h | true => b[0, ..raw(t)] | false => b[1, ..t] end
             end;
 
-        let probe(zt: Bits, p: Eq(raw(b[]), raw(b[true, ..zt]))) -> False =
+        let probe(zt: Bits, p: Eq(raw(b[]), raw(b[true, ..zt]))) -> Bool/False =
             false_neq_true(Eq/sym(cons_inj_head(p)));
 
         Io/pure(())

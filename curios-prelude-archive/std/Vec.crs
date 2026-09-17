@@ -1,4 +1,4 @@
-use /std/{Nat, List, Bool, Eq, Str, Show, Spell, True, False};
+use /std/{Nat, List, Bool, Eq, Str, Show, Spell};
 use /std/ops/{Eql};
 
 --- That `l` holds exactly `n` elements.
@@ -14,8 +14,8 @@ pub struct Vec(T: Type, n: Nat): pub Type {
 }
 
 -- Zero is no successor, refuted by the comparison that decides it.
-let zero_not_succ(@n: Nat, e: Eq(0, n + 1)) -> False =
-    Eq/subst((m: Nat) => Bool/Holds(Nat/eql(0, m)), e, True/qed());
+let zero_not_succ(@n: Nat, e: Eq(0, n + 1)) -> Bool/False =
+    Eq/subst((m: Nat) => Bool/Holds(Nat/eql(0, m)), e, Bool/True/qed());
 
 -- A successor cancels off both sides, which is how a tail's length is read off the whole's.
 let succ_cancel(@a: Nat, @b: Nat, e: Eq(a + 1, b + 1)) -> Eq(a, b) =

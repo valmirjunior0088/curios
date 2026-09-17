@@ -1,4 +1,4 @@
-use /std/{Bool, Bits, Eq, True, BigNat, BigPos};
+use /std/{Bool, Bits, Eq, BigNat, BigPos};
 use /std/Bool/{false_neq_true};
 use /std/BigNat/{is_trimmed, trim, xor3, maj3};
 use /std/BigPos/{is_cons, trim_head_non_zero, trim_head_true};
@@ -6,12 +6,12 @@ use /std/BigPos/{is_cons, trim_head_non_zero, trim_head_true};
 let raw_cons(x: Bits, y: Bits, c: Bool, ne: is_cons(x)) -> is_cons(BigNat/add/raw(x, y, c)) =
     match x
     | b[] => match ne end
-    | b[_, .._] => match y | b[] => True/qed() | b[_, .._] => True/qed() end
+    | b[_, .._] => match y | b[] => Bool/True/qed() | b[_, .._] => Bool/True/qed() end
     end;
 
 let carry_non_zero(x: Bits) -> is_cons(trim(BigNat/add/raw(b[], x, true))) =
     match x
-    | b[] => True/qed()
+    | b[] => Bool/True/qed()
     | b[xh, ..xt] =>
         match xh
         | true => trim_head_non_zero(false, BigNat/add/raw(b[], xt, true), carry_non_zero(xt))
@@ -35,7 +35,7 @@ pub let trim_non_zero(
             match ah
             | true =>
                 match b
-                | b[] => match c | false => True/qed() | true => True/qed() end
+                | b[] => match c | false => Bool/True/qed() | true => Bool/True/qed() end
                 | b[bh, ..bt] =>
                     match bh
                     | true =>
@@ -66,12 +66,12 @@ pub let trim_non_zero(
                 trim_head_non_zero(
                     xor3(ah, false, c),
                     BigNat/add/raw(at, b[], maj3(ah, false, c)),
-                    trim_non_zero(at, b[], maj3(ah, false, c), tr, True/qed()))
+                    trim_non_zero(at, b[], maj3(ah, false, c), tr, Bool/True/qed()))
             | b[bh, ..bt] =>
                 trim_head_non_zero(
                     xor3(ah, bh, c),
                     BigNat/add/raw(at, bt, maj3(ah, bh, c)),
-                    trim_non_zero(at, bt, maj3(ah, bh, c), tr, True/qed()))
+                    trim_non_zero(at, bt, maj3(ah, bh, c), tr, Bool/True/qed()))
             end
         end
     end;

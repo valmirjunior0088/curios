@@ -1,0 +1,2 @@
+pub use /sys/Bool/{True};
+pub use /sys/Bool/True/{qed};

@@ -1094,44 +1094,49 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
             "Nat",
             &["The whole numbers from zero up, with no highest."],
             pub_let("Nat", type_(), nat()),
-            nat_ops(syntax),
+            items(nat_ops(syntax)),
         ),
         SysModule::carrier(
             "Byte",
             &["A single byte, from zero through 255."],
             pub_let("Byte", type_(), byte()),
-            byte_ops(),
+            items(byte_ops()),
         ),
         SysModule::carrier(
             "Int",
             &["The whole numbers, negative and not, with no least and no greatest."],
             pub_let("Int", type_(), int()),
-            int_ops(syntax),
+            items(int_ops(syntax)),
         ),
         SysModule::carrier(
             "Flt",
             &["A binary32 floating-point number."],
             pub_let("Flt", type_(), flt()),
-            flt_ops(syntax),
+            items(flt_ops(syntax)),
         ),
         // The two packed runs share every operation name, so neither type is hoisted: `Bits` and `Bytes` are reached through their own modules.
         SysModule::packed(
             "Bits",
             &["A packed run of bits, written `b[…]`."],
             pub_let("Bits", type_(), bin(Grain::B)),
-            bin_ops(Grain::B, syntax),
+            items(bin_ops(Grain::B, syntax)),
         ),
         SysModule::packed(
             "Bytes",
             &["A packed run of bytes, written `x[…]`."],
             pub_let("Bytes", type_(), bin(Grain::X)),
-            bin_ops(Grain::X, syntax),
+            items(bin_ops(Grain::X, syntax)),
         ),
+        // The propositions `/sys`'s own operations state their preconditions in sit beside the decision they reflect: `Holds` is written beside every bound in the roster, and `True` and `False` are what it reduces to.
         SysModule::carrier(
             "Bool",
             &["The two truth values, `true` and `false`."],
             pub_let("Bool", type_(), bool_()),
-            bool_ops(),
+            [
+                items(bool_ops()),
+                vec![true_prop(), false_prop(), holds().into_item()],
+            ]
+            .concat(),
         ),
         // The one label in both inputs: its carrier declarations here, its host rows folded in by `absorb_host_rows` like any other subject's.
         SysModule::carrier(
@@ -1140,13 +1145,13 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
                 "An open stream the host holds — a file, a socket, or one of the three standard streams.",
             ],
             pub_let("Handle", type_(), handle()),
-            handle_ops(),
+            items(handle_ops()),
         ),
         SysModule::carrier(
             "List",
             &["A run of values of one type, written `[…]`."],
             pub_fn("List", vec![("T", type_())], type_(), list_of(name("T"))),
-            list_ops(syntax),
+            items(list_ops(syntax)),
         ),
         SysModule::carrier(
             "Cell",
@@ -1156,7 +1161,7 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
                 "Reading answers the last value written through any name for the same cell, so two names for one cell are not two cells.",
             ],
             pub_fn("Cell", vec![("T", type_())], type_(), cell_of(name("T"))),
-            cell_ops(),
+            items(cell_ops()),
         ),
         SysModule::carrier(
             "Io",
@@ -1166,7 +1171,7 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
                 "Holding one performs nothing: a description runs by being the program's tail, so forcing the same one twice does the work twice, and there is no operation taking an `Io(T)` back to a `T`.",
             ],
             pub_fn("Io", vec![("T", type_())], type_(), io_of(name("T"))),
-            io_ops(),
+            items(io_ops()),
         ),
         // Declared rather than pushed in after the join, which is what a module of operations is for: `exit` used to be placed by a `find` over the joined roster, so a store that stopped carrying a `proc` row would have dropped it with no error at all. Declaring the module is what makes that unrepresentable — and it puts `exit` ahead of the rows, since a declared module precedes every module the join opens.
         SysModule::ops("proc", vec![proc_exit()]),
@@ -1175,18 +1180,15 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
 
 /// Construct the generated `/sys` surface module from the authoritative host function store.
 ///
-/// **One keyed pass over one declared roster.** Every `/sys` module is a `SysModule` with a label: the ones written here from the intrinsic table, then each host row joining the module its own subject names — opening one where nothing declared the label, which is how `file`, `socket` and `dns` come to exist, and joining the declaration where something did, which is how `Handle`'s rows come to sit beside its type and `proc`'s beside `exit`. Then the propositions `/sys`'s own preconditions are stated in, and the wire-code mirror.
+/// **One keyed pass over one declared roster.** Every `/sys` module is a `SysModule` with a label: the ones written here from the intrinsic table, then each host row joining the module its own subject names — opening one where nothing declared the label, which is how `file`, `socket` and `dns` come to exist, and joining the declaration where something did, which is how `Handle`'s rows come to sit beside its type and `proc`'s beside `exit`. Then the wire-code mirror.
 ///
 /// Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
-    let mut items = absorb_host_rows(declared(syntax), foreigns)
+    let items = absorb_host_rows(declared(syntax), foreigns)
         .into_iter()
+        .chain(code_modules())
         .flat_map(SysModule::into_items)
-        .collect::<Vec<_>>();
-
-    // The propositions `/sys`'s own operations state their preconditions in, at the root rather than in a module of their own: a precondition is about the operation that demands it, and `Holds` is written beside every bound in the roster.
-    items.extend([true_prop(), false_prop(), holds().into_item()]);
-    items.extend(code_modules().into_iter().flat_map(SysModule::into_items));
+        .collect();
 
     Module { items }
 }

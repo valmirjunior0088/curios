@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Spell, True, False};
+use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Spell};
 use /std/ops/{Eql};
 
 --- The scheme, which decides the port when none is written and whether the connection is under TLS.
@@ -104,7 +104,7 @@ pub let of_str(s: Str) -> Result(Parse/Error, Url) =
 
 --- That `r` is a URL that read.
 pub let Read(r: Result(Parse/Error, Url)) -> Prop =
-    match r | success(_) => True | failure(_) => False end;
+    match r | success(_) => Bool/True | failure(_) => Bool/False end;
 
 --- That `s` reads as a URL, decided by reduction: a literal that does not is refused where it is written.
 pub let Valid(s: Str) -> Prop =

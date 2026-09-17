@@ -1,4 +1,4 @@
-use /std/{Bool, Show, Spell, Str, Monad, Result, True, False, Ordering, Ord};
+use /std/{Bool, Show, Spell, Str, Monad, Result, Ordering, Ord};
 use /std/ops/{Eql, Cmp};
 
 --- A value that may be absent.
@@ -58,11 +58,11 @@ pub let to_result(@A: Type, @E: Type, m: Option(A), e: E) -> Result(E, A) =
 pub let unwrap_or_else(@A: Type, m: Option(A), default: () -> A) -> A =
     match m | some(a) => a | none() => default() end;
 
---- Whether `m` holds a value, as a decided proposition: `True` at `some` and `False` at `none`.
+--- Whether `m` holds a value, as a decided proposition: `Bool/True` at `some` and `Bool/False` at `none`.
 ---
 --- A literal discharges it by reduction, and an option a guard has refined discharges it with nothing written.
 pub let IsSome(@A: Type, m: Option(A)) -> Prop =
-    match m | some(_) => True | none() => False end;
+    match m | some(_) => Bool/True | none() => Bool/False end;
 
 --- The value, under the evidence that there is one.
 pub let get(@A: Type, m: Option(A), @ok: IsSome(m)) -> A =

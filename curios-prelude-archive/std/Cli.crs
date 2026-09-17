@@ -1,5 +1,4 @@
-use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, proc, True,
-    False};
+use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, proc};
 
 --- How an argument's text is read into a value: the placeholder shown in help, and the reader.
 pub struct Value: pub Type {
@@ -169,8 +168,8 @@ pub let Lookup(spec: List(Arg), name: Str) -> Type =
 --- That `name` is one of `spec`'s long names, decided by reduction: a name the declaration lacks is refused where it is written.
 pub let Has(spec: List(Arg), name: Str) -> Prop =
     match spec
-    | [] => False
-    | [a, ..rest] => match Str/eql(a.long, name) | true => True | false => Has(rest, name) end
+    | [] => Bool/False
+    | [a, ..rest] => match Str/eql(a.long, name) | true => Bool/True | false => Has(rest, name) end
     end;
 
 --- The field named `name`, at the type its argument decides.
@@ -185,7 +184,7 @@ pub let get(
     | cons(@a, @rest, head, tail) =>
         let pick =
             match Str/eql(a.long, name): (b) =>
-                (here: match b | true => True | false => Has(rest, name) end) -> match b
+                (here: match b | true => Bool/True | false => Has(rest, name) end) -> match b
                 | true => Carrier(a)
                 | false => Lookup(rest, name)
                 end

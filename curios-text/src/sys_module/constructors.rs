@@ -221,18 +221,18 @@ pub(super) fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> In
 /// **A `/sys` module carries no gloss of its own, and that is a decision rather than an omission.** `/sys` does build a documentation record — `/std`'s pages adopt declarations out of it — so a module here *could* carry one. A carrier's prose goes on its type former instead, which is the name a reader reaches for, and stating that in the type is what keeps the two from drifting into both being written.
 pub(super) struct SysModule {
     pub(super) label: String,
-    /// What this label declares: a type former and the operations over it, then whatever host rows name it as their subject. **A `/sys` module holds nothing but `let` bindings** — the roster's two inductive propositions live at the root, and so does every re-export — which is why this is a run of declarations rather than of items.
-    pub(super) decls: Vec<Decl>,
+    /// What this label declares: a type former and the operations over it, then whatever host rows name it as their subject. A run of items rather than of declarations, because `Bool` also holds the two inductive propositions a decision reflects into; every re-export stays at the root.
+    pub(super) items: Vec<TopItem>,
     /// Whether the root re-exports the type this module declares — every carrier a program reaches by name, and no module of operations alone.
     hoisted: bool,
 }
 
 impl SysModule {
     /// A carrier: a type former, its gloss, and the operations over it, hoisted to the root.
-    pub(super) fn carrier(label: &str, doc: &[&str], former: Decl, ops: Vec<Decl>) -> Self {
+    pub(super) fn carrier(label: &str, doc: &[&str], former: Decl, ops: Vec<TopItem>) -> Self {
         Self {
             label: label.to_string(),
-            decls: std::iter::once(documented(doc, former))
+            items: std::iter::once(documented(doc, former).into_item())
                 .chain(ops)
                 .collect(),
             hoisted: true,
@@ -240,7 +240,7 @@ impl SysModule {
     }
 
     /// A carrier the root does not re-export — a packed run, reached through its own module because the two of them share every operation name.
-    pub(super) fn packed(label: &str, doc: &[&str], former: Decl, ops: Vec<Decl>) -> Self {
+    pub(super) fn packed(label: &str, doc: &[&str], former: Decl, ops: Vec<TopItem>) -> Self {
         Self {
             hoisted: false,
             ..Self::carrier(label, doc, former, ops)
@@ -251,7 +251,7 @@ impl SysModule {
     pub(super) fn ops(label: &str, decls: Vec<Decl>) -> Self {
         Self {
             label: label.to_string(),
-            decls,
+            items: items(decls),
             hoisted: false,
         }
     }
@@ -260,9 +260,7 @@ impl SysModule {
     pub(super) fn into_items(self) -> impl Iterator<Item = TopItem> {
         let hoist = self.hoisted.then(|| pub_use(&self.label));
 
-        [pub_mod(&self.label, items(self.decls))]
-            .into_iter()
-            .chain(hoist)
+        [pub_mod(&self.label, self.items)].into_iter().chain(hoist)
     }
 }
 
@@ -289,7 +287,9 @@ pub(super) fn absorb_host_rows(
             }
         };
 
-        modules[index].decls.push(host_fn(function, true));
+        modules[index]
+            .items
+            .push(host_fn(function, true).into_item());
     }
 
     modules

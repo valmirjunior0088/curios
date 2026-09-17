@@ -122,7 +122,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [ ] A function type elaborates in its size, not its size times its binders (measured)
 - [x] Elaboration transients grouped under one core variant (`Transient`), refused at the kernel
 - [x] [Names as identity only](design/toolchain/one-naming-scheme-for-compiler-identities.md) — nothing branches on a name's spelling
-- [x] [Totality of everything erasure deletes](design/language/totality-of-the-erased-program.md), so nothing inhabits `/std/False`
+- [x] [Totality of everything erasure deletes](design/language/totality-of-the-erased-program.md), so nothing inhabits `/std/Bool/False`
 - [x] Crate-boundary split separating the term representation from the elaborator (`curios-core`)
 - [x] [Independent kernel in `curios-cert` re-checking what the elaborator accepts](design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md)
 - [x] Crate-boundary split separating the rules both checkers run (`curios-analysis`)
@@ -220,7 +220,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 ## Standard Library
 
 - [x] Canonicalized module layout and registration
-- [x] Foundational proof/logic types (`std/True`, `std/False`)
+- [x] Foundational proof/logic types (`std/Bool/True`, `std/Bool/False`)
 - [x] Equality and ordering (`std/Eq`, `std/Ordering`)
 - [x] Foundational sum types (`std/Option`, `std/Result`)
 - [x] Pure state threading (`std/State`; no `Lift(Io, State(S))` edge, so a region performs nothing)

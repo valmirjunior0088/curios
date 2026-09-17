@@ -1,4 +1,4 @@
-use /std/{Bits, Eq, True, BigNat, BigPos};
+use /std/{Bits, Eq, Bool, BigNat, BigPos};
 use /std/Bool/{false_neq_true};
 use /std/BigNat/{is_trimmed, trim};
 use /std/BigPos/{is_cons, nz_trimmed, trim_head_non_zero, add};
@@ -23,7 +23,7 @@ let raw_trim_cons(
                 trim_head_non_zero(
                     false,
                     BigNat/mul/raw(pt, q),
-                    raw_trim_cons(pt, q, tp, True/qed(), tq, nq))
+                    raw_trim_cons(pt, q, tp, Bool/True/qed(), tq, nq))
             end
         end
     end;

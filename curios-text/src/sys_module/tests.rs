@@ -34,12 +34,15 @@ fn store(rows: &[(&str, &str)]) -> ForeignStore {
     store
 }
 
-/// The labels a module declares, in order — the placement question every test below asks.
+/// The labels a module declares, in order — the placement question every test below asks. Everything these tests place is a `let`.
 fn labels(module: &SysModule) -> Vec<&str> {
     module
-        .decls
+        .items
         .iter()
-        .map(|decl| decl.label.as_str())
+        .flat_map(|item| match item {
+            TopItem::Let(lets) => lets.iter().map(|decl| decl.label.as_str()),
+            other => panic!("a placed binding lowered to {other:?}"),
+        })
         .collect()
 }
 

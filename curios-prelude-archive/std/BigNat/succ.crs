@@ -1,4 +1,4 @@
-use /std/{Bool, Bits, Eq, False};
+use /std/{Bool, Bits, Eq};
 use /std/Bool/{false_neq_true};
 use /std/BigNat/{BigNat, cong_cons2, cons_inj_head, cons_inj_tail, is_trimmed, is_trimmed_cons,
     is_trimmed_of_canonical, nonempty, of_trimmed_bits, refl_at, tail_is_trimmed};
@@ -49,7 +49,7 @@ let raw_inj_absurd(
     zt: Bits,
     pz: Eq(is_trimmed(b[zh, ..zt]), true),
     p: Eq(raw(b[]), raw(b[zh, ..zt])),
-) -> False =
+) -> Bool/False =
     match zh
     | true => false_neq_true(Eq/sym(cons_inj_head(p)))
     | false =>
