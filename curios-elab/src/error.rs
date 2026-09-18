@@ -7,9 +7,9 @@ mod tests;
 use {
     super::{Erased, HeadKey, WitnessKey},
     curios_core::{
-        Atom, Free, Global, Imports, Level, Module, Polarity, ReduceError, Spelling, Subterm, Term,
-        UniverseConstraintOrigin, UniverseError, build_rename, build_shorten_layered,
-        display_names,
+        Atom, CalleeId, Free, Global, Imports, Level, Module, Polarity, ReduceError, Spelling,
+        Subterm, Term, UniverseConstraintOrigin, UniverseError, build_rename,
+        build_shorten_layered, display_names,
     },
     curios_num::{Integer, Natural},
     curios_utilities::{Grain, InfixOp, Plicity, Qualifier, Report, Span, SyntaxRegistry},
@@ -90,8 +90,8 @@ pub enum Underivable {
 /// Where an argument was checked, for a report that names the slot it filled.
 #[derive(Debug)]
 pub struct ArgumentSite {
-    /// The applied function, as the call spells it.
-    pub function: String,
+    /// The applied callee, carried as its identity so the report spells it under the names in scope.
+    pub function: CalleeId,
     /// The parameter the argument filled, when the telescope names it and the slot is not a `use` one.
     pub parameter: Option<String>,
     /// The mark the argument was written with, which is its slot's plicity.
@@ -107,12 +107,14 @@ pub struct ArgumentSite {
 /// Provenance travels as a string — a function's spelling, an operator's symbol, or an anonymous witness's minted name — and is read back into one of these where a report is built (by `resolve`'s `callee`), so no report spells a name a program cannot write or advises a call a program cannot make.
 #[derive(Debug, Clone)]
 pub enum Callee {
-    /// A function or constructor the program names, spelled as the provenance carried it.
-    Function(String),
+    /// A function or constructor the program names, carried as its identity rather than its text so the report spells it under the names in scope — the shorten map and the unit's import spellings, exactly as every term in the same report is spelled.
+    Function(Free),
     /// An infix operator, beside the wrapper of the concept method it dispatches through — the call a program can write where the operator takes no argument.
     Operator { op: InfixOp, method: Global },
     /// An anonymous witness, named as coherence names it: by its concept and the key it occupies.
     Witness { concept: Global, key: WitnessKey },
+    /// A head the program gave no name to report.
+    Anonymous,
 }
 
 #[derive(Debug)]

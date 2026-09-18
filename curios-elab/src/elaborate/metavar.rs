@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, curios_core::CalleeId};
 
 pub(super) fn elaborate_metavar(
     context: &mut Context,
@@ -128,8 +128,8 @@ pub(super) fn insert_implicits_on_check(
 
     let ift = ift.clone();
     let func_label = match &**term {
-        Subterm::Var(var) => var.unwrap().to_string(),
-        _ => "<function>".to_string(),
+        Subterm::Var(var) => CalleeId::Function(var.unwrap().clone()),
+        _ => CalleeId::Anonymous,
     };
 
     // Walk the head's telescope: implicit binders become fresh metavariables (the inserted arguments), witness binders fresh metavariables with resolution goals, explicit binders fresh lambda parameters (the eta variables). `head_args` records all in telescope order so the body re-applies the head fully saturated; `open` threads the dependent substitution so a later binder mentioning an earlier one is instantiated.

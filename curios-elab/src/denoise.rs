@@ -16,8 +16,8 @@ mod tests;
 use {
     super::Context,
     curios_core::{
-        Apply, Bound, Field, Free, Global, Instance, InstanceHead, Metavar, MetavarOrigin, Proj,
-        Rec, RecGroup, StructType, Subterm, Term, Var, Visit,
+        Apply, Bound, CalleeId, Field, Free, Global, Instance, InstanceHead, Metavar,
+        MetavarOrigin, Proj, Rec, RecGroup, StructType, Subterm, Term, Var, Visit,
     },
     curios_utilities::InfixOp,
     std::{collections::BTreeMap, rc::Rc},
@@ -187,7 +187,10 @@ fn projected_method(table: &Methods, binders: &BinderTypes, head: &Term) -> Opti
             ..
         }) => Some(Method {
             wrapper: None,
-            operator: Some(InfixOp::from_symbol(&origin.func)?),
+            operator: Some(match origin.func {
+                CalleeId::Operator(op) => op,
+                CalleeId::Function(_) | CalleeId::Witness(_) | CalleeId::Anonymous => return None,
+            }),
         }),
         Subterm::Var(var)
         | Subterm::Instance(Instance {

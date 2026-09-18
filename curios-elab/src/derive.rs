@@ -17,8 +17,9 @@
 use {
     super::{Context, Error, Mode, Sort, Underivable, elaborate, reduce_with},
     curios_core::{
-        Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many, MetavarOrigin, Scope,
-        StructDecl, StructType, Subterm, Term, WitnessOrigin, str_literal, syn_call,
+        CalleeId, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many,
+        MetavarOrigin, Scope, StructDecl, StructType, Subterm, Term, WitnessOrigin, str_literal,
+        syn_call,
     },
     curios_num::Natural,
     curios_utilities::{
@@ -224,8 +225,10 @@ fn motive(context: &mut Context) -> Scope<Many> {
 
 /// Where a payload sits, for the provenance a missing witness is reported under and the label a struct field spells with.
 struct Payload {
-    /// The constructor's absolute path, or the struct's.
+    /// The constructor's absolute path, or the struct's, as a refusal message spells it.
     constructor: String,
+    /// The same declaration as an identity. A provenance carries this rather than the rendered path above, so a report spells it under the names in scope instead of under a spelling fixed here.
+    global: Global,
     /// The written label, empty where there was none.
     label: String,
     /// `payload 'x'`, `field #2`: how a report names it.
@@ -242,8 +245,19 @@ impl Payload {
             true => format!("{noun} #{ordinal}"),
             false => format!("{noun} '{label}'"),
         };
+        // A constructor's own path is its type's with the tag appended; a struct is named by its declaration directly.
+        let global = match tag {
+            Some(tag) => Global::Authored(
+                owner
+                    .qualifier()
+                    .expect("a declared type has the path it was declared at")
+                    .with(tag),
+            ),
+            None => owner.clone(),
+        };
         Self {
             constructor: path(owner, tag),
+            global,
             label: label.to_string(),
             described,
         }
@@ -442,7 +456,7 @@ fn witness_call(
         None => classified.payload.described.clone(),
     };
     let provenance = WitnessOrigin {
-        func: classified.payload.constructor.clone(),
+        func: CalleeId::Function(Free::Global(classified.payload.global.clone())),
         binder,
     };
     // Spanned like the application around it: a goal deferred to the module's drain reports at the term it was born from, and that term is the declaration.

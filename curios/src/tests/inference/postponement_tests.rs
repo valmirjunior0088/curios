@@ -215,7 +215,7 @@ fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
 
     let report = error(source);
     assert!(
-        report.contains("'within' of '/sys/List/slice'") && report.contains("nothing discharged"),
+        report.contains("'within' of 'List/slice'") && report.contains("nothing discharged"),
         "the report should name the bound nothing discharged, got: {report}"
     );
     assert!(

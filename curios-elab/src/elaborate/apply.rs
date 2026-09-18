@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::{ArgumentSite, FrozenFrame, SettleTier, callee, exhausted_bound},
-    curios_core::Spelling,
+    curios_core::{CalleeId, Spelling},
 };
 
 pub(super) fn elaborate_func_type(
@@ -118,7 +118,7 @@ pub(super) fn insert_auto_argument(
     plicity: Plicity,
     type_: &Term,
     label: Option<&str>,
-    func: &str,
+    func: &CalleeId,
     origin: &Term,
     position: usize,
 ) -> Result<Term, Error> {
@@ -128,7 +128,7 @@ pub(super) fn insert_auto_argument(
         // An obligation already decided in the goal's favour is filled here, because *here* is where the facts that decide it are in scope: a scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established at the call and nowhere afterwards, and the inhabitant written here sits inside that arm. A bound not yet decided because its subject still waits on a metavariable — one a later argument or the expectation pins — is parked instead, and filled once the subject is known ([`attempt_discharge`]).
         Plicity::Implicit => {
             let provenance = ImplicitOrigin {
-                func: func.to_string(),
+                func: func.clone(),
                 binder,
             };
             let (reduced, inhabitant) = trivially_inhabited(context, type_)
@@ -163,7 +163,7 @@ pub(super) fn insert_auto_argument(
         }
         Plicity::Witness => {
             let provenance = WitnessOrigin {
-                func: func.to_string(),
+                func: func.clone(),
                 binder: premise_label(position),
             };
             let (id, metavar) =
@@ -270,18 +270,18 @@ pub(super) fn elaborate_apply(
     // Insertion provenance: name the applied function in the uninferred-implicit report.
     //
     // Through the spine, not just at its top: a curried call — `Fmt/print(fmt)(a)(b)`, and every partial application — heads the outer apply with another *apply*, so reading only the outermost node reported `<function>` for exactly the calls a reader most needs named. The innermost reference is the one the program wrote.
-    fn innermost_reference(term: &Term) -> Option<String> {
+    fn innermost_reference(term: &Term) -> Option<Free> {
         match &**term {
-            Subterm::Var(var) => Some(var.unwrap().to_string()),
+            Subterm::Var(var) => Some(var.unwrap().clone()),
             Subterm::Apply(apply) => innermost_reference(&apply.head),
             Subterm::Instance(instance) => match &instance.head {
-                InstanceHead::Var(var) => Some(var.unwrap().to_string()),
+                InstanceHead::Var(var) => Some(var.unwrap().clone()),
                 InstanceHead::RecProj(..) => None,
             },
             _ => None,
         }
     }
-    let func_label = innermost_reference(head).unwrap_or_else(|| "<function>".to_string());
+    let func_label = innermost_reference(head).map_or(CalleeId::Anonymous, CalleeId::Function);
 
     let (mut head, written_type) = elaborate(context, head, Mode::Infer)?;
     let mut head_type = reduce_with(context, &written_type)?;
@@ -518,7 +518,7 @@ pub(super) fn elaborate_apply(
 ///
 /// A `use` slot's binder goes unnamed, since no program names it — the method wrappers' `w` is the only name one ever carries. A hidden argument is pointed at no plain parameter: the hint is for swapped plain arguments, and an author who wrote `@` or `use` chose a hidden slot on purpose.
 fn argument_site(
-    function: &str,
+    function: &CalleeId,
     plicity: Plicity,
     position: usize,
     rest: &Scope<One, Telescope<Term>>,
@@ -547,7 +547,7 @@ fn argument_site(
         Plicity::Witness => None,
     };
     ArgumentSite {
-        function: function.to_string(),
+        function: function.clone(),
         parameter,
         plicity,
         position,

@@ -218,7 +218,7 @@ fn an_undetermined_value_implicit_is_reported_as_undetermined_not_undischarged()
 
     let report = error(source);
     assert!(
-        report.contains("implicit argument 'n' of '/pad' was not inferred")
+        report.contains("implicit argument 'n' of 'pad' was not inferred")
             && report.contains("no argument or expected type determined it (its type is Nat)")
             && !report.contains("nothing discharged"),
         "the report should say nothing determined the value, got: {report}"

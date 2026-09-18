@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    curios_utilities::{Qualifier, name},
+    curios_utilities::{InfixOp, Qualifier, name},
     std::{cmp::Ordering, collections::BTreeMap, fmt, hash},
 };
 
@@ -138,6 +138,22 @@ impl Global {
     pub fn path(&self) -> String {
         self.qualifier().map(Qualifier::join).unwrap_or_default()
     }
+}
+
+/// Who an inserted metavariable's call site was applying — the identity a report names, rather than the text it renders to.
+///
+/// **Three facts shared one `String` field before this.** A function's flattened [`Global::symbol`], a witness's, and an operator's bare symbol were all written into one slot, then discriminated on the error path by trying `InfixOp::from_symbol` and otherwise scanning every registered witness for a matching *rendered* name. That is behavior recovered from spelling, which is the defect this module exists to prevent, and it leaked in both directions: the scan compared rendered text to decide identity, and a callee captured as text never met the shorten map or the import spellings, so a report could name `/sys/Nat/to_byte` — a path no program is permitted to write.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum CalleeId {
+    /// A function or constructor the program names — a top-level definition, or a local binder holding one. A local carries no path to shorten, so only the global case meets the spelling tables.
+    Function(Free),
+    /// A witness, which is anonymous by design: carried as its own identity, and named by concept and key when a report renders it.
+    Witness(Global),
+    /// An infix operator, which has no path to render at all.
+    Operator(InfixOp),
+    /// A head with no name to report: a projection out of a recursive group, or a computed function. Reported as `<function>`, which is what the label fell back to when this was a string.
+    Anonymous,
 }
 
 /// A free variable's identity: a top-level definition, or a binder some scope opened.

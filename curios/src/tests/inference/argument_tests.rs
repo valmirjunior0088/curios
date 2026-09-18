@@ -13,8 +13,8 @@ fn a_lambda_in_the_wrong_position_names_the_parameter_it_filled_and_the_one_it_f
         "#,
     );
     assert!(
-        report.contains("checked as `a`, the 1st argument of '/sys/List/map'")
-            && report.contains("'/sys/List/map' takes a function as `f`, its 2nd argument"),
+        report.contains("checked as `a`, the 1st argument of 'List/map'")
+            && report.contains("'List/map' takes a function as `f`, its 2nd argument"),
         "unexpected report:\n{report}"
     );
 }
@@ -31,7 +31,7 @@ fn an_implicit_lambda_before_any_plain_argument_is_named_among_the_implicit_ones
         "#,
     );
     assert!(
-        report.contains("checked as `n`, the 1st '@' argument of '/f'")
+        report.contains("checked as `n`, the 1st '@' argument of 'f'")
             && !report.contains("takes a function"),
         "unexpected report:\n{report}"
     );
@@ -48,7 +48,7 @@ fn an_implicit_lambda_after_a_plain_argument_is_not_named_by_the_plain_ones_posi
         "#,
     );
     assert!(
-        report.contains("checked as `n`, the 1st '@' argument of '/f'"),
+        report.contains("checked as `n`, the 1st '@' argument of 'f'"),
         "unexpected report:\n{report}"
     );
 }
@@ -82,7 +82,7 @@ fn a_use_lambda_is_named_among_the_use_arguments_without_a_parameter_name() {
         "#,
     );
     assert!(
-        report.contains("checked as the 1st 'use' argument of '/f'"),
+        report.contains("checked as the 1st 'use' argument of 'f'"),
         "unexpected report:\n{report}"
     );
 }
@@ -98,7 +98,7 @@ fn a_use_lambda_in_a_leading_hidden_telescope_is_named_too() {
         "#,
     );
     assert!(
-        report.contains("checked as the 1st 'use' argument of '/std/Show/Show/show'")
+        report.contains("checked as the 1st 'use' argument of 'Show/show'")
             && !report.contains("`w`"),
         "unexpected report:\n{report}"
     );
@@ -118,7 +118,7 @@ fn a_missing_witness_after_a_written_one_is_named_by_its_own_position() {
         "#,
     );
     assert!(
-        report.contains("needed by '/f' for its 2nd 'use' premise"),
+        report.contains("needed by 'f' for its 2nd 'use' premise"),
         "unexpected report:\n{report}"
     );
 }

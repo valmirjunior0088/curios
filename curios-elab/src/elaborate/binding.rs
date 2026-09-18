@@ -3,7 +3,7 @@ use {
     crate::{
         HeadKey, WitnessKey, convert::convert, typing::display_mismatch, zonk_solved_term_metas,
     },
-    curios_core::Global,
+    curios_core::{CalleeId, Global},
     curios_utilities::Span,
 };
 
@@ -427,7 +427,7 @@ impl InfixMethod {
                         plicity,
                         &domain,
                         None,
-                        op.symbol(),
+                        &CalleeId::Operator(op),
                         origin,
                         positions.next(plicity),
                     )?;
@@ -474,7 +474,7 @@ fn infix_method(
         vec![operand_type.clone()],
     );
     let provenance = WitnessOrigin {
-        func: op.symbol().to_string(),
+        func: CalleeId::Operator(op),
         binder: format!("its '{field_name}' implementation"),
     };
     let (slot, witness) =

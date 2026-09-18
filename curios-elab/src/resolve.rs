@@ -15,10 +15,10 @@ use {
         ParkedWork, ShapeDiagnosis, Witness, WitnessKey, convert_outcome, reduce_with,
     },
     curios_core::{
-        ConceptDecl, Enter, Field, Free, Global, ImplicitOrigin, Level, Metavar, MetavarId,
-        StructType, Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
+        CalleeId, ConceptDecl, Enter, Field, Free, Global, ImplicitOrigin, Level, Metavar,
+        MetavarId, StructType, Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
     },
-    curios_utilities::{InfixOp, Mount, Plicity, Qualifier},
+    curios_utilities::{Mount, Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 };
 
@@ -47,23 +47,28 @@ fn display_goal(context: &mut Context, goal: &Term) -> Term {
     super::resolved_for_display(context, goal)
 }
 
-/// Read an insertion provenance back into who it names ([`Callee`]). An operator's provenance is its symbol, which no qualified name can be; a witness's is its minted name, found among the registered witnesses so the report can name it by its concept and key instead. Error-path only: the witness lookup scans the table.
-pub(crate) fn callee(context: &Context, func: &str) -> Callee {
-    if let Some(op) = InfixOp::from_symbol(func) {
-        let method = context.syntax().operator.concept_field(op);
-        return Callee::Operator {
-            op,
-            method: Global::Authored(method.concept.qualifier().with(method.field)),
-        };
+/// Read an insertion provenance back into who it names ([`Callee`]). The discrimination is the [`CalleeId`]'s own, so this is a total match rather than a parse: an operator carries its [`InfixOp`], and a witness carries the identity the coherence table is keyed by, which the report renames to a concept and key. Error-path only: the witness lookup scans the table.
+pub(crate) fn callee(context: &Context, func: &CalleeId) -> Callee {
+    match func {
+        CalleeId::Operator(op) => {
+            let method = context.syntax().operator.concept_field(*op);
+            Callee::Operator {
+                op: *op,
+                method: Global::Authored(method.concept.qualifier().with(method.field)),
+            }
+        }
+        // A witness with no table entry is left as the bare identity: coherence has nothing to rename it by, and a report naming the global beats one naming nothing.
+        CalleeId::Witness(name) => context
+            .witness_keyed_entries()
+            .find(|(_, _, witness)| &witness.name == name)
+            .map(|(concept, key, _)| Callee::Witness {
+                concept: concept.clone(),
+                key: key.clone(),
+            })
+            .unwrap_or_else(|| Callee::Function(Free::Global(name.clone()))),
+        CalleeId::Function(name) => Callee::Function(name.clone()),
+        CalleeId::Anonymous => Callee::Anonymous,
     }
-    context
-        .witness_keyed_entries()
-        .find(|(_, _, witness)| witness.name.symbol() == func)
-        .map(|(concept, key, _)| Callee::Witness {
-            concept: concept.clone(),
-            key: key.clone(),
-        })
-        .unwrap_or_else(|| Callee::Function(func.to_string()))
 }
 
 fn no_witness_error(context: &mut Context, goal: &Term, provenance: &WitnessOrigin) -> Error {
@@ -540,7 +545,7 @@ fn instantiate(
                     Plicity::Implicit => {
                         let proposition = crate::is_prop(context, &ty).unwrap_or(false);
                         let provenance = ImplicitOrigin {
-                            func: witness.name.symbol(),
+                            func: CalleeId::Witness(witness.name.clone()),
                             binder,
                         };
                         let (slot, hole) = context.fresh_metavar(
@@ -557,7 +562,7 @@ fn instantiate(
                     }
                     Plicity::Witness => {
                         let provenance = WitnessOrigin {
-                            func: witness.name.symbol(),
+                            func: CalleeId::Witness(witness.name.clone()),
                             binder: crate::premise_label(position),
                         };
                         let (id, metavar) = context.fresh_witness_metavar(

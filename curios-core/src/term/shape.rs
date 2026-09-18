@@ -704,11 +704,11 @@ impl Rec {
     }
 }
 
-/// Provenance of an inserted implicit argument: the applied function (`func`) had no `@`-argument for its implicit binder `binder` at some call site, so the elaborator filled the slot with a fresh metavariable.
+/// Provenance of an inserted implicit argument: the applied callee (`func`) had no `@`-argument for its implicit binder `binder` at some call site, so the elaborator filled the slot with a fresh metavariable.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct ImplicitOrigin {
-    pub func: String,
+    pub func: CalleeId,
     pub binder: String,
 }
 
@@ -716,7 +716,7 @@ pub struct ImplicitOrigin {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WitnessOrigin {
-    pub func: String,
+    pub func: CalleeId,
     pub binder: String,
 }
 

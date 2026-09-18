@@ -8,7 +8,7 @@ mod tests;
 use {
     super::{Callee, Erased, Error, GoalReport, HeadKey, ShapeDiagnosis, Underivable, WitnessKey},
     crate::ordinal,
-    curios_core::{Spelling, Subterm, Term},
+    curios_core::{CalleeId, Free, Spelling, Subterm, Term},
     curios_utilities::{Grain, Plicity, Qualifier},
     std::{fmt, rc::Rc},
 };
@@ -81,11 +81,30 @@ fn key_noun(key: &WitnessKey) -> &'static str {
     }
 }
 
+/// A name spelled under the names in scope: a global meets the shorten map and the unit's import spellings, a local binder is already the name the reader wrote, so neither can surface a path no program may write.
+fn spelled_free(name: &Free, spelling: &Spelling) -> String {
+    match name {
+        Free::Global(global) => spelling.symbol(global),
+        Free::Local(_) => name.to_string(),
+    }
+}
+
+/// A callee identity spelled the same way, for the reports that carry one whole rather than destructured.
+fn spelled_callee(callee: &CalleeId, spelling: &Spelling) -> String {
+    match callee {
+        CalleeId::Function(name) => spelled_free(name, spelling),
+        CalleeId::Witness(global) => spelling.symbol(global),
+        CalleeId::Operator(op) => op.symbol().to_string(),
+        CalleeId::Anonymous => "<function>".to_string(),
+    }
+}
+
 impl Callee {
     /// This callee as a report's sentence names it: a function quoted as written, an operator and a witness described, since neither has a name a program writes.
     pub(crate) fn phrase(&self, spelling: &Spelling) -> String {
         match self {
-            Callee::Function(name) => format!("'{name}'"),
+            Callee::Function(name) => format!("'{}'", spelled_free(name, spelling)),
+            Callee::Anonymous => "'<function>'".to_string(),
             Callee::Operator { op, .. } => format!("the '{}' operator", op.symbol()),
             Callee::Witness { concept, key } => format!(
                 "the witness of '{}' for {} '{}'",
@@ -100,7 +119,7 @@ impl Callee {
     pub(crate) fn slot(&self, noun: &str, binder: &str, spelling: &Spelling) -> String {
         match self {
             Callee::Operator { .. } => format!("the {noun} of {}", self.phrase(spelling)),
-            Callee::Function(_) | Callee::Witness { .. } => {
+            Callee::Function(_) | Callee::Witness { .. } | Callee::Anonymous => {
                 format!("the {noun} '{binder}' of {}", self.phrase(spelling))
             }
         }
@@ -231,7 +250,7 @@ impl fmt::Display for Displayed<'_> {
                         f,
                         "\n  checked as {parameter}the {} {mark}argument of '{}'",
                         ordinal(site.position),
-                        site.function
+                        spelled_callee(&site.function, spelling)
                     )?;
                     if let Some((name, position)) = &site.function_typed {
                         let name = match name {
@@ -241,7 +260,7 @@ impl fmt::Display for Displayed<'_> {
                         write!(
                             f,
                             "\n  '{}' takes a function as {name}its {} argument",
-                            site.function,
+                            spelled_callee(&site.function, spelling),
                             ordinal(*position)
                         )?;
                     }
@@ -688,16 +707,25 @@ impl fmt::Display for Displayed<'_> {
                     }
                 };
                 match callee {
-                    Callee::Function(func) => write!(
-                        f,
-                        "implicit argument '{binder}' of '{func}' was not inferred\n  {why}\n  supply it explicitly: {func}(@...)"
-                    ),
+                    Callee::Function(func) => {
+                        let func = spelled_free(func, spelling);
+                        write!(
+                            f,
+                            "implicit argument '{binder}' of '{func}' was not inferred\n  {why}\n  supply it explicitly: {func}(@...)"
+                        )
+                    }
                     // An operator has no argument list to write the bound into, so the report names the two places it can be established: a guard before the operation, or the method call the operator stands for — with its type argument first, since a leading `@` fills that slot and not the bound.
                     Callee::Operator { method, .. } => write!(
                         f,
                         "{} was not discharged\n  {why}\n  an operator takes no written arguments: decide the bound with a guard before the operation, or call {}(@T, a, b, @proof)",
                         callee.slot("bound", binder, spelling),
                         spelling.symbol(method)
+                    ),
+                    // A head the program gave no name to: a computed function, or a projection out of a recursive group. There is nothing to quote, so the advice names the slot rather than a callee it cannot spell.
+                    Callee::Anonymous => write!(
+                        f,
+                        "{} was not inferred\n  {why}\n  supply it explicitly at the call site",
+                        callee.slot("implicit argument", binder, spelling)
                     ),
                     // A witness is never called, so there is no argument to supply: its parameters are filled from the goal it answers.
                     Callee::Witness { .. } => write!(

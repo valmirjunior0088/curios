@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_core::{Global, Level, UniverseContext, instantiate_universe_levels_scoped},
+    curios_core::{CalleeId, Global, Level, UniverseContext, instantiate_universe_levels_scoped},
 };
 
 fn instantiate_struct_decl(
@@ -71,7 +71,7 @@ pub(super) fn elaborate_struct_type(
                 ty.clone(),
                 term.span(),
                 ImplicitOrigin {
-                    func: name.symbol(),
+                    func: CalleeId::Function(Free::Global(name.clone())),
                     binder,
                 },
                 proposition,
@@ -107,7 +107,7 @@ pub(super) enum FieldSource<'a> {
     Written(&'a Term),
     /// An unfilled `use` position: a superclass edge the literal left to resolution. `edge` names the concept edged to rather than a field label, because the field is anonymous — there is no label to carry, and the edge is what a reader needs.
     Resolve {
-        func: String,
+        func: CalleeId,
         edge: String,
     },
 }
@@ -289,7 +289,7 @@ pub(super) fn elaborate_struct(
                 Some(fill) => FieldSource::Written(fill),
                 // A `use` position is an anonymous superclass field, so the provenance names the concept it *edges to* rather than reaching for a label: the minted internal one must never surface, and the placeholder that stood in for it read as `its 'use' field '_'`. The short name, since the goal's own line already carries the application it is wanted at.
                 None => FieldSource::Resolve {
-                    func: name.symbol(),
+                    func: CalleeId::Function(Free::Global(name.clone())),
                     edge: edge
                         .qualifier()
                         .map(|path| path.last().to_string())
@@ -340,7 +340,7 @@ pub(super) fn resolve_struct_params(
                         ty.clone(),
                         term.span(),
                         ImplicitOrigin {
-                            func: name.to_string(),
+                            func: CalleeId::Function(Free::Global(name.clone())),
                             binder,
                         },
                         proposition,

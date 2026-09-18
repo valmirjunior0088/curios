@@ -24,7 +24,7 @@ pub use subterm::*;
 
 use {
     super::{
-        Atom, Bound, Enter, Free, Global, Intrinsic, Level, LevelHead, Many, Nat, Scope,
+        Atom, Bound, CalleeId, Enter, Free, Global, Intrinsic, Level, LevelHead, Many, Nat, Scope,
         SelfReference, Spelled, Spelling, Telescope, Three, Two, UniverseContext, UniverseError,
         UniverseMetaId, UniverseScheme, Var, Visit, instantiate_universe_levels_scoped, print_term,
         project_erased_universes,

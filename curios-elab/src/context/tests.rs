@@ -1,6 +1,6 @@
 use {
-    crate::*, curios_analysis::fixture::SYNTAX, curios_core::*, curios_utilities::Qualifier,
-    std::collections::BTreeSet,
+    crate::*, curios_analysis::fixture::SYNTAX, curios_core::CalleeId, curios_core::*,
+    curios_utilities::Qualifier, std::collections::BTreeSet,
 };
 
 fn context() -> Context {
@@ -50,8 +50,9 @@ fn deferred(context: &mut Context, slot: usize) -> ParkedProblem {
         work: ParkedWork::Witness {
             slot: MetavarId(slot),
             goal: Term::type_ground(),
+            // The callee is irrelevant here -- these fixtures exercise parked-problem bookkeeping, not how a report names one.
             provenance: WitnessOrigin {
-                func: "f".to_string(),
+                func: CalleeId::Anonymous,
                 binder: "w".to_string(),
             },
         },
