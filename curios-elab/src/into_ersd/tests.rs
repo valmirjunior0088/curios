@@ -1,6 +1,7 @@
 use crate::reduce::test_support::qed;
 use curios_core::Zonked;
 use curios_core::*;
+use curios_ersd::{FieldShape, Sign, test_support::shape};
 use {
     crate::*,
     curios_analysis::fixture::SYNTAX,
@@ -61,6 +62,49 @@ fn erase(context: &mut Context, module: &Module, expected: Term) -> curios_ersd:
     erase_module(context, &zonked(module), &expected).expect("the module erases")
 }
 
+/// The recorded payload row — field hint and carrier shape — of the one constructor of the single-constructor family whose debug name ends in `name`. The arena is what erasure wrote; the header the printer renders from it is a second spelling, and a test that scraped that spelling would pass by matching nothing if it moved.
+fn payload(module: &curios_ersd::Module, name: &str) -> Vec<(&'static str, FieldShape)> {
+    let family = module
+        .families()
+        .iter()
+        .find(|family| {
+            family
+                .debug_name
+                .as_deref()
+                .is_some_and(|debug_name| debug_name.ends_with(name))
+        })
+        .unwrap_or_else(|| panic!("the fixture registers {name}"));
+    let [constructor] = family.constructors[..] else {
+        panic!("{name} has exactly one constructor");
+    };
+
+    module
+        .constructor(constructor)
+        .expect("the constructor is registered")
+        .fields
+        .iter()
+        .map(|field| {
+            let hint = match field.debug_name.as_deref() {
+                Some("x") => "x",
+                other => panic!("unexpected field hint {other:?}"),
+            };
+            (hint, field.shape)
+        })
+        .collect()
+}
+
+/// Every `Rhs` the erased module binds, in statement order. A test whose subject is what erasure *built* asks this rather than the printout: a spelling belongs to the printer, and an anchor on one can silently match nothing, where a missing shape here is a loud failure.
+fn bound(module: &curios_ersd::Module) -> impl Iterator<Item = &curios_ersd::Rhs> {
+    module
+        .statements()
+        .iter()
+        .flatten()
+        .filter_map(|statement| match statement {
+            curios_ersd::Statement::Let { rhs, .. } => Some(rhs),
+            _ => None,
+        })
+}
+
 #[test]
 fn a_scalar_expression_erases_in_evaluation_order() {
     let mut context = context();
@@ -78,11 +122,11 @@ fn a_scalar_expression_erases_in_evaluation_order() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-entry =
-    let ~v0 = Nat/add(2, 3);
-    ~v0;
+entry
+  Let ~v0 = Operation NatAdd [Nat(2), Nat(3)]
+  Return ~v0
 "
     );
 }
@@ -111,12 +155,12 @@ fn bool_and_byte_keep_their_shapes() {
         Term::intrinsic(Intrinsic::ByteType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-entry =
-    let ~v0$b = Bool/and(true, false);
-    let ~v1 = Nat/to_byte(7);
-    ~v1;
+entry
+  Let ~v0$b = Operation BoolAnd [Bool(true), Bool(false)]
+  Let ~v1 = Operation NatToByte [Nat(7)]
+  Return ~v1
 "
     );
 }
@@ -139,11 +183,11 @@ fn a_nat_spine_over_a_variable_erases_to_one_addition() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-entry =
-    let ~v0 = Nat/add(3, 5);
-    ~v0;
+entry
+  Let ~v0 = Operation NatAdd [Nat(3), Nat(5)]
+  Return ~v0
 "
     );
 }
@@ -166,12 +210,12 @@ fn items_erase_in_dominance_order() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-let ~v0$/a =
-    Nat/add(2, 1);
-entry =
-    ~v0$/a;
+items
+  Let ~v0$/a = Operation NatAdd [Nat(2), Nat(1)]
+entry
+  Return ~v0$/a
 "
     );
 }
@@ -193,12 +237,13 @@ fn an_exit_seals_the_thunk_that_describes_it() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-entry =
-    let ~f0$dead() =
-        exit 3;
-    7;
+entry
+  Functions
+    function ~f0$dead()
+      Exit Nat(3)
+  Return Nat(7)
 "
     );
 }
@@ -225,12 +270,12 @@ fn sequences_transcribe_without_carrier_choices() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-entry =
-    let ~v0$list = List/build(1, 2);
-    let ~v1 = List/len(~v0$list);
-    ~v1;
+entry
+  Let ~v0$list = Sequence ListBuild [Nat(1), Nat(2)]
+  Let ~v1 = Sequence ListLen [~v0$list]
+  Return ~v1
 "
     );
 }
@@ -247,12 +292,12 @@ fn erasure_is_deterministic() {
             nat_lit(2),
             Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat_lit(3))),
         );
-        erase(
+        let erased = erase(
             context,
             &module(Vec::new(), body),
             Term::intrinsic(Intrinsic::NatType),
-        )
-        .to_string()
+        );
+        shape(&erased)
     };
     assert_eq!(build(&mut context), build(&mut self::context()));
 }
@@ -338,13 +383,15 @@ fn a_function_erases_with_dropped_type_params_and_no_captures() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-let ~f0$/id(~v0$x) =
-    ~v0$x;
-entry =
-    let ~v1 = ~f0$/id(4);
-    ~v1;
+items
+  Functions
+    function ~f0$/id(~v0$x)
+      Return ~v0$x
+entry
+  Let ~v1 = Apply ~f0$/id [Nat(4)]
+  Return ~v1
 "
     );
 }
@@ -390,9 +437,16 @@ fn a_capturing_closure_stores_no_capture_list() {
         expected,
     );
 
-    let printed = erased.to_string();
-    assert!(printed.contains("let ~f0$/make(~v0$y) ="), "{printed}");
-    assert!(printed.contains("Nat/add("), "{printed}");
+    assert!(
+        bound(&erased).any(|rhs| matches!(
+            rhs,
+            curios_ersd::Rhs::Operation {
+                operation: curios_ersd::Operation::NatAdd,
+                ..
+            }
+        )),
+        "the inner body adds"
+    );
     // The inner closure's capture of `y` is derived, never stored: the outer parameter is the inner function's one free value.
     let analysis = curios_ersd::Analysis::analyze(&erased);
     let mut functions = erased.function_ids();
@@ -469,13 +523,36 @@ fn a_variant_constructs_with_its_registered_schema() {
     let erased =
         erase_module(&mut context, &zonked(&fixture), &opt_type()).expect("the module erases");
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-family ~d0$/Opt { ~t0$none() ~t1$some(x:immediate) }
-entry =
-    let ~v0 = ~t1$some(6);
-    ~v0;
+entry
+  Let ~v0 = Construct ~t1 [Nat(6)]
+  Return ~v0
 "
+    );
+    // The family the construction registered against, asked of the arena the header used to render: a nullary `none` and a `some` carrying one immediate, with `~t1` — the constructed one — the second.
+    let [family] = erased.families() else {
+        panic!("the fixture registers one family");
+    };
+    let [none, some] = family.constructors[..] else {
+        panic!("Opt has two constructors");
+    };
+    assert!(
+        erased
+            .constructor(none)
+            .expect("none is registered")
+            .fields
+            .is_empty()
+    );
+    assert_eq!(
+        erased
+            .constructor(some)
+            .expect("some is registered")
+            .fields
+            .iter()
+            .map(|field| field.shape)
+            .collect::<Vec<_>>(),
+        vec![FieldShape::Immediate(Sign::Unsigned)]
     );
 }
 
@@ -501,15 +578,20 @@ fn a_multi_field_tuple_shares_the_width_schema() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-product ~p0(0, 1) shared
-entry =
-    let ~v0$pair = ~p0 { 0 = 1, 1 = 2 };
-    let ~v1 = ~v0$pair.1;
-    ~v1;
+entry
+  Let ~v0$pair = Product ~p0 [Nat(1), Nat(2)]
+  Let ~v1 = Project ~p0.1 ~v0$pair
+  Return ~v1
 "
     );
+    // The width row itself — that it is the interned shared one, which is the test's subject and what the header used to render.
+    let [schema] = erased.products() else {
+        panic!("the fixture registers one schema");
+    };
+    assert!(schema.shared);
+    assert_eq!(schema.width(), 2);
 }
 
 #[test]
@@ -535,10 +617,10 @@ fn a_subset_tuple_collapses_to_its_relevant_field() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-entry =
-    9;
+entry
+  Return Nat(9)
 "
     );
 }
@@ -559,15 +641,15 @@ fn a_bool_match_erases_to_a_switch_bool() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-entry =
-    let ~v0 =
-        match true
-        | true => 20
-        | false => 10
-        end;
-    ~v0;
+entry
+  Let ~v0 = SwitchBool Bool(true)
+    false
+      Return Nat(10)
+    true
+      Return Nat(20)
+  Return ~v0
 "
     );
 }
@@ -598,17 +680,16 @@ fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-entry =
-    let ~v1 =
-        match 5
-        | 0 => 0
-        | _ =>
-            let ~v0 = Nat/sub(5, 1);
-            ~v0
-        end;
-    ~v1;
+entry
+  Let ~v1 = SwitchNat Nat(5)
+    case 0
+      Return Nat(0)
+    default
+      Let ~v0 = Operation NatSub [Nat(5), Nat(1)]
+      Return ~v0
+  Return ~v1
 "
     );
 }
@@ -639,17 +720,16 @@ fn a_live_hypothesis_nat_match_erases_to_a_fold() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-entry =
-    let ~v3 =
-        match 5
-        | 0 => 0
-        | ~v0$pred + 1; ~v1$ih =>
-            let ~v2 = Nat/add(~v1$ih, 2);
-            ~v2
-        end;
-    ~v3;
+entry
+  Let ~v3 = FoldNat Nat(5)
+    zero
+      Return Nat(0)
+    step(~v0$pred, ~v1$ih)
+      Let ~v2 = Operation NatAdd [~v1$ih, Nat(2)]
+      Return ~v2
+  Return ~v3
 "
     );
 }
@@ -687,19 +767,18 @@ fn a_live_hypothesis_list_match_erases_to_a_sequence_fold() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-let ~v0$/xs =
-    List/build(1);
-entry =
-    let ~v5 =
-        match ~v0$/xs
-        | [] => 0
-        | [~v1$h, ..~v2$t]; ~v3$ih =>
-            let ~v4 = Nat/add(~v3$ih, 1);
-            ~v4
-        end;
-    ~v5;
+items
+  Let ~v0$/xs = Sequence ListBuild [Nat(1)]
+entry
+  Let ~v5 = FoldSequence List ~v0$/xs
+    empty
+      Return Nat(0)
+    step(~v1$h, ~v2$t, ~v3$ih)
+      Let ~v4 = Operation NatAdd [~v3$ih, Nat(1)]
+      Return ~v4
+  Return ~v5
 "
     );
 }
@@ -744,17 +823,16 @@ fn a_variant_match_binds_payload_without_projections() {
     )
     .expect("the module erases");
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-family ~d0$/Opt { ~t0$none() ~t1$some(x:immediate) }
-entry =
-    let ~v0$scrutinee = ~t1$some(6);
-    let ~v2 =
-        match ~v0$scrutinee
-        | ~t0$none() => 0
-        | ~t1$some(~v1$x) => ~v1$x
-        end;
-    ~v2;
+entry
+  Let ~v0$scrutinee = Construct ~t1 [Nat(6)]
+  Let ~v2 = MatchVariant ~d0 ~v0$scrutinee
+    arm ~t0()
+      Return Nat(0)
+    arm ~t1(~v1$x)
+      Return ~v1$x
+  Return ~v2
 "
     );
 }
@@ -789,11 +867,21 @@ fn an_effectful_scrutinee_is_erased_once() {
         &module(items, body),
         Term::intrinsic(Intrinsic::NatType),
     );
-    let printed = erased.to_string();
+    let read = erased.function_ids().next().expect("the read function");
+    let applications = bound(&erased)
+        .filter(|rhs| {
+            matches!(
+                rhs,
+                curios_ersd::Rhs::Apply {
+                    callee: curios_ersd::Atom::Function(callee),
+                    ..
+                } if *callee == read
+            )
+        })
+        .count();
     assert_eq!(
-        printed.matches("~f0$/read(0)").count(),
-        1,
-        "the compound scrutinee is applied exactly once:\n{printed}"
+        applications, 1,
+        "the compound scrutinee is applied exactly once"
     );
 }
 
@@ -824,14 +912,15 @@ fn a_recursive_function_group_erases_to_functions() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-entry =
-    let ~f0$f(~v0$x) =
-        let ~v1 = ~f0$f(~v0$x);
-        ~v1;
-    let ~v2 = ~f0$f(3);
-    ~v2;
+entry
+  Functions
+    function ~f0$f(~v0$x)
+      Let ~v1 = Apply ~f0$f [~v0$x]
+      Return ~v1
+  Let ~v2 = Apply ~f0$f [Nat(3)]
+  Return ~v2
 "
     );
 }
@@ -864,14 +953,15 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
     );
     let erased = erase(&mut context, &module(Vec::new(), body), produce_type);
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-entry =
-    let rec ~f0$produce(~v1$u) =
-        5
-    and ~v0$consume =
-        ~f0$produce;
-    ~v0$consume;
+entry
+  Rec
+    function ~f0$produce(~v1$u)
+      Return Nat(5)
+    value ~v0$consume
+      Return ~f0$produce
+  Return ~v0$consume
 "
     );
 }
@@ -922,14 +1012,16 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
         Term::intrinsic(Intrinsic::NatType),
     );
     assert_eq!(
-        erased.to_string(),
+        shape(&erased),
         "\
-let ~f0$/go(~v0$x) =
-    let ~v1 = ~f0$/go(~v0$x);
-    ~v1;
-entry =
-    let ~v2 = ~f0$/go(1);
-    ~v2;
+items
+  Functions
+    function ~f0$/go(~v0$x)
+      Let ~v1 = Apply ~f0$/go [~v0$x]
+      Return ~v1
+entry
+  Let ~v2 = Apply ~f0$/go [Nat(1)]
+  Return ~v2
 "
     );
 }
@@ -1051,17 +1143,14 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
     let erased =
         erase_module(&mut context, &zonked(&fixture), &expected).expect("the module erases");
 
-    let printed = erased.to_string();
-    assert!(
-        printed.contains("$/Wrapped { ~t0$mk(x:immediate) }"),
-        "{printed}"
+    let immediate = FieldShape::Immediate(Sign::Unsigned);
+    assert_eq!(payload(&erased, "/Wrapped"), vec![("x", immediate)]);
+    assert_eq!(
+        payload(&erased, "/Knotted"),
+        vec![("x", FieldShape::Opaque)]
     );
-    assert!(printed.contains("$/Knotted { ~t1$mk(x) }"), "{printed}");
     // `Boxed` was this fixture's "not immediate" example; the full recorder now names its carrier instead of merely withholding `immediate`.
-    assert!(printed.contains("$/Boxed { ~t2$mk(x:flt) }"), "{printed}");
-    assert!(
-        printed.contains("$/Chained { ~t3$mk(x:immediate) }"),
-        "{printed}"
-    );
-    assert!(printed.contains("$/Selfy { ~t4$mk(x) }"), "{printed}");
+    assert_eq!(payload(&erased, "/Boxed"), vec![("x", FieldShape::Flt)]);
+    assert_eq!(payload(&erased, "/Chained"), vec![("x", immediate)]);
+    assert_eq!(payload(&erased, "/Selfy"), vec![("x", FieldShape::Opaque)]);
 }

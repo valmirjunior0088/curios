@@ -1,6 +1,11 @@
 //! What erasure carries into the arena, and what a repeated compilation restores unmutated.
 
-use {crate::*, curios_ersd::Analysis, curios_text::RootSource, curios_wasm::to_bytes};
+use {
+    crate::*,
+    curios_ersd::{Analysis, Rhs, Statement, test_support::shape},
+    curios_text::RootSource,
+    curios_wasm::to_bytes,
+};
 
 use super::test_support::*;
 
@@ -70,8 +75,8 @@ fn arena_erasure_covers_the_fixed_prelude() {
 #[test]
 fn arena_erasure_is_deterministic_across_compiles() {
     let source = "/std/Nat/add(20, 22)";
-    let first = erase_to_ersd(source, Some("/std/Nat")).to_string();
-    let second = erase_to_ersd(source, Some("/std/Nat")).to_string();
+    let first = shape(&erase_to_ersd(source, Some("/std/Nat")));
+    let second = shape(&erase_to_ersd(source, Some("/std/Nat")));
     assert_eq!(first, second);
 }
 
@@ -90,12 +95,28 @@ fn arena_erasure_stores_no_captures_for_the_prelude() {
 #[test]
 fn arena_erasure_handles_deep_input_on_the_default_stack() {
     // A wide flat block (the shape whose N-deep nesting once overflowed the legacy pipeline); erasure, verification, and printing all stay on the default test-thread stack. Sized so quadratic *elaboration* cost — shared by both paths and out of erasure's scope — stays testable.
+    const BINDINGS: usize = 500;
+
     let mut source = String::new();
-    for index in 0..500 {
+    for index in 0..BINDINGS {
         source.push_str(&format!("let x{index} = {index} + 1;\n"));
     }
     source.push_str("x0");
     let module = erase_to_ersd(&source, Some("/std/Nat"));
-    let printed = module.to_string();
-    assert!(printed.contains("Nat/add("));
+
+    // Printing is half of what must survive the depth, so the deep module is still rendered.
+    let _ = module.to_string();
+
+    // What the fixture erased to is asked of the entry block, not of the module: the module carries the whole prelude, so a module-wide scan for an addition answers about `/sys/Nat/succ` and would pass with the fixture erased to nothing. Each binding is still an `Apply` of `/sys/Nat/add` at this rung — inlining is a later stage's.
+    let entry = module
+        .block(module.entry().expect("the program has an entry"))
+        .expect("the entry block is live");
+    assert_eq!(entry.statements.len(), BINDINGS);
+    assert!(entry.statements.iter().all(|&statement| matches!(
+        module.statement(statement),
+        Some(Statement::Let {
+            rhs: Rhs::Apply { .. },
+            ..
+        })
+    )));
 }

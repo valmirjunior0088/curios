@@ -2,7 +2,6 @@ use curios_num::Natural;
 
 use crate::*;
 
-/// let one = 1 (item); entry { let doubled = NatAdd(one, one); return doubled }
 fn doubling_module() -> Result<Module, VerifyError> {
     let mut builder = ErsdBuilder::new();
     let one = builder.constant(Constant::Nat(Natural::from(1u32)));
@@ -32,7 +31,6 @@ fn a_recursive_function_builds_through_reserve_and_define() {
     let mut builder = ErsdBuilder::new();
     let function = builder.reserve_function();
 
-    // fn loop(n) = switch n { 0 => 0, _ => loop(NatSub(n, 1)) }
     let n = builder.value(Some("n".into()));
     let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
     let one = builder.constant(Constant::Nat(Natural::from(1u32)));
