@@ -93,6 +93,7 @@ fn spelled_free(name: &Free, spelling: &Spelling) -> String {
 fn spelled_callee(callee: &CalleeId, spelling: &Spelling) -> String {
     match callee {
         CalleeId::Function(name) => spelled_free(name, spelling),
+        CalleeId::Constructor { owner, tag } => format!("{}/{tag}", spelling.symbol(owner)),
         CalleeId::Witness(global) => spelling.symbol(global),
         CalleeId::Operator(op) => op.symbol().to_string(),
         CalleeId::Anonymous => "<function>".to_string(),
@@ -104,6 +105,9 @@ impl Callee {
     pub(crate) fn phrase(&self, spelling: &Spelling) -> String {
         match self {
             Callee::Function(name) => format!("'{}'", spelled_free(name, spelling)),
+            Callee::Constructor { owner, tag } => {
+                format!("'{}/{tag}'", spelling.symbol(owner))
+            }
             Callee::Anonymous => "'<function>'".to_string(),
             Callee::Operator { op, .. } => format!("the '{}' operator", op.symbol()),
             Callee::Witness { concept, key } => format!(
@@ -119,7 +123,10 @@ impl Callee {
     pub(crate) fn slot(&self, noun: &str, binder: &str, spelling: &Spelling) -> String {
         match self {
             Callee::Operator { .. } => format!("the {noun} of {}", self.phrase(spelling)),
-            Callee::Function(_) | Callee::Witness { .. } | Callee::Anonymous => {
+            Callee::Function(_)
+            | Callee::Constructor { .. }
+            | Callee::Witness { .. }
+            | Callee::Anonymous => {
                 format!("the {noun} '{binder}' of {}", self.phrase(spelling))
             }
         }
@@ -720,6 +727,11 @@ impl fmt::Display for Displayed<'_> {
                         "{} was not discharged\n  {why}\n  an operator takes no written arguments: decide the bound with a guard before the operation, or call {}(@T, a, b, @proof)",
                         callee.slot("bound", binder, spelling),
                         spelling.symbol(method)
+                    ),
+                    Callee::Constructor { .. } => write!(
+                        f,
+                        "implicit argument '{binder}' of {} was not inferred\n  {why}\n  supply it explicitly",
+                        callee.phrase(spelling)
                     ),
                     // A head the program gave no name to: a computed function, or a projection out of a recursive group. There is nothing to quote, so the advice names the slot rather than a callee it cannot spell.
                     Callee::Anonymous => write!(

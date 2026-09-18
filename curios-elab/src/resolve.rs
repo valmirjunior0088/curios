@@ -47,7 +47,7 @@ fn display_goal(context: &mut Context, goal: &Term) -> Term {
     super::resolved_for_display(context, goal)
 }
 
-/// Read an insertion provenance back into who it names ([`Callee`]). The discrimination is the [`CalleeId`]'s own, so this is a total match rather than a parse: an operator carries its [`InfixOp`], and a witness carries the identity the coherence table is keyed by, which the report renames to a concept and key. Error-path only: the witness lookup scans the table.
+/// Read an insertion provenance back into who it names ([`Callee`]). The discrimination is the [`CalleeId`]'s own, so this is a total match rather than a parse: an operator carries its [`InfixOp`](curios_utilities::InfixOp), and a witness carries the identity the coherence table is keyed by, which the report renames to a concept and key. Error-path only: the witness lookup scans the table.
 pub(crate) fn callee(context: &Context, func: &CalleeId) -> Callee {
     match func {
         CalleeId::Operator(op) => {
@@ -66,6 +66,10 @@ pub(crate) fn callee(context: &Context, func: &CalleeId) -> Callee {
                 key: key.clone(),
             })
             .unwrap_or_else(|| Callee::Function(Free::Global(name.clone()))),
+        CalleeId::Constructor { owner, tag } => Callee::Constructor {
+            owner: owner.clone(),
+            tag: tag.clone(),
+        },
         CalleeId::Function(name) => Callee::Function(name.clone()),
         CalleeId::Anonymous => Callee::Anonymous,
     }

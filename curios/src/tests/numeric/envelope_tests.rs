@@ -30,7 +30,7 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
         "Int/to_str(Int/shr(Int/add(-65, i), 1))",
         // Carrier reinterpretations inside both envelopes.
         "Int/to_str(Nat/to_int(1000000000 + n))",
-        // Guarded on `>= +0`, the comparison `/sys/Int/to_nat`'s precondition is decided on: `i` is runtime-tainted, so nothing settles the sign statically and the narrowing demands evidence. Both arms fold identically at the literal `i`, so the differential still compares the conversion rather than the guard.
+        // Guarded on `>= +0`, the comparison `Int/to_nat`'s precondition is decided on: `i` is runtime-tainted, so nothing settles the sign statically and the narrowing demands evidence. Both arms fold identically at the literal `i`, so the differential still compares the conversion rather than the guard.
         "Nat/to_str(to_nat_or(Int/add(+12345, i), 0))",
         // Sign transfer.
         "Flt/to_str(Flt/copysign(Flt/add(2.5, Int/to_flt(i)), -1.0))",
@@ -181,7 +181,7 @@ fn a_shift_past_the_carrier_width_answers_the_arithmetic() {
 #[test]
 fn out_of_domain_computations_are_refused_where_they_are_written() {
     for (body, operation) in [
-        ("Nat/to_str(Int/to_nat(Int/sub(i, +1)))", "/sys/Int/to_nat"),
+        ("Nat/to_str(Int/to_nat(Int/sub(i, +1)))", "Int/to_nat"),
         ("Nat/to_str(Nat/div(5 + n, n))", "/"),
     ] {
         let error = match compile(&table(&[body], true)) {

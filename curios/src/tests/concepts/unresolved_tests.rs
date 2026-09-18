@@ -51,7 +51,7 @@ fn a_missing_witness_names_a_curried_head_by_its_innermost_reference() {
 
     let report = error(source);
     assert!(
-        report.contains("needed by '/std/Fmt/print'"),
+        report.contains("needed by 'Fmt/print'"),
         "expected the head named through the spine:\n{report}"
     );
 }
@@ -70,7 +70,7 @@ fn a_missing_witness_names_the_premise_by_position() {
 
     let report = error(source);
     assert!(
-        report.contains("needed by '/f' for its 1st 'use' premise"),
+        report.contains("needed by 'f' for its 1st 'use' premise"),
         "expected the premise named by position:\n{report}"
     );
 }
@@ -90,7 +90,7 @@ fn a_later_premise_is_named_by_its_own_position() {
 
     let report = error(source);
     assert!(
-        report.contains("needed by '/g' for its 2nd 'use' premise"),
+        report.contains("needed by 'g' for its 2nd 'use' premise"),
         "expected the second premise named as the second:\n{report}"
     );
 }

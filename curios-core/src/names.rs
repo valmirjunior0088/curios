@@ -148,6 +148,8 @@ impl Global {
 pub enum CalleeId {
     /// A function or constructor the program names — a top-level definition, or a local binder holding one. A local carries no path to shorten, so only the global case meets the spelling tables.
     Function(Free),
+    /// A constructor, carried as the declaration it belongs to together with its own tag, because that pair is how a program writes one: a bare tag is not a name in scope, and the declaration alone does not say which constructor.
+    Constructor { owner: Global, tag: String },
     /// A witness, which is anonymous by design: carried as its own identity, and named by concept and key when a report renders it.
     Witness(Global),
     /// An infix operator, which has no path to render at all.

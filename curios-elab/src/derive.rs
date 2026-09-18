@@ -227,8 +227,8 @@ fn motive(context: &mut Context) -> Scope<Many> {
 struct Payload {
     /// The constructor's absolute path, or the struct's, as a refusal message spells it.
     constructor: String,
-    /// The same declaration as an identity. A provenance carries this rather than the rendered path above, so a report spells it under the names in scope instead of under a spelling fixed here.
-    global: Global,
+    /// The same declaration as an identity, for a provenance: the report then shortens the declaration under the names in scope and keeps the tag beside it.
+    callee: CalleeId,
     /// The written label, empty where there was none.
     label: String,
     /// `payload 'x'`, `field #2`: how a report names it.
@@ -246,18 +246,16 @@ impl Payload {
             false => format!("{noun} '{label}'"),
         };
         // A constructor's own path is its type's with the tag appended; a struct is named by its declaration directly.
-        let global = match tag {
-            Some(tag) => Global::Authored(
-                owner
-                    .qualifier()
-                    .expect("a declared type has the path it was declared at")
-                    .with(tag),
-            ),
-            None => owner.clone(),
+        let callee = match tag {
+            Some(tag) => CalleeId::Constructor {
+                owner: owner.clone(),
+                tag: tag.to_string(),
+            },
+            None => CalleeId::Function(Free::Global(owner.clone())),
         };
         Self {
             constructor: path(owner, tag),
-            global,
+            callee,
             label: label.to_string(),
             described,
         }
@@ -456,7 +454,7 @@ fn witness_call(
         None => classified.payload.described.clone(),
     };
     let provenance = WitnessOrigin {
-        func: CalleeId::Function(Free::Global(classified.payload.global.clone())),
+        func: classified.payload.callee.clone(),
         binder,
     };
     // Spanned like the application around it: a goal deferred to the module's drain reports at the term it was born from, and that term is the declaration.

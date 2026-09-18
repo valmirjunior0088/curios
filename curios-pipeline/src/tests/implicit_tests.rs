@@ -140,7 +140,7 @@ fn uninferred_implicit_names_the_binder_and_function() {
     let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(
-        error.contains("implicit argument 'T' of '/cast' was not inferred"),
+        error.contains("implicit argument 'T' of 'cast' was not inferred"),
         "unexpected error: {error}"
     );
     // A type argument was never an obligation: the report says nothing determined it, not that nothing discharged `Type`.

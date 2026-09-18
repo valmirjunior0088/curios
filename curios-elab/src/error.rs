@@ -111,6 +111,8 @@ pub enum Callee {
     Function(Free),
     /// An infix operator, beside the wrapper of the concept method it dispatches through — the call a program can write where the operator takes no argument.
     Operator { op: InfixOp, method: Global },
+    /// A constructor, named by its declaration and tag.
+    Constructor { owner: Global, tag: String },
     /// An anonymous witness, named as coherence names it: by its concept and the key it occupies.
     Witness { concept: Global, key: WitnessKey },
     /// A head the program gave no name to report.

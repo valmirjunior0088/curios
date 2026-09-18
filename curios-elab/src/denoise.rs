@@ -189,7 +189,10 @@ fn projected_method(table: &Methods, binders: &BinderTypes, head: &Term) -> Opti
             wrapper: None,
             operator: Some(match origin.func {
                 CalleeId::Operator(op) => op,
-                CalleeId::Function(_) | CalleeId::Witness(_) | CalleeId::Anonymous => return None,
+                CalleeId::Function(_)
+                | CalleeId::Constructor { .. }
+                | CalleeId::Witness(_)
+                | CalleeId::Anonymous => return None,
             }),
         }),
         Subterm::Var(var)
