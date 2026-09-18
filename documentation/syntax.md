@@ -2,6 +2,8 @@
 
 This document defines the surface language accepted in `.crs` files. It is a reference for writing and reading Curios programs, not a description of compiler internals. An implementation disagreement is a language conformance bug: either the implementation or this document must be corrected.
 
+A `.crs` file is a sequence of top-level items. An entrypoint closes with one final term, the description the program performs; a module file has no final term and is items alone. Everything below is an item, a term, or the spelling of one of their parts.
+
 Examples use declarations from `/std`, the standard library every program may name. The authored library under `curios-prelude-archive/std/` is the main corpus of complete programs.
 
 - [Lexical structure](#lexical-structure)
@@ -9,9 +11,11 @@ Examples use declarations from `/std`, the standard library every program may na
 - [Sorts and types](#sorts-and-types)
 - [Expressions](#expressions)
 - [Operators](#operators)
+- [Sequencing and effects](#sequencing-and-effects)
 - [Pattern matching](#pattern-matching)
 - [Guarded ladders (`choose`)](#guarded-ladders-choose)
 - [Declarations and modules](#declarations-and-modules)
+- [Recursive groups](#recursive-groups)
 - [Inductive declarations](#inductive-declarations)
 - [Structure declarations](#structure-declarations)
 - [Concepts and witnesses](#concepts-and-witnesses)
@@ -49,7 +53,7 @@ Every comma-separated list — parameter and argument lists, tuple and struct fi
 
 An identifier is a nonempty sequence of Unicode alphanumeric characters and `_`.
 
-A name beginning with `_` is one the author keeps unused: `curios lint` never reports an `_`-prefixed binder or declaration, nor anything inside an `_`-prefixed module. `_` alone is a binder that names nothing.
+A name beginning with `_` is one the author keeps unused: [`curios lint`](usage.md#lint) never reports an `_`-prefixed binder or declaration, nor anything inside an `_`-prefixed module. `_` alone is a binder that names nothing.
 
 The following words are reserved and cannot be used as path segments:
 
@@ -57,14 +61,18 @@ The following words are reserved and cannot be used as path segments:
 | --- | --- |
 | `let`, `match`, `choose`, `mod`, `use`, `pub`, `end`, `induct`, `struct`, `foreign` | `true`, `false` |
 
-`concept`, `satisfy`, and `and` are contextual words. They are recognized only in the grammatical positions that use them and remain valid identifiers and path segments elsewhere. `Type` and `Prop` denote sorts when parsed as terms, but they are not globally forbidden path segments.
+Twelve words. The rest are yours.
+
+`concept`, `satisfy`, `and`, and `test` are contextual words. They are recognized only in the grammatical positions that use them and remain valid identifiers and path segments elsewhere. `Type` and `Prop` denote sorts when parsed as terms, but they are not globally forbidden path segments.
 
 ### Paths
 
-A path is one or more identifier segments separated by `/`. A leading `/` makes the path absolute; otherwise name resolution begins in the current lexical and module scope.
+A path is one or more identifier segments separated by `/`. A leading `/` anchors the path at the compilation root.
+
+A path without that leading `/` is relative to the module it is written in: its head must be a declaration of that module or a name that module imported. Enclosing modules are not searched, so an ancestor's declaration is reached by writing it absolute or by importing it — which is what the report says when one is not found.
 
 ```crs
-Nat                 -- relative name
+Nat                 -- a declaration or import of this module
 Option/some         -- member of Option
 /std/List           -- absolute name
 /std/Nat/Lt         -- absolute name through a nested module
@@ -72,9 +80,9 @@ Option/some         -- member of Option
 
 The root `/sys` is the compiler's own and a program may not name it: it holds the intrinsic types, the host's operations, and the propositions a decided bound is stated in. Naming it is refused, pointing at the `/std` module that stands in front of it — `Nat` is reached as `/std/Nat`. It is named in this document only where the mechanism behind a form is the point.
 
-That refusal is one case of a general rule: **a unit reaches the prefixes it declared a dependency on, plus `/std`, and no others.** A package declares them in its manifest; a transitive dependency is in the compilation, because the unit between it and this one had to compile, and is not one of them. Every unit in a compilation is mounted, so a prefix a unit did not declare is still there — it owns real names and nothing else may claim it — and writing one is refused at the reference, naming the prefix and saying it was not declared. A name is never reported unbound because a dependency was missing. The concepts the surface forms desugar into are ordinary `/std` declarations: `+` dispatches through `/std/ops/Add`, a `!` through `/std/Monad`, and a `test` through `/std/Test`.
+That refusal is one case of a general rule: **a unit reaches the prefixes it declared a dependency on, plus `/std`, and no others.** A package declares them in its manifest; a transitive dependency is in the compilation but is not one of them. Every unit is mounted, so an undeclared prefix is still there, and writing one is refused at the reference, naming the prefix and saying it was not declared — a name is never reported unbound because a dependency was missing. The concepts the surface forms desugar into are ordinary `/std` declarations: `+` dispatches through `/std/ops/Add`, a `!` through `/std/Monad`, and a `test` through `/std/Test`.
 
-A path is whitespace-free: every separator touches both of its neighbors. Infix operators are the opposite — they require whitespace on both sides (see [Operators](#operators)) — so `a/b` is only ever the path and `a / b` only ever the division, and the asymmetric spellings `a/ b` and `a /b` satisfy neither grammar. A packed `Bits` or `Bytes` literal glues its grain letter to the opening bracket and admits whitespace freely thereafter; see [Packed literals](#packed-literals).
+A path is whitespace-free: every separator touches both of its neighbors. Infix operators are the opposite — they require whitespace on both sides (see [Operators](#operators)) — so `a/b` is only ever the path and `a / b` only ever the division, and the asymmetric spellings `a/ b` and `a /b` satisfy neither grammar.
 
 ## Literals
 
@@ -91,9 +99,9 @@ Integer literals may be decimal, hexadecimal, or binary. An optional sign must t
 +3
 ```
 
-Elaboration chooses `Nat`, `Bool`, `Byte`, `Int`, or `Flt` from context. A written sign excludes `Nat`, `Bool`, and `Byte`. `Byte` is selected only by an expected `Byte` type and accepts values from `0` through `255`; `Bool` is selected only by an expected `Bool` type and accepts `0` and `1`. An unconstrained unsigned integer defaults to `Nat`; an unconstrained signed integer defaults to `Int`.
+Elaboration chooses `Nat`, `Bool`, `Byte`, `Int`, or `Flt` from context. A *negative* sign excludes `Nat`, `Bool`, and `Byte`; any written sign, `+` as well as `-`, makes the unconstrained default `Int` rather than `Nat`. `Byte` is selected only by an expected `Byte` type and accepts values from `0` through `255`; `Bool` is selected only by an expected `Bool` type and accepts `0` and `1`. An unconstrained unsigned integer defaults to `Nat`.
 
-`-42` is one literal. `- 42` is parsed as an operator occurrence and is not a signed literal.
+`-42` is one literal. `- 42` is parsed as an operator occurrence and is not a signed literal. The space is load-bearing.
 
 A floating-point literal has a decimal point followed by at least one decimal digit. It may have a sign and an `e` or `E` exponent.
 
@@ -103,11 +111,11 @@ A floating-point literal has a decimal point followed by at least one decimal di
 1.0e9
 ```
 
-Floating-point literals have type `Flt`. `5.` is not a floating-point literal.
+Floating-point literals have type `Flt`. `5.` is not one, and is refused rather than read as the numeral `5` with a stray dot after it.
 
 ### Character and string literals
 
-A character literal contains one Unicode scalar value or one supported escape. It is a polymorphic literal spelled by its scalar value: it realizes as the proof-certified `Char` wherever nothing pins it, and as `Nat`, `Byte`, or `Int` — the code point — where one of those is expected, under the same rules as a numeral (`Byte` refuses a code point past `255`; `Bool` and `Flt` never realize from a character). `Char` excludes the surrogate range and values above `U+10FFFF`; use `Char/to_nat` for an explicit code-point conversion of a *value*, whose type is already fixed. In a match, a character literal is a `Nat` dispatch case — see [Natural-number dispatch](#natural-number-dispatch).
+A character literal contains one Unicode scalar value or one supported escape, and is polymorphic exactly as a numeral is: it realizes as the proof-certified `Char` wherever nothing pins it, and as the code point at an expected `Nat`, `Byte`, or `Int` (`Byte` refuses a code point past `255`; `Bool` and `Flt` never realize from a character). `Char` excludes the surrogate range and values above `U+10FFFF`; `Char/to_nat` converts a *value*, whose type is already fixed. In a match, a character literal is a `Nat` dispatch case — see [Natural-number dispatch](#natural-number-dispatch).
 
 ```crs
 'c'
@@ -124,9 +132,9 @@ A string literal has type `Str`.
 "first\nsecond"
 ```
 
-String escapes are `\n`, `\t`, `\r`, `\\`, `\"`, and `\u{…}` as in a character literal. An unrecognized escape in a string literal is not an error: the backslash and the following character both stand for themselves, so `"\%"` is the two-character string `\%`, and so is `"\u"` — only the brace reserves the Unicode form, and a malformed `\u{…}` is a parse error. This is unlike a character literal, where every unrecognized escape is a parse error.
+String escapes are `\n`, `\t`, `\r`, `\\`, `\"`, and `\u{…}` as in a character literal. An unrecognized escape in a string literal is not an error: the backslash and the following character both stand for themselves, so `"\%"` is the two-character string `\%`, and so is `"\u"` — only the brace reserves the Unicode form, and a malformed `\u{…}` is a parse error. A string literal is not a format string and does not try to guess which of the two you meant.
 
-A block string literal spans lines. It opens with `"""` followed by a newline and closes with a newline, optional whitespace and `"""`; both delimiters take their newline, so the value is exactly the lines between, joined by newlines, with no newline before the first or after the last.
+A block string literal spans lines. It opens with `"""` and a newline — blanks between the two are allowed — and closes with a newline, optional whitespace and `"""`; both delimiters take their newline, so the value is exactly the lines between, joined by newlines, with no newline before the first or after the last.
 
 ```crs
 let page: Str =
@@ -137,7 +145,7 @@ let page: Str =
     """;
 ```
 
-The leading whitespace the non-blank lines and the closer's line share is removed from each line, so a block reads at the indentation of the code around it, and content indented past the closer keeps the difference. A whitespace-only line becomes an empty line and takes no part in that prefix. Trailing whitespace is stripped from every line. Escapes are the one-line form's, translated after the stripping, so `\u{20}` spells a space the stripping would otherwise take; a backslash before a newline joins the two lines. A `"` inside is itself, and three quotes are spelled `\"""`. The two spellings differ in nothing else: the value above is `"<ul>\n    <li>one</li>\n</ul>"`.
+The leading whitespace the non-blank lines and the closer's line share is removed from each, so a block reads at the indentation of the code around it and content indented past the closer keeps the difference; a whitespace-only line becomes an empty line and takes no part in that prefix. Trailing whitespace is stripped from each line's final run of text, which is why an escape at the end of a line survives it: `\u{20}` spells a space the stripping would otherwise take. Escapes are the one-line form's, translated after the stripping, and a backslash before a newline joins the two lines. A `"` inside is itself, and three quotes are spelled `\"""`. The two spellings differ in nothing else: the value above is `"<ul>\n    <li>one</li>\n</ul>"`.
 
 A one-line string literal does not span lines: a raw newline inside `"…"` is refused, naming the block form.
 
@@ -169,7 +177,7 @@ Spreads may appear in any position and may be repeated. Every element and spread
 
 Packed literals are bracketed like [list literals](#list-literals) and selected by a grain letter glued to the bracket: `b[…]` builds `Bits`, `x[…]` builds `Bytes`. A bare `[…]` remains `List`.
 
-An entry is a term contributing one atom — a `Bool` in a `Bits` literal, a `Byte` in a `Bytes` literal — or a `..` spread contributing a whole packed value of the same kind. A constant atom is a [numeric literal](#numeric-literals) realized at the grain's element type: `0` or `1` in a `Bits` literal, `0` through `255` (any radix) in a `Bytes` literal. A [character literal](#character-and-string-literals) is a constant atom of a `Bytes` literal when its code point fits the byte — `x['H', 'i']` — and no character is a bit.
+An entry is a term contributing one atom — a `Bool` in a `Bits` literal, a `Byte` in a `Bytes` literal — or a `..` spread contributing a whole packed value of the same kind. A constant atom is a [numeric literal](#numeric-literals) realized at the grain's element type: `0` or `1` for `Bits`, `0` through `255` in any radix for `Bytes`. A [character literal](#character-and-string-literals) is a constant `Bytes` atom when its code point fits the byte — `x['H', 'i']` — and no character is a bit.
 
 ```crs
 b[]                -- empty Bits
@@ -191,7 +199,7 @@ x[pick(flag, a, b)]
 
 `b[h, ..t]` is the cons of `h` onto `t`, and `x[..acc, b]` appends `b` to `acc`; neither operation has a separate named form.
 
-Only the grain letter's junction with `[` is tight: `b [1]` is the binder `b` followed by a list literal, and an identifier merely ending in the grain letter never begins a packed literal. Past the `[`, the literal lexes like any other bracketed list — whitespace is free, one trailing comma is admitted, and entry and spread operands are arbitrary terms needing no parentheses. `Bits` and `Bytes` cannot be mixed.
+Only the grain letter's junction with `[` is tight, which is what keeps `b` and `x` usable as ordinary binders: in `b [1]` the term ends at `b`, and an identifier merely ending in the grain letter never begins a packed literal. Past the `[` the literal lexes like any other bracketed list — whitespace is free, one trailing comma is admitted, and operands are arbitrary terms needing no parentheses. `Bits` and `Bytes` cannot be mixed.
 
 Adjacent constant atoms lower to a single packed constant rather than a chain of appends, so a literal written entirely from numerals is compile-time constant data with no marker needed to say so.
 
@@ -201,13 +209,13 @@ Adjacent constant atoms lower to a single packed constant rather than a chain of
 
 `Type` is the sort of computational types. `Prop` is the sort of proof-irrelevant propositions.
 
-Although the surface spelling is always the nullary term `Type`, each occurrence has an implicit level in a cumulative hierarchy. The compiler infers those levels and generalizes reusable declarations over them; there is no syntax for universe variables, levels, or explicit universe arguments. A type accepted at one level is also accepted where a higher level is required.
+Although the surface spelling is always the nullary term `Type`, each occurrence has an implicit level in a cumulative hierarchy. The compiler infers those levels and generalizes reusable declarations over them; there is no syntax for universe variables, levels, or explicit universe arguments. A type accepted at one level is also accepted where a higher level is required. The hierarchy is there; you just never write it down.
 
-All inhabitants of the same proposition are definitionally irrelevant. Eliminating a proposition into informative data is restricted; proofs may always be eliminated to prove another proposition.
+All inhabitants of the same proposition are definitionally irrelevant, so a proof does its thinking at compile time and then weighs nothing at runtime. Eliminating a proposition into a computational result is restricted: the proposition must be empty, or have one constructor whose payloads are each non-informative or fixed by the family's indices — which is what lets an `Eq` proof be matched to produce data. Proofs may always be eliminated to prove another proposition. Why the sorts are shaped this way is [`Prop` is strict, proof-irrelevant and definitionally K](design/language/prop-is-strict-proof-irrelevant-and-definitionally-k.md) and [Implicit cumulative universes, general recursion](design/language/implicit-cumulative-universes-general-recursion.md).
 
 ### Function types
 
-A function type is a parenthesized dependent parameter list followed by `->` and its result.
+A function type is a parenthesized dependent parameter list followed by `->` and its result. The list may be empty: `() -> T` is a nullary function, whose call site writes `f()`.
 
 An explicit parameter is written `name: type` or as an unlabeled type. An implicit parameter begins with `@`. A witness parameter begins with `use` and is anonymous.
 
@@ -233,7 +241,7 @@ A tuple type is a dependent field telescope enclosed in braces.
 
 Later fields may refer to earlier named fields. The empty tuple type `{}` is the unit type.
 
-Labels are part of a tuple type's identity: `{Nat, Bool}`, `{a: Nat, b: Bool}` and `{x: Nat, y: Bool}` are three distinct types, and a value of one is not a value of another. Function-type parameter names carry no such weight; only tuple labels do.
+Labels are part of a tuple type's identity: `{Nat, Bool}`, `{a: Nat, b: Bool}` and `{x: Nat, y: Bool}` are three distinct types, and a value of one is not a value of another. Function-type parameter names carry no such weight; only tuple labels do. Labels are not decoration.
 
 A labeled function field may use signature sugar:
 
@@ -263,7 +271,7 @@ Tuple values use parentheses and comma-separated fields:
 
 A one-field tuple is written `(x,)`; the trailing comma is what separates it from the parenthesized term `(x)`. A labeled single field needs no comma, since `=` already disambiguates it: `(only = 1)`.
 
-A literal is measured against the labels of its expected type position by position. An unlabeled literal checks against a labeled type and takes its labels from it, so `(1, true)` is a `{a: Nat, b: Bool}` where one is expected. A labeled literal is refused where the expected type's label at that position differs or is absent; fields are never reordered to match. A literal with no expected type — an unannotated `let`, a projection head — synthesizes the non-dependent product with the labels it wrote: `(a = 1, b = true)` is a `{a: Nat, b: Bool}`, and `(1, true)` a `{Nat, Bool}`, which no later annotation can relabel. A labeled tuple is projected by position or by label: `z.0` and `z.a` name the same field.
+A literal is measured against its expected type's labels position by position. An unlabeled literal takes its labels from a labeled expected type, so `(1, true)` is a `{a: Nat, b: Bool}` where one is expected; a labeled literal is refused where the expected label at that position differs or is absent, and fields are never reordered to match. A literal with no expected type — an unannotated `let`, a projection head — synthesizes the non-dependent product with the labels it wrote: `(a = 1, b = true)` is a `{a: Nat, b: Bool}` and `(1, true)` a `{Nat, Bool}`, which no later annotation can relabel. A labeled tuple is projected by position or by label: `z.0` and `z.a` name the same field.
 
 Labeled fields may use function-definition sugar:
 
@@ -301,7 +309,7 @@ pair.fst
 configuration.network.port
 ```
 
-Calls, projections, and postfix `!` may be chained.
+Calls, projections, and postfix [`!`](#postfix-) may be chained.
 
 ### Lambdas
 
@@ -329,7 +337,7 @@ A lambda parameter carries the same plicity mark as a function-type parameter: `
 (@A, use show, value) => Show/show(value)
 ```
 
-An omitted implicit or witness binder is inserted automatically from the expected function type, so hidden binders may be left out when the body does not name them. Alignment is positional by plicity: among the parameters of the expected type, each written binder claims the next slot of its own plicity, and every skipped implicit or witness slot before it is inserted. A plain binder never silently binds a hidden slot. For the expected type `(@A: Type, use Show(A), value: A) -> Str`, every one of `(value) => …`, `(@A, value) => …`, `(use show, value) => …`, and `(@A, use show, value) => …` is accepted; `(A, show, value) => …` is not, because `A` binds the sole explicit slot and the remaining binders are surplus.
+An omitted implicit or witness binder is inserted from the expected function type, so hidden binders may be left out when the body does not name them. Alignment is positional by plicity: each written binder claims the next slot of its own plicity, and every skipped implicit or witness slot before it is inserted. A plain binder never silently binds a hidden slot. Against `(@A: Type, use Show(A), value: A) -> Str`, each of `(value) => …`, `(@A, value) => …`, `(use show, value) => …` and `(@A, use show, value) => …` is accepted; `(A, show, value) => …` is not, because `A` binds the sole explicit slot and the rest are surplus.
 
 ### Local `let`
 
@@ -358,21 +366,7 @@ let Point { x, y } = point;
 x + y
 ```
 
-A binding is in scope of its own value, so a local function may call itself. A binding that mentions itself states its type, since a body that mentions the binding cannot be the source of it, and is a plain name rather than a pattern; a binding whose value performs `!` cannot mention itself, since the action runs before the binding exists. Bindings that mention one another are declared as one group with `and`, every member after the first a plain name with a type.
-
-```crs
-let even(n: Nat) -> Bool =
-    match n
-    | 0 => true
-    | p + 1; _ => odd(p)
-    end
-and odd(n: Nat) -> Bool =
-    match n
-    | 0 => false
-    | p + 1; _ => even(p)
-    end;
-even(input)
-```
+A binding is in scope of its own value, so a local function may call itself. A binding that mentions itself states its type, since a body that mentions the binding cannot be the source of it, and is a plain name rather than a pattern; a binding whose value performs `!` cannot mention itself, since the action runs before the binding exists. Bindings that mention one another are declared as one group with `and` — see [Recursive groups](#recursive-groups).
 
 Because a binding is in scope of its own value, `let n = n + 1;` names the binding it declares rather than an outer `n`, and is refused as the recursive value it is: a value may mention itself only under a lambda, where it is a recursive value computed the first time it is read.
 
@@ -386,13 +380,13 @@ let Point { loc = (x, y), color } = point;
 body
 ```
 
-These patterns are projection sugar, not runtime matches. The struct head is documentary and is not resolved or checked. An unlabeled field is matched positionally; a `label = pattern` field projects that label. Field punning such as `Point { x, y }` is the positional form, whose sub-patterns happen to be binders named after the fields.
+These patterns are projection sugar, not runtime matches. The struct head is documentary and is not resolved or checked. An unlabeled field is matched positionally; a `label = pattern` field projects that label. Field punning such as `Point { x, y }` is the positional form, whose sub-patterns happen to be binders named after the fields. Parentheses group a pattern without changing it, so `((x, y))` is `(x, y)`.
 
 Refutable patterns belong only to `match`.
 
 ### Written goals
 
-`?` is a development goal. It asks the elaborator to infer as much as possible, records the local scope and expected type, and then causes compilation to fail with a report.
+`?` is a development goal. It asks the elaborator to infer as much as possible, then reports the local scope, the expected type and the candidate fits it found, and fails compilation.
 
 ```crs
 let compose(@A: Type, @B: Type, @C: Type, f: (B) -> C, g: (A) -> B) -> (A) -> C =
@@ -400,98 +394,7 @@ let compose(@A: Type, @B: Type, @C: Type, f: (B) -> C, g: (A) -> B) -> (A) -> C 
 compose
 ```
 
-A goal is never accepted in a successfully compiled program.
-
-### Postfix `!`
-
-`action!` is monadic sequencing. Each occurrence is equivalent to a call to `/std/Monad/bind(action, continuation)` in the monad of its region.
-
-```crs
-let parser: Parse(Nat) =
-    let a = Parse/any_byte!;
-    let b = Parse/any_byte!;
-    Parse/pure(a + b);
-```
-
-Every value body is a sequencing region. Lambda bodies, match arms, and recursive member bodies begin fresh regions; the tail after a local `let` remains in the same region. There is no `let !` header or matching `end`.
-
-A region's monad is read from the region's type and never inferred from a sequenced action. A region whose type is not yet known waits for it, and one whose type can never name a monad — the body of a lambda in inference position, say — is rejected with a request to annotate the enclosing result type.
-
-An action whose own monad differs from the region's is lifted: the `!` wraps the action in `/std/Lift`'s `lift`, and the declared `Lift` witness for that ordered pair of monads carries it into the region. A pair with no declared witness is rejected. A region's tail is lifted the same way when its head is declared in another monad, so an `Io` action may end an `Async` region bare. See [Lifting between monads](#lifting-between-monads).
-
-Postfix `!` is not allowed in types. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
-
-### Host effects and `Io`
-
-Every operation that touches the host — writing a handle, reading a clock, allocating or reading a cell, calling a `foreign` function, exiting — has result type `Io(T)`. An `Io(T)` is a *description* of a computation yielding a `T`, not the `T`. Calling such an operation performs nothing; it builds a description.
-
-```crs
-use /std/{Io, print};
-let greeting: Io({}) = print("hello");   -- nothing has been printed
-```
-
-`Io/pure` wraps a value as a description that performs nothing, and `Io/bind` sequences one description into another. Postfix `!` is the ordinary sequencing form and reaches `Io` through its `Monad` witness like any other monad:
-
-```crs
-use /std/{Io, print};
-let shout(s: Str) -> Io({}) =
-    let _ = print(s)!;
-    print("!\n");
-```
-
-**There is no operation taking an `Io(T)` to a `T`.** A description is performed only by being the program's tail, which the emitted entrypoint forces once. So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
-
-```crs
-use /std/{print};
-let probe(tag: Str, r: Bool) -> Bool =
-    let _ = print(tag)!;   -- rejected: this region's type is `Bool`, not a monad
-    r;
-```
-
-Binding a description does not perform it, and forcing one twice performs it twice:
-
-```crs
-use /std/{Io, print};
-let once: Io({}) = print("x");
-let _ = once!;
-once                            -- prints "x" twice in total
-```
-
-`Io` is not matchable: it has no constructors to enumerate, so a `match` over one is rejected.
-
-A host operation that can fail is declared `Try(M, E, A)` over its base monad — `Try(Io, Io/Error, File)` for `File/open`, `Try(Async, Io/Error, Socket)` for `tcp/Socket/connect` — and a `Try` region sequences a `Try` over the same base, a bare `Result` as early return, an action of the base, and an `Io` action wherever the base admits one, each through a declared edge. `Try/raise` stops the region, `Try/rescue` handles the stop, and `Try/run` hands the outcome back as an `M(Result(E, A))` at the boundary.
-
-```crs
-use /std/{File, Path, Bytes, Try, Io};
-let contents: Try(Io, Io/Error, Bytes) =
-    let f = File/open(Path/of_str("notes.txt"), File/Mode/read())!;
-    let text = File/read_all(Path/of_str("notes.txt"))!;
-    let _ = File/close(f)!;
-    Try/pure(text);
-```
-
-### Lifting between monads
-
-`/std/Lift(M, N)` declares the canonical embedding of monad `M` into monad `N`: one method, `lift`, taking an `M(A)` to an `N(A)`, with `Monad` witnesses for both sides as superclasses — so an embedding between non-monads cannot be declared. Like every witness, one `Lift` witness may occupy each ordered pair of monads program-wide, so which embedding runs is a fact about the program, never about a call site.
-
-```crs
-satisfy Lift(Io, Async) {
-    lift = lift,
-}
-```
-
-With that witness declared — `/std/Async` declares it — an `Io` action sequences directly inside an `Async` region, and the `!` inserts the lift:
-
-```crs
-use /std/{Async, print};
-pub let fiber: Async({}) =
-    let _ = print("hello\n")!;
-    Async/pure(());
-```
-
-The explicit spelling `lift(action)` names the same embedding, with the target monad inferred from the region. A region's tail — the last expression of a value body, a lambda body, or a match arm — is lifted by the same read when both its head's declared monad and the region's are monads and differ; a tail that is not a monadic action at all keeps the ordinary type mismatch. The read is of the action's *head's declaration*, so an action whose head is not a declared name — a projection, a call of a lambda — is not embedded on its own: it is reported as an action of one monad where another is expected, at its own `!` or tail, and `lift(action)` is the spelling that embeds it.
-
-Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does not let an `Io` action sequence in a `Sched` region: the missing `Lift(Io, Sched)` is reported, together with any chain of declared embeddings that would have reached it, and the composite embedding is declared like any other — a decision about `Sched`, written by its author, not derived by the compiler.
+The compiler tells you everything it knows about the hole, and then refuses to build. A goal is never accepted in a successfully compiled program.
 
 ### Whole-term forms and operand positions
 
@@ -521,15 +424,90 @@ Both operands of an operator have the same type. `==` and `!=` are two separate 
 
 An operator's result type is whatever its concept's method declares: `+`, `-`, `*`, `/`, `%`, `&&` and `||` return the operand type, while `==`, `!=`, `<`, `>`, `<=` and `>=` return `Bool`.
 
-`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/Lt(0, b)`. A carrier whose division is total states `Bool/True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail.
+`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/Lt(0, b)`. A carrier whose division is total states `Bool/True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail ([A bound is stated in a decided proposition and discharged by reduction](design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md)). Dividing by zero is not a runtime surprise here; it is something you prove will not happen.
 
 Operator notation always uses witness resolution, including intrinsic operands. Standard witnesses cover the intrinsic types, while a `satisfy` declaration enables the same notation for a user-defined type.
+
+## Sequencing and effects
+
+### Postfix `!`
+
+`action!` is monadic sequencing. Each occurrence is equivalent to a call to `/std/Monad/bind(action, continuation)` in the monad of its region.
+
+```crs
+use /std/{Nat, Byte, Parse};
+pub let parser: Parse(Nat) =
+    let a = Parse/any_byte!;
+    let b = Parse/any_byte!;
+    Parse/pure(Byte/to_nat(a) + Byte/to_nat(b));
+```
+
+Every value body is a sequencing region. Lambda bodies, match arms, and recursive member bodies begin fresh regions; the tail after a local `let` remains in the same region. There is no `let !` header or matching `end`.
+
+A region's monad is read from the region's type and never inferred from a sequenced action. A region whose type is not yet known waits for it, and one whose type can never name a monad — the body of a lambda in inference position, say — is rejected with a request to annotate the enclosing result type.
+
+An action whose own monad differs from the region's is lifted through the declared `Lift` witness for that ordered pair, and a pair with no witness is rejected. See [Lifting between monads](#lifting-between-monads).
+
+Postfix `!` is not allowed in types. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
+
+### Host effects and `Io`
+
+Every operation that touches the host — writing a handle, reading a clock, allocating or reading a cell, calling a `foreign` function, exiting — has result type `Io(T)`: a *description* of a computation yielding a `T`, not the `T`. Calling one performs nothing, so `let greeting: Io({}) = print("hello");` has printed nothing.
+
+**There is no operation taking an `Io(T)` to a `T`** ([Effects are descriptions and the carrier has no eliminator](design/language/effects-are-descriptions-and-the-carrier-has-no-eliminator.md)). A description is performed only by being the program's tail, which the emitted entrypoint forces once. So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
+
+`Io/pure` wraps a value as a description performing nothing and `Io/bind` sequences one into another, but postfix `!` reaches `Io` through its `Monad` witness like any other monad. Binding a description does not perform it, and forcing one twice performs it twice:
+
+```crs
+use /std/{Io, print};
+let once: Io({}) = print("x");
+let _ = once!;
+once                            -- prints "x" twice in total
+```
+
+An `Io` is a noun, not a verb.
+
+`Io` is not matchable: it has no constructors to enumerate, so a `match` over one is rejected, whether it writes constructor arms or none at all. A lone `| _ =>` arm is an irrefutable binder match rather than an elimination, and is accepted as the binding it is.
+
+A host operation that can fail is declared `Try(M, E, A)` over its base monad — `Try(Io, Io/Error, File)` for `File/open`, `Try(Async, Io/Error, Socket)` for `tcp/Socket/connect`. Through the edges `/std/Try` declares, a `Try` region sequences a `Try` over the same base, a bare `Result` as early return, an action of the base, and an `Io` action wherever the base admits one; `Try/raise` stops the region, `Try/rescue` handles the stop, and `Try/run` hands the outcome back as an `M(Result(E, A))`.
+
+```crs
+use /std/{File, Path, Bytes, Try, Io};
+let contents: Try(Io, Io/Error, Bytes) =
+    let f = File/open(Path/of_str("notes.txt"), File/Mode/read())!;
+    let text = File/read_all(Path/of_str("notes.txt"))!;
+    let _ = File/close(f)!;
+    Try/pure(text);
+```
+
+### Lifting between monads
+
+`/std/Lift(M, N)` declares the canonical embedding of monad `M` into monad `N`: one method, `lift`, taking an `M(A)` to an `N(A)`, with `Monad` witnesses for both sides as superclasses — so an embedding between non-monads cannot be declared. Like every witness, one `Lift` witness may occupy each ordered pair of monads program-wide, so which embedding runs is a fact about the program, never about a call site.
+
+```crs
+satisfy Lift(Io, Async) {
+    lift = lift,
+}
+```
+
+With that witness declared — `/std/Async` declares it — an `Io` action sequences directly inside an `Async` region, and the `!` inserts the lift:
+
+```crs
+use /std/{Async, print};
+pub let fiber: Async({}) =
+    let _ = print("hello\n")!;
+    Async/pure(());
+```
+
+The explicit spelling `lift(action)` names the same embedding, with the target monad inferred from the region. A region's tail — the last expression of a value body, a lambda body, or a match arm — is lifted by the same read when its head's declared monad and the region's are both monads and differ; a tail that is no monadic action keeps the ordinary type mismatch. The read is of the action's *head's declaration*, so one whose head is not a declared name — a projection, a call of a lambda — is not embedded on its own: it reports as an action of one monad where another is expected, and `lift(action)` is the spelling that embeds it.
+
+Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does not let an `Io` action sequence in a `Sched` region: the missing `Lift(Io, Sched)` is reported, together with any chain of declared embeddings that would have reached it. The composite is declared like any other — a decision about `Sched`, written by its author, not derived by the compiler ([Monads embed along declared edges, and `!` lifts across them](design/language/monads-embed-along-declared-edges-and-bang-lifts-across-them.md)).
 
 ## Pattern matching
 
 ### Match shell and motives
 
-A headed match has a scrutinee, an optional motive, one or more `| pattern => body` arms unless the eliminated type is empty, and a closing `end`.
+A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T, n + 1)` needs no `empty()` arm — and where it is not provable the missing arm is demanded by name. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled.
 
 The motive states the result type as a family. It is an ordinary term, checked against the eliminator's motive type — a function of the scrutinee's indices, in declaration order, and then the scrutinee:
 
@@ -537,7 +515,7 @@ The motive states the result type as a family. It is an ordinary term, checked a
 (indices) -> Scrutinee(indices) -> Sort
 ```
 
-There is no motive grammar. What follows `:` is parsed as a term and terminates at the first arm, since `|` is not an infix operator.
+There is no motive grammar: what follows `:` is parsed as a term and terminates at the first arm, since `|` is not an infix operator ([A motive is a term, not a grammar](design/language/a-motive-is-a-term-not-a-grammar.md)).
 
 ```crs
 match b: (_) => Nat                            -- result ignores the scrutinee
@@ -548,19 +526,19 @@ match p: discriminates_eq                      -- a named family
 match v                                        -- omitted; inferred
 ```
 
-The number of binders is fixed by the eliminated type: one per index, then one for the scrutinee. A non-indexed scrutinee — every intrinsic carrier, and any inductive declared without an index telescope — therefore takes exactly one binder, so a result that ignores the scrutinee is written `(_) => T`. The `Sized` declared under [Inductive declarations](#inductive-declarations) has one index and takes two binders; `Eq` has two and takes three.
+The number of binders is fixed by the eliminated type: one per index, then one for the scrutinee. A non-indexed scrutinee — every intrinsic carrier, and any inductive declared without an index telescope — takes exactly one, so a result that ignores it is written `(_) => T`; the `Sized` declared under [Inductive declarations](#inductive-declarations) has one index and takes two binders, and `Eq` has two and takes three.
 
-Parameters are never binders. They are uniform across constructors and fixed by the scrutinee's type, so the motive body refers to them through the ambient scope, exactly as the declaration side states only index expressions in a constructor's case target.
+Parameters are never binders. They are uniform across constructors and fixed by the scrutinee's type, so the motive body reaches them through the ambient scope — exactly as a constructor's case target states only index expressions.
 
 Each arm is checked against the motive at that constructor's target indices, and the match as a whole at the scrutinee's actual indices. A `| _ =>` default binds nothing and refines no index, so it is checked at the actual indices too.
 
-A binder may be written bare, as `_`, or annotated. An annotation is an ordinary type in an ordinary position: it is checked by conversion against the binder's expected type, obeys the usual plicity rules, and may name the binders written before it. Annotating the scrutinee binder is how a reader recovers the eliminated family on the motive line.
+A binder may be written bare, as `_`, or annotated. An annotation is an ordinary type in an ordinary position: checked by conversion against the binder's expected type, obeying the usual plicity rules, and free to name the binders before it. Annotating the scrutinee binder is how a reader recovers the eliminated family on the motive line.
 
 ```crs
 match p: (s, t, q: Eq(s, t)) => Eq(t, s)
 ```
 
-Omitting the motive asks the elaborator to infer it. Over a variable scrutinee in a position with an expected type, the result is that expected type as written, and each arm is checked against it with the scrutinee and its variable indices standing for the arm's case — so a hypothesis whose type mentions the scrutinee needs no convoy to ride along. Over an expression scrutinee the expected type is abstracted over the expression's occurrences instead. Prefer omission wherever inference succeeds; a written motive is needed where there is nothing to infer from — a type-level match whose result appears in a signature, or an elimination in inference position — and where an occurrence of an expression scrutinee is not there to abstract.
+Omitting the motive asks the elaborator to infer it. Over a variable scrutinee in a position with an expected type, the result is that expected type as written, and each arm is checked against it with the scrutinee and its variable indices standing for the arm's case — so a hypothesis whose type mentions the scrutinee needs no convoy to ride along. Over an expression scrutinee the expected type is abstracted over the expression's occurrences instead. Prefer omission wherever inference succeeds. A motive has to be written where there is nothing to infer from — a type-level match whose result appears in a signature, or an elimination in inference position — and where an occurrence of an expression scrutinee is not there to abstract.
 
 A fold's motive (`Nat`, `List`, `Bits`, `Bytes`) reaches its scrutinee only through the binder it declares: the `; ih` hypothesis is typed at the motive opened at the tail, and a motive that named the scrutinee instead would have that name refined to the arm's own value. `match n: (m) => P(m)` is accepted; `match n: (_) => P(n)` is refused.
 
@@ -577,7 +555,7 @@ match option
 end
 ```
 
-A payload position the constructor declared implicit (`@`) must be matched with `@`; a plain payload is matched without a mark. A constructor pattern supplies one pattern per payload position, hidden ones included — omitted hidden payload patterns are not inserted (unlike lambda binders). Witness payloads are not a surface feature, so `use` is not accepted in a constructor pattern.
+A constructor is named bare: the scrutinee's type supplies the namespace, so `Option/some(n)` is refused as a pattern. A payload position the constructor declared implicit (`@`) must be matched with `@`; a plain payload is matched without a mark. A constructor pattern supplies one pattern per payload position, hidden ones included — omitted hidden payload patterns are not inserted, unlike lambda binders. Witness payloads are not a surface feature, so `use` is not accepted in a constructor pattern.
 
 ```crs
 match vector
@@ -586,7 +564,7 @@ match vector
 end
 ```
 
-A pattern may nest *inside* a constructor, tuple, or struct field. The operands of the `Nat`, `List`, `Bits`, and `Bytes` leaves are plain binder names rather than patterns — `[some(x), ..tail]` is not a pattern — while the `; ih` binding takes a full irrefutable pattern.
+A pattern may nest *inside* a constructor, tuple, or struct field, and parentheses group one as they group an irrefutable pattern. The operands of the `Nat`, `List`, `Bits` and `Bytes` leaves are plain binder names rather than patterns — `[some(x), ..tail]` is not a pattern — while the `; ih` binding takes a full irrefutable pattern.
 
 ```crs
 match value
@@ -608,7 +586,7 @@ match option
 end
 ```
 
-Only a bare `_` in this exact position is a default. A named binder is not a catch-all. Nested wildcard defaults are not accepted. A lone `_` with no concrete arm is an irrefutable binder match rather than an inductive default.
+Only a bare `_` in this exact position is a default, and nested wildcard defaults are not accepted. `_` is the only wildcard: a final arm binding a name called `rest` is a binder, and is refused as a catch-all. A lone `_` with no concrete arm is an irrefutable binder match rather than an inductive default.
 
 ### Multiple scrutinees
 
@@ -671,7 +649,7 @@ end
 
 Induction arms and literal-dispatch arms cannot be mixed in one match.
 
-A dispatch literal is a numeric literal or a character literal — the latter matching its scalar value, so `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, with the conversion visible at the head. `Nat` is unbounded and a dispatch literal is written whole, but the compiled carrier is 32 bits wide: a case past it is refused where every numeral narrows, with the arm named, rather than changing what the program means.
+A dispatch literal is a numeric literal or a character literal — the latter matching its scalar value, so `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, with the conversion visible at the head. `Nat` is unbounded; the branch table is not. A dispatch literal is written whole, but the compiled carrier is 32 bits wide, and a case past it is refused where every numeral narrows, located at the arm, rather than changing what the program means.
 
 ### List fold and case split
 
@@ -688,7 +666,7 @@ end
 
 ### Packed folds
 
-`Bits` and `Bytes` use their literal grain letters to select the carrier, and their arms take the same shape as a [list fold](#list-fold-and-case-split). The nonempty arm binds the leading element and tail; an optional binding after `;` receives the fold result for the tail, as a plain name or an irrefutable tuple/struct pattern. A `Bits` head has type `Bool`; a `Bytes` head has type `Byte`. Both cases are required here too, and a trailing `| _ =>` may stand in for the missing one.
+`Bits` and `Bytes` arms are a [list fold](#list-fold-and-case-split) under the grain letter that selects the carrier, with every rule of one: both cases required, the `;` binding optional, a trailing `| _ =>` standing in for a missing case. A `Bits` head has type `Bool`; a `Bytes` head has type `Byte`.
 
 ```crs
 match bits
@@ -714,7 +692,7 @@ choose
 end
 ```
 
-A condition arm fires when its expression evaluates to `true`. A bind arm evaluates the expression on the right of `=` and fires when it matches the refutable pattern on the left. A bare binder is not allowed as a bind-arm pattern because it cannot fail; use `let` instead.
+A condition arm fires when its expression evaluates to `true`. A bind arm evaluates the expression on the right of `=` and fires when it matches the refutable pattern on the left. A bare binder is not allowed as a bind-arm pattern, because it cannot fail: an arm that always fires is a `let`.
 
 Each selected arm receives the same definitional refinement that an equivalent nested headed match would provide.
 
@@ -726,7 +704,7 @@ An entrypoint consists of zero or more top-level items followed by exactly one f
 
 Top-level `let` declarations require a type annotation. Function-definition sugar supplies the annotation as a parameter telescope and result type.
 
-That requirement is also what separates items from the final term: an *unannotated* top-level binding in an entrypoint is not an item at all, but a local `let` opening the final term. The difference is not only scope. An item's value body is its own sequencing region, so a `!` written in it sequences within that definition; a local `let`'s value shares the final term's region, so a `!` written there sequences with the rest of the program.
+That requirement is also what separates items from the final term: an *unannotated* top-level binding in an entrypoint is not an item at all, but a local `let` opening the final term. The difference is not only scope — an item's value body is its own sequencing region, so a `!` in it sequences within that definition, while a local `let`'s value shares the final term's region and sequences with the rest of the program.
 
 ```crs
 pub let zero: Nat = 0;
@@ -738,11 +716,11 @@ pub let map(@A: Type, @B: Type, value: Option(A), f: (A) -> B) -> Option(B) =
     end;
 ```
 
-A top-level definition is in scope of its own body, so it may recurse with nothing said. Definitions that reference one another are declared as one group with `and`; each member takes its own `pub` marker — before `let` for the first member and before `and` for each later member — and one `;` terminates the whole group. Two definitions that reference each other without being declared as a group are refused, naming both.
+A top-level definition is in scope of its own body, and definitions that reference one another are declared as one group with `and` — see [Recursive groups](#recursive-groups).
 
 ### Test declarations
 
-A `test` declaration declares a named test: a description of type `/std/Test`, built with the combinators that module exports. It takes no parameters — a claim about every instantiation is a proposition, so it is a `let` whose type states it, which the kernel checks on every build.
+A `test` declaration names a check: a description of type `/std/Test`, built from that module's combinators, collected per unit in declaration order and run by `curios test`, which owns [what it reports](usage.md#test).
 
 ```crs
 use /std/{Nat, Eq, Test};
@@ -754,9 +732,11 @@ let _right_identity(n: Nat) -> Eq(n + 0, n) =
     Eq/refl();
 ```
 
-A test takes no parameters. Its body is a closed description and its verdict is computed when the test runs — `passed`, `failed`, `trapped`, or `exited N`. A claim about *every* instantiation is not a description and nothing runs decides it: it is a proposition, so it is a `let` whose type states the claim and whose body proves it, checked by the kernel on every build — `let _right_identity(n: Nat) -> Eq(n + 0, n) = Eq/refl();`, the leading `_` marking a declaration that exists for its type rather than its callers. To check a claim that is true but not a theorem at instances you choose, make it an ordinary definition returning `Test` and schedule a table: a `let` is not a test and owes no proof, and `Test/all(List/map(cases, ((a, b)) => claim(a, b)))` is one test over the author's own cases whose failure names the case's position. What `curios test` reports is [Testing](usage.md#testing).
+A test takes no parameters. A claim about *every* instantiation is a proposition rather than a description, so it is a `let` whose type states the claim and whose body proves it, checked by the kernel on every build — the second declaration above, its leading `_` marking a declaration that exists for its type rather than its callers ([A test is a check that runs, and a proof is a `let`](design/language/a-test-is-a-check-that-runs-and-a-proof-is-a-let.md)). A test runs; a proof does not have to.
 
-`test` is contextual: it is a keyword only where an item may start, and `test` stays an ordinary name everywhere else. A test is never `pub` — its name is its report line, not an export — but it is otherwise registered like a private definition: referable within its subtree, and colliding with a sibling declaration of the same name. Being referable is what makes a parameterized test a family: `Test/all(List/map(cases, ((a, b)) => add_commutes(a, b)))` is the same claim over a table the author wrote, one test whose failure names the case's position. The body is its own sequencing region typed at `Test`, which is no monad, so a bare `!` is refused where it is written; an effectful test enters `Io` through `Test/perform`'s thunk. Each unit's tests are collected in declaration order.
+To check a claim that is true but not a theorem at instances you choose, make it an ordinary definition returning `Test` and schedule a table: `Test/all(List/map(cases, ((a, b)) => claim(a, b)))` is one test over the author's own cases, whose failure names the case's position. That works because a test registers like a private definition — referable within its subtree, and colliding with a sibling of the same name.
+
+`test` is contextual: a keyword only where an item may start, an ordinary name everywhere else. A test is never `pub`, its name being a report line rather than an export, and no documentation comment may precede one. Its body is its own sequencing region typed at `Test`, which is no monad, so a bare `!` is refused where it is written; an effectful test enters `Io` through `Test/perform`'s thunk.
 
 ### Modules
 
@@ -770,18 +750,19 @@ pub mod Internal
 end
 ```
 
-A header's file-backed modules live in its **stem directory**. `mod Nat;` written in `foo.crs` loads `foo/Nat.crs`, and `Nat`'s own file-backed modules load from `foo/Nat/`. One rule governs every file in the language, so the file handed to `curios run` is a header like any other: `mod Nat;` in `main.crs` loads `main/Nat.crs`.
+A header's file-backed modules live in its **stem directory**. `mod Nat;` written in `foo.crs` loads `foo/Nat.crs`, and `Nat`'s own file-backed modules load from `foo/Nat/`. One rule governs every file in the language, so the file handed to `curios run` is a header like any other: `mod Nat;` in `main.crs` loads `main/Nat.crs`. `main.crs` is not special; it is only the file you pointed at.
 
 A package's library header is the single exception, and it is a fact about package layout rather than about the language — see [What a package is made of](usage.md#what-a-package-is-made-of). A stem is never part of a name: neither `main` nor `lib` can be written in a path.
 
 ### Imports and re-exports
 
-`use` imports through a group: a braced list `path/{…}` or a glob `path/*`. There is no bare `use path;` form — a single import is written `use /std/{Nat};`. Prefixing it with `pub` re-exports what it imports.
+`use` imports through a group: a braced list `path/{…}` or a glob `path/*`. There is no bare `use path;` form — a single import is written `use /std/{Nat};`. The path may be dropped entirely, leaving the root-anchored `use /{Name};`, which is how a nested module reaches a declaration of the compilation root. Prefixing a `use` with `pub` re-exports what it imports.
 
 ```crs
 use /std/{Nat, Bool};
 pub use Option/*;
 use /std/Nat/{Lt};
+use /{Owner};
 ```
 
 Inside a group, a bare name imports both a child module and a value with that name when both exist. `mod Name` imports only the module namespace; `let Name` imports only the value namespace.
@@ -797,7 +778,9 @@ One rule governs every declaration, in both namespaces:
 
 > A declaration written **without** `pub` in module `M` is visible exactly within `M`'s subtree — `M` itself and its descendants at any depth. A declaration written **with** `pub` is additionally visible wherever `M` itself is visible.
 
-Reachability along a path is the conjunction of that rule at each hop, and the root's subtree is the whole program. So a descendant may name its ancestors' private declarations, while ancestors and siblings may not: `Owner/Worker` can reach a private binding of `Owner`, but neither `Owner` nor a sibling `Owner/Other` can reach a private binding of `Owner/Worker`. `pub` inside a private module means "wherever this module is visible", which is that module's own audience rather than the whole program — the facade pattern, where a public module re-exports selected names out of a private child.
+Reachability along a path is the conjunction of that rule at each hop, and the root's subtree is the whole program. So a descendant may name its ancestors' private declarations, while ancestors and siblings may not: `Owner/Worker` can reach a private binding of `Owner` — written absolute or imported, since a relative path never climbs — but neither `Owner` nor a sibling `Owner/Other` can reach a private binding of `Owner/Worker`. Privacy points down the tree, and only down.
+
+`pub` inside a private module means "wherever this module is visible", which is that module's own audience rather than the whole program — the facade pattern, where a public module re-exports selected names out of a private child.
 
 `struct`, `induct`, and `concept` have a second, declaration-local `pub` before their result sort; this independently exposes their representation, under the same subtree rule. A private representation is transparent throughout its declaring module's subtree, so an abstraction can be implemented across several files without exporting how it is built.
 
@@ -810,7 +793,37 @@ A public interface cannot mention an item its own consumers cannot reach. The in
 - inductive constructor signatures when the inductive representation is public;
 - declared types of definitions.
 
-The check compares audiences rather than declaration paths, so a name re-exported out of a private child counts as visible wherever the re-export puts it, and an item that reaches only a subtree may freely mention other declarations of that subtree. It follows re-exports, identity aliases, and direct-headed type-family aliases whose declared result structurally ends in literal `Type` or `Prop`. Ordinary definition bodies are not part of the public interface, and neither are the signatures of members synthesized into a nested namespace — an inductive's constructors and a concept's method wrappers — so a constructor facade may hand out values of a type the consumer cannot name.
+The check compares audiences rather than declaration paths, so a name re-exported out of a private child counts as visible wherever the re-export puts it, and an item reaching only a subtree may freely mention other declarations of that subtree. It follows re-exports, identity aliases, and direct-headed type-family aliases whose declared result structurally ends in literal `Type` or `Prop`. Definition bodies are not interface, and neither are members synthesized into a nested namespace — an inductive's constructors, a concept's method wrappers — so a constructor facade may hand out values of a type the consumer cannot name.
+
+## Recursive groups
+
+A declaration is in scope of its own body, so it may recurse with nothing said. Declarations that reference one another are declared as one group with `and`, whose members all register before any body is elaborated; two that reference each other without being grouped are refused, naming both. One rule, five spellings, differing only in what a later member carries and what closes the group:
+
+| Form | A later member is written | The group closes with |
+| --- | --- | --- |
+| Local `let` | `and name: T = …` | one `;` |
+| Top-level `let` | `and`, its own `pub`, then `name: T = …` | one `;` |
+| `induct` | `and`, its own markers, then a head and its cases | one `end` |
+| `struct`, `concept` | `and`, its own markers, then a whole declaration | the last member's `}` |
+| `satisfy` | `and`, then a whole witness | the last member's `}` or `;` |
+
+A local group's first member may be a pattern; every later one is a plain name stating its type, since a body mentioning the binding cannot be the source of it.
+
+```crs
+let even(n: Nat) -> Bool =
+    match n
+    | 0 => true
+    | p + 1; _ => odd(p)
+    end
+and odd(n: Nat) -> Bool =
+    match n
+    | 0 => false
+    | p + 1; _ => even(p)
+    end;
+even(input)
+```
+
+Visibility is per member, never per group: a `pub` before `let`, `induct`, `struct` or `concept` covers the first member, and one before `and` covers that member alone. A witness is never `pub`, so neither is a member of a witness group.
 
 ## Inductive declarations
 
@@ -852,9 +865,9 @@ pub induct Eq(@A: Type): (left: A, right: A) -> pub Prop
 end
 ```
 
-The outer `pub` exports the family name. The inner `pub` exports construction and every form of elimination. Without the inner marker, constructor access and pattern matching are restricted to the declaring module's subtree.
+The outer `pub` exports the family name; the inner exports construction and every form of elimination, and without it constructor access and pattern matching are restricted to the declaring module's subtree.
 
-Mutually recursive inductives are separated by `and` within one block. Each member has its own outer and representation visibility markers.
+Mutually recursive inductives are separated by `and` within one block, which a single `end` closes — see [Recursive groups](#recursive-groups).
 
 ## Structure declarations
 
@@ -873,11 +886,9 @@ A single unlabeled field defines a newtype-like structure and is projected with 
 pub struct Meters: pub Type { Nat }
 ```
 
-The outer `pub` exports the type name. The inner `pub` exports construction and projection. Without the inner marker, those operations are restricted to the declaring module's subtree.
+The outer `pub` exports the type name; the inner exports construction and projection, and without it those are restricted to the declaring module's subtree. A `Prop` structure may contain only non-informative fields.
 
-A `Prop` structure may contain only non-informative fields.
-
-Structures whose fields name one another are declared as one group with `and`; each member takes its own `pub` markers, before `struct` for the first and before `and` for each later one. A lone structure may name itself in its fields with nothing said.
+Structures whose fields name one another are declared as one group with `and`; a lone structure may name itself in its fields with nothing said. See [Recursive groups](#recursive-groups).
 
 ```crs
 pub struct Node: pub Type { value: Nat, next: Option(Edge) }
@@ -917,7 +928,7 @@ Concepts provide ad-hoc polymorphism. A concept is a record-shaped interface, a 
 
 ### Concept declarations
 
-A concept has zero or more parameters, a required representation sort, and a field list. The representation sort follows the struct rules: `: pub Type` declares a transparent concept, and `: Type` a *sealed* one, whose representation is private to its declaring module's subtree — witness declarations, dictionary literals, structure updates, and raw field projections are then permitted only there. Resolution, `use` parameters, and the generated method wrappers work the same either way, and visibility of the concept's name remains independent of its representation.
+A concept has zero or more parameters, a required representation sort, and a field list. The representation sort follows the struct rules: `: pub Type` declares a transparent concept, `: Type` a *sealed* one whose representation is private to its declaring module's subtree, so witness declarations, dictionary literals, structure updates and raw field projections are permitted only there. Resolution, `use` parameters and the generated method wrappers work the same either way, and the concept name's own visibility stays independent of its representation.
 
 ```crs
 pub concept Show(A: Type): pub Type {
@@ -925,14 +936,14 @@ pub concept Show(A: Type): pub Type {
 }
 
 pub concept Monad(M: (Type) -> Type): pub Type {
-    pure(@A: Type, value: A) -> M(A),
-    bind(@A: Type, @B: Type, action: M(A), next: (A) -> M(B)) -> M(B),
+    pure(@A: Type, A) -> M(A),
+    bind(@A: Type, @B: Type, M(A), (A) -> M(B)) -> M(B),
 }
 ```
 
 Every ordinary field receives a wrapper in the concept's namespace, so `Show/show(value)` asks for an implicit witness of `Show(A)` and projects its `show` implementation.
 
-Concepts whose method types name one another's dictionaries are declared as one group with `and`, as structures are. A superclass cycle — `use B(A)` in `A` and `use A(B)` in `B` — is refused whether or not the two are declared together, since resolution could never discharge it.
+Concepts whose method types name one another's dictionaries are declared as one group with `and`, as structures are — see [Recursive groups](#recursive-groups). A superclass cycle — `use B(A)` in `A` and `use A(B)` in `B` — is refused whether or not the two are declared together, since resolution could never discharge it.
 
 The field list is a dependent telescope: later fields may refer to earlier named fields. In a generated wrapper such a reference becomes the corresponding projection of the resolved witness, so the wrapper's type constrains that witness's own implementations.
 
@@ -943,7 +954,7 @@ pub concept Idem(A: Type): pub Type {
 }
 ```
 
-A field whose type is a proposition about earlier fields is a law. `satisfy` cannot register a witness for such a concept without supplying a proof that discharges the law at the implementations that witness supplies, so a witness violating it is rejected where it is declared.
+A field whose type is a proposition about earlier fields is a law. `satisfy` cannot register a witness for such a concept without supplying a proof that discharges the law at the implementations that witness supplies, so a witness violating it is rejected where it is declared — at the declaration, not in the tests you meant to write.
 
 A field's result may itself be a sort, which makes the field an associated type each witness chooses. `Div`'s `Ok(A) -> Prop` is what lets every carrier state its own division precondition, and a witness supplies it with the same field sugar as any other:
 
@@ -965,7 +976,7 @@ pub concept Ord(A: Type): pub Type {
 
 A local `Ord(A)` witness can therefore satisfy an `Eql(A)` goal by superclass projection.
 
-A sealed concept's fields are not part of its public interface: a `pub` sealed concept may reference private names in its field types — a private superclass is a hidden obligation that resolution discharges without the consumer naming it. A transparent `pub` concept's field types are interface and must be `pub` themselves.
+A sealed concept's fields are not part of its public interface: a `pub` sealed concept may reference private names in its field types, so a private superclass is a hidden obligation resolution discharges without the consumer naming it ([Concept representations may be sealed](design/language/concept-representations-may-be-sealed.md)). A transparent `pub` concept's field types are interface and must be `pub` themselves.
 
 A concept returning `Prop` (or `pub Prop`) has proof-irrelevant witnesses that erase completely.
 
@@ -979,7 +990,7 @@ satisfy Show(Nat) {
 }
 ```
 
-A witness may quantify over implicit parameters and require other witnesses. A nonempty telescope is separated from the concept application by `=>`. It cannot declare explicit parameters because resolution has no explicit arguments to supply.
+A witness may quantify over implicit parameters and require other witnesses. A nonempty telescope is separated from the concept application by `=>`. It cannot declare explicit parameters, because resolution has no explicit arguments to supply.
 
 ```crs
 satisfy (@A: Type, use Show(A)) => Show(List(A)) {
@@ -989,7 +1000,7 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
 
 Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, tuple type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A: Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
 
-A tuple type is keyed by its *shape*: the label at each field position, arity implied, field types excluded. Labels are part of a tuple type's identity, so `Show({Nat, Bool})`, `Show({a: Nat, b: Bool})` and `Show({x: Nat, y: Bool})` are three keys for three types, and a witness for one does not serve another. `{}` keys as the empty shape, and a constructor whose body is a tuple type — `let Pair(A: Type) -> Type = {Nat, A};` — keys on that body's shape in the higher-kinded position. The standard library writes tuple-keyed witnesses for the positional shapes in `/std/Tuple`, whose header states which concept reaches which arity and why the ceiling sits where it does; a labeled product wanting the same is written as a `struct`.
+A tuple type is keyed by its *shape*: the label at each field position, arity implied, field types excluded. Labels are part of a tuple type's identity, so `Show({Nat, Bool})`, `Show({a: Nat, b: Bool})` and `Show({x: Nat, y: Bool})` are three keys for three types. `{}` keys as the empty shape, and a constructor whose body is a tuple type — `let Pair(A: Type) -> Type = {Nat, A};` — keys on that body's shape in the higher-kinded position. `/std/Tuple` writes the tuple-keyed witnesses the standard library has: `Show`, `Spell`, `Eql` and `Ord` at the positional shapes of nought through eight fields. A labeled product wanting the same is written as a `struct`.
 
 ```crs
 satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
@@ -997,9 +1008,9 @@ satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
 }
 ```
 
-A function type is **not** keyed. Its useful key space is nearly one point — `(_) -> _` above all — so a concept's owner claiming a shape would claim it program-wide and forever, and no meaningful witness wanted one: `Show` at a function type is meaningless, `Eql` at one undecidable, and `Monad` at one declined deliberately, since the nominal wrapper — `/std/State`'s idiom — is how a function becomes a monad. A `satisfy` whose concept parameter reduces to a function type is refused as unkeyable, with the same report a variable head gets.
+A function type is **not** keyed: a `satisfy` whose concept parameter reduces to one is refused as unkeyable, with the same report a variable head gets. A function becomes a monad by being wrapped in a nominal type, which is `/std/State`'s idiom. Why the shape was tried and retired is [A tuple type is keyed by the part of its identity conversion keeps](design/language/a-tuple-type-is-keyed-by-the-part-of-its-identity-conversion-keeps.md).
 
-Two witnesses that resolve through each other are declared as one group with `and`; each member is a whole witness, with its own telescope where it has one, and the group's members register before any body elaborates. A lone witness may resolve through its own entry with nothing said; two that resolve through each other without being declared as a group are refused, naming both.
+Witnesses that resolve through each other are declared as one group with `and` — see [Recursive groups](#recursive-groups). A lone witness may resolve through its own entry with nothing said.
 
 ```crs
 satisfy Show(Tree) {
@@ -1010,11 +1021,9 @@ and Show(Forest) {
 }
 ```
 
-A globally registered witness therefore requires a concept with at least one parameter. A parameterless concept can still be used through an ordinary value supplied in a local `use` scope.
+A globally registered witness therefore requires a concept with at least one parameter; a parameterless one is still usable through an ordinary value supplied in a local `use` scope. Parameters key independently — `Into(Nat, Str)` and `Into(Nat, Bool)` are distinct keys — so a call must determine every parameter from its explicit arguments, its expected result, or an explicitly supplied witness before lookup can proceed.
 
-For example, witnesses for `Into(Nat, Str)` and `Into(Nat, Bool)` have distinct keys. A call must determine both parameters from its explicit arguments, expected result, or an explicitly supplied witness before automatic lookup can proceed.
-
-Only one witness may occupy a key across the whole program. Module visibility does not scope witness registration, but a *sealed* concept's representation does gate declaration: its witnesses may only be declared within the concept's declaring module's subtree.
+Only one witness may occupy a key across the whole program; there is no "the `Show` I meant here". Module visibility does not scope witness registration, but a *sealed* concept's representation does gate declaration: its witnesses may only be declared within the concept's declaring module's subtree.
 
 To use a second dictionary for the same key on a *transparent* concept, construct an ordinary concept value and supply it explicitly (a sealed concept forbids the literal outside its module):
 
@@ -1025,7 +1034,7 @@ sort(use reverse, values)
 
 ### Derived witnesses
 
-A witness may omit its body: `satisfy Spell(Point);`, or `satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));` under a telescope, and either form may join an `and` group beside written members. The signature is the programmer's — it registers, keys, and meets the orphan and sealing rules exactly as a written witness does — and the compiler writes the body from the declaration of the type in the key. Derivability is a property of the concept: `Spell`, `Eql` and `Ord` derive, every other concept refuses the form by name, and the hand-written witness remains the norm.
+A witness may omit its body: `satisfy Spell(Point);`, or `satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));` under a telescope, and either form may join an `and` group beside written members. The signature is the programmer's — it registers, keys, and meets the orphan and sealing rules exactly as a written witness does — and the compiler writes the body from the declaration of the type in the key ([A witness body may be written by the compiler](design/language/a-witness-body-may-be-written-by-the-compiler.md)). Derivability is a property of the concept: `Spell`, `Eql`, `Ord` and `Hash` derive, every other concept refuses the form by name, and the hand-written witness remains the norm.
 
 ```crs
 struct Point: pub Type { x: Nat, y: Nat }
@@ -1037,19 +1046,26 @@ and (@A: Type, use Eql(A)) => Eql(Tree(A));
 and (@A: Type, use Eql(A), use Ord(A)) => Ord(Tree(A));
 ```
 
-The key must be a declared `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — fully applied, representation-transparent where the witness is declared, and not a proposition. An implicit payload is inferred by the re-parsed text and takes no part; a proof payload spells as the written goal `?` and compares as nothing; a payload that is itself a type is refused; every other payload goes through its own witness, resolved in the witness's scope — a telescope premise, the witness's own entry, or a member of the same `and` group — and a missing one is reported against the constructor and payload, naming the `use` premise to add when the payload's type is a telescope variable.
+The key must be a declared `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — fully applied, representation-transparent where the witness is declared, and not a proposition. An implicit payload is inferred by the re-parsed text and takes no part, and a payload that is itself a type is refused; every other goes through its own witness, resolved in the witness's scope — a telescope premise, the witness's own entry, or a member of the same `and` group. A missing one is reported against the constructor and payload, naming the `use` premise to add when the payload's type is a telescope variable.
 
-A derived `Spell` spells a value as its constructor, qualified by its type's own name, applied to its explicit payloads — `Tree/node(Tree/leaf(1), Tree/leaf(2))`, `Option/some(3)` — and a struct as its literal, `Point { x = 1, y = 2 }`, positionally where a field has no label; the text re-parses wherever the type's name is visible unqualified, which is wherever a value of it is written, and reads in a report as the author would have written it. A derived `Eql` is structural — the same constructor with pairwise equal payloads — and `!=` is its negation. A derived `Ord` ranks constructors by declaration position first and compares payloads only where the constructors agree, taking the first that differs; a proof payload contributes nothing, which is what answering `eq` would be. `Ord` has `Eql` as a superclass, so a derived one asks for the key's equality witness and reports at the declaration when there is none. A derived `Hash` encodes a value as its constructor's ordinal followed by its explicit payloads' encodings, every part written behind its own four-byte length so that no two distinct values share a byte string; a struct takes ordinal zero, and a proof payload takes no part, since two values differing only in a proof are the same value. The standard library derives across twenty modules.
+| Concept | The body the compiler writes | A proof payload |
+| --- | --- | --- |
+| `Spell` | the constructor, qualified by its type's own name, applied to the explicit payloads — `Tree/node(Tree/leaf(1), Tree/leaf(2))`, `Option/some(3)` — and a struct as its literal, `Point { x = 1, y = 2 }`, positional where a field has no label | spells as the written goal `?` |
+| `Eql` | structural: the same constructor with pairwise equal payloads, `!=` its negation | compares as nothing |
+| `Ord` | constructors ranked by declaration position, payloads compared only where the constructors agree, taking the first that differs | contributes nothing |
+| `Hash` | the constructor's ordinal, then the explicit payloads' encodings, each part behind its own four-byte length so no two distinct values share a byte string; a struct takes ordinal zero | takes no part |
+
+A derived `Spell`'s text re-parses wherever the type's name is visible unqualified, which is wherever a value of it is written, so it reads in a report as the author would have written it. `Ord` has `Eql` as a superclass, so a derived one asks for the key's equality witness and reports at the declaration when there is none. A proof payload never contributes anywhere, since two values differing only in a proof are the same value.
 
 ### Witness premises
 
-A witness premise must be a concept application strictly smaller than the witness's own: every variable in it is bound by the witness's telescope, no variable occurs more often in it than in the witness's concept application, and it has fewer nodes in all. A premise may therefore name a constant beside a binder — `use Lift(Io, M)` under `Lift(Io, (A: Type) => Try(M, E, A))` — while `use Show(A)` under `Show(A)` is refused. This is what makes recursive resolution structurally decreasing without fuel or tabling.
+A witness premise must be a concept application strictly smaller than the witness's own: every variable in it is bound by the witness's telescope, no variable occurs more often in it than in the witness's concept application, and it has fewer nodes in all. A premise may therefore name a constant beside a binder — `use Lift(Io, M)` under `Lift(Io, (A: Type) => Try(M, E, A))` — while `use Show(A)` under `Show(A)` is refused. Recursive resolution terminates because the premises shrink, not because anybody counted ([A witness premise is smaller than its head](design/language/a-witness-premise-is-smaller-than-its-head.md)).
 
 ### Orphan rule
 
-A witness may be declared only by the compilation root that owns its concept or at least one rigid type head in its key. This prevents independent third parties from defining the same globally coherent instance.
+A witness may be declared only by the compilation root that owns its concept or at least one rigid type head in its key, which is what stops two independent parties from defining the same globally coherent instance ([Concepts resolve with global coherence](design/language/concepts-resolve-with-global-coherence.md)).
 
-A tuple shape is owned by no root, as an intrinsic type former is. A tuple-keyed witness is therefore declared where its concept is declared: a program writes tuple witnesses for its own concepts, and cannot add one for a `/std` concept at a shape `/std` did not write. No root is exempt, the standard library included — it declares every concept it witnesses, so the first clause admits it on the same terms as anyone.
+A tuple shape is owned by no root, as an intrinsic type former is, so a tuple-keyed witness is declared where its concept is: a program writes tuple witnesses for its own concepts and cannot add one for a `/std` concept at a shape `/std` did not write. No root is exempt, the standard library included — it declares every concept it witnesses, so the first clause admits it on the same terms as anyone.
 
 The coordinated `/sys` and `/std` roots are exempt from the restriction against one another.
 
@@ -1087,7 +1103,7 @@ An omitted witness argument is resolved in this order:
 2. Search superclass projections of local witnesses breadth-first; more than one match at the same minimum depth is ambiguous.
 3. Look up the concept and the rigid heads of every parameter in the global witness table.
 
-If any concept parameter is still headed by an unsolved metavariable, resolution waits until that metavariable is solved. A selected global witness is instantiated with fresh implicit arguments, its witness premises are resolved recursively, and its full result type is unified with the goal.
+If any concept parameter is still headed by an unsolved metavariable, resolution waits until that metavariable is solved. A selected global witness is instantiated with fresh implicit arguments, its witness premises are resolved recursively, and its full result type is unified with the goal. A rigid key with no entry yet defers rather than failing, so a witness may be declared after the code that resolves through it; what is still deferred once the unit has elaborated is reported then.
 
 Higher-kinded parameters are keyable. When conversion establishes a shape such as `M(A) = Option(Nat)`, it may infer `M` as the `Option` type constructor, allowing `Monad(Option)` lookup. An under-applied shape such as `M(A) = State(S, Nat)` infers `M` right-biasedly, as `(A) => State(S, A)`: the final argument is the abstracted one, which is why a family intended as a monad orders its parameters context first and result last.
 
@@ -1101,13 +1117,13 @@ foreign frobnicate: (Nat, Bytes) -> Nat;
 pub foreign log: (Bytes) -> Nat;
 ```
 
-The wire types are `Nat`, `Int`, `Bool`, `Bytes`, `Handle`, and `List(T)`. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
+The wire types are `Nat`, `Int`, `Bool`, `Bytes`, `Handle`, and `List(T)`, spelled bare: the wire grammar is a closed vocabulary that resolves no names, so `/std/Nat` is refused where `Nat` is meant. Six words that look like types and are not. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
 
 `Byte` and `Bits` are not distinct wire types. `List` does not nest: its element must be `Nat`, `Int`, `Bool`, `Bytes`, or `Handle`, so `List(List(T))` is rejected. `List` is in practice reachable only from builtin `/sys` operations — an embedder implementing a `foreign` declaration binds it through typed host closures, and the shapes those provide are the ones the builtins use. How the declaration reaches the embedder is the host ABI's concern rather than the surface language's.
 
 ## Equality and proofs
 
-Propositional equality `Eq` is an ordinary indexed inductive proposition from `/std/Eq`. Its proofs use the same constructors, functions, and match forms as other inductives.
+Propositional equality `Eq` is an ordinary indexed inductive proposition from `/std/Eq`. Its proofs use the same constructors, functions, and match forms as other inductives; `Eq` gets no syntax of its own, which is the point.
 
 ```crs
 pub let sym(@A: Type, @x: A, @y: A, proof: Eq(x, y)) -> Eq(y, x) =
@@ -1124,26 +1140,20 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | --- | --- |
 | `-- ` | Line comment |
 | `--- ` | Documentation comment, attached to the declaration below it |
-| `{}` | Unit type |
-| `()` | Unit value |
-| `@A: Type` | Implicit binder |
-| `@value` | Explicitly supplied implicit argument |
-| `use C(A)` | Automatically resolved witness binder |
-| `use value` | Explicitly supplied witness argument or superclass field |
-| `?` | Written elaboration goal that always reports and fails compilation |
+| `{}` / `()` | Unit type / unit value |
+| `@A: Type` / `@value` | Implicit binder / explicitly supplied implicit argument |
+| `use C(A)` / `use value` | Witness binder / explicitly supplied witness argument or superclass field |
+| `?` | Written goal — reports scope, type and fits, then fails compilation |
 | `term!` | Monadic bind through `Monad`, lifting a cross-monad action through `Lift` |
 | `"""` … `"""` | Block string literal — the lines between the delimiters, their shared indentation removed |
-| `b[...]` | `Bits` literal — grain letter glued to the bracket |
-| `x[...]` | `Bytes` literal |
+| `b[...]` / `x[...]` | `Bits` / `Bytes` literal — grain letter glued to the bracket |
 | `Name { ... }` | Structure or concept literal |
 | `Name { ..base, ... }` | Structure update |
 | `match term ... end` | Typed elimination or dispatch |
 | `choose ... end` | Ordered guarded ladder |
-| `test name = body;` | Declared test — a `/std/Test` description, collected per unit and run by `curios test`; it takes no parameters, since a claim over every instantiation is a `let` whose type states it |
+| `test name = body;` | Declared test — a `/std/Test` description, collected per unit and run by `curios test` |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
 | `satisfy C(args);` | Derived witness — the compiler writes the body |
-| `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |
-| `satisfy C(A) { ... } and D(B) { ... }` | Witnesses that resolve through each other, declared as one group |
-| `struct A: pub Type { ... } and B: pub Type { ... }` | Structures whose fields name one another, declared as one group |
-| `concept A(T): pub Type { ... } and B(T): pub Type { ... }` | Concepts whose method types name one another, declared as one group |
-| `let f(…) -> T = … and g(…) -> U = …;` | Mutually recursive group, at the top level or locally |
+| `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Witness under a telescope |
+| `use /std/{Nat};` / `use /std/*` / `use /{Name};` | Import a group, the exported surface, or a name from the compilation root |
+| `… and …` | [Recursive group](#recursive-groups) — `let`, `induct`, `struct`, `concept` or `satisfy` |
