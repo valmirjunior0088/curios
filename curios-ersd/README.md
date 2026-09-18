@@ -27,3 +27,7 @@ The Curios erased IR: the flat, explicit, first-order stage between `curios-elab
 ### Identity naming is cross-cutting
 
 This crate's arena identities (`id.rs`) follow the naming scheme shared with `curios-cont` and `curios-wasm` — see [One naming scheme for compiler identities](../documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md), which states it once for all three.
+
+### Printing is cross-cutting
+
+`print.rs` renders the module as ANF Curios, under an elision rule that decides what a dump declares and what it states once — see [The erased IR prints as ANF Curios](../documentation/design/toolchain/the-erased-ir-prints-as-anf-curios.md). The decision is filed there rather than here because it settles the notational continuity between this rung and the three above it, and because the same rule is what `curios-cont`'s printer is measured against.
