@@ -80,10 +80,9 @@ fn a_scalar_expression_erases_in_evaluation_order() {
     assert_eq!(
         erased.to_string(),
         "\
-entry {
-    ~v0 = NatAdd(2, 3)
-    return ~v0
-}
+entry =
+    let ~v0 = Nat/add(2, 3);
+    ~v0;
 "
     );
 }
@@ -114,11 +113,10 @@ fn bool_and_byte_keep_their_shapes() {
     assert_eq!(
         erased.to_string(),
         "\
-entry {
-    ~v0$b = BoolAnd(true, false)
-    ~v1 = NatToByte(7)
-    return ~v1
-}
+entry =
+    let ~v0$b = Bool/and(true, false);
+    let ~v1 = Nat/to_byte(7);
+    ~v1;
 "
     );
 }
@@ -143,10 +141,9 @@ fn a_nat_spine_over_a_variable_erases_to_one_addition() {
     assert_eq!(
         erased.to_string(),
         "\
-entry {
-    ~v0 = NatAdd(3, 5)
-    return ~v0
-}
+entry =
+    let ~v0 = Nat/add(3, 5);
+    ~v0;
 "
     );
 }
@@ -171,10 +168,10 @@ fn items_erase_in_dominance_order() {
     assert_eq!(
         erased.to_string(),
         "\
-~v0$/a = NatAdd(2, 1)
-entry {
-    return ~v0$/a
-}
+let ~v0$/a =
+    Nat/add(2, 1);
+entry =
+    ~v0$/a;
 "
     );
 }
@@ -198,13 +195,10 @@ fn an_exit_seals_the_thunk_that_describes_it() {
     assert_eq!(
         erased.to_string(),
         "\
-entry {
-    functions ~f0$dead
-    return 7
-}
-function ~f0$dead() {
-    exit 3
-}
+entry =
+    let ~f0$dead() =
+        exit 3;
+    7;
 "
     );
 }
@@ -233,11 +227,10 @@ fn sequences_transcribe_without_carrier_choices() {
     assert_eq!(
         erased.to_string(),
         "\
-entry {
-    ~v0$list = ListBuild(1, 2)
-    ~v1 = ListLen(~v0$list)
-    return ~v1
-}
+entry =
+    let ~v0$list = List/build(1, 2);
+    let ~v1 = List/len(~v0$list);
+    ~v1;
 "
     );
 }
@@ -347,14 +340,11 @@ fn a_function_erases_with_dropped_type_params_and_no_captures() {
     assert_eq!(
         erased.to_string(),
         "\
-functions ~f0$/id
-entry {
-    ~v1 = apply ~f0$/id(4)
-    return ~v1
-}
-function ~f0$/id(~v0$x) {
-    return ~v0$x
-}
+let ~f0$/id(~v0$x) =
+    ~v0$x;
+entry =
+    let ~v1 = ~f0$/id(4);
+    ~v1;
 "
     );
 }
@@ -401,8 +391,8 @@ fn a_capturing_closure_stores_no_capture_list() {
     );
 
     let printed = erased.to_string();
-    assert!(printed.contains("function ~f0$/make(~v0$y)"), "{printed}");
-    assert!(printed.contains("NatAdd("), "{printed}");
+    assert!(printed.contains("let ~f0$/make(~v0$y) ="), "{printed}");
+    assert!(printed.contains("Nat/add("), "{printed}");
     // The inner closure's capture of `y` is derived, never stored: the outer parameter is the inner function's one free value.
     let analysis = curios_ersd::Analysis::analyze(&erased);
     let mut functions = erased.function_ids();
@@ -482,10 +472,9 @@ fn a_variant_constructs_with_its_registered_schema() {
         erased.to_string(),
         "\
 family ~d0$/Opt { ~t0$none() ~t1$some(x:immediate) }
-entry {
-    ~v0 = construct ~t1(6)
-    return ~v0
-}
+entry =
+    let ~v0 = ~t1$some(6);
+    ~v0;
 "
     );
 }
@@ -514,12 +503,11 @@ fn a_multi_field_tuple_shares_the_width_schema() {
     assert_eq!(
         erased.to_string(),
         "\
-product ~p0(0, 1)
-entry {
-    ~v0$pair = product ~p0(1, 2)
-    ~v1 = project ~p0.1 ~v0$pair
-    return ~v1
-}
+product ~p0(0, 1) shared
+entry =
+    let ~v0$pair = ~p0 { 0 = 1, 1 = 2 };
+    let ~v1 = ~v0$pair.1;
+    ~v1;
 "
     );
 }
@@ -549,9 +537,8 @@ fn a_subset_tuple_collapses_to_its_relevant_field() {
     assert_eq!(
         erased.to_string(),
         "\
-entry {
-    return 9
-}
+entry =
+    9;
 "
     );
 }
@@ -574,17 +561,13 @@ fn a_bool_match_erases_to_a_switch_bool() {
     assert_eq!(
         erased.to_string(),
         "\
-entry {
-    ~v0 = switch-bool true {
-        false => {
-            return 10
-        }
-        true => {
-            return 20
-        }
-    }
-    return ~v0
-}
+entry =
+    let ~v0 =
+        match true
+        | true => 20
+        | false => 10
+        end;
+    ~v0;
 "
     );
 }
@@ -617,18 +600,15 @@ fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
     assert_eq!(
         erased.to_string(),
         "\
-entry {
-    ~v1 = switch-nat 5 {
-        0 => {
-            return 0
-        }
-        default => {
-            ~v0 = NatSub(5, 1)
-            return ~v0
-        }
-    }
-    return ~v1
-}
+entry =
+    let ~v1 =
+        match 5
+        | 0 => 0
+        | _ =>
+            let ~v0 = Nat/sub(5, 1);
+            ~v0
+        end;
+    ~v1;
 "
     );
 }
@@ -661,18 +641,15 @@ fn a_live_hypothesis_nat_match_erases_to_a_fold() {
     assert_eq!(
         erased.to_string(),
         "\
-entry {
-    ~v3 = fold-nat 5 {
-        zero => {
-            return 0
-        }
-        step(~v0$pred, ~v1$ih) => {
-            ~v2 = NatAdd(~v1$ih, 2)
-            return ~v2
-        }
-    }
-    return ~v3
-}
+entry =
+    let ~v3 =
+        match 5
+        | 0 => 0
+        | ~v0$pred + 1; ~v1$ih =>
+            let ~v2 = Nat/add(~v1$ih, 2);
+            ~v2
+        end;
+    ~v3;
 "
     );
 }
@@ -712,19 +689,17 @@ fn a_live_hypothesis_list_match_erases_to_a_sequence_fold() {
     assert_eq!(
         erased.to_string(),
         "\
-~v0$/xs = ListBuild(1)
-entry {
-    ~v5 = fold-seq[list] ~v0$/xs {
-        empty => {
-            return 0
-        }
-        step(~v1$h, ~v2$t, ~v3$ih) => {
-            ~v4 = NatAdd(~v3$ih, 1)
-            return ~v4
-        }
-    }
-    return ~v5
-}
+let ~v0$/xs =
+    List/build(1);
+entry =
+    let ~v5 =
+        match ~v0$/xs
+        | [] => 0
+        | [~v1$h, ..~v2$t]; ~v3$ih =>
+            let ~v4 = Nat/add(~v3$ih, 1);
+            ~v4
+        end;
+    ~v5;
 "
     );
 }
@@ -772,18 +747,14 @@ fn a_variant_match_binds_payload_without_projections() {
         erased.to_string(),
         "\
 family ~d0$/Opt { ~t0$none() ~t1$some(x:immediate) }
-entry {
-    ~v0$scrutinee = construct ~t1(6)
-    ~v2 = match ~d0 ~v0$scrutinee {
-        ~t0() => {
-            return 0
-        }
-        ~t1(~v1$x) => {
-            return ~v1$x
-        }
-    }
-    return ~v2
-}
+entry =
+    let ~v0$scrutinee = ~t1$some(6);
+    let ~v2 =
+        match ~v0$scrutinee
+        | ~t0$none() => 0
+        | ~t1$some(~v1$x) => ~v1$x
+        end;
+    ~v2;
 "
     );
 }
@@ -820,7 +791,7 @@ fn an_effectful_scrutinee_is_erased_once() {
     );
     let printed = erased.to_string();
     assert_eq!(
-        printed.matches("apply ~f0$/read").count(),
+        printed.matches("~f0$/read(0)").count(),
         1,
         "the compound scrutinee is applied exactly once:\n{printed}"
     );
@@ -855,15 +826,12 @@ fn a_recursive_function_group_erases_to_functions() {
     assert_eq!(
         erased.to_string(),
         "\
-entry {
-    functions ~f0$f
-    ~v2 = apply ~f0$f(3)
-    return ~v2
-}
-function ~f0$f(~v0$x) {
-    ~v1 = apply ~f0$f(~v0$x)
-    return ~v1
-}
+entry =
+    let ~f0$f(~v0$x) =
+        let ~v1 = ~f0$f(~v0$x);
+        ~v1;
+    let ~v2 = ~f0$f(3);
+    ~v2;
 "
     );
 }
@@ -898,18 +866,12 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
     assert_eq!(
         erased.to_string(),
         "\
-entry {
-    rec ~r0 {
-        functions ~f0$produce
-        ~v0$consume = init {
-            return ~f0$produce
-        }
-    }
-    return ~v0$consume
-}
-function ~f0$produce(~v1$u) {
-    return 5
-}
+entry =
+    let rec ~f0$produce(~v1$u) =
+        5
+    and ~v0$consume =
+        ~f0$produce;
+    ~v0$consume;
 "
     );
 }
@@ -962,15 +924,12 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
     assert_eq!(
         erased.to_string(),
         "\
-functions ~f0$/go
-entry {
-    ~v2 = apply ~f0$/go(1)
-    return ~v2
-}
-function ~f0$/go(~v0$x) {
-    ~v1 = apply ~f0$/go(~v0$x)
-    return ~v1
-}
+let ~f0$/go(~v0$x) =
+    let ~v1 = ~f0$/go(~v0$x);
+    ~v1;
+entry =
+    let ~v2 = ~f0$/go(1);
+    ~v2;
 "
     );
 }

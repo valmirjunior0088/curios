@@ -97,5 +97,5 @@ fn arena_erasure_handles_deep_input_on_the_default_stack() {
     source.push_str("x0");
     let module = erase_to_ersd(&source, Some("/std/Nat"));
     let printed = module.to_string();
-    assert!(printed.contains("NatAdd"));
+    assert!(printed.contains("Nat/add("));
 }
