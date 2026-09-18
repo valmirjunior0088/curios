@@ -98,10 +98,34 @@ else
     echo "$version installed to $BIN_DIR/curios"
 fi
 
-# Whether *this* shell can see the directory is not the question worth asking: it is interactive, so it has read files that a desktop session never does, and the usual way this is discovered is an editor that cannot find `curios` while every terminal on the machine can. So ask a shell that reads no interactive startup file, which is the PATH an application launched outside a terminal inherits. A shell that cannot be asked falls back to this one, which is the weaker check rather than no check.
+# Whether *this* shell can see the directory is not the question worth asking: it is interactive, so its PATH may have been built by a startup file only a terminal like it reads, or by hand in this session alone. So ask a shell that reads no interactive startup file, which is the PATH a new session starts from. A shell that cannot be asked falls back to this one, which is the weaker check rather than no check.
 launched_path=$(env -i HOME="$HOME" "${SHELL:-/bin/sh}" -lc 'printf %s "$PATH"' 2> /dev/null) || launched_path="$PATH"
 
 case ":$launched_path:" in
     *":$BIN_DIR:"*) ;;
-    *) echo "note: $BIN_DIR is missing from the PATH a non-interactive shell builds, so an application launched outside a terminal — an editor, most likely — will not find it. Put it where every shell reads it (~/.zshenv for zsh, ~/.profile for bash) with: export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+    *)
+        # Which file the line belongs in is the login shell's business, and listing the candidates leaves the reader to answer a question this script is better placed to. `$SHELL` is the shell the account is configured with, so it is the one the next terminal starts.
+        case "${SHELL##*/}" in
+            # Every zsh reads .zshenv — login or not, interactive or not — and `$ZDOTDIR` is where it looks for it.
+            zsh) advice="echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ${ZDOTDIR:-$HOME}/.zshenv" ;;
+            # Fish reads neither `export` nor any of these files. `fish_add_path` records the directory as a universal variable, so there is no file to name at all.
+            fish) advice="fish_add_path ~/.local/bin" ;;
+            # Bash reads the first of these that exists and never looks at the rest, so the file to extend is the one already there; when none is, ~/.profile is both the last it would look for and the one it would then find.
+            bash)
+                for candidate in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
+                    if [ -f "$candidate" ]; then
+                        break
+                    fi
+                done
+
+                advice="echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> $candidate"
+                ;;
+            *) advice="echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> $HOME/.profile" ;;
+        esac
+
+        # On its own line, indented, because it is there to be selected and pasted rather than read.
+        echo "note: $BIN_DIR is not in the PATH a new session builds, so \`curios\` may not run by name in a terminal you open later. Add it with:"
+        echo
+        echo "    $advice"
+        ;;
 esac
