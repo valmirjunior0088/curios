@@ -159,7 +159,7 @@ fn print_constant_args_collapses_at_ersd() {
     let ersd = ersd_optm.expect("Stage::ErsdOptm observed");
     // "x = 42, s = hello\n", already formatted, as the operand of the host write itself. The residual used to be a call to `/std/print`; `print` is an `Io`-returning wrapper now and inlines away with the rest, so what survives is the write inside the description thunk it erases to — one step further than before, not one less. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the Cont sweep below is where they must be gone.
     assert!(
-        ersd.contains("foreign sys/handle_write(io:1, x\"78203d2034322c2073203d2068656c6c6f0a\")"),
+        ersd.contains("sys/handle_write(io:1, x\"78203d2034322c2073203d2068656c6c6f0a\")"),
         "expected the folded write residual, got:\n{ersd}",
     );
     assert!(

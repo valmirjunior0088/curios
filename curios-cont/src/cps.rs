@@ -1594,8 +1594,11 @@ impl Module {
         let mut visited = BTreeSet::<NodeId>::new();
 
         while let Some((id, scope)) = work.pop() {
+            // Every node has exactly one structural parent: a `next`, a `body`, or a continuation's. The walk once skipped a node it had already reached, which caught a node shared between two *functions* through `node_owners` and let a node shared within one function pass — and a shared node is a region that runs on two paths while binding its values once, which the scope check cannot see either, since it admits the bindings on whichever path reached it first. It is also what a nesting printer would duplicate.
             if !visited.insert(id) {
-                continue;
+                return Err(VerifyError(format!(
+                    "{id} is reached from more than one place in {owner}"
+                )));
             }
             if let Some(previous) = node_owners.insert(id, owner)
                 && previous != owner
@@ -1992,6 +1995,7 @@ mod fields;
 mod inline;
 mod optimize;
 mod origin;
+mod print;
 mod protocol;
 mod reachable;
 mod represent;
@@ -2024,118 +2028,6 @@ pub(crate) use demand::*;
 pub use optimize::optimize;
 pub(crate) use origin::*;
 pub use represent::*;
-
-impl fmt::Display for Module {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "entry {}",
-            self.entry
-                .map_or_else(|| "<none>".into(), |id| id.to_string())
-        )?;
-        for (id, function) in self.functions.iter_live() {
-            write!(f, "fun {id}")?;
-            if let Some(name) = &function.debug_name {
-                write!(f, "${name}")?;
-            }
-            write!(f, "(")?;
-            params(self, f, &function.params)?;
-            writeln!(f, ") -> {} = {}", function.return_cont, function.body)?;
-        }
-        for (id, continuation) in self.continuations.iter_live() {
-            write!(f, "cont {id}(")?;
-            params(self, f, &continuation.params)?;
-            writeln!(f, ") = {}", continuation.body)?;
-        }
-        for (id, node) in self.nodes.iter_live() {
-            writeln!(f, "{id} = {}", DisplayNode(node))?;
-        }
-        Ok(())
-    }
-}
-
-/// Render a parameter list, spelling each binder's source hint as `$name` — the definition-site form that matches function names and the wasm scheme, so a value's origin is legible where it is bound. A binder with no hint prints bare.
-fn params(module: &Module, f: &mut fmt::Formatter<'_>, params: &[ValueId]) -> fmt::Result {
-    for (index, &param) in params.iter().enumerate() {
-        if index != 0 {
-            write!(f, ", ")?;
-        }
-        write!(f, "{param}")?;
-        if let Some(name) = module
-            .values()
-            .get(param.index())
-            .and_then(Option::as_ref)
-            .and_then(|def| def.debug_name.as_ref())
-        {
-            write!(f, "${name}")?;
-        }
-    }
-    Ok(())
-}
-
-struct DisplayNode<'a>(&'a Node);
-
-impl fmt::Display for DisplayNode<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Node::LetValue {
-                result,
-                value,
-                next,
-            } => write!(f, "let {result} = {value:?}; {next}"),
-            Node::LetIntrinsic {
-                result,
-                op,
-                args,
-                next,
-            } => {
-                write!(f, "let {result} = {op:?}{args:?}; {next}")
-            }
-            Node::LetFun { functions, body } => write!(f, "let-fun {functions:?}; {body}"),
-            Node::LetCont {
-                continuations,
-                body,
-            } => write!(f, "let-cont {continuations:?}; {body}"),
-            Node::ApplyFun {
-                callee,
-                args,
-                return_to,
-            } => {
-                write!(f, "apply {callee:?}{args:?} -> {return_to}")
-            }
-            Node::ApplyCont(edge) => write!(f, "jump {}{:?}", edge.target, edge.args),
-            Node::Switch {
-                scrutinee,
-                cases,
-                default,
-            } => {
-                write!(f, "switch {scrutinee:?} {cases:?} default {default:?}")
-            }
-            Node::Foreign {
-                function,
-                args,
-                return_to,
-            } => {
-                write!(f, "foreign {}{args:?} -> {return_to}", function.name)
-            }
-            Node::Cell {
-                op,
-                args,
-                return_to,
-            } => write!(f, "cell.{op:?}{args:?} -> {return_to}"),
-            Node::Intrinsic {
-                op,
-                args,
-                return_to,
-            } => {
-                write!(f, "intrinsic.{op:?}{args:?} -> {return_to}")
-            }
-            Node::Exit { value } => write!(f, "exit {value:?}"),
-            Node::Panic(panic) => write!(f, "panic {panic}"),
-            Node::Unreachable => f.write_str("unreachable"),
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests;

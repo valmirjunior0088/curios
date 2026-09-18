@@ -1,7 +1,7 @@
 //! Closures and local recursion surviving erasure and codegen, including the shapes a knot builds.
 
 use {
-    crate::tests::{run, run_text},
+    crate::tests::{emits, run, run_text},
     curios_pipeline::Stage,
     curios_pipeline::compile_with_prelude,
     curios_runtime::MockHost,
@@ -138,14 +138,18 @@ fn folds_constant_arg_through_let_function() {
     .expect("compile succeeded");
 
     let optimized = optimized.expect("Stage::ContOptm observed");
-    let text = format!("{optimized}");
     assert!(
-        !text.contains("NatAdd"),
-        "the addition must fold at compile time, got:\n{text}",
+        !emits(&optimized, |op| *op == curios_cont::Intrinsic::NatAdd),
+        "the addition must fold at compile time, got:\n{optimized}",
     );
     assert!(
-        text.contains("exit Some(Literal(Nat(4)))"),
-        "expected the folded 4 to reach the exit, got:\n{text}",
+        optimized.nodes().iter().flatten().any(|node| matches!(
+            node,
+            curios_cont::Node::Exit {
+                value: Some(curios_cont::Atom::Literal(curios_cont::Literal::Nat(folded)))
+            } if folded.to_u32() == Some(4)
+        )),
+        "expected the folded 4 to reach the exit, got:\n{optimized}",
     );
 }
 

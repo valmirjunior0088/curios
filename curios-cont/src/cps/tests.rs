@@ -401,3 +401,47 @@ fn verifier_rejects_local_body_at_return_id() {
             .contains("also identifies a local continuation")
     );
 }
+
+/// Every node has exactly one structural parent. A shared one runs on two paths while binding its values once, and the scope check cannot see it — it admits the bindings on whichever path arrives first — so the ownership walk is what has to refuse it.
+#[test]
+fn a_node_reached_from_two_places_is_refused() {
+    let mut module = minimal_module();
+    let entry = module.entry().unwrap();
+    let body = module.function(entry).unwrap().body;
+
+    // Two continuations sharing one body, both bound by a group the entry enters.
+    let shared = module.add_node(Node::Exit { value: None });
+    let first = module.add_continuation(Continuation {
+        debug_name: Some("first".into()),
+        params: Vec::new(),
+        body: shared,
+    });
+    let second = module.add_continuation(Continuation {
+        debug_name: Some("second".into()),
+        params: Vec::new(),
+        body: shared,
+    });
+    let jump = module.add_node(Node::ApplyCont(Edge {
+        target: first,
+        args: Vec::new(),
+    }));
+    let scope = module.add_node(Node::LetCont {
+        continuations: vec![first, second],
+        body: jump,
+    });
+    module.nodes.set(
+        body,
+        Node::LetCont {
+            continuations: Vec::new(),
+            body: scope,
+        },
+    );
+
+    let error = module.verify().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("reached from more than one place"),
+        "{error}"
+    );
+}

@@ -4,7 +4,7 @@
 //!
 //! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot kernels are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an ordinary constructor-tag `switch` is not a dispatcher whatever shape it takes — a `br_table` over `$case$N`/`$tail` labels for three or more cases, a plain `if` for the two-way and one-way shapes.
 
-use crate::tests::cont_optm;
+use crate::tests::{cont_optm_module, emits, reads_nat};
 
 use super::test_support::*;
 
@@ -13,29 +13,20 @@ use super::test_support::*;
 /// L1: the LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, the `io/…` description thunks every effect boundary erases to, and the lambdas those lift, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cont`'s `contify_calls` tests; this pins the end-to-end result.
 #[test]
 fn lcg_kernel_is_single_entry_recursive_continuation() {
-    let cont = cont_optm(LCG);
+    let module = cont_optm_module(LCG);
     assert!(
-        cont.contains("NatRem") && cont.contains("65537"),
-        "the kernel arithmetic must survive into the optimized cont module",
+        emits(&module, |op| *op == curios_cont::Intrinsic::NatRem) && reads_nat(&module, 65537),
+        "the kernel arithmetic must survive into the optimized cont module:\n{module}",
     );
 
-    for line in cont
-        .lines()
-        .map(str::trim_start)
-        .filter(|l| l.starts_with("fun ~f"))
-    {
-        // A named function prints `fun ~fN$hint(...)`: the source hint is the run after the first `$` and before the parameter list.
-        let provenance = line
-            .split_once('$')
-            .and_then(|(_, rest)| rest.split_once('('))
-            .map(|(name, _)| name)
-            .unwrap_or_default();
+    for function in module.functions().iter().flatten() {
+        let provenance = function.debug_name.as_deref().unwrap_or_default();
         // An allowlist rather than a check on the loop's own name, which is only possible because every emitted function carries a hint: a prelude helper its `/std/` path, the description machinery its `io/` tag, and a lifted lambda its owner's name qualified — `/sys/Handle/write/1`. A leaked `loop` matches none of them.
         assert!(
             provenance == "main"
                 || provenance.starts_with("/std/")
                 || provenance.starts_with("io/"),
-            "the recursive loop must be contified, not left a top-level function: {line}",
+            "the recursive loop must be contified, not left a top-level function: {provenance}",
         );
     }
 }

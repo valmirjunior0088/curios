@@ -4,7 +4,7 @@
 //!
 //! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot kernels are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an ordinary constructor-tag `switch` is not a dispatcher whatever shape it takes — a `br_table` over `$case$N`/`$tail` labels for three or more cases, a plain `if` for the two-way and one-way shapes.
 
-use crate::tests::{census_settles, cont_optm, run};
+use crate::tests::{census_settles, cont_optm_module, emits, run};
 
 /// A packed literal's non-constant atoms fuse into one flat chunk build (`fuse_append_chains` in `curios-cont`): the byte literal's two runtime atoms become a `BinChunk(X, 2)` and the bit literal's one a `BinChunk(B, 1)`, in place of the append-per-atom chains the lowering honestly writes, and the program still prints what the chains would. The taint keeps every atom out of constant folding, so the chunks survive to emission and the equality runs over runtime-built values.
 #[test]
@@ -23,14 +23,22 @@ fn tainted_packed_literals_fuse_to_flat_chunks() {
         end
         "#;
 
-    let dump = cont_optm(source);
+    let module = cont_optm_module(source);
     assert!(
-        dump.contains("BinChunk(X, 2)"),
-        "the byte atoms fuse into one chunk: {dump}"
+        emits(&module, |op| *op
+            == curios_cont::Intrinsic::BinChunk(
+                curios_utilities::Grain::X,
+                2
+            )),
+        "the byte atoms fuse into one chunk: {module}"
     );
     assert!(
-        dump.contains("BinChunk(B, 1)"),
-        "the bit atom fuses into one chunk: {dump}"
+        emits(&module, |op| *op
+            == curios_cont::Intrinsic::BinChunk(
+                curios_utilities::Grain::B,
+                1
+            )),
+        "the bit atom fuses into one chunk: {module}"
     );
 
     assert_eq!(run(source), b"ok\n");
@@ -64,10 +72,10 @@ fn indexed_field_store_fuses_to_flat_build() {
         census_settles(source, "/Box", "pack", "items"),
         "the census marks the stored field indexed-only"
     );
-    let dump = cont_optm(source);
+    let module = cont_optm_module(source);
     assert!(
-        dump.contains("ListFlat(3)"),
-        "the spliced store flattens to one exact build: {dump}"
+        emits(&module, |op| *op == curios_cont::Intrinsic::ListFlat(3)),
+        "the spliced store flattens to one exact build: {module}"
     );
 
     assert_eq!(run(source), b"9\n");
@@ -85,8 +93,11 @@ fn a_shared_tuple_field_settles_nothing() {
         /std/print(Nat/to_str(List/len(a.0) + b.1))
         "#;
 
-    let dump = cont_optm(source);
-    assert!(!dump.contains("ListSettle"), "{dump}");
+    let module = cont_optm_module(source);
+    assert!(
+        !emits(&module, |op| *op == curios_cont::Intrinsic::ListSettle),
+        "{module}"
+    );
 
     assert_eq!(run(source), b"3");
 }
@@ -120,10 +131,13 @@ fn regrown_field_store_stays_lazy() {
         !census_settles(source, "/Acc", "keep", "items"),
         "a re-grown field is never marked"
     );
-    let dump = cont_optm(source);
+    let module = cont_optm_module(source);
     assert!(
-        !dump.contains("ListSettle") && !dump.contains("ListFlat"),
-        "a re-grown field is never settled: {dump}"
+        !emits(&module, |op| matches!(
+            op,
+            curios_cont::Intrinsic::ListSettle | curios_cont::Intrinsic::ListFlat(_)
+        )),
+        "a re-grown field is never settled: {module}"
     );
 
     assert_eq!(run(source), b"3\n");
@@ -144,10 +158,10 @@ fn indexed_local_concat_fuses_to_flat_build() {
         end
         "#;
 
-    let dump = cont_optm(source);
+    let module = cont_optm_module(source);
     assert!(
-        dump.contains("ListFlat(2)"),
-        "the indexed concat flattens: {dump}"
+        emits(&module, |op| *op == curios_cont::Intrinsic::ListFlat(2)),
+        "the indexed concat flattens: {module}"
     );
 
     assert_eq!(run(source), b"4\n");

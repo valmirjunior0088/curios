@@ -268,7 +268,7 @@ impl Lowerer<'_> {
             self.emitter.module.define_continuation(
                 after_store,
                 curios_cont::Continuation {
-                    debug_name: None,
+                    debug_name: Some("knot/stored".into()),
                     params: Vec::new(),
                     body,
                 },
@@ -321,7 +321,7 @@ impl Lowerer<'_> {
             self.emitter.module.define_continuation(
                 bound,
                 curios_cont::Continuation {
-                    debug_name: None,
+                    debug_name: Some("knot/cell".into()),
                     params: vec![knot.cell],
                     body,
                 },
@@ -404,7 +404,7 @@ impl Lowerer<'_> {
             self.emitter.module.define_continuation(
                 resume,
                 curios_cont::Continuation {
-                    debug_name: None,
+                    debug_name: Some("force/resume".into()),
                     params: vec![local],
                     body,
                 },
@@ -843,7 +843,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             join,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("join".into()),
                 params: vec![parameter],
                 body,
             },
@@ -862,7 +862,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             continuation,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("arm".into()),
                 params: Vec::new(),
                 body,
             },
@@ -1040,7 +1040,7 @@ impl Lowerer<'_> {
                 self.emitter.module.define_continuation(
                     continuation,
                     curios_cont::Continuation {
-                        debug_name: None,
+                        debug_name: Some("arm/immediate".into()),
                         params: Vec::new(),
                         body,
                     },
@@ -1108,7 +1108,7 @@ impl Lowerer<'_> {
                 self.emitter.module.define_continuation(
                     continuation,
                     curios_cont::Continuation {
-                        debug_name: None,
+                        debug_name: Some("arm/boxed".into()),
                         params: Vec::new(),
                         body,
                     },
@@ -1239,11 +1239,16 @@ impl Lowerer<'_> {
                     next: body,
                 });
         }
+        let hint = self
+            .source
+            .constructor(arm.constructor)
+            .and_then(|constructor| constructor.debug_name.as_deref())
+            .map_or_else(|| "arm".to_string(), |name| format!("arm/{name}"));
         let continuation = self.emitter.module.reserve_continuation();
         self.emitter.module.define_continuation(
             continuation,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some(hint),
                 params: Vec::new(),
                 body,
             },
@@ -1305,7 +1310,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             step_resume,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("loop/step_resume".into()),
                 params: vec![next_acc],
                 body: increment,
             },
@@ -1320,7 +1325,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             step_cont,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("loop/step".into()),
                 params: vec![step_index, step_acc],
                 body: step_body,
             },
@@ -1356,7 +1361,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             loop_cont,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("loop".into()),
                 params: vec![loop_index, loop_acc],
                 body: loop_body,
             },
@@ -1373,7 +1378,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             zero_resume,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("loop/base".into()),
                 params: vec![zero_acc],
                 body: zero_jump,
             },
@@ -1432,7 +1437,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             cons_arm,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("arm/cons".into()),
                 params: Vec::new(),
                 body: cons_body,
             },
@@ -1514,7 +1519,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             step_resume,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("loop/step_resume".into()),
                 params: vec![next_acc],
                 body: loop_back,
             },
@@ -1549,7 +1554,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             step_cont,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("loop/step".into()),
                 params: vec![step_index, step_acc],
                 body: step_body,
             },
@@ -1588,7 +1593,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             loop_cont,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("loop".into()),
                 params: vec![loop_index, loop_acc],
                 body: loop_body,
             },
@@ -1605,7 +1610,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             empty_resume,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("loop/base".into()),
                 params: vec![base_acc],
                 body: empty_jump,
             },
@@ -1629,7 +1634,9 @@ impl Lowerer<'_> {
 
     // === Effects =========================================================
 
-    /// Lower a control-splitting statement (an application, cell, or intrinsic) returning to a fresh join. The join receives the statement's results — one for value-producing forms, zero for a cell write, whose bound result is the unit carrier.
+    /// Lower a control-splitting statement (an application, cell, or intrinsic) returning to a fresh continuation. That continuation receives the statement's results — one for value-producing forms, zero for a cell write, whose bound result is the unit carrier.
+    ///
+    /// The continuation is named after the operation it resumes from, read off the node `make` builds rather than passed in: where a call returns to and where an eliminator's arms converge are different things, and calling both of them `join` left four fifths of the hints in a dump saying the wrong one.
     fn split(
         &mut self,
         result: ValueId,
@@ -1657,15 +1664,17 @@ impl Lowerer<'_> {
             vec![self.emitter.bind_value(result)]
         };
         let body = self.lower_statements(rest, terminator, target);
+        // The node first, so the continuation can be named after it: a caller passing its own role could name a continuation after an operation it did not build.
+        let node = self.emitter.module.add_node(make(join));
+        let role = resume_role(self.emitter.module.node(node).expect("the node just added"));
         self.emitter.module.define_continuation(
             join,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some(role.into()),
                 params,
                 body,
             },
         );
-        let node = self.emitter.module.add_node(make(join));
         self.emitter.module.add_node(curios_cont::Node::LetCont {
             continuations: vec![join],
             body: node,
@@ -1716,7 +1725,7 @@ impl Lowerer<'_> {
         self.emitter.module.define_continuation(
             resume,
             curios_cont::Continuation {
-                debug_name: None,
+                debug_name: Some("foreign/resume".into()),
                 params: results,
                 body: pack,
             },
@@ -1746,5 +1755,18 @@ impl Lowerer<'_> {
         let bound = self.emitter.bind_value(result);
         let next = self.lower_statements(rest, terminator, target);
         self.emitter.module.add_node(make(bound, next))
+    }
+}
+
+/// What a split's continuation resumes from, read off the node the split built.
+///
+/// A wildcard rather than an exhaustive list: the input is whatever the caller's closure produced, and `split` builds only the four call-like nodes — a neutral name for anything else costs nothing, where a missed arm in a table the header depends on would cost a declaration.
+fn resume_role(node: &curios_cont::Node) -> &'static str {
+    match node {
+        curios_cont::Node::ApplyFun { .. } => "apply/resume",
+        curios_cont::Node::Cell { .. } => "cell/resume",
+        curios_cont::Node::Intrinsic { .. } => "intrinsic/resume",
+        curios_cont::Node::Foreign { .. } => "foreign/resume",
+        _ => "resume",
     }
 }

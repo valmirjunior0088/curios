@@ -242,22 +242,68 @@ fn core_elab(source: &str) -> String {
     printed.expect("the pipeline emits the elaborated Core stage")
 }
 
-/// Compile through production and capture the optimized Cont printout.
-fn cont_optm(source: &str) -> String {
+/// Compile through production and capture the optimized Cont module.
+///
+/// The module rather than its printout is what a shape assertion should ask, and the suites below that once asked the text have the scars: `codegen::parity`'s operation scraper silently matched nothing for a stretch after one printer change, and a second change broke eleven fixtures at once. A spelling belongs to the printer; a program's shape is in its graph.
+fn cont_optm_module(source: &str) -> curios_cont::Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
-    let mut printed = String::new();
+    let mut captured = None;
     compile_with_prelude(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| {
             if let Stage::ContOptm(module) = stage {
-                printed = module.to_string();
+                captured = Some(module.clone());
             }
         },
     )
     .expect("fixture compiles");
 
-    printed
+    captured.expect("the pipeline observes cont-optm")
+}
+
+/// Compile through production and capture the optimized Cont printout. For the suites whose subject genuinely is a name in the dump — which declarations survived — rather than an operation.
+fn cont_optm(source: &str) -> String {
+    cont_optm_module(source).to_string()
+}
+
+/// Every intrinsic the optimized module emits, tagged by the node kind that carries it, sorted.
+///
+/// The `Debug` spelling is the comparison key on purpose: it is exact, total, and carries the grain and arity a printed name deliberately leaves to the operand list — `Bytes/chunk` is one name for `BinChunk(X, 2)` and `BinChunk(X, 3)`. Nothing here reaches a user, so the Rust spelling costs nothing and cannot drift from the enum it names.
+fn cont_operations(module: &curios_cont::Module) -> Vec<String> {
+    let mut operations: Vec<String> = module
+        .nodes()
+        .iter()
+        .flatten()
+        .filter_map(|node| match node {
+            curios_cont::Node::LetIntrinsic { op, .. } => Some(format!("{op:?}")),
+            curios_cont::Node::Cell { op, .. } => Some(format!("cell.{op:?}")),
+            curios_cont::Node::Intrinsic { op, .. } => Some(format!("intrinsic.{op:?}")),
+            _ => None,
+        })
+        .collect();
+    operations.sort();
+    operations
+}
+
+/// Whether a `Nat` literal of `value` is an operand anywhere — how a constant baked into a kernel is found, since nothing names it.
+fn reads_nat(module: &curios_cont::Module, value: u32) -> bool {
+    module.nodes().iter().flatten().any(|node| {
+        curios_cont::atoms(node).into_iter().any(|atom| {
+            matches!(atom, curios_cont::Atom::Literal(curios_cont::Literal::Nat(literal)) if literal.to_u32() == Some(value))
+        })
+    })
+}
+
+/// Whether the optimized module emits an intrinsic the predicate accepts.
+fn emits(
+    module: &curios_cont::Module,
+    predicate: impl Fn(&curios_cont::Intrinsic) -> bool,
+) -> bool {
+    module.nodes().iter().flatten().any(|node| match node {
+        curios_cont::Node::LetIntrinsic { op, .. } => predicate(op),
+        _ => false,
+    })
 }
