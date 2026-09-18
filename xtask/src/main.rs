@@ -12,6 +12,8 @@
 //!
 //! **The installer is a template.** `installer` renders `templates/install.sh` with a release's version through Askama and files the script under `xtask/.artifacts/`, the one recipe that runs no cargo at all: the release workflow calls it with the tag's version and attaches what it filed. What it is and why it is rendered here rather than by the workflow is [`installer`](mod@installer)'s own documentation.
 //!
+//! **The release recipe publishes.** `release` is the one recipe that changes the repository rather than building from it: it sets the workspace version, commits it, tags it and pushes both, which is what fires `release.yml`. It builds nothing, because the check workflow has already had its say on the commits being released, and it undoes nothing, because removing a local commit or tag is destructive and so the user's to ask for. What it refuses, and when a failure leaves something behind, is [`release`](mod@release)'s own documentation.
+//!
 //! **A dependency of nothing.** This crate is reached only through the `x` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of it.
 //!
 //! The command line is clap's, in `curios`'s own convention — a `Parser` root over a `Subcommand` of recipes — so the help is derived from the definitions and cannot fall out of step with them.
@@ -30,6 +32,9 @@ use recipes::*;
 
 mod installer;
 use installer::*;
+
+mod release;
+use release::*;
 
 use {
     clap::{Parser, Subcommand},
@@ -125,6 +130,17 @@ enum Recipe {
         version: String,
     },
 
+    #[command(
+        about = "Bump the workspace version, commit it, tag the release, and push main and the tag"
+    )]
+    Release {
+        #[arg(
+            value_name = "BUMP",
+            help = "patch, minor, major, or the version itself; omitted, the three candidates are named"
+        )]
+        bump: Option<String>,
+    },
+
     #[command(about = "Run one program under a profiling build, and fold what it filed")]
     Profile {
         #[arg(
@@ -207,6 +223,7 @@ fn main() -> ExitCode {
         Recipe::RustDocs => rust_docs(),
         Recipe::StdDocs => std_docs(),
         Recipe::Installer { version } => installer(&version),
+        Recipe::Release { bump } => release(bump.as_deref()),
         Recipe::Profile { source } => profile(&source),
         Recipe::Benchmarks { tag } => benchmarks(&tag),
         Recipe::GrammarInstall => grammar(&["clean-install"]),

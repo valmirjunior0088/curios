@@ -4,9 +4,71 @@
 
 use {
     crate::places::root,
-    std::{env, path::Path, process::Command},
+    std::{
+        env,
+        path::Path,
+        process::{Command, Stdio},
+    },
     wasm_bindgen_cli_support::Bindgen,
 };
+
+#[cfg(test)]
+mod tests;
+
+/// Where a command's output goes: to the terminal, because it is the user's to watch, or to the caller, because it is the program's to read.
+enum Output {
+    Streamed,
+    Captured,
+}
+
+/// The one spawn. A streamed command echoes its command line and inherits both of the terminal's streams; a captured one says nothing and pipes stdout back, leaving stderr inherited so a failure explains itself in the tool's own words rather than through this function. Either way a non-zero status is the error.
+fn execute(
+    directory: &Path,
+    mut command: Command,
+    arguments: &[&str],
+    output: Output,
+) -> Result<String, String> {
+    command.args(arguments).current_dir(directory);
+
+    let program = command.get_program().to_string_lossy().into_owned();
+
+    let (status, printed) = match output {
+        Output::Streamed => {
+            eprintln!(
+                "{program} {}",
+                command
+                    .get_args()
+                    .map(|argument| argument.to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+
+            let status = command
+                .status()
+                .map_err(|error| format!("cannot run {program}: {error}"))?;
+
+            (status, String::new())
+        }
+        Output::Captured => {
+            let produced = command
+                .stdout(Stdio::piped())
+                .spawn()
+                .map_err(|error| format!("cannot run {program}: {error}"))?
+                .wait_with_output()
+                .map_err(|error| format!("cannot read from {program}: {error}"))?;
+
+            (
+                produced.status,
+                String::from_utf8_lossy(&produced.stdout).into_owned(),
+            )
+        }
+    };
+
+    match status.success() {
+        true => Ok(printed),
+        false => Err(format!("{program} exited with {status}")),
+    }
+}
 
 /// cargo at the workspace root, under the toolchain the alias resolved to.
 pub(crate) fn cargo(arguments: &[&str]) -> Result<(), String> {
@@ -30,37 +92,15 @@ pub(crate) fn run(command: Command, arguments: &[&str]) -> Result<(), String> {
 }
 
 /// [`run`] from `directory` instead of the workspace root — the editor recipes, whose trees are their own npm packages and cargo workspace.
-pub(crate) fn run_in(
-    directory: &Path,
-    mut command: Command,
-    arguments: &[&str],
-) -> Result<(), String> {
-    command.args(arguments).current_dir(directory);
+pub(crate) fn run_in(directory: &Path, command: Command, arguments: &[&str]) -> Result<(), String> {
+    execute(directory, command, arguments, Output::Streamed).map(drop)
+}
 
-    eprintln!(
-        "{} {}",
-        command.get_program().to_string_lossy(),
-        command
-            .get_args()
-            .map(|argument| argument.to_string_lossy())
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
-
-    let status = command.status().map_err(|error| {
-        format!(
-            "cannot run {}: {error}",
-            command.get_program().to_string_lossy()
-        )
-    })?;
-
-    match status.success() {
-        true => Ok(()),
-        false => Err(format!(
-            "{} exited with {status}",
-            command.get_program().to_string_lossy()
-        )),
-    }
+/// What a command printed, for a recipe that is asking rather than doing.
+///
+/// A question's answer is the program's to read, so nothing is echoed and nothing reaches the terminal unless the command writes to stderr — which a failing one does, in its own words. The step verbs above are the other half: their output is the user's, and streaming it live is the whole point of them.
+pub(crate) fn ask(command: Command, arguments: &[&str]) -> Result<String, String> {
+    execute(root(), command, arguments, Output::Captured)
 }
 
 /// npm in `editors/grammar`, the tree-sitter grammar's own package.
