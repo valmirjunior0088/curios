@@ -6,7 +6,7 @@
 //!
 //! **The launcher's isolation is the spawn.** `runtime` builds `curios-runtime` in its own `cargo` invocation, exactly as the recipe it replaced did, so workspace feature unification cannot reach it — `curios` enables `curios-runtime/cranelift`, and a launcher built beside it would carry a compiler. `curios/build.rs` embeds what this recipe copies to `curios/.artifacts/<triple>` and refuses to build without it.
 //!
-//! **A recipe that needs the launcher runs `runtime` first, unconditionally.** `build`, `profile`, `rust-docs` and `std-docs` all do, because the compiler they build or document embeds it. What makes that free to repeat is that `runtime` costs nothing when nothing changed: cargo decides whether the launcher needs rebuilding, and [`file_with_inputs()`](helpers::file_with_inputs) skips the copy when the filed bytes are already the built ones, so a repeated run neither rebuilds nor touches the file `curios/build.rs` watches. It files the launcher's inputs beside it — cargo's dep-info and the lock file — which is what that build script compares the launcher against, and it refreshes the launcher's timestamp when a listed input is newer while the bytes stayed the same, so the staleness warning never outlives the command it names.
+//! **A recipe that needs the launcher runs `runtime` first, unconditionally.** `build`, `profile`, `rust-docs` and `std-docs` all do, because the compiler they build or document embeds it. What makes that free to repeat is that `runtime` costs nothing when nothing changed: cargo decides whether the launcher needs rebuilding, and [`file_with_inputs()`](filing::file_with_inputs) skips the copy when the filed bytes are already the built ones, so a repeated run neither rebuilds nor touches the file `curios/build.rs` watches. It files the launcher's inputs beside it — cargo's dep-info and the lock file — which is what that build script compares the launcher against, and it refreshes the launcher's timestamp when a listed input is newer while the bytes stayed the same, so the staleness warning never outlives the command it names.
 //!
 //! **The bindings generator is a dependency.** `js` calls `wasm-bindgen-cli-support`, the crate the `wasm-bindgen` command line wraps; why, and what keeps its version honest, is the README's decision.
 //!
@@ -16,16 +16,20 @@
 //!
 //! The command line is clap's, in `curios`'s own convention — a `Parser` root over a `Subcommand` of recipes — so the help is derived from the definitions and cannot fall out of step with them.
 //!
-//! **This file is the rule table and nothing else.** It declares the recipes and dispatches each to one call, so what a recipe *is* can be read top to bottom without reading what it *does* — and a recipe's steps, like the verbs they are written in, live in [`helpers`]. The list here is therefore the same list `CLAUDE.md`'s gate and the check workflow name, in the same order, with nothing between a name and its meaning.
+//! **This file is the rule table and nothing else.** It declares the recipes and dispatches each to one call, so what a recipe *is* can be read top to bottom without reading what it *does* — and a recipe's steps live in [`recipes`], beside the vocabulary they are written in: [`places`], [`commands`] and [`filing`]. The list here is therefore the same list `CLAUDE.md`'s gate and the check workflow name, in the same order, with nothing between a name and its meaning.
 
-mod helpers;
-use helpers::*;
+mod places;
+
+mod commands;
+use commands::*;
+
+mod filing;
+
+mod recipes;
+use recipes::*;
 
 mod installer;
 use installer::*;
-
-#[cfg(test)]
-mod tests;
 
 use {
     clap::{Parser, Subcommand},

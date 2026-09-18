@@ -1,6 +1,9 @@
 //! The installer script a release attaches, rendered from `templates/install.sh` with the release's version baked in. The version is fixed when the script is rendered rather than discovered when it runs, so the script a release ships installs that release's binary and a pinned URL stays pinned; the release workflow renders it from the tag and attaches what this files. The template is rendered without an escaper, because the product is a shell script rather than markup, and the version is the one thing it substitutes: a placeholder the template names and the context does not supply fails the build, which is what the `sed` this replaced could not promise.
 
-use {crate::helpers::root, askama::Template, std::fs};
+use {crate::places::root, askama::Template, std::fs};
+
+#[cfg(test)]
+mod tests;
 
 /// The one value the script cannot know for itself.
 #[derive(Template)]
