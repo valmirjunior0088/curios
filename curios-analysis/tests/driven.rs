@@ -595,16 +595,16 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
     };
 
     let mut markers = Markers::default();
-    let builders: Vec<Box<dyn FnOnce(&mut Markers) -> Term + '_>> = vec![
-        Box::new(|_| Term::type_ground()),
-        Box::new(|_| {
+    let specimens = vec![
+        Specimen::of(&mut markers, |_| Term::type_ground()),
+        Specimen::of(&mut markers, |_| {
             Subterm::Instance(Instance {
                 head: InstanceHead::Var(Var::free(binder(7))),
                 levels: Vec::new(),
             })
             .into()
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             Subterm::Metavar(Metavar {
                 id: MetavarId::from(0usize),
                 spine: Rc::new(vec![markers.unvisited("a metavariable's spine")]),
@@ -612,7 +612,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             })
             .into()
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             let rec = Term::rec(
                 vec![(
                     binder(90),
@@ -627,7 +627,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             })
             .into()
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             Subterm::Transient(Transient::Infix(Infix {
                 op: InfixOp::Add,
                 left: markers.visited(),
@@ -635,15 +635,17 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             }))
             .into()
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             Subterm::Transient(Transient::Bang(Bang {
                 action: markers.visited(),
                 continuation: markers.visited(),
             }))
             .into()
         }),
-        Box::new(|markers| Term::intrinsic(Intrinsic::ListType(markers.visited()))),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
+            Term::intrinsic(Intrinsic::ListType(markers.visited()))
+        }),
+        Specimen::of(&mut markers, |markers| {
             let row = Arc::new(ForeignFunction {
                 namespace: Namespace::Ffi,
                 name: "/planted".to_string(),
@@ -657,9 +659,13 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             });
             Term::foreign(row, vec![markers.visited()])
         }),
-        Box::new(|markers| Term::func([(binder(1), markers.visited())], markers.visited())),
-        Box::new(|markers| Term::func_type([(binder(1), markers.visited())], markers.visited())),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
+            Term::func([(binder(1), markers.visited())], markers.visited())
+        }),
+        Specimen::of(&mut markers, |markers| {
+            Term::func_type([(binder(1), markers.visited())], markers.visited())
+        }),
+        Specimen::of(&mut markers, |markers| {
             Subterm::Apply(Apply {
                 head: markers.visited(),
                 arguments: vec![Argument {
@@ -669,22 +675,24 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             })
             .into()
         }),
-        Box::new(|markers| Term::tuple_type(vec![(binder(1), markers.visited())])),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
+            Term::tuple_type(vec![(binder(1), markers.visited())])
+        }),
+        Specimen::of(&mut markers, |markers| {
             Subterm::Tuple(Tuple {
                 fields: vec![markers.visited()],
                 names: vec![None],
             })
             .into()
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             Subterm::Proj(Proj {
                 head: markers.visited(),
                 field: Field::Index(0),
             })
             .into()
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             Subterm::InductType(InductType {
                 name: name(),
                 universes: Vec::new(),
@@ -693,7 +701,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             })
             .into()
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             Subterm::Variant(Variant {
                 name: name(),
                 universes: Vec::new(),
@@ -703,7 +711,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             })
             .into()
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             Subterm::StructType(StructType {
                 name: name(),
                 universes: Vec::new(),
@@ -711,7 +719,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             })
             .into()
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             Subterm::Struct(Struct {
                 name: name(),
                 universes: Vec::new(),
@@ -721,14 +729,14 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             })
             .into()
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             let cases = Cases::Bool {
                 false_case: markers.visited(),
                 true_case: markers.visited(),
             };
             matching(markers, cases)
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             Subterm::Match(Match {
                 head: markers.visited(),
                 result: MatchResult::Ambient(markers.visited()),
@@ -739,14 +747,14 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             })
             .into()
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             let cases = Cases::Switch {
                 cases: vec![(Natural::from(0usize), markers.visited())],
                 default: markers.visited(),
             };
             matching(markers, cases)
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             let arm = Scope::close(Many(1), &[&binder(2)], markers.visited());
             let cases = Cases::Induct {
                 cases: vec![("mk".into(), InductArm::new(arm, vec![Plicity::Explicit]))],
@@ -754,14 +762,14 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             };
             matching(markers, cases)
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             let carrier = Carrier::Nat {
                 empty_case: markers.visited(),
                 cons_case: Scope::close(Two, &[&binder(2), &binder(3)], markers.visited()),
             };
             matching(markers, Cases::FreeMonoid { carrier })
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             let carrier = Carrier::Bin {
                 grain: Grain::X,
                 empty_case: markers.visited(),
@@ -773,7 +781,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             };
             matching(markers, Cases::FreeMonoid { carrier })
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             let carrier = Carrier::List {
                 elem: markers.visited(),
                 empty_case: markers.visited(),
@@ -785,7 +793,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             };
             matching(markers, Cases::FreeMonoid { carrier })
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             Term::let_(
                 &binder(1),
                 markers.visited(),
@@ -793,7 +801,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
                 markers.visited(),
             )
         }),
-        Box::new(|markers| {
+        Specimen::of(&mut markers, |markers| {
             Term::rec(
                 vec![(
                     binder(1),
@@ -804,10 +812,6 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             )
         }),
     ];
-    let specimens = builders
-        .into_iter()
-        .map(|build| Specimen::of(&mut markers, build))
-        .collect::<Vec<_>>();
 
     // The harness itself, first: a bare self-call must be seen and a call-free body must not, or every row below passes for the wrong reason.
     assert!(call_is_seen(call()), "the bare self-call was not seen");
