@@ -27,6 +27,8 @@ Every program except `hello_world.crs` and `dependent_vectors.crs` reads its wor
 
 **Subject and control pairs.** `state_monad.crs`/`state_manual.crs` and `rng_state.crs`/`rng_manual.crs` run the same loop through a monad and by hand, with identical arithmetic and identical output. `monad_io.crs`, `monad_result.crs` and `monad_async.crs` run one loop in three carriers, to separate the cost of `bind` from the cost of what `bind` builds.
 
+**The rope's hazard.** `rope_push_peek.crs` alternates one append with one indexed read over a list growing to N, the alternation `curios-emit`'s rope cost model names as quadratic, with `rng_manual.crs` as its control: the same arithmetic and the same output with no list. It stands outside the census corpus, whose roster is fixed, and it exists so that a change to how a rope answers a read has a program to be measured on.
+
 **Samples.** `hello_world.crs` — also `cargo x profile`'s default subject — and `dependent_vectors.crs`, which show the language rather than measure it.
 
 ## The cross-language workloads

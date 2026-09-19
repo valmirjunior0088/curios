@@ -1,0 +1,30 @@
+-- Push, then peek: one append and one indexed read per step, over a list that grows to N. A `List` is a rope whose append is one node and whose read of an uncached node flattens it, so each peek here refills the whole list built so far — the alternation `curios-emit`'s rope cost model names as its hazard, reached by a single `try_get` rather than by a whole-value read.
+-- N is read from stdin; output is the sum of the peeked elements mod 1000003. Each peek reads the element just pushed, so the output is `rng_manual.crs`'s for the same N, which is the control: the same arithmetic with no list.
+use /std/{Str, Nat, List, Io};
+
+let run(k: Nat, s: Nat, built: List(Nat), acc: Nat) -> Nat =
+    match k: (_) => Nat
+    | 0 => acc
+    | m + 1 =>
+        let n = 75 * s % 65537;
+        let grown = [..built, n];
+        let peeked = match List/try_get(grown, List/len(built)) | some(x) => x | none() => 0 end;
+        run(m, n, grown, (acc + peeked) % 1000003)
+    end;
+
+let total(n: Nat) -> Nat =
+    run(n, 1, [], 0);
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end
