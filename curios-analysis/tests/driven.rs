@@ -70,36 +70,63 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
 ///
 /// Instrumenting `consolidate` and running the whole corpus — the fixed prelude through the kernel's own walk, plus every test program through both checkers — counts 5883 inversions, 20 of which re-force a binder. Sixteen refuse, on genuinely inconvertible `Bits` spines. The four that accept are all `prior == value`: the two forcings are *syntactically identical*, so a plain equality test would have decided every acceptance the corpus contains. The semantic half of the rule — accepting two forcings that differ but convert — is exercised by nothing, which is precisely the condition under which a rule's mistakes stay invisible.
 ///
-/// So the two directions are put to it directly. Both fixtures force one binder to `a()` in the first index position and to `b()` in the second, differing in nothing but the family's sort — which is what makes them a control pair rather than two unrelated cases.
+/// So its answers are put to it directly. Every fixture forces one binder in the first index position and again in the second — the shape `refl(@z) : (z, z)` meets at `Eq(a, b)` — and the first two differ in nothing but the family's sort, which is what makes them a control pair rather than two unrelated cases.
 ///
-/// At a proposition the two forcings convert by irrelevance, so the rule deletes the redundant constraint and one solution survives: sound because `Eq : Prop` makes the system definitionally K, and harmless because the surviving substitution is interchangeable with the one it replaced. At a relevant family they do not convert, and the binder's solutions are dropped rather than reconciled — the arm is still checked, with the binder simply unsolved.
+/// At a proposition the two forcings `a()` and `b()` convert by irrelevance, so the rule deletes the redundant constraint and one solution survives: sound because `Eq : Prop` makes the system definitionally K, and harmless because the surviving substitution is interchangeable with the one it replaced. At a relevant family the same two are constructors a program tells apart, and each forcing was reached by injective steps, so the case is reachable only if `a()` is `b()`: the verdict is `Impossible`, the conflict rule arriving through a non-linear target, and it is what lets `match h end` close a hypothesis `Eq(false, true)`. The third fixture is the control on *that*: two forcings that do not convert and do not clash either — one opaque function at two arguments, which may well agree — are dropped, the arm still checked with the binder unsolved.
 ///
-/// What both must never be is `Impossible`. That verdict excuses an arm from being checked at all, and an arm excused wrongly at a `Prop`-sorted family is the vacuous-elimination route to a closed inhabitant of `False` (see `documentation/soundness/per-term-rules/coverage.md`), routed there from index inversion. `consolidate` returns no clash by construction; this is what holds that to account, since the refusing path removes solutions and a future rewrite could as easily report the position unreachable.
+/// `Impossible` excuses an arm from being checked at all, and an arm excused wrongly at a `Prop`-sorted family is the vacuous-elimination route to a closed inhabitant of `False` (see `documentation/soundness/per-term-rules/coverage.md`), routed there from index inversion. So the proposition's verdict is the one this holds hardest: the clash is asked of the walk a linear position is put to, whose tag test is licensed by the family's sort, and only after conversion said no — and at a proposition conversion says yes.
 #[test]
 fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
-    for (label, sort, surviving) in [
+    enum Verdict {
+        Survives,
+        Dropped,
+        Impossible,
+    }
+
+    for (label, sort, opaque, expected) in [
         (
             "a proposition, whose two inhabitants irrelevance identifies",
             Term::prop(),
-            1,
+            false,
+            Verdict::Survives,
         ),
         (
-            "a relevant family, whose two inhabitants a program tells apart",
+            "a relevant family, whose two constructors a program tells apart",
             Term::type_ground(),
-            0,
+            false,
+            Verdict::Impossible,
+        ),
+        (
+            "a relevant family, at two values nothing tells apart or together",
+            Term::type_ground(),
+            true,
+            Verdict::Dropped,
         ),
     ] {
         let mut kernel = kernel();
         let family = declare(&mut kernel, "Forced", sort);
+        let family_type = Term::induct_type(family.clone(), Vec::<Term>::new(), Vec::<Term>::new());
         let binder = Free::local(900, Some("p"));
+        let opaque_function = Free::local(901, Some("g"));
+        let argument = Free::local(902, Some("x"));
 
+        kernel.assume(&binder, &family_type);
         kernel.assume(
-            &binder,
-            &Term::induct_type(family.clone(), Vec::<Term>::new(), Vec::<Term>::new()),
+            &opaque_function,
+            &Term::func_type(
+                [(argument.clone(), family_type.clone())],
+                family_type.clone(),
+            ),
         );
 
-        let inhabitant =
-            |tag| Term::variant(family.clone(), Vec::<Term>::new(), tag, Vec::<Term>::new());
+        let inhabitant = |tag| {
+            let constructed =
+                Term::variant(family.clone(), Vec::<Term>::new(), tag, Vec::<Term>::new());
+            match opaque {
+                true => Term::apply(Term::free_var(&opaque_function), [constructed]),
+                false => constructed,
+            }
+        };
         let target = Term::free_var(&binder);
 
         let outcome = invert_indices(
@@ -110,15 +137,22 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
         )
         .expect("inversion is a total function of finished terms");
 
-        let Invert::Solved(solutions) = outcome else {
-            panic!(
+        let surviving = match (outcome, expected) {
+            (Invert::Impossible, Verdict::Impossible) => continue,
+            (Invert::Impossible, _) => panic!(
                 "{label}: a re-forced binder was reported unreachable, which excuses the arm from being checked"
-            );
+            ),
+            (Invert::Solved(_), Verdict::Impossible) => {
+                panic!("{label}: two forcings that clash left the case reachable")
+            }
+            (Invert::Solved(solutions), Verdict::Survives) => (solutions, 1),
+            (Invert::Solved(solutions), Verdict::Dropped) => (solutions, 0),
         };
+        let (solutions, count) = surviving;
 
         assert_eq!(
             solutions.len(),
-            surviving,
+            count,
             "{label}: the deletion rule kept {} of the two forcings",
             solutions.len(),
         );
@@ -135,37 +169,42 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
 ///
 /// It is pinned anyway, because the conservative answer is not the obvious one to write. `None => true` — no type, so nothing to disagree about, so keep the forcing — is the plausible slip, and it would accept a re-forcing that *no convertibility test ever decided*, which is the deletion rule discharging a constraint it never checked. Nothing else in the workspace would notice.
 ///
-/// The discrimination is against the proposition case above rather than beside it: identical family, identical sort, identical forcings, and the binder assumed there and not here. That one difference must turn one surviving solution into none. And as there, the verdict must stay `Solved` — `Impossible` excuses the arm from being checked, and an arm excused wrongly at a `Prop`-sorted family is the vacuous-elimination route to `False`.
+/// The discrimination is against the two constructor cases above rather than beside them: identical family, identical sort, identical forcings, and the binder assumed there and not here. At a proposition that one difference must turn one surviving solution into none. At a relevant family it must turn `Impossible` into none as well: the clash is asked only after conversion has said no, and with no type conversion was never asked, so the strong verdict — the one that excuses an arm from being checked — would be decided out of blindness, which is the direction no analysis on this seam takes.
 #[test]
 fn a_binder_whose_type_is_out_of_scope_drops_its_forcings() {
-    let mut kernel = kernel();
-    let family = declare(&mut kernel, "Forced", Term::prop());
-    let binder = Free::local(900, Some("p"));
+    for (label, sort) in [
+        ("a proposition", Term::prop()),
+        ("a relevant family", Term::type_ground()),
+    ] {
+        let mut kernel = kernel();
+        let family = declare(&mut kernel, "Forced", sort);
+        let binder = Free::local(900, Some("p"));
 
-    // Deliberately not assumed: this is the whole of the fixture.
+        // Deliberately not assumed: this is the whole of the fixture.
 
-    let inhabitant =
-        |tag| Term::variant(family.clone(), Vec::<Term>::new(), tag, Vec::<Term>::new());
-    let target = Term::free_var(&binder);
+        let inhabitant =
+            |tag| Term::variant(family.clone(), Vec::<Term>::new(), tag, Vec::<Term>::new());
+        let target = Term::free_var(&binder);
 
-    let outcome = invert_indices(
-        &mut kernel,
-        &[inhabitant("a"), inhabitant("b")],
-        &[target.clone(), target],
-        slice::from_ref(&binder),
-    )
-    .expect("inversion is a total function of finished terms");
+        let outcome = invert_indices(
+            &mut kernel,
+            &[inhabitant("a"), inhabitant("b")],
+            &[target.clone(), target],
+            slice::from_ref(&binder),
+        )
+        .expect("inversion is a total function of finished terms");
 
-    let Invert::Solved(solutions) = outcome else {
-        panic!(
-            "a binder with no assumption was reported unreachable, which excuses the arm from being checked"
+        let Invert::Solved(solutions) = outcome else {
+            panic!(
+                "{label}: a binder with no assumption was reported unreachable, which excuses the arm from being checked"
+            );
+        };
+
+        assert!(
+            solutions.is_empty(),
+            "{label}: a binder whose type is out of scope kept a forcing that no convertibility test decided",
         );
-    };
-
-    assert!(
-        solutions.is_empty(),
-        "a binder whose type is out of scope kept a forcing that no convertibility test decided",
-    );
+    }
 }
 
 /// The clash rule's license is the registry, and a family the registry cannot answer for must not clash.

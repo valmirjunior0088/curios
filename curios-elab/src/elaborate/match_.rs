@@ -1,7 +1,7 @@
 use {
     super::{Context, Error, Mode, check, elaborate, expect},
     crate::{MotiveShape, check_intrinsic_head, check_motive, is_prop, reduce_with, refine_head},
-    curios_analysis::{Invert, case_target_indices, invert_indices, pinned_by_targets},
+    curios_analysis::{Invert, invert_indices, pinned_by_targets},
     curios_core::{
         Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic, IntrinsicHead,
         Many, Match, MatchResult, Nat, Scope, Subterm, Telescope, Term, Three, Two,
@@ -750,10 +750,14 @@ fn elaborate_induct_match(
             let labels = (0..telescope.len())
                 .map(|_| context.fresh(None))
                 .collect::<Vec<_>>();
-            let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
-            let ix_c = case_target_indices(telescope, &vars);
 
-            match invert_indices(context, &actual_indices, &ix_c, &labels)? {
+            // The case is opened as a written arm's is, its binders assumed, because inversion reconciles a binder forced twice *at its type*: `refl(@z) : (z, z)` against `Eq(false, true)` is decided by what `false` and `true` are at `Bool`, and a binder that is only a name has no type to be asked at.
+            let inversion = context.with_frame(|context| {
+                let ix_c = assume_payload(context, telescope, &labels);
+                invert_indices(context, &actual_indices, &ix_c, &labels)
+            })?;
+
+            match inversion {
                 Invert::Impossible => continue,
                 Invert::Solved(_) => {
                     return Err(Error::missing_arm_not_impossible(tag.clone()));
@@ -803,22 +807,7 @@ fn elaborate_induct_match(
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 
         let body_elaborated = context.with_frame(|context| {
-            let mut telescope = telescope;
-            for (label, var) in labels.iter().zip(&vars) {
-                match telescope {
-                    Telescope::Cons(ty, rest) => {
-                        context.assume(label, &ty);
-                        telescope = rest.open(&[var]);
-                    }
-                    Telescope::Done(_) => unreachable!("arity checked above"),
-                }
-            }
-
-            // This case's target indices, which its (instantiated, opened) signature terminates in, stated over the payload binders.
-            let ix_c = match &telescope {
-                Telescope::Done(targets) => (**targets).clone(),
-                Telescope::Cons(..) => unreachable!("arity checked above"),
-            };
+            let ix_c = assume_payload(context, telescope, &labels);
 
             // Refinement propagates `head := ctor_val` to other occurrences of the scrutinee in the arm body; the binder types themselves came from the telescope above. Built at the scrutinee's own universe levels, because this value outlives the refinement: the motive is opened on it, so it is what a metavariable in an arm's expected type is solved to — the `@z` of an `Eq/refl()` against `Eq(len(xs), len(xs))` — and a level-less occurrence of a polymorphic family zonks into the definition, where the arity check (or, for a prelude family it cannot see, the kernel) refuses it.
             let ctor_val = Term::variant_at(
@@ -884,6 +873,30 @@ fn elaborate_induct_match(
 }
 
 /// Re-assume, at its specialized type, every local whose type mentions a variable the case substitutes for — the elaborator's copy of the kernel's `shadow`. The arm's refinements already make such a type *reduce* at the case, which is enough for the arm body's own conversions, but not for a metavariable solution parked and retried outside the frame: `z : Sizes(s)` used as `(z).0` under `s := node(a, b)` has to be a tuple where the solution is checked, which the shadow states outright. The substituted variables' own entries are left alone, exactly as the kernel leaves them.
+/// Open a case's instantiated telescope under `labels`, each assumed at its declared (dependent) type, and answer the index targets the signature terminates in, stated over those binders. The caller holds the frame the assumptions live in.
+///
+/// A written arm and an omitted one open their case the same way, so inversion is put the same question about both — which is also the question the kernel puts, its callers reaching the unifier through a payload open that assumes every binder.
+fn assume_payload(
+    context: &mut Context,
+    mut telescope: Telescope<Vec<Term>>,
+    labels: &[Free],
+) -> Vec<Term> {
+    for label in labels {
+        match telescope {
+            Telescope::Cons(type_, rest) => {
+                context.assume(label, &type_);
+                telescope = rest.open(&[&Term::free_var(label)]);
+            }
+            Telescope::Done(_) => unreachable!("a case's binders parallel its telescope"),
+        }
+    }
+
+    match telescope {
+        Telescope::Done(targets) => *targets,
+        Telescope::Cons(..) => unreachable!("a case's binders parallel its telescope"),
+    }
+}
+
 fn shadow_specialized(
     context: &mut Context,
     head: &Term,

@@ -77,6 +77,53 @@ fn a_nested_relevant_clash_still_excuses_an_omitted_arm() {
     );
 }
 
+// The conflict rule through a *non-linear* target. `Eq`'s `refl(@z) : (z, z)` mentions its binder twice, so against `Eq(false, true)` no position clashes on its own: each solves `z`, to `false` and to `true`. The deletion rule reconciles a binder forced twice, and where the two forcings definitely clash the case is unreachable — each was reached by injective steps, so the arm needs `false` to be `true`. Every refutation here was refused while the rule only ever dropped such a pair, and the library worked around it by transporting into a decided proposition. Stated over a literal, two constructors, a closed `Nat` pair, an open successor, a parameterized family and an equality the program declares itself, since the rule is the walk's and not `Eq`'s.
+#[test]
+fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
+    assert_eq!(
+        run(A_CLASH_BETWEEN_TWO_FORCINGS_OF_ONE_BINDER_EXCUSES_THE_ARM),
+        b"ok"
+    );
+}
+
+// The control the rule above is most dangerous without, and the exploit it would be: `Two/a()` and `Two/b()` are distinct constructors, and they are proofs, so `Eq/refl()` inhabits `Eq(Two/a(), Two/b())` by irrelevance. Reading the two forcings as a clash would make `absurd` total on an inhabited type, and `forged` a closed inhabitant of `False`. Two things stand in the way and either suffices: the forcings *convert* at `Two`, so the deletion rule keeps one before a clash is ever asked for; and the walk that would answer the clash reads the family's sort before its tags.
+//
+// The two are independent rather than one guard stated twice, and that was run at the unifier itself, in `curios-analysis`'s `tests/driven.rs`: with the sort test removed the proposition's verdict does not move, conversion answering first; with the clash asked before conversion it does not move either, the sort test answering; with both gone the case is reported unreachable and `a_binder_forced_twice_survives_only_when_its_forcings_convert` fails on it.
+#[test]
+fn two_proofs_forced_on_one_binder_do_not_clash() {
+    rejected_by(
+        TWO_PROOFS_FORCED_ON_ONE_BINDER_DO_NOT_CLASH,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+// Short of a definite clash the pair is dropped and the arm stays mandatory. A variable may yet be `red()`.
+#[test]
+fn an_open_forcing_does_not_clash() {
+    rejected_by(
+        AN_OPEN_FORCING_DOES_NOT_CLASH,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+// An opaque function may send `0` and `1` to one value, so its two applications neither convert nor clash.
+#[test]
+fn two_applications_of_one_opaque_function_do_not_clash() {
+    rejected_by(
+        TWO_APPLICATIONS_OF_ONE_OPAQUE_FUNCTION_DO_NOT_CLASH,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+// `x * 2 + 1` is never `y * 2`, and the fold says so: a comparison of the two reduces to `false` by the gcd of their coefficients. That verdict is deliberately not the peel's `Clash`, so inversion does not read it as impossibility — `documentation/design/toolchain/a-law-is-decided-where-it-neither-respells-nor-invents.md` defers it as a row of its own — and this rule must not be the way it arrives.
+#[test]
+fn a_parity_disagreement_is_not_a_clash() {
+    rejected_by(
+        A_PARITY_DISAGREEMENT_IS_NOT_A_CLASH,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
 // The lower end of that discrimination: drop `a` from the index target and the guard fires. Without this, a fix could "close" the hole above by rejecting every indexed proposition and nothing here would notice.
 #[test]
 fn an_unmentioned_payload_binder_is_not_forced() {

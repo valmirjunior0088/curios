@@ -51,7 +51,7 @@ pub fn case_target_indices(telescope: Telescope<Vec<Term>>, vars: &[Term]) -> Ve
     }
 }
 
-/// The unifier, deliberately tiny: first-order, constructor-form. Per index position it decomposes matching constructor forms (`Nat` successor spines, variants by tag, tuples pointwise), solves an unbound arm binder against the rigid term it is forced to equal, and declares a clash on distinct constructors. A binder forced in more than one position is reconciled by the *deletion* rule (`consolidate`): its forcings must be convertible — sound because `Eq : Prop` makes the system definitionally K. Everything else — metavariables, opaque applications, key-shaped actuals at the top of a position (Rung B's territory) — it *refuses*: the arm stays mandatory and the binder unsolved.
+/// The unifier, deliberately tiny: first-order, constructor-form. Per index position it decomposes matching constructor forms (`Nat` successor spines, variants by tag, tuples pointwise), solves an unbound arm binder against the rigid term it is forced to equal, and declares a clash on distinct constructors. A binder forced in more than one position is reconciled by the *deletion* rule (`consolidate`): forcings that convert are one constraint — sound because `Eq : Prop` makes the system definitionally K — and forcings that definitely clash make the case unreachable, as two distinct constructors met in one position do. Everything else — metavariables, opaque applications, key-shaped actuals at the top of a position (Rung B's territory) — it *refuses*: the arm stays mandatory and the binder unsolved.
 pub fn invert_indices<J: Judge>(
     judge: &mut J,
     actuals: &[Term],
@@ -92,14 +92,15 @@ fn invert_with<J: Judge>(
         }
     }
 
-    consolidate(judge, solutions).map(Invert::Solved)
+    consolidate(judge, solutions)
 }
 
-/// The deletion rule (Goguen–McBride–McKinna), the last of the first-order set, restored here as a *semantic* test in place of the old syntactic non-linearity refusal. A flex arm binder forced in more than one index position must take convertible values; since `Eq : Prop` makes the system definitionally K, deleting the redundant constraint is sound. A *definite* yes from the boolean oracle (`Prop`-typed positions convert by irrelevance, so they delete for free) keeps one solution; anything short — a `Mismatch`, a `Blocked`, or a binder whose type is out of scope (the prune site, which only reads `Impossible` vs `Solved`) — drops that binder's solutions, conservatively. Never a `Clash`, so `Impossible`/prune semantics hold.
-fn consolidate<J: Judge>(
-    judge: &mut J,
-    solutions: Vec<(Free, Term)>,
-) -> Result<Vec<(Free, Term)>, J::Error> {
+/// The deletion rule (Goguen–McBride–McKinna), the last of the first-order set, restored here as a *semantic* test in place of the old syntactic non-linearity refusal. A flex arm binder forced in more than one index position must take convertible values; since `Eq : Prop` makes the system definitionally K, deleting the redundant constraint is sound. A *definite* yes from the boolean oracle (`Prop`-typed positions convert by irrelevance, so they delete for free) keeps one solution.
+///
+/// **Two forcings that definitely clash make the case impossible**, which is the conflict rule arriving through a non-linear target: `refl(@z) : (z, z)` against `Eq(false, true)` forces `z := false` and `z := true`, each by steps that were injective, so the case is reachable only if `false` is `true`. Whether they clash is asked of the same walk a linear position is put to — [`unify_index`], with nothing flexible, since both sides are the scrutinee's — so every license that walk checks is checked here: the tag test only at a relevant family, the literal test only where the peel answers `Clash`. It is asked only after conversion has said *no* at a type that was in scope, which is what keeps a `Prop`-typed binder out of it: there the two forcings convert by irrelevance and the rule above has already deleted one.
+///
+/// Anything short of either answer — forcings that neither convert nor clash, a `Blocked`, or a binder whose type is out of scope, where there is nothing to have compared at — drops that binder's solutions, conservatively.
+fn consolidate<J: Judge>(judge: &mut J, solutions: Vec<(Free, Term)>) -> Result<Invert, J::Error> {
     let mut kept: Vec<(Free, Term)> = Vec::new();
     let mut refused = BTreeSet::new();
 
@@ -115,18 +116,22 @@ fn consolidate<J: Judge>(
 
         // A re-forcing: keep the prior solution iff the two are convertible at the binder's declared type (cloned to release the borrow).
         let prior = kept[index].1.clone();
-        let deletes = match judge.assumption(&binder).cloned() {
-            Some(type_) => judge.convert_at(&type_, &prior, &value)?,
-            None => false,
-        };
-
-        if !deletes {
-            kept.remove(index);
-            refused.insert(binder);
+        if let Some(type_) = judge.assumption(&binder).cloned() {
+            if judge.convert_at(&type_, &prior, &value)? {
+                continue;
+            }
+            if let Step::Clash =
+                unify_index(judge, &prior, &value, &[], false, false, &mut Vec::new())?
+            {
+                return Ok(Invert::Impossible);
+            }
         }
+
+        kept.remove(index);
+        refused.insert(binder);
     }
 
-    Ok(kept)
+    Ok(Invert::Solved(kept))
 }
 
 fn unify_index<J: Judge>(

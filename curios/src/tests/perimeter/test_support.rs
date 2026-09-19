@@ -301,6 +301,87 @@ pub(super) const A_NESTED_RELEVANT_CLASH_STILL_EXCUSES_AN_OMITTED_ARM: &str = r#
         /std/print(Nat/to_str(f(Ind/left())))
         "#;
 
+pub(super) const A_CLASH_BETWEEN_TWO_FORCINGS_OF_ONE_BINDER_EXCUSES_THE_ARM: &str = r#"
+        use /std/{Eq, Bool, Nat, Option};
+
+        induct Color : pub Type
+        | red()
+        | green()
+        end
+
+        induct Same(@A : Type) : (A, A) -> pub Prop
+        | same(@z : A) : (z, z)
+        end
+
+        let absurd_bool(h : Eq(false, true)) -> Bool/False =
+            match h end;
+
+        let absurd_color(h : Eq(Color/green(), Color/red())) -> Bool/False =
+            match h end;
+
+        let absurd_nat(h : Eq(0, 1)) -> Bool/False =
+            match h end;
+
+        let absurd_successor(n : Nat, h : Eq(0, n + 1)) -> Bool/False =
+            match h end;
+
+        let absurd_option(h : Eq(Option/some(1), Option/none())) -> Bool/False =
+            match h end;
+
+        let absurd_same(h : Same(Color/green(), Color/red())) -> Bool/False =
+            match h end;
+
+        /std/print("ok")
+        "#;
+
+pub(super) const TWO_PROOFS_FORCED_ON_ONE_BINDER_DO_NOT_CLASH: &str = r#"
+        use /std/{Eq, Bool};
+
+        induct Two : pub Prop
+        | a()
+        | b()
+        end
+
+        let absurd(h : Eq(Two/a(), Two/b())) -> Bool/False =
+            match h end;
+
+        let forged : Bool/False = absurd(Eq/refl());
+
+        /std/print("FORGED")
+        "#;
+
+pub(super) const AN_OPEN_FORCING_DOES_NOT_CLASH: &str = r#"
+        use /std/{Eq, Bool};
+
+        induct Color : pub Type
+        | red()
+        | green()
+        end
+
+        let absurd(c : Color, h : Eq(c, Color/red())) -> Bool/False =
+            match h end;
+
+        /std/print("FORGED")
+        "#;
+
+pub(super) const TWO_APPLICATIONS_OF_ONE_OPAQUE_FUNCTION_DO_NOT_CLASH: &str = r#"
+        use /std/{Eq, Bool, Nat};
+
+        let absurd(f : (Nat) -> Nat, h : Eq(f(0), f(1))) -> Bool/False =
+            match h end;
+
+        /std/print("FORGED")
+        "#;
+
+pub(super) const A_PARITY_DISAGREEMENT_IS_NOT_A_CLASH: &str = r#"
+        use /std/{Eq, Bool, Nat};
+
+        let absurd(x : Nat, y : Nat, h : Eq(x * 2 + 1, y * 2)) -> Bool/False =
+            match h end;
+
+        /std/print("FORGED")
+        "#;
+
 pub(super) const AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED: &str = r#"
         use /std/{Nat};
 
@@ -1126,6 +1207,37 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         A_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM,
         Expect::Refuses("not provably impossible"),
         Expect::NotAsked(None),
+    ),
+    // Both must accept: the clash is the shared unifier's, so a checker that excused these arms alone would be the trusted base resting on the other's analysis.
+    (
+        "clash_between_two_forcings",
+        A_CLASH_BETWEEN_TWO_FORCINGS_OF_ONE_BINDER_EXCUSES_THE_ARM,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    (
+        "two_proofs_forced_on_one_binder",
+        TWO_PROOFS_FORCED_ON_ONE_BINDER_DO_NOT_CLASH,
+        Expect::Refuses("not provably impossible"),
+        Expect::NotAsked,
+    ),
+    (
+        "open_forcing",
+        AN_OPEN_FORCING_DOES_NOT_CLASH,
+        Expect::Refuses("not provably impossible"),
+        Expect::NotAsked,
+    ),
+    (
+        "two_applications_of_one_opaque_function",
+        TWO_APPLICATIONS_OF_ONE_OPAQUE_FUNCTION_DO_NOT_CLASH,
+        Expect::Refuses("not provably impossible"),
+        Expect::NotAsked,
+    ),
+    (
+        "parity_disagreement",
+        A_PARITY_DISAGREEMENT_IS_NOT_A_CLASH,
+        Expect::Refuses("not provably impossible"),
+        Expect::NotAsked,
     ),
     (
         "non_injective_target",
