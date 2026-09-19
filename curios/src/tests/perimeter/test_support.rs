@@ -552,6 +552,52 @@ pub(super) const A_GROUNDED_ARGUMENT_FORFEITS_IRRELEVANCE: &str = r#"
         /std/print(Nat/to_str(1))
         "#;
 
+pub(super) const A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_NEUTRAL: &str = r#"
+        use /std/{Eq, Nat, State};
+
+        let left(a: Nat, f: (Nat) -> State(Nat, Nat)) -> Eq(State/bind(State/pure(a), f), f(a)) =
+            Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_VARIABLE: &str = r#"
+        use /std/{Eq, Nat, State};
+
+        let right(m: State(Nat, Nat)) -> Eq(State/bind(m, (v) => State/pure(v)), m) =
+            Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS: &str = r#"
+        use /std/{Eq, Nat, State};
+
+        let assoc(m: State(Nat, Nat), f: (Nat) -> State(Nat, Nat), g: (Nat) -> State(Nat, Nat))
+            -> Eq(State/bind(State/bind(m, f), g), State/bind(m, (v) => State/bind(f(v), g))) =
+            Eq/refl();
+
+        /std/print(Nat/to_str(1))
+        "#;
+
+pub(super) const A_GROUP_MEMBER_IS_USED_A_LEVEL_UP_BY_ITS_SIBLING: &str = r#"
+        use /std/{Nat};
+
+        let pick(@A: Type, x: A) -> Nat = 0
+        and other(n: Nat) -> Nat = pick(Nat) + n;
+
+        /std/print(Nat/to_str(other(1)))
+        "#;
+
+pub(super) const THE_SAME_PAIR_DECLARED_APART_CERTIFIES: &str = r#"
+        use /std/{Nat};
+
+        let pick(@A: Type, x: A) -> Nat = 0;
+        let other(n: Nat) -> Nat = pick(Nat) + n;
+
+        /std/print(Nat/to_str(other(1)))
+        "#;
+
 pub(super) const A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS: &str = r#"
         use /std/{Eq, Nat, Option, Str};
 
@@ -1009,7 +1055,9 @@ pub(super) enum Expect {
     /// Refused, by a diagnostic containing this fragment — the rule must be named, or a fixture broken in some unrelated way would pass.
     Refuses(&'static str),
     /// Never reached this checker. Not a pass: it records that the rule is enforced earlier, so whether this checker also enforces it is *unverified here*. Only the erasure obligations can be deferred far enough for the kernel to see a program the elaborator rejects — every other refusal happens while the module is still being built, so there is nothing to hand over.
-    NotAsked,
+    ///
+    /// What it carries is where the kernel *is* asked: the fixture in `curios-cert` that puts the same rule to it from a module built by hand, as `<file under curios-cert/src>::<test>`, which `every_named_kernel_twin_exists` holds to the tree. `None` says no such fixture was found, so the kernel's half of that row stands verified nowhere — a rung of the same rule held by a neighbouring row's twin is not counted as this row's.
+    NotAsked(Option<&'static str>),
 }
 
 /// Every fixture above, with what each checker is expected to say about it.
@@ -1020,7 +1068,9 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "multi_constructor_prop",
         A_MULTI_CONSTRUCTOR_PROPOSITION_CANNOT_BE_ELIMINATED_INTO_DATA,
         Expect::Refuses("cannot eliminate the proposition"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "kernel/infer/eliminate/tests.rs::a_proposition_with_two_constructors_does_not_eliminate_into_a_type",
+        )),
     ),
     (
         "empty_prop_eliminates",
@@ -1038,70 +1088,84 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "informative_prop_field",
         A_PROPOSITION_MAY_NOT_CARRY_INFORMATIVE_FIELDS,
         Expect::Refuses("is informative"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "kernel/module/tests.rs::a_proposition_may_not_carry_an_informative_field",
+        )),
     ),
     (
         "informative_prop_method",
         A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_INFORMATIVE_METHODS,
         Expect::Refuses("is informative"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     (
         "coverage",
         AN_ELIMINATION_MUST_ENUMERATE_ITS_CONSTRUCTORS,
         Expect::Refuses("missing match case"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "kernel/infer/eliminate/tests.rs::an_undecided_absent_arm_is_refused",
+        )),
     ),
     // Enforced by the grammar, before either checker exists.
     (
         "wire_types",
         A_FOREIGN_DECLARATION_IS_CONFINED_TO_WIRE_TYPES,
         Expect::Refuses("expected a wire type"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "recheck/foreign_tests.rs::a_forged_foreign_row_cannot_inhabit_a_proposition",
+        )),
     ),
     (
         "prop_index_vacuous",
         A_PROPOSITION_VALUED_INDEX_CANNOT_MAKE_AN_ELIMINATION_VACUOUS,
         Expect::Refuses("not provably impossible"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     (
         "prop_index_omitted_arm",
         A_PROPOSITION_VALUED_INDEX_CANNOT_EXCUSE_AN_OMITTED_ARM,
         Expect::Refuses("not provably impossible"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     (
         "non_injective_target",
         A_NON_INJECTIVE_INDEX_TARGET_DOES_NOT_FORCE_ITS_BINDER,
         Expect::Refuses("cannot eliminate the proposition"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "kernel/infer/eliminate/tests.rs::a_singleton_whose_index_merely_mentions_its_payload_does_not",
+        )),
     ),
     (
         "unmentioned_binder",
         AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED,
         Expect::Refuses("cannot eliminate the proposition"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     // `NotAsked` here is the elaborator gating first, not the kernel being silent: its half of both rules is guarded in `curios-cert`'s own tests, which reach it by building the module directly.
     (
         "singleton_carrying_a_type",
         A_SINGLETON_CARRYING_A_TYPE_DOES_NOT_ELIMINATE,
         Expect::Refuses("cannot eliminate the proposition"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "kernel/infer/eliminate/tests.rs::a_singleton_carrying_a_type_does_not_eliminate_into_a_type",
+        )),
     ),
     (
         "type_valued_prop_field",
         A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD,
         Expect::Refuses("is informative"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "kernel/module/tests.rs::a_proposition_may_not_carry_a_type",
+        )),
     ),
     // Both accepted this one: the sort of a parameterized intrinsic former was implemented twice on each side, and the typing rule's copy disagreed with `Sort::of`'s. Its kernel half is guarded where the rule lives, in `curios_cert::kernel::infer::tests`.
     (
         "list_of_proofs_is_not_a_prop",
         A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION,
         Expect::Refuses("type mismatch"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "kernel/sort/tests.rs::a_list_of_proofs_is_not_a_proposition",
+        )),
     ),
     (
         "irrelevance_still_identifies",
@@ -1168,13 +1232,15 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "induction_hypothesis_at_the_scrutinee",
         INDUCTION_HYPOTHESIS_AT_THE_SCRUTINEE,
         Expect::Refuses("type mismatch"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "kernel/infer/intrinsic_tests.rs::a_free_monoid_arm_must_inhabit_the_motive_at_its_case",
+        )),
     ),
     (
         "dispatch_default_at_a_case",
         DISPATCH_DEFAULT_AT_A_CASE,
         Expect::Refuses("type mismatch"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     (
         "saturating_subtraction_is_not_descent",
@@ -1192,19 +1258,21 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "distinct_recursions_are_not_equal",
         DISTINCT_RECURSIONS_ARE_NOT_EQUAL,
         Expect::Refuses("type mismatch"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "kernel/convert/recursion_tests.rs::a_recurrence_does_not_excuse_a_finite_disagreement",
+        )),
     ),
     (
         "bool_arm_at_the_wrong_case",
         BOOL_ARM_AT_THE_WRONG_CASE,
         Expect::Refuses("type mismatch"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     (
         "dispatch_literal_at_the_wrong_value",
         DISPATCH_LITERAL_AT_THE_WRONG_VALUE,
         Expect::Refuses("type mismatch"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     (
         "sound_program",
@@ -1223,7 +1291,9 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "empty_record_is_unit",
         THE_EMPTY_RECORD_IS_NOT_A_PROPOSITION,
         Expect::Refuses("is informative"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "kernel/sort/tests.rs::a_record_of_propositions_is_a_proposition_but_the_empty_one_is_unit",
+        )),
     ),
     (
         "function_into_proposition",
@@ -1235,7 +1305,7 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "function_into_type",
         A_FUNCTION_INTO_A_TYPE_IS_NOT_A_PROPOSITION,
         Expect::Refuses("is informative"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     (
         "prop_into_formed_prop",
@@ -1247,13 +1317,13 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "prop_into_formed_type",
         A_PROPOSITION_MAY_NOT_BE_ELIMINATED_INTO_A_FORMED_TYPE,
         Expect::Refuses("cannot eliminate the proposition"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     (
         "non_strict_behind_record",
         A_NON_STRICT_OCCURRENCE_BEHIND_A_RECORD_IS_STILL_REFUSED,
         Expect::Refuses("positively, but not strictly"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     // Eta, whose accepting rungs all reach the kernel because they compile — so this row's second opinion is one of the few on this map that says anything.
     (
@@ -1266,13 +1336,13 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "eta_drops_its_binder",
         AN_EXPANSION_THAT_DROPS_ITS_BINDER_IS_NOT_ETA,
         Expect::Refuses("type mismatch"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     (
         "eta_swaps_its_components",
         AN_EXPANSION_THAT_SWAPS_ITS_COMPONENTS_IS_NOT_ETA,
         Expect::Refuses("type mismatch"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     (
         "function_into_proposition_needs_no_eta",
@@ -1284,7 +1354,7 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "function_into_type_needs_comparing",
         A_FUNCTION_INTO_A_TYPE_IS_NOT_DISCHARGED_UNCOMPARED,
         Expect::Refuses("type mismatch"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     (
         "eta_reaches_irrelevance",
@@ -1296,7 +1366,7 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "eta_compares_the_relevant_component",
         ETA_STILL_COMPARES_A_RECORDS_RELEVANT_COMPONENT,
         Expect::Refuses("type mismatch"),
-        Expect::NotAsked,
+        Expect::NotAsked(None),
     ),
     // The quadrant this table's own documentation describes and had no instance of: the kernel refusing what the elaborator accepted, which is recorded conversion incompleteness and the safe direction. The grounded argument position is where it comes from.
     (
@@ -1304,6 +1374,38 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         A_GROUNDED_ARGUMENT_FORFEITS_IRRELEVANCE,
         Expect::Accepts,
         Expect::Refuses("f(p), f(q)"),
+    ),
+    // The same quadrant, reached from `/std`'s own vocabulary. `State`'s two identity laws close by `Eq/refl()` for the elaborator, which compares the structure's function field at its declared type and so by eta; the kernel's struct eta projects the neutral side and compares the field at `Type`, where a lambda never meets a neutral function. Associativity is the control: both sides are literals there, and both checkers accept it.
+    (
+        "state_left_identity_forfeits_eta",
+        A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_NEUTRAL,
+        Expect::Accepts,
+        Expect::Refuses("State/bind"),
+    ),
+    (
+        "state_right_identity_forfeits_eta",
+        A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_VARIABLE,
+        Expect::Accepts,
+        Expect::Refuses("State/bind"),
+    ),
+    (
+        "state_associativity_is_two_literals",
+        TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS,
+        Expect::Accepts,
+        Expect::Accepts,
+    ),
+    // The third instance is not conversion's. A member of an `and` group used by its sibling at a type one level up needs `1 ≤ u` of the group's own instance, since a group is monomorphic in its universes; the elaborator accepts the group and the kernel refuses the call. Declared apart, the two certify, which is the control.
+    (
+        "group_member_used_a_level_up_by_its_sibling",
+        A_GROUP_MEMBER_IS_USED_A_LEVEL_UP_BY_ITS_SIBLING,
+        Expect::Accepts,
+        Expect::Refuses("expected `Type.{u}`, found `Type.{1}`"),
+    ),
+    (
+        "the_same_pair_declared_apart",
+        THE_SAME_PAIR_DECLARED_APART_CERTIFIES,
+        Expect::Accepts,
+        Expect::Accepts,
     ),
     (
         "nominal_struct_eta_survives_grounding",
@@ -1322,25 +1424,33 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "fold_motive_captures_scrutinee",
         A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE,
         Expect::Refuses("through the binder it declares"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "recheck/elimination_tests.rs::a_fold_motive_that_captures_its_scrutinee_is_refused",
+        )),
     ),
     (
         "list_fold_motive_captures_scrutinee",
         A_LIST_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE,
         Expect::Refuses("through the binder it declares"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "recheck/elimination_tests.rs::a_fold_motive_that_captures_its_scrutinee_is_refused",
+        )),
     ),
     (
         "fold_motive_captures_scrutinee_expression",
         A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_EXPRESSION,
         Expect::Refuses("through the binder it declares"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "recheck/elimination_tests.rs::a_fold_motive_that_captures_its_scrutinee_is_refused",
+        )),
     ),
     (
         "fold_motive_captures_scrutinee_through_an_alias",
         A_FOLD_MOTIVE_MAY_NOT_CAPTURE_ITS_SCRUTINEE_THROUGH_AN_ALIAS,
         Expect::Refuses("through the binder it declares"),
-        Expect::NotAsked,
+        Expect::NotAsked(Some(
+            "recheck/elimination_tests.rs::a_fold_motive_that_captures_its_scrutinee_is_refused",
+        )),
     ),
     (
         "fold_motive_binds_scrutinee",
@@ -1353,7 +1463,7 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
 pub(super) fn agrees(name: &str, checker: &str, expected: &Expect, actual: &Verdict) {
     match (expected, actual) {
         (Expect::Accepts, Verdict::Accepts) => {}
-        (Expect::NotAsked, Verdict::NotAsked) => {}
+        (Expect::NotAsked(_), Verdict::NotAsked) => {}
         (Expect::Refuses(fragment), Verdict::Refuses(error)) => assert!(
             error.contains(fragment),
             "{name}: {checker} refused, but not by '{fragment}':\n{error}",
@@ -1366,7 +1476,7 @@ impl std::fmt::Debug for Expect {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Expect::Accepts => write!(formatter, "accepts"),
-            Expect::NotAsked => write!(formatter, "not-asked"),
+            Expect::NotAsked(_) => write!(formatter, "not-asked"),
             Expect::Refuses(fragment) => write!(formatter, "refuses({fragment})"),
         }
     }

@@ -8,7 +8,10 @@
 //!
 //! Each rejection asserts its *own* diagnostic, following `tests::soundness`. A perimeter test that accepts any error is worse than none: an invalid fixture passes it while the rule it names goes unchecked. That is not hypothetical — the first draft of these probes "passed" on `unbound variable`, having never reached the check at all.
 
-use super::test_support::*;
+use {
+    super::test_support::*,
+    std::{fs, path::Path},
+};
 
 // Coverage. A missing arm leaves an elimination undefined at that constructor, which is a proof of the motive at an index nothing established.
 #[test]
@@ -49,4 +52,69 @@ fn the_two_checkers_agree_as_recorded() {
         agrees(name, "the elaborator", expect_elaborator, &elaborator);
         agrees(name, "the kernel", expect_kernel, &kernel);
     }
+}
+
+/// Every kernel-side twin a row names is a test in the file the row says.
+///
+/// A name is a contract only while something reads it. The twins live in `curios-cert`, whose private tests this crate cannot call, so what is held is the spelling: a fixture renamed or moved there fails here instead of leaving a row pointing at nothing.
+#[test]
+fn every_named_kernel_twin_exists() {
+    let sources = Path::new(env!("CARGO_MANIFEST_DIR")).join("../curios-cert/src");
+
+    for (name, _, _, expect_kernel) in CORPUS {
+        let Expect::NotAsked(Some(twin)) = expect_kernel else {
+            continue;
+        };
+        let (file, test) = twin
+            .split_once("::")
+            .unwrap_or_else(|| panic!("{name}: '{twin}' is not spelled `<file>::<test>`"));
+        let text = fs::read_to_string(sources.join(file))
+            .unwrap_or_else(|error| panic!("{name}: {file} under curios-cert/src: {error}"));
+
+        assert!(
+            text.contains(&format!("fn {test}(")),
+            "{name}: {file} holds no test named {test}",
+        );
+    }
+}
+
+/// How the rows fall, by what the two checkers say.
+#[derive(Debug, Default, PartialEq)]
+struct Tally {
+    both_accept: usize,
+    both_refuse: usize,
+    the_kernel_refuses_alone: usize,
+    unasked_with_a_twin: usize,
+    unasked_with_none: usize,
+}
+
+/// The matrix's own figures, held in the one place a reader should quote them from.
+///
+/// A row moving between quadrants — a disagreement closed, a kernel twin written — moves a number here, and deliberately: `the_kernel_refuses_alone` is what the second checker's incompleteness costs on this corpus, and `unasked_with_none` is how many rules the kernel is never put to anywhere. The elaborator refusing what the kernel accepts has no field, because no row may sit there.
+#[test]
+fn the_matrix_tallies_as_recorded() {
+    let mut tally = Tally::default();
+
+    for (name, _, expect_elaborator, expect_kernel) in CORPUS {
+        let quadrant = match (expect_elaborator, expect_kernel) {
+            (Expect::Accepts, Expect::Accepts) => &mut tally.both_accept,
+            (Expect::Refuses(_), Expect::Refuses(_)) => &mut tally.both_refuse,
+            (Expect::Accepts, Expect::Refuses(_)) => &mut tally.the_kernel_refuses_alone,
+            (Expect::Refuses(_), Expect::NotAsked(Some(_))) => &mut tally.unasked_with_a_twin,
+            (Expect::Refuses(_), Expect::NotAsked(None)) => &mut tally.unasked_with_none,
+            _ => panic!("{name}: no row may record {expect_elaborator:?} beside {expect_kernel:?}"),
+        };
+        *quadrant += 1;
+    }
+
+    assert_eq!(
+        tally,
+        Tally {
+            both_accept: 17,
+            both_refuse: 9,
+            the_kernel_refuses_alone: 4,
+            unasked_with_a_twin: 15,
+            unasked_with_none: 14,
+        },
+    );
 }

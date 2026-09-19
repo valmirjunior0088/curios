@@ -96,3 +96,27 @@ fn a_nominal_structs_eta_is_not_forfeited_there() {
 fn a_proof_field_does_not_distinguish_two_literals() {
     assert_eq!(run(A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS), b"1");
 }
+
+// **The forfeiture reaches `/std`'s own laws.** `State`'s left identity sets a structure literal against the neutral `f(a)`: the elaborator compares the one field at its declared function type, where eta opens both sides at a fresh state, and the kernel's struct eta projects the neutral and compares at `Type`, where a lambda never meets a projection. So the law closes by `Eq/refl()` for one checker and is refused by the other, in the safe direction — found by stating the monad laws for the library's own witnesses rather than by a hunt.
+#[test]
+fn a_structs_function_field_forfeits_eta_against_a_neutral() {
+    rejected_by(
+        A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_NEUTRAL,
+        "State/bind",
+    );
+}
+
+// The right identity is the same forfeiture with a variable on the neutral side, which is the shape `struct_eta`'s neutral restriction is written for.
+#[test]
+fn a_structs_function_field_forfeits_eta_against_a_variable() {
+    rejected_by(
+        A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_VARIABLE,
+        "State/bind",
+    );
+}
+
+// The control for the pair above. Associativity sets two literals against each other, so both checkers compare the field at the declaration's telescope and the law certifies: what the two refusals lack is a typed position, not a rule about `State`.
+#[test]
+fn two_struct_literals_compare_their_function_fields() {
+    assert_eq!(run(TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS), b"1");
+}
