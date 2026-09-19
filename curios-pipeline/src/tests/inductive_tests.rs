@@ -394,8 +394,27 @@ fn omission_requires_a_definite_clash() {
         "unexpected error: {error}"
     );
 
-    // The non-linear refusal — no K through the back door: `same`'s target `(z, z)` constrains two positions with one binder, which the unifier refuses, so the arm stays mandatory even at the plainly-uninhabited `Foo(3, 4)`. The flip side: `diff`'s target `(0, 1)` clashes against literals `(5, 5)` and prunes.
-    let nonlinear = r#"
+    // A binder forced twice keeps its arm mandatory only while the two forcings could still be one value. `same`'s target `(z, z)` constrains two positions with one binder, and at the *open* `Foo(a, b)` the forcings `z ↦ a` and `z ↦ b` neither convert nor clash, so the arm stays mandatory. This was once a blanket non-linearity refusal — no K through the back door — and the clash test now decides where the unifier used to decline; the twice-forced literal pair below is the side that decides.
+    let open_forcing = r#"
+        use /std/{Nat, Bytes};
+        induct Foo : (x : Nat, y : Nat) -> Type
+        | same(z : Nat) : (z, z)
+        | diff() : (0, 1)
+        end
+        let f(a : Nat, b : Nat, q : Foo(a, b)) -> Bytes =
+            match q : (_, _, _) => Bytes
+            | diff() => /std/Str/to_bytes("d")
+            end;
+        0
+    "#;
+    let error = compile(open_forcing, Some("/std/Nat")).unwrap_err();
+    assert!(
+        error.contains("missing arm 'same'"),
+        "unexpected error: {error}"
+    );
+
+    // The same target at `Foo(3, 4)`, where the two forcings are literals that definitely clash, so the case is unreachable and the arm is excused. The two halves are one rule read from both sides, which is what keeps this test's name true: omission requires a *definite* clash, and an open pair is not one.
+    let twice_forced = r#"
         use /std/{Nat, Bytes};
         induct Foo : (x : Nat, y : Nat) -> Type
         | same(z : Nat) : (z, z)
@@ -407,11 +426,7 @@ fn omission_requires_a_definite_clash() {
             end;
         0
     "#;
-    let error = compile(nonlinear, Some("/std/Nat")).unwrap_err();
-    assert!(
-        error.contains("missing arm 'same'"),
-        "unexpected error: {error}"
-    );
+    assert!(compile(twice_forced, Some("/std/Nat")).is_ok());
 
     let prunes = r#"
         use /std/{Nat, Bytes};
