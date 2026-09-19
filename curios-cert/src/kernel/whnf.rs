@@ -40,10 +40,6 @@ impl ClosedHost for Kernel {
     fn closed_body_at(&self, name: &Free) -> Option<&Term> {
         self.value_at(name)
     }
-
-    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
-        self.fresh(hint)
-    }
 }
 
 /// Whether the closed machine may take `term` under this judgment: the kernel admits it at all (the `machine` field is false only in the differential fixture's strategy arm), the representation-side gate ([`accelerable`]) holds, and no case equation is in scope — because inside an arm a closed scrutinee *is* the arm's assumed value.
@@ -73,6 +69,10 @@ impl Reducer for Kernel {
 
     fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
         Kernel::spend(self, cost)
+    }
+
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
+        self.fresh(hint)
     }
 }
 

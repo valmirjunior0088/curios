@@ -69,18 +69,32 @@ pub fn normalize_bool(
     reducer.reduce_forced(tree).map(Some)
 }
 
-/// Whether a function is the identity lambda: one binder, whose body is that binder and nothing else.
-fn is_identity(function: &Term) -> bool {
+/// Whether a function is the identity: one binder, whose body is that binder once it is weak-head reduced, so `(v) => v + 0` and `(v) => ((w) => w)(v)` are the identity as `(v) => v` is. This is beta and the folds under the binder, never extensionality: a function that is the identity only *pointwise* — `(v) => match v | 0 => 0 | k + 1 => k + 1 end` — has a stuck match for a body, and stays a function nothing here recognises.
+///
+/// The body is read as conversion would read it, which is what makes the test agree with what both checkers already say of the function itself: `(v) => v + 0` converts with `(v) => v`, so a `map` by one that stayed stuck while a `map` by the other collapsed was a test of the *spelling* where the value was meant. The lambda as written is asked first, since it costs nothing; past it the binder is opened on a fresh identity, charged as the closed machine's eta probe charges the same opening, and the body reduced to weak-head form and not forced — a body whose head is a recursive call is no binder, and unfolding it to find that out would be paid at every `map`.
+fn is_identity(reducer: &mut impl Reducer, function: &Term) -> Result<bool, ReduceError> {
     let Subterm::Func(Func { telescope, .. }) = &**function else {
-        return false;
+        return Ok(false);
     };
     let Telescope::Cons(_, rest) = telescope else {
-        return false;
+        return Ok(false);
     };
     let Telescope::Done(body) = rest.body() else {
-        return false;
+        return Ok(false);
     };
-    matches!(&***body, Subterm::Var(var) if var.as_bound() == Some(0))
+    if matches!(&***body, Subterm::Var(var) if var.as_bound() == Some(0)) {
+        return Ok(true);
+    }
+
+    reducer.spend(
+        Cost::collection(1)
+            .saturating_mul(3)
+            .saturating_add(Cost::term(1)),
+    )?;
+    let binder = reducer.fresh_binder(None);
+    let body = reducer.reduce(telescope.open(&[&Term::free_var(&binder)]))?;
+
+    Ok(matches!(&*body, Subterm::Var(var) if var.unwrap() == &binder))
 }
 
 /// Two stuck comparisons spelled across the family, aligned to one spelling so the congruence can compare them: a negated comparison — `Bool/not` is `xor(_, true)` once unfolded — becomes its dual, `not(a < b)` reading `b <= a` and `not(a == b)` reading `a != b`, and a `<=` meeting a `<` on the other side becomes `<` of the successor, since `a <= b` and `a < b + 1` are one relation on `Nat` and on `Int`. `None` when neither side moved.
@@ -1589,8 +1603,8 @@ pub fn reduce_intrinsic(
             let b = reducer.reduce(b.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
             let f = reducer.reduce(f.clone())?;
-            // `map` with the identity is the list itself, whatever its shape: a function whose one binder is its whole body sends every element to itself.
-            if is_identity(&f) {
+            // `map` with the identity is the list itself, whatever its shape: a function whose body reduces to its one binder sends every element to itself.
+            if is_identity(reducer, &f)? {
                 return Ok(Term::unwrap_or_clone(list));
             }
             reduce_homomorphism(

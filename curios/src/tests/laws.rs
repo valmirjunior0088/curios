@@ -308,7 +308,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "List, the free monoid",
-        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Nat/Le(s + l, List/len(xs)), at: Nat/Lt(s, List/len(xs)), head: Nat/Lt(0, List/len(ys)), into: Nat/Lt(s, List/len(ys)), fits: Nat/Le(l, List/len(ys)), z: Nat, g: (Nat, Nat) -> Nat",
+        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Nat/Le(s + l, List/len(xs)), at: Nat/Lt(s, List/len(xs)), head: Nat/Lt(0, List/len(ys)), into: Nat/Lt(s, List/len(ys)), fits: Nat/Le(l, List/len(ys)), z: Nat, g: (Nat, Nat) -> Nat, h: (Nat) -> Nat",
         held: &[
             "Eq([..xs, ..[]], xs)",
             "Eq([..[], ..xs], xs)",
@@ -320,8 +320,11 @@ const CARRIERS: &[Carrier] = &[
             "Eq(List/len([..xs, ..ys]), List/len(xs) + List/len(ys))",
             "Eq(List/len([1, 2, ..xs]), List/len(xs) + 2)",
             "Eq(List/map(@Nat, @Nat, [], f), [])",
-            // The syntactic identity lambda is beta, not extensionality: `map` sends every element to itself and the list is returned whole.
+            // The identity is beta, not extensionality: `map` sends every element to itself and the list is returned whole. It is recognised by what the function's body reduces to under its binder, as conversion reads it, and not by how the lambda is spelled.
             "Eq(List/map(xs, (v) => v), xs)",
+            "Eq(List/map(xs, (v) => v + 0), xs)",
+            "Eq(List/map(xs, (v) => ((w: Nat) => w)(v)), xs)",
+            "Eq(List/len(List/map(xs, (v) => v * 1)), List/len(xs))",
             // An index into a map is the function at the index into its argument; the bound is the argument's, since `len(map(xs, f))` is `len(xs)`.
             "Eq(List/get(@Nat, List/map(xs, f), s, @at), f(List/get(@Nat, xs, s, @at)))",
             "Eq(List/map([a, ..xs], f), [f(a), ..List/map(xs, f)])",
@@ -355,8 +358,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq(List/fold([..xs, a], z, g), g(a, List/fold(xs, z, g)))",
         ],
         refused: &[
-            // Not function extensionality: `(v) => v + 0` is convertible with the identity lambda. The fold tests the lambda as written, before anything reduces its body, so `map` by it stays stuck.
-            "Eq(List/map(xs, (v) => v + 0), xs)",
+            // Function extensionality, and not one to take: a function that is the identity only pointwise has a stuck match for a body, which reduces to no binder, and nothing short of induction on every element says otherwise.
+            "Eq(List/map(xs, (v) => match v | 0 => 0 | k + 1 => k + 1 end), xs)",
+            // Fusion: a map of a map is one map by the composite, a law of the functor and not of the monoid. A candidate — a fold would build the composite lambda, and nothing makes the equation inadmissible — that no consumer has asked for.
+            "Eq(List/map(List/map(xs, f), h), List/map(xs, (v) => h(f(v))))",
         ],
     },
     Carrier {

@@ -241,3 +241,37 @@ fn a_spine_against_a_bare_variable_clashes_on_a_positive_residual() {
         "`x[..bs, ..cs] == bs` is undecided while `cs` may be empty"
     );
 }
+
+// The identity is recognised by what a function's body reduces to under its binder, not by how the lambda is spelled: `(v) => v + 0` is the identity as `(v) => v` is, and a `map` by either is the list. The controls are the two ways a looser test would go wrong — a body that reduces to a *successor* of the binder, and one that reduces to a variable which is not the binder, a constant function no list survives.
+#[test]
+fn a_map_by_a_function_whose_body_reduces_to_its_binder_is_the_list() {
+    let xs = sym(0, "xs");
+    let other = sym(1, "w");
+    let binder = Free::local(2, Some("v"));
+    let v = Term::free_var(&binder);
+    let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
+    let map_by = |body: Term| {
+        Term::intrinsic(Intrinsic::list_map(
+            nat_type(),
+            nat_type(),
+            xs.clone(),
+            Term::func([(binder.clone(), nat_type())], body),
+        ))
+    };
+    let is_map = |term: &Term| matches!(&**term, Subterm::Intrinsic(Intrinsic::ListMap { .. }));
+
+    assert_eq!(fold(map_by(v.clone())), xs, "the lambda as written");
+    assert_eq!(
+        fold(map_by(add(v.clone(), zero.clone()))),
+        xs,
+        "`v + 0` reduces to the binder"
+    );
+    assert!(
+        is_map(&fold(map_by(add(v, lit(1))))),
+        "`v + 1` is not the binder"
+    );
+    assert!(
+        is_map(&fold(map_by(add(other, zero)))),
+        "a variable that is not the binder is a constant function"
+    );
+}

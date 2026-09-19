@@ -31,10 +31,6 @@ impl ClosedHost for Context {
     fn closed_body_at(&self, name: &Free) -> Option<&Term> {
         self.var_reduct_at(name)
     }
-
-    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
-        self.fresh(hint)
-    }
 }
 
 /// Whether the closed machine may take `term` in this context: the representation-side gate ([`accelerable`]) plus the judgment-side one — no refinement of any kind registered, suppressed or live, because a refined closed scrutinee *is* the arm's assumed value, a refined projection is its recorded reduct, and a *suppressed* key must stay withheld rather than be evaluated.
@@ -54,6 +50,10 @@ impl Reducer for Context {
 
     fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
         Context::spend(self, cost)
+    }
+
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
+        self.fresh(hint)
     }
 }
 

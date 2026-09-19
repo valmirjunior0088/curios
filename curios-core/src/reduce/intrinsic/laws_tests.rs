@@ -1100,6 +1100,27 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
                 vec![(&list_base, nat_list(&[1, 2])), (&nat_elem, lit(5))],
             ],
         ),
+        // A map by a function whose body *reduces* to its binder is the list: the identity is read as conversion reads it, so `(v) => v + 0` collapses as `(v) => v` does.
+        (
+            "map(xs, (v) => v + 0) = xs",
+            {
+                let binder = Free::local(15, Some("v"));
+                Term::intrinsic(Intrinsic::list_map(
+                    nat_type(),
+                    nat_type(),
+                    xs.clone(),
+                    Term::func(
+                        [(binder.clone(), nat_type())],
+                        plus(Term::free_var(&binder), lit(0)),
+                    ),
+                ))
+            },
+            xs.clone(),
+            vec![
+                vec![(&list_base, nat_list(&[]))],
+                vec![(&list_base, nat_list(&[1, 2]))],
+            ],
+        ),
         (
             "len(append(xs, a)) = len(xs) + 1",
             list_len(list_append(xs.clone(), a.clone())),

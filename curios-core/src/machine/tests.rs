@@ -42,6 +42,11 @@ impl Reducer for Host {
         self.budget -= cost.get();
         Ok(())
     }
+
+    fn fresh_binder(&mut self, _hint: Option<&str>) -> Free {
+        self.minted += 1;
+        Free::local(1_000_000 + self.minted, Some("fresh"))
+    }
 }
 
 impl ClosedHost for Host {
@@ -51,11 +56,6 @@ impl ClosedHost for Host {
 
     fn closed_body_at(&self, name: &Free) -> Option<&Term> {
         self.definitions.get(name)
-    }
-
-    fn fresh_binder(&mut self, _hint: Option<&str>) -> Free {
-        self.minted += 1;
-        Free::local(1_000_000 + self.minted, Some("fresh"))
     }
 }
 

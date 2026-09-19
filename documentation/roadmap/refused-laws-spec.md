@@ -2,7 +2,7 @@
 
 ## Status
 
-Not refined yet. The refused half of `curios/src/tests/laws.rs` was read row by row against the tree, and what that found is below: the map row is a syntactic test and not extensionality, a decision made at the comparison needs no normal form, and the refused half is itself incomplete by the grid's own rule. Every row has a mechanism within reach. The shift by a literal count, parity and the position inside a window have landed and left this file; the rest are not started. The rows are independent of one another, so this file is a set of lifts under one acceptance bar and not a sequence.
+Not refined yet. The refused half of `curios/src/tests/laws.rs` was read row by row against the tree, and what that found is below: a decision made at the comparison needs no normal form, and the refused half is itself incomplete by the grid's own rule. Every row has a mechanism within reach. The shift by a literal count, parity, the position inside a window and the map by the identity have landed and left this file; De Morgan and absorption are not started. The rows are independent of one another, so this file is a set of lifts under one acceptance bar and not a sequence.
 
 ## Why it exists
 
@@ -17,11 +17,8 @@ Taken **2026-09-19** at `c1fc7d16`, through the line the grid itself reads: each
 | Row | Today | Recorded reason | Does the reason stand |
 | --- | --- | --- | --- |
 | `Eq(Bool/not(b && c), Bool/not(b) \|\| Bool/not(c))` and `Eq(b \|\| (b && c), b)` | refused | "need a normal form past the leaf set" | Yes for a *rewriting* normal form; a comparison-time decision needs none |
-| `Eq(List/map(xs, (v) => v + 0), xs)` | refused | the fold tests the lambda as written, before anything reduces its body | Yes, and the test is the defect. See below |
 
-**The map row is a syntactic test, not extensionality.** `Eq(@(Nat) -> Nat, (v: Nat) => v + 0, (v: Nat) => v)` is held, and so is `Eq(List/map(xs, (v) => v), xs)`. Their composition is refused, and so is `Eq(List/map(xs, (v) => v + 0), List/map(xs, (v) => v))`. The cause is `is_identity` in `curios-core/src/reduce/intrinsic.rs`: one binder whose body *is* that binder, tested on the lambda as `reducer.reduce` left it, which is weak-head and so never looks under the binder. A function that is the identity only pointwise — `(v) => match v | 0 => 0 | k + 1 => k + 1 end` — is the extensionality case, and it is not the row the grid states.
-
-**The refused half is incomplete by the grid's own rule.** "State a row at every carrier, and state it first." Refused today and stated nowhere: the duals of De Morgan and absorption, and distribution of `&&` over `||`; and map fusion, `map(map(xs, f), g) = map(xs, (v) => g(f(v)))`.
+**The refused half is incomplete by the grid's own rule.** "State a row at every carrier, and state it first." Refused today and stated nowhere: the duals of De Morgan and absorption, and distribution of `&&` over `||`.
 
 ## The acceptance every lift shares
 
@@ -45,23 +42,15 @@ The recorded reason assumes the answer is a normal form. [A stuck comparison is 
 
 (a) is the one that fits both records. **To decide:** the cap, which is a theory constant; and whether a tautology should *reduce* to `true`. A comparison-time rule closes `Eq(e, true)` by `refl`, and `Bool/holds_of_eq` turns that into `Bool/Holds(e)` in one written step, but an obligation the elaborator fills by reduction is not filled — that would take the decision into the fold, where the cliff is.
 
-## A map by a function convertible to the identity
-
-The test is the defect, so the lift is the test. Open the binder, weak-head reduce the body, and ask whether what is left is the binder: `(v) => v + 0` and `(v) => ((w) => w)(v)` pass, the pointwise `match` stays stuck and stays refused — and becomes the row that carries the extensionality comment, which belongs to it.
-
-- **Fold-side or probe-side.** Fold-side, `map(xs, (v) => v + 0)` *reduces* to `xs`, so `len`, `get` and every later fold see through it; it would be the first fold in `reduce::intrinsic` to open a binder — none does today — and the `Reducer` trait offers `reduce`, `reduce_forced` and `spend`, no fresh variable and no conversion. Probe-side, in both converters' intrinsic congruence, going under a binder is everyday work and the two sides merely compare equal. **To decide**, on what opening a binder inside a fold costs the trait.
-- **Carrier:** `List` alone has `map`.
-
 ## Adjacent items that are not this one
 
 - **Hypotheses feeding the algebra.** With no hypothesis in scope `compare_nat` is already complete for `<` and `<=` — a side still holding a symbol is unbounded — so beyond the gcd test what an omega-style procedure adds is hypotheses. [A bound is stated in a decided proposition and discharged by reduction](../design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md) parks it as "a larger and separate capability" and [A closed term evaluates at an interpreter's speed](faster-conversion-oracle-spec.md) says it wants its own file. The smallest step that way is `nat_dominators` reading a guard in scope, which puts a hypothesis inside conversion and owes the metatheory that move has always owed. The route that fits [Proof automation writes terms into the source and is never trusted](proof-automation-spec.md) is a reflected checker with a certificate.
 - **Summands paired up to conversion.** `Eq(f(a + b) + g(c + d), g(d + c) + f(b + a))` is refused while `Eq(f(a + b), f(b + a))` and commutation each hold: `Nat::cancel_common` pairs summands by structural identity, the incompleteness falling on the declining side by design. It is the same family as the map row — a syntactic test where conversion is what is meant — and a larger change, since `cancel_common` takes no reducer and its stability contract is what keeps the peel terminating.
-- **Fusion.** `map` after `map`, and `fold` after `map`. Stated here only as refused rows to add.
+- **Fusion.** `map` after `map` is a refused row of the grid with its reason; `fold` after `map` is the same candidate one fold over.
 
 ## What has to be decided
 
 - Whether a Boolean tautology reduces, or only compares; and the cap.
-- Whether a fold may open a binder, which settles the map row's side.
 - Whether the missing refused rows are stated as one change ahead of every lift, or each with its own.
 
 ## Deliberately not specified
@@ -70,20 +59,18 @@ The value of the truth table's cap and the unit it is charged in. `Int/shr`'s la
 
 ## The seam it comes back through
 
-`curios/src/tests/laws.rs` for every row. `normalize_bool`, `align_comparisons`, `dual_comparison` and `spine.rs`'s `peel_bool` for the Boolean rows; `is_identity` and the `ListMap` arm for the map row. Both converters' intrinsic congruences — `curios-cert/src/kernel/convert/intrinsic.rs` and `curios-elab/src/convert/intrinsic.rs` — and `curios-analysis/src/invert.rs` for anything probe-side. `reduce::intrinsic::laws_tests`, `compare_tests` and `spine`'s tests for the value grids.
+`curios/src/tests/laws.rs` for every row. `normalize_bool`, `align_comparisons`, `dual_comparison` and `spine.rs`'s `peel_bool` for the Boolean rows. Both converters' intrinsic congruences — `curios-cert/src/kernel/convert/intrinsic.rs` and `curios-elab/src/convert/intrinsic.rs` — and `curios-analysis/src/invert.rs` for anything probe-side. `reduce::intrinsic::laws_tests`, `compare_tests` and `spine`'s tests for the value grids.
 
 ## How to retake the measurements
 
 ```sh
 cargo run --package curios -- wonder diagnostics - <<'CRS' | grep -E '^ +[0-9]+ \| let|≈ Eq/refl'
-use /std/{Nat, Int, Bool, List, Eq, Io};
+use /std/{Bool, Eq, Io};
 
 let absorb(b: Bool, c: Bool) -> Eq(b || (b && c), b) = ?;
-let mapped(xs: List(Nat)) -> Eq(List/map(xs, (v) => v + 0), xs) = ?;
-let functions: Eq(@(Nat) -> Nat, (v: Nat) => v + 0, (v: Nat) => v) = ?;
-let identity(xs: List(Nat)) -> Eq(List/map(xs, (v) => v), xs) = ?;
+let excluded(b: Bool) -> Eq(b || Bool/not(b), true) = ?;
 Io/pure(())
 CRS
 ```
 
-A report prints its candidates above the source line it belongs to, so a `? ≈ Eq/refl()` line marks the `let` that *follows* it as held, and the bare listing after the last report repeats every line without them. `functions` and `identity` are held and the other two are not.
+A report prints its candidates above the source line it belongs to, so a `? ≈ Eq/refl()` line marks the `let` that *follows* it as held, and the bare listing after the last report repeats every line without them. `excluded` is held and `absorb` is not.

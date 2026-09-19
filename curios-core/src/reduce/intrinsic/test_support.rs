@@ -8,6 +8,16 @@ use {
     curios_utilities::{Grain, PackedBin},
 };
 
+/// A binder no fixture spells: the suites name their symbols by small indices, so one minted far above them aliases none, and a process-wide counter keeps two openings in one test apart.
+fn fresh(hint: Option<&str>) -> Free {
+    static MINTED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1_000_000);
+
+    Free::local(
+        MINTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        hint,
+    )
+}
+
 /// A reducer that reduces nothing. Every operand below is already a literal — a weak-head normal form — so no strategy is involved, and running the comparison body against an inert reducer says exactly that: the outcome is decided by the structural compare, not by anything unfolded.
 pub(super) struct Inert;
 
@@ -23,6 +33,10 @@ impl Reducer for Inert {
     /// Unbudgeted: these fixtures are about what a fold *decides*, and a limit would only decide it a second time.
     fn spend(&mut self, _cost: Cost) -> Result<(), ReduceError> {
         Ok(())
+    }
+
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
+        fresh(hint)
     }
 }
 
@@ -64,6 +78,10 @@ impl Reducer for Folding {
     fn spend(&mut self, _cost: Cost) -> Result<(), ReduceError> {
         Ok(())
     }
+
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
+        fresh(hint)
+    }
 }
 
 /// [`Folding`] under a budget, for the gates whose subject is a *charge* rather than a value.
@@ -95,6 +113,10 @@ impl Reducer for Budgeted {
             }
             None => Err(ReduceError::exhausted(self.remaining, cost)),
         }
+    }
+
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
+        fresh(hint)
     }
 }
 

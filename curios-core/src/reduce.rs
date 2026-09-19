@@ -2,7 +2,7 @@ mod intrinsic;
 pub use intrinsic::*;
 
 use {
-    super::{Category, Cost, Subterm, Term, UniverseError},
+    super::{Category, Cost, Free, Subterm, Term, UniverseError},
     curios_abi::ForeignFunction,
     curios_num::{Integer, Natural},
     curios_utilities::Span,
@@ -116,4 +116,7 @@ pub trait Reducer {
     ///
     /// A saturated cost is refused outright rather than compared, so a size that overflowed can never be handed to an allocator; [`Cost`]'s module documentation carries the argument. Charging nothing is still a call — a site that computes [`Cost::NOTHING`] because it shares rather than builds is saying so, and saying so is what the audit checks.
     fn spend(&mut self, cost: Cost) -> Result<(), ReduceError>;
+
+    /// A fresh binder identity, for a fold that must look under a binder to decide — `List/map`'s identity test opens the mapped function's body on one, and the closed machine's eta probe does the same. The identity space is the strategy's, since a binder minted here must alias none the lowerer, the elaborator or the archived prelude minted; it is assumed at no type, because what is asked of it is a weak-head reduct and never a judgment.
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free;
 }

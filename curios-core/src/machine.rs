@@ -38,16 +38,13 @@ fn machine_frame() -> Cost {
     Cost::buffer(2)
 }
 
-/// What the machine asks of its host: the reduction seam every intrinsic fold already drives, plus the judgment the strategy owns — what a global unfolds to, and a fresh binder identity for the eta probe. Charges land on the host's counter through [`Reducer::spend`], so both checkers price a machine run identically because both run the same machine.
+/// What the machine asks of its host: the reduction seam every intrinsic fold already drives — a fresh binder identity for the eta probe among it — plus the judgment the strategy owns, which is what a global unfolds to. Charges land on the host's counter through [`Reducer::spend`], so both checkers price a machine run identically because both run the same machine.
 pub trait ClosedHost: Reducer {
     /// What `name` unfolds to through a bare occurrence. A universe-polymorphic definition is withheld, exactly as the host's own delta withholds it.
     fn closed_body(&self, name: &Free) -> Option<&Term>;
 
     /// What `name` unfolds to at a stated universe instance — the one position a polymorphic definition may be unfolded from.
     fn closed_body_at(&self, name: &Free) -> Option<&Term>;
-
-    /// A fresh binder identity, for the eta probe's openings.
-    fn fresh_binder(&mut self, hint: Option<&str>) -> Free;
 }
 
 /// Whether `term` is in the machine's domain: no local frees and no metavariables, read off the per-node cached bits in O(1). The hosts add their own judgment-side condition — no refinements in scope — at the call site.
@@ -183,6 +180,10 @@ impl<H: Reducer> Reducer for Tap<'_, H> {
 
     fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
         self.host.spend(cost)
+    }
+
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
+        self.host.fresh_binder(hint)
     }
 }
 
