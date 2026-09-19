@@ -385,6 +385,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq(List/map(xs, (v) => match v | 0 => 0 | k + 1 => k + 1 end), xs)",
             // Fusion: a map of a map is one map by the composite, a law of the functor and not of the monoid. A candidate — a fold would build the composite lambda, and nothing makes the equation inadmissible — that no consumer has asked for.
             "Eq(List/map(List/map(xs, f), h), List/map(xs, (v) => h(f(v))))",
+            // Fusion's other half: a fold over a map is one fold whose step applies the function first. The same candidate for the same reason — the fold would build the composite step — and `len(map(xs, f)) = len(xs)`, held above, is the one instance of it a consumer has asked for.
+            "Eq(List/fold(List/map(xs, f), z, g), List/fold(xs, z, (v, acc) => g(f(v), acc)))",
         ],
     },
     Carrier {
