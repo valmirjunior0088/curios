@@ -9,8 +9,8 @@ use {
     crate::Context,
     curios_core::{
         Intrinsic, Nat, Operand, Peel, ReduceError, Subterm, Term, Var, Visit, align_comparisons,
-        int_has_stuck_product, int_normalize, normalize_bool, peel_bin, peel_bool, peel_int_pair,
-        peel_list, peel_nat_pair, peel_position, peel_symmetric,
+        decide_bool, int_has_stuck_product, int_normalize, normalize_bool, peel_bin, peel_bool,
+        peel_int_pair, peel_list, peel_nat_pair, peel_position, peel_symmetric,
     },
     curios_utilities::{Grain, PackedBin, SyntaxRegistry},
 };
@@ -54,6 +54,14 @@ pub(crate) fn convert_intrinsic(
             }
         }
     };
+    // **Two `Bool` terms, one of them a connective, are first put to the truth table over their atoms** — the kernel's rule, stated once more here: it decides what no leaf set or local law relates, De Morgan and absorption and distribution, and changes no spelling. A metavariable among the leaves is an atom like any other, since agreement at every assignment holds whatever it is solved to. Undecided is not unequal, so everything below runs as it did.
+    if decide_bool(
+        context,
+        &Term::intrinsic(this.clone()),
+        &Term::intrinsic(that.clone()),
+    )? {
+        return Ok(true);
+    }
     // **Two `&&` trees, or two `||` trees, are flattened with their leaves forced before they are peeled** — the same demand by name as the stuck product's, because the fold leaves a stuck connective's right operand as written and the peel reads leaves without reducing.
     let (this, that) = match (
         normalize_bool(context, &this)?,

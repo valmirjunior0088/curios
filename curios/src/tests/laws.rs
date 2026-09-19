@@ -258,7 +258,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bool",
-        binders: "b: Bool, c: Bool, d: Bool",
+        binders: "b: Bool, c: Bool, d: Bool, x: Nat, y: Nat",
         held: &[
             "Eq(b && true, b)",
             "Eq(true && b, b)",
@@ -299,12 +299,32 @@ const CARRIERS: &[Carrier] = &[
             "Eq(b || Bool/not(b), true)",
             "Eq(b == Bool/not(b), false)",
             "Eq(b != Bool/not(b), true)",
-        ],
-        // De Morgan and absorption need a normal form past the leaf set, and neither is taken.
-        refused: &[
+            // The laws that relate one connective to another, which no single node sees and no leaf set holds: decided where two terms are compared, by a truth table over their atoms, so no spelling a guard was keyed on is ever changed. Absorption is the one whose other side is no connective at all.
             "Eq(Bool/not(b && c), Bool/not(b) || Bool/not(c))",
+            "Eq(Bool/not(b || c), Bool/not(b) && Bool/not(c))",
             "Eq(b || (b && c), b)",
+            "Eq(b && (b || c), b)",
+            "Eq(b, b || (b && c))",
+            "Eq(b && (c || d), (b && c) || (b && d))",
+            "Eq(Bool/xor(b, c), (b || c) && Bool/not(b && c))",
+            "Eq((b && c) || Bool/not(b) || Bool/not(c), true)",
+            // A comparison and its dual are one atom at two polarities.
+            "Eq(Bool/not(x < y && c), y <= x || Bool/not(c))",
         ],
+        refused: &[
+            // Controls, and none is a law: each pair differs at an assignment, the last by reading a comparison and its dual at one polarity.
+            "Eq(b || c, b)",
+            "Eq(b && c, b || c)",
+            "Eq(x < y && c, y <= x && c)",
+        ],
+    },
+    Carrier {
+        name: "Bool, at the table's cap",
+        binders: "a0: Bool, a1: Bool, a2: Bool, a3: Bool, a4: Bool, a5: Bool, a6: Bool, a7: Bool, a8: Bool",
+        // Absorption over eight atoms, which is the cap.
+        held: &["Eq(a0 || (a0 && a1 && a2 && a3 && a4 && a5 && a6 && a7), a0)"],
+        // The same law over nine: true, and declined, because a table doubles with every atom and the cap is where the question stops being asked. A candidate for a procedure that does not enumerate.
+        refused: &["Eq(a0 || (a0 && a1 && a2 && a3 && a4 && a5 && a6 && a7 && a8), a0)"],
     },
     Carrier {
         name: "List, the free monoid",

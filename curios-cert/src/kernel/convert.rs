@@ -37,7 +37,8 @@ use {
     curios_core::{
         Bound, Carrier, Cases, Cost, Field, FuncType, Global, InductType, Instance, Level, Many,
         MatchResult, Proj, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Three,
-        Tuple, TupleType, Two, instantiate_universe_levels_scoped, strip_universe_levels,
+        Tuple, TupleType, Two, decide_bool, instantiate_universe_levels_scoped, is_bool_connective,
+        strip_universe_levels,
     },
     curios_utilities::recurse,
     std::collections::HashSet,
@@ -435,6 +436,14 @@ fn structural(
             if this.as_rec_proj().is_some() && that.as_rec_proj().is_some() =>
         {
             Ok(rec_instances(kernel, this, that) == Some(true))
+        }
+
+        // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence never sees. The truth table over the two sides' atoms decides it equal or says nothing, and saying nothing leaves the pair where it was.
+        _ if is_bool_connective(this) || is_bool_connective(that) => {
+            match decide_bool(kernel, this, that)? {
+                true => Ok(true),
+                false => unfolded_retry(kernel, history, this, that),
+            }
         }
 
         // Two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.

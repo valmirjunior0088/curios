@@ -285,3 +285,26 @@ fn a_metavariable_does_not_convert_with_anything_else() {
         Err(KernelError::NotCore(_)),
     ));
 }
+
+/// A `Bool` connective against a term that is no intrinsic at all — absorption's shape — never reaches the intrinsic congruence, so the truth table over the two sides' atoms is asked at the head dispatch. The control differs at one assignment and stays apart.
+#[test]
+fn a_bool_tree_converts_with_the_bare_term_it_equals_at_every_assignment() {
+    let mut kernel = kernel();
+    let (b, c) = (
+        Term::free_var(&binder(0, "b")),
+        Term::free_var(&binder(1, "c")),
+    );
+    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+    let or = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolOr(left, right));
+    let absorbed = or(
+        b.clone(),
+        Term::intrinsic(Intrinsic::BoolAnd(b.clone(), c.clone())),
+    );
+
+    assert_eq!(convert(&mut kernel, &bool_type, &absorbed, &b), Ok(true));
+    assert_eq!(convert(&mut kernel, &bool_type, &b, &absorbed), Ok(true));
+    assert_eq!(
+        convert(&mut kernel, &bool_type, &or(b.clone(), c), &b),
+        Ok(false)
+    );
+}

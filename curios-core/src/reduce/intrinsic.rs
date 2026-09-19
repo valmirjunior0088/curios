@@ -19,6 +19,9 @@ use int::*;
 mod scalar;
 use scalar::*;
 
+mod truth;
+pub use truth::*;
+
 use {
     super::{ReduceError, Reducer},
     crate::{
@@ -1800,3 +1803,5 @@ mod nat_tests;
 mod shift_tests;
 #[cfg(test)]
 mod test_support;
+#[cfg(test)]
+mod truth_tests;

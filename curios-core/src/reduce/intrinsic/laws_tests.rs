@@ -2,7 +2,7 @@
 
 use {
     crate::{
-        Free, Intrinsic, Nat, Peel, Subterm, Term, peel_bin, peel_int_pair, peel_list,
+        Free, Intrinsic, Nat, Peel, Subterm, Term, decide_bool, peel_bin, peel_int_pair, peel_list,
         peel_nat_terms, peel_position,
     },
     curios_num::Integer,
@@ -752,6 +752,104 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
         (equal, stuck),
         (2, 2),
         "the grid stopped reaching both position verdicts",
+    );
+}
+
+// The truth table's one verdict, held over values: a pair it decides equal must be one `Bool` at every closed instantiation of its symbols — naturals as well as booleans, because the comparison atoms are *not* independent of one another and the table treats them as if they were, which is sound only in the direction it answers. The undecided pairs are tallied and promise nothing; among them is a law that is true of the values and invisible to the table, `x < y || x < y + 1` against `x < y + 1`, which is what declining costs.
+#[test]
+fn every_truth_table_decision_holds_at_every_closed_instantiation() {
+    let bool_b = Free::local(0, Some("b"));
+    let bool_c = Free::local(1, Some("c"));
+    let nat_x = Free::local(2, Some("x"));
+    let nat_y = Free::local(3, Some("y"));
+    let (b, c) = (Term::free_var(&bool_b), Term::free_var(&bool_c));
+    let (x, y) = (Term::free_var(&nat_x), Term::free_var(&nat_y));
+
+    let boolean = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+    let and = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolAnd(left, right));
+    let or = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolOr(left, right));
+    let xor = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolXor(left, right));
+    let not = |term: Term| xor(term, boolean(true));
+    let less = Term::intrinsic(Intrinsic::nat_lt(x.clone(), y.clone()));
+    let at_most = Term::intrinsic(Intrinsic::NatLe(y.clone(), x.clone()));
+    let below_next = Term::intrinsic(Intrinsic::nat_lt(x.clone(), plus(y.clone(), lit(1))));
+
+    let cases = [
+        (
+            "not(b && c) ~ not(b) || not(c)",
+            not(and(b.clone(), c.clone())),
+            or(not(b.clone()), not(c.clone())),
+        ),
+        (
+            "b || (b && c) ~ b",
+            or(b.clone(), and(b.clone(), c.clone())),
+            b.clone(),
+        ),
+        (
+            "xor(b, c) ~ (b || c) && not(b && c)",
+            xor(b.clone(), c.clone()),
+            and(or(b.clone(), c.clone()), not(and(b.clone(), c.clone()))),
+        ),
+        (
+            "not(x < y && c) ~ y <= x || not(c)",
+            not(and(less.clone(), c.clone())),
+            or(at_most.clone(), not(c.clone())),
+        ),
+        // Absorption over two atoms that are correlated: decided, and true of the values.
+        (
+            "(x < y && x < y + 1) || x < y + 1 ~ x < y + 1",
+            or(and(less.clone(), below_next.clone()), below_next.clone()),
+            below_next.clone(),
+        ),
+        // True of the values and invisible to the table, which sees two atoms where there is an implication.
+        (
+            "x < y || x < y + 1 ~ x < y + 1",
+            or(less.clone(), below_next.clone()),
+            below_next,
+        ),
+        ("b || c ~ b", or(b.clone(), c.clone()), b.clone()),
+        (
+            "x < y && c ~ y <= x && c",
+            and(less, c.clone()),
+            and(at_most, c.clone()),
+        ),
+    ];
+
+    let (mut equal, mut undecided) = (0, 0);
+
+    for (label, left, right) in cases {
+        let decided = decide_bool(&mut Folding, &left, &right).expect("reduces");
+        match decided {
+            true => equal += 1,
+            false => undecided += 1,
+        }
+
+        for (first, second) in [(false, false), (false, true), (true, false), (true, true)] {
+            for left_nat in [0u32, 1, 2] {
+                for right_nat in [0u32, 1, 2] {
+                    let close = |term: &Term| {
+                        let term = at(term.clone(), &bool_b, boolean(first));
+                        let term = at(term, &bool_c, boolean(second));
+                        let term = at(term, &nat_x, lit(left_nat));
+                        fold(at(term, &nat_y, lit(right_nat)))
+                    };
+
+                    if decided {
+                        assert_eq!(
+                            close(&left),
+                            close(&right),
+                            "`{label}` was decided equal but differs at b = {first}, c = {second}, x = {left_nat}, y = {right_nat}",
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    assert_eq!(
+        (equal, undecided),
+        (5, 3),
+        "the grid stopped reaching both answers",
     );
 }
 

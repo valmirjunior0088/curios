@@ -32,8 +32,8 @@ use {
         Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
         Level, Many, Match, MatchResult, Metavar, Proj, Rec, ReduceError, Scope, Struct,
         StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, Variant, Visit,
-        instantiate_universe_levels_scoped, strip_universe_levels,
+        UniverseConstraintOrigin, UniverseContext, Variant, Visit, decide_bool,
+        instantiate_universe_levels_scoped, is_bool_connective, strip_universe_levels,
     },
     curios_utilities::Plicity,
     std::{
@@ -1674,6 +1674,16 @@ impl Convert {
                         continue;
                     }
                 }
+            }
+
+            // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence below never sees. The truth table over the two sides' atoms decides it equal or says nothing, and saying nothing leaves the pair to the dispatch as it was; the kernel states the same arm.
+            if !matches!(
+                (&*this, &*that),
+                (Subterm::Intrinsic(_), Subterm::Intrinsic(_))
+            ) && (is_bool_connective(&this) || is_bool_connective(&that))
+                && decide_bool(context, &this, &that)?
+            {
+                continue;
             }
 
             let syntax = context.syntax();

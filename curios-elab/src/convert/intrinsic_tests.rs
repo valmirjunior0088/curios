@@ -321,3 +321,22 @@ fn intrinsic_bin_slice_recurses_into_operands() {
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
+
+// A `Bool` connective against a term that is no intrinsic at all — absorption's shape — never reaches the intrinsic congruence, so the truth table over the two sides' atoms is asked at the head dispatch. The control differs at one assignment and stays apart.
+#[test]
+fn a_bool_tree_converts_with_the_bare_term_it_equals_at_every_assignment() {
+    let mut context = context();
+    let (b, c) = (
+        Term::free_var(&context.fresh(Some("b"))),
+        Term::free_var(&context.fresh(Some("c"))),
+    );
+    let or = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolOr(left, right));
+    let absorbed = or(
+        b.clone(),
+        Term::intrinsic(Intrinsic::BoolAnd(b.clone(), c.clone())),
+    );
+
+    assert_eq!(conv(&mut context, &absorbed, &b), Ok(true));
+    assert_eq!(conv(&mut context, &b, &absorbed), Ok(true));
+    assert_eq!(conv(&mut context, &or(b.clone(), c), &b), Ok(false));
+}
