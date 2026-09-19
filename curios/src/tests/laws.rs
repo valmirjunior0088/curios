@@ -32,6 +32,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq((x + y) + z, x + (y + z))",
             // Congruence under an opaque head: the arguments are compared as numbers.
             "Eq(f(x + y), f(y + x))",
+            // A summand meets its own spelling. Summands pair by identity, and two occurrences of one operator are two terms while the signature holding them is checked — each carries its own witness metavariable, solved and not yet spliced — so this was refused by the elaborator alone, as `x` against `y` under the positional congruence, until the solved ones were substituted before the peel.
+            "Eq(f(x + 1) + f(y + 1), f(y + 1) + f(x + 1))",
         ],
         // Each step of this holds — the row above, and commutation — and their composition does not: cancellation pairs two summands by identity up to universe instances, never up to conversion, so `f(x + y)` does not meet `f(y + x)` inside a sum. A candidate, and a larger one than it looks: `Nat::cancel_common` takes no reducer, and handing back an untouched pair identically is what keeps the peel terminating.
         refused: &["Eq(f(x + y) + g(y + z), g(z + y) + f(y + x))"],
@@ -209,8 +211,10 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Int",
-        binders: "i: Int, j: Int, k: Int",
+        binders: "i: Int, j: Int, k: Int, h: (Int) -> Int",
         held: &[
+            // A summand meets its own spelling, as on `Nat`.
+            "Eq(h(i + 1) + h(j + 1), h(j + 1) + h(i + 1))",
             "Eq(i + 0, i)",
             "Eq(0 + i, i)",
             "Eq(i - 0, i)",
@@ -261,8 +265,10 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bool",
-        binders: "b: Bool, c: Bool, d: Bool, x: Nat, y: Nat",
+        binders: "b: Bool, c: Bool, d: Bool, x: Nat, y: Nat, p: (Nat) -> Bool",
         held: &[
+            // A leaf meets its own spelling, as a summand does on `Nat`.
+            "Eq(p(x + 1) && p(y + 1), p(y + 1) && p(x + 1))",
             "Eq(b && true, b)",
             "Eq(true && b, b)",
             "Eq(b && false, false)",

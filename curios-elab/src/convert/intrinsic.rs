@@ -22,6 +22,16 @@ pub(crate) fn convert_intrinsic(
     this: Intrinsic,
     that: Intrinsic,
 ) -> Result<bool, ReduceError> {
+    // **A summand meets its own spelling only once its solved metavariables are substituted.** Every peel below pairs by identity — a summand cancels against a summand, a leaf joins a leaf set, an atom indexes a truth table — and while the signature holding them is being checked, two occurrences of `a + 1` are two terms: an operator reaches its concept through a witness metavariable of its own, solved to the one witness and not yet spliced. So `f(a + 1) + f(c + 1)` against its commutation shared no summand, fell to the positional congruence, and was refused there as `a` against `c`. This is the elaborator's alone to do: the kernel is handed zonked terms, and accepted the equation all along.
+    let materialized = |context: &Context, intrinsic: Intrinsic| {
+        let solved = crate::zonk_solved_term_metas(context, &Term::intrinsic(intrinsic.clone()));
+        match &*solved {
+            Subterm::Intrinsic(solved) => solved.clone(),
+            _ => intrinsic,
+        }
+    };
+    let this = materialized(context, this);
+    let that = materialized(context, that);
     // **A pair of `Nat`s decides how much of itself to build** — the kernel's rule, stated once more here because the two checkers keep their strategies apart on purpose. Both sides arrived at weak-head form. A literal against a sum with nothing left to force clashes from the head; anything else is forced to its linear combination first, and the peel below reads that pair. A `Stuck` verdict then falls into the operand congruence on the normalized operands rather than re-enqueueing the pair, which would come back here.
     // **Two symbolic `Nat`s are distributed before they are peeled.** The fold leaves a product of two symbolic sums as a stuck node, so `(a + b) · (c + d)` and its expansion arrive as two shapes the peel cannot cancel against each other; normalizing both sides is the one demand that relates them, and it is asked for here by name. A literal on either side needs nothing: sums and differences are already merged and cancelled by the fold, so the peel decides those as it always did.
     let as_intrinsic = |term: &Term| match &**term {
