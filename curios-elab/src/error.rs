@@ -5,7 +5,7 @@ use display::*;
 mod tests;
 
 use {
-    super::{Erased, HeadKey, WitnessKey},
+    super::{Erased, WitnessKey},
     curios_core::{
         Atom, CalleeId, Free, Global, Imports, Level, Module, Polarity, ReduceError, Spelling,
         Subterm, Term, UniverseConstraintOrigin, UniverseError, build_rename,
@@ -63,7 +63,7 @@ pub struct EmbeddingDiagnosis {
     pub chain: Vec<(String, Qualifier)>,
 }
 
-/// The shape-specific half of a missing-witness report, computed when the unresolved goal keys on a *labeled* tuple shape or a *marked* function type and the same key with every label dropped and every mark made explicit does have a witness. Labels are part of a tuple type's identity and plicity marks of a function type's, which are the surprises an anonymous-shape key has; a reader who meets one deserves the rule rather than a bare miss.
+/// The shape-specific half of a missing-witness report, computed when the unresolved goal keys on a *labeled* tuple shape and the same key with every label dropped does have a witness. Labels are part of a tuple type's identity, which is the surprise an anonymous-shape key has; a reader who meets it deserves the rule rather than a bare miss.
 #[derive(Debug)]
 pub struct ShapeDiagnosis {
     pub wanted: WitnessKey,

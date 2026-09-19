@@ -66,7 +66,7 @@ impl fmt::Display for WitnessKey {
     }
 }
 
-/// One rigid head inside a [`WitnessKey`]: the nominal (inductive or struct) qualified name, an intrinsic type constructor, an anonymous product's shape, or a function type's plicity vector. Parameters past the heads are checked by unification at resolution time, not by the key.
+/// One rigid head inside a [`WitnessKey`]: the nominal (inductive or struct) qualified name, an intrinsic type constructor, or an anonymous product's shape. A function type has no head here and is refused as unkeyable. Parameters past the heads are checked by unification at resolution time, not by the key.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[curios_archive::archived]
 pub enum HeadKey {

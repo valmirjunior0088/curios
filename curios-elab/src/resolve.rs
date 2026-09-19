@@ -87,7 +87,7 @@ fn no_witness_error(context: &mut Context, goal: &Term, provenance: &WitnessOrig
     )
 }
 
-/// When `goal` keys on a *labeled* tuple shape or a *marked* function type and the same key with every label dropped and every mark made explicit does have a witness, the shape-specific diagnosis its missing-witness report carries: the two keys, so the reader meets the rule — labels are part of a tuple type's identity, plicity marks of a function type's — rather than a bare miss. Those are the surprises keying on an anonymous shape has; every other way to miss the table is a miss for the ordinary reason. Error-path only; a diagnosis that cannot be computed is simply absent.
+/// When `goal` keys on a *labeled* tuple shape and the same key with every label dropped does have a witness, the shape-specific diagnosis its missing-witness report carries: the two keys, so the reader meets the rule — labels are part of a tuple type's identity — rather than a bare miss. That is the surprise keying on an anonymous shape has; every other way to miss the table is a miss for the ordinary reason. Error-path only; a diagnosis that cannot be computed is simply absent.
 pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<ShapeDiagnosis>> {
     let goal = reduce_with(context, goal).ok()?;
     let (concept_name, _, params) = as_concept_app(context, &goal)?;
@@ -961,7 +961,7 @@ pub(crate) fn register_witness(
 
     // The orphan rule: a witness may be declared only where the concept it witnesses, or at least one rigid type in its key, is already declared — never by a third root unrelated to both. Without this, two unrelated roots could each legally `satisfy` the same `(concept, key)` pair, a collision that is unfixable once both are linked into one program (see `documentation/roadmap.md`'s Type System section). Checked before the duplicate-key insert below: "not allowed to register this at all" is the more fundamental violation than "and it also collides."
     //
-    // **No root is exempt.** `/std` used to be, on the grounds that it and `/sys` are one coordinated standard library rather than independent packages — but every concept `/std` witnesses is `/std`'s own, so clause one admits all 185 of its witnesses on its own terms, including the tuple-keyed ones and the ones keyed on a `/sys`-homed carrier whose head owns nothing. An exemption that decides nothing is a rule nobody can check, and the one root it covered was the one corpus large enough to have proved it unnecessary.
+    // **No root is exempt.** `/std` used to be, on the grounds that it and `/sys` are one coordinated standard library rather than independent packages — but every concept `/std` witnesses is `/std`'s own, so clause one admits every one of its witnesses on its own terms, including the tuple-keyed ones and the ones keyed on a `/sys`-homed carrier whose head owns nothing. An exemption that decides nothing is a rule nobody can check, and the one root it covered was the one corpus large enough to have proved it unnecessary.
     //
     // Ownership is compared by *mount prefix*, which is what makes the rule bite between two ordinary units at all. It used to compare `RootId`s, and every ordinary root was the one value `RootId::Entry` — so two packages compared equal and the rule went inert exactly where two independent authors could collide.
     //

@@ -6,7 +6,7 @@
 mod tests;
 
 use {
-    super::{Callee, Erased, Error, GoalReport, HeadKey, ShapeDiagnosis, Underivable, WitnessKey},
+    super::{Callee, Erased, Error, GoalReport, ShapeDiagnosis, Underivable, WitnessKey},
     crate::ordinal,
     curios_core::{CalleeId, Free, Spelling, Subterm, Term},
     curios_utilities::{Grain, Plicity, Qualifier},
@@ -784,20 +784,11 @@ impl fmt::Display for Displayed<'_> {
                 write!(f, "no witness of {goal} found")?;
                 if let Some(diagnosis) = shape {
                     let ShapeDiagnosis { wanted, bare } = &**diagnosis;
-                    // Which identity the twin dropped decides the sentence: a differing tuple pair means labels were dropped, otherwise the difference sits in a function type's marks. A key that mixes both surprises takes the label sentence — the remedy line names declaring the shape's witness either way.
-                    let labels = wanted.0.iter().zip(bare.0.iter()).any(|(wanted, bare)| {
-                        matches!(wanted, HeadKey::TupleType(_)) && wanted != bare
-                    });
-                    match labels {
-                        true => write!(
-                            f,
-                            "\n  labels are part of the type: the witness for {bare} does not cover {wanted}\n  name a struct for the labeled product, or declare the witness for this shape"
-                        )?,
-                        false => write!(
-                            f,
-                            "\n  plicity marks are part of the type: the witness for {bare} does not cover {wanted}\n  declare the witness for this shape"
-                        )?,
-                    }
+                    // A tuple shape is the only identity a twin can drop, so the sentence names labels and nothing decides between two of them: `diagnose_shape` bares tuple labels alone and answers `None` when that leaves the key unchanged. It also carried a plicity-marks sentence, for the function keys that were keyed on their marks; a function type is not keyed at all now, so that arm could not fire and is gone with the key.
+                    write!(
+                        f,
+                        "\n  labels are part of the type: the witness for {bare} does not cover {wanted}\n  name a struct for the labeled product, or declare the witness for this shape"
+                    )?;
                 }
                 match embedding {
                     None => write!(f, "\n  needed by {} for {binder}", callee.phrase(spelling)),
