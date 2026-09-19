@@ -89,14 +89,17 @@ fn a_constant_floor_chains_through_the_hypotheses() {
     assert!(!entails(&[leq(&one, &u)], &one, &v));
 }
 
-/// A premise carrying atoms of its own is skipped, and that is *incompleteness* rather than a verdict: `u + 1 ≤ v` does bound `1 ≤ v`, since `u` is a natural, and this rule declines to say so. Following it would mean bounding the premise's own atoms first, which is the atoms' side of the walk; the constant's side takes one step of transitivity and no more, so what it refuses it refuses in the safe direction.
+/// A premise is read at its own floor, so one carrying atoms bounds a constant: `u + 1 ≤ v` says `v` is at least one, `u` being a natural whose offset is carried whatever it is assigned. The premise's *constant* is zero there, and reading that instead of its floor was an incompleteness this rule was written with and then lost.
 #[test]
-fn a_premise_carrying_atoms_bounds_no_constant() {
+fn a_premise_carrying_atoms_bounds_a_constant_at_its_floor() {
     let (u, v) = (param(0), param(1));
     let one = Level::constant(1);
+    let two = Level::constant(2);
     let raised = u.checked_add(1).expect("level admits the offset");
 
-    assert!(!entails(&[leq(&raised, &v)], &one, &v));
+    assert!(entails(&[leq(&raised, &v)], &one, &v));
+    // And no further than the floor reaches: `u + 1` carries one, not two.
+    assert!(!entails(&[leq(&raised, &v)], &two, &v));
 }
 
 /// Every level over two parameters with constants and offsets below three — enough to reach every clause either predicate has.
