@@ -558,7 +558,7 @@ pub enum Panic {
     IntCarrier,
     /// A packed or list read, or a window, past the end of its value.
     OutOfBounds,
-    /// A `Flt` decoded from a byte string that is not four bytes long.
+    /// A `Flt` decoded from a byte string that is not eight bytes long.
     FltDecode,
     /// A recursive value read while its own initializer is still running — a cycle the eager verifier could not see through a closure, met by forcing.
     Cycle,

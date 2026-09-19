@@ -1110,7 +1110,7 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
         ),
         SysModule::carrier(
             "Flt",
-            &["A binary32 floating-point number."],
+            &["A binary64 floating-point number."],
             pub_let("Flt", type_(), flt()),
             items(flt_ops(syntax)),
         ),

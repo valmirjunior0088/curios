@@ -73,7 +73,7 @@ pub use Bits/{let Bits};
 pub mod Bytes;
 pub use Bytes/{let Bytes};
 
---- The cons list, written `[...]` with `..` spreads.
+--- A run of values of one type, written `[...]` with `..` spreads.
 ---
 --- `fold` walks left to right with `f(elem, acc)`; the right fold is the language's `; ih` binding on a list arm.
 pub mod List;

@@ -20,7 +20,7 @@ pub(crate) fn refusal_message(class: curios_cont::Panic) -> &'static str {
             "a read reached past the end of a Bits, Bytes or List value"
         }
         curios_cont::Panic::FltDecode => {
-            "a Flt was decoded from a byte string that is not four bytes long"
+            "a Flt was decoded from a byte string that is not eight bytes long"
         }
         curios_cont::Panic::Cycle => {
             "a recursive value was read while its own initializer was still running: the group's members form a cycle no forcing order can satisfy"
