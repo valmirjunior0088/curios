@@ -48,7 +48,7 @@ fn small_packed_literal_rides_the_immediate() {
     );
     module.set_entry(main);
 
-    // Inside the envelope nothing is allocated and no data segment exists for the program's own constant: the value is one i31 constant. The refusal messages every module carries are data segments of their own, named `refusal/…`, and are not what this counts.
+    // Inside the envelope nothing is allocated and no data segment exists for the program's own constant: the value is one i31 constant. A refusal the code reaches brings a data segment of its own, named `refusal/…`, which is not what this counts.
     let wat = wat(&module);
     assert_contains(&wat, "ref.i31");
     assert_eq!(count(&wat, "array.new_data $bytes $const/"), 0);

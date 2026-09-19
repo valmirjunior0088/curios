@@ -25,7 +25,7 @@ fn constant_bin_literals_hoist_into_a_start_initialized_global() {
     let wat = wat(&bin_len());
     assert_contains(&wat, "global.set $const/");
     assert_contains(&wat, "global.get $const/");
-    // The program's one constant; the refusal messages are hoisted the same way under `refusal/…` and are not counted here.
+    // The program's one constant; a refusal's sentence is built by its helper from a `refusal/…` segment and is not counted here.
     assert_eq!(count(&wat, "array.new_data $bytes $const/"), 1);
 }
 

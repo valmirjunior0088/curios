@@ -6,7 +6,7 @@ use {
     super::{
         EmissionArg, EmissionBody, EmissionCallTarget, EmissionCellTarget, EmissionCode,
         EmissionData, EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue,
-        EmissionValueName, refusal_const_name, refusal_data,
+        EmissionValueName,
     },
     curios_utilities::{Grain, PackedBin},
     std::collections::HashMap,
@@ -63,10 +63,6 @@ pub(crate) fn hoist_consts(module: &mut EmissionModule) {
         hoist_region(&mut func.region, &mut interner);
     }
     module.consts = interner.consts;
-    // The refusal messages, after everything the program hoisted: `Table` reads its const index off this vector, and the code emitter loads a message by the name `refusal_const_name` spells.
-    module.consts.extend(
-        curios_cont::Panic::ALL.map(|class| (refusal_const_name(class), refusal_data(class))),
-    );
 }
 
 /// Hoist one function's region tree: collect and intern its constants, then drop the hoisted bindings and rename every surviving occurrence. Two phases because a scalar may be demanded by an aggregate bound after uses of the scalar were already walked.

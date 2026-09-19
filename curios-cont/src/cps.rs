@@ -567,7 +567,7 @@ pub enum Panic {
 }
 
 impl Panic {
-    /// Every class, in declaration order: the emitter mints one message constant for each.
+    /// Every class, in declaration order: the order the emitter writes the refusal helpers a module reaches.
     pub const ALL: [Panic; 6] = [
         Panic::NatCarrier,
         Panic::IntCarrier,

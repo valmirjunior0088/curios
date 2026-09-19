@@ -3,7 +3,8 @@ use {
         Context, EmissionClosure, EmissionClosureName, EmissionData, EmissionFunction,
         EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter, ImmediateLayout,
         RopeEmitter, Table, bytes_sub_type, cell_sub_type, elems_sub_type, flt_sub_type,
-        rope_base_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
+        refusal_data_name, refusal_message, rope_base_sub_type, rope_leaf_sub_type,
+        rope_node_sub_type, rope_view_sub_type,
     },
     curios_abi::{ENTRY, EXIT, Namespace, PANIC, WireType},
     curios_utilities::{Grain, PackedBin},
@@ -693,6 +694,58 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
+    /// Add the refusal helpers the emitted code referenced: per class, a passive data segment holding the sentence and a function that builds the `$bytes` payload from it, hands that to `sys.panic` and ends in the `unreachable` the import's return would otherwise need. The payload is built where the refusal fires, a path taken at most once, so a module pays nothing at start-up for a message it never prints.
+    fn emit_refuse_funcs(&mut self) {
+        for (class, func_name) in self.table.refuse_funcs() {
+            let bytes = refusal_message(class).as_bytes().to_vec();
+            let length = bytes.len() as i32;
+            let data_name = refusal_data_name(class);
+            let type_name = curios_wasm::TypeName::from(func_name.as_str());
+
+            self.module.add_data(
+                data_name.clone(),
+                curios_wasm::DataSegment {
+                    mode: curios_wasm::DataMode::Passive,
+                    bytes,
+                },
+            );
+
+            self.module.add_type(
+                type_name.clone(),
+                curios_wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
+                        inputs: curios_wasm::ResultType::from([]),
+                        outputs: curios_wasm::ResultType::from([]),
+                    }),
+                },
+            );
+
+            let mut expr: curios_wasm::Expr = Default::default();
+            expr.push(curios_wasm::Instr::I32Const { value: 0 });
+            expr.push(curios_wasm::Instr::I32Const { value: length });
+            expr.push(curios_wasm::Instr::ArrayNewData {
+                type_name: self.table.bin_rope().payload,
+                data_name,
+            });
+            expr.push(curios_wasm::Instr::Call {
+                func_name: self.table.panic_func(),
+            });
+            expr.push(curios_wasm::Instr::Unreachable);
+
+            self.module.add_func(
+                func_name,
+                curios_wasm::Func {
+                    type_name,
+                    params: vec![],
+                    locals: vec![],
+                    expr,
+                },
+            );
+        }
+    }
+
     /// Add the rope helpers the emitted code referenced. Helpers whose bodies call other helpers go first: *building* a body references its callees through the table, so the callee used-flags must settle before they are read — deep host-boundary forms, then everything else whose body calls `force` (`norm`, `box`, `eql`, `map`, `slice`, `read`), then `force`/`embed`.
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
@@ -848,6 +901,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         self.emit_rope_funcs();
+        // After the rope helpers, whose bodies refuse too: only now is the set of reached classes complete.
+        self.emit_refuse_funcs();
         self.emit_sys_imports();
 
         let start_type_name = curios_wasm::TypeName::from("start");

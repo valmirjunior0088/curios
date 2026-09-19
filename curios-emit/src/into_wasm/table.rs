@@ -2,7 +2,7 @@ use {
     super::{
         EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName, EmissionCode,
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
-        EmissionValueName, LoadAs, refusal_const_name,
+        EmissionValueName, LoadAs, refuse_func_name,
     },
     curios_abi::ForeignFunction,
     std::{
@@ -250,6 +250,8 @@ pub(crate) struct Table<'a> {
     cell_type: curios_wasm::TypeName,
     exit: OnceCell<curios_wasm::FuncName>,
     panic: OnceCell<curios_wasm::FuncName>,
+    // One slot per class, in `Panic::ALL`'s order, minted lazily like `exit`: a module declares the refusals its code can reach and no others.
+    refuse: [OnceCell<curios_wasm::FuncName>; curios_cont::Panic::ALL.len()],
     // The shared rope helpers, minted lazily like `exit`: the first call site recorded during emission names the function, and the module emitter then adds exactly the recorded set after the program's own functions (see `emit_rope_funcs`).
     bytes_force: OnceCell<curios_wasm::FuncName>,
     bits_force: OnceCell<curios_wasm::FuncName>,
@@ -324,6 +326,7 @@ impl<'a> Table<'a> {
             cell_type: curios_wasm::TypeName::from("cell"),
             exit: OnceCell::new(),
             panic: OnceCell::new(),
+            refuse: Default::default(),
             bytes_force: OnceCell::new(),
             bits_force: OnceCell::new(),
             list_force: OnceCell::new(),
@@ -588,20 +591,35 @@ impl<'a> Table<'a> {
             .clone()
     }
 
-    /// The instruction sequence a refusal is: the class's message, forced to its payload, handed to `sys.panic`, and the `unreachable` that keeps the block's type. Spelled once for the code emitter, the region context and the rope helpers alike. The message const is a rope leaf — [`refusal_data`](super::refusal_data) asserts as much — so it forces through `$bytes/force` exactly as a `Bytes` host operand does.
+    /// The instruction sequence a refusal is: a call to the class's helper and the `unreachable` that keeps the block's type. Spelled once for the code emitter, the region context and the rope helpers alike.
     pub(crate) fn refuse_instrs(&self, panic: curios_cont::Panic) -> Vec<curios_wasm::Instr> {
         vec![
-            curios_wasm::Instr::GlobalGet {
-                global_name: self.find_const(&refusal_const_name(panic)),
-            },
             curios_wasm::Instr::Call {
-                func_name: self.bytes_force_func(),
-            },
-            curios_wasm::Instr::Call {
-                func_name: self.panic_func(),
+                func_name: self.refuse_func(panic),
             },
             curios_wasm::Instr::Unreachable,
         ]
+    }
+
+    /// `$refuse/<class> () -> ()`: build the class's sentence from its data segment, hand it to `sys.panic`, and never return. First use marks it for emission, so nothing is allocated for a refusal until one fires.
+    fn refuse_func(&self, panic: curios_cont::Panic) -> curios_wasm::FuncName {
+        let slot = curios_cont::Panic::ALL
+            .iter()
+            .position(|class| *class == panic)
+            .expect("`Panic::ALL` holds every class");
+
+        self.refuse[slot]
+            .get_or_init(|| refuse_func_name(panic))
+            .clone()
+    }
+
+    /// The refusals the emitted code referenced, in `Panic::ALL`'s order. Read after every body that can refuse has been built — the rope helpers' included.
+    pub(crate) fn refuse_funcs(&self) -> Vec<(curios_cont::Panic, curios_wasm::FuncName)> {
+        curios_cont::Panic::ALL
+            .into_iter()
+            .zip(&self.refuse)
+            .filter_map(|(class, slot)| Some((class, slot.get()?.clone())))
+            .collect()
     }
 
     /// `$bytes/force (ref $rope/bin) -> (ref $bytes)`: flatten a `Bytes` rope to its payload, memoizing in the entry node. First use marks it for emission.

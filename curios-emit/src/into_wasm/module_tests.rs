@@ -51,24 +51,29 @@ fn an_irreducible_component_uses_exactly_one_localized_dispatcher() {
     );
 }
 
-/// A refusal reaches the user as a sentence: every module declares the `sys.panic` import and carries one message per refusal class, and a checked operation's overflow branch hands its class's message to the import before the `unreachable` — never a bare trap.
+/// A refusal reaches the user as a sentence: every module declares the `sys.panic` import, and a checked operation's overflow branch calls its class's helper before the `unreachable` — never a bare trap. The helper builds the sentence from its data segment where the refusal fires, so the module carries the one class its code can reach and allocates no message at start-up.
 #[test]
-fn a_refusal_calls_the_panic_import_with_its_class_message() {
+fn a_refusal_calls_its_class_helper_which_builds_the_message_where_it_fires() {
     let wat = wat(&intrinsic_main(
         curios_cont::Intrinsic::NatAdd,
         vec![nat(1), nat(2)],
     ));
     assert_contains(&wat, "(import \"sys\" \"panic\"");
     assert_eq!(
-        count(&wat, "(global $refusal/"),
-        6,
-        "one message per panic class"
+        count(&wat, "(func $refuse/"),
+        1,
+        "one helper per class the code reaches"
     );
-    assert_contains(&wat, "global.get $refusal/nat");
-    assert_contains(&wat, "call $panic");
-    let call = wat.find("call $panic").unwrap();
+    assert_eq!(count(&wat, "(data $refusal/"), 1);
+    assert_absent(&wat, "(global $refusal/");
+    assert_contains(&wat, "call $refuse/nat");
+
+    let helper = &wat[wat.find("(func $refuse/nat").unwrap()..];
+    let build = helper.find("array.new_data $bytes $refusal/nat").unwrap();
+    let call = helper.find("call $panic").unwrap();
+    assert!(build < call, "the message is built inside the helper");
     assert!(
-        wat[call..]
+        helper[call..]
             .trim_start_matches("call $panic")
             .trim_start()
             .starts_with("unreachable"),
@@ -76,7 +81,7 @@ fn a_refusal_calls_the_panic_import_with_its_class_message() {
     );
 }
 
-/// A `Panic` node a lowering seated — the knot's forcing state — ends its block by handing its class's message to the import, the same sequence a refusal decided in the emitter emits.
+/// A `Panic` node a lowering seated — the knot's forcing state — ends its block by calling its class's helper, the same sequence a refusal decided in the emitter emits.
 #[test]
 fn a_panic_node_reports_its_class() {
     let mut module = curios_cont::Module::new();
@@ -95,6 +100,6 @@ fn a_panic_node_reports_its_class() {
     module.set_entry(main);
 
     let wat = wat(&module);
-    assert_contains(&wat, "global.get $refusal/cycle");
-    assert_contains(&wat, "call $panic");
+    assert_contains(&wat, "call $refuse/cycle");
+    assert_contains(&wat, "array.new_data $bytes $refusal/cycle");
 }

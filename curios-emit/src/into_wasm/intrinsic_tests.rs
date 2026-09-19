@@ -178,7 +178,7 @@ fn flt_to_nat_guards_the_envelope_before_truncating() {
         vec![flt(1.0)],
     ));
     assert_contains(&wat, "f64.ge");
-    assert_guarded_before(&wat, "i32.trunc_f64_u", "global.get $refusal/nat");
+    assert_guarded_before(&wat, "i32.trunc_f64_u", "call $refuse/nat");
 }
 
 #[test]
@@ -188,5 +188,5 @@ fn flt_to_int_guards_the_envelope_before_truncating() {
         vec![flt(1.0)],
     ));
     assert_contains(&wat, "f64.gt");
-    assert_guarded_before(&wat, "i32.trunc_f64_s", "global.get $refusal/int");
+    assert_guarded_before(&wat, "i32.trunc_f64_s", "call $refuse/int");
 }
