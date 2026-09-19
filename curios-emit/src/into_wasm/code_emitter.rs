@@ -20,6 +20,38 @@ struct WindowFuncs {
     norm: Option<curios_wasm::FuncName>,
 }
 
+/// What truncating a `Flt` into an integer carrier is held to: the open or closed floor and the open ceiling the float must sit between for its truncation to land inside the envelope, the truncation itself, and the refusal that names the carrier. Both bounds are read off `ENVELOPE_BITS` and are exact in binary64.
+struct FltNarrowing {
+    floor: (curios_wasm::Instr, f64),
+    ceiling: f64,
+    trunc: curios_wasm::Instr,
+    refusal: curios_cont::Panic,
+}
+
+impl FltNarrowing {
+    /// `[0, 2^31)`: a negative float has no `Nat`, and `-0.0 >= +0.0` holds, so the negative zero truncates to `0` as the model says.
+    fn nat() -> Self {
+        Self {
+            floor: (curios_wasm::Instr::F64Ge, 0.0),
+            ceiling: f64::from(1u32 << curios_cont::ENVELOPE_BITS),
+            trunc: curios_wasm::Instr::I32TruncF64U,
+            refusal: curios_cont::Panic::NatCarrier,
+        }
+    }
+
+    /// `(-2^30 - 1, 2^30)`: truncation is toward zero, so every float strictly above `-2^30 - 1` lands at `-2^30` or higher.
+    fn int() -> Self {
+        let ceiling = f64::from(1u32 << (curios_cont::ENVELOPE_BITS - 1));
+
+        Self {
+            floor: (curios_wasm::Instr::F64Gt, -ceiling - 1.0),
+            ceiling,
+            trunc: curios_wasm::Instr::I32TruncF64S,
+            refusal: curios_cont::Panic::IntCarrier,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct CodeEmitter<'a, 'b, 'c> {
     context: &'c mut Context<'a, 'b>,
@@ -85,6 +117,51 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     ) {
         self.emit_operand(intrinsic, 0, operand);
         self.emit_instr(instr);
+        self.emit_store(dest, &intrinsic.result_repr());
+    }
+
+    /// Lower a `Flt`-to-integer conversion, deciding the envelope on the float before truncating.
+    ///
+    /// `i32.trunc_f64_u` and `i32.trunc_f64_s` trap by themselves on an operand their result type cannot hold — from `2^32` and from `2^31` in magnitude — and that trap reaches the user as the engine's, naming no carrier. A test of the truncated integer therefore refuses only the band between the envelope and the instruction's own range; past it the instruction has already stopped the program. Every comparison is false at a NaN, so the same guard refuses one without leaning on the erased `NonNeg` or `Finite` evidence, as the bounds check on a packed read does not lean on its.
+    fn emit_flt_narrowing(
+        &mut self,
+        dest: &Dest<'_>,
+        intrinsic: &curios_cont::Intrinsic,
+        operand: &EmissionValueName,
+        narrowing: FltNarrowing,
+    ) {
+        let FltNarrowing {
+            floor: (above_floor, floor),
+            ceiling,
+            trunc,
+            refusal,
+        } = narrowing;
+        let local_name = self.context.push_local(
+            "flt_narrowing",
+            curios_wasm::ValType::Num(curios_wasm::NumType::F64),
+        );
+
+        self.emit_operand(intrinsic, 0, operand);
+        self.emit_instr(curios_wasm::Instr::LocalTee {
+            local_name: local_name.clone(),
+        });
+        self.emit_instr(curios_wasm::Instr::F64Const { value: floor });
+        self.emit_instr(above_floor);
+        self.emit_instr(curios_wasm::Instr::LocalGet {
+            local_name: local_name.clone(),
+        });
+        self.emit_instr(curios_wasm::Instr::F64Const { value: ceiling });
+        self.emit_instr(curios_wasm::Instr::F64Lt);
+        self.emit_instr(curios_wasm::Instr::I32And);
+        self.emit_instr(curios_wasm::Instr::I32Eqz);
+        self.emit_instr(curios_wasm::Instr::If {
+            label_name: self.context.table().special_label(),
+            block_type: curios_wasm::BlockType::Empty,
+            then_instructions: self.context.table().refuse_instrs(refusal),
+            else_instructions: vec![],
+        });
+        self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
+        self.emit_instr(trunc);
         self.emit_store(dest, &intrinsic.result_repr());
     }
 
@@ -1570,62 +1647,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_store(dest, &op.result_repr());
             }
             curios_cont::Intrinsic::FltToNat => {
-                let local_name = self.context.push_local(
-                    "flt_to_nat",
-                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
-                );
-                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Flt));
-                self.emit_instr(curios_wasm::Instr::I32TruncF64U);
-                self.emit_instr(curios_wasm::Instr::LocalTee {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(curios_wasm::Instr::I32Const {
-                    value: curios_cont::ENVELOPE_BITS,
-                });
-                self.emit_instr(curios_wasm::Instr::I32ShrU);
-                self.emit_instr(curios_wasm::Instr::If {
-                    label_name: self.context.table().special_label(),
-                    block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: self
-                        .context
-                        .table()
-                        .refuse_instrs(curios_cont::Panic::NatCarrier),
-                    else_instructions: vec![],
-                });
-                self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
-                self.emit_store(dest, &op.result_repr());
+                self.emit_flt_narrowing(dest, &op, &args[0], FltNarrowing::nat())
             }
             curios_cont::Intrinsic::FltToInt => {
-                let local_name = self.context.push_local(
-                    "flt_to_int",
-                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
-                );
-                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Flt));
-                self.emit_instr(curios_wasm::Instr::I32TruncF64S);
-                self.emit_instr(curios_wasm::Instr::LocalTee {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(curios_wasm::Instr::I32Const { value: 1 });
-                self.emit_instr(curios_wasm::Instr::I32Shl);
-                self.emit_instr(curios_wasm::Instr::LocalGet {
-                    local_name: local_name.clone(),
-                });
-                self.emit_instr(curios_wasm::Instr::I32Xor);
-                self.emit_instr(curios_wasm::Instr::I32Const {
-                    value: curios_cont::ENVELOPE_BITS,
-                });
-                self.emit_instr(curios_wasm::Instr::I32ShrU);
-                self.emit_instr(curios_wasm::Instr::If {
-                    label_name: self.context.table().special_label(),
-                    block_type: curios_wasm::BlockType::Empty,
-                    then_instructions: self
-                        .context
-                        .table()
-                        .refuse_instrs(curios_cont::Panic::IntCarrier),
-                    else_instructions: vec![],
-                });
-                self.emit_instr(curios_wasm::Instr::LocalGet { local_name });
-                self.emit_store(dest, &op.result_repr());
+                self.emit_flt_narrowing(dest, &op, &args[0], FltNarrowing::int())
             }
             curios_cont::Intrinsic::BinLen(grain) => {
                 self.emit_bin_len(grain, &args[0]);

@@ -161,12 +161,32 @@ fn flt_to_le_bytes_packs_an_eight_byte_leaf() {
     assert_contains(&wat, "struct.new $rope/bin/leaf");
 }
 
+/// The truncation instruction traps by itself past its own result type, so a guard placed after it never runs where it matters most: the order is the property, and the refusal names the carrier the value would have left.
+#[track_caller]
+fn assert_guarded_before(wat: &str, trunc: &str, refusal: &str) {
+    let guard = wat.find("f64.lt").expect("a ceiling comparison");
+    let trunc = wat.find(trunc).expect("the truncation");
+    assert!(guard < trunc, "the envelope is decided before truncating");
+    assert_contains(wat, refusal);
+    assert_traps(wat);
+}
+
 #[test]
-fn flt_to_int_truncates_and_guards_the_range() {
+fn flt_to_nat_guards_the_envelope_before_truncating() {
+    let wat = wat(&intrinsic_main(
+        curios_cont::Intrinsic::FltToNat,
+        vec![flt(1.0)],
+    ));
+    assert_contains(&wat, "f64.ge");
+    assert_guarded_before(&wat, "i32.trunc_f64_u", "global.get $refusal/nat");
+}
+
+#[test]
+fn flt_to_int_guards_the_envelope_before_truncating() {
     let wat = wat(&intrinsic_main(
         curios_cont::Intrinsic::FltToInt,
         vec![flt(1.0)],
     ));
-    assert_contains(&wat, "i32.trunc_f64_s");
-    assert_traps(&wat);
+    assert_contains(&wat, "f64.gt");
+    assert_guarded_before(&wat, "i32.trunc_f64_s", "global.get $refusal/int");
 }

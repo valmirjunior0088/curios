@@ -107,6 +107,11 @@ fn overflowing_computations_trap_at_the_backend_boundary() {
         "Int/to_str(Int/shl(Int/add(+1, i), 40))",
         // The signed envelope is `[-2^30, 2^30)`, so one place short of the unsigned one.
         "Int/to_str(Int/shl(Int/add(+1, i), 30))",
+        // A float past the carrier, on each side of what the truncation instruction can itself hold: `i32.trunc_f64_u` traps from `2^32` and `i32.trunc_f64_s` from `2^31`, so a guard placed after the instruction refused the first of each pair and let the engine's bare trap answer the second.
+        "Nat/to_str(Option/unwrap_or(Flt/try_to_nat(Flt/mul(Nat/to_flt(n + 3), 1.0e9)), 0))",
+        "Nat/to_str(Option/unwrap_or(Flt/try_to_nat(Flt/mul(Nat/to_flt(n + 5), 1.0e9)), 0))",
+        "Int/to_str(Option/unwrap_or(Flt/try_to_int(Flt/mul(Nat/to_flt(n + 2), -1.0e9)), +0))",
+        "Int/to_str(Option/unwrap_or(Flt/try_to_int(Flt/mul(Nat/to_flt(n + 3), -1.0e9)), +0))",
     ]);
 }
 
