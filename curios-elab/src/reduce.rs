@@ -13,11 +13,11 @@ use {
     super::{Context, zonk_solved_term_metas},
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid,
-        Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Layer,
-        Let, Match, MatchResult, Metavar, Nat, One, Proj, Rec, RecGroup, ReduceError, Reducer,
-        Scope, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var,
-        Variant, Visit, accelerable, dual_comparison, instantiate_universe_levels_scoped,
-        project_erased_universes, reduce_closed, reduce_intrinsic,
+        Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance, InstanceHead, Intrinsic,
+        Layer, Let, Match, MatchResult, Metavar, Nat, One, Proj, Rec, RecGroup, ReduceError,
+        Reducer, Scope, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        Var, Variant, Visit, accelerable, dual_comparison, instantiate_universe_levels_scoped,
+        project_erased_universes, reduce_closed, reduce_intrinsic, successor_comparison,
     },
     curios_utilities::recurse,
 };
@@ -677,6 +677,21 @@ fn refined_dual(context: &Context, term: &Term) -> Option<Term> {
     Some(Term::intrinsic(Intrinsic::Bool(!literal)))
 }
 
+/// The same miss across the `<`/`<=` seam: a bound reaches the probe as `i + 1 <= len(l)` while the guard that decided it was written `i < len(l)`, and the two are one fact on `Nat` and on `Int`. So a miss on a comparison key is retried on its successor spelling, with the literal carried across rather than negated — these are the same proposition, where a dual's are opposite ones. Lookup only, as [`refined_dual`] is: the record still holds exactly what the guard was written as, which is what keeps this the kernel's rule too.
+fn refined_successor(context: &Context, term: &Term) -> Option<Term> {
+    let Subterm::Intrinsic(intrinsic) = &**term else {
+        return None;
+    };
+    let spelling = Term::intrinsic(successor_comparison(intrinsic)?);
+    if !context.scrutinee_head_refined(spelling.head_key()?) {
+        return None;
+    }
+    let literal = context
+        .scrutinee_reduct(&shallow_scrutinee(context, &spelling))?
+        .as_bool()?;
+    Some(Term::intrinsic(Intrinsic::Bool(literal)))
+}
+
 /// The refinement probe for an intrinsic the loop has just folded — the second look every *other* arm of the dispatch gets for free.
 ///
 /// **Why one arm needs its own.** Each arm returns a [`Reduce`]: on progress it `Continue`s, the loop comes back around, and the probe at the top runs again on the new term. That is how a refinement keeps up with reduction. This arm answers a normal form in one step and breaks, so without this the store is asked exactly once, about a term whose operands have not been reduced yet.
@@ -691,23 +706,49 @@ fn refined_after_fold(context: &mut Context, folded: &Term) -> Result<Option<Ter
         return Ok(None);
     };
 
-    if !context.scrutinee_head_refined(head) {
-        return Ok(refined_dual(context, folded));
+    if let Some(value) = refined_by_spelling(context, folded, head)? {
+        return Ok(Some(value));
     }
 
-    // Suppression needs no arm: `scrutinee_reduct` withholds under it, and breaking on the folded term leaves standing the neutral a suppressed key wants.
-    let shallow = shallow_scrutinee(context, folded);
+    if let Some(value) = refined_dual(context, folded) {
+        return Ok(Some(value));
+    }
 
+    // The successor spelling through the same two steps, and it needs them for the same reason the written one does: a guard `i < List/len(l)` records its operand as the call the author wrote, while the bound `i + 1 <= List/len(l)` arrives with that call folded to its `ListLen` intrinsic. The shallow probe therefore misses on the seam exactly where it misses on a spelling, and only the escalation brings the two together. The literal is the key's own, this being one proposition spelled twice rather than a negation.
+    if let Some(spelling) = successor_spelling(folded)
+        && let Some(head) = spelling.head_key()
+        && let Some(value) = refined_by_spelling(context, &spelling, head)?
+    {
+        return Ok(Some(value));
+    }
+
+    Ok(None)
+}
+
+/// One spelling's lookup: the shallow key first, then the canonical escalation, or `None` where nothing is registered under `head` at all.
+///
+/// Suppression needs no arm: `scrutinee_reduct` withholds under it, and breaking on the folded term leaves standing the neutral a suppressed key wants.
+///
+/// The escalation brings both sides to the canonical form — the key's, capped and memoized, so once per key rather than once per node; the probe's through the same `canonical_scrutinee` the key's is, so the two meet however either was spelled. The probe side used to be taken as canonical already, on the premise that `reduce_intrinsic` left every operand in weak-head normal form, and a `&&` behind a stuck left leaves its right as written now. In practice the probe before decomposition reaches a connective first, since the loop re-runs it on every continued term; this one decides the folds that change a spelling, and canonicalizing an already-reduced operand is a cache hit.
+fn refined_by_spelling(
+    context: &mut Context,
+    probe: &Term,
+    head: HeadTag<'_>,
+) -> Result<Option<Term>, ReduceError> {
+    if !context.scrutinee_head_refined(head) {
+        return Ok(None);
+    }
+
+    let shallow = shallow_scrutinee(context, probe);
     if let Some(value) = context.scrutinee_reduct(&shallow) {
         return Ok(Some(value.clone()));
     }
 
-    // The escalation: both sides brought to the canonical form — the key's, capped and memoized, so once per key rather than once per node; the probe's through the same `canonical_scrutinee` the key's is, so the two meet however either was spelled. The probe side used to be taken as canonical already, on the premise that `reduce_intrinsic` left every operand in weak-head normal form, and a `&&` behind a stuck left leaves its right as written now. In practice the probe before decomposition reaches a connective first, since the loop re-runs it on every continued term; this one decides the folds that change a spelling, and canonicalizing an already-reduced operand is a cache hit.
     let entries = context.scrutinee_entries(head);
     if entries.is_empty() {
         return Ok(None);
     }
-    let canonical = canonical_scrutinee(context, folded)?;
+    let canonical = canonical_scrutinee(context, probe)?;
     for (key, entry) in entries {
         if canonical_key(context, &key, &entry.original)? == canonical {
             return Ok(Some(entry.value));
@@ -715,6 +756,14 @@ fn refined_after_fold(context: &mut Context, folded: &Term) -> Result<Option<Ter
     }
 
     Ok(None)
+}
+
+/// A comparison's spelling across the `<`/`<=` seam, as a term.
+fn successor_spelling(term: &Term) -> Option<Term> {
+    match &**term {
+        Subterm::Intrinsic(intrinsic) => successor_comparison(intrinsic).map(Term::intrinsic),
+        _ => None,
+    }
 }
 
 /// Reduce `term` until its head constructor is stable.
@@ -787,6 +836,13 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
             // The dual spelling, when the written one has no key: the false arm of `n < m` recorded `n < m` alone, and `m <= n` is the same fact read the other way. Lookup only — every key stays as written.
             if context.has_scrutinee_refinements()
                 && let Some(value) = refined_dual(context, &term)
+            {
+                break 'step Reduce::Continue(value);
+            }
+
+            // And the successor spelling, for the seam between `<` and `<=`: a bound arriving as `i + 1 <= len(l)` under a guard written `i < len(l)` is one fact spelled twice.
+            if context.has_scrutinee_refinements()
+                && let Some(value) = refined_successor(context, &term)
             {
                 break 'step Reduce::Continue(value);
             }

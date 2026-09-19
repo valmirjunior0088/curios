@@ -26,7 +26,7 @@ use {
         Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat, Proj, Rec,
         RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Var, Variant, Visit,
         accelerable, dual_comparison, instantiate_universe_levels_scoped, reduce_closed,
-        reduce_intrinsic,
+        reduce_intrinsic, successor_comparison,
     },
     curios_utilities::recurse,
 };
@@ -135,6 +135,10 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
             term = refined;
             continue;
         }
+        if let Some(refined) = refined_successor(kernel, &term) {
+            term = refined;
+            continue;
+        }
 
         let step = match Term::unwrap_or_clone(term) {
             Subterm::Intrinsic(intrinsic) => {
@@ -189,6 +193,16 @@ fn refined_dual(kernel: &Kernel, term: &Term) -> Option<Term> {
     Some(Term::intrinsic(Intrinsic::Bool(!literal)))
 }
 
+/// The same miss across the `<`/`<=` seam: a bound reaches the probe as `i + 1 <= len(l)` while the guard that decided it was written `i < len(l)`, and the two are one fact on `Nat` and on `Int`. So a miss on a comparison's written spelling is retried on its successor spelling with the literal carried across — not negated, these being the same proposition rather than opposite ones. Lookup only, as [`refined_dual`] is: nothing is recorded under the second spelling, so a guard still refines exactly what it was written as.
+fn refined_successor(kernel: &Kernel, term: &Term) -> Option<Term> {
+    let Subterm::Intrinsic(intrinsic) = &**term else {
+        return None;
+    };
+    let spelling = Term::intrinsic(successor_comparison(intrinsic)?);
+    let literal = kernel.refinement_of(&spelling)?.as_bool()?;
+    Some(Term::intrinsic(Intrinsic::Bool(literal)))
+}
+
 /// The refinement probe at a stuck reduct: the written spelling first, then the reduced one, settling reduced spellings until one answers or none is left to settle.
 ///
 /// **Why the escalation is here and not at the other probe point.** An equation is recorded under the scrutinee as written, and reduction reaches the scrutinee's *reduct* — `Le(s + l, len b)` instantiated at a call arrives as `Le(0 + n, len b)` and folds to a spelling the written key does not carry. The point before decomposition sees terms on the way in, where the written spelling is what matches; this point sees the forms reduction produced, which is exactly where a spelling that exists only as a reduct can appear.
@@ -203,6 +217,9 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
     if let Some(refined) = refined_dual(kernel, value) {
         return Ok(Some(refined));
     }
+    if let Some(refined) = refined_successor(kernel, value) {
+        return Ok(Some(refined));
+    }
 
     if !value.has_local_free() || !kernel.has_refinements() {
         return Ok(None);
@@ -212,6 +229,11 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
     // The dual under the reduced spelling too: a guard dispatched through a witness is recorded under the projection it elaborated to and answers only once its reduct is settled, so the dual is asked of the settled reducts exactly as the written spelling was asked of the record.
     let dual = match &*canonical {
         Subterm::Intrinsic(intrinsic) => dual_comparison(intrinsic).map(Term::intrinsic),
+        _ => None,
+    };
+    // And the successor spelling for the same reason, which is the one the `<`/`<=` seam actually needs: a guard records the call its author wrote, `i < List/len(l)`, while the bound arrives with that call folded to its intrinsic, so the two meet only once the key's own reduct is settled. Nothing is recorded under this spelling either — it is a second place to look, and the elaborator looks in the same two.
+    let successor = match &*canonical {
+        Subterm::Intrinsic(intrinsic) => successor_comparison(intrinsic).map(Term::intrinsic),
         _ => None,
     };
 
@@ -226,11 +248,26 @@ fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, Red
         {
             return Ok(Some(Term::intrinsic(Intrinsic::Bool(!literal))));
         }
+        // The literal stands as the guard left it: these are one proposition, where the dual's are opposite ones.
+        if let Some(successor) = &successor
+            && let Some(literal) = kernel
+                .refinement_of_reduct(successor)
+                .and_then(|refined| refined.as_bool())
+        {
+            return Ok(Some(Term::intrinsic(Intrinsic::Bool(literal))));
+        }
 
-        let unasked = kernel.unasked_refinement(&canonical).or_else(|| {
-            dual.as_ref()
-                .and_then(|dual| kernel.unasked_refinement(dual))
-        });
+        let unasked = kernel
+            .unasked_refinement(&canonical)
+            .or_else(|| {
+                dual.as_ref()
+                    .and_then(|dual| kernel.unasked_refinement(dual))
+            })
+            .or_else(|| {
+                successor
+                    .as_ref()
+                    .and_then(|successor| kernel.unasked_refinement(successor))
+            });
         let Some((index, key)) = unasked else {
             return Ok(None);
         };

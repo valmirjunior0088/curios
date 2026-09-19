@@ -26,8 +26,8 @@ use {
     super::{ReduceError, Reducer},
     crate::{
         Cost, FUSION_CAP, FreeMonoid, Func, Intrinsic, Nat, Peel, Subterm, Telescope, Term,
-        int_negate, int_product, int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom,
-        peel_first_elem, project_erased_universes,
+        int_cancel_common, int_negate, int_product, int_sum, int_terms, normalize_concat, peel_bin,
+        peel_first_atom, peel_first_elem, project_erased_universes,
     },
     curios_num::{Floating, Integer, Natural},
     curios_utilities::{Grain, PackedBin},
@@ -209,6 +209,42 @@ pub fn dual_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
         _ => return None,
     };
     Some(dual)
+}
+
+/// The comparison that is true exactly when `comparison` is, spelled across the `<`/`<=` seam: `a < b` is `a + 1 <= b` on `Nat` and on `Int`, where the successor is exact in both directions. `None` where no such spelling exists — a `Nat` `<=` whose left operand carries no successor floor to peel, which is where truncation would otherwise invent one, and every comparison that is not an ordering on those two carriers.
+///
+/// Read by both reducers' refinement probes, and by them alone: a guard is recorded on its written spelling, so `match i < len(l)` records `i < len(l)` and an obligation reaching the probe as `i + 1 <= len(l)` misses it over a spelling rather than over a fact. [`align_comparisons`] settles the same seam for *conversion*, by the mirror identity `a <= b` ⟺ `a < b + 1`; the two are separate because a probe must produce the key a guard actually recorded, while a congruence needs only one spelling both sides reach.
+///
+/// **The literal is carried across unchanged**, where [`dual_comparison`]'s is negated: these two comparisons have one truth value rather than opposite ones, so the arm that refined the guard refines this obligation to the same `Bool`.
+pub fn successor_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
+    let one = || Term::intrinsic(Intrinsic::Int(Integer::from(1i32)));
+    let succ = |term: &Term| {
+        let (floor, inner) = Nat::decompose(term);
+        Nat::rebuild(floor + Natural::from(1u32), inner)
+    };
+
+    // **Every arm adds**, on whichever side keeps the step exact: `a < b` is `a + 1 <= b`, and `a <= b` is `a < b + 1`. Reading either identity backwards would spell a *predecessor*, which on `Nat` exists only where a successor floor is already standing — so adding is what lets this reach every comparison rather than the ones whose operand happens to carry one.
+    let (left, right, nat) = match comparison {
+        Intrinsic::NatLt(a, b) => (succ(a), b.clone(), true),
+        Intrinsic::NatLe(a, b) => (a.clone(), succ(b), true),
+        Intrinsic::IntLt(a, b) => (int_sum(a, &one()), b.clone(), false),
+        Intrinsic::IntLe(a, b) => (a.clone(), int_sum(b, &one()), false),
+        _ => return None,
+    };
+
+    // **The shared floor comes off, because the fold this spelling has to meet has already taken it off.** `compare_nat` cancels what both operands carry in common, so a bound `i + 1 <= len + 64` is stuck as `i <= len + 63` while the guard `i < len + 64` is stuck as itself: adding the step back without cancelling would build a spelling the reducer never produces, and the probe would miss on every comparison whose operands share a floor. The cancellation is the fold's own function and is pure, so it runs here rather than by re-entering reduction — which a probe running inside reduction cannot do.
+    let (left, right) = match nat {
+        true => Nat::cancel_common(&left, &right),
+        false => int_cancel_common(&left, &right),
+    };
+
+    let spelling = match comparison {
+        Intrinsic::NatLt(..) => Intrinsic::nat_lte(left, right),
+        Intrinsic::NatLe(..) => Intrinsic::nat_lt(left, right),
+        Intrinsic::IntLt(..) => Intrinsic::IntLe(left, right),
+        _ => Intrinsic::IntLt(left, right),
+    };
+    Some(spelling)
 }
 
 pub fn reduce_intrinsic(

@@ -383,3 +383,61 @@ fn a_comparison_refined_answers_its_dual_negated() {
         );
     });
 }
+
+/// A guard's equation answers the same bound spelled across the `<`/`<=` seam.
+///
+/// `List/slice`'s bound arrives as `i + 1 <= len` where the guard deciding it was written `i < len`, and the two are one proposition on `Nat`: `whnf` retries a miss on the successor spelling, carrying the literal across rather than negating it as the dual retry does. Without it a guard discharges a bound only when the author spelled the comparison the way the standard library's signature happens to.
+///
+/// **Both operands are spelled as a program spells them, which is what the retry has to survive.** The guard's own operand is the *unreduced* call — a real one records `List/len(l)`, the application the author wrote, and the bound arrives with that call already folded to its intrinsic — so the seam is asked of the key's settled reduct rather than of the record. The first cut asked only the written spelling; it answered this fixture while both surface programs still refused, and the kernel then refused what the elaborator had accepted, which is the disagreement the second checker exists to produce. The stand-in here is a definition the key mentions and the probe does not, which is the same asymmetry with nothing else in it.
+#[test]
+fn a_guard_answers_a_bound_spelled_across_the_successor_seam() {
+    let index = binder(1, "i");
+    let length = binder(2, "len");
+
+    // The operand as a program writes it: a term reduction folds, standing for the `List/len(l)` call a guard records and the bound meets already folded.
+    let written_length = Term::intrinsic(Intrinsic::nat_add(
+        Term::free_var(&length),
+        Term::intrinsic(Intrinsic::nat_add(nat(30), nat(34))),
+    ));
+
+    let below = Term::intrinsic(Intrinsic::nat_lt(
+        Term::free_var(&index),
+        written_length.clone(),
+    ));
+    // The bound as a signature instantiates it: `i + 1 <= len`, the successor written as the sum it is before reduction folds it into a floor.
+    let within = Term::intrinsic(Intrinsic::nat_lte(
+        Term::intrinsic(Intrinsic::nat_add(Term::free_var(&index), nat(1))),
+        written_length.clone(),
+    ));
+
+    let mut control = kernel();
+    control.assume(&index, &nat_type());
+    control.assume(&length, &nat_type());
+    let folded = whnf(&mut control, written_length.clone()).expect("the operand reduces");
+    assert_ne!(
+        folded, written_length,
+        "the operand has to fold, or the probe never leaves the written spelling",
+    );
+
+    let mut kernel = kernel();
+    kernel.assume(&index, &nat_type());
+    kernel.assume(&length, &nat_type());
+
+    kernel.scoped(|kernel| {
+        kernel.refine(below.clone(), Term::intrinsic(Intrinsic::Bool(true)));
+
+        let reduced = whnf(kernel, within.clone()).expect("the bound reduces");
+        assert_eq!(
+            reduced,
+            Term::intrinsic(Intrinsic::Bool(true)),
+            "the guard `i < len` did not answer the bound `i + 1 <= len`",
+        );
+    });
+
+    // Outside the arm it is stuck again: the seam is a second spelling to look under, never a fact of its own.
+    let reduced = whnf(&mut kernel, within).expect("the bound reduces");
+    assert!(
+        reduced.as_bool().is_none(),
+        "the successor spelling answered outside the arm that recorded the guard: {reduced:?}",
+    );
+}

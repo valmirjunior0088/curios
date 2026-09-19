@@ -174,3 +174,67 @@ fn the_false_arm_of_a_comparison_proves_its_dual() {
         "#;
     assert_eq!(run(source), b"7");
 }
+
+// A guard decides a bound spelled across the `<`/`<=` seam. `List/slice`'s precondition is `s + l <= len`, so slicing one element at `i` asks for `i + 1 <= len(l)`, while the guard a program writes to establish it is `i < len(l)` — one proposition, two spellings, and the arm records only the one the author wrote. Both reducers retry a miss on the successor spelling, so a bound discharges without the author having to spell the comparison the way the standard library's signature happens to.
+//
+// It certifies, which is the half that matters: the elaborator discharged this first while the kernel still refused it, and the seam is a rule only when both checkers look in the same two places.
+#[test]
+fn a_guard_discharges_a_bound_across_the_successor_seam() {
+    let source = r#"
+        use /std/{Nat, List};
+
+        let one_at(@T : Type, l : List(T), i : Nat) -> List(T) =
+            match i < List/len(l)
+            | false => []
+            | true => List/slice(l, i, 1)
+            end;
+
+        /std/print(Nat/to_str(List/len(one_at([1, 2, 3], 1))))
+        "#;
+    assert_eq!(run(source), b"1");
+}
+
+// The seam in the other direction, where the guard is the `<=` and the bound the `<`: `List/get` asks for `i < len(l)`, and a program that established `i + 1 <= len(l)` has proved it.
+#[test]
+fn a_bound_below_a_length_is_decided_by_the_successor_guard() {
+    let source = r#"
+        use /std/{Nat, List, Option};
+
+        let get_at(@T : Type, l : List(T), i : Nat) -> Option(T) =
+            match i + 1 <= List/len(l)
+            | false => Option/none()
+            | true => Option/some(List/get(l, i))
+            end;
+
+        let shown(l : List(Nat), i : Nat) -> Nat =
+            match get_at(l, i) | some(x) => x | none() => 0 end;
+
+        /std/print(Nat/to_str(shown([4, 5, 6], 2)))
+        "#;
+    assert_eq!(run(source), b"6");
+}
+
+// **The seam is a second spelling, not a second fact.** Two guards that between them imply a bound only through arithmetic — `i < n` and `len(l) == n * k` give `(i * k) + k <= len(l)` by monotonicity of `*` — leave it stuck, because nothing here reasons about the operands. A retry that answered this would be deciding a proposition rather than looking up another spelling of one.
+#[test]
+fn a_bound_a_hypothesis_only_implies_is_still_stuck() {
+    let source = r#"
+        use /std/{Nat, List};
+
+        let chunk(@T : Type, n : Nat, k : Nat, l : List(T), i : Nat) -> List(T) =
+            match i < n
+            | false => []
+            | true =>
+                match List/len(l) == n * k
+                | false => []
+                | true => List/slice(l, i * k, k)
+                end
+            end;
+
+        /std/print("unreached")
+        "#;
+    let message = error(source);
+    assert!(
+        message.contains("nothing discharged"),
+        "the seam decided a bound that needs arithmetic:\n{message}"
+    );
+}
