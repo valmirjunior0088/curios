@@ -34,9 +34,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq(f(x + y), f(y + x))",
             // A summand meets its own spelling. Summands pair by identity, and two occurrences of one operator are two terms while the signature holding them is checked — each carries its own witness metavariable, solved and not yet spliced — so this was refused by the elaborator alone, as `x` against `y` under the positional congruence, until the solved ones were substituted before the peel.
             "Eq(f(x + 1) + f(y + 1), f(y + 1) + f(x + 1))",
+            // The composition of the two rows above, which each hold. It was refused while summands paired by one structural key: a sum *inside* an atom splits it, so `f(x + y)` never met `f(y + x)` within a sum though the reducer decides that very pair on its own. `Nat::cancel_common` now pairs in two tiers, the canonical-atom key running only where the erased one cancelled nothing — so the peel still takes no reducer, and the no-progress arm that keeps it terminating is still the arm a pair sharing nothing falls through.
+            "Eq(f(x + y) + g(y + z), g(z + y) + f(y + x))",
         ],
-        // Each step of this holds — the row above, and commutation — and their composition does not: cancellation pairs two summands by identity up to universe instances, never up to conversion, so `f(x + y)` does not meet `f(y + x)` inside a sum. A candidate, and a larger one than it looks: `Nat::cancel_common` takes no reducer, and handing back an untouched pair identically is what keeps the peel terminating.
-        refused: &["Eq(f(x + y) + g(y + z), g(z + y) + f(y + x))"],
+        refused: &[],
     },
     Carrier {
         name: "Nat under *",
