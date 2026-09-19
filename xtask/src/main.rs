@@ -2,7 +2,7 @@
 //!
 //! **A recipe is cargo with flags, and whatever step cargo does not do.** Every recipe here spawns `cargo` — or npm, in an editor tree — as a separate process, and then copies a file, generates the browser bindings or runs a container, where there is such a step to take. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
 //!
-//! **A recipe takes no arguments it passes on.** A recipe may take a parameter it places itself — a release's version, a program to profile, a package to narrow a check to — but never a tail it hands to the tool unread. Every recipe's command line is written here, so the gate in `CLAUDE.md`, the check workflow and a contributor run one spelling of each step and no two of them can drift. A recipe names a tool and a tree: `cargo` at the workspace root, `grammar` and `vscode` for their npm packages, `zed` for the extension's own workspace. Anything else in a tree is run from inside it, where that tree's README sends the reader.
+//! **A recipe takes no arguments it passes on.** A recipe may take a parameter it places itself — a release's version, a program to profile, a package to narrow a check to, a name to narrow a test run by — but never a tail it hands to the tool unread. Every recipe's command line is written here, so the gate in `CLAUDE.md`, the check workflow and a contributor run one spelling of each step and no two of them can drift. A recipe names a tool and a tree: `cargo` at the workspace root, `grammar` and `vscode` for their npm packages, `zed` for the extension's own workspace. Anything else in a tree is run from inside it, where that tree's README sends the reader.
 //!
 //! **The launcher's isolation is the spawn.** `runtime` builds `curios-runtime` in its own `cargo` invocation, exactly as the recipe it replaced did, so workspace feature unification cannot reach it — `curios` enables `curios-runtime/cranelift`, and a launcher built beside it would carry a compiler. `curios/build.rs` embeds what this recipe copies to `curios/.artifacts/<triple>` and refuses to build without it.
 //!
@@ -91,6 +91,14 @@ enum Recipe {
             help = "The package whose tests to run; the whole workspace when omitted"
         )]
         package: Option<String>,
+
+        #[arg(
+            long,
+            short,
+            value_name = "FILTER",
+            help = "Run only the tests whose path contains this; every test when omitted"
+        )]
+        filter: Option<String>,
     },
 
     #[command(
@@ -211,11 +219,13 @@ fn main() -> ExitCode {
             &["clippy"],
             &["--all-targets", "--all-features", "--", "-Dwarnings"],
         ),
-        Recipe::Test { package } => scoped(
-            package.as_deref(),
-            &["test"],
-            &["--all-targets", "--all-features", "--no-fail-fast"],
-        ),
+        Recipe::Test { package, filter } => {
+            // The filter rides where cargo's own `TESTNAME` does, which is what makes it one narrowing rather than a tail: `--no-fail-fast` still reports every failure among the tests it selects, and a filter matching nothing in a target is that target reporting no tests rather than an error.
+            let mut after = vec!["--all-targets", "--all-features", "--no-fail-fast"];
+            after.extend(filter.as_deref());
+
+            scoped(package.as_deref(), &["test"], &after)
+        }
         Recipe::Doctest { package } => {
             scoped(package.as_deref(), &["test"], &["--doc", "--all-features"])
         }
