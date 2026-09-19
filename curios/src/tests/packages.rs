@@ -233,6 +233,52 @@ fn a_loose_program_names_std_and_is_refused_sys() {
     );
 }
 
+/// The orphan rule between two roots, neither of them the standard library and neither the entry.
+///
+/// Every other orphan fixture sets an entry program against `/std`, the one pairing a real project never meets trouble in. Here `base` declares a concept and a type, and `app`'s library — which depends on `base` and owns neither — declares the witness: the refusal that keeps two independent packages from each claiming one key. The control keys the same concept on a type `app` declares, which the rule's second clause admits, and the program runs through it.
+#[test]
+fn a_package_may_not_witness_anothers_concept_at_anothers_type() {
+    let base = "pub concept Tag(A: Type): pub Type {\n    tag(A) -> /std/Nat,\n}\n\npub induct Thing: pub Type\n| mk()\nend\n";
+    let manifest = "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[[executables]]\nname = \"app\"\n";
+    let package = |name: &str, library: &str, program: &str| {
+        tree(
+            name,
+            &[
+                ("curios.toml", "members = [\"app\", \"base\"]\n"),
+                ("base/curios.toml", "name = \"base\"\n"),
+                ("base/lib.crs", base),
+                ("app/curios.toml", manifest),
+                ("app/lib.crs", library),
+                ("app/app.crs", program),
+            ],
+        )
+    };
+
+    let orphan = package(
+        "e2e-orphan",
+        "use /base/{Tag, Thing};\n\nsatisfy Tag(Thing) {\n    tag(_) = 1,\n}\n",
+        "/std/print(\"unreached\")\n",
+    );
+    let (entry, units) = resolved(&orphan.join("app"), None);
+    let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
+    let refusal = Fold::new(DEFAULT_STEP_BUDGET, &units, None)
+        .compile(&entrypoint, &loader, |_| {}, |_| {})
+        .map(|_| ())
+        .expect_err("a package owning neither the concept nor the type declares no witness")
+        .to_string();
+    assert!(
+        refusal.contains("orphan witness of 'Tag' for head 'Thing'"),
+        "{refusal}"
+    );
+
+    let owned = package(
+        "e2e-orphan-control",
+        "use /base/{Tag};\n\npub induct Mine: pub Type\n| mk()\nend\n\nsatisfy Tag(Mine) {\n    tag(_) = 7,\n}\n\npub let seven: /std/Nat = Tag/tag(Mine/mk());\n",
+        "/std/print(/std/Nat/to_str(/app/seven))\n",
+    );
+    assert_eq!(run(&owned.join("app"), None), b"7");
+}
+
 /// **A cached unit and a freshly elaborated one produce the same program**, and changing the terms invalidates.
 ///
 /// The dependency is what gets stored — the entry never is, because it is what you are editing. So the third run below is the one that matters: it reuses a verdict reached in the first, and has to agree with it. The middle run is the control that says the store is keyed on content rather than merely written to, since an edited dependency must not be answered from it.
