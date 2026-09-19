@@ -576,6 +576,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// `$<carrier>/read (ref <base>, i32) -> <element>`.
     ///
     /// ```wat
+    /// if i >= r.len         → unreachable             ;; the eager bounds trap
     /// if r.tag == 0 → r.payload[i]                    ;; leaf
     /// if r.tag == 2 →                                 ;; view: read through
     ///   (r.base.tag == 0 ? r.base.payload : r.base.cache)[r.offset + i]
@@ -623,6 +624,17 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         };
 
         let instrs = vec![
+            // The eager bounds trap, as the bit grain's twin opens with. A leaf would trap in the engine on its own payload, but a *view* reads `base.payload[offset + i]`, and a position past the window is a position the base array still holds — so without this a read past the end answers a neighbouring element instead of refusing. What makes every read well-placed is the proof its caller discharged; this is the backstop for a wrong erasure or a wrong checker, and the one place the three carriers' reads did not agree.
+            get(&i),
+            get(&r),
+            field_get(&rope.base, &rope.len_field),
+            curios_wasm::Instr::I32GeU,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("bounds"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: self.table.refuse_instrs(curios_cont::Panic::OutOfBounds),
+                else_instructions: vec![],
+            },
             get(&i),
             set(&j),
             get(&r),

@@ -1,5 +1,6 @@
 //! Structural acceptance fixtures: each compiles a small `.crs` fixture to raw pre-Binaryen wasm and asserts a property of the module.
 
+mod bounds_tests;
 mod closure_tests;
 mod fusion_tests;
 mod layout_tests;
