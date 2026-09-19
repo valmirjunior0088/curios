@@ -97,6 +97,10 @@ pub fn optimize(module: &mut Module) {
                 "cont::eliminate_dead_parameters",
                 eliminate_dead_parameters(module)
             )
+            | {
+                sample_droppable_dead_calls(module);
+                false
+            }
             | pass!(
                 "cont::inline_single_use_continuations",
                 inline_single_use_continuations(module)
@@ -143,4 +147,50 @@ pub fn optimize(module: &mut Module) {
     module
         .verify()
         .expect("invalid high CPS after optimization");
+}
+
+/// How many calls stand where step four's rule would delete one: a known callee whose definition was proved total and performs nothing, with a result nothing reads.
+///
+/// **A measurement, not a rule.** Whether such a call is ever *observed* here is the question the deletion rests on, and reading the pass list does not answer it: the result becomes unread only once [`eliminate_dead_parameters`] has stripped it, and inlining and contification consume the call in the same round — so the call may be gone before it is ever dead. Counting at the one point the rule would fire is what settles that for the price of a counter.
+///
+/// The condition is the deletion's own: the return continuation takes no parameter, which is the state in which the call could be spliced to a jump carrying no arguments.
+///
+/// # What it last reported
+///
+/// **Seven calls stand here and none of them is dead**, which is why there are two numbers: one zero cannot tell a call already consumed by inlining from a call still standing whose result is still read. Taken 2026-09-19 over a fresh compile of the program the rule was designed for — `total(Vec/of_list(List/replicate(List/len(args), 7)))`, whose emitted module builds its list twice — `present` reads 7 and `dead` reads 0. So the calls are *there*; what has not happened is the propagation. A parameter is stripped from a callee before its caller's own parameter is seen to be unused, so deadness climbs one level per round, and the rule as placed would fire on nothing while there is plainly material for it. `programs/hello_world.crs` reads zero on both, having nothing to drop.
+///
+/// Retake it with `cargo x profile <source>` and read `cont::droppable_dead_calls` in the folded output, or `curios/.artifacts/profile.tsv` directly when the program exits non-zero, since the recipe folds nothing then. Perturb the source first: a cached unit skips the optimizer entirely and reports no sample at all.
+fn sample_droppable_dead_calls(module: &Module) {
+    let _ = module;
+    #[cfg(feature = "profile")]
+    {
+        // Two numbers, because one cannot tell the two causes of a zero apart: a call already consumed by inlining or contification, and a call still standing whose result is still read.
+        let mut present = 0u64;
+        let mut dead = 0u64;
+        for node in module.nodes().iter().flatten() {
+            let super::Node::ApplyFun {
+                callee: super::Callee::Known(callee),
+                return_to,
+                ..
+            } = node
+            else {
+                continue;
+            };
+            if !module
+                .function(*callee)
+                .is_some_and(|function| function.droppable)
+            {
+                continue;
+            }
+            present += 1;
+            if module
+                .continuation(*return_to)
+                .is_some_and(|continuation| continuation.params.is_empty())
+            {
+                dead += 1;
+            }
+        }
+        curios_profile::sample!("cont::droppable_calls_present", present);
+        curios_profile::sample!("cont::droppable_dead_calls", dead);
+    }
 }
