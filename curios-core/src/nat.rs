@@ -1,5 +1,7 @@
 use {
-    super::{Cost, Intrinsic, ReduceError, Reducer, Subterm, Term},
+    super::{
+        Apply, Argument, Bound, Cost, Intrinsic, ReduceError, Reducer, Subterm, Term, Var, Visit,
+    },
     curios_num::Natural,
     curios_utilities::recurse,
     std::collections::HashMap,
@@ -301,6 +303,75 @@ impl Nat {
             .unwrap_or_else(|| Term::intrinsic(Intrinsic::Nat(Nat::Zero)));
 
         Self::rebuild(floor, inner)
+    }
+
+    /// `term` with every sum inside it rebuilt in one order, so two spellings of one number become one term.
+    ///
+    /// **Reduction is not enough on its own, and this is the half it does not do.** [`Nat::summands`] keeps first-appearance order — which is what makes read-then-rebuild the identity, and a rebuild that reordered would hand the reducer a new term every pass — so `x + y` and `y + x` reduce to two distinct `NatAdd` nodes and stay two summands the peel cannot pair. Forcing a summand's arguments only gets as far as turning the concept dispatch into that node; ordering is what makes the pair meet.
+    ///
+    /// Ordering by [`Term::structural_hash`] is the discipline a monomial's factors already keep — `Nat::multiply` and `int_monomial` both sort that way, so `i · j` and `j · i` are one term — applied to a sum's summands instead of a product's factors. Sound because `Nat` under `+` is a commutative monoid and congruence carries that under the head.
+    ///
+    /// **Probe-side only.** The one caller hands the result to a peel and falls back to the *original* spelling when that peel still decides nothing, so no reordered sum is ever returned to the reducer and the oscillation [`Nat::summands`] records is not re-entered.
+    fn ordered_sums(term: &Term) -> Term {
+        recurse(|| {
+            term.traverse(&mut Visit::rewriting(
+                |_, _: &Var| None,
+                // A pre-hook does not descend into what it replaces, so the recursion is this closure's own: each summand is ordered before the sum it sits in is.
+                Box::new(|_, node: &Term| {
+                    if !matches!(&**node, Subterm::Intrinsic(Intrinsic::NatAdd(..))) {
+                        return None;
+                    }
+                    let mut combination =
+                        Self::linear(Self::summands(node).iter().map(Self::ordered_sums));
+                    combination.sort_by_key(|(_, factor)| factor.structural_hash());
+
+                    Some(Self::from_linear(combination, Natural::zero()))
+                }),
+            ))
+        })
+    }
+
+    /// A weak-head `Nat` with every summand's own arguments forced — the second normalization the fold does not perform on its own, asked for by name where a comparison needs the value.
+    ///
+    /// **The peel reads summands without reducing them, and the fold leaves a stuck application's arguments exactly as written.** So `f(x + y)` and `f(y + x)` are two summands that never pair, though conversion decides that very pair on its own the moment it compares them directly — which is why each step of `Eq(f(x + y) + g(y + z), g(z + y) + f(y + x))` holds while the composition did not. This is [`Nat::normalize`]'s demand for a different unforced shape, and `normalize_bool`'s for a different carrier: force what the peel reads before it reads it.
+    ///
+    /// **The head is kept verbatim and only the arguments are forced**, as `canonical_scrutinee` keeps a refinement key's head verbatim: reducing the summand itself would unfold the very definition the sum is stuck on, and the sum would stop being a sum. A summand that is not an application comes back untouched, and a term no summand of which changed comes back as itself — which is what keeps this free where it decides nothing, and keeps the caller's stability arm reading the term it was handed.
+    pub fn normalize_atoms(reducer: &mut impl Reducer, term: Term) -> Result<Term, ReduceError> {
+        let (floor, inner) = Self::decompose(&term);
+        let mut summands = Vec::new();
+        let mut changed = false;
+        for summand in Self::summands(&inner) {
+            let forced = Self::force_arguments(reducer, &summand)?;
+            changed |= forced != summand;
+            summands.push(forced);
+        }
+
+        match changed {
+            false => Ok(term),
+            true => Ok(Self::sum_over_floor(summands, floor)),
+        }
+    }
+
+    /// One summand with each argument of its applied head reduced, the head itself untouched.
+    fn force_arguments(reducer: &mut impl Reducer, summand: &Term) -> Result<Term, ReduceError> {
+        let Subterm::Apply(Apply { head, arguments }) = &**summand else {
+            return Ok(summand.clone());
+        };
+
+        let mut forced = Vec::with_capacity(arguments.len());
+        for argument in arguments {
+            let reduced = reducer.reduce(argument.term.clone())?;
+            forced.push(Argument {
+                term: Self::ordered_sums(&reduced),
+                plicity: argument.plicity,
+            });
+        }
+
+        Ok(Subterm::Apply(Apply {
+            head: head.clone(),
+            arguments: forced,
+        })
+        .into())
     }
 
     /// A weak-head `Nat` with every product of two symbolic sums distributed, and the result re-merged — the one normalization the fold no longer performs on its own, asked for by name where a comparison needs the value: `compare_nat`, the converters' rule for two symbolic `Nat`s. See `documentation/design/toolchain/a-sum-is-merged-when-it-is-forced-not-when-it-is-built.md`.

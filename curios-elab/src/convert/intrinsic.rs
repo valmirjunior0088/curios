@@ -128,7 +128,29 @@ pub(crate) fn convert_intrinsic(
                 cmp.enqueue(Term::type_ground(), left, right);
                 return Ok(true);
             }
-            Peel::Stuck => {}
+            // **The `Nat` peel's one unforced shape**, retried once with each summand's own arguments forced. The fold leaves a stuck application's arguments as written, so two summands that differ only inside their heads never pair; forcing them here is `normalize_bool`'s demand for the other carrier, and it costs nothing on any pair that already decided — this arm is reached only when the peel found nothing to cancel. A retry that still finds nothing falls through to the congruence below on the *original* spelling, so nothing downstream meets a respelled sum.
+            Peel::Stuck => {
+                if peel_nat_pair(&this, &that).is_some() {
+                    let forced_this = Nat::normalize_atoms(context, Term::intrinsic(this.clone()))?;
+                    let forced_that = Nat::normalize_atoms(context, Term::intrinsic(that.clone()))?;
+
+                    if let (Some(forced_this), Some(forced_that)) =
+                        (as_intrinsic(&forced_this), as_intrinsic(&forced_that))
+                        && (forced_this != this || forced_that != that)
+                        && let Some(peel) = peel_nat_pair(&forced_this, &forced_that)
+                    {
+                        match peel {
+                            Peel::Equal => return Ok(true),
+                            Peel::Clash => return Ok(false),
+                            Peel::Continue(left, right) => {
+                                cmp.enqueue(Term::type_ground(), left, right);
+                                return Ok(true);
+                            }
+                            Peel::Stuck => {}
+                        }
+                    }
+                }
+            }
         }
     }
 

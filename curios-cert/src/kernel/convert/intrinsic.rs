@@ -103,7 +103,28 @@ pub(super) fn convert_intrinsic(
             Peel::Equal => return Ok(true),
             Peel::Clash => return Ok(false),
             Peel::Continue(left, right) => return ground(kernel, history, &left, &right),
-            Peel::Stuck => {}
+            // **The `Nat` peel's one unforced shape**, retried once with each summand's own arguments forced and its sums put in one order — the elaborator's rule, stated once more here because each checker asks its normalization demands by name. The fold leaves a stuck application's arguments as written, so two summands differing only inside their heads never pair; this arm is reached only when the peel found nothing to cancel, and a retry that still finds nothing falls through to the congruence below on the *original* spelling.
+            Peel::Stuck => {
+                if peel_nat_pair(this, that).is_some() {
+                    let forced_this = Nat::normalize_atoms(kernel, Term::intrinsic(this.clone()))?;
+                    let forced_that = Nat::normalize_atoms(kernel, Term::intrinsic(that.clone()))?;
+
+                    if let (Subterm::Intrinsic(forced_this), Subterm::Intrinsic(forced_that)) =
+                        (&*forced_this, &*forced_that)
+                        && (forced_this != this || forced_that != that)
+                        && let Some(peel) = peel_nat_pair(forced_this, forced_that)
+                    {
+                        match peel {
+                            Peel::Equal => return Ok(true),
+                            Peel::Clash => return Ok(false),
+                            Peel::Continue(left, right) => {
+                                return ground(kernel, history, &left, &right);
+                            }
+                            Peel::Stuck => {}
+                        }
+                    }
+                }
+            }
         }
     }
 
