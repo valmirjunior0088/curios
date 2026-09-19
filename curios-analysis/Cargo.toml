@@ -26,6 +26,8 @@ curios-num = { workspace = true }
 # crate a second time, so `Kernel`'s `Judge` implementation would be against the
 # other copy and the bound would not hold.
 [dev-dependencies]
+# The foreign row `tests/driven.rs` forges to put a call in a foreign call's argument, the one child position no `curios-core` constructor reaches without one.
+curios-abi = { workspace = true }
 curios-cert = { workspace = true }
 # This crate on itself, only to turn `test-support` on for its own tests: `tests/driven.rs`
 # links the library as an external crate, so `#[cfg(test)]` inside the lib would not reach it

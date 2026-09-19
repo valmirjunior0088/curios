@@ -7,18 +7,22 @@
 //! What stays in `curios-analysis` is everything that needs no checker at all — the polarity lattice's own laws, the size-change matrix algebra, universe satisfiability. Those are unit tests of pure functions and belong beside them.
 
 use {
+    curios_abi::{ForeignFunction, Namespace, WireResults, WireSignature, WireType},
     curios_analysis::{
         Coverage, Declarations, Invert, PositivityRefusal, fixture::SYNTAX, group_totality,
         invert_indices, positivity_vectors,
     },
     curios_cert::Kernel,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Instance, InstanceHead, Intrinsic, Metavar,
-        MetavarId, MetavarOrigin, Nat, Polarity, Rec, StructType, Subterm, Telescope, Term,
-        Totality, UniverseContext, Var,
+        Apply, Argument, Atom, Bang, Carrier, Cases, Field, Free, Global, InductArm, InductDecl,
+        InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic, Many, Match,
+        MatchResult, Metavar, MetavarId, MetavarOrigin, Nat, Polarity, Proj, Rec, Scope, Struct,
+        StructEntry, StructType, Subterm, Telescope, Term, Three, Totality, Transient, Tuple, Two,
+        UniverseContext, Var, Variant,
     },
-    curios_utilities::{Plicity, Qualifier},
-    std::{collections::BTreeMap, rc::Rc, slice},
+    curios_num::Natural,
+    curios_utilities::{Grain, InfixOp, Plicity, Qualifier},
+    std::{collections::BTreeMap, rc::Rc, slice, sync::Arc},
 };
 
 /// The member every probe below plants a call to.
@@ -437,208 +441,452 @@ fn call_is_seen(body: Term) -> bool {
     group_totality(&mut kernel, group) == Totality::Partial
 }
 
-/// The position-coverage differential (see `documentation/soundness/whole-module-passes/record_totality-t.md`): `Walk::walk` visits every child position `Subterm::any_child_term` does, minus a named whitelist.
+/// The `index`th placeholder child: a literal no walk reads as anything, distinct from every other so that replacing one names one position.
+fn marker(index: usize) -> Term {
+    Term::intrinsic(Intrinsic::Nat(Nat::new(10_000 + index)))
+}
+
+/// The markers minted so far, and which of them the walk is documented not to reach.
+#[derive(Default)]
+struct Markers {
+    minted: usize,
+    unvisited: Vec<(Term, &'static str)>,
+}
+
+impl Markers {
+    /// A child the walk must reach.
+    fn visited(&mut self) -> Term {
+        self.minted += 1;
+        marker(self.minted)
+    }
+
+    /// A child on the whitelist, with the mechanism that keeps the walk from it.
+    fn unvisited(&mut self, mechanism: &'static str) -> Term {
+        let marker = self.visited();
+        self.unvisited.push((marker.clone(), mechanism));
+        marker
+    }
+}
+
+/// One term whose every child is a marker, and the markers it was built from.
+struct Specimen {
+    term: Term,
+    markers: Vec<Term>,
+}
+
+impl Specimen {
+    fn of(markers: &mut Markers, build: impl FnOnce(&mut Markers) -> Term) -> Self {
+        let first = markers.minted;
+        let term = build(markers);
+        let markers = (first + 1..=markers.minted).map(marker).collect();
+
+        Self { term, markers }
+    }
+}
+
+/// Every form a child can hang from, by the name its specimen is held under.
+const FORMS: &[&str] = &[
+    "a leaf",
+    "a metavariable",
+    "a universe instance of a variable",
+    "a universe instance of a projected group",
+    "a transient",
+    "an intrinsic",
+    "a foreign call",
+    "a lambda",
+    "a function type",
+    "an application",
+    "a tuple type",
+    "a tuple",
+    "a projection",
+    "a nominal type",
+    "a constructor",
+    "a structure type",
+    "a structure literal",
+    "a match at a motive",
+    "a match at an ambient goal",
+    "a boolean match",
+    "a dispatch",
+    "a nominal match",
+    "a `Nat` eliminator",
+    "a `Bin` eliminator",
+    "a `List` eliminator",
+    "a let",
+    "a group",
+];
+
+/// The forms a specimen stands for. Wildcard-free at every level a child can hang from, so a new former — a `Subterm` variant, a `Cases` kind, a carrier, a match result, an instance head, a transient — is a compile error here, and the arm it forces is where its specimen is owed.
+fn forms(term: &Term) -> Vec<&'static str> {
+    match &**term {
+        Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => vec!["a leaf"],
+        Subterm::Metavar(_) => vec!["a metavariable"],
+        Subterm::Instance(Instance { head, .. }) => vec![match head {
+            InstanceHead::Var(_) => "a universe instance of a variable",
+            InstanceHead::RecProj(..) => "a universe instance of a projected group",
+        }],
+        Subterm::Transient(transient) => vec![match transient {
+            Transient::Infix(_) | Transient::Bang(_) => "a transient",
+            Transient::NumLit(_) | Transient::Derive => "a leaf",
+        }],
+        Subterm::Intrinsic(_) => vec!["an intrinsic"],
+        Subterm::Foreign(..) => vec!["a foreign call"],
+        Subterm::Func(_) => vec!["a lambda"],
+        Subterm::FuncType(_) => vec!["a function type"],
+        Subterm::Apply(_) => vec!["an application"],
+        Subterm::TupleType(_) => vec!["a tuple type"],
+        Subterm::Tuple(_) => vec!["a tuple"],
+        Subterm::Proj(_) => vec!["a projection"],
+        Subterm::InductType(_) => vec!["a nominal type"],
+        Subterm::Variant(_) => vec!["a constructor"],
+        Subterm::StructType(_) => vec!["a structure type"],
+        Subterm::Struct(_) => vec!["a structure literal"],
+        Subterm::Match(Match { result, cases, .. }) => vec![
+            match result {
+                MatchResult::Family(_) => "a match at a motive",
+                MatchResult::Ambient(_) => "a match at an ambient goal",
+            },
+            match cases {
+                Cases::Bool { .. } => "a boolean match",
+                Cases::Switch { .. } => "a dispatch",
+                Cases::Induct { .. } => "a nominal match",
+                Cases::FreeMonoid { carrier } => match carrier {
+                    Carrier::Nat { .. } => "a `Nat` eliminator",
+                    Carrier::Bin { .. } => "a `Bin` eliminator",
+                    Carrier::List { .. } => "a `List` eliminator",
+                },
+            },
+        ],
+        Subterm::Let(_) => vec!["a let"],
+        Subterm::Rec(_) => vec!["a group"],
+    }
+}
+
+/// The position-coverage differential (see `documentation/soundness/whole-module-passes/record_totality-t.md`): `Walk::walk` visits every child position `Subterm::any_child_term` reports, minus a named whitelist.
 ///
 /// This matters more here than anywhere else on the perimeter because this is the only analysis whose blindness *admits*. Every other one refuses when it cannot see — positivity answers `Mixed` at an out-of-set name, `whnf` goes stuck, inversion derives nothing at a `Prop`-valued position, an under-applied call is graded `Matrix::unknown` — while a call site the walk never visits contributes no edge, and a group with no edges is `Total`. Route eight of this row's history was exactly that and nothing else: a projected inner group went unwalked, `rec f(n) -> False = (rec g(m) -> False = f(m); g)(n)` closed to no call whatsoever, both groups classified `Total`, and `f(0)` diverged through `g` while (V) read the verdict.
 ///
 /// The probe needs no instrumentation because the engine types nothing: it is a total function of post-zonk terms, so an ill-typed fixture is a legitimate input. Each row plants a *nullary* self-call at one child position — the member takes no lambda, so a self-call from it is a 0x0 matrix, idempotent with no diagonal — which makes the verdict `Partial` exactly when the walk reached the plant and `Total` exactly when it did not.
 ///
-/// **The whitelist is three, where the prose audit this replaces counted two.** Its two are a `Metavar`'s spine, which `zonk_module` refuses before this pass runs, and a nested `Rec` member's declared type. The third is a separate mechanism the audit names but folds into the second: `Member::of` peels the member body's *leading* lambdas and discards their domain annotations at `Telescope::Cons(_, rest)`, so a call planted there is invisible while the same lambda one node deeper is walked — which is why every row below is wrapped in a tuple, and why the two spellings are asserted against each other at the end.
+/// **The rows are the fold's, not a list kept here.** Each specimen is one form with a distinct marker in every child position; the fold is asked for its children, and the call is planted at each child it reports. A list written by hand held a row for whatever its author thought of, and passed as it stood while the second boolean arm, every dispatch, nominal and eliminator arm, a nominal match's default, a `List` eliminator's element type, an ambient goal, a foreign call's arguments and a transient's children had none. Two things are asserted of every specimen before anything is planted: that the fold reports exactly the markers it was built from, so a specimen populating a field the fold does not visit fails here rather than passing unplanted, and that every form in `FORMS` has one.
 ///
-/// All three are type positions, and the argument that they are safe is the audit's: a call in one is consumed by β or read only by typing, never reduced, and an edge the engine misses is dangerous only where it can complete a reduction cycle. That argument is not what this test checks. What it checks is that the set does not quietly grow — a new term-bearing field on an existing variant is absorbed by the `..` in both patterns without a compile error, and would otherwise widen what the engine accepts in silence.
+/// **What that does and does not hold.** A term-bearing field added to a form whose specimen is a struct literal is a compile error at that literal, and the marker that repairs it is planted with no further edit. `Func`, `FuncType`, `TupleType`, `Let` and `Rec` are built through `Term`'s constructors, their fields being private, so a field added behind one of those is held only by whoever extends the constructor.
+///
+/// **The whitelist is three mechanisms.** A `Metavar`'s spine, which `zonk_module` refuses before this pass runs. A group member's declared type, under both spellings a group is reached by — a nested `Rec` and a universe instance's projection head. And the one the fold cannot show, because it is not a child position but a peel: `Member::of` takes the member body's *leading* lambdas and discards their domain annotations at `Telescope::Cons(_, rest)`, so a call planted there is invisible while the same lambda one node deeper is walked — which is why every row is wrapped in a tuple, and why the two spellings are asserted against each other at the end.
+///
+/// All three are type positions, and the argument that they are safe is the audit's: a call in one is consumed by β or read only by typing, never reduced, and an edge the engine misses is dangerous only where it can complete a reduction cycle. That argument is not what this test checks.
 #[test]
 fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
-    let filler = || Term::intrinsic(Intrinsic::NatType);
-    let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
     let name = || Global::Authored(Qualifier::from(["N"]));
     let binder = |index: u32| Free::local(500 + index, None);
     let call = || Term::free_var(&planted());
+    let group_of = |rec: &Term| {
+        let Subterm::Rec(Rec { group, .. }) = &**rec else {
+            panic!("the fixture changed shape");
+        };
+        group.clone()
+    };
+    let matching = |markers: &mut Markers, cases: Cases| -> Term {
+        Subterm::Match(Match {
+            head: markers.visited(),
+            result: MatchResult::Family(Scope::close(Many(1), &[&binder(1)], markers.visited())),
+            cases,
+        })
+        .into()
+    };
 
-    // Every child position `Subterm::any_child_term` visits, and what the walk must say about it.
-    let positions: Vec<(&str, Term, bool)> = vec![
-        (
-            // The variable head is the node's own data rather than a child term since the head became typed, but it is still a call position the walk must see.
-            "a universe instance's variable head",
+    let mut markers = Markers::default();
+    let builders: Vec<Box<dyn FnOnce(&mut Markers) -> Term + '_>> = vec![
+        Box::new(|_| Term::type_ground()),
+        Box::new(|_| {
             Subterm::Instance(Instance {
-                head: InstanceHead::Var(Var::free(planted())),
+                head: InstanceHead::Var(Var::free(binder(7))),
                 levels: Vec::new(),
             })
-            .into(),
-            true,
-        ),
-        (
-            "a universe instance's projection head's member body",
-            {
-                let rec = Term::rec(
-                    vec![(binder(90), filler(), call())],
-                    Term::free_var(&binder(90)),
-                );
-                let Subterm::Rec(Rec { group, .. }) = &*rec else {
-                    panic!("the fixture changed shape");
-                };
-                Subterm::Instance(Instance {
-                    head: InstanceHead::RecProj(group.clone(), 0),
-                    levels: Vec::new(),
-                })
-                .into()
-            },
-            true,
-        ),
-        (
-            "an intrinsic's operand",
-            Term::intrinsic(Intrinsic::ListType(call())),
-            true,
-        ),
-        (
-            "a lambda's domain",
-            Term::func([(binder(1), call())], zero()),
-            true,
-        ),
-        (
-            "a lambda's body",
-            Term::func([(binder(1), filler())], call()),
-            true,
-        ),
-        (
-            "a function type's domain",
-            Term::func_type([(binder(1), call())], zero()),
-            true,
-        ),
-        (
-            "a function type's codomain",
-            Term::func_type([(binder(1), filler())], call()),
-            true,
-        ),
-        ("an application's head", Term::apply(call(), [zero()]), true),
-        (
-            "an application's argument",
-            Term::apply(zero(), [call()]),
-            true,
-        ),
-        (
-            "a tuple type's component",
-            Term::tuple_type(vec![(binder(1), call())]),
-            true,
-        ),
-        ("a tuple's field", Term::tuple([call()]), true),
-        ("a projection's head", Term::proj(call(), 0), true),
-        (
-            "a nominal type's parameter",
-            Term::induct_type(name(), [call()], Vec::<Term>::new()),
-            true,
-        ),
-        (
-            "a nominal type's index",
-            Term::induct_type(name(), Vec::<Term>::new(), [call()]),
-            true,
-        ),
-        (
-            "a constructor's parameter",
-            Term::variant(name(), [call()], "mk", Vec::<Term>::new()),
-            true,
-        ),
-        (
-            "a constructor's payload",
-            Term::variant(name(), Vec::<Term>::new(), "mk", [call()]),
-            true,
-        ),
-        (
-            "a structure type's parameter",
+            .into()
+        }),
+        Box::new(|markers| {
+            Subterm::Metavar(Metavar {
+                id: MetavarId::from(0usize),
+                spine: Rc::new(vec![markers.unvisited("a metavariable's spine")]),
+                origin: MetavarOrigin::Hole,
+            })
+            .into()
+        }),
+        Box::new(|markers| {
+            let rec = Term::rec(
+                vec![(
+                    binder(90),
+                    markers.unvisited("a projected group's member type"),
+                    markers.visited(),
+                )],
+                Term::free_var(&binder(90)),
+            );
+            Subterm::Instance(Instance {
+                head: InstanceHead::RecProj(group_of(&rec), 0),
+                levels: Vec::new(),
+            })
+            .into()
+        }),
+        Box::new(|markers| {
+            Subterm::Transient(Transient::Infix(Infix {
+                op: InfixOp::Add,
+                left: markers.visited(),
+                right: markers.visited(),
+            }))
+            .into()
+        }),
+        Box::new(|markers| {
+            Subterm::Transient(Transient::Bang(Bang {
+                action: markers.visited(),
+                continuation: markers.visited(),
+            }))
+            .into()
+        }),
+        Box::new(|markers| Term::intrinsic(Intrinsic::ListType(markers.visited()))),
+        Box::new(|markers| {
+            let row = Arc::new(ForeignFunction {
+                namespace: Namespace::Ffi,
+                name: "/planted".to_string(),
+                subject: None,
+                label: "planted".to_string(),
+                description: String::new(),
+                signature: WireSignature {
+                    params: Vec::new(),
+                    results: WireResults::single("value".to_string(), WireType::Nat),
+                },
+            });
+            Term::foreign(row, vec![markers.visited()])
+        }),
+        Box::new(|markers| Term::func([(binder(1), markers.visited())], markers.visited())),
+        Box::new(|markers| Term::func_type([(binder(1), markers.visited())], markers.visited())),
+        Box::new(|markers| {
+            Subterm::Apply(Apply {
+                head: markers.visited(),
+                arguments: vec![Argument {
+                    term: markers.visited(),
+                    plicity: Plicity::Explicit,
+                }],
+            })
+            .into()
+        }),
+        Box::new(|markers| Term::tuple_type(vec![(binder(1), markers.visited())])),
+        Box::new(|markers| {
+            Subterm::Tuple(Tuple {
+                fields: vec![markers.visited()],
+                names: vec![None],
+            })
+            .into()
+        }),
+        Box::new(|markers| {
+            Subterm::Proj(Proj {
+                head: markers.visited(),
+                field: Field::Index(0),
+            })
+            .into()
+        }),
+        Box::new(|markers| {
+            Subterm::InductType(InductType {
+                name: name(),
+                universes: Vec::new(),
+                params: vec![markers.visited()],
+                indices: vec![markers.visited()],
+            })
+            .into()
+        }),
+        Box::new(|markers| {
+            Subterm::Variant(Variant {
+                name: name(),
+                universes: Vec::new(),
+                params: vec![markers.visited()],
+                tag: "mk".into(),
+                payload: vec![markers.visited()],
+            })
+            .into()
+        }),
+        Box::new(|markers| {
             Subterm::StructType(StructType {
                 name: name(),
                 universes: Vec::new(),
-                params: vec![call()],
+                params: vec![markers.visited()],
             })
-            .into(),
-            true,
-        ),
-        (
-            "a structure literal's parameter",
-            Term::struct_(name(), [call()], Vec::<Term>::new()),
-            true,
-        ),
-        (
-            "a structure literal's field",
-            Term::struct_(name(), Vec::<Term>::new(), [call()]),
-            true,
-        ),
-        (
-            "a match's scrutinee",
-            Term::bool_match(call(), None, filler(), zero(), zero()),
-            true,
-        ),
-        (
-            "a match's motive",
-            Term::bool_match(zero(), None, call(), zero(), zero()),
-            true,
-        ),
-        (
-            "a boolean arm",
-            Term::bool_match(zero(), None, filler(), call(), zero()),
-            true,
-        ),
-        (
-            "a let binding's type",
-            Term::let_(&binder(1), call(), zero(), zero()),
-            true,
-        ),
-        (
-            "a let binding's value",
-            Term::let_(&binder(1), filler(), call(), zero()),
-            true,
-        ),
-        (
-            "a let's tail",
-            Term::let_(&binder(1), filler(), zero(), call()),
-            true,
-        ),
-        (
-            "a nested group's member body",
-            Term::rec(vec![(binder(1), filler(), call())], zero()),
-            true,
-        ),
-        (
-            "a nested group's tail",
-            Term::rec(vec![(binder(1), filler(), zero())], call()),
-            true,
-        ),
-        // The two positions the audit names, and the reason each is safe to skip.
-        (
-            "a metavariable's spine",
-            Subterm::Metavar(Metavar {
-                id: MetavarId::from(0usize),
-                spine: Rc::new(vec![call()]),
-                origin: MetavarOrigin::Hole,
+            .into()
+        }),
+        Box::new(|markers| {
+            Subterm::Struct(Struct {
+                name: name(),
+                universes: Vec::new(),
+                params: vec![markers.visited()],
+                fields: vec![markers.visited()],
+                entries: vec![StructEntry::Field(None)],
             })
-            .into(),
-            false,
-        ),
-        (
-            "a nested group's member type",
-            Term::rec(vec![(binder(1), call(), zero())], zero()),
-            false,
-        ),
+            .into()
+        }),
+        Box::new(|markers| {
+            let cases = Cases::Bool {
+                false_case: markers.visited(),
+                true_case: markers.visited(),
+            };
+            matching(markers, cases)
+        }),
+        Box::new(|markers| {
+            Subterm::Match(Match {
+                head: markers.visited(),
+                result: MatchResult::Ambient(markers.visited()),
+                cases: Cases::Bool {
+                    false_case: markers.visited(),
+                    true_case: markers.visited(),
+                },
+            })
+            .into()
+        }),
+        Box::new(|markers| {
+            let cases = Cases::Switch {
+                cases: vec![(Natural::from(0usize), markers.visited())],
+                default: markers.visited(),
+            };
+            matching(markers, cases)
+        }),
+        Box::new(|markers| {
+            let arm = Scope::close(Many(1), &[&binder(2)], markers.visited());
+            let cases = Cases::Induct {
+                cases: vec![("mk".into(), InductArm::new(arm, vec![Plicity::Explicit]))],
+                default: Some(markers.visited()),
+            };
+            matching(markers, cases)
+        }),
+        Box::new(|markers| {
+            let carrier = Carrier::Nat {
+                empty_case: markers.visited(),
+                cons_case: Scope::close(Two, &[&binder(2), &binder(3)], markers.visited()),
+            };
+            matching(markers, Cases::FreeMonoid { carrier })
+        }),
+        Box::new(|markers| {
+            let carrier = Carrier::Bin {
+                grain: Grain::X,
+                empty_case: markers.visited(),
+                cons_case: Scope::close(
+                    Three,
+                    &[&binder(2), &binder(3), &binder(4)],
+                    markers.visited(),
+                ),
+            };
+            matching(markers, Cases::FreeMonoid { carrier })
+        }),
+        Box::new(|markers| {
+            let carrier = Carrier::List {
+                elem: markers.visited(),
+                empty_case: markers.visited(),
+                cons_case: Scope::close(
+                    Three,
+                    &[&binder(2), &binder(3), &binder(4)],
+                    markers.visited(),
+                ),
+            };
+            matching(markers, Cases::FreeMonoid { carrier })
+        }),
+        Box::new(|markers| {
+            Term::let_(
+                &binder(1),
+                markers.visited(),
+                markers.visited(),
+                markers.visited(),
+            )
+        }),
+        Box::new(|markers| {
+            Term::rec(
+                vec![(
+                    binder(1),
+                    markers.unvisited("a nested group's member type"),
+                    markers.visited(),
+                )],
+                markers.visited(),
+            )
+        }),
     ];
+    let specimens = builders
+        .into_iter()
+        .map(|build| Specimen::of(&mut markers, build))
+        .collect::<Vec<_>>();
 
     // The harness itself, first: a bare self-call must be seen and a call-free body must not, or every row below passes for the wrong reason.
     assert!(call_is_seen(call()), "the bare self-call was not seen");
     assert!(
-        !call_is_seen(zero()),
+        !call_is_seen(Term::type_ground()),
         "a call-free body was read as recursive"
     );
 
-    // Wrapped in a tuple so the member body is never itself a lambda: `Member::of` peels a *leading* lambda and discards its domain annotations, which is a separate divergence with its own row below, and leaving it in the way would hide what `Walk::step` does with every other position.
-    for (position, plant, expected) in positions {
-        assert_eq!(
-            call_is_seen(Term::tuple([plant])),
-            expected,
-            "{position}: the walk {} the planted self-call",
-            if expected { "missed" } else { "reached" },
-        );
+    let held = specimens
+        .iter()
+        .flat_map(|specimen| forms(&specimen.term))
+        .collect::<Vec<_>>();
+    for form in FORMS {
+        assert!(held.contains(form), "{form} has no specimen");
     }
 
-    // The third divergence, stated as the pair that separates it from `Walk::step`: the same lambda is invisible at the top of a member body and visited one node deeper.
-    let lambda = || Term::func([(binder(1), call())], zero());
+    for specimen in &specimens {
+        let form = forms(&specimen.term).join(", ");
+        let mut children = Vec::new();
+        specimen.term.any_child_term(&mut |child| {
+            children.push(child.clone());
+            false
+        });
+
+        // The fold and the specimen agree on what the children are, in both directions: a marker the fold does not report is a field it misses, and a child that is no marker is a position the specimen left unpopulated.
+        for marker in &specimen.markers {
+            assert!(
+                children.contains(marker),
+                "{form}: the child fold does not report {marker:?}",
+            );
+        }
+        for child in &children {
+            assert!(
+                specimen.markers.contains(child),
+                "{form}: the specimen leaves the child {child:?} without a marker",
+            );
+        }
+
+        for child in &children {
+            let plant = specimen.term.replace_term(child, &call());
+            // A replacement that reached nothing would hold every whitelisted row vacuously.
+            assert!(
+                plant.mentions_term(&call()),
+                "{form}: nothing was planted at {child:?}",
+            );
+
+            let mechanism = markers
+                .unvisited
+                .iter()
+                .find(|(marker, _)| marker == child)
+                .map(|(_, mechanism)| *mechanism);
+            // Wrapped in a tuple so the member body is never itself a lambda: `Member::of` peels a *leading* lambda and discards its domain annotations, which is the third mechanism and has its own pair below, and leaving it in the way would hide what `Walk::step` does with every other position.
+            assert_eq!(
+                call_is_seen(Term::tuple([plant])),
+                mechanism.is_none(),
+                "{form}, at the child {child:?}: the walk {} the planted self-call{}",
+                if mechanism.is_none() {
+                    "missed"
+                } else {
+                    "reached"
+                },
+                mechanism.map_or(String::new(), |mechanism| format!(" past {mechanism}")),
+            );
+        }
+    }
+
+    // The variable head is the node's own data rather than a child term since the head became typed, so the fold reports nothing there, but it is still a call position the walk must see.
+    let head: Term = Subterm::Instance(Instance {
+        head: InstanceHead::Var(Var::free(planted())),
+        levels: Vec::new(),
+    })
+    .into();
+    assert!(
+        call_is_seen(Term::tuple([head])),
+        "a universe instance's variable head: the walk missed the planted self-call",
+    );
+
+    // The third mechanism, stated as the pair that separates it from `Walk::step`: the same lambda is invisible at the top of a member body and visited one node deeper.
+    let lambda = || Term::func([(binder(1), call())], Term::type_ground());
     assert!(
         !call_is_seen(lambda()),
         "a peeled lambda domain: the walk reached the planted self-call",

@@ -589,6 +589,7 @@ dependencies = [
 name = "curios-analysis"
 version = "0.14.7"
 dependencies = [
+ "curios-abi",
  "curios-analysis",
  "curios-cert",
  "curios-core",
