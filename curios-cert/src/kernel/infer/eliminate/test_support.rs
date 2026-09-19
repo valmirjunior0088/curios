@@ -34,24 +34,40 @@ pub(super) fn nat_type() -> Term {
 pub(super) struct Case {
     pub(super) tag: &'static str,
     pub(super) payload: Option<(Free, Term)>,
-    pub(super) index: Term,
+    /// The index targets this constructor produces, one per index of its family — several, because a target that mentions one binder *twice* is the shape the clash rule turns on and a single target cannot spell.
+    pub(super) indices: Vec<Term>,
 }
 
-/// A constructor carrying nothing, aimed at `index`.
+/// A constructor carrying nothing, aimed at `index` — the one-index spelling of [`nullary_at`].
 pub(super) fn nullary(tag: &'static str, index: Term) -> Case {
+    nullary_at(tag, vec![index])
+}
+
+/// A constructor carrying `binder : type_`, aimed at `index` — the one-index spelling of [`carrying_at`].
+pub(super) fn carrying(tag: &'static str, binder: Free, type_: Term, index: Term) -> Case {
+    carrying_at(tag, binder, type_, vec![index])
+}
+
+/// A constructor carrying nothing, aimed at `indices`.
+pub(super) fn nullary_at(tag: &'static str, indices: Vec<Term>) -> Case {
     Case {
         tag,
         payload: None,
-        index,
+        indices,
     }
 }
 
-/// A constructor carrying `binder : type_`, aimed at `index`.
-pub(super) fn carrying(tag: &'static str, binder: Free, type_: Term, index: Term) -> Case {
+/// A constructor carrying `binder : type_`, aimed at `indices`. A binder named in more than one of them is the non-linear target `Eq`'s `refl(@z) : (z, z)` has.
+pub(super) fn carrying_at(
+    tag: &'static str,
+    binder: Free,
+    type_: Term,
+    indices: Vec<Term>,
+) -> Case {
     Case {
         tag,
         payload: Some((binder, type_)),
-        index,
+        indices,
     }
 }
 
@@ -62,12 +78,29 @@ pub(super) fn declare(
     result_sort: Term,
     constructors: Vec<Case>,
 ) -> Global {
+    declare_at(
+        kernel,
+        path,
+        result_sort,
+        vec![Term::intrinsic(Intrinsic::NatType)],
+        constructors,
+    )
+}
+
+/// Declare a family whose indices have the given types, from its constructors.
+pub(super) fn declare_at(
+    kernel: &mut Kernel,
+    path: &str,
+    result_sort: Term,
+    index_types: Vec<Term>,
+    constructors: Vec<Case>,
+) -> Global {
     let family = Global::Authored(Qualifier::from([path]));
 
     let entries = constructors
         .into_iter()
         .map(|case| {
-            let targets = vec![case.index];
+            let targets = case.indices;
             let (telescope, plicities) = match case.payload {
                 Some((field, type_)) => (
                     Telescope::build([(field, type_)], targets),
@@ -85,10 +118,13 @@ pub(super) fn declare(
         &InductDecl {
             universe_context: UniverseContext::default(),
             arity: Telescope::done(Telescope::build(
-                [(
-                    Free::local(9_000, Some("i")),
-                    Term::intrinsic(Intrinsic::NatType),
-                )],
+                index_types
+                    .into_iter()
+                    .enumerate()
+                    .map(|(position, type_)| {
+                        (Free::local(9_000 + position as u32, Some("i")), type_)
+                    })
+                    .collect::<Vec<_>>(),
                 (),
             )),
             constructors: entries,
@@ -110,13 +146,33 @@ pub(super) fn eliminate(
     motive: Term,
     arms: Vec<(&str, Vec<Free>, Term)>,
 ) -> Term {
+    eliminate_at(kernel, family, vec![index], motive, arms)
+}
+
+/// [`eliminate`] over a scrutinee assumed at `family(indices)`, for a family carrying more than one.
+pub(super) fn eliminate_at(
+    kernel: &mut Kernel,
+    family: &Global,
+    indices: Vec<Term>,
+    motive: Term,
+    arms: Vec<(&str, Vec<Free>, Term)>,
+) -> Term {
     let subject = binder(50, "subject");
     kernel.assume(
         &subject,
-        &Term::induct_type(family.clone(), Vec::<Term>::new(), [index]),
+        &Term::induct_type(family.clone(), Vec::<Term>::new(), indices.clone()),
     );
 
-    let motive = Scope::close(Many(2), &[&binder(51, "i"), &binder(52, "s")], motive);
+    // One motive binder per index, then the scrutinee's.
+    let binders = (0..indices.len())
+        .map(|position| binder(51 + position as u32, "i"))
+        .chain([binder(51 + indices.len() as u32, "s")])
+        .collect::<Vec<_>>();
+    let motive = Scope::close(
+        Many(binders.len()),
+        &binders.iter().collect::<Vec<_>>(),
+        motive,
+    );
 
     Term::induct_match_scoped_marked(
         Term::free_var(&subject),

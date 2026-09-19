@@ -115,8 +115,8 @@ fn the_matrix_tallies_as_recorded() {
             both_accept: 22,
             both_refuse: 9,
             the_kernel_refuses_alone: 0,
-            unasked_with_a_twin: 15,
-            unasked_with_none: 18,
+            unasked_with_a_twin: 19,
+            unasked_with_none: 14,
         },
     );
 }

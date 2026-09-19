@@ -1219,25 +1219,33 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         "two_proofs_forced_on_one_binder",
         TWO_PROOFS_FORCED_ON_ONE_BINDER_DO_NOT_CLASH,
         Expect::Refuses("not provably impossible"),
-        Expect::NotAsked(None),
+        Expect::NotAsked(Some(
+            "kernel/infer/eliminate/tests.rs::a_clash_between_two_forcings_of_one_binder_excuses_the_arm",
+        )),
     ),
     (
         "open_forcing",
         AN_OPEN_FORCING_DOES_NOT_CLASH,
         Expect::Refuses("not provably impossible"),
-        Expect::NotAsked(None),
+        Expect::NotAsked(Some(
+            "kernel/infer/eliminate/tests.rs::a_clash_between_two_forcings_of_one_binder_excuses_the_arm",
+        )),
     ),
     (
         "two_applications_of_one_opaque_function",
         TWO_APPLICATIONS_OF_ONE_OPAQUE_FUNCTION_DO_NOT_CLASH,
         Expect::Refuses("not provably impossible"),
-        Expect::NotAsked(None),
+        Expect::NotAsked(Some(
+            "kernel/infer/eliminate/tests.rs::a_clash_between_two_forcings_of_one_binder_excuses_the_arm",
+        )),
     ),
     (
         "parity_disagreement",
         A_PARITY_DISAGREEMENT_IS_NOT_A_CLASH,
         Expect::Refuses("not provably impossible"),
-        Expect::NotAsked(None),
+        Expect::NotAsked(Some(
+            "kernel/infer/eliminate/tests.rs::a_clash_between_two_forcings_of_one_binder_excuses_the_arm",
+        )),
     ),
     (
         "non_injective_target",

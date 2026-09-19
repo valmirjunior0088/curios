@@ -648,3 +648,68 @@ fn an_arm_of_the_wrong_payload_arity_is_refused() {
         Err(KernelError::Arity { .. }),
     ));
 }
+
+/// Two forcings of one binder that clash make the case impossible, so the arm may be omitted — and at a proposition they do not, so it may not.
+///
+/// This is the clash rule reaching the kernel through the walk that certifies a module, rather than through the shared unifier alone. The target is *non-linear*: `same(@z) : (z, z)` is `Eq`'s shape, so neither index position clashes on its own — each solves `z`, here to `a()` and to `b()` — and what decides the case is whether those two forcings can be one value.
+///
+/// The pair differs in nothing but the sort of the *carrier the forcings inhabit* — not of the family being eliminated, which stays a proposition as `Eq` is. That is the distinction the rule turns on and the one a fixture most easily gets wrong: what licenses telling two constructors apart is their own family's sort. At a relevant carrier they are values a program distinguishes, so `Same(a(), b())` is empty and the omission stands. At a `Prop` carrier irrelevance identifies them, the deletion rule reconciles the pair before a clash is ever asked for, and the omitted arm is one the elimination cannot prove absent — the vacuous-elimination route `documentation/soundness/per-term-rules/coverage.md` records, which is why that half is the half worth holding.
+#[test]
+fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
+    for (label, carrier_sort, omission_stands) in [
+        (
+            "a relevant carrier, whose two constructors a program tells apart",
+            Term::type_ground(),
+            true,
+        ),
+        (
+            "a proposition, whose two inhabitants irrelevance identifies",
+            Term::prop(),
+            false,
+        ),
+    ] {
+        let mut kernel = kernel();
+        let carrier = declare_at(
+            &mut kernel,
+            "Bit",
+            carrier_sort,
+            Vec::new(),
+            vec![nullary_at("a", Vec::new()), nullary_at("b", Vec::new())],
+        );
+        let bit = Term::induct_type(carrier.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+        let inhabitant =
+            |tag: &str| Term::variant(carrier.clone(), Vec::<Term>::new(), tag, Vec::<Term>::new());
+
+        let value = binder(60, "z");
+        let family = declare_at(
+            &mut kernel,
+            "Same",
+            Term::prop(),
+            vec![bit.clone(), bit.clone()],
+            vec![carrying_at(
+                "same",
+                value.clone(),
+                bit.clone(),
+                vec![Term::free_var(&value), Term::free_var(&value)],
+            )],
+        );
+
+        // No arm for `same`, at two indices it cannot both equal.
+        let term = eliminate_at(
+            &mut kernel,
+            &family,
+            vec![inhabitant("a"), inhabitant("b")],
+            nat_type(),
+            Vec::new(),
+        );
+
+        let verdict = infer(&mut kernel, &term);
+        match omission_stands {
+            true => assert!(verdict.is_ok(), "{label}: the omitted arm was demanded"),
+            false => assert!(
+                matches!(verdict, Err(KernelError::MissingArm { .. })),
+                "{label}: the omitted arm was excused"
+            ),
+        }
+    }
+}
