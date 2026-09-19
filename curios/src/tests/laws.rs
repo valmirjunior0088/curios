@@ -4,7 +4,7 @@
 //!
 //! **State a row at every carrier, and state it first.** A grid stating a law at one carrier and not another passes exactly as a complete one does, and what it hides is invisible from reading the two implementations side by side: the bit grain went without `eql` while its byte twin had it, and `List` went without both seam-index rows while `Bytes` and `Bits` held them. Each was a real incompleteness, and each was found by stating the row rather than by inspection. A row stated before an implementation moves turns the change that follows into a refactor with an oracle.
 //!
-//! Every refused row is a candidate law, not a bug: each needs a rule in `curios-core`'s `reduce::intrinsic`, which both checkers share, so taking one is an addition to the trusted base and is recorded in `documentation/soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md` beside the grid that probes it over values.
+//! Every refused row is a candidate law or a control, never a bug. A candidate needs a rule in `curios-core`'s `reduce::intrinsic`, which both checkers share, so taking one is an addition to the trusted base and is recorded in `documentation/soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md` beside the grid that probes it over values. A control is a claim that is *not* a law, stated beside the held rows whose rule must stop short of it and marked as one where it stands: a rule widened past its soundness moves a control to the held side, and the goal test names it.
 
 use super::typecheck;
 
@@ -134,9 +134,16 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Nat/shr(x, y) <= x, true)",
             "Eq(x < x - y, false)",
             "Eq(x - y <= x + 3, true)",
+            // Divisibility: every symbolic summand is a multiple of the gcd of the coefficients, so two floors apart modulo it meet at no value. Equality and its negation decide; the order stays open.
+            "Eq(x * 2 + 1 == y * 2, false)",
+            "Eq(x * 2 + 1 != y * 2, true)",
+            "Eq(x * 4 + 6 == y * 2 + 1, false)",
         ],
-        // Parity: not a law of any monoid here, and not one to take.
-        refused: &["Eq(x * 2 + 1 == y * 2, false)"],
+        refused: &[
+            // Controls, and neither is a law: floors that agree modulo the gcd meet at `x = y + 1`, and a gcd of `1` divides every floor, so these meet at `x = y = 1`.
+            "Eq(x * 2 == y * 2 + 2, false)",
+            "Eq(x * 2 + 1 == y * 3, false)",
+        ],
     },
     Carrier {
         name: "Nat bitwise and shifts",
@@ -239,8 +246,12 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Int/shl(i, 1), i * 2)",
             "Eq(Int/shl(i, 3), 8 * i)",
             "Eq(Int/shl(i + j, 1), 2 * i + 2 * j)",
+            // Divisibility, as on `Nat`: the argument needs integers and nothing more.
+            "Eq(i * 2 + 1 == j * 2, false)",
+            "Eq(i * 2 + 1 != j * 2, true)",
         ],
-        refused: &[],
+        // The control, and not a law: constants that agree modulo the gcd meet at `i = j + 1`.
+        refused: &["Eq(i * 2 == j * 2 + 2, false)"],
     },
     Carrier {
         name: "Bool",

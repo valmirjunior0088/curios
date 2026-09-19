@@ -312,7 +312,7 @@ pub fn reduce_intrinsic(
             right,
             |c| match c {
                 Comparison::Eq => Some(true),
-                Comparison::Lt | Comparison::Gt => Some(false),
+                Comparison::Lt | Comparison::Gt | Comparison::Ne => Some(false),
                 Comparison::Le | Comparison::Ge | Comparison::Stuck => None,
             },
             Intrinsic::nat_eql,
@@ -323,7 +323,7 @@ pub fn reduce_intrinsic(
             right,
             |c| match c {
                 Comparison::Eq => Some(false),
-                Comparison::Lt | Comparison::Gt => Some(true),
+                Comparison::Lt | Comparison::Gt | Comparison::Ne => Some(true),
                 Comparison::Le | Comparison::Ge | Comparison::Stuck => None,
             },
             Intrinsic::nat_neq,
@@ -388,7 +388,7 @@ pub fn reduce_intrinsic(
             |c| match c {
                 Comparison::Lt => Some(true),
                 Comparison::Eq | Comparison::Gt | Comparison::Ge => Some(false),
-                Comparison::Le | Comparison::Stuck => None,
+                Comparison::Le | Comparison::Ne | Comparison::Stuck => None,
             },
             Intrinsic::nat_lt,
         ),
@@ -409,7 +409,7 @@ pub fn reduce_intrinsic(
             |c| match c {
                 Comparison::Lt | Comparison::Eq | Comparison::Le => Some(true),
                 Comparison::Gt => Some(false),
-                Comparison::Ge | Comparison::Stuck => None,
+                Comparison::Ge | Comparison::Ne | Comparison::Stuck => None,
             },
             Intrinsic::nat_lte,
         ),
@@ -472,7 +472,7 @@ pub fn reduce_intrinsic(
             right,
             |c| match c {
                 Comparison::Eq => Some(true),
-                Comparison::Lt | Comparison::Gt => Some(false),
+                Comparison::Lt | Comparison::Gt | Comparison::Ne => Some(false),
                 _ => None,
             },
             Intrinsic::IntEql,
@@ -483,7 +483,7 @@ pub fn reduce_intrinsic(
             right,
             |c| match c {
                 Comparison::Eq => Some(false),
-                Comparison::Lt | Comparison::Gt => Some(true),
+                Comparison::Lt | Comparison::Gt | Comparison::Ne => Some(true),
                 _ => None,
             },
             Intrinsic::IntNeq,

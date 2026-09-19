@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use {
     num_bigint::BigUint,
     num_traits::{One, ToPrimitive, Zero},
@@ -98,6 +101,16 @@ impl Natural {
         Self {
             value: self.value.sqrt(),
         }
+    }
+
+    /// The greatest common divisor, by Euclid's remainders — `gcd(n, 0)` is `n`, so the gcd of no numbers at all is the zero a fold starts from. Here because divisibility is a fact about ℕ: what a comparison reads off it is that two sums whose floors differ modulo the gcd of their coefficients are equal at no value.
+    pub fn gcd(&self, other: &Self) -> Self {
+        let (mut larger, mut smaller) = (self.value.clone(), other.value.clone());
+        while !smaller.is_zero() {
+            (larger, smaller) = (smaller.clone(), larger % smaller);
+        }
+
+        Self { value: larger }
     }
 
     /// `None` on a zero divisor — the reducer reports that case before folding.

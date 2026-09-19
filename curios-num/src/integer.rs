@@ -31,6 +31,11 @@ impl Integer {
         self.value.to_biguint().map(Natural::new)
     }
 
+    /// The absolute value as a [`Natural`] — total where [`Integer::to_natural`] is not, for a reader that asks what divides a number and not which side of zero it is on.
+    pub fn magnitude(&self) -> Natural {
+        Natural::new(self.value.magnitude().clone())
+    }
+
     /// `self << amount` as `self * 2^amount`, unbounded. The count is a [`Natural`], as `/sys`'s `Int/shl` declares it, so there is no negative count to decline; `None` only when it is too large to be a shift count, leaving the op a neutral term rather than fabricating a value. The right shift has no such case: it is the total `>>` below.
     pub fn checked_shl(self, amount: Natural) -> Option<Self> {
         Some(Self {

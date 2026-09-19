@@ -4,7 +4,11 @@
 
 use {
     super::*,
-    crate::{ReduceError, Reducer, Term, int_cancel_common, int_has_stuck_product, int_normalize},
+    crate::{
+        ReduceError, Reducer, Term, int_cancel_common, int_has_stuck_product, int_monomial,
+        int_normalize, int_terms,
+    },
+    curios_num::Natural,
 };
 
 /// The structural outcome of comparing two `Int`s, with the operands their shared part cancelled off. A stuck product on either side is distributed first, by name, as `compare_nat` distributes.
@@ -25,7 +29,20 @@ pub(super) fn compare_int(
 
     let outcome = match (left.as_int(), right.as_int()) {
         (Some(l), Some(r)) => from_ordering(l.cmp(&r)),
-        _ => Comparison::Stuck,
+        // Divisibility, as `compare_nat` reads it: the argument needs every monomial to be an integer and nothing more, so it holds below zero, and the two constants are apart modulo the gcd exactly when their difference is.
+        _ => {
+            let (constant_left, summands_left) = int_terms(&left);
+            let (constant_right, summands_right) = int_terms(&right);
+            let coefficients = summands_left
+                .iter()
+                .chain(&summands_right)
+                .map(|summand| int_monomial(summand).0.magnitude());
+            let difference = (constant_left - constant_right).magnitude();
+            match apart_modulo((&difference, &Natural::zero()), coefficients) {
+                true => Comparison::Ne,
+                false => Comparison::Stuck,
+            }
+        }
     };
 
     Ok((outcome, left, right))

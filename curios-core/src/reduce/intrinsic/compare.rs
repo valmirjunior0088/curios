@@ -1,6 +1,6 @@
 //! Deciding a `Nat` comparison, including under symbols.
 //!
-//! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. [`Comparison`] is the three-way verdict that carries an undecided answer back rather than guessing one.
+//! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. [`Comparison`] is the verdict: which of the three orderings the operands may still take, so an undecided answer is carried back rather than guessed.
 
 use {
     super::*,
@@ -9,7 +9,9 @@ use {
     std::cmp::Ordering,
 };
 
-/// The structural outcome of comparing two `Nat`s. The whole comparison family (`eql`/`neq`/`lt`/`le`/`gt`/`ge`) reads this one result; each op differs only in how it maps the outcome to a `bool`. `Le`/`Ge` record a *non-strict* bound the operands force without pinning equality (e.g. `succ x ≥ 1`), letting `lt`/`ge` decide where `eql` still cannot; `Stuck` is undecidable, and the op's neutral term is rebuilt.
+/// The structural outcome of comparing two `Nat`s. The whole comparison family (`eql`/`neq`/`lt`/`le`/`gt`/`ge`) reads this one result; each op differs only in how it maps the outcome to a `bool`.
+///
+/// A verdict is the set of orderings the operands may still take, and the variants are that set's seven non-empty values: `Lt`, `Eq` and `Gt` pin one, `Le` and `Ge` record a *non-strict* bound the operands force without pinning equality (e.g. `succ x ≥ 1`), letting `lt`/`ge` decide where `eql` still cannot, `Ne` is forced unequal with the order undecided — what divisibility proves, which `eql` and `neq` read and the order relations cannot — and `Stuck` is all three, where the op's neutral term is rebuilt. Two sound verdicts compose by intersection, which is how a forced `Le` that is also `Ne` becomes `Lt`.
 #[derive(Debug, PartialEq)]
 pub(super) enum Comparison {
     Eq,
@@ -17,7 +19,34 @@ pub(super) enum Comparison {
     Gt,
     Le,
     Ge,
+    Ne,
     Stuck,
+}
+
+impl Comparison {
+    /// This verdict met with the fact that the operands are unequal: the orderings left once `Eq` is struck from the set.
+    pub(super) fn unequal(self) -> Self {
+        match self {
+            Comparison::Stuck => Comparison::Ne,
+            Comparison::Le => Comparison::Lt,
+            Comparison::Ge => Comparison::Gt,
+            decided => decided,
+        }
+    }
+}
+
+/// Whether two sums are equal at no value because their floors differ modulo the gcd of their coefficients: every symbolic summand is a literal coefficient times a natural, so each side is its floor modulo that gcd whatever the symbols take, and two floors apart there never meet — `2 · x + 1` against `2 · y`, the first step of the omega test. A summand that is no literal multiple has coefficient `1`, which takes the gcd to `1` and the test quiet exactly where it has nothing to say; two literals have no coefficient at all, and were decided before this was asked.
+pub(super) fn apart_modulo(
+    floors: (&Natural, &Natural),
+    coefficients: impl IntoIterator<Item = Natural>,
+) -> bool {
+    let divisor = coefficients
+        .into_iter()
+        .fold(Natural::zero(), |divisor, coefficient| {
+            divisor.gcd(&coefficient)
+        });
+
+    !divisor.is_zero() && !divisor.is_one() && floors.0 % &divisor != floors.1 % &divisor
 }
 
 pub(super) fn from_ordering(ordering: Ordering) -> Comparison {
@@ -77,6 +106,21 @@ pub(super) fn compare_nat(
     // A symbolic bound decides by the same criterion, through the operand the value never exceeds: `x - y` is at most `x`, so `x - y <= x + z` is decided by comparing `x` in its place, and `x % (y + 1)` is below `y + 1` outright. The dominator is compared one strict subterm down, so the recursion ends, and an at-most there is an at-most here, strict where either step is. See `nat_dominators` for why each pair holds unconditionally.
     let outcome = match outcome {
         Comparison::Stuck => dominated(reducer, &sl, &il, &left, &sr, &ir, &right)?,
+        decided => decided,
+    };
+
+    // Divisibility decides what no ordering does: floors apart modulo the gcd of every coefficient make the sides unequal at every value, which is `x * 2 + 1 == y * 2` reducing to `false`. Read last, and only where equality is still open, so a verdict the stages above reached costs nothing more.
+    let outcome = match outcome {
+        Comparison::Stuck | Comparison::Le | Comparison::Ge => {
+            let coefficients = Nat::summands(&il)
+                .into_iter()
+                .chain(Nat::summands(&ir))
+                .map(|summand| Nat::monomial(&summand).0);
+            match apart_modulo((&sl, &sr), coefficients) {
+                true => outcome.unequal(),
+                false => outcome,
+            }
+        }
         decided => decided,
     };
 

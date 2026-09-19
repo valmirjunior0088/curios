@@ -1,7 +1,7 @@
 //! Symbolic `Nat` comparison: shared addends, commuted sums, and the bound an indexed loop walks under.
 
 use {
-    super::{Comparison, compare_nat, from_ordering, reduce_intrinsic},
+    super::{Comparison, compare_int, compare_nat, from_ordering, reduce_intrinsic},
     crate::{Intrinsic, Nat, ReduceError, Subterm, Term},
     curios_num::Integer,
 };
@@ -182,5 +182,71 @@ fn nat_decides_a_value_against_an_operand_it_never_exceeds() {
         open,
         Comparison::Stuck,
         "`x % (y + 1)` against `y` is undecided"
+    );
+}
+
+// Divisibility decides what no ordering does: every symbolic summand is a multiple of the gcd of the coefficients, so two floors apart modulo it meet at no value, and the verdict is unequal with the order left open. The two controls are what a test that dropped the modulus, or the gcd, would decide wrongly: `2 · x` meets `2 · y + 2` at `x = y + 1`, and coefficients whose gcd is `1` say nothing — `2 · x + 1` meets `3 · y` at `x = y = 1`.
+#[test]
+fn nat_decides_floors_apart_modulo_the_coefficients_gcd_unequal() {
+    let (x, y) = (sym(0, "x"), sym(1, "y"));
+    let odd = Nat::rebuild(1u32.into(), scaled(2, x.clone()));
+
+    let (parity, _, _) =
+        compare_nat(&mut Inert, odd.clone(), scaled(2, y.clone())).expect("reduces");
+    assert_eq!(parity, Comparison::Ne, "`2 · x + 1` is never `2 · y`");
+
+    let (wider, _, _) = compare_nat(
+        &mut Inert,
+        Nat::rebuild(6u32.into(), scaled(4, x.clone())),
+        Nat::rebuild(1u32.into(), scaled(2, y.clone())),
+    )
+    .expect("reduces");
+    assert_eq!(wider, Comparison::Ne, "`4 · x + 6` is never `2 · y + 1`");
+
+    let (congruent, _, _) = compare_nat(
+        &mut Inert,
+        scaled(2, x),
+        Nat::rebuild(2u32.into(), scaled(2, y.clone())),
+    )
+    .expect("reduces");
+    assert_eq!(
+        congruent,
+        Comparison::Stuck,
+        "floors that agree modulo the gcd decide nothing"
+    );
+
+    let (coprime, _, _) = compare_nat(&mut Inert, odd, scaled(3, y)).expect("reduces");
+    assert_eq!(
+        coprime,
+        Comparison::Stuck,
+        "a gcd of one divides every floor"
+    );
+}
+
+// The signed twin: the argument needs every monomial to be an integer and nothing more, so it holds with a negative coefficient and a negative constant, and the two constants are apart exactly when their difference is.
+#[test]
+fn int_decides_floors_apart_modulo_the_coefficients_gcd_unequal() {
+    let (i, j) = (sym(0, "i"), sym(1, "j"));
+    let integer = |value: i32| Term::intrinsic(Intrinsic::Int(Integer::from(value)));
+    let times = |coefficient: i32, factor: &Term| {
+        Term::intrinsic(Intrinsic::IntMul(integer(coefficient), factor.clone()))
+    };
+    let plus =
+        |left: Term, constant: i32| Term::intrinsic(Intrinsic::IntAdd(left, integer(constant)));
+
+    let (parity, _, _) =
+        compare_int(&mut Inert, plus(times(2, &i), 1), times(2, &j)).expect("reduces");
+    assert_eq!(parity, Comparison::Ne, "`2 · i + 1` is never `2 · j`");
+
+    let (negative, _, _) =
+        compare_int(&mut Inert, plus(times(-4, &i), -3), times(6, &j)).expect("reduces");
+    assert_eq!(negative, Comparison::Ne, "`-4 · i - 3` is never `6 · j`");
+
+    let (congruent, _, _) =
+        compare_int(&mut Inert, plus(times(2, &i), -2), times(2, &j)).expect("reduces");
+    assert_eq!(
+        congruent,
+        Comparison::Stuck,
+        "constants that agree modulo the gcd decide nothing"
     );
 }

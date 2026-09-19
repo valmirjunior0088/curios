@@ -1098,6 +1098,47 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             lit(0),
             nats(),
         ),
+        // Divisibility: two sums whose floors differ modulo the gcd of their coefficients are unequal at every value, so `==` folds to `false` and `!=` to `true`, on `Nat` and on `Int`.
+        (
+            "2 * x + 1 == 2 * y = false",
+            Term::intrinsic(Intrinsic::NatEql(
+                plus(mul(lit(2), x.clone()), lit(1)),
+                mul(lit(2), y.clone()),
+            )),
+            boolean(false),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(0)), (&nat_y, lit(1))],
+                vec![(&nat_x, lit(1)), (&nat_y, lit(1))],
+                vec![(&nat_x, lit(6)), (&nat_y, lit(7))],
+            ],
+        ),
+        (
+            "4 * x + 6 != 2 * y + 1 = true",
+            Term::intrinsic(Intrinsic::NatNeq(
+                plus(mul(lit(4), x.clone()), lit(6)),
+                plus(mul(lit(2), y.clone()), lit(1)),
+            )),
+            boolean(true),
+            vec![
+                vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                vec![(&nat_x, lit(0)), (&nat_y, lit(3))],
+                vec![(&nat_x, lit(6)), (&nat_y, lit(1))],
+            ],
+        ),
+        (
+            "2 * i + 1 == 2 * j = false",
+            Term::intrinsic(Intrinsic::IntEql(
+                int_add(int_mul(integer(2), i.clone()), integer(1)),
+                int_mul(integer(2), j.clone()),
+            )),
+            boolean(false),
+            vec![
+                vec![(&int_i, integer(-3)), (&int_j, integer(-3))],
+                vec![(&int_i, integer(0)), (&int_j, integer(1))],
+                vec![(&int_i, integer(5)), (&int_j, integer(-2))],
+            ],
+        ),
         // A left shift by a literal count is the coefficient `2ᵏ`, so it lands in the sum normal form: over a bare symbol, and over a floored one, where the product's own fold distributes it.
         (
             "shl(x, 3) = 8 * x",
