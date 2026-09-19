@@ -1067,8 +1067,6 @@ A witness may be declared only by the compilation root that owns its concept or 
 
 A tuple shape is owned by no root, as an intrinsic type former is, so a tuple-keyed witness is declared where its concept is: a program writes tuple witnesses for its own concepts and cannot add one for a `/std` concept at a shape `/std` did not write. No root is exempt, the standard library included — it declares every concept it witnesses, so the first clause admits it on the same terms as anyone.
 
-The coordinated `/sys` and `/std` roots are exempt from the restriction against one another.
-
 ### Superclass fields in literals
 
 A concept's superclass fields remain positional slots in concept values and witness bodies. Omitting one asks witness resolution to fill it. `use value` fills the next superclass slot explicitly.
