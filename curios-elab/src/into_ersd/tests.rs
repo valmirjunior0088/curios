@@ -292,6 +292,42 @@ fn calls(erased: &curios_ersd::Module) -> usize {
         .count()
 }
 
+/// A definition's termination verdict reaches the function it erased to, and a definition without one leaves it false.
+///
+/// Carried rather than re-derived: below Core a function is a body and a parameter list, and nothing there says which definition it came from or whether that definition descends. The conservative reading is `false`, which is what an unproved definition gets, and so does every function minted deeper than an item.
+#[test]
+fn a_definitions_termination_verdict_reaches_its_function() {
+    for verdict in [Totality::Total, Totality::Partial] {
+        let mut context = context();
+        let x = context.fresh(Some("x"));
+        let nat = Term::intrinsic(Intrinsic::NatType);
+        let mut items = vec![definition(
+            "identity",
+            Term::func_type([(x.clone(), nat.clone())], nat.clone()),
+            Term::func([(x.clone(), nat.clone())], Term::free_var(&x)),
+        )];
+        let Item::Let(declared) = &mut items[0] else {
+            unreachable!("the fixture declares a definition");
+        };
+        declared.totality = verdict;
+
+        let body = Term::apply(Term::free_var(&global("identity")), [nat_lit(4)]);
+        let erased = erase(&mut context, &module(items, body), nat);
+
+        let stamped = erased
+            .functions()
+            .iter()
+            .flatten()
+            .map(|function| function.total)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            stamped,
+            vec![verdict == Totality::Total],
+            "{verdict:?} reached the erased function as {stamped:?}"
+        );
+    }
+}
+
 #[test]
 fn a_bound_type_is_not_computed() {
     // A binding is a kept slot and a type fills it with a stand-in, so the call that would have computed the type is never emitted — the direct call `erase_apply` keeps at an erasable type is not reached at all.

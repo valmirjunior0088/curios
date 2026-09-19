@@ -82,8 +82,8 @@ fn project_definition(definition: &Definition) -> Definition {
         kind: definition.kind.clone(),
         universe_context: Default::default(),
         island: definition.island.clone(),
-        // Totality is elaboration-only metadata, projected out here alongside the universe context: the gates run before erasure and nothing past it reads the flag, so archiving a second copy per definition would pay for a fact no consumer of this representation asks.
-        totality: Default::default(),
+        // Carried, not projected out. It was elaboration-only metadata while the gates that read it all ran before erasure; the erased representation now carries it onto the function a definition becomes (see `curios_ersd::Function::total`), because below Core there is nothing left to derive termination from and a second derivation would be a second opinion about a question the trusted base has already answered.
+        totality: definition.totality,
         type_: project_erased_universes(&definition.type_),
         body: project_erased_universes(&definition.body),
     }

@@ -50,6 +50,12 @@ impl Lowering {
                             curios_ersd::Atom::Value(value)
                         }
                     };
+                    // The definition's termination verdict, carried onto the function it erased to — the one place it is in hand, since below here a function is a body and a parameter list and nothing says which definition it came from. A definition that erased to anything else has no function to stamp, and a function minted deeper — a lambda inside a body — keeps the conservative `false` until something needs otherwise.
+                    if let curios_ersd::Atom::Function(id) = atom
+                        && definition.totality.is_total()
+                    {
+                        self.builder.mark_total(id);
+                    }
                     let name = Free::from(&definition.name);
                     context.define_assuming_scheme(
                         &name,

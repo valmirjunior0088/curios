@@ -259,6 +259,7 @@ impl Remap<'_> {
             params: function.params.iter().map(|&p| self.value(p)).collect(),
             body: self.block(function.body),
             description: function.description,
+            total: function.total,
         }
     }
 

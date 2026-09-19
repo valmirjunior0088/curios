@@ -3,7 +3,7 @@
 //! Members are classified syntactically: a member whose body is a lambda is a function member (a reserved arena function), anything else is an eagerly computed member (a value with an initializer block). Every member is pre-bound before any body is erased, so mutual references resolve; a computed member is forced by need downstream, so source order is spelling and nothing more. An all-function group erases to a `Functions` statement, a mixed or value-only group to a recursive group — and the representation's verifier owns the rejection of the recursion classes the language does not admit (a computed member evaluating itself, directly or through the functions it applies, and an initializer performing an effect), so no diagnostic is re-derived here.
 
 use {
-    super::{Context, Error, Lowering, Outcome, Rec, RecItem, Subterm, Term},
+    super::{Binding, Context, Error, Lowering, Outcome, Rec, RecItem, Subterm, Term},
     curios_core::Free,
 };
 
@@ -86,7 +86,19 @@ impl Lowering {
             .iter()
             .map(|definition| (definition.type_.clone(), definition.body.clone()))
             .collect::<Vec<_>>();
-        self.emit_group(context, &names, &hints, &members)
+        self.emit_group(context, &names, &hints, &members)?;
+
+        // The verdict is per member, not per group — the group's descent is decided once, but what each member reaches is its own — so each is stamped from its own definition, read back through the binding `emit_group` just made rather than threaded into it as a fourth parallel slice.
+        for definition in &definitions {
+            if definition.totality.is_total()
+                && let Some(Binding::Atom(curios_ersd::Atom::Function(id))) =
+                    self.environment.lookup(&Free::from(&definition.name))
+            {
+                self.builder.mark_total(id);
+            }
+        }
+
+        Ok(())
     }
 
     /// Pre-bind every member, erase function bodies and computed initializers, and emit the group statement (`Functions` when every member is a function, a recursive group otherwise). Statement emission falls through to the top-level item list when no block is open.

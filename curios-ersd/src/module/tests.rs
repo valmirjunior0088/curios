@@ -116,6 +116,7 @@ fn functions_reserve_before_they_define() {
             params: vec![n],
             body,
             description: false,
+            total: false,
         },
     );
     assert_eq!(module.function(function).unwrap().params, vec![n]);

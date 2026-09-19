@@ -342,6 +342,7 @@ impl Minter {
                 params,
                 body: definition.body,
                 description: definition.description,
+                total: definition.total,
             },
         );
 

@@ -214,7 +214,10 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
     let mut worker_params = params;
     worker_params.push(acc);
     let worker_name = debug_name.as_ref().map(|name| format!("{name}@w"));
-    // A description is a zero-parameter thunk and never reaches the accumulator split, so both halves are ordinary computations.
+    // A description is a zero-parameter thunk and never reaches the accumulator split, so both halves are ordinary computations. The termination verdict is the split definition's and is carried to both halves: re-basing a recursion moves where the accumulator lives, never whether the recursion descends.
+    let total = module
+        .function(function)
+        .is_some_and(|function| function.total);
     module.define_function(
         worker,
         Function {
@@ -222,6 +225,7 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
             params: worker_params,
             body,
             description: false,
+            total,
         },
     );
     module.set_function(
@@ -231,6 +235,7 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
             params: wrapper_params,
             body: wrapper_body,
             description: false,
+            total,
         },
     );
 

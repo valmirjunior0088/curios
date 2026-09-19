@@ -2,7 +2,7 @@
 //!
 //! Where [`Semantics`] reports one operation's node-local behavior, a [`Summary`] composes those leaves over the reference graph and the block structure, giving the total behavior of *evaluating* a function body, a right-hand side, or a statement — including every function it calls, the callback an intrinsic runs, and the sub-blocks its control forms evaluate. This is the fact pruning consumes to decide whether an eager top-level item must be kept for effect even when its result is unused.
 //!
-//! Composition is conservative: an unknown callee or callback contributes the lattice top, and a function in a recursive component may diverge unless proven otherwise (which this phase does not attempt). Dormancy is structural: constructing a function contributes nothing — its summary is composed only where a call or callback invokes it. Every traversal is iterative and identity-ordered, so a deep region cannot overflow the native stack and the result never depends on hash order.
+//! Composition is conservative: an unknown callee or callback contributes the lattice top, and a function in a recursive component may diverge unless its definition was proved total above Core, which [`Function::total`](super::Function::total) carries down — this phase proves no termination of its own and re-derives none. Dormancy is structural: constructing a function contributes nothing — its summary is composed only where a call or callback invokes it. Every traversal is iterative and identity-ordered, so a deep region cannot overflow the native stack and the result never depends on hash order.
 
 use {
     super::{
@@ -24,12 +24,14 @@ impl Summary {
     /// Compute the summary to a fixed point over a verified module and its analysis.
     pub fn analyze(module: &Module, analysis: &Analysis) -> Self {
         let aliases = alias_bindings(module);
-        // Seed: a recursive component's members may diverge; everything else starts pure. The seed persists because updates join the previous summary in (the lattice only grows).
+        // Seed: a recursive component's members may diverge *unless the definition they erased from was proved total*; everything else starts pure. The seed persists because updates join the previous summary in (the lattice only grows).
         let mut current = BTreeMap::<FunctionId, LocalBehavior>::new();
         for id in module.function_ids() {
+            // Recursion is why this stage cannot tell termination on its own, and the verdict is why it does not have to: it is the size-change engine's, decided above Core and carried down (see `Function::total`). Reading it here is what keeps a total recursive definition from being called divergent by everything that consults a summary.
             let recursive = analysis
                 .component_of(id)
-                .is_some_and(|component| analysis.is_recursive(component));
+                .is_some_and(|component| analysis.is_recursive(component))
+                && !module.function(id).is_some_and(|function| function.total);
             let seed = if recursive {
                 LocalBehavior {
                     observable: super::ObservableBehavior::none().with_divergence(),
@@ -192,3 +194,6 @@ fn alias_bindings(module: &Module) -> BTreeMap<ValueId, Atom> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests;

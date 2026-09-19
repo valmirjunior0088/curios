@@ -222,6 +222,12 @@ pub struct Function {
     pub body: BlockId,
     /// Whether this function is an erased effect description's performance — stamped where descriptions are born, the erasure's `thunk`, and read where copying one would buy nothing: the host runs a description once per force, so the reifier declines to specialize it.
     pub description: bool,
+    /// Whether the definition this function was erased from terminates on every input, together with everything it reaches — `curios_core::Totality::Total`, carried rather than re-derived.
+    ///
+    /// **Carried, because below Core there is nothing to derive it from.** Termination is decided once, by the size-change engine both checkers share, and it is already load-bearing above: the obligations that let erasure delete a proof or a type rest on it, and the kernel reads the same field rather than recomputing it for a plain definition. A second derivation down here would be a second opinion about a question the trusted base has already answered, and two answers is how the stages come to disagree.
+    ///
+    /// False is the safe reading and the default: a definition the engine did not prove total is `Partial`, and so is anything this could not be filled from.
+    pub total: bool,
 }
 
 /// A mutually recursive group mixing functions and computed values. Every member is in scope in every member body and initializer and in the rest of the enclosing scope. A computed member is forced by need: its initializer runs the first time something reads the member, so members may reference one another in any order, and what the verifier refuses is an initializer that evaluates itself — directly, or through the functions it applies — and one that performs an effect, which forcing could not keep in its place. Member order is source order and decides nothing but spelling.

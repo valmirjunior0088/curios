@@ -119,8 +119,22 @@ impl ErsdBuilder {
                 params,
                 body,
                 description: false,
+                total: false,
             },
         );
+    }
+
+    /// Stamp a defined function as one whose definition the size-change engine proved total — see [`Function::total`]. Called where a definition's verdict is in hand, which is the item chain; a function minted anywhere else keeps the conservative `false`.
+    pub fn mark_total(&mut self, id: FunctionId) {
+        if let Some(function) = self.module.function(id).cloned() {
+            self.module.set_function(
+                id,
+                Function {
+                    total: true,
+                    ..function
+                },
+            );
+        }
     }
 
     /// Stamp a defined function as an erased effect description's performance — see [`Function::description`]. Called by the one birthplace of descriptions, the erasure's `thunk`.
