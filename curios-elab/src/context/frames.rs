@@ -43,12 +43,21 @@ pub(crate) struct ScrutineeEntry {
     pub(crate) value: Term,
 }
 
+/// One projection refinement: the base as *written* (unerased, so a probe at another universe instance can be told apart from the spelling the arm actually scrutinized), and the arm's value.
+///
+/// The key beside it is universes-erased, which is what lets two occurrences of one polymorphic base merge while their instances are still undecided. Erasure cannot tell a decided disagreement from an undecided one, so the base is kept whole and [`Context::proj_reduct`](crate::Context) compares it at the read.
+#[derive(Debug, Clone)]
+pub(crate) struct ProjectionEntry {
+    pub(crate) original: Term,
+    pub(crate) value: Term,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct FrozenFrame {
     pub(crate) assumptions: Vec<(Free, Term)>,
     pub(crate) definitions: Vec<(Free, DefEntry)>,
     pub(crate) refinements: Vec<(Free, Term)>,
-    pub(crate) refinement_projections: Vec<((Term, usize), Term)>,
+    pub(crate) refinement_projections: Vec<((Term, usize), ProjectionEntry)>,
     pub(crate) refinement_scrutinees: Vec<(Term, ScrutineeEntry)>,
     /// The `use`-plicity binders in scope at park time (a subset of `assumptions`, in the same binding order). Witness resolution scans these; a retry must see the same instance scope its origin saw.
     pub(crate) witness_binders: Vec<(Free, Term)>,
@@ -71,7 +80,7 @@ pub(crate) struct Frames {
     definitions: Vec<HashMap<Free, DefEntry>>,
     /// Counterfactual match-arm refinements (`refine_head`), kept parallel to `definitions` but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
     refinements: Vec<HashMap<Free, Term>>,
-    refinement_projections: Vec<HashMap<(Term, usize), Term>>,
+    refinement_projections: Vec<HashMap<(Term, usize), ProjectionEntry>>,
     /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by a *canonical* form (head verbatim, arguments reduced to WHNF), so an occurrence that surfaces spelled differently still matches the stored key once both are canonicalized. The term-keyed analogue of the two stores above, suppressed by the same flag.
     refinement_scrutinees: Vec<HashMap<Term, ScrutineeEntry>>,
     /// How much of the refinement stack is withheld, as the frame depth suppression began at — `None` for none of it.
@@ -354,8 +363,10 @@ impl Frames {
         self.raw_var_reduct(name)
     }
 
-    /// The reduct of a projection: its counterfactual match-arm refinement, from the frames suppression does not withhold (re-validation).
-    pub(crate) fn proj_reduct(&self, base: &Term, index: usize) -> Option<&Term> {
+    /// The entry a projection's counterfactual match-arm refinement is registered under, from the frames suppression does not withhold (re-validation).
+    ///
+    /// The whole entry rather than its value, for the reason [`Frames::scrutinee_entry`] gives: the key cannot decide a universe instance, so the read above compares the unerased bases instead.
+    pub(crate) fn projection_entry(&self, base: &Term, index: usize) -> Option<&ProjectionEntry> {
         let base = project_erased_universes(base);
         self.refinement_projections[self.refinement_floor()..]
             .iter()
@@ -373,10 +384,13 @@ impl Frames {
 
     /// Register a counterfactual refinement of a projection (`refine_head` on a `Proj` scrutinee). The façade clears the caches first.
     pub(crate) fn refine_projection(&mut self, base: Term, index: usize, value: Term) {
-        self.refinement_projections
-            .last_mut()
-            .unwrap()
-            .insert((project_erased_universes(&base), index), value);
+        self.refinement_projections.last_mut().unwrap().insert(
+            (project_erased_universes(&base), index),
+            ProjectionEntry {
+                original: base,
+                value,
+            },
+        );
     }
 
     /// Register a counterfactual refinement of a stuck-application scrutinee (`refine_head` on a non-key head). `canonical` is the cheap key (as written, metas and universes normalized); `original` is the unerased spelling the probe-time canonicalization reduces; `value` is the arm's constructor. Sound for the same reason `refine` is — the arm is reached only when the scrutinee equals `value` — and non-cyclic because `value` is a constructor of the scrutinee's inductive, a normal form. The façade clears the caches first.

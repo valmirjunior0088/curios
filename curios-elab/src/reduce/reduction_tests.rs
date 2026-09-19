@@ -721,6 +721,8 @@ fn scrutinee_refinement_ignores_fresh_universe_instances() {
 /// A fresh instance is undecided and collapses — the test above is that rule, and it is what the prelude needs — but `Type u` embeds a level in a *term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two ground instances. Erasing the instance identifies them, and the arm's equation then refines a stuck term it was never shown to be about. The kernel refuses the coercion this forges (`curios-cert`'s `recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`, over the whole module); this is the elaborator's own store, asked directly.
 ///
 /// The probe is checker-level rather than a source program on purpose: the pair has no surface spelling, because `UniverseSolver::finalize` minimizes a body-only level to a constant instead of generalizing it.
+///
+/// Mutation-checked while the guard was written, in the one order that could check it: both of these were written and watched failing *before* the guard existed, while both `ignores_fresh_universe_instances` tests passed throughout. So the forgery pair and the collapse pair are not testing one thing twice — removing the guard fails these two and leaves those two green, which is the whole of what the guard is claimed to do.
 #[test]
 fn scrutinee_refinement_does_not_fire_at_another_ground_universe_instance() {
     let mut context = context();
@@ -730,6 +732,22 @@ fn scrutinee_refinement_does_not_fire_at_another_ground_universe_instance() {
     let probe = at(Level::zero().succ().expect("level zero has a successor"));
     let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
     context.refine_scrutinee(canonical, registered, nat(1));
+
+    assert_eq!(reduce(&mut context, probe.clone()), Ok(probe));
+}
+
+/// [`scrutinee_refinement_does_not_fire_at_another_ground_universe_instance`] over the projection store, which keys the same way and keeps no unerased spelling of its own.
+#[test]
+fn projection_refinement_does_not_fire_at_another_ground_universe_instance() {
+    let mut context = context();
+    let record_binder = context.fresh(Some("record"));
+    let at = |level: Level| Term::apply(Term::instance_of(&record_binder, vec![level]), [nat(0)]);
+    let registered = at(Level::zero());
+    let probe = Term::proj(
+        at(Level::zero().succ().expect("level zero has a successor")),
+        0,
+    );
+    context.refine_projection(registered, 0, nat(1));
 
     assert_eq!(reduce(&mut context, probe.clone()), Ok(probe));
 }

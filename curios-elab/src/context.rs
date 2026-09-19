@@ -960,8 +960,16 @@ impl Context {
         self.frames.var_reduct_at(name)
     }
 
+    /// [`Frames::projection_entry`]'s value, declined where `base` and the base the arm scrutinized disagree on a universe instance both sides have already decided.
+    ///
+    /// The guard sits in the accessor for the reason [`Context::scrutinee_reduct`] states, and this store needed one more thing before it could carry it: its key erases the base, so the unerased spelling is kept beside the value rather than recovered.
     pub(crate) fn proj_reduct(&self, base: &Term, index: usize) -> Option<&Term> {
-        self.frames.proj_reduct(base, index)
+        let entry = self.frames.projection_entry(base, index)?;
+
+        match crate::levels_clash_on_a_decided_instance(self, base, &entry.original) {
+            Ok(false) => Some(&entry.value),
+            Ok(true) | Err(_) => None,
+        }
     }
 
     /// [`Frames::refine_scrutinee`], with the refinement cache protocol.
@@ -1577,8 +1585,9 @@ impl Context {
             self.refine(name, value);
         }
 
-        for ((base, index), value) in &frame.refinement_projections {
-            self.refine_projection(base.clone(), *index, value.clone());
+        for ((_, index), entry) in &frame.refinement_projections {
+            // Re-registered from the *unerased* base, never the key: the key is what erasing that base produced, and re-erasing it would lose the spelling the read compares against.
+            self.refine_projection(entry.original.clone(), *index, entry.value.clone());
         }
 
         for (canonical, entry) in &frame.refinement_scrutinees {
