@@ -183,7 +183,7 @@ impl PackedBin {
 
     /// The `index`-th byte of the packed form, read without materializing it — bits past `bit_length` read as the zero padding [`PackedBin::to_packed_bytes`] writes.
     ///
-    /// The streaming spelling `Hash` and `Ord` share: both must agree with the aligned arm's byte slice, and a second copy of this loop is a second thing to keep in step with it.
+    /// The streaming spelling `Hash` and `Ord` share: `Ord` must agree with the aligned arm's byte slice it compares beside, and a second copy of this loop is a second thing to keep in step with it.
     fn packed_byte(&self, index: usize) -> u8 {
         let mut byte = 0u8;
         for offset in 0..8 {
@@ -215,23 +215,31 @@ impl PartialEq for PackedBin {
     }
 }
 impl Eq for PackedBin {}
+/// How many packed bytes [`PackedBin`]'s hash reads from a value larger than that. Enough that two values of one length agreeing at all of them are not a shape a program writes by accident, and small enough that hashing is a constant.
+const HASH_SAMPLE_BYTES: usize = 32;
+
 impl Hash for PackedBin {
-    /// **Allocation-free on both arms**, which is what lets a cache probe stay a probe.
+    /// **Constant-cost, which is what keeps a walk over a literal linear.** A hash is memoized per term node, but *computing* one is not free: a node is hashed when it is built, and peeling a literal builds one node per element, each holding a window one element shorter than the last. Reading every byte of each made that walk quadratic — the shape [`PackedBin::eq`] records on its own side of the same probe, where a window of one buffer is now equal to itself without a read. A cache probe cannot take that shortcut, because a window and a directly-built value of the same bits are equal and must hash alike, so what this does instead is read a bounded sample.
     ///
-    /// The unaligned arm used to materialize `to_packed_bytes`, so looking a value up in a hash map built one — and a lookup that allocates is a lookup that would have to be fallible under a budget that charges construction. It streams the packed bytes instead, feeding the hasher exactly what the aligned arm's slice feeds it.
+    /// The length is hashed whole and at most [`HASH_SAMPLE_BYTES`] bytes are read from the packed form, spread across it with both ends included. Two values of one length that agree at every sampled byte collide, and a collision costs a comparison rather than an answer: [`PackedBin::eq`] decides the pair, as it decides every probe that reaches it. Where the hash is an *order* rather than a key — `Nat::multiply` sorts a monomial's factors by the structural hash their term carries — a collision leaves two factors in their written order under a stable sort, which is incompleteness and never a wrong equation, exactly as that sort already records for two distinct factors hashing alike.
     ///
-    /// The two arms must agree byte for byte, because a window and a directly-built value of the same bits are equal and must hash alike. `Hash` for `[u8]` writes its length and then its bytes, so the loop below matches that shape rather than merely covering the same data.
+    /// Allocation-free, which is what lets a cache probe stay a probe: a lookup that allocated would have to be fallible under a budget that charges construction. The streamed spelling is the only one now — the aligned arm's byte slice bought a bulk hash of the whole value, which is the cost this removes — so no two arms have to be kept agreeing byte for byte.
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.bit_length.hash(state);
 
-        match self.as_bytes() {
-            Some(bytes) => bytes.hash(state),
-            None => {
-                let packed = self.bit_length.div_ceil(8);
-                packed.hash(state);
+        let packed = self.bit_length.div_ceil(8);
+        packed.hash(state);
 
+        match packed <= HASH_SAMPLE_BYTES {
+            true => {
                 for index in 0..packed {
                     state.write_u8(self.packed_byte(index));
+                }
+            }
+            // Spread over `0..packed` with both ends included, so a value that differs from another only in its first or last byte is still told apart by the hash rather than by the comparison behind it.
+            false => {
+                for step in 0..HASH_SAMPLE_BYTES {
+                    state.write_u8(self.packed_byte(step * (packed - 1) / (HASH_SAMPLE_BYTES - 1)));
                 }
             }
         }

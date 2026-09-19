@@ -30,6 +30,61 @@ fn windows_compare_logically_and_ignore_padding() {
     }
 }
 
+/// Counts what a hash reads, so its cost is asserted rather than timed.
+#[derive(Default)]
+struct Counting(usize);
+
+impl Hasher for Counting {
+    fn finish(&self) -> u64 {
+        0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        self.0 += bytes.len();
+    }
+}
+
+/// Hashing reads a bounded amount however large the value is, which is what keeps a walk over a literal linear: a node is hashed when it is built, and peeling a literal builds one node per element.
+#[test]
+fn a_value_past_the_sample_is_hashed_at_a_cost_its_length_does_not_move() {
+    let read = |bytes: usize| {
+        let mut counting = Counting::default();
+        PackedBin::from_bytes(vec![0x5A; bytes]).hash(&mut counting);
+        counting.0
+    };
+
+    let sampled = read(HASH_SAMPLE_BYTES + 1);
+    assert_eq!(sampled, read(1 << 10));
+    assert_eq!(sampled, read(1 << 20));
+    assert!(
+        sampled <= HASH_SAMPLE_BYTES + 2 * size_of::<usize>(),
+        "a hash read {sampled} bytes where the sample is {HASH_SAMPLE_BYTES} and two lengths",
+    );
+}
+
+/// Equal values hash alike past the sample too, which is the obligation the sampling could most easily have broken: the two spellings are an unaligned window and a value built from the bytes directly, and both must read the same sampled bytes.
+#[test]
+fn a_window_past_the_sample_hashes_as_the_value_it_equals() {
+    let bytes = (0..300u32)
+        .map(|index| (index * 7 % 251) as u8)
+        .collect::<Vec<_>>();
+    let direct = PackedBin::from_bytes(bytes);
+    let framed = PackedBin::from_bits(
+        [true, false, true]
+            .into_iter()
+            .chain((0..direct.bit_length).map(|index| direct.bit(index).unwrap()))
+            .chain([true, true]),
+    );
+    let window = framed.window(3, direct.bit_length).unwrap();
+
+    assert_eq!(direct, window);
+    assert_eq!(hash(&direct), hash(&window));
+    // The sample reaches both ends, so a value differing only in its last byte is still told apart by the hash rather than by the comparison behind it.
+    let mut last = direct.to_bytes().unwrap();
+    *last.last_mut().unwrap() ^= 0xFF;
+    assert_ne!(hash(&direct), hash(&PackedBin::from_bytes(last)));
+}
+
 /// The three arms of equality answer alike: a window against itself, an aligned window against a fresh buffer of the same bytes, and an aligned window against an unaligned window of the same bits — and a window against the same buffer one offset over is unequal when the bits say so.
 #[test]
 fn equality_agrees_across_its_arms() {

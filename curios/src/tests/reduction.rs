@@ -664,7 +664,20 @@ fn a_literal_mentioned_in_several_types_is_folded_once() {
 ///
 /// **The elaborator's retention is linear now** — 33K to 67K units across the ladder, about four a character, where it grew as 37·n² and saturated the quota near 5 200 characters — and **its units are the kernel's**: the `kernel/elab` column reads 1.0× at every size, where it read 0.3×. Both were one defect. The literal's proof was then `of_scan_eq(b, refl_scan(b))`, and checking it asked conversion one question, `scan_from(lead, b) ≡ Scan/lead()`; the elaborator's conversion reduced the left at the *plain* demand — where a folded recursive call is its own normal form, as the machine's contract says — met the fold against a constructor, and unfolded it **one step per round**, each round storing a cache entry keyed on the next folded spelling with the scan's state unreduced in its argument, one `step` deeper per character. The kernel forces both sides of every comparison, which is one machine run. `Convert::force_folded_call` now does the same, falling back to the one-step unfold only when forcing reaches no value.
 ///
-/// **Wall clock was superlinear where every counter was linear, and that was the representation.** Release, the bisection's rungs: 16K in 0.95 s, 32K in 2.15 s, 64K in 5.86 s, 128K in 18.3 s — where they were 5.7 s, 21 s, 82 s and about 250 s on this host. The whole of the difference was inside one `reduce_closed` run, and `PackedBin`'s equality was what it did per element: the run-scoped memo probes a key holding the current tail window and finds the key it stored, and confirming those equal walked the window bit by bit. A window of one buffer at one offset is the same bits, and `PartialEq` now says so without a read; aligned windows compare as byte slices beside it. What remains grows as about n^1.5 at the top of that ladder and is not a per-element walk — its shape is the run-scoped memo's size — and is left measured rather than chased.
+/// **Wall clock was superlinear where every counter was linear, and that was the representation.** Release, the bisection's rungs: 16K in 0.95 s, 32K in 2.15 s, 64K in 5.86 s, 128K in 18.3 s — where they were 5.7 s, 21 s, 82 s and about 250 s on this host. The whole of the difference was inside one `reduce_closed` run, and `PackedBin`'s equality was what it did per element: the run-scoped memo probes a key holding the current tail window and finds the key it stored, and confirming those equal walked the window bit by bit. A window of one buffer at one offset is the same bits, and `PartialEq` now says so without a read; aligned windows compare as byte slices beside it. What remained grew as about n^1.5 at the top of that ladder, was left measured rather than chased, and is chased in the section above: it was the same walk on the other side of the same probe.
+///
+/// # What the wall clock did when the hash stopped reading the whole value
+///
+/// Taken **2026-09-19**, **release**, on `x86_64-unknown-linux-gnu`, over one `print` of an n-character literal, with `wonder diagnostics` — so each row holds one constant, the prelude's own 0.28 s, which the marginal column removes. Retake it by building `--release` and timing that command at the three lengths.
+///
+/// ```text
+///   n        before   marginal   after    marginal
+///   8 000     0.58 s     0.30 s   0.58 s     0.30 s
+///   16 000    1.02 s     0.74 s   0.90 s     0.62 s
+///   32 000    2.11 s     1.83 s   1.57 s     1.29 s
+/// ```
+///
+/// **A doubling cost 2.47× and costs 2.07×**, which is n^1.30 against n^1.05 — linear to what this ladder can tell. The unit columns do not move: nothing about what reduction builds or transitions changed. What changed is that a term node's hash is *computed* once per node although it is memoized after, and peeling a literal builds one node per element, each holding a window one element shorter than the last; reading every byte of each is the same per-element walk the equality arm above removed, and `PackedBin`'s hash now reads a bounded sample instead. The n=8 000 row is the control: unchanged, so the constant did not move under the change.
 ///
 /// # What it printed before conversion forced a folded call
 ///
