@@ -3,6 +3,8 @@ use /std/ops/{Eql};
 use /std/Map/{Key};
 
 --- A set of keys.
+---
+--- Membership is of the byte string an element's `Key` witness produces, as a `Map`'s keys are: an element inserted under one `Key(K)` dictionary and again under another supplied with `use` is two members.
 pub struct Set(K: Type): Type {
     map: Map(K),
 }
