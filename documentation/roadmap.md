@@ -96,7 +96,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] The bound reaches Core and the kernel re-checks it, for every one of the thirteen
 - [x] A bound is read off the node that carries it, and the oracle closed on a criterion
 - [x] A fact is stated once, or the copies are checked — the fold arms' grain twins, the decomposition's carriers and its two measures, and a key's encoding
-- [ ] [A refused law is lifted as a row moving, at every carrier](roadmap/refused-laws-spec.md) (every row has landed; the decisions are not yet transferred to the design record)
+- [x] [A law is decided where it neither respells nor invents](design/toolchain/a-law-is-decided-where-it-neither-respells-nor-invents.md) — a left shift by a literal count, parity, a position inside a window, a map by a function convertible to the identity, and De Morgan with absorption, each moved from the law grid's refused rows to its held ones
 
 ## Module System
 

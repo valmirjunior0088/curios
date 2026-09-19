@@ -24,14 +24,17 @@ const IMPORTS: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Bits, List, Str, C
 const CARRIERS: &[Carrier] = &[
     Carrier {
         name: "Nat under +",
-        binders: "x: Nat, y: Nat, z: Nat",
+        binders: "x: Nat, y: Nat, z: Nat, f: (Nat) -> Nat, g: (Nat) -> Nat",
         held: &[
             "Eq(x + 0, x)",
             "Eq(0 + x, x)",
             "Eq(x + y, y + x)",
             "Eq((x + y) + z, x + (y + z))",
+            // Congruence under an opaque head: the arguments are compared as numbers.
+            "Eq(f(x + y), f(y + x))",
         ],
-        refused: &[],
+        // Each step of this holds — the row above, and commutation — and their composition does not: cancellation pairs two summands by identity up to universe instances, never up to conversion, so `f(x + y)` does not meet `f(y + x)` inside a sum. A candidate, and a larger one than it looks: `Nat::cancel_common` takes no reducer, and handing back an untouched pair identically is what keeps the peel terminating.
+        refused: &["Eq(f(x + y) + g(y + z), g(z + y) + f(y + x))"],
     },
     Carrier {
         name: "Nat under *",
