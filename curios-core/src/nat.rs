@@ -1,12 +1,9 @@
 use {
-    super::{Bound, Cost, Intrinsic, ReduceError, Reducer, Subterm, Term, Var, Visit},
+    super::{Cost, Intrinsic, ReduceError, Reducer, Subterm, Term},
     curios_num::Natural,
     curios_utilities::recurse,
     std::collections::HashMap,
 };
-
-/// A sum read as a linear combination: each symbolic factor with the coefficient it carries, in first-appearance order. What [`Nat::linear`] reads a sum into and [`Nat::from_linear`] spells back, named so the pairing can hand back two of them.
-type Combination = Vec<(Natural, Term)>;
 
 /// A type-level natural in successor-floor form: `Zero`, or `Succ(floor, inner)` — a [`Natural`] count of successors stacked on a tail term `inner`, so a closed literal is one node and `x + 3` is `Succ(3, x)`, never a unary chain. Unbounded — the type level pretends ℕ, like `Integer`'s ℤ, and so does every stage below it; the runtime's 31-bit envelope is enforced at one place only, where `curios-emit` materializes a value into an `i31ref`. Reduction keeps the form canonical — nested `Succ` flattened, zero floors collapsed (see `Nat::decompose` and `Nat::rebuild`) — so arithmetic on the floor is [`Natural`] arithmetic.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -264,9 +261,9 @@ impl Nat {
     }
 
     /// `summands` as a linear combination: like factors merged by adding their coefficients, in first-appearance order, keyed up to universe instances exactly as [`Nat::cancel_common`] keys them. This is the sum normal form — `x + x` is `2 · x`, and `2 · x + 3 · x` is `5 · x` — and it is what makes a sum's like terms definitionally equal rather than merely cancellable against each other.
-    pub(crate) fn linear(summands: impl IntoIterator<Item = Term>) -> Combination {
+    pub(crate) fn linear(summands: impl IntoIterator<Item = Term>) -> Vec<(Natural, Term)> {
         curios_profile::profile!("nat::linear");
-        let mut combination: Combination = Vec::new();
+        let mut combination: Vec<(Natural, Term)> = Vec::new();
         // **The index is a map, and the combination stays a vector.** Those are two separate obligations that a single `Vec<Term>` of keys used to serve at once, badly: finding a like factor was a scan comparing whole terms, one `Term::eq` per candidate, while first-appearance order — which the sum normal form above promises and which a caller relies on to reach a fixed point — only ever needed `combination` to be pushed to in order. Keeping them apart makes the lookup a hash and leaves the order exactly where it was.
         //
         // A key is a *projected* term rather than the factor, so two instances of one polymorphic name merge; `Term`'s hash is memoized per node, and `clippy.toml` names `Term` for `ignore-interior-mutability` on the same grounds the map relies on — a cache fill moves neither hash nor equality.
@@ -295,7 +292,7 @@ impl Nat {
     }
 
     /// [`Nat::sum_over_floor`] from a combination already merged.
-    pub(crate) fn from_linear(combination: Combination, floor: Natural) -> Term {
+    pub(crate) fn from_linear(combination: Vec<(Natural, Term)>, floor: Natural) -> Term {
         curios_profile::profile!("nat::from_linear");
         let inner = combination
             .into_iter()
@@ -397,55 +394,23 @@ impl Nat {
     ///
     /// **Summands pair by equality up to universe instances.** A definitionally equal pair spelled two ways still does not cancel — the match does not reduce candidates against each other, so incompleteness in that direction costs reductions and never correctness. What it *does* see through is an instance, because two occurrences of a polymorphic name are independently instantiated and would otherwise be two terms: `len(xs)` written twice never cancels against itself, and every bound mentioning one stays stuck. Erasing before the comparison is [`crate::project_erased_universes`], and what licenses it here is the carrier rather than erasure: Core offers no elimination from a type or a level into a `Nat`, so two summands differing only in their instances denote one number. That is not true of terms in general — `Type u` is a value that differs by its level — which is why the same projection is unsound as a refinement key, as `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` records.
     ///
-    /// **And they pair in two tiers, the second only where the first found nothing.** The erased key is structural, so a sum *inside* an atom splits it: `f(x + y)` and `f(y + x)` are one number by congruence — the reducer decides that pair on its own — and yet two summands that never meet, so each step of `Eq(f(x + y) + g(y + z), g(z + y) + f(y + x))` held while the composition did not. [`Nat::canonical_atom`] is the second key, and it is a key rather than a normal form: nothing it builds reaches a residual. The shape is the refinement store's, for the same reason — the cheap key settles nearly every pair, and a rewrite per atom is not a price the common case should pay — and running it only on a complete miss is also what keeps the no-progress arm below reachable, since a tier that cancelled nothing leaves the operands for the next one to try and, failing that, for the caller to have back untouched.
-    ///
     /// The literal floors cancel by the same law, which is why the minimum comes off both: it is the one-summand case of the same rule, and doing it here rather than at each consumer is what keeps the two spellings from drifting.
     pub(crate) fn cancel_common(left: &Term, right: &Term) -> (Term, Term) {
         curios_profile::profile!("nat::cancel_common");
         let (floor_left, inner_left) = Nat::decompose(left);
         let (floor_right, inner_right) = Nat::decompose(right);
 
-        let paired = Self::pair_summands(&inner_left, &inner_right, |factor| {
-            crate::project_erased_universes(factor)
-        })
-        .or_else(|| Self::pair_summands(&inner_left, &inner_right, Self::canonical_atom));
-
-        let shared = floor_left.clone().min(floor_right.clone());
-
-        // **A pass that cancels no summand must hand its inners back untouched.** Rebuilding through [`Nat::sum_over_floor`] re-associates and reorders a sum — `a + (b + c)` comes back as `(c + b) + a`, and again as `(a + b) + c` — so a stuck comparison rebuilt from reordered operands is a *different* term, which the caller reduces again, reorders again, and never settles. Taking the floors off the original inners is what the comparison family did before summands were read at all, and it is stable because it rewrites nothing below the floor.
-        let Some((held, residual_right)) = paired else {
-            return (
-                Self::rebuild(floor_left - &shared, inner_left),
-                Self::rebuild(floor_right - &shared, inner_right),
-            );
-        };
-
-        (
-            Self::from_linear(held, floor_left - &shared),
-            Self::from_linear(residual_right, floor_right - &shared),
-        )
-    }
-
-    /// One tier of the pairing, under `key`: what the left keeps and what the right has left over, or `None` where no summand paired at all.
-    ///
-    /// `None` rather than an unchanged pair, because both of this function's callers need to tell "cancelled nothing" from "cancelled to nothing" — the next tier to know it is worth trying, and the caller's stability arm to know it must hand the operands back as they arrived rather than rebuilt.
-    ///
-    /// Over the linear combination, so a like term cancels by coefficient: `2 · x + a` against `x + b` leaves `x + a` against `b` — the multiset rule, with the multiplicity read off the coefficient rather than counted. The residuals carry the factor each side arrived with; `key` decides only what pairs with what.
-    fn pair_summands(
-        inner_left: &Term,
-        inner_right: &Term,
-        key: impl Fn(&Term) -> Term,
-    ) -> Option<(Combination, Combination)> {
-        let mut held = Self::linear(Self::summands(inner_left));
+        // Over the linear combination, so a like term cancels by coefficient: `2 · x + a` against `x + b` leaves `x + a` against `b` — the multiset rule below, with the multiplicity read off the coefficient rather than counted.
+        let mut held = Self::linear(Self::summands(&inner_left));
         let mut keys = held
             .iter()
-            .map(|(_, factor)| key(factor))
+            .map(|(_, factor)| crate::project_erased_universes(factor))
             .collect::<Vec<_>>();
         let mut residual_right = Vec::new();
         let mut cancelled = false;
-        for (coefficient, factor) in Self::linear(Self::summands(inner_right)) {
-            let probe = key(&factor);
-            match keys.iter().position(|candidate| *candidate == probe) {
+        for (coefficient, factor) in Self::linear(Self::summands(&inner_right)) {
+            let key = crate::project_erased_universes(&factor);
+            match keys.iter().position(|candidate| *candidate == key) {
                 Some(index) => {
                     let shared = held[index].0.clone().min(coefficient.clone());
                     let remaining = held[index].0.clone() - &shared;
@@ -465,35 +430,20 @@ impl Nat {
             }
         }
 
-        cancelled.then_some((held, residual_right))
-    }
+        let shared = floor_left.clone().min(floor_right.clone());
 
-    /// `factor` with every sum inside it put in one order — a *matching key*, never a term.
-    ///
-    /// [`Nat::summands`] keeps first-appearance order, and that is load-bearing: it is what makes read-then-rebuild the identity on a sum already in normal form, and a rebuild that reordered would hand the reducer a new term every pass. So `x + y` and `y + x` stay two spellings of one number. Under an opaque head the difference is invisible to the *value* and fatal to the *pairing* — `f(x + y)` and `f(y + x)` are one number the reducer decides on its own, and two summands that never meet.
-    ///
-    /// Ordering by [`Term::structural_hash`] is the discipline a monomial's factors already keep — `Nat::multiply` and `int_monomial` both sort that way, which is what makes `i · j` and `j · i` one term — applied to a sum's summands instead of a product's factors. It is sound for the reason the whole peel is: `Nat` under `+` is a commutative monoid, so reordering preserves the number, and congruence carries that under the head.
-    ///
-    /// **It reaches only the key.** Every residual [`Nat::cancel_common`] returns is built from the factor as it arrived, so no reordered sum is ever handed back and the oscillation [`Nat::summands`] records is not re-entered. Two atoms equal only by *reduction* still miss, which is the refusing direction and the incompleteness this keeps.
-    fn canonical_atom(factor: &Term) -> Term {
-        let canonical = recurse(|| {
-            factor.traverse(&mut Visit::rewriting(
-                |_, _: &Var| None,
-                // A pre-hook does not descend into what it replaces, so the recursion is this closure's own: each summand is canonicalized before the sum it sits in is ordered, which is what makes the key bottom-up.
-                Box::new(|_, term: &Term| {
-                    if !matches!(&**term, Subterm::Intrinsic(Intrinsic::NatAdd(..))) {
-                        return None;
-                    }
-                    let mut combination =
-                        Self::linear(Self::summands(term).iter().map(Self::canonical_atom));
-                    combination.sort_by_key(|(_, factor)| factor.structural_hash());
+        // **A pass that cancels no summand must hand its inners back untouched.** Rebuilding through [`Nat::sum_over_floor`] re-associates and reorders a sum — `a + (b + c)` comes back as `(c + b) + a`, and again as `(a + b) + c` — so a stuck comparison rebuilt from reordered operands is a *different* term, which the caller reduces again, reorders again, and never settles. Taking the floors off the original inners is what the comparison family did before summands were read at all, and it is stable because it rewrites nothing below the floor.
+        if !cancelled {
+            return (
+                Self::rebuild(floor_left - &shared, inner_left),
+                Self::rebuild(floor_right - &shared, inner_right),
+            );
+        }
 
-                    Some(Self::from_linear(combination, Natural::zero()))
-                }),
-            ))
-        });
-
-        crate::project_erased_universes(&canonical)
+        (
+            Self::from_linear(held, floor_left - &shared),
+            Self::from_linear(residual_right, floor_right - &shared),
+        )
     }
 }
 
