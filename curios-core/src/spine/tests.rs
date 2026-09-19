@@ -402,3 +402,138 @@ fn peel_bin_clashes_a_symbolic_byte_against_the_identity() {
         "`append(x, c)` is one byte longer than `x`"
     );
 }
+
+fn list_window(base: Term, start: Term, count: Term) -> Term {
+    Term::intrinsic(Intrinsic::list_slice(
+        sym(1000, "T"),
+        base,
+        start,
+        count,
+        sym(9_999, "qed"),
+    ))
+}
+
+fn list_get(list: Term, index: Term) -> Intrinsic {
+    Intrinsic::ListGet {
+        element: sym(1000, "T"),
+        list,
+        index,
+        in_range: sym(9_998, "in_range"),
+    }
+}
+
+fn bin_get(grain: Grain, bin: Term, index: Term) -> Intrinsic {
+    Intrinsic::BinGet {
+        grain,
+        bin,
+        index,
+        in_range: sym(9_998, "in_range"),
+    }
+}
+
+// A position inside a window is the position it names in the base: `get(slice(xs, s, l), i)` reads `xs` at `s + i`. Decided as a comparison, since a rewritten node would owe a bound no term in hand proves; the absolute positions are compared as numbers, so a commuted sum is the same position, and a window of a window nests the same way. Both carriers, since a copied arm is where the two would drift.
+#[test]
+fn peel_position_decides_a_position_through_a_window_equal() {
+    let (xs, s, l, i, t) = (
+        sym(0, "xs"),
+        sym(1, "s"),
+        sym(2, "l"),
+        sym(3, "i"),
+        sym(4, "t"),
+    );
+    let window = list_window(xs.clone(), s.clone(), l.clone());
+
+    let inside = list_get(window.clone(), i.clone());
+    let named = list_get(xs.clone(), add(i.clone(), s.clone()));
+    assert!(
+        matches!(peel_position(&inside, &named), Some(Peel::Equal)),
+        "`get(slice(xs, s, l), i)` is `get(xs, i + s)`"
+    );
+
+    let nested = list_get(list_window(window, t.clone(), i.clone()), i.clone());
+    let deep = list_get(xs.clone(), add(add(s.clone(), t.clone()), i.clone()));
+    assert!(
+        matches!(peel_position(&nested, &deep), Some(Peel::Equal)),
+        "a window of a window adds both starts"
+    );
+
+    let bytes_window = Term::intrinsic(Intrinsic::bin_slice(
+        Grain::X,
+        xs.clone(),
+        s.clone(),
+        l,
+        sym(9_999, "qed"),
+    ));
+    assert!(
+        matches!(
+            peel_position(
+                &bin_get(Grain::X, bytes_window, i.clone()),
+                &bin_get(Grain::X, xs, add(s, i)),
+            ),
+            Some(Peel::Equal)
+        ),
+        "the packed carrier reads a position the same way"
+    );
+}
+
+// The declining side: a position one past the named one, and the same position of another base, may still hold one element, so neither clashes; and two grains are not one carrier's pair at all.
+#[test]
+fn peel_position_declines_an_unlike_position_or_base_without_clashing() {
+    let (xs, ys, s, l) = (sym(0, "xs"), sym(1, "ys"), sym(2, "s"), sym(3, "l"));
+    let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
+    let inside = list_get(list_window(xs.clone(), s.clone(), l), zero);
+
+    let past = Term::intrinsic(Intrinsic::Nat(nat_of(1, s.clone())));
+    assert!(
+        matches!(
+            peel_position(&inside, &list_get(xs.clone(), past)),
+            Some(Peel::Stuck)
+        ),
+        "position `s + 1` is not the window's first"
+    );
+    assert!(
+        matches!(
+            peel_position(&inside, &list_get(ys, s.clone())),
+            Some(Peel::Stuck)
+        ),
+        "another base is not this one"
+    );
+    assert!(
+        peel_position(
+            &bin_get(Grain::X, xs.clone(), s.clone()),
+            &bin_get(Grain::B, xs, s)
+        )
+        .is_none(),
+        "two grains are two carriers"
+    );
+}
+
+// A window of a window is the window it names in the root, which the prefix step decides by reading both spans from the root; the near miss differs by one in its start and declines.
+#[test]
+fn peel_list_decides_a_window_of_a_window_against_the_window_it_names() {
+    let (xs, s, l, t, m) = (
+        sym(0, "xs"),
+        sym(1, "s"),
+        sym(2, "l"),
+        sym(3, "t"),
+        sym(4, "m"),
+    );
+    let nested = list_window(list_window(xs.clone(), s.clone(), l), t.clone(), m.clone());
+    let named = list_window(xs.clone(), add(s.clone(), t.clone()), m.clone());
+    assert!(
+        matches!(
+            peel_list(as_intrinsic(&nested), as_intrinsic(&named)),
+            Some(Peel::Equal)
+        ),
+        "`slice(slice(xs, s, l), t, m)` is `slice(xs, s + t, m)`"
+    );
+
+    let shifted = list_window(xs, Term::intrinsic(Intrinsic::Nat(nat_of(1, add(s, t)))), m);
+    assert!(
+        matches!(
+            peel_list(as_intrinsic(&nested), as_intrinsic(&shifted)),
+            Some(Peel::Stuck)
+        ),
+        "a start one past the named one is another window"
+    );
+}

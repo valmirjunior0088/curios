@@ -32,7 +32,8 @@ pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
             .or_else(|| peel_bin(left, right))
             .or_else(|| peel_list(left, right))
             .or_else(|| peel_bool(left, right))
-            .or_else(|| peel_symmetric(left, right)),
+            .or_else(|| peel_symmetric(left, right))
+            .or_else(|| peel_position(left, right)),
     }
 }
 
@@ -201,6 +202,69 @@ fn nat_equal(left: &Term, right: &Term) -> bool {
     left == right || matches!(peel_nat_terms(left, right), Some(Peel::Equal))
 }
 
+/// A position in a value read through every window that value is itself cut from: the root the windows were taken of, and the position counted from the root's own start. `slice(b, s, l)` begins at `s`, so its position `i` is `b`'s position `s + i`, and a window of a window nests the same way; the sum is [`Nat::sum`]'s, so it is the term the fold would have built. The windows' own counts and proofs are not read: what makes every window on the way well-placed is the typing of the term in hand, and this states where a position *is*, never that it is in range.
+fn rooted(base: &Term, position: &Term) -> (Term, Term) {
+    let (mut base, mut position) = (base.clone(), position.clone());
+    loop {
+        let (inner, start) = match &*base {
+            Subterm::Intrinsic(Intrinsic::BinSlice { bin, start, .. }) => {
+                (bin.clone(), start.clone())
+            }
+            Subterm::Intrinsic(Intrinsic::ListSlice { list, start, .. }) => {
+                (list.clone(), start.clone())
+            }
+            _ => return (base, position),
+        };
+        position = Nat::sum(&start, &position);
+        base = inner;
+    }
+}
+
+/// Two stuck `get`s are one value when they read one position of one root: `get(slice(xs, s, l), i)` is `xs`'s element at `s + i`, which is `get(xs, s + i)`. `Equal` when the roots are identical and the cancellation decides the two absolute positions one number, `Stuck` otherwise and never `Clash` — two unlike positions may still hold one element. `None` for a pair that is not two `get`s of one carrier and grain.
+///
+/// Decided here, as a comparison, because reduction cannot take it: rewriting the node would owe `s + i < len(xs)`, which follows from the window's bound and the index's by transitivity and is convertible with neither, and a reducer that derives a proof is the defect window fusion was reparameterised to avoid. Comparing builds no term, so it owes no proof — the two bounds are never read, which is proof irrelevance, the line `Atom::Window`'s `within` already draws.
+pub fn peel_position(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
+    let ((this, here), (that, there)) = match (left, right) {
+        (
+            Intrinsic::ListGet {
+                list: this,
+                index: here,
+                ..
+            },
+            Intrinsic::ListGet {
+                list: that,
+                index: there,
+                ..
+            },
+        ) => ((this, here), (that, there)),
+        (
+            Intrinsic::BinGet {
+                grain,
+                bin: this,
+                index: here,
+                ..
+            },
+            Intrinsic::BinGet {
+                grain: other,
+                bin: that,
+                index: there,
+                ..
+            },
+        ) if grain == other => ((this, here), (that, there)),
+        _ => return None,
+    };
+
+    let (this_root, this_position) = rooted(this, here);
+    let (that_root, that_position) = rooted(that, there);
+
+    Some(
+        match this_root == that_root && nat_equal(&this_position, &that_position) {
+            true => Peel::Equal,
+            false => Peel::Stuck,
+        },
+    )
+}
+
 /// One segment of a flattened free-monoid value: a run of consecutive literal elements — concrete bytes (`Bin`) or terms (`List`) — a `Single` symbolic element (a `Bin/append`'s byte when it is not a literal: contents unknown, length exactly one), a `Window` into a base value (a `Bin/slice(base, offset, length)`: contents symbolic, but length carried outright as a `Nat` term), or an opaque symbolic chunk (a variable, an unknown producer: anything whose contents *and* length are unknown). A value is a sequence of these, and the concatenation intrinsic is their juxtaposition; flattening normalises the monoid laws — associativity, the empty identity, re-segmented literal runs, and fused adjacent windows of one base (`slice(b, s, l₁) ++ slice(b, s + l₁, l₂) = slice(b, s, l₁ + l₂)`) — so two definitionally equal values decompose to the same list.
 enum Atom<E> {
     Literal(Vec<E>),
@@ -239,7 +303,7 @@ fn peel_prefix<E: PartialEq>(left: &mut VecDeque<Atom<E>>, right: &mut VecDeque<
                 left.pop_front();
                 right.pop_front();
             }
-            // Two windows into the same base over the same span are equal whole. A shared base/offset with differing lengths (one window extends past the other) could peel too, but that needs ordering the symbolic bounds, so it is left to defer rather than decided here.
+            // Two windows over the same span of the same root are equal whole, each read through the windows its own base was cut from, so `slice(slice(b, s, l), t, n)` is `slice(b, s + t, n)`; the starts and the counts are compared as numbers, by the cancellation. A shared root and start with differing lengths (one window extends past the other) could peel too, but that needs ordering the symbolic bounds, so it is left to defer rather than decided here.
             (
                 Some(Atom::Window {
                     base: b1,
@@ -253,7 +317,12 @@ fn peel_prefix<E: PartialEq>(left: &mut VecDeque<Atom<E>>, right: &mut VecDeque<
                     length: n2,
                     within: _,
                 }),
-            ) if b1 == b2 && o1 == o2 && n1 == n2 => {
+            ) if nat_equal(n1, n2) && {
+                let (this_root, this_start) = rooted(b1, o1);
+                let (that_root, that_start) = rooted(b2, o2);
+                this_root == that_root && nat_equal(&this_start, &that_start)
+            } =>
+            {
                 peeled = true;
                 left.pop_front();
                 right.pop_front();

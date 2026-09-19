@@ -3,7 +3,7 @@
 use {
     crate::{
         Free, Intrinsic, Nat, Peel, Subterm, Term, peel_bin, peel_int_pair, peel_list,
-        peel_nat_terms,
+        peel_nat_terms, peel_position,
     },
     curios_num::Integer,
     curios_utilities::Grain,
@@ -231,6 +231,29 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
             cat(vec![window(0, 2), window(3, 1)]),
             window(0, 3),
         ),
+        // A window of a window is the window it names in the root, read through both starts; the near miss names a start one short and must not be decided equal.
+        (
+            "slice(slice(w, 1, 3), 1, 2) ~ slice(w, 2, 2)",
+            Term::intrinsic(Intrinsic::bin_slice(
+                Grain::X,
+                window(1, 3),
+                lit(1),
+                lit(2),
+                qed(),
+            )),
+            window(2, 2),
+        ),
+        (
+            "slice(slice(w, 1, 3), 1, 2) ~ slice(w, 1, 2)",
+            Term::intrinsic(Intrinsic::bin_slice(
+                Grain::X,
+                window(1, 3),
+                lit(1),
+                lit(2),
+                qed(),
+            )),
+            window(1, 2),
+        ),
         (
             "slice(w, 1, 0) ++ x ~ x ++ slice(w, 2, 0)",
             cat(vec![window(1, 0), x.clone()]),
@@ -324,7 +347,7 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
 
     assert_eq!(
         (equal, clash, carried, stuck),
-        (4, 4, 4, 3),
+        (5, 4, 4, 4),
         "the grid stopped reaching every peel verdict",
     );
 }
@@ -510,6 +533,29 @@ fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
             cat(vec![window(0, 2), window(2, 2)]),
             window(0, 4),
         ),
+        // A window of a window, as in the `Bin` grid: the window it names in the root, and the near miss one short of it.
+        (
+            "slice(slice(ws, 1, 3), 1, 2) ~ slice(ws, 2, 2)",
+            Term::intrinsic(Intrinsic::list_slice(
+                elem.clone(),
+                window(1, 3),
+                lit(1),
+                lit(2),
+                qed(),
+            )),
+            window(2, 2),
+        ),
+        (
+            "slice(slice(ws, 1, 3), 1, 2) ~ slice(ws, 1, 2)",
+            Term::intrinsic(Intrinsic::list_slice(
+                elem.clone(),
+                window(1, 3),
+                lit(1),
+                lit(2),
+                qed(),
+            )),
+            window(1, 2),
+        ),
         (
             "[7, 8] ~ [7] ++ xs",
             nat_list(&[7, 8]),
@@ -604,8 +650,108 @@ fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
 
     assert_eq!(
         (equal, clash, carried, stuck),
-        (2, 1, 3, 2),
+        (3, 1, 3, 3),
         "the grid stopped reaching every peel verdict",
+    );
+}
+
+// A position through a window, held over values: `get(slice(w, s, l), i)` is decided the same element as `get(w, s + i)`, at both packed grains' carrier and at `List`, and the near miss one position short must not be. An `Equal` must hold at every anchor, inside the windows' own preconditions; the tally says both verdicts were reached.
+#[test]
+fn every_position_verdict_holds_at_every_closed_instantiation() {
+    let anchor_free = Free::local(0, Some("w"));
+    let w = Term::free_var(&anchor_free);
+    let elem = symbol(1000, "T");
+
+    let bin_window = Term::intrinsic(Intrinsic::bin_slice(
+        Grain::X,
+        w.clone(),
+        lit(1),
+        lit(3),
+        qed(),
+    ));
+    let list_window = Term::intrinsic(Intrinsic::list_slice(
+        elem.clone(),
+        w.clone(),
+        lit(1),
+        lit(3),
+        qed(),
+    ));
+    let bin_get = |bin: Term, index: u32| Intrinsic::BinGet {
+        grain: Grain::X,
+        bin,
+        index: lit(index),
+        in_range: qed(),
+    };
+    let list_get = |list: Term, index: u32| Intrinsic::ListGet {
+        element: elem.clone(),
+        list,
+        index: lit(index),
+        in_range: qed(),
+    };
+
+    let bin_anchors: [&[u8]; 2] = [&[9, 8, 7, 6], &[9, 8, 7, 7, 3]];
+    let list_anchors: [&[u32]; 2] = [&[9, 8, 7, 6], &[9, 8, 7, 7, 3]];
+
+    let cases = [
+        (
+            "get(slice(w, 1, 3), 2) ~ get(w, 3)",
+            bin_get(bin_window.clone(), 2),
+            bin_get(w.clone(), 3),
+            true,
+        ),
+        (
+            "get(slice(w, 1, 3), 2) ~ get(w, 2)",
+            bin_get(bin_window, 2),
+            bin_get(w.clone(), 2),
+            true,
+        ),
+        (
+            "get(slice(ws, 1, 3), 2) ~ get(ws, 3)",
+            list_get(list_window.clone(), 2),
+            list_get(w.clone(), 3),
+            false,
+        ),
+        (
+            "get(slice(ws, 1, 3), 2) ~ get(ws, 2)",
+            list_get(list_window, 2),
+            list_get(w.clone(), 2),
+            false,
+        ),
+    ];
+
+    let (mut equal, mut stuck) = (0, 0);
+
+    for (label, left, right, packed) in cases {
+        let peel = peel_position(&left, &right).expect("two gets of one carrier");
+        match &peel {
+            Peel::Equal => equal += 1,
+            Peel::Stuck => stuck += 1,
+            _ => unreachable!("`{label}`: a position is decided equal or declined, never more"),
+        }
+
+        for index in 0..2 {
+            let close = |side: &Intrinsic| {
+                let anchor = match packed {
+                    true => run_bytes(bin_anchors[index]),
+                    false => nat_list(list_anchors[index]),
+                };
+                fold(at(Term::intrinsic(side.clone()), &anchor_free, anchor))
+            };
+
+            if matches!(peel, Peel::Equal) {
+                assert_eq!(
+                    close(&left),
+                    close(&right),
+                    "`{label}` was decided equal but differs at anchor {index}",
+                );
+            }
+        }
+    }
+
+    assert_eq!(
+        (equal, stuck),
+        (2, 2),
+        "the grid stopped reaching both position verdicts",
     );
 }
 

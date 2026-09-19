@@ -2,7 +2,7 @@
 
 ## Status
 
-Not refined yet. The refused half of `curios/src/tests/laws.rs` was read row by row against the tree, and what that found is below: the map row is a syntactic test and not extensionality, a decision made at the comparison needs neither the normal form nor the bound that two other rows wait on, and the refused half is itself incomplete by the grid's own rule. Every row has a mechanism within reach. The shift by a literal count and parity have landed and left this file; the rest are not started. The rows are independent of one another, so this file is a set of lifts under one acceptance bar and not a sequence.
+Not refined yet. The refused half of `curios/src/tests/laws.rs` was read row by row against the tree, and what that found is below: the map row is a syntactic test and not extensionality, a decision made at the comparison needs no normal form, and the refused half is itself incomplete by the grid's own rule. Every row has a mechanism within reach. The shift by a literal count, parity and the position inside a window have landed and left this file; the rest are not started. The rows are independent of one another, so this file is a set of lifts under one acceptance bar and not a sequence.
 
 ## Why it exists
 
@@ -18,11 +18,10 @@ Taken **2026-09-19** at `c1fc7d16`, through the line the grid itself reads: each
 | --- | --- | --- | --- |
 | `Eq(Bool/not(b && c), Bool/not(b) \|\| Bool/not(c))` and `Eq(b \|\| (b && c), b)` | refused | "need a normal form past the leaf set" | Yes for a *rewriting* normal form; a comparison-time decision needs none |
 | `Eq(List/map(xs, (v) => v + 0), xs)` | refused | the fold tests the lambda as written, before anything reduces its body | Yes, and the test is the defect. See below |
-| `Eq(List/get(…List/slice(xs, s, l)…, 0), List/get(xs, s))` | refused | a bound on the base no term in hand proves, which a reducer may not invent | Yes for a *reduction*; a comparison builds no term and so needs no bound |
 
 **The map row is a syntactic test, not extensionality.** `Eq(@(Nat) -> Nat, (v: Nat) => v + 0, (v: Nat) => v)` is held, and so is `Eq(List/map(xs, (v) => v), xs)`. Their composition is refused, and so is `Eq(List/map(xs, (v) => v + 0), List/map(xs, (v) => v))`. The cause is `is_identity` in `curios-core/src/reduce/intrinsic.rs`: one binder whose body *is* that binder, tested on the lambda as `reducer.reduce` left it, which is weak-head and so never looks under the binder. A function that is the identity only pointwise — `(v) => match v | 0 => 0 | k + 1 => k + 1 end` — is the extensionality case, and it is not the row the grid states.
 
-**The refused half is incomplete by the grid's own rule.** "State a row at every carrier, and state it first." Refused today and stated nowhere: the window row at `Bytes` and `Bits`; its general position, `get(slice(xs, s, l), i) = get(xs, s + i)`; a window through a window, `slice(slice(xs, s, l), t, m) = slice(xs, s + t, m)`, which [Open fold laws and the sum normal form](../soundness/per-term-rules/open-fold-laws-and-the-sum-normal-form.md) names as declined beside the `get`; the duals of De Morgan and absorption, and distribution of `&&` over `||`; and map fusion, `map(map(xs, f), g) = map(xs, (v) => g(f(v)))`.
+**The refused half is incomplete by the grid's own rule.** "State a row at every carrier, and state it first." Refused today and stated nowhere: the duals of De Morgan and absorption, and distribution of `&&` over `||`; and map fusion, `map(map(xs, f), g) = map(xs, (v) => g(f(v)))`.
 
 ## The acceptance every lift shares
 
@@ -53,17 +52,6 @@ The test is the defect, so the lift is the test. Open the binder, weak-head redu
 - **Fold-side or probe-side.** Fold-side, `map(xs, (v) => v + 0)` *reduces* to `xs`, so `len`, `get` and every later fold see through it; it would be the first fold in `reduce::intrinsic` to open a binder — none does today — and the `Reducer` trait offers `reduce`, `reduce_forced` and `spend`, no fresh variable and no conversion. Probe-side, in both converters' intrinsic congruence, going under a binder is everyday work and the two sides merely compare equal. **To decide**, on what opening a binder inside a fold costs the trait.
 - **Carrier:** `List` alone has `map`.
 
-## A position inside a window
-
-`get(slice(xs, s, l, ok), i, inside)` is `xs[s + i]`, and the proposition a rewritten node would owe — `s + i < len(xs)` — follows from `ok` and `inside` by transitivity and is convertible with neither. Window fusion and the last-operand law hand a proof on because cancellation makes the propositions *one*; here there is a derivation to perform, which is why the row is stuck.
-
-- **(a) A comparison-time rule in the peel.** Read each stuck `get` through its windows to a root base and an absolute position, and each stuck `slice` to a root base, an absolute start and a count; two are `Equal` when the bases are one and `nat_equal` decides the positions one. It builds no term and so owes no proof — the bound is never compared, which is the line `Atom::Window`'s `within` already draws. `Stuck` otherwise, never `Clash`.
-- **(b) A reduction that constructs the bound** from `ok` and `inside` through a `/std` lemma reached by the `SyntaxRegistry`. No axiom, and the node normalizes, so later folds see through the window. Its price is that the trusted reducer's output would name a library declaration: the rule cannot fire where the registry slot is unfilled, and the standard library compiling itself is such a place.
-
-(a) is in the peel's existing character — `peel_symmetric` and `peel_bool` also equate what reduction leaves apart. **To decide**, on whether anything needs the window *reduced* rather than equated.
-
-- **Carriers:** `List`, `Bytes`, `Bits`, at the first position, the general one, and a window through a window.
-
 ## Adjacent items that are not this one
 
 - **Hypotheses feeding the algebra.** With no hypothesis in scope `compare_nat` is already complete for `<` and `<=` — a side still holding a symbol is unbounded — so beyond the gcd test what an omega-style procedure adds is hypotheses. [A bound is stated in a decided proposition and discharged by reduction](../design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md) parks it as "a larger and separate capability" and [A closed term evaluates at an interpreter's speed](faster-conversion-oracle-spec.md) says it wants its own file. The smallest step that way is `nat_dominators` reading a guard in scope, which puts a hypothesis inside conversion and owes the metatheory that move has always owed. The route that fits [Proof automation writes terms into the source and is never trusted](proof-automation-spec.md) is a reflected checker with a certificate.
@@ -74,7 +62,6 @@ The test is the defect, so the lift is the test. Open the binder, weak-head redu
 
 - Whether a Boolean tautology reduces, or only compares; and the cap.
 - Whether a fold may open a binder, which settles the map row's side.
-- Whether a window is equated or reduced.
 - Whether the missing refused rows are stated as one change ahead of every lift, or each with its own.
 
 ## Deliberately not specified
@@ -83,7 +70,7 @@ The value of the truth table's cap and the unit it is charged in. `Int/shr`'s la
 
 ## The seam it comes back through
 
-`curios/src/tests/laws.rs` for every row. `normalize_bool`, `align_comparisons`, `dual_comparison` and `spine.rs`'s `peel_bool` for the Boolean rows; `is_identity` and the `ListMap` arm for the map row; `spine.rs`'s `Atom::Window`, `peel_bin` and `peel_list` for the window rows. Both converters' intrinsic congruences — `curios-cert/src/kernel/convert/intrinsic.rs` and `curios-elab/src/convert/intrinsic.rs` — and `curios-analysis/src/invert.rs` for anything probe-side. `reduce::intrinsic::laws_tests`, `compare_tests` and `spine`'s tests for the value grids.
+`curios/src/tests/laws.rs` for every row. `normalize_bool`, `align_comparisons`, `dual_comparison` and `spine.rs`'s `peel_bool` for the Boolean rows; `is_identity` and the `ListMap` arm for the map row. Both converters' intrinsic congruences — `curios-cert/src/kernel/convert/intrinsic.rs` and `curios-elab/src/convert/intrinsic.rs` — and `curios-analysis/src/invert.rs` for anything probe-side. `reduce::intrinsic::laws_tests`, `compare_tests` and `spine`'s tests for the value grids.
 
 ## How to retake the measurements
 
@@ -99,4 +86,4 @@ Io/pure(())
 CRS
 ```
 
-A report prints its candidates above the source line it belongs to, so a `? ≈ Eq/refl()` line marks the `let` that *follows* it as held, and the bare listing after the last report repeats every line without them. `functions` and `identity` are held and the other two are not; the grid's own binders state the window rows.
+A report prints its candidates above the source line it belongs to, so a `? ≈ Eq/refl()` line marks the `let` that *follows* it as held, and the bare listing after the last report repeats every line without them. `functions` and `identity` are held and the other two are not.

@@ -1,6 +1,6 @@
 //! The definitional-law grid: which equations over the intrinsic carriers the normalizer closes by computation, and which it refuses, stated so that both halves are checked.
 //!
-//! A held row is a law both checkers decide for every value, so it is stated as an `Eq/refl()` proof and compiled. A refused row is a law the normalizer does *not* take — kept here rather than in prose so the refused set is a record rather than a rumor, and so that taking one later is a row moving, not a test appearing. The refused half cannot be stated as a proof, so both halves are also stated as written goals and read back through the `? ≈ Eq/refl()` candidate line, which is the compiler's own answer to "does refl fit here": a held row must get the line and a refused row must not. The two directions check each other — if the candidate search stopped reporting, every held row would fail the goal test, so a refused row cannot pass it vacuously.
+//! A held row is a law both checkers decide for every value, so it is stated as an `Eq/refl()` proof and compiled. A refused row is a law the normalizer does *not* take — kept here rather than in prose so the refused set is a record rather than a rumor, and so that taking one later is a row moving, not a test appearing. The refused half cannot be stated as a proof, so both halves are also stated as written goals and read back through the `? ≈ Eq/refl()` candidate line, which is the compiler's own answer to "does refl fit here": a held row must get the line and a refused row must not. The two directions check each other — if the candidate search stopped reporting, every held row would fail the goal test. That alone does not keep a refused row from passing vacuously, because the search can stop *partway*: every goal of one program draws its candidate attempts from a single budget, so a program with enough goals runs it dry and every goal after that point reports no candidate at all — which is exactly what a refused row is expected to show, and the refused rows come last. So each program ends on a sentinel, a row `refl` trivially closes, stated after the refused ones: a sentinel without its line means the search ran dry before the refused rows were reached, and the test says so rather than passing them.
 //!
 //! **State a row at every carrier, and state it first.** A grid stating a law at one carrier and not another passes exactly as a complete one does, and what it hides is invisible from reading the two implementations side by side: the bit grain went without `eql` while its byte twin had it, and `List` went without both seam-index rows while `Bytes` and `Bits` held them. Each was a real incompleteness, and each was found by stating the row rather than by inspection. A row stated before an implementation moves turns the change that follows into a refactor with an oracle.
 //!
@@ -15,6 +15,9 @@ struct Carrier {
     held: &'static [&'static str],
     refused: &'static [&'static str],
 }
+
+/// The last goal of every program the goal test states: trivially closed by `refl`, so its candidate line is evidence that the search still had budget when the refused rows before it were answered.
+const SENTINEL: &str = "Eq(0, 0)";
 
 const IMPORTS: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Bits, List, Str, Char, Eq, Io};";
 
@@ -305,7 +308,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "List, the free monoid",
-        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Nat/Le(s + l, List/len(xs)), first: Nat/Lt(0, l), at: Nat/Lt(s, List/len(xs)), head: Nat/Lt(0, List/len(ys)), into: Nat/Lt(s, List/len(ys)), fits: Nat/Le(l, List/len(ys)), z: Nat, g: (Nat, Nat) -> Nat",
+        binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Nat/Le(s + l, List/len(xs)), at: Nat/Lt(s, List/len(xs)), head: Nat/Lt(0, List/len(ys)), into: Nat/Lt(s, List/len(ys)), fits: Nat/Le(l, List/len(ys)), z: Nat, g: (Nat, Nat) -> Nat",
         held: &[
             "Eq([..xs, ..[]], xs)",
             "Eq([..[], ..xs], xs)",
@@ -354,8 +357,6 @@ const CARRIERS: &[Carrier] = &[
         refused: &[
             // Not function extensionality: `(v) => v + 0` is convertible with the identity lambda. The fold tests the lambda as written, before anything reduces its body, so `map` by it stays stuck.
             "Eq(List/map(xs, (v) => v + 0), xs)",
-            // A position inside a window needs a bound on the base that no term in hand proves, and a reducer may not invent one — so these stay stuck, and are stated here so that taking them is a row moving.
-            "Eq(List/get(@Nat, List/slice(@Nat, xs, s, l, @ok), 0, @first), List/get(@Nat, xs, s, @at))",
         ],
     },
     Carrier {
@@ -436,6 +437,51 @@ const CARRIERS: &[Carrier] = &[
         refused: &[],
     },
     Carrier {
+        name: "List, through a window",
+        binders: "xs: List(Nat), ys: List(Nat), s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Nat/Le(s + l, List/len(xs)), first: Nat/Lt(0, l), at: Nat/Lt(s, List/len(xs)), inside: Nat/Lt(i, l), deep: Nat/Lt(s + i, List/len(xs)), next: Nat/Lt(s + 1, List/len(xs)), other: Nat/Lt(s, List/len(ys)), inner: Nat/Le(t + m, l), whole: Nat/Le(s + t + m, List/len(xs))",
+        held: &[
+            // A position inside a window is the position it names in the base, and a window of a window is the window it names there. Decided where two are compared, never by rewriting one: the rewritten node would owe a bound no term in hand proves, and a comparison builds nothing, so the two bounds are never read. A carrier of its own because these rows take more binders than the monoid's do, and every goal's candidate search pays for the whole scope.
+            "Eq(List/get(@Nat, List/slice(@Nat, xs, s, l, @ok), 0, @first), List/get(@Nat, xs, s, @at))",
+            "Eq(List/get(@Nat, List/slice(@Nat, xs, s, l, @ok), i, @inside), List/get(@Nat, xs, s + i, @deep))",
+            "Eq(List/slice(@Nat, List/slice(@Nat, xs, s, l, @ok), t, m, @inner), List/slice(@Nat, xs, s + t, m, @whole))",
+        ],
+        refused: &[
+            // Controls, and neither is a law: the position one past the window's first, and the same position of another list.
+            "Eq(List/get(@Nat, List/slice(@Nat, xs, s, l, @ok), 0, @first), List/get(@Nat, xs, s + 1, @next))",
+            "Eq(List/get(@Nat, List/slice(@Nat, xs, s, l, @ok), 0, @first), List/get(@Nat, ys, s, @other))",
+        ],
+    },
+    Carrier {
+        name: "Bytes, through a window",
+        binders: "bs: Bytes, cs: Bytes, s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Nat/Le(s + l, Bytes/len(bs)), first: Nat/Lt(0, l), at: Nat/Lt(s, Bytes/len(bs)), inside: Nat/Lt(i, l), deep: Nat/Lt(s + i, Bytes/len(bs)), next: Nat/Lt(s + 1, Bytes/len(bs)), other: Nat/Lt(s, Bytes/len(cs)), inner: Nat/Le(t + m, l), whole: Nat/Le(s + t + m, Bytes/len(bs))",
+        held: &[
+            // The `List` rows, at the byte grain.
+            "Eq(Bytes/get(Bytes/slice(bs, s, l, @ok), 0, @first), Bytes/get(bs, s, @at))",
+            "Eq(Bytes/get(Bytes/slice(bs, s, l, @ok), i, @inside), Bytes/get(bs, s + i, @deep))",
+            "Eq(Bytes/slice(Bytes/slice(bs, s, l, @ok), t, m, @inner), Bytes/slice(bs, s + t, m, @whole))",
+        ],
+        refused: &[
+            // The `List` controls, at the byte grain.
+            "Eq(Bytes/get(Bytes/slice(bs, s, l, @ok), 0, @first), Bytes/get(bs, s + 1, @next))",
+            "Eq(Bytes/get(Bytes/slice(bs, s, l, @ok), 0, @first), Bytes/get(cs, s, @other))",
+        ],
+    },
+    Carrier {
+        name: "Bits, through a window",
+        binders: "ts: Bits, us: Bits, s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Nat/Le(s + l, Bits/len(ts)), first: Nat/Lt(0, l), at: Nat/Lt(s, Bits/len(ts)), inside: Nat/Lt(i, l), deep: Nat/Lt(s + i, Bits/len(ts)), next: Nat/Lt(s + 1, Bits/len(ts)), other: Nat/Lt(s, Bits/len(us)), inner: Nat/Le(t + m, l), whole: Nat/Le(s + t + m, Bits/len(ts))",
+        held: &[
+            // The `List` rows, at the bit grain: one grain's arm is not evidence for the other's.
+            "Eq(Bits/get(Bits/slice(ts, s, l, @ok), 0, @first), Bits/get(ts, s, @at))",
+            "Eq(Bits/get(Bits/slice(ts, s, l, @ok), i, @inside), Bits/get(ts, s + i, @deep))",
+            "Eq(Bits/slice(Bits/slice(ts, s, l, @ok), t, m, @inner), Bits/slice(ts, s + t, m, @whole))",
+        ],
+        refused: &[
+            // The `List` controls, at the bit grain.
+            "Eq(Bits/get(Bits/slice(ts, s, l, @ok), 0, @first), Bits/get(ts, s + 1, @next))",
+            "Eq(Bits/get(Bits/slice(ts, s, l, @ok), 0, @first), Bits/get(us, s, @other))",
+        ],
+    },
+    Carrier {
         name: "Char, over Nat",
         binders: "c: Char, d: Char",
         held: &[
@@ -494,13 +540,14 @@ fn every_held_law_closes_by_refl() {
 
 #[test]
 fn every_row_is_on_the_side_the_compiler_puts_it() {
-    // Every row — held then refused — as a written goal, read back through the compiler's own refl-fit line. A held row without the line is a regression in the normalizer; a refused row with it is a law that has been taken and must move to the held rows, which is how the refused half stays a record. Every misplaced row is reported at once, since a change to one rule can move several.
+    // Every row — held, then refused, then the sentinel — as a written goal, read back through the compiler's own refl-fit line. A held row without the line is a regression in the normalizer; a refused row with it is a law that has been taken and must move to the held rows, which is how the refused half stays a record. Every misplaced row is reported at once, since a change to one rule can move several.
     let mut misplaced = Vec::new();
     for carrier in CARRIERS {
         let rows = carrier
             .held
             .iter()
             .chain(carrier.refused)
+            .chain(&[SENTINEL])
             .copied()
             .collect::<Vec<_>>();
         let error = typecheck(&program(carrier, &rows, "?"))
@@ -514,6 +561,15 @@ fn every_row_is_on_the_side_the_compiler_puts_it() {
         );
         for (index, (row, report)) in rows.iter().zip(reports).enumerate() {
             let fits = report.contains("? \u{2248} Eq/refl()");
+            if index + 1 == rows.len() {
+                if !fits {
+                    misplaced.push(format!(
+                        "{}: the candidate search ran dry before the sentinel, so the refused rows above it were answered by an empty budget and not by the normalizer — split the carrier",
+                        carrier.name
+                    ));
+                }
+                continue;
+            }
             let held = index < carrier.held.len();
             if fits != held {
                 misplaced.push(format!(
