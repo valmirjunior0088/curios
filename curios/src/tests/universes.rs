@@ -2,12 +2,12 @@
 //!
 //! The hierarchy exists to remove one source of unsoundness: under `Type : Type` a type could classify itself, which admits Girard's paradox. The solver's own rules are unit-tested in `curios-analysis/src/satisfy/tests.rs`; these check what a *user* can observe.
 //!
-//! There is deliberately no "the paradox is rejected" test here. A declaration generalizes over the levels its *interface* carries, so a self-reference like `Box/wrap(Box)` instantiates `Box` at two different levels and is admitted — correctly, since that is stratification working. And `syntax.md` gives no syntax for universe variables or explicit arguments, so a program cannot force two occurrences to share a level. Whether *any* surface program can reach `UniverseInconsistency` is an open question; until it is answered, asserting a rejection here would only pin behavior that holds for the wrong reason. Stratification itself is covered at unit level by `a_polymorphic_definition_instantiates_at_prop_and_type`, which pins `id(Prop)` to level 1 and `id(Type)` to level 2.
+//! A surface program reaches `UniverseInconsistency`, and three fixtures hold where. What a program cannot do is force two *occurrences of a name* to share a level: a declaration generalizes over the levels its *interface* carries, so a self-reference like `Box/wrap(Box)` instantiates `Box` at two different levels and is admitted — correctly, since that is stratification working — and `syntax.md` gives no syntax for universe variables or explicit arguments. A bound variable and the type that binds it are another matter: they share a level by construction, and a level a declaration carries only in its body is minimized rather than generalized, so `let U: Type = (X: Type, …) -> …` fixes `X` one level below `U`, and instantiating `X` at `U` itself asks for a level strictly below itself. `a_type_quantifying_over_types_cannot_be_instantiated_at_itself` is that refusal alone, `the_self_application_girards_paradox_needs_is_refused` is the paradox's own shape, refused at the same instantiation, and `the_same_quantifier_instantiates_at_a_type_below_it` is the control. Stratification itself is covered at unit level by `a_polymorphic_definition_instantiates_at_prop_and_type`, which pins `id(Prop)` to level 1 and `id(Type)` to level 2.
 //!
 //! "Interface" is load-bearing in that sentence and is what `a_body_carried_level_is_minimized_rather_than_generalized` pins: the levels reachable only through a body are *minimized* instead, so the set of declarations a use site can instantiate at two levels is narrower than "every declaration".
 
 use {
-    super::run,
+    super::{error, run},
     curios_core::Module,
     curios_pipeline::{DEFAULT_STEP_BUDGET, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
@@ -126,6 +126,56 @@ fn a_body_carried_level_is_minimized_rather_than_generalized() {
         Some(&1),
         "an interface level stopped generalizing, so the control no longer separates the two: {parameters:?}",
     );
+}
+
+/// A type that quantifies over a type and answers a double powerset of it — the carrier Hurkens' form of Girard's paradox is stated over — with `tau`, the half of the paradox that stratifies. Both of `U`'s levels are carried by its body alone, so they are minimized as `a_body_carried_level_is_minimized_rather_than_generalized` pins: `X` ranges over level 0 and `U` sits at level 1.
+const A_TYPE_QUANTIFYING_OVER_TYPES: &str = r#"
+    let Pow(A: Type) -> Type = (A) -> Type;
+    let U: Type = (X: Type, f: (Pow(Pow(X))) -> X) -> Pow(Pow(X));
+    let tau(t: Pow(Pow(U))) -> U = (X, f) => (p) => t((x) => p(f(x(X, f))));
+    "#;
+
+// The refusal with nothing beside it: `s(U, f)` instantiates `U`'s bound `X` at `U`, which asks `U`, at level 1, to be a type of level 0. The diagnostic names the rule and the declaration, since a fixture that accepted any error would pass on a program broken some other way — and `tau`, which mentions `U` as often, is not where it is refused.
+#[test]
+fn a_type_quantifying_over_types_cannot_be_instantiated_at_itself() {
+    let source = format!(
+        r#"{A_TYPE_QUANTIFYING_OVER_TYPES}
+        let at_itself(s: U, f: (Pow(Pow(U))) -> U) -> Pow(Pow(U)) = s(U, f);
+        /std/print("no")
+        "#
+    );
+
+    let message = error(&source);
+    assert!(message.contains("strictly below itself"), "got: {message}");
+    assert!(message.contains("/at_itself"), "got: {message}");
+}
+
+// The paradox's own shape: `sigma` is the self-application Girard's paradox needs, and it is refused at the same instantiation for the same reason. The hierarchy does not make this unspellable; it makes it ill-typed.
+#[test]
+fn the_self_application_girards_paradox_needs_is_refused() {
+    let source = format!(
+        r#"{A_TYPE_QUANTIFYING_OVER_TYPES}
+        let sigma(s: U) -> Pow(Pow(U)) = s(U, tau);
+        /std/print("no")
+        "#
+    );
+
+    let message = error(&source);
+    assert!(message.contains("strictly below itself"), "got: {message}");
+    assert!(message.contains("/sigma"), "got: {message}");
+}
+
+// The control, differing in the last declaration alone: the same `s` instantiated at a type its caller supplies. `A`'s level is held to the one `X` ranges over, which is satisfiable — what the refusals above rest on is the self-instantiation, not the quantifier.
+#[test]
+fn the_same_quantifier_instantiates_at_a_type_below_it() {
+    let source = format!(
+        r#"{A_TYPE_QUANTIFYING_OVER_TYPES}
+        let sigma_at(s: U, A: Type, f: (Pow(Pow(A))) -> A) -> Pow(Pow(A)) = s(A, f);
+        /std/print("stratified")
+        "#
+    );
+
+    assert_eq!(run(&source), b"stratified");
 }
 
 // A `match` arm is checked at the motive opened on the constructor value the scrutinee is refined to, and that value is what a metavariable in the arm's expected type gets solved to — here `Eq/refl()`'s `@z`, against `Eq(len(xs), len(xs))` with `xs := L/cons(x, rest)`. The family is universe-polymorphic through its `A: Type`, so the occurrence needs its level instance; built without one, it zonked into the definition, where the elaborator's own arity check refused a program that is plainly well-typed. Both arms are `Eq/refl()` on purpose: no `rec`, no `Eq/cong`, nothing but the refinement itself. A twin fixture over a *prelude* family stood beside this one, where the detector differs — the elaborator's arity check knows only the module's own inductives, so a level-less prelude constructor passed it and the kernel refused the definition instead. It was written over `/std/Vec` when `Vec` was an indexed inductive; `/std` now has no `Type`-valued universe-polymorphic indexed family to state it over, and the prelude rung is held by the build rather than by a fixture: `/std/Eq`'s own `sym`, `trans`, `cong` and `subst` each match on that universe-polymorphic family and answer with `Eq/refl()` in the arm, and `cargo x clippy` certifies every `/std` module with the kernel on each build.
