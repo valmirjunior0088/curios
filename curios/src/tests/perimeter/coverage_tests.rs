@@ -41,7 +41,7 @@ fn a_non_strict_occurrence_behind_a_record_is_still_refused() {
 
 /// Every perimeter fixture, put to both checkers, asserting what each says.
 ///
-/// Each row judges the user suffix only, as `compile_entrypoint` does, so this costs what compiling sixteen small programs costs rather than sixteen walks of the standard library. It is the coverage map: where a rule's *second* opinion is recorded, or its absence admitted.
+/// Each row judges the user suffix only, as `compile_entrypoint` does, so this costs what compiling one small program per row costs rather than a walk of the standard library per row. It is the coverage map: where a rule's *second* opinion is recorded, or its absence admitted.
 #[test]
 fn the_two_checkers_agree_as_recorded() {
     for (name, source, expect_elaborator, expect_kernel) in CORPUS {
