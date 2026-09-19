@@ -397,3 +397,40 @@ fn a_grounded_motive_binder_carries_the_stand_in_rather_than_its_real_type() {
         "the same binder at its real `Prop` stopped licensing the irrelevance grounding forfeits",
     );
 }
+
+/// A struct's *parameters* compare at the declaration's outer telescope too, so a parameter at a proposition is discharged without being read.
+///
+/// This is the gap `induct_type_args` named and left open — "no witness has forced it" — and it is the parameter-side twin of the field rule above: a family's indices were typed, a struct's and a constructor's parameters were not, so `Wrap(P, p)` and `Wrap(P, q)` were two types for one, where `Eq(@P, p, q)` and `Eq(@P, p, p)` were already one. Nothing in `/std` forces it either; it is taken because the rule is the same rule and the asymmetry was an accident of which shape someone needed first.
+#[test]
+fn a_struct_parameter_at_a_proposition_is_not_read() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let name = curios_core::Global::Authored(Qualifier::from(["Held"]));
+    kernel.declare_struct(
+        &name,
+        &StructDecl {
+            universe_context: UniverseContext::default(),
+            // One parameter at the proposition, and a field that does not mention it.
+            arity: Telescope::build(
+                [(binder(70, "p"), proposition.clone())],
+                Telescope::build([(binder(71, "n"), nat_type())], ()),
+            ),
+            result_sort: Term::type_ground(),
+            module: Qualifier::empty(),
+            rep_public: true,
+            polarities: vec![curios_core::Polarity::Unused],
+        },
+    );
+    let (p, q) = (binder(72, "p"), binder(73, "q"));
+    kernel.assume(&p, &proposition);
+    kernel.assume(&q, &proposition);
+
+    let this = Term::struct_type(name.clone(), [Term::free_var(&p)]);
+    let that = Term::struct_type(name, [Term::free_var(&q)]);
+
+    assert_eq!(
+        convert(&mut kernel, &Term::type_ground(), &this, &that),
+        Ok(true),
+        "two instances differing only in a proof parameter did not convert",
+    );
+}

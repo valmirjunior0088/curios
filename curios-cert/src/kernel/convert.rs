@@ -16,7 +16,7 @@
 //!
 //! # Where this is incomplete, and why that is the safe direction
 //!
-//! One concession remains — a `rec` group used to be a second, compared syntactically, until two instances of one group at two universe levels showed a syntactic refusal turning into an unfolding that never returned; `rec_instances` now decides such a pair by its levels under the item's hypotheses, the equation `induct_type_args` and the instance arms already apply, and two different groups are refused as before. Every child position without a typed context — a stuck elimination's motive and arms under their opaque binders, a projection's or an instance's head, and a struct type-former's parameters — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted. An application spine's arguments left that list when a *variable* head was found to carry the telescope they inhabit: reading it is a lookup rather than an inference, so `compare_arguments` types them at no new cost and at no new thing consulted, and a head that names no type still grounds. The struct-parameter gap `induct_type_args` names is the nearest one left. An inductive type-former's arguments left this list when the compile path put real programs through the kernel: they are compared at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P, p, q)` at a `Prop`-sorted `P` convert with `Eq(@P, p, p)`. A struct literal's fields and a constructor's payload left it when the proof-carrying idiom met it: two `Str`s built from different proofs of the same bytes were unequal here and equal to the elaborator, so both now compare at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read.
+//! One concession remains — a `rec` group used to be a second, compared syntactically, until two instances of one group at two universe levels showed a syntactic refusal turning into an unfolding that never returned; `rec_instances` now decides such a pair by its levels under the item's hypotheses, the equation `induct_type_args` and the instance arms already apply, and two different groups are refused as before. Every child position without a typed context — a stuck elimination's motive and arms under their opaque binders, and a projection's or an instance's head — is compared at `Type` rather than at the types its head assigns, which forfeits eta and irrelevance there. Each is a place where the kernel may reject a term the elaborator accepted. An application spine's arguments left that list when a *variable* head was found to carry the telescope they inhabit: reading it is a lookup rather than an inference, so `compare_arguments` types them at no new cost and at no new thing consulted, and a head that names no type still grounds. A struct type's, a struct literal's and a constructor's parameters left it with `params_at`, which reads the declaration's outer telescope the way `induct_type_args` reads a family's — the asymmetry between them was an accident of which shape a witness forced first, not a rule. An inductive type-former's arguments left this list when the compile path put real programs through the kernel: they are compared at the declaration's own index telescope (`induct_type_args`), which is what lets `Eq(@P, p, q)` at a `Prop`-sorted `P` convert with `Eq(@P, p, p)`. A struct literal's fields and a constructor's payload left it when the proof-carrying idiom met it: two `Str`s built from different proofs of the same bytes were unequal here and equal to the elaborator, so both now compare at the declaration's telescope (`compare_fields_at`), which is what lets a proof field discharge without being read.
 //!
 //! That direction is deliberate. An incomplete conversion refuses programs; an unsound one admits them. A refusal is visible — it is a disagreement between the two checkers, which is precisely the signal this kernel exists to produce — whereas an over-eager acceptance is silent and is exactly what a second opinion is supposed to catch. Every one of these can be strengthened later against a real program that needs it, and none can be strengthened back from having been wrong.
 
@@ -341,17 +341,24 @@ fn structural(
                 universes: right_universes,
                 params: right_params,
             }),
-        ) => Ok(left_name == right_name
-            && kernel.levels_eq(left_universes, right_universes)
-            && compare_each(kernel, history, left_params.iter(), right_params.iter())?),
+        ) => {
+            if left_name != right_name || !kernel.levels_eq(left_universes, right_universes) {
+                return Ok(false);
+            }
+            let telescope = struct_params(kernel, left_name, left_universes);
+            params_at(kernel, history, telescope, left_params, right_params)
+        }
 
         // The payload compares at the constructor's own telescope, opened at the left side's parameters and then at each preceding payload, so a `Prop`-sorted payload discharges by irrelevance without being read — the discipline `eta_tuple` follows at a Σ, and what the elaborator's `compare_variant` does. A tag the declaration does not carry leaves the telescope absent, and the payload then compares at `Type` as it always did, which admits nothing new.
         (Subterm::Variant(left), Subterm::Variant(right)) => {
             if left.name != right.name
                 || left.tag != right.tag
                 || !kernel.levels_eq(&left.universes, &right.universes)
-                || !compare_each(kernel, history, left.params.iter(), right.params.iter())?
             {
+                return Ok(false);
+            }
+            let params = induct_params(kernel, &left.name, &left.universes);
+            if !params_at(kernel, history, params, &left.params, &right.params)? {
                 return Ok(false);
             }
             let telescope = kernel
@@ -378,10 +385,11 @@ fn structural(
                 ..
             }),
         ) => {
-            if left_name != right_name
-                || !kernel.levels_eq(left_universes, right_universes)
-                || !compare_each(kernel, history, left_params.iter(), right_params.iter())?
-            {
+            if left_name != right_name || !kernel.levels_eq(left_universes, right_universes) {
+                return Ok(false);
+            }
+            let params = struct_params(kernel, left_name, left_universes);
+            if !params_at(kernel, history, params, left_params, right_params)? {
                 return Ok(false);
             }
             let telescope = kernel
@@ -465,7 +473,60 @@ fn structural(
     }
 }
 
-/// Argument-wise comparison of two instances of one inductive family, each pair at the type the declaration's full index telescope assigns, opened at the left instance's preceding actuals — the typed context the grounded comparison forfeits. Irrelevance at a `Prop`-typed index is the observable difference: `Eq(@P, p, q)` with `P : Prop` converts with `Eq(@P, p, p)`, because no proof of a proposition is distinguishable from another. The struct-parameter analog of this gap is still grounded — no witness has forced it.
+/// Two parameter vectors at the types a declaration's outer telescope assigns them, each opened at the left side's preceding actuals because a later domain may name an earlier parameter.
+///
+/// `None` for the telescope keeps the grounded comparison: a declaration the registry seeding refused has no types to compare at, and inventing some would be worse than the concession. Shared by the three nominal shapes that carry parameters — a struct type, a struct literal and a constructor value — which reach it from `StructDecl::arity`'s outer half and `InductDecl::arity`'s, the same halves `induct_type_args` walks for a family.
+fn params_at(
+    kernel: &mut Kernel,
+    history: &mut History,
+    telescope: Option<Telescope<Telescope<()>>>,
+    this: &[Term],
+    that: &[Term],
+) -> Result<bool, KernelError> {
+    if this.len() != that.len() {
+        return Ok(false);
+    }
+
+    let Some(mut telescope) = telescope else {
+        return compare_each(kernel, history, this.iter(), that.iter());
+    };
+
+    for (left, right) in this.iter().zip(that) {
+        let Telescope::Cons(type_, rest) = telescope else {
+            return Ok(false);
+        };
+        if !compare(kernel, history, &type_, left, right)? {
+            return Ok(false);
+        }
+        telescope = rest.open(&[left]);
+    }
+
+    Ok(true)
+}
+
+/// A struct declaration's parameter telescope at `universes`, or `None` where the declaration is absent or its levels do not instantiate.
+fn struct_params(
+    kernel: &Kernel,
+    name: &Global,
+    universes: &[Level],
+) -> Option<Telescope<Telescope<()>>> {
+    let arity = kernel.struct_decl(name)?.arity.clone();
+
+    instantiate_universe_levels_scoped(&arity, universes).ok()
+}
+
+/// The same for an inductive family, which a constructor value's parameters are the family's.
+fn induct_params(
+    kernel: &Kernel,
+    name: &Global,
+    universes: &[Level],
+) -> Option<Telescope<Telescope<()>>> {
+    let arity = kernel.induct_decl(name)?.arity.clone();
+
+    instantiate_universe_levels_scoped(&arity, universes).ok()
+}
+
+/// Argument-wise comparison of two instances of one inductive family, each pair at the type the declaration's full index telescope assigns, opened at the left instance's preceding actuals — the typed context the grounded comparison forfeits. Irrelevance at a `Prop`-typed index is the observable difference: `Eq(@P, p, q)` with `P : Prop` converts with `Eq(@P, p, p)`, because no proof of a proposition is distinguishable from another. The struct and constructor analogs are [`params_at`]'s, which reads the same outer telescope this does.
 fn induct_type_args(
     kernel: &mut Kernel,
     history: &mut History,
