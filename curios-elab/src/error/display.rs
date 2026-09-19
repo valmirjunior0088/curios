@@ -253,7 +253,7 @@ impl fmt::Display for Displayed<'_> {
 
                 write!(
                     f,
-                    "\n  levels are inferred and there is no syntax for one, so this cannot be annotated away\n  a local definition used at two levels is generalized only at the top level, and a recursive group is monomorphic in its own levels — so a member used by a sibling at a level above its own has to be declared apart from it",
+                    "\n  levels are inferred and there is no syntax for one, so this cannot be annotated away\n  a definition is generalized only at the top level, so a local one used at two levels has to be hoisted to be used at both; a recursive group is monomorphic in its own levels, so a member's own calls constrain those levels rather than choosing them afresh",
                 )
             }
             Error::UniverseInvariant(message) => {

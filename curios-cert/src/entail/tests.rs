@@ -67,6 +67,38 @@ fn a_constant_is_not_bounded_by_a_bare_parameter() {
     assert!(entails(&[], &three, &raised));
 }
 
+/// **A hypothesis is what puts a floor under a parameter**, and the rule above is the no-hypothesis case rather than the whole relation.
+///
+/// A recursive group states exactly this constraint about its own levels: a member calling itself at `Type` — `pick(@Type, …)` for `pick(@A: Type, …)` — needs the group's `u` strictly above zero, and the elaborator records `1 ≤ u` in the scheme it generalizes. The kernel refused such a declaration under its own context until this held, because the constant part was decided structurally *before* the hypotheses were reached: the premise was sitting in `assumed` and nothing consulted it. The elaborator accepted the same program, its solver having the constraint, so the pair was a two-checker disagreement on a program with nothing adversarial in it.
+#[test]
+fn a_hypothesis_bounds_a_constant_where_a_bare_parameter_does_not() {
+    let u = param(0);
+    let one = Level::constant(1);
+
+    assert!(!entails(&[], &one, &u), "a bare parameter bounds nothing");
+    assert!(entails(&[leq(&one, &u)], &one, &u));
+}
+
+/// The floor travels the same leg the atoms' side travels: `1 ≤ u` and `u ≤ v` bound the constant at `v`.
+#[test]
+fn a_constant_floor_chains_through_the_hypotheses() {
+    let (u, v) = (param(0), param(1));
+    let one = Level::constant(1);
+
+    assert!(entails(&[leq(&one, &u), leq(&u, &v)], &one, &v));
+    assert!(!entails(&[leq(&one, &u)], &one, &v));
+}
+
+/// A premise carrying atoms of its own is skipped, and that is *incompleteness* rather than a verdict: `u + 1 ≤ v` does bound `1 ≤ v`, since `u` is a natural, and this rule declines to say so. Following it would mean bounding the premise's own atoms first, which is the atoms' side of the walk; the constant's side takes one step of transitivity and no more, so what it refuses it refuses in the safe direction.
+#[test]
+fn a_premise_carrying_atoms_bounds_no_constant() {
+    let (u, v) = (param(0), param(1));
+    let one = Level::constant(1);
+    let raised = u.checked_add(1).expect("level admits the offset");
+
+    assert!(!entails(&[leq(&raised, &v)], &one, &v));
+}
+
 /// Every level over two parameters with constants and offsets below three — enough to reach every clause either predicate has.
 fn levels() -> Vec<Level> {
     let mut levels = Vec::new();

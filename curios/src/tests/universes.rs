@@ -288,7 +288,7 @@ fn a_local_polymorphic_definition_applied_to_itself_is_refused_with_its_remedy()
         "the message numbers its levels within itself:\n{message}"
     );
     assert!(
-        message.contains("generalized only at the top level"),
+        message.contains("has to be hoisted"),
         "the message says what to write instead:\n{message}"
     );
 }
@@ -329,4 +329,35 @@ fn a_recursive_call_a_level_above_its_group_is_refused_with_its_remedy() {
         message.contains("monomorphic in its own levels"),
         "the message names the group rule:\n{message}"
     );
+}
+
+// **A group's own levels are constrained by its own recursion, and the kernel has to read that.** A member used at a type one level up — `pick(@Type, …)` for `pick(@A: Type, …)` — needs `1 ≤ u` of the group's instance, a group being monomorphic in its universes. The elaborator records exactly that in the scheme, so the constraint was never missing; the kernel refused anyway, because its entailment decided a level's constant part structurally before reaching the hypotheses, and a parameter bounds no constant until something assumes it does.
+//
+// Both spellings are here because the two-member group is incidental: the same demand raised inside one self-recursive member refuses identically, so what the rule turns on is the group instance rather than the sibling.
+#[test]
+fn a_group_member_used_a_level_above_its_own_certifies() {
+    let source = r#"
+        use /std/{Nat};
+
+        let pick(@A: Type, x: A) -> Nat = 0
+        and other(n: Nat) -> Nat = pick(Nat) + n;
+
+        /std/print(Nat/to_str(other(1)))
+        "#;
+
+    assert_eq!(run(source), b"1");
+}
+
+#[test]
+fn a_self_recursive_call_a_level_above_its_own_certifies() {
+    let source = r#"
+        use /std/{Nat};
+
+        let depth(@A: Type, n: Nat, x: A) -> Nat =
+            match n | 0 => 0 | k + 1 => depth(@Type, k, Nat) end;
+
+        /std/print(Nat/to_str(depth(0, 1)))
+        "#;
+
+    assert_eq!(run(source), b"0");
 }

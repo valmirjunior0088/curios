@@ -13,7 +13,7 @@ pub(crate) fn entails(assumed: &[UniverseConstraint], lower: &Level, upper: &Lev
 
 /// `lower ≤ upper`: the constant part and every atom must each be bounded.
 ///
-/// The constant rule is [`Level::structurally_leq`]'s: a parameter ranges over the naturals, so `head + k` already dominates any constant `n ≤ k`.
+/// The constant rule is [`Level::structurally_leq`]'s: a parameter ranges over the naturals, so `head + k` already dominates any constant `n ≤ k`. That is the rule with *no* hypotheses, and it is not the whole of the relation — an assumed constraint narrows what a parameter ranges over, so the constant falls through to [`constant_entailed`] rather than deciding the pair.
 fn level_entailed(
     assumed: &[UniverseConstraint],
     lower: &Level,
@@ -22,13 +22,37 @@ fn level_entailed(
     fuel: usize,
 ) -> bool {
     let constant_bounded = lower.constant <= upper.constant
-        || upper.atoms.values().any(|offset| *offset >= lower.constant);
+        || upper.atoms.values().any(|offset| *offset >= lower.constant)
+        || constant_entailed(assumed, lower.constant, upper, visiting, fuel);
 
     constant_bounded
         && lower
             .atoms
             .iter()
             .all(|(head, offset)| atom_entailed(assumed, *head, *offset, upper, visiting, fuel))
+}
+
+/// `constant ≤ upper` through an assumed constraint, where no parameter of `upper` dominates it structurally.
+///
+/// **A hypothesis is what puts a floor under a parameter.** `Type u` with `1 ≤ u` assumed is the shape a group's own monomorphic recursion states — `pick(@Type, …)` calling itself at `Type 0` needs the group's `u` strictly above zero, and the elaborator records exactly that constraint in the scheme. Without this the kernel reads `u` as ranging over every natural, finds no `k` in `upper` dominating the constant, and refuses a program whose own declaration says it may not: the premise is in `assumed` and was never consulted, because the constant was decided before the hypotheses were reached.
+///
+/// A premise carrying atoms of its own is skipped rather than followed. `a + 1 ≤ U` says nothing about a bare constant until `a` is bounded, and the atoms' side of the walk is [`atom_entailed`]'s; taking only the atom-free premises keeps this rule's soundness to one step of transitivity — `n ≤ c ≤ U ≤ upper` — with the recursion carrying the last leg.
+fn constant_entailed(
+    assumed: &[UniverseConstraint],
+    constant: u32,
+    upper: &Level,
+    visiting: &mut Vec<(LevelHead, u32)>,
+    fuel: usize,
+) -> bool {
+    let Some(fuel) = fuel.checked_sub(1) else {
+        return false;
+    };
+
+    assumed.iter().any(|constraint| {
+        constraint.lower.atoms.is_empty()
+            && constraint.lower.constant >= constant
+            && level_entailed(assumed, &constraint.upper, upper, visiting, fuel)
+    })
 }
 
 /// `head + offset ≤ upper`, structurally or through an assumed constraint.

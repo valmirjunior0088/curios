@@ -1394,12 +1394,12 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Accepts,
         Expect::Accepts,
     ),
-    // The third instance is not conversion's. A member of an `and` group used by its sibling at a type one level up needs `1 ≤ u` of the group's own instance, since a group is monomorphic in its universes; the elaborator accepts the group and the kernel refuses the call. Declared apart, the two certify, which is the control.
+    // The third disagreement was not conversion's at all. A member of an `and` group used at a type one level up needs `1 ≤ u` of the group's own instance, a group being monomorphic in its universes, and the elaborator records exactly that in the scheme it generalizes — so the kernel had the premise and refused anyway, because its entailment decided a level's *constant* part structurally before the hypotheses were reached. A parameter ranges over every natural when nothing is assumed; a hypothesis is what puts a floor under it.
     (
         "group_member_used_a_level_up_by_its_sibling",
         A_GROUP_MEMBER_IS_USED_A_LEVEL_UP_BY_ITS_SIBLING,
         Expect::Accepts,
-        Expect::Refuses("expected `Type.{u}`, found `Type.{1}`"),
+        Expect::Accepts,
     ),
     (
         "the_same_pair_declared_apart",
