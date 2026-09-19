@@ -132,12 +132,12 @@ impl Lowering {
 
         let callee = emitted!(self.walk(context, head, &head_type, None)?);
 
-        // A proof-valued callee that is not a direct function reference is erased content standing where a function was expected — a projection of an erased field, a dropped binder, or a wrapper call returning an erased method: the application is proof content and collapses to the unit constant. The check must be value-driven, not type-driven: a *direct* function reference keeps its call even at an erasable type, because a never-returning host effect (`/std/proc/exit : (Nat) -> False`, polymorphic `/sys/proc/exit`) is proof-typed but must run.
+        // A proof-valued callee that is not a direct function reference is erased content standing where a function was expected — a projection of an erased field, a dropped binder, or a wrapper call returning an erased method: the application is proof content and collapses to the unit constant. The check is value-driven, not type-driven: a *direct* function reference keeps its call even at an erasable type. Nothing that must run is proof-typed — `exit` yields `Io(A)`, which never erases, and a foreign result is a wire type — so the call kept here is to a total, pure function whose result nothing reads, left for the optimizer to drop rather than decided here.
         if !matches!(callee, curios_ersd::Atom::Function(_)) && is_erasable(context, &head_type)? {
             return Ok(Outcome::Emitted(self.unit()));
         }
 
-        // A `Prop` family's constructor is the one direct call that *is* safe to drop: it is pure, so no host effect rides on it, and its layout keeps no payload (see `induct_row`). Its arguments exist only to fill fields erasure has already removed — and they may mention binders erasure dropped, so walking them would compute over placeholder units. The never-returning host effects the check above protects are foreign definitions, never constructors.
+        // A `Prop` family's constructor is the one direct call that *has* to be dropped here: its layout keeps no payload (see `induct_row`), and its arguments exist only to fill fields erasure has already removed — and they may mention binders erasure dropped, so walking them would compute over placeholder units.
         if is_proof_constructor(context, head)? {
             return Ok(Outcome::Emitted(self.unit()));
         }
