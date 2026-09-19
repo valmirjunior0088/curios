@@ -243,7 +243,7 @@ fn erased_index_in_type_valued_arg() {
     assert_eq!(run(source), b"ok");
 }
 
-// Regression: a `Prop` family is proof-irrelevant, so erasure drops its inhabitants wholesale. Classifying `Eq`'s `refl(@z : A)` payload on its own abstract `A` used to keep it, so rebuilding the constructor computed the field from binders the same erasure had dropped — `Eq/cong` erased to `apply f(unit)`, and a proof bound in a statement position (which the design runs regardless of sort) fed that unit to a `Bits` fold and trapped.
+// Regression: a `Prop` family is proof-irrelevant, so erasure drops its inhabitants wholesale. Classifying `Eq`'s `refl(@z : A)` payload on its own abstract `A` used to keep it, so rebuilding the constructor computed the field from binders the same erasure had dropped — `Eq/cong` erased to `apply f(unit)`, and a proof bound as a top-level item, which then ran at initialization, fed that unit to a `Bits` fold and trapped. Such an item is no longer computed at all (see `a_top_level_proof_does_not_run_before_the_program`), so what this still holds is the classification.
 #[test]
 fn proof_bound_as_a_statement_does_not_run_its_certificate() {
     let source = r#"
@@ -302,6 +302,23 @@ fn a_let_bound_proof_cannot_refuse_the_program() {
         run_text(source, system).expect("a proof gives a program no way to refuse");
         assert_eq!(io.output(), b"2");
     }
+}
+
+// A top-level item that is not a function is a value computed at initialization, and a proof there is a kept slot like a local one. Pruning already drops an unused item whose evaluation the erased program calls pure; a lemma that recurses is one it has to keep, since a recursive call may diverge for all it knows, and that lemma ran — here three hundred steps — before the program's first instruction.
+#[test]
+fn a_top_level_proof_does_not_run_before_the_program() {
+    let source = r#"
+        use /std/{Nat, print};
+        use /std/Nat/{Le};
+        let p: Nat/Le(300, 301) = Le/succ_r(300, 300, Le/refl(300));
+        print("ok")
+        "#;
+    let optimized = cont_optm(source);
+    assert!(
+        !optimized.contains("succ_r"),
+        "the proof's recursion reached the optimized program:\n{optimized}"
+    );
+    assert_eq!(run(source), b"ok");
 }
 
 // The control: a binding that is a value is still computed where it is written, used or not, so the same product bound as a `Nat` refuses.

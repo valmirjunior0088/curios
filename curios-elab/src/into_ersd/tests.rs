@@ -248,11 +248,17 @@ entry
     );
 }
 
-/// `let bound = family(4); 7` and `let bound = successor(4); 7`, differing in whether the binding's type is a sort: a function of one `Nat` applied where a `let` binds it, the first returning a type and the second a `Nat`.
-fn a_call_bound_by_let(returns_a_type: bool) -> curios_ersd::Module {
+/// Where [`a_bound_call`] binds its call: a local `let` opening the entry, or a top-level item.
+#[derive(Clone, Copy)]
+enum Binder {
+    Let,
+    Item,
+}
+
+/// `callee(4)` bound and never used, before an entry that answers `7`: `callee` is a function of one `Nat`, returning a type where `returns_a_type` and a `Nat` otherwise, so the two readings differ only in whether the binding's type is a sort.
+fn a_bound_call(binder: Binder, returns_a_type: bool) -> curios_ersd::Module {
     let mut context = context();
     let n = context.fresh(Some("n"));
-    let bound = context.fresh(Some("bound"));
     let nat = Term::intrinsic(Intrinsic::NatType);
     let (result_type, result) = match returns_a_type {
         true => (Term::type_ground(), nat.clone()),
@@ -261,40 +267,47 @@ fn a_call_bound_by_let(returns_a_type: bool) -> curios_ersd::Module {
             Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat_lit(1))),
         ),
     };
-    let items = vec![definition(
+    let mut items = vec![definition(
         "callee",
         Term::func_type([(n.clone(), nat.clone())], result_type.clone()),
         Term::func([(n.clone(), nat.clone())], result),
     )];
-    let body = Term::let_(
-        &bound,
-        result_type,
-        Term::apply(Term::free_var(&global("callee")), [nat_lit(4)]),
-        nat_lit(7),
-    );
+    let call = Term::apply(Term::free_var(&global("callee")), [nat_lit(4)]);
+    let body = match binder {
+        Binder::Let => {
+            let bound = context.fresh(Some("bound"));
+            Term::let_(&bound, result_type, call, nat_lit(7))
+        }
+        Binder::Item => {
+            items.push(definition("bound", result_type, call));
+            nat_lit(7)
+        }
+    };
     erase(&mut context, &module(items, body), nat)
 }
 
-#[test]
-fn a_type_bound_by_let_is_not_computed() {
-    // The binding is a kept slot and a type fills it with a stand-in, so the call that would have computed the type is never emitted — the direct call `erase_apply` keeps at an erasable type is not reached at all.
-    let erased = a_call_bound_by_let(true);
-    assert!(
-        !bound(&erased).any(|rhs| matches!(rhs, curios_ersd::Rhs::Apply { .. })),
-        "{}",
-        shape(&erased)
-    );
+fn calls(erased: &curios_ersd::Module) -> usize {
+    bound(erased)
+        .filter(|rhs| matches!(rhs, curios_ersd::Rhs::Apply { .. }))
+        .count()
 }
 
 #[test]
-fn a_value_bound_by_let_is_computed_where_it_is_written() {
+fn a_bound_type_is_not_computed() {
+    // A binding is a kept slot and a type fills it with a stand-in, so the call that would have computed the type is never emitted — the direct call `erase_apply` keeps at an erasable type is not reached at all.
+    for binder in [Binder::Let, Binder::Item] {
+        let erased = a_bound_call(binder, true);
+        assert_eq!(calls(&erased), 0, "{}", shape(&erased));
+    }
+}
+
+#[test]
+fn a_bound_value_is_computed_where_it_is_written() {
     // The control: the same binding at a `Nat` is evaluated under call-by-value, used or not.
-    let erased = a_call_bound_by_let(false);
-    assert!(
-        bound(&erased).any(|rhs| matches!(rhs, curios_ersd::Rhs::Apply { .. })),
-        "{}",
-        shape(&erased)
-    );
+    for binder in [Binder::Let, Binder::Item] {
+        let erased = a_bound_call(binder, false);
+        assert_eq!(calls(&erased), 1, "{}", shape(&erased));
+    }
 }
 
 #[test]

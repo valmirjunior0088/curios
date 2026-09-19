@@ -3,7 +3,7 @@
 //! Items become statements of the module's top-level item list, evaluated eagerly in emission order. Bindings persist in the Core base frame (no scoping frame), so later items and the entrypoint reduce through them — top-level cross-references are already free names.
 
 use {
-    super::{BTreeMap, BTreeSet, Bound, Context, Error, Lowering, Outcome},
+    super::{BTreeMap, BTreeSet, Bound, Context, Error, Lowering, Outcome, Subterm},
     curios_core::Free,
     curios_core::{Item, Module},
 };
@@ -22,9 +22,22 @@ impl Lowering {
             match item {
                 Item::Let(definition) => {
                     let symbol = definition.name.symbol();
-                    let outcome = self.with_owner(symbol.clone(), |lowering| {
-                        lowering.walk(context, &definition.body, &definition.type_, Some(&symbol))
-                    })?;
+                    // A function's body runs where it is called, so writing one computes nothing and it is walked whatever it returns. Any other item is a value computed at initialization, which makes it a kept slot as a local binding is: a proof or a type is bound to its stand-in, and a lemma applied at the top level does not run before the program does.
+                    let outcome =
+                        self.with_owner(symbol.clone(), |lowering| match &*definition.body {
+                            Subterm::Func(_) => lowering.walk(
+                                context,
+                                &definition.body,
+                                &definition.type_,
+                                Some(&symbol),
+                            ),
+                            _ => lowering.kept_operand(
+                                context,
+                                &definition.body,
+                                &definition.type_,
+                                Some(&symbol),
+                            ),
+                        })?;
                     let atom = match outcome {
                         Outcome::Emitted(atom) => atom,
                         // A diverging initializer (a vacuous elimination) has no result operand; give it the computed-member encoding — a value whose init block seals with the divergence terminator — so the program traps at initialization, matching the entry-block convention.
