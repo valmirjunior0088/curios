@@ -56,7 +56,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Right-biased partial imitation for flex-apply (what pins a two-parameter monad's `?M`)
   - [x] Witness keying through a partially applied type constructor (keyed on the stuck head)
   - [x] A lambda whose expectation never gains structure settles by synthesizing its type (unannotated domains stand as named metavariables for the body to pin)
-- [ ] [Equality is defined at the type, not assumed over all of them](roadmap/observational-equality-spec.md) (not refined yet)
 
 ## Pattern Matching
 
@@ -253,12 +252,10 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Stage 1: the `Io` vocabulary (`/sys/Io`, `/std/Io`, the `Monad` witness)
   - [x] Stage 2: the flip — `/std` retyped and the certifier's purity analysis deleted
 - [x] HTTP client and server (`std/http` over `tcp` + `Async`; a handler answers each connection)
-- [ ] [What a value may do next is part of its type](roadmap/typestate-spec.md) (surveyed and probed, not designed)
 - [x] HTML as a tree (`/std/Html`, rendered escaped and read back as a browser reads it)
 - [x] Host-service modules (`std/time`, `std/proc`, `std/rand`, `std/fs`, and the terminal rows in `std/Io`)
 - [x] Command-line interfaces (`/std/Cli`: a specification computes the record a line parses into)
 - [x] A terminal program draws a screen and reads keys (`/std/Tui`, with five widgets)
-- [ ] [Text templates with named holes, sections and an output kind](roadmap/templates-spec.md) (prototyped, not designed)
 - [x] Arbitrary-precision naturals (`std/BigNat`, canonical and packed over `Bits`)
   - [x] Machine-checked additive, multiplicative, cancellation and order laws
 - [x] Certified strictly-positive arbitrary-precision naturals (`std/BigPos`)
@@ -294,7 +291,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Documentation
   - [x] Syntax overview and examples
   - [x] Full language reference
-  - [ ] [The Curios Book](roadmap/the-curios-book-spec.md) (nothing teaches the language in sequence, and the proof half has no material at all; not refined yet)
 - [x] Benchmarks
   - [x] Internal benchmarks
   - [x] Cross-language benchmarks (a Docker harness against six other languages in seven columns, Rust compiled both natively and to WebAssembly)
