@@ -145,7 +145,7 @@ pub(super) fn nat_bitwise_laws(left: &Term, right: &Term, op: &Intrinsic) -> Opt
     }
 }
 
-/// A shift by `0` is the value, and a shifted `0` is `0` — both hold on the unbounded ℕ the type level folds and on the truncating carrier the runtime imposes, which is why no other shift law is taken here: `shl(x, k) = 2ᵏ · x` holds only on the former.
+/// A shift by `0` is the value, and a shifted `0` is `0`. No other shift law is taken here, and the reason is resources rather than arithmetic: `shl(x, k) = 2ᵏ · x` holds on the unbounded ℕ the type level folds, and the run time refuses a shift that leaves the carrier rather than truncating it, but the rule would build a coefficient whose size the operands do not bound, and a law beside a fold takes no reducer to charge for it.
 pub(super) fn nat_shift_laws(left: &Term, right: &Term) -> Option<Term> {
     if Nat::is_zero(right) || Nat::is_zero(left) {
         return Some(left.clone());

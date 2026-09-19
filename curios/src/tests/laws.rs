@@ -159,7 +159,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Nat/shl(0, x), 0)",
             "Eq(Nat/shr(0, x), 0)",
         ],
-        // True on the unbounded ℕ the type level folds, false on the truncating carrier the runtime imposes: not one to take.
+        // A literal count is the coefficient `2ᵏ`, on the unbounded ℕ the type level folds and at run time alike, since the emitter refuses a shift that leaves the carrier rather than truncating it. Not taken yet: a left shift is the one fold whose result size its operands do not bound, so the rule owes the budget a charge for the coefficient it builds.
         refused: &["Eq(Nat/shl(x, 1), x * 2)"],
     },
     Carrier {
@@ -328,7 +328,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(List/fold([..xs, a], z, g), g(a, List/fold(xs, z, g)))",
         ],
         refused: &[
-            // Function extensionality in disguise, and not one to take: a function that is the identity pointwise is not the identity lambda, and `map` by it stays stuck.
+            // Not function extensionality: `(v) => v + 0` is convertible with the identity lambda. The fold tests the lambda as written, before anything reduces its body, so `map` by it stays stuck.
             "Eq(List/map(xs, (v) => v + 0), xs)",
             // A position inside a window needs a bound on the base that no term in hand proves, and a reducer may not invent one — so these stay stuck, and are stated here so that taking them is a row moving.
             "Eq(List/get(@Nat, List/slice(@Nat, xs, s, l, @ok), 0, @first), List/get(@Nat, xs, s, @at))",
