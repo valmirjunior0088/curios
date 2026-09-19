@@ -106,7 +106,7 @@ pub use BigFlt/{let BigFlt};
 
 `Add`, `Sub`, `Mul`, `Eql`, and `Cmp` witnesses belong in the existing `/std` operator façade modules. `Show` and `Ord` may be supplied where useful. There is no dyadic `Div(BigFlt)` witness.
 
-`BigFlt` belongs entirely to `/std`; no compiler lowering emits it, so `/syn` and the canonical syntax registry remain unchanged.
+`BigFlt` belongs entirely to `/std`; no compiler lowering emits it, so the canonical syntax registry remains unchanged.
 
 ## Soundness discipline
 

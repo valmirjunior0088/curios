@@ -88,7 +88,7 @@ Zero produces `none`. Nonzero inputs swap signed numerator magnitude with the po
 - `of_flt_bytes` continues to produce denominator-one values.
 - No Core, Ersd, Cont, Wasm, host ABI, or syntax representation changes are introduced.
 - The prelude archive is rebuilt for the private runtime-layout change rather than migrated.
-- `/syn` remains unchanged because compiler lowering does not emit `BigFlt`.
+- The syntax registry remains unchanged because compiler lowering does not emit `BigFlt`.
 
 ## Soundness discipline
 

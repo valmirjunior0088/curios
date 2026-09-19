@@ -122,7 +122,7 @@ impl Subterm {
         <Subterm as Bound>::free_vars(self)
     }
 
-    /// Collect every infix operator occurring in this subterm. Like [`Subterm::construction_names`], this feeds `order_flat_items`' edges: an operator dispatches through an anonymous witness of its `/syn` concept, so no `Var` can spell the dependency, and the scheduler must learn it from the operator itself. `Infix` nodes are elaboration-transient — born in `into_core`, consumed by `elaborate` — so only lowered, pre-elaboration terms have any to collect, which is exactly where the scheduler walks.
+    /// Collect every infix operator occurring in this subterm. Like [`Subterm::construction_names`], this feeds `order_flat_items`' edges: an operator dispatches through an anonymous witness of its `/std/ops` concept, so no `Var` can spell the dependency, and the scheduler must learn it from the operator itself. `Infix` nodes are elaboration-transient — born in `into_core`, consumed by `elaborate` — so only lowered, pre-elaboration terms have any to collect, which is exactly where the scheduler walks.
     pub fn infix_ops(&self) -> HashSet<InfixOp> {
         let mut ops = HashSet::new();
         self.collect_infix_ops(&mut ops);
