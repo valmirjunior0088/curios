@@ -447,14 +447,7 @@ fn check_motive(
     // An ambient goal was typed where it stands, so its well-formedness is asked in the ambient context and under no binder; what the guard needs is still its sort.
     let motive = match result {
         MatchResult::Family(motive) => motive,
-        MatchResult::Ambient(goal) => {
-            let type_ = match infer(kernel, goal) {
-                Ok(type_) => type_,
-                Err(error @ KernelError::Reduce(_)) => return Err(error),
-                Err(_) => return Err(KernelError::NotAMotive(goal.clone())),
-            };
-            return as_sort(kernel, &type_).map_err(|_| KernelError::NotAMotive(goal.clone()));
-        }
+        MatchResult::Ambient(goal) => return motive_sort(kernel, goal),
     };
 
     kernel.scoped(|kernel| {
@@ -491,16 +484,23 @@ fn check_motive(
         let refs = opened.iter().collect::<Vec<_>>();
         let body = motive.open(&refs);
 
-        // A budget failure is not a malformed motive, so it keeps its own diagnostic; every other refusal is reported as the rule that was violated rather than as whichever mismatch happened to expose it.
-        let type_ = match infer(kernel, &body) {
-            Ok(type_) => type_,
-            Err(error @ KernelError::Reduce(_)) => return Err(error),
-            Err(_) => return Err(KernelError::NotAMotive(body.clone())),
-        };
-
-        // The motive's own sort *is* its type read as one: a body typed `Prop` is a proposition, a body typed `Type u` is relevant. So the well-formedness check and the answer the guard needs are one step.
-        as_sort(kernel, &type_).map_err(|_| KernelError::NotAMotive(body.clone()))
+        motive_sort(kernel, &body)
     })
+}
+
+/// The sort `stated` lands in, where `stated` is a motive's body under its binders or an ambient goal where it stands.
+///
+/// The motive's own sort *is* its type read as one: a body typed `Prop` is a proposition, a body typed `Type u` is relevant. So the well-formedness check and the answer the guard needs are one step.
+///
+/// A budget failure is not a malformed motive, so it keeps its own diagnostic — on the way to the type and on the way from the type to its sort alike, the second being a reduction as the first is. Every other refusal is reported as the rule that was violated rather than as whichever mismatch happened to expose it.
+fn motive_sort(kernel: &mut Kernel, stated: &Term) -> Result<Sort, KernelError> {
+    let refusal = |error| match error {
+        error @ KernelError::Reduce(_) => error,
+        _ => KernelError::NotAMotive(stated.clone()),
+    };
+
+    let type_ = infer(kernel, stated).map_err(refusal)?;
+    as_sort(kernel, &type_).map_err(refusal)
 }
 
 /// Check an elimination's arms against its motive.

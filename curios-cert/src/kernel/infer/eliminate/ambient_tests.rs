@@ -3,8 +3,10 @@
 use {
     super::test_support::*,
     crate::{Kernel, KernelError, infer},
+    curios_analysis::fixture::SYNTAX,
     curios_core::{
-        Atom, Carrier, Cases, Free, Global, InductArm, Many, Scope, Term, Two, UniverseContext,
+        Atom, Carrier, Cases, Free, Global, InductArm, Intrinsic, Many, ReduceError, Scope, Term,
+        Two, UniverseContext,
     },
     curios_utilities::Plicity,
 };
@@ -213,4 +215,59 @@ fn an_ambient_fold_is_refused() {
         infer(&mut kernel, &fold),
         Err(KernelError::AmbientFold(_))
     ));
+}
+
+/// A budget failure is not a malformed motive, on the way from a motive's type to its sort as on the way to the type. `T : U`, where `U` is a `Nat` eliminator counting a literal down to `Type`, so the type of what the result states is in hand at once and reading *it* as a sort is what the budget cannot afford. That read reported `NotAMotive` whatever it was refused for, which sent a reader to a motive with nothing wrong with it; an ambient goal and a family's motive go through the one read, so both are put to it. The control is the same elimination under a budget that affords the count, which is what says the refusal was the budget's.
+#[test]
+fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
+    let attempt = |budget: u64, ambient: bool| {
+        let mut kernel = Kernel::new(budget, SYNTAX);
+        kernel.set_local_floor(1_000);
+
+        let (b, t, x) = (binder(80, "b"), binder(81, "T"), binder(82, "x"));
+        let universe = Term::nat_match(
+            nat(50_000),
+            None,
+            Term::type_ground(),
+            Term::type_ground(),
+            &binder(83, "pred"),
+            &binder(84, "ih"),
+            Term::free_var(&binder(84, "ih")),
+        );
+        kernel.assume(&b, &Term::intrinsic(Intrinsic::BoolType));
+        kernel.assume(&t, &universe);
+        kernel.assume(&x, &Term::free_var(&t));
+
+        let elimination = match ambient {
+            true => Term::match_ambient(
+                Term::free_var(&b),
+                Term::free_var(&t),
+                Cases::Bool {
+                    false_case: Term::free_var(&x),
+                    true_case: Term::free_var(&x),
+                },
+            ),
+            false => Term::bool_match_scoped(
+                Term::free_var(&b),
+                Scope::close(Many(1), &[&binder(85, "s")], Term::free_var(&t)),
+                Term::free_var(&x),
+                Term::free_var(&x),
+            ),
+        };
+
+        infer(&mut kernel, &elimination)
+    };
+
+    for ambient in [false, true] {
+        assert!(
+            matches!(
+                attempt(20_000, ambient),
+                Err(KernelError::Reduce(ReduceError::Exhausted { .. }))
+            ),
+            "ambient = {ambient}: the sort read ran out of budget and was reported as something else",
+        );
+        attempt(1_000_000_000, ambient).unwrap_or_else(|error| {
+            panic!("ambient = {ambient}: a budget that affords the count refused: {error:?}")
+        });
+    }
 }
