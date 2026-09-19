@@ -171,7 +171,7 @@ fn a_partial_value_reaching_a_type_through_an_argument_is_rejected() {
     ));
 }
 
-// The three fixtures below probe the *erasure premise*: that everything erasure deletes lies within a term one of the obligations covers.
+// The four fixtures below probe the *erasure premise*: that everything erasure deletes lies within a term one of the obligations covers.
 //
 // Erasure deletes more than types and proofs. Each of these sites drops a whole construct, arguments included, and those arguments are ordinary values — neither a type nor a proof, so nothing seeds them directly. What makes that safe is containment rather than coverage: the *enclosing* term is a proof position, and the reachability closure walks into it. Each fixture therefore hides a partial `Nat` computation inside one deleted construct, and each must be rejected for reaching it.
 
@@ -229,6 +229,27 @@ fn a_partial_erased_scrutinee_is_still_reached() {
             match mk(spin(0))
             | qed() => n
             end;
+
+        /std/print(Nat/to_str(use_it(5)))
+        "#;
+    rejected_as_a_proof(source);
+}
+
+// A proof bound by `let`: the binding is a kept slot, filled with a stand-in, and its value is never walked — whatever form the value takes, so this one is an elimination rather than a call.
+#[test]
+fn a_partial_scrutinee_under_an_erased_binding_is_still_reached() {
+    let source = r#"
+        use /std/{Nat, Bool};
+
+        let spin(n : Nat) -> Nat = spin(n);
+
+        let use_it(n : Nat) -> Nat =
+            let witness : Bool/True =
+                match spin(0)
+                | 0 => Bool/True/qed()
+                | _ => Bool/True/qed()
+                end;
+            n;
 
         /std/print(Nat/to_str(use_it(5)))
         "#;

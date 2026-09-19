@@ -153,15 +153,18 @@ impl Lowering {
     }
 
     /// Erase a value held in a kept slot. The mask keeps the slot for uniform arity, but this instantiation can still make it a proof or a type, which carries no runtime content: proof irrelevance fills the slot with content-free stand-in — the unit constant, or, where the declaration kept a *function* it will apply, a function of the declared runtime arity returning it — rather than materializing a witness no runtime code reads.
+    ///
+    /// A `let` binding is a kept slot too: the name stays bound for the tail, and a proof or a type bound to it is not computed. Nothing is lost by that. No term outside `Io` performs an effect, so the value performed nothing; the totality obligations make every proof and every type total, so it would have returned; and what it could still have done is refuse on a run-time carrier, which is a behaviour no proof should be able to give a program.
     pub(super) fn kept_operand(
         &mut self,
         context: &mut Context,
         value: &Term,
         type_: &Term,
+        hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         match is_erasable(context, type_)? {
             true => Ok(Outcome::Emitted(self.proof_stub(context, type_)?)),
-            false => self.walk(context, value, type_, None),
+            false => self.walk(context, value, type_, hint),
         }
     }
 

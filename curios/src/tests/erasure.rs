@@ -1,7 +1,8 @@
 use {
-    super::{cont_optm, error, run},
+    super::{cont_optm, error, run, run_text},
     curios_pipeline::Stage,
     curios_pipeline::compile_with_prelude,
+    curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -253,6 +254,72 @@ fn proof_bound_as_a_statement_does_not_run_its_certificate() {
         /std/print("ok")
         "#;
     assert_eq!(run(source), b"ok");
+}
+
+// A proof bound by a local `let` is a kept slot holding nothing: the name is bound and the proof is not computed. The recursion that builds it would otherwise survive to the optimized program as a loop whose result is dropped, since nothing below Core knows a call is total.
+#[test]
+fn a_let_bound_proof_leaves_no_computation_behind() {
+    let source = r#"
+        use /std/{Nat, List, Io, proc};
+        use /std/Nat/{Le};
+        let use_it(a: Nat, b: Nat, _p: Nat/Le(a, b)) -> Nat = a + b;
+        Io/bind(proc/args, (args) =>
+            let n = List/len(args);
+            let p = Le/succ_r(n, n, Le/refl(n));
+            proc/exit(use_it(n, n + 1, p)))
+        "#;
+    let optimized = cont_optm(source);
+    assert!(
+        !optimized.contains("succ_r"),
+        "the proof's recursion reached the optimized program:\n{optimized}"
+    );
+}
+
+// What a computed proof could still do is refuse: the lemma's first argument leaves the `Nat` carrier at run time. Bound by `let` or written where it is used, the proof is the same proof, so the program runs alike — a proof gives a program no behaviour.
+#[test]
+fn a_let_bound_proof_cannot_refuse_the_program() {
+    let bound = r#"
+        use /std/{Nat, List, Io, proc, print};
+        use /std/Nat/{Le};
+        let lemma(k: Nat, a: Nat) -> Nat/Le(a, a) = Le/refl(a);
+        let keep(a: Nat, _p: Nat/Le(a, a)) -> Nat = a;
+        Io/bind(proc/args, (args) =>
+            let n = List/len(args);
+            let p = lemma(n * 1000000 * 1000000, n);
+            print(Nat/to_str(keep(n, p))))
+        "#;
+    let inline = r#"
+        use /std/{Nat, List, Io, proc, print};
+        use /std/Nat/{Le};
+        let lemma(k: Nat, a: Nat) -> Nat/Le(a, a) = Le/refl(a);
+        let keep(a: Nat, _p: Nat/Le(a, a)) -> Nat = a;
+        Io/bind(proc/args, (args) =>
+            let n = List/len(args);
+            print(Nat/to_str(keep(n, lemma(n * 1000000 * 1000000, n)))))
+        "#;
+    for source in [bound, inline] {
+        let (system, io) = MockHost::builder().args(["prog", "x"]).build();
+        run_text(source, system).expect("a proof gives a program no way to refuse");
+        assert_eq!(io.output(), b"2");
+    }
+}
+
+// The control: a binding that is a value is still computed where it is written, used or not, so the same product bound as a `Nat` refuses.
+#[test]
+fn a_let_bound_value_is_still_computed() {
+    let source = r#"
+        use /std/{Nat, List, Io, proc, print};
+        Io/bind(proc/args, (args) =>
+            let n = List/len(args);
+            let _unused = n * 1000000 * 1000000;
+            print(Nat/to_str(n)))
+        "#;
+    let (system, _io) = MockHost::builder().args(["prog", "x"]).build();
+    let refusal = run_text(source, system).expect_err("the product leaves the carrier");
+    assert!(
+        refusal.contains("left its carrier"),
+        "stopped, but not on the carrier:\n{refusal}"
+    );
 }
 
 // The same law in an erased position stays non-strict: it is never evaluated, and the consumer still typechecks against it.

@@ -337,7 +337,7 @@ impl Lowering {
             match telescope {
                 Telescope::Cons(type_, rest) => {
                     if !mask[index] {
-                        match self.kept_operand(context, value, &type_)? {
+                        match self.kept_operand(context, value, &type_, None)? {
                             Outcome::Emitted(atom) => atoms.push(atom),
                             diverged => return Ok(Err(diverged)),
                         }
@@ -459,8 +459,8 @@ impl Lowering {
                 let label = binding.tail.hint_iter().nth(index).flatten();
                 let hint = label.map(str::to_string);
                 let name = context.fresh(label);
-                // A proof- or type-valued binding is walked, not collapsed: a written binding evaluates under call-by-value even when its *result* is erased, so an effectful never-returning body (`let _ = /std/proc/exit(3); …`) still runs. The erased residue a proof body can produce — projections of erased fields, dropped binders, applications of erased content — collapses to the unit constant at its own site (see `erase_apply` and `erase_proj`).
-                let outcome = self.walk(context, &value, &type_, hint.as_deref())?;
+                // A binding is a kept slot: a value is erased once and bound, and a proof or a type is bound to its stand-in without being computed (see `kept_operand`). `let _ = /std/proc/exit(3); …` is neither — an exit is an `Io`, a description, which is built here and performed only where it is bound into the program.
+                let outcome = self.kept_operand(context, &value, &type_, hint.as_deref())?;
                 let atom = emitted!(outcome);
                 context.define_assuming(&name, &type_, &value, None);
                 self.environment.bind(&name, atom);
