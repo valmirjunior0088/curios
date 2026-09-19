@@ -44,6 +44,7 @@ fn small_packed_literal_rides_the_immediate() {
             params: Vec::new(),
             return_cont,
             body: build,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -126,6 +127,7 @@ fn an_aggregate_reaching_a_raw_parameter_is_refused() {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -198,6 +200,7 @@ fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -242,6 +245,7 @@ fn a_variant_is_built_and_read_at_its_family_type() {
             params: vec![],
             return_cont,
             body: build,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -287,6 +291,7 @@ fn a_short_variant_construction_is_refused() {
             params: vec![],
             return_cont,
             body: build,
+            droppable: false,
         },
     );
     module.set_entry(main);

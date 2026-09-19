@@ -10,7 +10,7 @@ use {
         StatementId, Terminator, UNFORCED, UnconsSequenceStep, ValueId, VariantArm, cell_op,
         operation_intrinsic, sequence_census, sequence_intrinsic, sequence_len_op,
     },
-    crate::Intrinsic,
+    crate::{Allocation, Intrinsic, Summary},
     curios_abi::ForeignFunction,
     curios_num::Natural,
     curios_utilities::recurse,
@@ -19,6 +19,8 @@ use {
 
 pub(super) struct Lowerer<'a> {
     source: &'a Module,
+    /// Whether a call of each source function, its result unread, may simply not happen — the conjunction of the carried termination verdict and this stage's effect summary, which is the only form of either fact that crosses into Cont.
+    droppable: BTreeMap<FunctionId, bool>,
     /// Use counts over the finished arena, read only to decline emitting a binding nothing reads. The module does not change during lowering, so one analysis taken at entry stays exact throughout.
     analysis: Analysis,
     /// The sequence-usage census's verdicts, read at every construction site to settle the stores into indexed-only fields.
@@ -34,6 +36,7 @@ impl<'a> Lowerer<'a> {
     pub(super) fn new(source: &'a Module) -> Self {
         Self {
             source,
+            droppable: droppable_functions(source),
             analysis: Analysis::analyze(source),
             facts: sequence_census(source),
             emitter: Emitter::new(source),
@@ -62,6 +65,8 @@ impl<'a> Lowerer<'a> {
                 params: Vec::new(),
                 return_cont,
                 body,
+                // The entry is the program; nothing calls it, so whether it could be dropped is not a question.
+                droppable: false,
             },
         );
         self.emitter.module.set_entry(main);
@@ -184,6 +189,7 @@ impl Lowerer<'_> {
                 params,
                 return_cont,
                 body,
+                droppable: self.droppable.get(&arena).copied().unwrap_or(false),
             },
         );
     }
@@ -354,6 +360,8 @@ impl Lowerer<'_> {
                 params: Vec::new(),
                 return_cont,
                 body,
+                // A computed member's initializer runs once, on first force, and the cell it fills is what a later read answers from — so whether the *call* could be skipped is the cell's question, not this function's.
+                droppable: false,
             },
         );
         thunk
@@ -1769,4 +1777,34 @@ fn resume_role(node: &curios_cont::Node) -> &'static str {
         curios_cont::Node::Foreign { .. } => "foreign/resume",
         _ => "resume",
     }
+}
+
+/// Which source functions a dead call of may simply not happen: the carried termination verdict met with this stage's effect summary.
+///
+/// **Both halves are needed and neither is this stage's to invent.** Termination is decided once, above Core, by the engine both checkers share, and arrives on [`Function::total`](super::super::Function::total). Freedom from effects is the interprocedural [`Summary`], which is Ersd's and dissolves at this boundary — item granularity and per-function behavior become the entry's initialization code. So the conjunction is computed here, at the last place both are in hand, and only it crosses.
+///
+/// A mutable allocation is excluded because a program can tell one from another of equal contents; an immutable one is not, which is the case this exists for — a list built and never read is a list that need not be built.
+fn droppable_functions(source: &Module) -> BTreeMap<FunctionId, bool> {
+    let summary = Summary::analyze(source, &Analysis::analyze(source));
+    source
+        .function_ids()
+        .map(|id| {
+            let behavior = summary.rhs_behavior(
+                source,
+                &Rhs::Apply {
+                    callee: Atom::Function(id),
+                    arguments: Vec::new(),
+                },
+            );
+            let observable = behavior.observable;
+            let droppable = source.function(id).is_some_and(|function| function.total)
+                && !observable.host_effect
+                && !observable.state_read
+                && !observable.state_write
+                && !observable.may_exit
+                && !observable.may_diverge
+                && behavior.operational.allocation != Allocation::Mutable;
+            (id, droppable)
+        })
+        .collect()
 }

@@ -304,6 +304,7 @@ pub(super) fn copy_bodies(
                     params: def.params.iter().map(|&p| map_value(p)).collect(),
                     return_cont: returns[&def.return_cont],
                     body: nodes[&def.body],
+                    droppable: def.droppable,
                 },
             )
         })

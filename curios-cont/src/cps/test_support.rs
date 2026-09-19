@@ -28,6 +28,7 @@ pub(super) fn module_with(body_of: impl FnOnce(&mut Module) -> NodeId) -> Module
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(function);
@@ -74,6 +75,7 @@ pub(super) fn polymorphic_loop(second_is_mul: bool, padding: usize) -> Polymorph
                 params: vec![param],
                 return_cont: function_return,
                 body: function_body,
+                droppable: false,
             },
         );
         function
@@ -153,6 +155,7 @@ pub(super) fn polymorphic_loop(second_is_mul: bool, padding: usize) -> Polymorph
             params: vec![op, n],
             return_cont: loop_return,
             body: loop_body,
+            droppable: false,
         },
     );
 
@@ -198,6 +201,7 @@ pub(super) fn polymorphic_loop(second_is_mul: bool, padding: usize) -> Polymorph
             params: vec![],
             return_cont: entry_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -239,6 +243,7 @@ pub(super) fn helper_called(two_sites: bool) -> (Module, FunctionId) {
             params: vec![x],
             return_cont: helper_return,
             body: helper_body,
+            droppable: false,
         },
     );
 
@@ -285,6 +290,7 @@ pub(super) fn helper_called(two_sites: bool) -> (Module, FunctionId) {
             params: vec![],
             return_cont: entry_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -315,6 +321,7 @@ pub(super) fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId)
             params: vec![x],
             return_cont: helper_return,
             body: helper_body,
+            droppable: false,
         },
     );
 
@@ -331,6 +338,7 @@ pub(super) fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId)
             params: vec![y],
             return_cont: owner_return,
             body: owner_body,
+            droppable: false,
         },
     );
 
@@ -355,6 +363,7 @@ pub(super) fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId)
             params: vec![],
             return_cont: entry_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -426,6 +435,7 @@ pub(super) fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<Nod
             params: vec![t],
             return_cont: consume_return,
             body: consume_body,
+            droppable: false,
         },
     );
 
@@ -495,6 +505,7 @@ pub(super) fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<Nod
             params: vec![],
             return_cont: entry_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -532,6 +543,7 @@ pub(super) fn unary_intrinsic_module(op: Intrinsic, args: Vec<Atom>) -> (Module,
             params: vec![x],
             return_cont,
             body: intrinsic,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -586,6 +598,7 @@ pub(super) fn duplicate_pair_module(
             params: vec![x, y],
             return_cont,
             body: first_node,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -743,6 +756,7 @@ pub(super) fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId)
             params: vec![x],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);

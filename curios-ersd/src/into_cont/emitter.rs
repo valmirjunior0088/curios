@@ -454,6 +454,8 @@ impl<'a> Emitter<'a> {
                 params: Vec::new(),
                 return_cont,
                 body,
+                // Minted here rather than lowered from a definition, so no verdict reaches it and it is kept.
+                droppable: false,
             },
         );
     }

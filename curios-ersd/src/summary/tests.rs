@@ -2,12 +2,37 @@
 
 use crate::*;
 
-/// `fn loop(n) = loop(n)` — a self-call, so its component is recursive whatever it does.
+/// `fn loop(n) = loop(n)` — a self-call, so its component is recursive whatever it does. With `effectful`, a host call sits in the body beside it.
 fn a_self_recursive_function(total: bool) -> Module {
+    a_self_recursive_function_that(total, false)
+}
+
+fn a_self_recursive_function_that(total: bool, effectful: bool) -> Module {
     let mut builder = ErsdBuilder::new();
     let id = builder.reserve_function();
     let param = builder.value(Some("n".into()));
     builder.open_block();
+    if effectful {
+        let row = std::sync::Arc::new(curios_abi::ForeignFunction {
+            namespace: curios_abi::Namespace::Sys,
+            name: "beep".into(),
+            subject: Some("Handle".into()),
+            label: "beep".into(),
+            description: String::new(),
+            signature: curios_abi::WireSignature {
+                params: vec![],
+                results: curios_abi::WireResults::single("r".into(), curios_abi::WireType::Nat),
+            },
+        });
+        let foreign = builder.foreign(row);
+        builder.let_value(
+            None,
+            Rhs::Foreign {
+                foreign,
+                operands: vec![],
+            },
+        );
+    }
     let call = builder.let_value(
         None,
         Rhs::Apply {
@@ -59,4 +84,25 @@ fn a_recursive_function_diverges_unless_its_definition_was_proved_total() {
         !may_diverge(&a_self_recursive_function(true)),
         "a recursive function whose definition was proved total is not divergent",
     );
+}
+
+/// The conclusion the erased stage hands Cont is the *conjunction*, and it is the only form of either fact that crosses.
+///
+/// Cont has no lattice and no notion of purity: termination arrived from above Core, effects are this stage's summary, and both are in hand exactly once — at the lowering. A function proved total but performing an effect must not cross as droppable, which is the half a test of the verdict alone would miss.
+#[test]
+fn only_a_total_and_effect_free_function_crosses_as_droppable() {
+    for (label, total, effectful, expected) in [
+        ("total and pure", true, false, true),
+        ("pure but unproved", false, false, false),
+        ("total but performing", true, true, false),
+    ] {
+        let source = a_self_recursive_function_that(total, effectful);
+        let lowered = crate::lower_to_cont(&source);
+        let droppable = lowered
+            .functions()
+            .iter()
+            .flatten()
+            .any(|function| function.droppable);
+        assert_eq!(droppable, expected, "{label}");
+    }
 }

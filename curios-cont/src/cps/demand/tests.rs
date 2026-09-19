@@ -37,6 +37,7 @@ fn module() -> (Module, ValueId, ValueId, ValueId) {
             params: vec![projected, whole, unused],
             return_cont,
             body: project,
+            droppable: false,
         },
     );
     module.set_entry(function);
@@ -94,6 +95,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
             params: vec![param],
             return_cont: callee_ret,
             body: callee_body,
+            droppable: false,
         },
     );
 
@@ -125,6 +127,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
             params: vec![argument],
             return_cont: caller_ret,
             body: caller_body,
+            droppable: false,
         },
     );
     module.set_entry(caller);
@@ -190,6 +193,7 @@ fn deferral_reaches_unused_through_a_chain() {
             params: vec![argument],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(function);
@@ -219,6 +223,7 @@ fn a_returned_value_stays_opaque() {
             params: vec![returned],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(function);
@@ -248,6 +253,7 @@ fn a_closure_call_consumes_its_arguments_whole() {
             params: vec![closure, argument],
             return_cont,
             body: call,
+            droppable: false,
         },
     );
     module.set_entry(function);

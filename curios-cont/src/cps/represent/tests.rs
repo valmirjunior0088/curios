@@ -21,6 +21,7 @@ fn entry(module: &mut Module, params: Vec<ValueId>, body: NodeId) {
             params,
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(function);
@@ -255,6 +256,7 @@ fn a_value_free_in_another_function_stays_boxed() {
             params: vec![],
             return_cont: callee_return,
             body: callee_body,
+            droppable: false,
         },
     );
 

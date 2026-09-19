@@ -57,6 +57,7 @@ fn contifies_a_single_entry_tail_loop_and_bridges_switch_returns() {
             params: vec![loop_param],
             return_cont: loop_return,
             body: loop_body,
+            droppable: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -75,6 +76,7 @@ fn contifies_a_single_entry_tail_loop_and_bridges_switch_returns() {
             params: vec![],
             return_cont: entry_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -144,6 +146,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
             params: vec![y],
             return_cont: inner_return,
             body: inner_body,
+            droppable: false,
         },
     );
 
@@ -165,6 +168,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
             params: vec![x],
             return_cont: outer_return,
             body: outer_body,
+            droppable: false,
         },
     );
 
@@ -185,6 +189,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
             params: vec![],
             return_cont: entry_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);

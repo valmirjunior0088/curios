@@ -26,6 +26,7 @@ fn return_sentinel_becomes_machine_return_without_a_block() {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     source.set_entry(function);
@@ -62,6 +63,7 @@ fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
             params: vec![],
             return_cont: callee_return,
             body: callee_body,
+            droppable: false,
         },
     );
 
@@ -82,6 +84,7 @@ fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
             params: vec![],
             return_cont: main_return,
             body: main_body,
+            droppable: false,
         },
     );
     source.set_entry(main);
@@ -112,6 +115,7 @@ fn exit_stays_direct_termination_through_structurization() {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     source.set_entry(main);
@@ -160,6 +164,7 @@ fn repeated_first_class_use_materializes_one_closure() {
             params: vec![],
             return_cont: target_return,
             body: target_body,
+            droppable: false,
         },
     );
 
@@ -179,6 +184,7 @@ fn repeated_first_class_use_materializes_one_closure() {
             params: vec![first, second],
             return_cont: consumer_return,
             body: consumer_body,
+            droppable: false,
         },
     );
 
@@ -202,6 +208,7 @@ fn repeated_first_class_use_materializes_one_closure() {
             params: vec![],
             return_cont: main_return,
             body: main_body,
+            droppable: false,
         },
     );
     source.set_entry(main);
@@ -230,6 +237,7 @@ fn mixed_direct_and_escaping_use_keeps_the_call_direct() {
             params: vec![],
             return_cont: target_return,
             body: target_body,
+            droppable: false,
         },
     );
 
@@ -264,6 +272,7 @@ fn mixed_direct_and_escaping_use_keeps_the_call_direct() {
             params: vec![],
             return_cont: main_return,
             body: main_body,
+            droppable: false,
         },
     );
     source.set_entry(main);
@@ -294,6 +303,7 @@ fn exiting_main() -> (curios_cont::Module, curios_cont::FunctionId) {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     source.set_entry(main);
@@ -349,6 +359,7 @@ fn verify_rejects_a_nested_block_with_no_lexical_owner() {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     source.set_entry(main);

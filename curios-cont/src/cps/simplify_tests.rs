@@ -52,6 +52,7 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
             params: vec![],
             return_cont,
             body: trap_node,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -88,6 +89,7 @@ fn dead_parameter_elimination_rewrites_known_calls() {
             params: vec![kept, removed],
             return_cont: callee_return,
             body: callee_body,
+            droppable: false,
         },
     );
     let main_return = module.reserve_continuation();
@@ -110,6 +112,7 @@ fn dead_parameter_elimination_rewrites_known_calls() {
             params: vec![],
             return_cont: main_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -176,6 +179,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -243,6 +247,7 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -349,6 +354,7 @@ fn forwards_a_chain_of_projections_in_one_sweep() {
             params: vec![a],
             return_cont: entry_return,
             body: build_t1,
+            droppable: false,
         },
     );
     module.set_entry(entry);

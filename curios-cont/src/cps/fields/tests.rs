@@ -117,6 +117,7 @@ fn loop_module() -> (Module, FunctionId, ContinuationId, ValueId) {
             params: vec![scrutinee],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(function);
@@ -262,6 +263,7 @@ fn two_joins_module(chained: bool) -> (Module, ContinuationId, ContinuationId) {
             params: vec![scrutinee],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(function);
@@ -374,6 +376,7 @@ fn a_mixed_origin_is_declined() {
             params: vec![callee_param],
             return_cont: callee_ret,
             body: callee_exit,
+            droppable: false,
         },
     );
 
@@ -446,6 +449,7 @@ fn a_mixed_origin_is_declined() {
             params: vec![argument],
             return_cont: caller_ret,
             body,
+            droppable: false,
         },
     );
     module.set_entry(caller);
@@ -553,6 +557,7 @@ fn variant_loop_module() -> (Module, ContinuationId, ValueId) {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(function);
@@ -675,6 +680,7 @@ fn merged_argument_module() -> (Module, FunctionId, ValueId) {
             params: vec![callee_param],
             return_cont: callee_ret,
             body: callee_body,
+            droppable: false,
         },
     );
 
@@ -760,6 +766,7 @@ fn merged_argument_module() -> (Module, FunctionId, ValueId) {
             params: vec![scrutinee],
             return_cont: caller_ret,
             body,
+            droppable: false,
         },
     );
     module.set_entry(caller);
@@ -940,6 +947,7 @@ fn walk_module() -> (Module, crate::ContinuationId) {
             params: vec![rope, scrutinee],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(function);
@@ -1059,6 +1067,7 @@ fn row_consumer(slots: Vec<Slot>, pad_second: bool) -> (Module, FunctionId) {
             params: vec![param],
             return_cont: consume_ret,
             body,
+            droppable: false,
         },
     );
 
@@ -1135,6 +1144,7 @@ fn row_consumer(slots: Vec<Slot>, pad_second: bool) -> (Module, FunctionId) {
             params: vec![],
             return_cont: entry_ret,
             body: group,
+            droppable: false,
         },
     );
     module.set_entry(entry);

@@ -95,6 +95,7 @@ fn a_panic_node_reports_its_class() {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(main);

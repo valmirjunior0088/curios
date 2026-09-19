@@ -164,6 +164,7 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
             params: vec![x],
             return_cont,
             body: bind,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -224,6 +225,7 @@ fn keeps_bit_literals_of_equal_packing_and_unequal_length_distinct() {
             params: vec![x],
             return_cont,
             body: first_node,
+            droppable: false,
         },
     );
     module.set_entry(entry);

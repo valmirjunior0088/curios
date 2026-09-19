@@ -23,6 +23,7 @@ fn nesting_module() -> (Module, FunctionId, FunctionId) {
             params: vec![],
             return_cont: inner_sentinel,
             body: inner_body,
+            droppable: false,
         },
     );
 
@@ -48,6 +49,7 @@ fn nesting_module() -> (Module, FunctionId, FunctionId) {
             params: vec![param],
             return_cont: outer_sentinel,
             body: outer_body,
+            droppable: false,
         },
     );
     module.set_entry(outer);

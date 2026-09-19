@@ -88,6 +88,7 @@ pub(super) fn intrinsic_main(
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -124,6 +125,7 @@ pub(super) fn tuple_project() -> curios_cont::Module {
             params: vec![],
             return_cont,
             body: build,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -158,6 +160,7 @@ pub(super) fn list_len() -> curios_cont::Module {
             params: vec![],
             return_cont,
             body: build,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -196,6 +199,7 @@ pub(super) fn bin_len() -> curios_cont::Module {
             params: vec![],
             return_cont,
             body: build,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -243,6 +247,7 @@ pub(super) fn cell_roundtrip() -> curios_cont::Module {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -290,6 +295,7 @@ pub(super) fn foreign_call(name: &str) -> curios_cont::Module {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -317,6 +323,7 @@ pub(super) fn indirect_apply() -> curios_cont::Module {
             params: vec![],
             return_cont: target_return,
             body: target_body,
+            droppable: false,
         },
     );
 
@@ -334,6 +341,7 @@ pub(super) fn indirect_apply() -> curios_cont::Module {
             params: vec![closure],
             return_cont: apply_return,
             body: apply_body,
+            droppable: false,
         },
     );
 
@@ -354,6 +362,7 @@ pub(super) fn indirect_apply() -> curios_cont::Module {
             params: vec![],
             return_cont: main_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -397,6 +406,7 @@ pub(super) fn list_read() -> curios_cont::Module {
             params: vec![],
             return_cont,
             body: build,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -422,6 +432,7 @@ pub(super) fn list_map() -> curios_cont::Module {
             params: vec![element],
             return_cont: mapper_return,
             body: mapper_body,
+            droppable: false,
         },
     );
 
@@ -464,6 +475,7 @@ pub(super) fn list_map() -> curios_cont::Module {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -501,6 +513,7 @@ pub(super) fn deep_bin_chain(depth: usize) -> curios_cont::Module {
             params: vec![],
             return_cont,
             body: next,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -543,6 +556,7 @@ pub(super) fn reducible_loop() -> curios_cont::Module {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -613,6 +627,7 @@ pub(super) fn irreducible_pair() -> curios_cont::Module {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -653,6 +668,7 @@ pub(super) fn constant_tuple_pair() -> curios_cont::Module {
             params: vec![],
             return_cont,
             body: build_first,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -694,6 +710,7 @@ pub(super) fn runtime_tuple() -> curios_cont::Module {
             params: vec![],
             return_cont,
             body: compute,
+            droppable: false,
         },
     );
     module.set_entry(main);
@@ -728,6 +745,7 @@ pub(super) fn overflowing_tuple() -> curios_cont::Module {
             params: vec![],
             return_cont,
             body: build,
+            droppable: false,
         },
     );
     module.set_entry(main);

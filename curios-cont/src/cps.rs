@@ -602,6 +602,12 @@ pub struct Function {
     pub params: Vec<ValueId>,
     pub return_cont: ContinuationId,
     pub body: NodeId,
+    /// Whether a call of this function whose result nothing reads may simply not happen: it terminates, and running it a second time — or not at all — is not an event a program can observe.
+    ///
+    /// **A conclusion, not a fact this stage could reach.** Termination is the size-change engine's, decided above Core and carried down; freedom from effects is the erased stage's interprocedural summary. Both are in hand at the lowering that builds this, and only their conjunction crosses, so nothing here needs a lattice or a notion of purity of its own. A trap or a divergence is *not* excluded by it — an occurrence that already ran is what licenses dropping a later one, and a dead call has no dominating occurrence, so this must mean total.
+    ///
+    /// False is the safe reading and the default: a function this could not be filled from is kept.
+    pub droppable: bool,
 }
 
 #[derive(Debug, Clone)]

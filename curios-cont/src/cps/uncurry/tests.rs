@@ -44,6 +44,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             params: vec![step_param],
             return_cont: step_sentinel,
             body: step_body,
+            droppable: false,
         },
     );
 
@@ -65,6 +66,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             params: vec![leader_param],
             return_cont: leader_sentinel,
             body: leader_body,
+            droppable: false,
         },
     );
 
@@ -84,6 +86,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             params: vec![forwarder_param],
             return_cont: forwarder_sentinel,
             body: forwarder_body,
+            droppable: false,
         },
     );
 
@@ -129,6 +132,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
                         params: vec![],
                         return_cont: nested_sentinel,
                         body: nested_body,
+                        droppable: false,
                     },
                 );
                 let kept = module.add_value(Some("kept".into()));
@@ -239,6 +243,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             params: vec![],
             return_cont: entry_sentinel,
             body: entry_body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -438,6 +443,7 @@ fn a_forwarded_application_declines_uncurrying() {
             params: vec![inner_param],
             return_cont: inner_ret,
             body: inner_exit,
+            droppable: false,
         },
     );
 
@@ -455,6 +461,7 @@ fn a_forwarded_application_declines_uncurrying() {
             params: vec![produced_param],
             return_cont: producer_ret,
             body: producer_body,
+            droppable: false,
         },
     );
 
@@ -507,6 +514,7 @@ fn a_forwarded_application_declines_uncurrying() {
             params: vec![argument],
             return_cont: caller_ret,
             body,
+            droppable: false,
         },
     );
     module.set_entry(caller);

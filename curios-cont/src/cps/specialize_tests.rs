@@ -41,6 +41,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
             params: vec![],
             return_cont: helper_return,
             body: helper_body,
+            droppable: false,
         },
     );
 
@@ -89,6 +90,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
             params: vec![invariant, counter],
             return_cont: loop_return,
             body: loop_body,
+            droppable: false,
         },
     );
 
@@ -111,6 +113,7 @@ fn scc_invariant_known_argument_propagates_into_recursive_member() {
             params: vec![],
             return_cont: entry_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -409,6 +412,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
             params: vec![t],
             return_cont: consume_return,
             body: project_tag,
+            droppable: false,
         },
     );
 
@@ -437,6 +441,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
             params: vec![],
             return_cont: entry_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);

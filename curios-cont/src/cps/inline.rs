@@ -375,6 +375,7 @@ pub(super) fn inline_call(
                 params: definition.params.iter().map(|id| map_value(*id)).collect(),
                 return_cont: returns[&definition.return_cont],
                 body: node_map[&definition.body],
+                droppable: definition.droppable,
             },
         );
     }

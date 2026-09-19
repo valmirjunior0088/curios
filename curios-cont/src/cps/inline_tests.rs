@@ -29,6 +29,7 @@ fn continuation_beta_rewrites_parameters_captured_by_nested_functions() {
             params: vec![],
             return_cont: nested_return,
             body: nested_body,
+            droppable: false,
         },
     );
     let return_nested = module.add_node(Node::ApplyCont(Edge {
@@ -62,6 +63,7 @@ fn continuation_beta_rewrites_parameters_captured_by_nested_functions() {
             params: vec![],
             return_cont,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -112,6 +114,7 @@ fn known_call_inlining_clones_recursive_local_continuations() {
             params: vec![callee_param],
             return_cont: callee_return,
             body: callee_body,
+            droppable: false,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -130,6 +133,7 @@ fn known_call_inlining_clones_recursive_local_continuations() {
             params: vec![],
             return_cont: entry_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
@@ -180,6 +184,7 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
             params: vec![p],
             return_cont: callee_return,
             body: callee_body,
+            droppable: false,
         },
     );
 
@@ -199,6 +204,7 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
             params: vec![],
             return_cont: entry_return,
             body,
+            droppable: false,
         },
     );
     module.set_entry(entry);
