@@ -7,7 +7,7 @@
 //! - `concat`/`append` are O(1): one `node` allocation, no copying.
 //! - `len` is O(1): every shape carries it.
 //! - `slice` is O(1): one `view` allocation over the source (collapsing a view-of-view, so windows never stack). A `view`'s base is always *flat-available* — a leaf or an already-cached node (slicing an uncached node forces it first, which memoizes) — so `get` reads straight through a window without forcing or copying.
-//! - The first *whole-value read* (`eql` on equal lengths, `map`, a host call) forces the rope — one O(n) fill into a fresh flat payload, memoized in the entry node's `cache` (its children are then nulled, releasing the tree). Later reads are O(1) to reach the payload. (A `view` is not memoized: forcing one is a single window copy of exactly its own size.)
+//! - The first *whole-value read* (`eql` on equal lengths, `map`, a host call, and a single `get` or `slice` on an uncached node — one element read is a whole-value read there) forces the rope — one O(n) fill into a fresh flat payload, memoized in the entry node's `cache` (its children are then nulled, releasing the tree). Later reads are O(1) to reach the payload. (A `view` is not memoized: forcing one is a single window copy of exactly its own size.)
 //! - The documented hazard: *alternating* append and whole-value reads re-forces per read (the new node above a cached one is uncached), which is quadratic. Build fully, then read.
 //!
 //! Naive accumulation loops are therefore O(n) by construction, and so are head/tail peel loops (`get` head + `slice` tail): the first peel forces once, every later peel is an O(1) window over the settled payload. There is no compile-time recognition anywhere.
