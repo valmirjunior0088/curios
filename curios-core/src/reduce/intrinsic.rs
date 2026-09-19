@@ -444,10 +444,15 @@ pub fn reduce_intrinsic(
             )?,
             |l, r| nat_bitwise_laws(l, r, intrinsic),
         )),
-        Intrinsic::NatShl(left, right) => Ok(then_laws(
-            reduce_nat_shl(reducer, left, right)?,
-            nat_shift_laws,
-        )),
+        Intrinsic::NatShl(left, right) => {
+            let shifted = then_laws(reduce_nat_shl(reducer, left, right)?, nat_shift_laws);
+            then_coefficient(reducer, shifted, |coefficient, value| {
+                Term::intrinsic(Intrinsic::nat_mul(
+                    Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
+                    value,
+                ))
+            })
+        }
         Intrinsic::NatShr(left, right) => Ok(then_laws(
             reduce_nat_binary(
                 reducer,
@@ -590,14 +595,22 @@ pub fn reduce_intrinsic(
             |left, right| Some(Intrinsic::Int(left ^ right)),
             Intrinsic::IntXor,
         ),
-        Intrinsic::IntShl(left, right) => reduce_int_shift(
-            reducer,
-            left,
-            right,
-            shift_bound,
-            |value, amount| value.checked_shl(amount),
-            Intrinsic::IntShl,
-        ),
+        Intrinsic::IntShl(left, right) => {
+            let shifted = reduce_int_shift(
+                reducer,
+                left,
+                right,
+                shift_bound,
+                |value, amount| value.checked_shl(amount),
+                Intrinsic::IntShl,
+            )?;
+            then_coefficient(reducer, shifted, |coefficient, value| {
+                Term::intrinsic(Intrinsic::IntMul(
+                    Term::intrinsic(Intrinsic::Int(Integer::from(coefficient))),
+                    value,
+                ))
+            })
+        }
         Intrinsic::IntShr(left, right) => reduce_int_shift(
             reducer,
             left,

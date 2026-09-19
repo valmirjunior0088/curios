@@ -158,9 +158,18 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Nat/shr(x, 0), x)",
             "Eq(Nat/shl(0, x), 0)",
             "Eq(Nat/shr(0, x), 0)",
+            // A left shift by a literal count is the coefficient `2ᵏ`, on the unbounded ℕ the type level folds and at run time alike, since the emitter refuses a shift that leaves the carrier rather than truncating it. The coefficient is charged before it is built, and the product then distributes as any other does.
+            "Eq(Nat/shl(x, 1), x * 2)",
+            "Eq(Nat/shl(x, 3), 8 * x)",
+            "Eq(Nat/shl(x + 1, 2), 4 * x + 4)",
+            "Eq(Nat/shl(x, 1) + Nat/shl(y, 1), 2 * (x + y))",
         ],
-        // A literal count is the coefficient `2ᵏ`, on the unbounded ℕ the type level folds and at run time alike, since the emitter refuses a shift that leaves the carrier rather than truncating it. Not taken yet: a left shift is the one fold whose result size its operands do not bound, so the rule owes the budget a charge for the coefficient it builds.
-        refused: &["Eq(Nat/shl(x, 1), x * 2)"],
+        refused: &[
+            // A symbolic count is no coefficient: `2ˣ` is not a literal, and the normal form has no exponential to hold it.
+            "Eq(Nat/shl(2, x), Nat/shl(1, x + 1))",
+            // A right shift by a literal count is a quotient by `2ᵏ` and could join the division family through the Euclidean split. It may not do so by building a division node, which carries a proof that the divisor is nonzero, and a reducer may not invent one.
+            "Eq(Nat/shr(x * 4, 2), x)",
+        ],
     },
     Carrier {
         // Every subject here is bounded below 256 where a `Byte` is built from a `Nat`, never a bare binder: the narrowing states that domain, so an unbounded subject would stop the row elaborating rather than move it between the halves.
@@ -226,6 +235,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq(i <= j, i < j + 1)",
             "Eq(i < j && j <= i, false)",
             "Eq(i <= j || j < i, true)",
+            // A left shift by a literal count is the coefficient `2ᵏ`, as on `Nat`, and below zero too.
+            "Eq(Int/shl(i, 1), i * 2)",
+            "Eq(Int/shl(i, 3), 8 * i)",
+            "Eq(Int/shl(i + j, 1), 2 * i + 2 * j)",
         ],
         refused: &[],
     },

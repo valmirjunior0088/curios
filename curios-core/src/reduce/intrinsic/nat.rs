@@ -54,7 +54,7 @@ impl Euclid {
 ///
 /// A `Byte` is `0..=255` **by its carrier**, a fact about the type rather than about how the value was produced. Every producer establishes it, and no case analysis over them is performed or wanted: the operand under a stuck `ByteToNat` is normally a bare binder or a projection, which is exactly the seam this bound exists to serve. `Byte` is not a wire type either, so no embedder can supply one outside the range. `x % n < n` holds by definition, a zero divisor having already been reported.
 ///
-/// **`NatShl` is deliberately absent, and the reason is resources rather than arithmetic.** A left shift is the one fold whose result size is not bounded by its operands' — `Nat/shl(1, 400000000)` is fifty megabytes of magnitude out of three lines of surface Curios — and this function takes no [`crate::Reducer`], so it cannot `spend` against the budget that exists to price exactly that. An arm would perform, uncharged, the allocation the reduction arm is careful to charge for.
+/// **`NatShl` is deliberately absent, and the reason is resources rather than arithmetic.** A left shift is the one fold whose result size is not bounded by its operands' — `Nat/shl(1, 400000000)` is fifty megabytes of magnitude out of three lines of surface Curios — and this function takes no [`crate::Reducer`], so it cannot `spend` against the budget that exists to price exactly that. An arm would perform, uncharged, the allocation the reduction arm is careful to charge for. What reaches here as a `NatShl` is a shift by a *symbolic* count, which no operand bounds: a literal count is [`then_coefficient`]'s, so it arrives as a `NatMul` with its coefficient already charged and takes that arm.
 ///
 /// An over-report only withholds the rule; an *under*-report is a false definitional equation, which is the direction `bound_upper_bounds_every_closed_instantiation` asserts. That gate is a hand-written block per shape rather than an enumeration, so an arm added here owes it one or it passes while checking nothing. A wrong bound is a false equation and not a wrong value: see `documentation/soundness/per-term-rules/the-bounds-oracle-and-the-division-family.md`.
 pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
@@ -298,6 +298,37 @@ pub(super) fn reduce_nat_shl(
         Some(intrinsic) => intrinsic,
         None => Intrinsic::NatShl(left, right),
     }))
+}
+
+/// A left shift its fold and its zero laws left neutral, read as the product it is when the count is a literal: `shl(x, k) = 2ᵏ · x`, on `Nat` and on `Int` alike, where it holds below zero too.
+///
+/// The equation holds for every value on the unbounded carriers the type level folds, and the run time refuses a shift that leaves its carrier rather than truncating it, so no layer below can tell the two spellings apart by a value. `product` spells the carrier's own multiplication and the result goes back through the reducer, so the shift enters the sum normal form through that fold — distribution over a sum and the floor law included — and restates none of it.
+///
+/// **The coefficient is what this rule builds, and it is charged before it exists**, under the same [`shift_bound`] the closed fold pays: a count is a *value*, so `shl(x, 400000000)` is refused rather than allocated. A symbolic count declines, since `2ʸ` is no literal, and so does a zero one, which the zero law already answered.
+pub(super) fn then_coefficient(
+    reducer: &mut impl Reducer,
+    result: Subterm,
+    product: impl FnOnce(Natural, Term) -> Term,
+) -> Result<Subterm, ReduceError> {
+    let (Subterm::Intrinsic(Intrinsic::NatShl(value, count))
+    | Subterm::Intrinsic(Intrinsic::IntShl(value, count))) = &result
+    else {
+        return Ok(result);
+    };
+    let Some(count) = count.as_nat() else {
+        return Ok(result);
+    };
+    let (Some(amount), Some(exponent)) = (count.to_u64(), count.to_natural()) else {
+        return Ok(result);
+    };
+    reducer.spend(shift_bound(1, Some(amount)))?;
+
+    match Natural::one().checked_shl(exponent) {
+        Some(coefficient) => Ok(Term::unwrap_or_clone(
+            reducer.reduce_forced(product(coefficient, value.clone()))?,
+        )),
+        None => Ok(result),
+    }
 }
 
 /// Reduce the operand of a `Nat` unary intrinsic, then either `fold` the literal or `rebuild` the neutral term from the reduced operand.

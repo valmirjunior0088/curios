@@ -63,6 +63,36 @@ fn a_shift_amount_past_a_host_index_is_refused_rather_than_folded() {
     );
 }
 
+/// A literal count under a *symbolic* value builds the coefficient `2ᵏ` and nothing else, so that is what it is charged for, before it is built: an affordable count lands on the product, and one past the budget is refused on the same row and at the same size as the closed fold's.
+#[test]
+fn a_shift_coefficient_is_refused_before_it_is_built() {
+    let shift = |amount: usize| {
+        Term::intrinsic(Intrinsic::NatShl(
+            sym(0, "x"),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(amount))),
+        ))
+    };
+
+    let mut reducer = Budgeted { remaining: 1_000 };
+    assert_eq!(
+        reducer.reduce(shift(40)),
+        Ok(Term::intrinsic(Intrinsic::nat_mul(
+            Term::intrinsic(Intrinsic::Nat(Nat::new(1usize << 40_u32))),
+            sym(0, "x"),
+        )))
+    );
+
+    let mut reducer = Budgeted { remaining: 1_000 };
+    assert_eq!(
+        reducer.reduce(shift(1 << 30)),
+        Err(ReduceError::Exhausted {
+            category: Category::Limbs,
+            remaining: 1_000,
+            attempted: Cost::big_number(1 + (1 << 30)).get(),
+        })
+    );
+}
+
 /// Bytes are not the only protected payload. Each subject below builds a result whose logical size its operands decide, and each is charged **at least** that size — so a carrier priced as a constant would show up here as a charge that does not cover what it built.
 ///
 /// At least, rather than exactly: a fold pays for traversing its operands as well as for its result, and the price list is an upper bound rather than an equality. The lower bound is the half that matters, because undercharging is the direction that loses the property.

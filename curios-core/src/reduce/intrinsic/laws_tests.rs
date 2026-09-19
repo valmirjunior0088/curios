@@ -1098,6 +1098,25 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             lit(0),
             nats(),
         ),
+        // A left shift by a literal count is the coefficient `2ᵏ`, so it lands in the sum normal form: over a bare symbol, and over a floored one, where the product's own fold distributes it.
+        (
+            "shl(x, 3) = 8 * x",
+            Term::intrinsic(Intrinsic::NatShl(x.clone(), lit(3))),
+            mul(lit(8), x.clone()),
+            nats(),
+        ),
+        (
+            "shl(x + 1, 2) = 4 * x + 4",
+            Term::intrinsic(Intrinsic::NatShl(plus(x.clone(), lit(1)), lit(2))),
+            plus(mul(lit(4), x.clone()), lit(4)),
+            nats(),
+        ),
+        (
+            "shl(i, 3) = 8 * i",
+            Term::intrinsic(Intrinsic::IntShl(i.clone(), lit(3))),
+            int_mul(integer(8), i.clone()),
+            ints(),
+        ),
         (
             "i + 0 = i",
             Term::intrinsic(Intrinsic::IntAdd(i.clone(), integer(0))),
