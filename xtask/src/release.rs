@@ -1,6 +1,6 @@
-//! The release dance: the version in `Cargo.toml`, the lock file beside it, one commit, one tag, and the push that publishes them.
+//! The release dance: the version in `Cargo.toml`, the lock file beside it, one commit, one tag, and the push that publishes them — along with whatever else `main` had not published yet.
 //!
-//! **Invoking this recipe is the intent to publish.** `.github/workflows/release.yml` fires on a `release/*` tag and creates the public GitHub release from it, so once the preflight passes the dance runs to the end without asking again. Every precondition is therefore a refusal taken before anything is written: a dirty tree, a branch that is not `main`, a `main` that disagrees with `origin/main`, a tag that already exists, or a version that is not above the one in the manifest stops the recipe with nothing done.
+//! **Invoking this recipe is the intent to publish.** `.github/workflows/release.yml` fires on a `release/*` tag and creates the public GitHub release from it, so once the preflight passes the dance runs to the end without asking again. Every precondition is therefore a refusal taken before anything is written: a dirty tree, a branch that is not `main`, a `main` that origin has moved past, a tag that already exists, or a version that is not above the one in the manifest stops the recipe with nothing done.
 //!
 //! **Nothing here builds, and nothing here undoes.** The check workflow runs on every push to `main` and has already had its say on the commits being released; the tag's own workflow builds and publishes without running it again. And removing a local commit or tag is destructive, so a failure past the commit prints what exists and what would undo it rather than doing it — that is the user's to ask for.
 //!
@@ -198,13 +198,12 @@ fn preflight(tag: &str) -> Result<(), String> {
 
     git(&["fetch", "origin", "main"])?;
 
-    let head = git_ask(&["rev-parse", "HEAD"])?;
-    let origin = git_ask(&["rev-parse", "origin/main"])?;
-    if head.trim() != origin.trim() {
+    // **Commits `main` has not published are pushed by the dance, not refused by it.** The push below carries them with the bump, so cutting a release from a main that is merely ahead of origin is the ordinary case rather than a mistake to report. What is still refused is a main origin has moved *past*: that push would be rejected as a non-fast-forward, and it would be rejected after the commit and the tag were already written — leaving behind exactly the local state this preflight exists to make impossible.
+    let unpulled = git_ask(&["rev-list", "--count", "HEAD..origin/main"])?;
+    if unpulled.trim() != "0" {
         return Err(format!(
-            "main is at {} and origin/main at {}; a bump on a stale main tags a tree nobody has",
-            head.trim(),
-            origin.trim()
+            "origin/main holds {} commit(s) this tree does not, so the push would be refused after the tag was written; pull before cutting a release",
+            unpulled.trim()
         ));
     }
 
