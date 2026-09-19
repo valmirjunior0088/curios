@@ -543,7 +543,7 @@ pub(super) const ETA_STILL_COMPARES_A_RECORDS_RELEVANT_COMPONENT: &str = r#"
         /std/Io/pure(())
         "#;
 
-pub(super) const A_GROUNDED_ARGUMENT_FORFEITS_IRRELEVANCE: &str = r#"
+pub(super) const A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN: &str = r#"
         use /std/{Eq, Nat};
 
         let ground(f : (Eq(0, 0)) -> Nat, p : Eq(0, 0), q : Eq(0, 0)) -> Eq(f(p), f(q)) =
@@ -552,7 +552,7 @@ pub(super) const A_GROUNDED_ARGUMENT_FORFEITS_IRRELEVANCE: &str = r#"
         /std/print(Nat/to_str(1))
         "#;
 
-pub(super) const A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_NEUTRAL: &str = r#"
+pub(super) const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_APPLICATION: &str = r#"
         use /std/{Eq, Nat, State};
 
         let left(a: Nat, f: (Nat) -> State(Nat, Nat)) -> Eq(State/bind(State/pure(a), f), f(a)) =
@@ -561,7 +561,7 @@ pub(super) const A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_NEUTRAL: &str =
         /std/print(Nat/to_str(1))
         "#;
 
-pub(super) const A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_VARIABLE: &str = r#"
+pub(super) const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_VARIABLE: &str = r#"
         use /std/{Eq, Nat, State};
 
         let right(m: State(Nat, Nat)) -> Eq(State/bind(m, (v) => State/pure(v)), m) =
@@ -1368,25 +1368,25 @@ pub(super) const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Refuses("type mismatch"),
         Expect::NotAsked(None),
     ),
-    // The quadrant this table's own documentation describes and had no instance of: the kernel refusing what the elaborator accepted, which is recorded conversion incompleteness and the safe direction. The grounded argument position is where it comes from.
+    // **The quadrant this table had one instance of, and now has none.** Two proofs of one proposition passed to an opaque head were compared at `Type`, where irrelevance is never asked, so the kernel refused what the elaborator accepted. A variable head carries the telescope its arguments inhabit, and reading it is a lookup rather than an inference, so the arguments compare at their domains and the proofs discharge without being read.
     (
-        "grounded_argument_forfeits_irrelevance",
-        A_GROUNDED_ARGUMENT_FORFEITS_IRRELEVANCE,
+        "a_spine_argument_compares_at_the_heads_domain",
+        A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN,
         Expect::Accepts,
-        Expect::Refuses("f(p), f(q)"),
+        Expect::Accepts,
     ),
-    // The same quadrant, reached from `/std`'s own vocabulary. `State`'s two identity laws close by `Eq/refl()` for the elaborator, which compares the structure's function field at its declared type and so by eta; the kernel's struct eta projects the neutral side and compares the field at `Type`, where a lambda never meets a neutral function. Associativity is the control: both sides are literals there, and both checkers accept it.
+    // The same closure reached from `/std`'s own vocabulary, and the reason it is worth a row: `State`'s identity laws are a library's own equations, not adversarial programs. Each sets `State/bind`'s literal against a neutral — `f(a)` on the left, `m` on the right — and both now converge, the field comparing at the function type the declaration gives it rather than at `Type`, where a lambda never meets a projection. Associativity is the control: both sides are literals there, and it converged all along.
     (
-        "state_left_identity_forfeits_eta",
-        A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_NEUTRAL,
+        "state_left_identity_converges",
+        A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_APPLICATION,
         Expect::Accepts,
-        Expect::Refuses("State/bind"),
+        Expect::Accepts,
     ),
     (
-        "state_right_identity_forfeits_eta",
-        A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_VARIABLE,
+        "state_right_identity_converges",
+        A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_VARIABLE,
         Expect::Accepts,
-        Expect::Refuses("State/bind"),
+        Expect::Accepts,
     ),
     (
         "state_associativity_is_two_literals",

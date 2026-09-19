@@ -75,17 +75,19 @@ fn still_compares_a_records_relevant_component() {
     );
 }
 
-// The row's second clause in the direction it claims: comparing an untyped child at `Type` forfeits rules rather than adding them. `p` and `q` inhabit one proposition, so they are interchangeable at their own type — but as arguments of an opaque head they meet `ground`, where the goal type is `Type` and irrelevance is never asked. What the forfeiture costs is exactly what the row says it costs, a *refusal*, and a refusal is a disagreement, which is the signal the second checker exists to produce.
+// **The position this row was written about is not untyped any more.** `p` and `q` inhabit one proposition, so they are interchangeable at their own type — and as arguments of an opaque head they used to meet `ground`, where the goal type is `Type` and irrelevance is never asked, so the kernel refused what the elaborator accepted. That was the matrix's only accept-then-refuse row and the row this clause was stated over.
 //
-// This is the first row of the matrix above to sit in that quadrant. The elaborator accepts, comparing the arguments at the domain the head assigns them; the kernel refuses, and the fragment asserted is the two argument spellings themselves, so a fixture broken anywhere else could not pass it.
+// A variable head has a typed context after all: it was assumed or declared at a function type, and its telescope is what its arguments inhabit, exactly as a declaration's field telescope is what a field inhabits. Reading it is a lookup rather than an inference, so the spine costs what it did and conversion consults nothing new. What remains untyped is a head that names no type — a projection, a stuck elimination, a `rec` member — and a binder carrying `ground_scope`'s stand-in, which is not a function type and so hands back no telescope.
 #[test]
-fn a_grounded_argument_forfeits_irrelevance() {
-    rejected_by(A_GROUNDED_ARGUMENT_FORFEITS_IRRELEVANCE, "f(p), f(q)");
+fn a_spine_argument_compares_at_the_heads_domain() {
+    assert_eq!(run(A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN), b"1");
 }
 
-// **The clause is inexact, and this is the correction.** What grounding forfeits is *type-directed* eta and *goal-level* irrelevance — the two rules `turn` reaches by asking what the goal type is. `struct_eta` is neither. It reads the literal's own declaration, so it fires from `structural`, which is precisely where a grounded comparison lands, and it skips a `Prop`-sorted field by asking `Sort::of` about the declaration's field type. Both rules the clause says are gone are therefore live in an untyped position, and this is the sharpest spelling of it: every field of `Sealed` is a proposition, so the field walk compares *nothing at all* and the literal is equated with the neutral on the strength of the neutral restriction alone.
+// **What this pins is the vacuous walk, and the invariant that licenses it.** Every field of `Sealed` is a proposition, so `struct_eta`'s walk compares *nothing at all* and answers `true` on the strength of the neutral restriction alone. That is sound because `other` inhabits `Sealed` — conversion is only ever asked about two terms of one type — and because eta for a single-constructor record equates any inhabitant with the literal of its projections.
 //
-// It is not unsound, and the reason is not the one `struct_eta`'s own comment gives. That comment says the neutral restriction is what stops the literal being equated with "an arbitrary term that merely appeared in the same untyped position" — but a `Var` is such a term, and the restriction excludes only non-neutrals. What actually establishes that the neutral inhabits `Sealed` is that every grounded pair is the corresponding children of two parents already shown convertible, so their types agree by typing. That is a property of the *callers* of `ground` rather than of `struct_eta`, and it is written in neither place.
+// The restriction is a proxy for that invariant rather than a second guarantee: a `Var` is as arbitrary a term as any other, and the invariant is a property of the *callers* rather than of this function. `struct_eta` now says so in its own documentation, which is where it was missing.
+//
+// This fixture used to be the sharpest spelling of "a nominal struct's eta survives an *untyped* position", and it is not any more: its comparison is `Sealed { one = p, two = q }` against `b` as arguments of `f`, and a spine's arguments now take the telescope their head carries. So the position is typed, the fixture reaches `struct_eta` from a typed goal, and what it still holds is the vacuous walk itself.
 #[test]
 fn a_nominal_structs_eta_is_not_forfeited_there() {
     assert_eq!(run(A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE), b"1");
@@ -97,22 +99,21 @@ fn a_proof_field_does_not_distinguish_two_literals() {
     assert_eq!(run(A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS), b"1");
 }
 
-// **The forfeiture reaches `/std`'s own laws.** `State`'s left identity sets a structure literal against the neutral `f(a)`: the elaborator compares the one field at its declared function type, where eta opens both sides at a fresh state, and the kernel's struct eta projects the neutral and compares at `Type`, where a lambda never meets a projection. So the law closes by `Eq/refl()` for one checker and is refused by the other, in the safe direction — found by stating the monad laws for the library's own witnesses rather than by a hunt.
+// **`/std`'s own laws are what forced the rest of it.** `State`'s left identity sets `State/bind`'s literal against the neutral `f(a)`, and two things had to change for it to converge. The field compares at the function type the declaration gives it, where eta opens both sides at a fresh state, instead of at `Type` where a lambda never meets a projection. And a stuck *application* counts as the neutral inhabitant it is: `struct_eta` took a variable or a projection, so the law was refused not on its content but on the shape of the side it was stated against.
+//
+// A refusal there fell through to `unfolded_retry`, and it still does — an application may have an unfolding left where a variable and a projection have none, so the eta attempt is tried first and a failure hands the pair on rather than deciding it.
 #[test]
-fn a_structs_function_field_forfeits_eta_against_a_neutral() {
-    rejected_by(
-        A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_NEUTRAL,
-        "State/bind",
+fn a_structs_function_field_meets_a_neutral_application() {
+    assert_eq!(
+        run(A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_APPLICATION),
+        b"1"
     );
 }
 
-// The right identity is the same forfeiture with a variable on the neutral side, which is the shape `struct_eta`'s neutral restriction is written for.
+// The right identity is the same law with a variable on the neutral side, which `struct_eta` always admitted — so this one needed the typed field alone, and it is what separates the two halves of the change.
 #[test]
-fn a_structs_function_field_forfeits_eta_against_a_variable() {
-    rejected_by(
-        A_STRUCTS_FUNCTION_FIELD_FORFEITS_ETA_AGAINST_A_VARIABLE,
-        "State/bind",
-    );
+fn a_structs_function_field_meets_a_neutral_variable() {
+    assert_eq!(run(A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_VARIABLE), b"1");
 }
 
 // The control for the pair above. Associativity sets two literals against each other, so both checkers compare the field at the declaration's telescope and the law certifies: what the two refusals lack is a typed position, not a rule about `State`.
