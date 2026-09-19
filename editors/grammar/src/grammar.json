@@ -1535,7 +1535,7 @@
                           "members": [
                             {
                               "type": "SYMBOL",
-                              "name": "witness_entry"
+                              "name": "field_definition"
                             },
                             {
                               "type": "REPEAT",
@@ -1548,7 +1548,7 @@
                                   },
                                   {
                                     "type": "SYMBOL",
-                                    "name": "witness_entry"
+                                    "name": "field_definition"
                                   }
                                 ]
                               }
@@ -1648,28 +1648,6 @@
         {
           "type": "STRING",
           "value": ")"
-        }
-      ]
-    },
-    "witness_entry": {
-      "type": "CHOICE",
-      "members": [
-        {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "use"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "_term"
-            }
-          ]
-        },
-        {
-          "type": "SYMBOL",
-          "name": "field_definition"
         }
       ]
     },

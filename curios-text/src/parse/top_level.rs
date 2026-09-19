@@ -615,12 +615,15 @@ pub(super) fn parse_witness_field<'a>() -> Parser<'a, WitnessField> {
         })
 }
 
-// A witness-body entry: a `use <term>` fill for one of the concept's `use`-marked fields, or an implementation field.
-pub(super) fn parse_witness_entry<'a>() -> Parser<'a, WitnessEntry> {
-    parse_keyword("use")
-        .and_keep(lazy(parse_term))
-        .map(WitnessEntry::Use)
-        .or(parse_witness_field().map(WitnessEntry::Field))
+/// What refuses a `use` entry in a witness body.
+const WITNESS_NEVER_FILLS_A_SUPERCLASS: &str = "a witness never writes a superclass slot: resolution fills it, so every path to the superclass finds the one registered witness";
+
+// A witness-body entry is an implementation field. A concept literal also admits a `use <term>` fill for one of the concept's `use`-marked fields; a witness does not, because a registered witness carrying a superclass other than the registered one answers `==` one way through the table and another way through its own projection. The word is read and refused by name rather than left to fail as a missing label, which would say nothing about why.
+fn parse_witness_entry<'a>() -> Parser<'a, WitnessField> {
+    mark()
+        .and_drop(parse_keyword("use"))
+        .flat_map(|start| commit(fail_from(&start, WITNESS_NEVER_FILLS_A_SUPERCLASS)))
+        .or(parse_witness_field())
 }
 
 // One witness: `Concept(args) { … }`, or `(params) => Concept(args) { … }` with a nonempty telescope. The separator makes the parameterized form's terminal concept application explicit; an empty telescope must use the bare form instead. The body is the brace block, or `;` in its place — the derived form, whose body the compiler writes — and either may follow either head.

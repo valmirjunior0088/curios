@@ -35,7 +35,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] [Sealed concept representations](design/language/concept-representations-may-be-sealed.md) (`concept C(A): Type` — witness declarations, dictionary literals and raw projections confined to the declaring subtree)
   - [x] Concept laws (a field whose type is a proposition about earlier fields, discharged by `satisfy` at the implementations it supplies)
   - [x] Associated types (a field whose result is a sort — what lets `Div` state each carrier's own division precondition)
-  - [x] Superclass edges (a `use`-prefixed field; `use value` fills a slot in a literal, and an `Ord(A)` witness answers an `Eql(A)` goal by projection)
+  - [x] Superclass edges (a `use`-prefixed field; `use value` fills a slot in a concept literal, never in a `satisfy`, and an `Ord(A)` witness answers an `Eql(A)` goal by projection)
 - [x] [Derived witnesses](design/language/a-witness-body-may-be-written-by-the-compiler.md) (`satisfy C(T);` writes the body from the key's declaration)
 - [x] Unified `struct` declarations (independent nominal and representation visibility)
 - [x] Inductive types (`induct` declarations)

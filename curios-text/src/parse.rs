@@ -47,7 +47,7 @@ use {
         NatPattern, NumLit, Pattern, PatternField, Proj, Radix, StrLit, StructField, StructLit,
         StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
         TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessEntry, WitnessField,
+        TupleTypeParam, UseGroup, WitnessField,
     },
     curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
     curios_num::{Floating, Natural},

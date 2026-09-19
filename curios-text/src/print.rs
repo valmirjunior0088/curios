@@ -9,7 +9,7 @@ use {
         MatchPatternField, Nat, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix,
         StructField, StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept,
         TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
-        Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessEntry,
+        Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
     },
     crate::parse::op_precedence,
     curios_abi::{WireSignature, WireType, stdio},
@@ -1986,22 +1986,12 @@ fn witness_member_start(item: &TopWitness) -> Option<usize> {
     .min()
 }
 
-fn witness_entry_start(entry: &WitnessEntry) -> Option<usize> {
-    let term = match entry {
-        WitnessEntry::Use(term) => term,
-        WitnessEntry::Field(field) => &field.value,
-    };
-
-    term.span().map(|span| span.start)
+fn witness_entry_start(field: &WitnessField) -> Option<usize> {
+    field.value.span().map(|span| span.start)
 }
 
-/// A witness-body entry: a `use <term>` fill or an implementation field — `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
-fn print_witness_entry(entry: WitnessEntry) -> Printer {
-    let field = match entry {
-        WitnessEntry::Use(term) => return flat([pure("use "), print_term(term)]),
-        WitnessEntry::Field(field) => field,
-    };
-
+/// A witness-body entry, which is an implementation field — `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
+fn print_witness_entry(field: WitnessField) -> Printer {
     let start = member_start([&field.value]);
     match field.func_params {
         Some(params) => marked(start, || {

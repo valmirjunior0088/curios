@@ -574,7 +574,7 @@ fn function_field_sugar_round_trips() {
     for source in [
         "struct Api : pub Type { version : Nat, ping(x : Nat) -> Nat } u",
         "concept Ordered(A : Type) : Type { use Equal(A), cmp(A, A) -> Ordering } u",
-        "satisfy Ordered(Nat) { use eql_nat, cmp(a, b) = f(a, b) } u",
+        "let o : Ordered(Nat) = Ordered { use eql_nat, cmp(a, b) = f(a, b) }; u",
         "satisfy Ordered(Nat) { cmp(a, b) = f(a, b) } u",
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();

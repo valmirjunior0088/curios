@@ -226,7 +226,7 @@ module.exports = grammar({
 
     concept_field: ($) => choice(seq("use", field("type", $._term)), $.field_declaration),
 
-    // One witness, or a `satisfy C(A) { … } and D(B) { … }` group of witnesses that resolve through one another. A member's body is written `{ … }` or omitted as `;` — the derived form, whose body the compiler writes — and a group may mix the two.
+    // One witness, or a `satisfy C(A) { … } and D(B) { … }` group of witnesses that resolve through one another. A member's body is written `{ … }` or omitted as `;` — the derived form, whose body the compiler writes — and a group may mix the two. A written body holds implementation fields alone: a concept literal admits a `use <term>` fill for a superclass slot and a witness does not, since resolution fills it.
     satisfy_item: ($) =>
       seq("satisfy", $.satisfy_member, repeat(seq("and", $.satisfy_member))),
 
@@ -235,12 +235,10 @@ module.exports = grammar({
         optional(seq(field("parameters", $.parameters), "=>")),
         field("concept", $.path),
         optional(field("arguments", $.type_arguments)),
-        choice(seq("{", commaList($.witness_entry), "}"), ";"),
+        choice(seq("{", commaList($.field_definition), "}"), ";"),
       ),
 
     type_arguments: ($) => seq("(", commaList($._term), ")"),
-
-    witness_entry: ($) => choice(seq("use", $._term), $.field_definition),
 
     // `label = value` or the definition sugar `label(params) = value`.
     field_definition: ($) =>

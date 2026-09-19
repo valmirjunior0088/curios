@@ -26,27 +26,48 @@ fn use_entry_fills_a_concept_field_explicitly() {
     assert_eq!(run(source), b"false");
 }
 
-// A witness body is a concept literal, so `use <term>` fills its superclass field there too.
+// A witness body is not a concept literal in this one respect: it never writes a superclass slot. Written, the registered `Ord(Mine)` would carry an `Eql(Mine)` other than the registered one, and `==` on one type would answer `false` through the table and `true` through the witness's own projection — two implicit resolutions disagreeing, which is what global coherence exists to rule out. The refusal names the rule, so a fixture broken some other way cannot pass for it.
 #[test]
-fn use_entry_fills_a_witness_superclass() {
+fn a_witness_never_writes_its_superclass_slot() {
     let source = r#"
-        use /std/{Nat, Bool, Str, Ordering};
-        pub concept Eq3(A : Type) : pub Type {
-            eq3(A, A) -> Bool
+        use /std/{print, Str, Bool, Ord, Ordering};
+        use /std/ops/{Eql};
+        induct Mine: pub Type | a() | b() end
+        satisfy Eql(Mine);
+        let always: Eql(Mine) = Eql { eql(x, y) = true, neq(x, y) = false };
+        satisfy Ord(Mine) {
+            use always,
+            ord(x, y) = Ordering/eq(),
         }
-        pub concept Ord3(A : Type) : pub Type {
-            use Eq3(A),
-            cmp3(A, A) -> Ordering
-        }
-        satisfy Ord3(Nat) {
-            use Eq3 { eq3(a, b) = a == b },
-            cmp3(a, b) = Ordering/lt()
-        }
-        pub let same(@A : Type, use Ord3(A), x : A, y : A) -> Bool = Eq3/eq3(x, y);
-        /std/print(Bool/to_str(same(2, 2)))
+        print("no")
         "#;
 
-    assert_eq!(run(source), b"true");
+    let message = error(source);
+    assert!(
+        message.contains("a witness never writes a superclass slot"),
+        "got: {message}"
+    );
+}
+
+// The control, differing in the omitted slot alone: resolution fills it with the registered `Eql(Mine)`, so the table and the superclass projection of a local `Ord(A)` are one witness and answer alike.
+#[test]
+fn a_superclass_reads_alike_through_the_table_and_through_a_witness() {
+    let source = r#"
+        use /std/{print, Str, Bool, Ord, Ordering};
+        use /std/ops/{Eql};
+        induct Mine: pub Type | a() | b() end
+        satisfy Eql(Mine);
+        satisfy Ord(Mine) {
+            ord(x, y) = Ordering/eq(),
+        }
+        let via_table(x: Mine, y: Mine) -> Bool = x == y;
+        let via_super(@A: Type, use Ord(A), x: A, y: A) -> Bool = x == y;
+        print(Str/concat(
+            Bool/to_str(via_table(Mine/a(), Mine/b())),
+            Bool/to_str(via_super(Mine/a(), Mine/b()))))
+        "#;
+
+    assert_eq!(run(source), b"falsefalse");
 }
 
 // A superclass field is anonymous, so its concept's former field name is not a label: assigning it is a plain unknown-field error, with no special `use`-field diagnostic (`Equal`'s superclass is reached by resolution, never by name).
@@ -96,11 +117,11 @@ fn misplaced_use_entries_are_errors() {
         satisfy Eq5(Nat) {
             eq5(a, b) = a == b
         }
-        satisfy Ord5(Nat) {
+        let twice : Ord5(Nat) = Ord5 {
             use Eq5 { eq5(a, b) = a == b },
             use Eq5 { eq5(a, b) = a == b },
             cmp5(a, b) = Ordering/lt()
-        }
+        };
         /std/print("no")
         "#;
     assert!(error(surplus).contains("'use' entr"));

@@ -1069,11 +1069,13 @@ A tuple shape is owned by no root, as an intrinsic type former is, so a tuple-ke
 
 ### Superclass fields in literals
 
-A concept's superclass fields remain positional slots in concept values and witness bodies. Omitting one asks witness resolution to fill it. `use value` fills the next superclass slot explicitly.
+A concept's superclass fields remain positional slots in a concept value. Omitting one asks witness resolution to fill it, and in a concept literal `use value` fills the next superclass slot explicitly.
 
 ```crs
 Ord { use custom_eql, ord(a, b) = reversed(a, b) }
 ```
+
+A witness body never writes one: a `use` entry in a `satisfy` is refused by name, so resolution fills every superclass slot of a registered witness, and the `Eql(A)` reached through a local `Ord(A)` is the one the table holds ([Concepts resolve with global coherence](design/language/concepts-resolve-with-global-coherence.md)).
 
 In a structure update, a spread copies superclass fields from the base. An explicit `use value` after the spread replaces the corresponding slot.
 
@@ -1140,7 +1142,7 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `--- ` | Documentation comment, attached to the declaration below it |
 | `{}` / `()` | Unit type / unit value |
 | `@A: Type` / `@value` | Implicit binder / explicitly supplied implicit argument |
-| `use C(A)` / `use value` | Witness binder / explicitly supplied witness argument or superclass field |
+| `use C(A)` / `use value` | Witness binder / explicitly supplied witness argument, or superclass field of a concept literal |
 | `?` | Written goal — reports scope, type and fits, then fails compilation |
 | `term!` | Monadic bind through `Monad`, lifting a cross-monad action through `Lift` |
 | `"""` … `"""` | Block string literal — the lines between the delimiters, their shared indentation removed |

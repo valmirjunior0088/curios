@@ -83,12 +83,28 @@ fn concept_out_marker_is_rejected() {
     assert!(source.parse::<Entrypoint>().is_err());
 }
 
+/// A concept literal admits a `use <term>` fill and a witness body does not, so the word is refused by name there rather than read as a missing label — and the literal beside it, with the same fill, still parses.
+#[test]
+fn a_witness_body_refuses_a_superclass_fill_by_name() {
+    let report = "satisfy Ordered(Nat) { use eql_nat, cmp(a, b) = f(a, b) } u"
+        .parse::<Entrypoint>()
+        .unwrap_err()
+        .format();
+    assert!(
+        report.contains("a witness never writes a superclass slot"),
+        "{report}"
+    );
+
+    "let o : Ordered(Nat) = Ordered { use eql_nat, cmp(a, b) = f(a, b) }; u"
+        .parse::<Entrypoint>()
+        .expect("a concept literal keeps its fill");
+}
+
 #[test]
 fn parse_witness_item() {
-    // A premised witness: an `@` binder, a `use` premise, an explicit `use <term>` fill for the concept's superclass field, and the definition sugar (`cmp(a, b) = ...`).
+    // A premised witness: an `@` binder, a `use` premise, and the definition sugar (`cmp(a, b) = ...`).
     let source = "\
         satisfy (@A : Type, use Ordered(A)) => Ordered(List(A)) { \
-            use eql_list, \
             cmp(a, b) = Ordering/lt() \
         } u";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
@@ -105,16 +121,10 @@ fn parse_witness_item() {
     assert_eq!(witness.params[0].plicity, Plicity::Implicit);
     assert_eq!(witness.params[1].plicity, Plicity::Witness);
 
-    // The definition-sugar field keeps its written parameter list; the value slot holds the body, and only the struct-literal lowering builds the lambda (via `TupleField::desugared_value`). The `use eql_list` entry fills the concept's `use`-marked field without naming it.
-    let entries = witness.body.as_ref().expect("a written body");
-    assert_eq!(entries.len(), 2);
-    let WitnessEntry::Use(fill) = &entries[0] else {
-        panic!("expected a use fill");
-    };
-    assert!(matches!(fill.as_subterm(), Subterm::Name(_)));
-    let WitnessEntry::Field(cmp) = &entries[1] else {
-        panic!("expected an implementation field");
-    };
+    // The definition-sugar field keeps its written parameter list; the value slot holds the body, and only the struct-literal lowering builds the lambda (via `TupleField::desugared_value`). The concept's `use`-marked field has no entry: a witness leaves it to resolution.
+    let fields = witness.body.as_ref().expect("a written body");
+    assert_eq!(fields.len(), 1);
+    let cmp = &fields[0];
     assert_eq!(cmp.label, "cmp");
     let params = cmp.func_params.as_ref().unwrap();
     assert_eq!(params.len(), 2);

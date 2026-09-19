@@ -440,20 +440,19 @@ and (@B: Type) => Show(B) {
       (type_arguments
         (path
           (identifier)))
-      (witness_entry
-        (field_definition
-          (identifier)
-          (sugar_parameters
-            (sugar_parameter
-              (identifier)))
-          (call
-            (path
-              (identifier)
-              (identifier))
-            (arguments
-              (argument
-                (path
-                  (identifier))))))))
+      (field_definition
+        (identifier)
+        (sugar_parameters
+          (sugar_parameter
+            (identifier)))
+        (call
+          (path
+            (identifier)
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier)))))))
     (satisfy_member
       (parameters
         (parameter
@@ -464,20 +463,19 @@ and (@B: Type) => Show(B) {
       (type_arguments
         (path
           (identifier)))
-      (witness_entry
-        (field_definition
-          (identifier)
-          (sugar_parameters
-            (sugar_parameter
-              (identifier)))
-          (call
-            (path
-              (identifier)
-              (identifier))
-            (arguments
-              (argument
-                (path
-                  (identifier))))))))))
+      (field_definition
+        (identifier)
+        (sugar_parameters
+          (sugar_parameter
+            (identifier)))
+        (call
+          (path
+            (identifier)
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier)))))))))
 
 ================================================================================
 Witnesses, bare and parameterized
@@ -487,7 +485,6 @@ satisfy Show(Nat) {
     show(n) = Nat/to_str(n),
 }
 satisfy (@A: Type, use Show(A)) => Show(List(A)) {
-    use custom,
     show = show_list,
     Ok(b) = Nat/Lt(0, b),
 }
@@ -502,20 +499,19 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
       (type_arguments
         (path
           (identifier)))
-      (witness_entry
-        (field_definition
-          (identifier)
-          (sugar_parameters
-            (sugar_parameter
-              (identifier)))
-          (call
-            (path
-              (identifier)
-              (identifier))
-            (arguments
-              (argument
-                (path
-                  (identifier)))))))))
+      (field_definition
+        (identifier)
+        (sugar_parameters
+          (sugar_parameter
+            (identifier)))
+        (call
+          (path
+            (identifier)
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier))))))))
   (satisfy_item
     (satisfy_member
       (parameters
@@ -540,30 +536,25 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
             (argument
               (path
                 (identifier))))))
-      (witness_entry
+      (field_definition
+        (identifier)
         (path
           (identifier)))
-      (witness_entry
-        (field_definition
-          (identifier)
+      (field_definition
+        (identifier)
+        (sugar_parameters
+          (sugar_parameter
+            (identifier)))
+        (call
           (path
-            (identifier))))
-      (witness_entry
-        (field_definition
-          (identifier)
-          (sugar_parameters
-            (sugar_parameter
-              (identifier)))
-          (call
-            (path
-              (identifier)
-              (identifier))
-            (arguments
-              (argument
-                (number))
-              (argument
-                (path
-                  (identifier))))))))))
+            (identifier)
+            (identifier))
+          (arguments
+            (argument
+              (number))
+            (argument
+              (path
+                (identifier)))))))))
 
 ================================================================================
 An annotated top-level let is an item even when a term follows
@@ -690,21 +681,20 @@ and Equal(Point) {
       (type_arguments
         (path
           (identifier)))
-      (witness_entry
-        (field_definition
-          (identifier)
-          (sugar_parameters
-            (sugar_parameter
-              (identifier))
-            (sugar_parameter
-              (identifier)))
-          (call
-            (path
-              (identifier))
-            (arguments
-              (argument
-                (path
-                  (identifier)))
-              (argument
-                (path
-                  (identifier))))))))))
+      (field_definition
+        (identifier)
+        (sugar_parameters
+          (sugar_parameter
+            (identifier))
+          (sugar_parameter
+            (identifier)))
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier)))
+            (argument
+              (path
+                (identifier)))))))))

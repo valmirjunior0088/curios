@@ -1266,24 +1266,19 @@ fn process_items(
 
                         let concept_app =
                             witness_concept_application(&witness.concept, &witness.args);
-                        // A written body is the concept literal; a body-less one is the `Derive` transient, spanned at the concept application so a refusal lands on the declaration. Either way the telescope below wraps it identically.
+                        // A written body is the concept literal over its fields alone, so every `use`-marked position is left to resolution; a body-less one is the `Derive` transient, spanned at the concept application so a refusal lands on the declaration. Either way the telescope below wraps it identically.
                         let body: Term = match &witness.body {
-                            Some(entries) => Subterm::StructLit(StructLit {
+                            Some(fields) => Subterm::StructLit(StructLit {
                                 head: witness.concept.clone(),
                                 params: witness.args.clone(),
-                                entries: entries
+                                entries: fields
                                     .iter()
-                                    .map(|entry| match entry {
-                                        WitnessEntry::Field(field) => {
-                                            StructLitEntry::Field(TupleField {
-                                                label: Some(field.label.clone()),
-                                                func_params: field.func_params.clone(),
-                                                value: field.value.clone(),
-                                            })
-                                        }
-                                        WitnessEntry::Use(term) => {
-                                            StructLitEntry::Use(term.clone())
-                                        }
+                                    .map(|field| {
+                                        StructLitEntry::Field(TupleField {
+                                            label: Some(field.label.clone()),
+                                            func_params: field.func_params.clone(),
+                                            value: field.value.clone(),
+                                        })
                                     })
                                     .collect(),
                             })
