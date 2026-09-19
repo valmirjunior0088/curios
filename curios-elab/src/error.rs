@@ -1437,10 +1437,15 @@ impl Error {
     }
 
     /// The innermost span stamped on this error, looking through both wrappers.
+    ///
+    /// A universe inconsistency carries its own, from the first constraint on the path that knows where it came from: nothing stamps one on the way out, because the solve that finds the cycle runs after the terms that forced it have been checked and left behind.
     fn innermost_span(&self) -> Option<&Span> {
         match self {
             Self::Located { span, error } => error.innermost_span().or(Some(span)),
             Self::InDeclaration { error, .. } => error.innermost_span(),
+            Self::UniverseInconsistency { path, .. } => {
+                path.iter().find_map(|origin| origin.span.as_ref())
+            }
             _ => None,
         }
     }

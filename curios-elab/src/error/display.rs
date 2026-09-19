@@ -8,9 +8,9 @@ mod tests;
 use {
     super::{Callee, Erased, Error, GoalReport, ShapeDiagnosis, Underivable, WitnessKey},
     crate::ordinal,
-    curios_core::{CalleeId, Free, Spelling, Subterm, Term},
+    curios_core::{CalleeId, Free, Level, Spelling, Subterm, Term, UniverseMetaId},
     curios_utilities::{Grain, Plicity, Qualifier},
-    std::{fmt, rc::Rc},
+    std::{collections::HashMap, fmt, rc::Rc},
 };
 
 /// Whether a goal-scope binder is unnameable — a hintless local no written expression can reference. Its scope line spells `_` the way source does, instead of the synthesized name the rename map would mint for it.
@@ -79,6 +79,34 @@ fn key_noun(key: &WitnessKey) -> &'static str {
         1 => "head",
         _ => "key",
     }
+}
+
+/// One short name per level metavariable the message shows, numbered in the order the reader meets them.
+///
+/// A metavariable's own id counts every level the unit has invented, so the same two-line program reports `?u784` on one day and `?u791` on the next. The reader needs only to see which occurrences are the *same* level, which is what numbering within the message gives, and what makes the message something a fixture can asservate on.
+fn level_meta_names<'a>(
+    levels: impl IntoIterator<Item = &'a Level>,
+) -> HashMap<UniverseMetaId, String> {
+    let mut names = HashMap::new();
+    for level in levels {
+        for meta in level.metas() {
+            let next = names.len() + 1;
+            names.entry(meta).or_insert_with(|| format!("?u{next}"));
+        }
+    }
+    names
+}
+
+/// A level under those names, the rest of its spelling left to [`Level`]'s own.
+fn renamed_level(level: &Level, names: &HashMap<UniverseMetaId, String>) -> String {
+    let mut text = level.to_string();
+    // Longest first: `?u12` contains `?u1`, and replacing the shorter one first would leave `?u1` followed by a stray `2`.
+    let mut metas = names.iter().collect::<Vec<_>>();
+    metas.sort_by_key(|(meta, _)| std::cmp::Reverse(meta.to_string().len()));
+    for (meta, name) in metas {
+        text = text.replace(&meta.to_string(), name);
+    }
+    text
 }
 
 /// A name spelled under the names in scope: a global meets the shorten map and the unit's import spellings, a local binder is already the name the reader wrote, so neither can surface a path no program may write.
@@ -214,15 +242,19 @@ impl fmt::Display for Displayed<'_> {
                     "an action of one monad where another is expected\n  action: {action}\n  expected: {expected}\n  an action is embedded through the declared Lift witness when its monad can be read from its head's declaration\n  write lift(action) to embed this one explicitly; that resolves the witness, or reports the edge to declare"
                 )
             }
-            Error::UniverseInconsistency { lower, upper, path } => {
+            Error::UniverseInconsistency { lower, upper, .. } => {
+                let names = level_meta_names([lower, upper]);
                 write!(
                     f,
-                    "this Type would need to be strictly below itself\n  required constraint: {lower} ≤ {upper}"
+                    "this Type would need to be strictly below itself\n  required constraint: {} ≤ {}",
+                    renamed_level(lower, &names),
+                    renamed_level(upper, &names),
                 )?;
-                if path.len() > 1 {
-                    write!(f, "\n  inconsistency path has {} steps", path.len())?;
-                }
-                Ok(())
+
+                write!(
+                    f,
+                    "\n  levels are inferred and there is no syntax for one, so this cannot be annotated away\n  a local definition used at two levels is generalized only at the top level, and a recursive group is monomorphic in its own levels — so a member used by a sibling at a level above its own has to be declared apart from it",
+                )
             }
             Error::UniverseInvariant(message) => {
                 write!(f, "invalid inferred universe state: {message}")

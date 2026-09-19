@@ -4,6 +4,8 @@
 //!
 //! A surface program reaches `UniverseInconsistency`, and three fixtures hold where. What a program cannot do is force two *occurrences of a name* to share a level: a declaration generalizes over the levels its *interface* carries, so a self-reference like `Box/wrap(Box)` instantiates `Box` at two different levels and is admitted — correctly, since that is stratification working — and `syntax.md` gives no syntax for universe variables or explicit arguments. A bound variable and the type that binds it are another matter: they share a level by construction, and a level a declaration carries only in its body is minimized rather than generalized, so `let U: Type = (X: Type, …) -> …` fixes `X` one level below `U`, and instantiating `X` at `U` itself asks for a level strictly below itself. `a_type_quantifying_over_types_cannot_be_instantiated_at_itself` is that refusal alone, `the_self_application_girards_paradox_needs_is_refused` is the paradox's own shape, refused at the same instantiation, and `the_same_quantifier_instantiates_at_a_type_below_it` is the control. Stratification itself is covered at unit level by `a_polymorphic_definition_instantiates_at_prop_and_type`, which pins `id(Prop)` to level 1 and `id(Type)` to level 2.
 //!
+//! **Nor need the program be a paradox.** Two more shapes reach the same refusal from ordinary code, because generalization is a privilege of the top level and a group is monomorphic in its own levels: a *local* definition applied to itself, and a member of a recursive group called at a level above the group's. The last two fixtures here are those, each with the control admitted once the definition is hoisted or the group split, and what they assert is the *advice* — levels have no syntax, so a user who meets this has nothing to annotate and needs the message to say what to write instead.
+//!
 //! "Interface" is load-bearing in that sentence and is what `a_body_carried_level_is_minimized_rather_than_generalized` pins: the levels reachable only through a body are *minimized* instead, so the set of declarations a use site can instantiate at two levels is narrower than "every declaration".
 
 use {
@@ -258,5 +260,73 @@ fn a_rec_result_sort_level_is_minimized_like_a_let_s() {
         parameters.get("/count_self"),
         Some(&0),
         "the recursive proof's family level was generalized: {parameters:?}",
+    );
+}
+
+// **An honest program that reaches the refusal, and what the message owes it.** The header above leaves open whether any surface program can, and two can: a *local* polymorphic definition applied to itself, and a recursive call at a level above its group's own. Neither is a paradox — the top-level twin of the first is admitted below, and stratification is what refuses them — so each is a program a user can write by accident and has no way to annotate out of, levels having no syntax.
+//
+// What these assert is therefore the *advice* rather than the refusal alone. The message used to print the constraint and a step count, so a reader met `?u784+1 ≤ ?u784` with nothing to do about it; it now carries the span the constraint came from, a level numbering local to the message, and the two facts that decide what to write instead. The raw metavariable id counts every level the unit has invented and moves with an edit anywhere, which is why the numbering exists and why a fixture may assert on it at all.
+#[test]
+fn a_local_polymorphic_definition_applied_to_itself_is_refused_with_its_remedy() {
+    let source = r#"
+        use /std/{Nat};
+
+        let self_applied: (@A: Type, x: A) -> A =
+            let id(@A: Type, x: A) -> A = x;
+            id(id);
+
+        /std/print(Nat/to_str(self_applied(1)))
+        "#;
+
+    let message = error(source);
+    assert!(
+        message.contains("this Type would need to be strictly below itself"),
+        "{message}"
+    );
+    assert!(
+        message.contains("required constraint: ?u1+1 ≤ ?u1"),
+        "the message numbers its levels within itself:\n{message}"
+    );
+    assert!(
+        message.contains("generalized only at the top level"),
+        "the message says what to write instead:\n{message}"
+    );
+}
+
+// The control, and the reason the refusal above is about *locality* rather than about self-application: hoisted to the top level, `id` generalizes over the level its interface carries, the two occurrences instantiate it at their own, and the program runs.
+#[test]
+fn the_same_definition_at_the_top_level_is_admitted() {
+    let source = r#"
+        use /std/{Nat};
+
+        let id(@A: Type, x: A) -> A = x;
+        let self_applied: (@A: Type, x: A) -> A = id(id);
+
+        /std/print(Nat/to_str(self_applied(1)))
+        "#;
+
+    assert_eq!(run(source), b"1");
+}
+
+// The second shape: a recursive call at a level above its group's own. `depth` calls itself at `A := Type`, and a group is monomorphic in its universes, so the call needs the group's own level strictly above itself. The remedy clause names that case too — there is no annotation, and what the sibling needs has to be a declaration apart from the one needing it.
+#[test]
+fn a_recursive_call_a_level_above_its_group_is_refused_with_its_remedy() {
+    let source = r#"
+        use /std/{Nat};
+
+        let depth(@A: Type, n: Nat, x: A) -> Nat =
+            match n | 0 => 0 | k + 1 => depth(@Type, k, A) + 1 end;
+
+        /std/print(Nat/to_str(depth(0, 1)))
+        "#;
+
+    let message = error(source);
+    assert!(
+        message.contains("this Type would need to be strictly below itself"),
+        "{message}"
+    );
+    assert!(
+        message.contains("monomorphic in its own levels"),
+        "the message names the group rule:\n{message}"
     );
 }
