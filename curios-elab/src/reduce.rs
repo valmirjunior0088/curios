@@ -10,7 +10,7 @@ mod reduction_tests;
 pub(crate) mod test_support;
 
 use {
-    super::{Context, zonk_solved_term_metas},
+    super::{Context, levels_clash_on_a_decided_instance, zonk_solved_term_metas},
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid,
         Func, FuncType, Global, HeadTag, InductDecl, InductType, Instance, InstanceHead, Intrinsic,
@@ -672,7 +672,7 @@ fn refined_dual(context: &Context, term: &Term) -> Option<Term> {
         return None;
     }
     let literal = context
-        .scrutinee_reduct(&shallow_scrutinee(context, &dual))?
+        .scrutinee_reduct(&shallow_scrutinee(context, &dual), &dual)?
         .as_bool()?;
     Some(Term::intrinsic(Intrinsic::Bool(!literal)))
 }
@@ -687,7 +687,7 @@ fn refined_successor(context: &Context, term: &Term) -> Option<Term> {
         return None;
     }
     let literal = context
-        .scrutinee_reduct(&shallow_scrutinee(context, &spelling))?
+        .scrutinee_reduct(&shallow_scrutinee(context, &spelling), &spelling)?
         .as_bool()?;
     Some(Term::intrinsic(Intrinsic::Bool(literal)))
 }
@@ -740,7 +740,7 @@ fn refined_by_spelling(
     }
 
     let shallow = shallow_scrutinee(context, probe);
-    if let Some(value) = context.scrutinee_reduct(&shallow) {
+    if let Some(value) = context.scrutinee_reduct(&shallow, probe) {
         return Ok(Some(value.clone()));
     }
 
@@ -750,7 +750,9 @@ fn refined_by_spelling(
     }
     let canonical = canonical_scrutinee(context, probe)?;
     for (key, entry) in entries {
-        if canonical_key(context, &key, &entry.original)? == canonical {
+        if canonical_key(context, &key, &entry.original)? == canonical
+            && !levels_clash_on_a_decided_instance(context, probe, &entry.original)?
+        {
             return Ok(Some(entry.value));
         }
     }
@@ -809,7 +811,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
             {
                 let shallow = shallow_scrutinee(context, &term);
 
-                if let Some(value) = context.scrutinee_reduct(&shallow) {
+                if let Some(value) = context.scrutinee_reduct(&shallow, &term) {
                     // A key a suppressed frame withholds answers `None` here, so this serves only what is live — the caller's own arm outside a re-validation, and the validated term's own arms within one.
                     break 'step Reduce::Continue(value.clone());
                 } else if context.refinements_suppressed() {
@@ -825,7 +827,13 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                         let canonical = canonical_scrutinee(context, &term)?;
 
                         for (key, entry) in candidates {
-                            if canonical_key(context, &key, &entry.original)? == canonical {
+                            if canonical_key(context, &key, &entry.original)? == canonical
+                                && !levels_clash_on_a_decided_instance(
+                                    context,
+                                    &term,
+                                    &entry.original,
+                                )?
+                            {
                                 break 'step Reduce::Continue(entry.value);
                             }
                         }

@@ -412,13 +412,14 @@ impl Frames {
             .collect()
     }
 
-    /// The reduct of a canonical stuck scrutinee: its refinement value, from the frames suppression does not withhold (re-validation).
-    pub(crate) fn scrutinee_reduct(&self, canonical: &Term) -> Option<&Term> {
+    /// The entry a canonical stuck scrutinee is registered under, from the frames suppression does not withhold (re-validation).
+    ///
+    /// The whole entry rather than its value, because the read above this one needs the `original` beside it: the key is universes-erased and cannot decide an instance, so [`Context::scrutinee_reduct`](crate::Context) compares the unerased spellings and declines where they disagree on one both sides have decided.
+    pub(crate) fn scrutinee_entry(&self, canonical: &Term) -> Option<&ScrutineeEntry> {
         self.refinement_scrutinees[self.refinement_floor()..]
             .iter()
             .rev()
             .find_map(|f| f.get(canonical))
-            .map(|entry| &entry.value)
     }
 
     /// Whether `canonical` is itself a registered scrutinee key — checked *past* suppression. A `Var`/`Proj` key stays neutral under suppression for free (its reduct is withheld, so it does not unfold); an application key would otherwise unfold to its definition body and stop being a key. The reducer consults this to keep such a key neutral while suppressed, so `solve_refinement_free`'s committed (refinement-free) spelling stays a term the live refinement can still fire on.

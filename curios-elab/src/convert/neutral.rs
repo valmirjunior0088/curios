@@ -20,12 +20,58 @@ pub(super) fn identify_universe_levels(
     this: &Term,
     that: &Term,
 ) -> Result<Identification, ReduceError> {
-    // One traversal per side, shared with the kernel: every level collected with its universe-binder depth, a ground `Type 0` included, and replaced by a sentinel — the skeletons then compare equal exactly when the sides differ in nothing but levels, and that equality is what aligns the two collections positionally. A universes-only walk skipped the `Type 0`, which once aligned `(Type 0, Type u)` with `(Type u, Type 0)` on one level paired with itself.
+    let pending = match align_universe_levels(context, this, that)? {
+        Alignment::Pending(pending) => pending,
+        Alignment::Distinct => return Ok(Identification::Distinct),
+        Alignment::UnderBinder => return Ok(Identification::UnderBinder),
+        Alignment::GroundUnequal => return Ok(Identification::GroundUnequal),
+    };
+
+    for (this_level, that_level) in pending {
+        context
+            .universes_mut()
+            .add_eq(
+                this_level,
+                that_level,
+                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+            )
+            .map_err(ReduceError::Universe)?;
+    }
+
+    Ok(Identification::Identified)
+}
+
+/// Whether two spellings of one term disagree on a level that is already *decided* on both sides.
+///
+/// The refusing half of [`align_universe_levels`], and the one a *store* can use. Conversion answers its question by committing the differing pairs equal, which is licensed because a goal asked it; a refinement probe is a search over candidate keys, and committing a universe equality on the strength of a speculative match would constrain the declaration from a lookup. This commits nothing and only ever declines, so it is safe to ask wherever a key has already matched.
+///
+/// `false` for everything that is not a decided disagreement — sides differing in more than levels, a pair under a universe binder, a pair either of whose sides is still undecided. That is deliberate and is what keeps the answer the *refusing* direction only: an undecided level may yet be solved either way, and collapsing those is exactly what the refinement key is for.
+pub(crate) fn levels_clash_on_a_decided_instance(
+    context: &Context,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, ReduceError> {
+    Ok(matches!(
+        align_universe_levels(context, this, that)?,
+        Alignment::GroundUnequal
+    ))
+}
+
+/// Align two spellings' levels positionally and classify the first pair that decides the question, committing nothing.
+///
+/// One traversal per side, shared with the kernel: every level collected with its universe-binder depth, a ground `Type 0` included, and replaced by a sentinel — the skeletons then compare equal exactly when the sides differ in nothing but levels, and that equality is what aligns the two collections positionally. A universes-only walk skipped the `Type 0`, which once aligned `(Type 0, Type u)` with `(Type u, Type 0)` on one level paired with itself.
+///
+/// Every pair is checked before any verdict that would insert, because a decline that had already inserted would not be a fall-through — which is why the commitment lives in [`identify_universe_levels`] and the walk here hands back what it *would* commit.
+fn align_universe_levels(
+    context: &Context,
+    this: &Term,
+    that: &Term,
+) -> Result<Alignment, ReduceError> {
     let (this_stripped, this_levels) = strip_universe_levels(this);
     let (that_stripped, that_levels) = strip_universe_levels(that);
 
     if this_stripped != that_stripped || this_levels.len() != that_levels.len() {
-        return Ok(Identification::Distinct);
+        return Ok(Alignment::Distinct);
     }
 
     let mut pending = Vec::new();
@@ -35,7 +81,7 @@ pub(super) fn identify_universe_levels(
             continue;
         }
         if *this_depth > 0 || *that_depth > 0 {
-            return Ok(Identification::UnderBinder);
+            return Ok(Alignment::UnderBinder);
         }
 
         let this_level = context
@@ -50,24 +96,22 @@ pub(super) fn identify_universe_levels(
             continue;
         }
         if this_level.atoms.is_empty() && that_level.atoms.is_empty() {
-            return Ok(Identification::GroundUnequal);
+            return Ok(Alignment::GroundUnequal);
         }
 
         pending.push((this_level, that_level));
     }
 
-    for (this_level, that_level) in pending {
-        context
-            .universes_mut()
-            .add_eq(
-                this_level,
-                that_level,
-                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
-            )
-            .map_err(ReduceError::Universe)?;
-    }
+    Ok(Alignment::Pending(pending))
+}
 
-    Ok(Identification::Identified)
+/// What [`align_universe_levels`] found, before anybody decides what to do about it.
+enum Alignment {
+    Distinct,
+    UnderBinder,
+    GroundUnequal,
+    /// The sides differ in levels alone, and these are the zonked pairs a commitment would have to join.
+    Pending(Vec<(Level, Level)>),
 }
 
 /// What [`identify_universe_levels`] found: the sides are one term now that their levels are committed equal; they differ in more than levels; a differing pair is two unequal ground levels, which no commitment can join; or a differing pair sits under a universe binder, whose bound parameters the ambient solver cannot constrain.

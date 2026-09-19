@@ -978,8 +978,18 @@ impl Context {
         self.frames.scrutinee_head_refined(head)
     }
 
-    pub(crate) fn scrutinee_reduct(&self, canonical: &Term) -> Option<&Term> {
-        self.frames.scrutinee_reduct(canonical)
+    /// [`Frames::scrutinee_reduct`], declined where `probe` and the spelling the equation was registered on disagree on a universe instance both sides have already decided.
+    ///
+    /// **The guard is in the accessor, so no unguarded read of the store exists.** The key cannot carry this test: it is computed when an arm is entered, which is before the levels in it are solved, and it is then compared for as long as the arm stands. `documentation/soundness/what-the-kernel-consults/the-refinement-key.md`'s "concrete levels kept apart, undecided ones collapsed" therefore describes a *comparison* rather than a key, and this is the one step that happens after solving. The kernel needs none of it because it is handed a zonked module, where every instance is already ground and keying on the scrutinee itself is exact.
+    ///
+    /// A universe error declines too. That is the same direction the whole guard moves in — fewer refinements fire, never more — so it can cost a reduction and never admit one.
+    pub(crate) fn scrutinee_reduct(&self, canonical: &Term, probe: &Term) -> Option<&Term> {
+        let entry = self.frames.scrutinee_entry(canonical)?;
+
+        match crate::levels_clash_on_a_decided_instance(self, probe, &entry.original) {
+            Ok(false) => Some(&entry.value),
+            Ok(true) | Err(_) => None,
+        }
     }
 
     pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, ScrutineeEntry)> {

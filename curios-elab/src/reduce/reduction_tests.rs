@@ -716,6 +716,24 @@ fn scrutinee_refinement_ignores_fresh_universe_instances() {
     assert_eq!(reduce(&mut context, probe), Ok(nat(1)));
 }
 
+/// The pair the key must keep apart, and the one it does not: two occurrences of one definition at *ground* instances.
+///
+/// A fresh instance is undecided and collapses — the test above is that rule, and it is what the prelude needs — but `Type u` embeds a level in a *term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two ground instances. Erasing the instance identifies them, and the arm's equation then refines a stuck term it was never shown to be about. The kernel refuses the coercion this forges (`curios-cert`'s `recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`, over the whole module); this is the elaborator's own store, asked directly.
+///
+/// The probe is checker-level rather than a source program on purpose: the pair has no surface spelling, because `UniverseSolver::finalize` minimizes a body-only level to a constant instead of generalizing it.
+#[test]
+fn scrutinee_refinement_does_not_fire_at_another_ground_universe_instance() {
+    let mut context = context();
+    let classify = context.fresh(Some("classify"));
+    let at = |level: Level| Term::apply(Term::instance_of(&classify, vec![level]), [nat(0)]);
+    let registered = at(Level::zero());
+    let probe = at(Level::zero().succ().expect("level zero has a successor"));
+    let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
+    context.refine_scrutinee(canonical, registered, nat(1));
+
+    assert_eq!(reduce(&mut context, probe.clone()), Ok(probe));
+}
+
 #[test]
 fn projection_refinement_ignores_fresh_universe_instances() {
     let mut context = context();
