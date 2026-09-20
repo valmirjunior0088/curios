@@ -29,7 +29,10 @@ use {
     curios_document::write_documentation,
     curios_package::{Entry, Governing, Spelling, Store, curate, declared_modules, scaffold},
     curios_pipeline::CompileError,
-    curios_runtime::{DeclaredModule, ForeignBindings, OsHost, plugin_bindings, run_bytes},
+    curios_runtime::{
+        Bundle, BundledPlugin, DeclaredModule, ForeignBindings, ModuleBytes, OsHost,
+        plugin_bindings, precompile, run_bytes,
+    },
     curios_text::Formatted,
     curios_utilities::Source,
     curios_wonder::{
@@ -37,7 +40,7 @@ use {
         wonder_stage, wonder_tests,
     },
     std::{
-        collections::BTreeSet,
+        collections::{BTreeMap, BTreeSet},
         ffi::OsString,
         fs, io, iter,
         path::Path,
@@ -105,14 +108,26 @@ impl From<CompileError> for Failure {
     }
 }
 
-/// The `ffi`-tier bindings a program needs, from the `[[foreign]]` rows its package graph declares.
+/// One `[[foreign]]` row resolved: what declared it, which declarations its exports answer, and the module's own bytes.
+///
+/// Deliberately not a [`DeclaredModule`], which carries a [`ModuleBytes`] whose provenance its consumer decides — `run` and `test` link these as source, `compile` precompiles them first. A type that had already chosen would make one of the two unwrap what the other had just wrapped.
+struct ResolvedModule {
+    package: String,
+    name: String,
+    exports: BTreeMap<String, String>,
+    bytes: Vec<u8>,
+}
+
+/// The modules a program's package graph declares for the `foreign` declarations it holds, each already accepted against the hash its row pins.
 ///
 /// **Nothing is read for a program that declares no `foreign`**, which is very nearly all of them: an empty store short-circuits before any manifest is walked or any module opened, so the common case pays one check.
 ///
 /// A loose program is refused rather than left to fail at link: it has no manifest, so there is nowhere for it to say what implements what. The refusal says that, where `no host implementation registered for ffi./x` said only that nobody had.
-fn bindings_of(root: Option<&Path>, foreigns: ForeignStore) -> Result<ForeignBindings, String> {
+///
+/// Shared by the two consumers that want these for different ends, so what a bundled executable ships and what `curios run` links cannot differ by having read the manifest twice.
+fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<ResolvedModule>, String> {
     if foreigns.iter().next().is_none() {
-        return Ok(ForeignBindings::empty());
+        return Ok(Vec::new());
     }
 
     let Some(root) = root else {
@@ -123,17 +138,35 @@ fn bindings_of(root: Option<&Path>, foreigns: ForeignStore) -> Result<ForeignBin
 
     let governing = Governing::of(root)?;
     let store = governing.store();
-    let declared = declared_modules(&governing)?
+
+    declared_modules(&governing)?
         .into_iter()
         .map(|(package, directory, foreign)| {
-            Ok(DeclaredModule {
+            Ok(ResolvedModule {
                 package,
                 bytes: foreign.bytes(&directory, &store)?,
                 name: foreign.name,
                 exports: foreign.exports,
             })
         })
-        .collect::<Result<Vec<_>, String>>()?;
+        .collect()
+}
+
+/// The `ffi`-tier bindings a program needs, linking each declared module in this process.
+fn bindings_of(root: Option<&Path>, foreigns: ForeignStore) -> Result<ForeignBindings, String> {
+    if foreigns.iter().next().is_none() {
+        return Ok(ForeignBindings::empty());
+    }
+
+    let declared = modules_of(root, &foreigns)?
+        .into_iter()
+        .map(|module| DeclaredModule {
+            package: module.package,
+            name: module.name,
+            exports: module.exports,
+            bytes: ModuleBytes::Source(module.bytes),
+        })
+        .collect();
 
     plugin_bindings(foreigns, declared)
 }
@@ -245,6 +278,8 @@ fn dispatch() -> Result<(), Failure> {
             let store = program
                 .home()
                 .and_then(|home| contract.access.filed(&home.root));
+            // Kept before the program is consumed: resolving the declared modules needs the governing root, and `payload_of` takes the program by value.
+            let root = program.home().map(|home| home.root.clone());
 
             // `-o` can name the entry itself. Refuse before compiling rather than destroy the source.
             if let Entry::File(entry) = program.entry()
@@ -260,14 +295,27 @@ fn dispatch() -> Result<(), Failure> {
             let started = Instant::now();
             let (cwasm, foreigns) = payload_of(elaboration.budget, program, store)?;
 
-            // The bundle carries one payload, so a program whose `foreign` declarations are answered by modules has nowhere to put them: the executable would build and then fail to link, away from the machine that built it. Refused where that is still legible.
-            if foreigns.iter().next().is_some() {
-                return Err(Failure::Error(
-                    "a program declaring `foreign` cannot be compiled to an executable yet: the modules answering it would not travel with the payload. Run it with `curios run`".to_string(),
-                ));
-            }
+            // Compiled here, where Cranelift is, so the launcher only ever deserializes: that is what lets a program declaring `foreign` reach a machine with no compiler, no manifest and no sources, carrying the modules answering it inside its own image.
+            let plugins = modules_of(root.as_deref(), &foreigns)?
+                .into_iter()
+                .map(|module| {
+                    Ok(BundledPlugin {
+                        package: module.package,
+                        name: module.name,
+                        exports: module.exports,
+                        payload: precompile(&module.bytes)?,
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()?;
 
-            emit_exe(&cwasm, &output)?;
+            emit_exe(
+                &Bundle {
+                    program: cwasm,
+                    foreigns,
+                    plugins,
+                },
+                &output,
+            )?;
 
             // Where it landed rather than what it was called: that is the one fact a finished build is read for, and the group above already named the target twice. The time is the whole invocation's, payload and emission both, so it is measured here rather than by the line.
             let mut line = Line::open(Heading::Finished, &Subject::File(output));

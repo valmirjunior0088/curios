@@ -1,18 +1,18 @@
-//! Emitting a self-contained native executable: the embedded slim launcher with the program's `.cwasm` payload appended. The trailing footer layout lives in `curios_runtime::bundle` (shared with the launcher that recovers it); this module only embeds the launcher image and writes the result to disk.
+//! Emitting a self-contained native executable: the embedded slim launcher with the program's payload, the modules answering its `foreign` declarations, and the record naming them appended. The trailing tail layout lives in `curios_runtime::bundle` (shared with the launcher that recovers it); this module only embeds the launcher image and writes the result to disk.
 
 use {
-    curios_runtime::append_payload,
+    curios_runtime::{Bundle, append_bundle},
     std::{fs, os::unix::fs::PermissionsExt, path::Path},
 };
 
 /// The slim `curios-runtime` launcher stub, embedded at build time. Produced by `cargo x runtime` (an isolated `--package curios-runtime` build, kept Cranelift/Binaryen-free) into `curios/.artifacts/<triple>`, which is outside Cargo's target tree so `cargo clean` cannot remove it. Absence is caught before this line: `build.rs` emits a `cargo::error` naming the command to run. So `compile` needs no launcher lookup at runtime.
 const LAUNCHER: &[u8] = include_bytes!(env!("CURIOS_RUNTIME_BIN"));
 
-/// Build a self-contained executable: the embedded launcher stub with the `.cwasm` payload and its footer appended to the tail (see [`curios_runtime::append_payload`]).
-pub(crate) fn emit_exe(cwasm: &[u8], output: &Path) -> Result<(), String> {
+/// Build a self-contained executable: the embedded launcher stub with `bundle` and its footer appended to the tail (see [`curios_runtime::append_bundle`]).
+pub(crate) fn emit_exe(bundle: &Bundle, output: &Path) -> Result<(), String> {
     let mut bytes = LAUNCHER.to_vec();
 
-    append_payload(&mut bytes, cwasm);
+    append_bundle(&mut bytes, bundle)?;
 
     // A declared executable lands inside the store, nested under its package, so the directories below it are this write's to create — nothing else has had reason to.
     if let Some(directory) = output.parent()

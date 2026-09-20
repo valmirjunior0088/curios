@@ -811,6 +811,7 @@ name = "curios-runtime"
 version = "0.14.8"
 dependencies = [
  "curios-abi",
+ "curios-archive",
  "curios-utilities",
  "getrandom 0.4.3",
  "rustix",

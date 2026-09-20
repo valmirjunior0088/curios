@@ -20,7 +20,10 @@ cranelift = ["wasmtime/cranelift"]
 test-support = ["cranelift"]
 
 [dependencies]
-curios-abi = { workspace = true }        # for the host<->guest wire ABI constants
+# `archive` is what expands the derives on `ForeignStore`, which a bundle carries: the rows a payload's `ffi` imports are typed by cannot be recovered from the payload. It cascades to `curios-num/archive`; the pair costs the launcher 29,312 bytes against its 6 MiB ceiling, measured by building `cargo x runtime` with and without this feature.
+curios-abi = { workspace = true, features = ["archive"] }
+# rkyv itself, for the bundle archive the launcher reads unconditionally.
+curios-archive = { workspace = true, features = ["enabled"] }
 # The one place in the workspace wasmtime is named, so the pin and the feature set live here rather than in the workspace table — the arrangement `curios-archive` and `curios-num` use for rkyv and num-bigint. It also makes the version-match invariant structural: `curios` precompiles a `.cwasm` and the launcher deserializes it, and with a single row they cannot drift.
 wasmtime = { version = "47.0.3", default-features = false, features = [
     "runtime",

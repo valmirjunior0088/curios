@@ -16,10 +16,8 @@ mod cranelift;
 #[cfg(feature = "cranelift")]
 pub use cranelift::*;
 
-// Behind the same gate, and for the same reason `cranelift` states: instantiating a plugin compiles it, so a runtime-only build has no function to call rather than a launcher that quietly grew a backend. The bundled launcher reaches a plugin through a precompiled payload instead.
-#[cfg(feature = "cranelift")]
+// Not behind that gate, because a bundled launcher links plugins too: what needs a compiler is turning a `.wasm` into a module, not instantiating one. `ModuleBytes` splits exactly there — its `Source` variant is gated and its `Precompiled` variant is not — so a runtime-only build can link what `curios compile` already compiled while still having no way to spell compiling one.
 mod plugin;
-#[cfg(feature = "cranelift")]
 pub use plugin::*;
 
 mod host;

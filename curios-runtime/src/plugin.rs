@@ -37,9 +37,22 @@ pub struct DeclaredModule {
     /// The row's own name, likewise.
     pub name: String,
     /// The module itself, already accepted against its hash by whoever read it.
-    pub bytes: Vec<u8>,
+    pub bytes: ModuleBytes,
     /// Which declaration each of its exports answers, as `export -> fully qualified name`.
     pub exports: BTreeMap<String, String>,
+}
+
+/// A plugin's module, and how this build is able to turn it into one.
+///
+/// **The split is the whole reason the launcher can link a plugin at all.** Compiling WebAssembly needs a backend; deserializing code this engine already emitted does not. `curios run` holds Cranelift and compiles the module a manifest pointed at, while a bundled executable carries what `curios compile` compiled and its launcher deserializes — so a plugin travels without a compiler travelling with it.
+///
+/// Gating the *variant* rather than a branch is what makes that structural: a runtime-only build has no way to spell a source module, so the case cannot be reached by a mistake rather than being reachable and refused.
+pub enum ModuleBytes {
+    /// A WebAssembly module, compiled here. Only a build carrying a backend can hold one.
+    #[cfg(feature = "cranelift")]
+    Source(Vec<u8>),
+    /// Machine code this engine already emitted, deserialized rather than compiled.
+    Precompiled(Vec<u8>),
 }
 
 /// An instantiated plugin: its store, its memory, the allocator every byte string goes through, and what it exports.
@@ -60,9 +73,18 @@ impl Plugin {
         let engine = shared_engine();
         let subject = format!("the module {:?} of {}", module.name, module.package);
 
-        let compiled = Module::new(engine, &module.bytes).map_err(|error| {
-            format!("{subject} is not a WebAssembly module this engine accepts: {error}")
-        })?;
+        let compiled = match &module.bytes {
+            #[cfg(feature = "cranelift")]
+            ModuleBytes::Source(bytes) => Module::new(engine, bytes).map_err(|error| {
+                format!("{subject} is not a WebAssembly module this engine accepts: {error}")
+            })?,
+            // SAFETY: the payload was emitted by `curios compile` through `precompile`, which compiles on the very engine `shared_engine` builds here — the wasmtime pin is one manifest row, so a bundler's engine and its launcher's cannot drift — and it travels inside the executable's own image, past the point any other producer could substitute it. Wasmtime's own stamp inside the artifact stays the backstop for whatever that failed to separate.
+            ModuleBytes::Precompiled(bytes) => unsafe {
+                Module::deserialize(engine, bytes).map_err(|error| {
+                    format!("{subject} is not machine code this engine accepts: {error}")
+                })?
+            },
+        };
 
         // Before instantiation, so the refusal names every import rather than whichever one the linker reached first.
         let demanded = compiled

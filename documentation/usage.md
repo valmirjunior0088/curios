@@ -115,6 +115,8 @@ curios compile scratch.crs -o s  # a loose program, which has nowhere else to go
 
 Dispatched through the same code as `run`, so the two cannot drift apart. A declared executable is written under the store beside the governing manifest, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead. A program no package declares — a loose file, or standard input — is filed nowhere, so `--output` is the only place it can go, and without one the command is refused naming the flag that would build it.
 
+**The result is self-contained, including its `foreign` implementations.** Every [`[[foreign]]`](#the-manifest) module the program's package graph declares is compiled into the executable beside the program itself, so it runs where there is no manifest to read a row from, no `.wasm` beside it to hash and no compiler to turn one into a module. Nothing is read from the store or the package at run time, and the executable is the only file that has to travel.
+
 ## `document`
 
 ```sh

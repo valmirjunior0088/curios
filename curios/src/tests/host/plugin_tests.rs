@@ -5,7 +5,7 @@
 use {
     crate::tests::run_wasm,
     curios_pipeline::compile_with_prelude,
-    curios_runtime::{DeclaredModule, MockHost, plugin_bindings},
+    curios_runtime::{DeclaredModule, MockHost, ModuleBytes, plugin_bindings},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::{
         AddressType, CompType, Export, Expr, Func, FuncName, FuncType, Instr, Limits, MemName,
@@ -113,7 +113,7 @@ fn declared(exports: &[(&str, &str)]) -> Vec<DeclaredModule> {
     vec![DeclaredModule {
         package: "fixture".to_string(),
         name: "probe".to_string(),
-        bytes: plugin(),
+        bytes: ModuleBytes::Source(plugin()),
         exports: exports
             .iter()
             .map(|(export, declaration)| (export.to_string(), declaration.to_string()))
