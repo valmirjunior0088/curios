@@ -65,8 +65,16 @@ pub let max(a: Nat, b: Nat) -> Nat =
     match a < b | true => b | false => a end;
 
 --- `base` to the power `exp`.
+---
+--- By squaring, so the cost is the exponent's bit width rather than the exponent: the spine this replaced multiplied `exp` times, which is the same defect `/std/Flt`'s own `pow_by_squaring` was written to avoid and the argument its comment already states.
 pub let pow(base: Nat, exp: Nat) -> Nat =
-    match exp | 0 => 1 | _ + 1; acc => acc * base end;
+    match exp == 0
+    | true => 1
+    | false =>
+        let half = pow(base, exp / 2);
+        let square = half * half;
+        match exp % 2 == 1 | true => square * base | false => square end
+    end;
 
 --- The greatest common divisor, with `gcd(a, 0)` as `a`. General recursion, so a type may not mention it.
 pub let gcd(a: Nat, b: Nat) -> Nat =
