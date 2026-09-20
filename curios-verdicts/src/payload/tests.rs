@@ -74,7 +74,8 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
     };
 
     let sources = scope.iter().map(UnitSource::mounted).collect::<Vec<_>>();
-    if let Some(payload) = verdicts.payload_get(&program, &sources, ENGINE) {
+    // The rows come back beside the payload and are dropped here: what this suite asks is whether the *payload* was believed, and the rows ride along rather than deciding anything.
+    if let Some((payload, _foreigns)) = verdicts.payload_get(&program, &sources, ENGINE) {
         return Invocation {
             reused: true,
             payload,
@@ -82,13 +83,13 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
         };
     }
 
-    let (module, _foreigns) = Fold::new(DEFAULT_STEP_BUDGET, &scope, Some(&verdicts as &dyn Cache))
+    let (module, foreigns) = Fold::new(DEFAULT_STEP_BUDGET, &scope, Some(&verdicts as &dyn Cache))
         .compile(&entrypoint, &loader, |_| {}, |_| {})
         .expect("the package compiles");
 
     // The module's own bytes stand in for machine code: the store digests a payload and never reads it, and nothing here runs one.
     let payload = to_bytes(&module);
-    verdicts.payload_put(&program, &sources, &payload, ENGINE);
+    verdicts.payload_put(&program, &sources, &payload, &foreigns, ENGINE);
 
     Invocation {
         reused: false,

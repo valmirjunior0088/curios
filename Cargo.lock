@@ -558,6 +558,7 @@ name = "curios"
 version = "0.14.8"
 dependencies = [
  "clap",
+ "curios-abi",
  "curios-archive",
  "curios-binaryen",
  "curios-cert",
@@ -862,6 +863,7 @@ dependencies = [
 name = "curios-verdicts"
 version = "0.14.8"
 dependencies = [
+ "curios-abi",
  "curios-archive",
  "curios-core",
  "curios-package",

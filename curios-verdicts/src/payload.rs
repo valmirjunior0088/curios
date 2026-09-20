@@ -11,6 +11,7 @@ mod tests;
 
 use {
     crate::{Placed, Verdicts, chained, replace, unchanged},
+    curios_abi::ForeignStore,
     curios_package::payload_slot,
     curios_text::{RootSource, UnitSource},
     curios_unit::{digested, read_within, segments},
@@ -34,9 +35,11 @@ pub struct Program<'a> {
     pub loader: &'a RootSource,
 }
 
-/// What a stored payload must still be true of to be believed.
+/// What a stored payload must still be true of to be believed, and the one thing it needs beside it to be used.
 ///
-/// Every field is a fact the compilation depended on and the address deliberately does not carry. Verification is all of them or nothing: a record that cannot be read, or that disagrees anywhere, is a miss.
+/// **Two kinds of field, and [`agrees`] reads only the first.** Every field but `foreigns` is a fact the compilation depended on and the address deliberately does not carry; verification is all of them or nothing, and a record that cannot be read or disagrees anywhere is a miss.
+///
+/// `foreigns` is the other kind: an *output* of the compilation rather than an input it rested on, so nothing verifies it — the payload's digest already answers for the bytes it was derived alongside. It is here because a reused payload still has to be linked, and the rows a program's `ffi` imports are typed by cannot be recovered from the module: `Nat`, `Int` and `Bool` all cross as an i31 ref, so a re-derivation from the wasm import types would lose the signedness a result is boxed by. Filing what the compilation already computed is the only reading that cannot disagree with itself.
 // `always`: a product that reads and writes archives unconditionally has no `archive` feature for a `cfg_attr` to gate on.
 #[curios_archive::archived(always)]
 struct Record {
@@ -50,6 +53,8 @@ struct Record {
     predecessors: Vec<String>,
     /// The payload's own digest, so a damaged artifact is a miss here rather than a failure to deserialize at run time — or, for a flipped byte inside a function's code, machine code that runs wrong. Its segment of the slot is exactly the byte string a bundled executable carries and `curios_runtime::run_bytes` deserializes.
     payload: String,
+    /// The `ffi` rows the compilation harvested, which is what a link types its marshalling by. Empty for the overwhelming majority of programs, which declare no `foreign`.
+    foreigns: ForeignStore,
 }
 
 impl Verdicts {
@@ -65,7 +70,7 @@ impl Verdicts {
         program: &Program<'_>,
         units: &[UnitSource<'_>],
         engine: &str,
-    ) -> Option<Vec<u8>> {
+    ) -> Option<(Vec<u8>, ForeignStore)> {
         let placed = self.chain(units)?;
 
         // A file that is not a slot, or a stored record that will not read back, is a store to ignore, never a compile to fail.
@@ -74,7 +79,7 @@ impl Verdicts {
         let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
         match agrees(program, &record, &placed, bytes) {
-            true => Some(bytes.to_vec()),
+            true => Some((bytes.to_vec(), record.foreigns)),
             false => None,
         }
     }
@@ -89,6 +94,7 @@ impl Verdicts {
         program: &Program<'_>,
         units: &[UnitSource<'_>],
         bytes: &[u8],
+        foreigns: &ForeignStore,
         engine: &str,
     ) {
         let placed = self.placed.borrow();
@@ -109,6 +115,7 @@ impl Verdicts {
                 .map(|placed| placed.contained.clone())
                 .collect(),
             payload: digest(bytes),
+            foreigns: foreigns.clone(),
         };
 
         let filed = curios_archive::to_bytes(&record)

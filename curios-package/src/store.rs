@@ -2,20 +2,21 @@
 //!
 //! `.curios/` sits beside the governing root — the umbrella's manifest when one governs the invocation, the package's otherwise — and it is **the only generated directory in the tree**: member directories hold user files and nothing else.
 //!
-//! It holds five families, each in its own subtree rather than sharing one namespace, and each named for what it holds:
+//! It holds six families, each in its own subtree rather than sharing one namespace, and each named for what it holds:
 //!
 //! ```text
 //! .curios/
 //!   executables/    json/serve      what `curios compile` emits
 //!   documentation/  json/           what `curios document` emits
 //!   sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
+//!   foreign/        f1/<digest>     fetched foreign modules, keyed by the hash they were accepted against
 //!   verdicts/       <slot>          judged units, one file per mount, compiler and predecessor chain
 //!   payloads/       <slot>          precompiled payloads, one file per executable, chain and engine
 //! ```
 //!
 //! Separated because the alternative re-invites a collision that nesting otherwise removes: a hash has to be transformed to sit in a directory name at all — `c1:<digest>` most naturally becoming `c1/<digest>` — and a package legitimately named `c1` would then land on top of it.
 //!
-//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `sources/`, `verdicts/` and `payloads/` families — never `executables/` or `documentation/`, which belong to the package that declared them — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
+//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `sources/`, `foreign/`, `verdicts/` and `payloads/` families — never `executables/` or `documentation/`, which belong to the package that declared them — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
 //!
 //! The family names are the plural of their contents, and the words are the ones the rest of the toolchain already uses: the manifest's `[[executables]]`, the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing store rebuilds once.
 
@@ -119,7 +120,7 @@ fn shared() -> Option<PathBuf> {
 const SCHEMA: &str = "u11";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
-const PAYLOAD_SCHEMA: &str = "p2";
+const PAYLOAD_SCHEMA: &str = "p3";
 
 /// The slot a unit compiled by `compiler`, after `predecessors`, claiming `mounts` and declaring `declared`, is filed under.
 ///

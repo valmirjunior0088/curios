@@ -20,6 +20,8 @@ curios-text = { workspace = true }
 curios-unit = { workspace = true, features = ["archive"] }
 curios-pipeline = { workspace = true }
 curios-package = { workspace = true }
+# For the `ffi` rows a payload's record carries beside it: a reused payload still has to be linked, and what its imports are typed by cannot be read back off the module.
+curios-abi = { workspace = true }
 
 # The payload suite files the bytes of a compiled module as a payload: the store digests a payload and never reads it, so any bytes stand in for machine code.
 [dev-dependencies]
