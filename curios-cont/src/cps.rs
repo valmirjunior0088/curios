@@ -304,6 +304,9 @@ pub enum IntrinsicEffect {
 }
 
 impl Intrinsic {
+    /// How many operands this operation takes, which the arena verifier checks every emitted call against.
+    ///
+    /// **Exhaustive on purpose**, for [`Intrinsic::effect`]'s reason one accessor over. This was a wildcard defaulting to `2`, and a row that took any other count inherited it silently — the verifier caught it, but at the far end of a lowering rather than at the definition, reporting a shape mismatch against a node whose author had never been asked the question. A binary majority is what made the default tempting and is exactly why it was wrong: the common case is the one nobody checks.
     pub fn arity(self) -> usize {
         match self {
             Self::NatEqz
@@ -329,14 +332,64 @@ impl Intrinsic {
             | Self::TupleGet(_)
             | Self::RowGet(..)
             | Self::IsImmediate
-            | Self::ImmediateGet => 1,
+            | Self::ImmediateGet
+            | Self::ListSettle => 1,
+            Self::NatEql
+            | Self::NatNeq
+            | Self::NatAdd
+            | Self::NatSub
+            | Self::NatMul
+            | Self::NatLt
+            | Self::NatDiv
+            | Self::NatRem
+            | Self::NatLe
+            | Self::NatAnd
+            | Self::NatOr
+            | Self::NatXor
+            | Self::NatShl
+            | Self::NatShr
+            | Self::IntEql
+            | Self::IntNeq
+            | Self::IntAdd
+            | Self::IntSub
+            | Self::IntMul
+            | Self::IntDiv
+            | Self::IntRem
+            | Self::IntLt
+            | Self::IntLe
+            | Self::IntAnd
+            | Self::IntOr
+            | Self::IntXor
+            | Self::IntShl
+            | Self::IntShr
+            | Self::FltAdd
+            | Self::FltSub
+            | Self::FltMul
+            | Self::FltDiv
+            | Self::FltRem
+            | Self::FltEql
+            | Self::FltNeq
+            | Self::FltLt
+            | Self::FltLe
+            | Self::FltMin
+            | Self::FltMax
+            | Self::FltCopysign
+            | Self::BinEql(_)
+            | Self::BinGet(_)
+            | Self::BinRest(_)
+            | Self::BinAppend(_)
+            | Self::BinReplicate(_)
+            | Self::BinAnd(_)
+            | Self::BinOr(_)
+            | Self::BinXor(_)
+            | Self::ListGet
+            | Self::ListRest
+            | Self::ListAppend => 2,
             Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent => 3,
             Self::BinConcat(_, arity)
             | Self::ListConcat(arity)
             | Self::BinChunk(_, arity)
             | Self::ListFlat(arity) => arity,
-            Self::ListSettle => 1,
-            _ => 2,
         }
     }
 
