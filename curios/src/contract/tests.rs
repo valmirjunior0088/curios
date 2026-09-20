@@ -12,23 +12,33 @@ use {
 const TARGET: &str = "TARGET";
 
 /// Every command, as the command line that invokes it.
-const COMMANDS: &[&[&str]] = &[
-    &["run", TARGET],
-    &["compile", TARGET],
-    &["compile", TARGET, "--output", "out"],
-    &["document", TARGET],
-    &["document", "--archive", "unit.rkyv", "--output", "site"],
-    &["test", TARGET],
-    &["curate"],
-    &["new", "fresh"],
-    &["lint", TARGET],
-    &["format", TARGET],
-    &["wonder", "diagnostics", TARGET],
-    &["wonder", "tests", TARGET],
-    &["wonder", "cost", TARGET],
-    &["wonder", "stage", "core", TARGET],
-    &["wonder", "server"],
-];
+///
+/// A function rather than a `const`, because the set the tree actually holds is feature-dependent — `profile` carries a command of its own — and `#[cfg]` does not reach an element of an array literal. What [`every_command_is_listed`] compares this against is the tree clap built for *this* build, so the table has to vary exactly as that tree does or one of the two builds would be checked against the other's surface.
+fn commands() -> Vec<&'static [&'static str]> {
+    #[allow(unused_mut)]
+    let mut lines: Vec<&'static [&'static str]> = vec![
+        &["run", TARGET],
+        &["compile", TARGET],
+        &["compile", TARGET, "--output", "out"],
+        &["document", TARGET],
+        &["document", "--archive", "unit.rkyv", "--output", "site"],
+        &["test", TARGET],
+        &["curate"],
+        &["new", "fresh"],
+        &["lint", TARGET],
+        &["format", TARGET],
+        &["wonder", "diagnostics", TARGET],
+        &["wonder", "tests", TARGET],
+        &["wonder", "cost", TARGET],
+        &["wonder", "stage", "core", TARGET],
+        &["wonder", "server"],
+    ];
+
+    #[cfg(feature = "profile")]
+    lines.push(&["profile", "stream.tsv"]);
+
+    lines
+}
 
 /// Where an invocation stands under the tree's root, and the argument it spells there — `None` for none.
 const ROWS: &[(&str, Option<&str>)] = &[
@@ -241,7 +251,7 @@ fn package_entire(entire: &Entire) -> String {
 fn table(root: &Path) -> String {
     let mut table = String::new();
 
-    for line in COMMANDS {
+    for line in commands() {
         let contract = parsed(line, None).contract();
         let own = match contract.own_file_only {
             true => " (its own file)",
@@ -288,6 +298,24 @@ fn table(root: &Path) -> String {
     }
 
     table
+}
+
+/// The section a profiling build adds, written the way [`table`] writes an [`Accepts::Nothing`] command: one header and the single row that says it resolves nothing.
+///
+/// Separate from [`EXPECTED`] for the reason [`commands`] is a function — the surface varies with the feature, so the expectation must vary with it, or one build would be held to the other's surface.
+#[cfg(feature = "profile")]
+const PROFILE_EXPECTED: &str =
+    "profile stream.tsv — Nothing, store None, leaves Nothing, options none\n  takes no subject\n";
+
+/// What [`table`] must read for the tree *this* build holds.
+fn expected() -> String {
+    #[allow(unused_mut)]
+    let mut expected = String::from(EXPECTED);
+
+    #[cfg(feature = "profile")]
+    expected.push_str(PROFILE_EXPECTED);
+
+    expected
 }
 
 const EXPECTED: &str = r#"run TARGET — Program (its own file), store Write, leaves Nothing, options --budget --manifest
@@ -530,7 +558,7 @@ fn every_command_admits_what_the_table_says() {
     let root = tree();
     let table = table(&root);
 
-    assert!(table == EXPECTED, "the table now reads:\n{table}");
+    assert!(table == expected(), "the table now reads:\n{table}");
 }
 
 /// A flag a command reads follows the command, and written before it is refused with the spelling that works — or, for a command that takes no such flag, with why.
@@ -589,7 +617,7 @@ fn every_command_the_parser_knows_is_in_the_table() {
     let mut known = BTreeSet::new();
     leaves(&Cli::command(), &[], &mut known);
 
-    let listed = COMMANDS
+    let listed = commands()
         .iter()
         .map(|line| {
             let mut command = Cli::command();

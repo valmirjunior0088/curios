@@ -6,7 +6,7 @@ The complete command-line and package reference. The [README](../README.md) cove
 - [What a package is made of](#what-a-package-is-made-of)
 - [Targets](#targets)
 - [The surface](#the-surface)
-- [`run`](#run) · [`compile`](#compile) · [`document`](#document) · [`test`](#test) · [`curate`](#curate) · [`new`](#new) · [`lint`](#lint) · [`format`](#format) · [`wonder`](#wonder)
+- [`run`](#run) · [`compile`](#compile) · [`document`](#document) · [`test`](#test) · [`curate`](#curate) · [`new`](#new) · [`lint`](#lint) · [`format`](#format) · [`wonder`](#wonder) · [`profile`](#profile)
 - [The manifest](#the-manifest)
 - [Exit codes](#exit-codes)
 - [Flags](#flags)
@@ -70,7 +70,7 @@ A loose file brings no project with it — no dependencies, not even the library
 
 ## The surface
 
-Nine commands, and `wonder`'s five queries. What each takes and leaves:
+Nine commands, and `wonder`'s five queries — ten where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
 
 | Command | Subject | Its own arguments | Writes | Store |
 | --- | --- | --- | --- | --- |
@@ -87,6 +87,7 @@ Nine commands, and `wonder`'s five queries. What each takes and leaves:
 | [`wonder cost`](#wonder) | a program | — | nothing | reads only |
 | [`wonder stage`](#wonder) | a program | `<STAGE>`, before the target | nothing | reads only |
 | [`wonder server`](#wonder) | — | — | nothing | reads only |
+| [`profile`](#profile) | — | `<PATH>` | nothing | none |
 
 `--manifest` is taken by every command but `new`. `--budget` is taken by every command that elaborates, which is every one but `new`, `curate` and `format`. Both are stated under [Flags](#flags).
 
@@ -232,6 +233,18 @@ The stages, in the order the compiler passes them:
 | `wasm` | the emitted WebAssembly module |
 | `wasm-optm` | the module after Binaryen optimization, rendered by Binaryen's own text writer |
 
+## `profile`
+
+```sh
+curios profile .curios/profile.tsv
+```
+
+Reads back a stream [`--profile`](#flags) filed and writes its summary to stdout: the spans by total time, the magnitude sites beneath them, and — for a run that never returned — the stack it was inside when it stopped.
+
+Present only in a compiler built with the `profile` feature, the same one that carries the flag. The two halves of one format ship in one binary, so neither can drift from the other, and `PATH` is spelled as it was spelled to `--profile`: the rotated predecessor beside it is found rather than named, because which files one stream occupies is the writer's to answer.
+
+**Reading is a separate pass, not the profiled run's last step.** A stream is worth reading exactly when the run did not finish — a hang, a kill, a trap — and such a run never reaches its last step. Folding there would serve every case but the one profiling exists for.
+
 ## The manifest
 
 A `curios.toml` declares a package or an umbrella, never both, and one that declares neither is refused naming what each would have had to state. Unknown keys are refused too, so a misspelling is an error rather than a setting that silently did nothing.
@@ -315,7 +328,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 | `--budget <UNITS>` | every command that elaborates, which is every one but `new`, `curate` and `format` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
 | `-h`/`--help` | `curios` and every command | what that command takes, with the default each flag was built with |
 | `-V`/`--version` | `curios` itself | the build's version, so a bug report can say which compiler produced the output |
-| `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`, rotating at 512 MiB — present only in a compiler built with the `profile` feature, and inert without it |
+| `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`, rotating at 512 MiB — present only in a compiler built with the `profile` feature, and inert without it. [`profile`](#profile) reads the stream back |
 
 The budget is restored at every declaration boundary, so it bounds the heaviest declaration rather than the compilation; `--help` prints the default this build carries, which is why no number is written here.
 

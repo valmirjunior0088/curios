@@ -169,6 +169,21 @@ pub(crate) enum Mode {
         #[command(subcommand)]
         query: Query,
     },
+
+    /// The reader of what `--profile` files, in the build that files it: the two halves of one format ship together, so neither can drift from the other.
+    ///
+    /// Not the last step of a profiled run, deliberately. A stream is worth reading exactly when the run did not finish — a hang, a kill, a trap — and such a run never reaches its own last step, so folding there could serve every case but the one profiling exists for. It is a separate pass over a file the compiler has already closed.
+    ///
+    /// PATH is the command's own argument rather than a TARGET: the argument resolver reads a path-bearing word as a `.crs` file and would refuse a stream as no program, so this takes its subject the way `document --archive` takes an archived unit.
+    #[cfg(feature = "profile")]
+    #[command(about = "Summarize a profile stream filed by --profile")]
+    Profile {
+        #[arg(
+            value_name = "PATH",
+            help = "The stream to read, as it was spelled to --profile; its rotated predecessor is found beside it"
+        )]
+        stream: PathBuf,
+    },
 }
 
 /// One question each, of fixed arity. A target takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Selection`'s.

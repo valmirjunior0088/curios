@@ -10,13 +10,7 @@ use {
             BROWSER_TRIPLE, HOST_TRIPLE, artifact, built, inputs, modified, root, target_directory,
         },
     },
-    curios_profile::ProfileReport,
-    std::{
-        fs,
-        io::{BufReader, Read, empty},
-        path::{Path, PathBuf},
-        process::Command,
-    },
+    std::{fs, path::Path, process::Command},
 };
 
 pub(crate) fn runtime() -> Result<(), String> {
@@ -134,9 +128,11 @@ pub(crate) fn std_docs() -> Result<(), String> {
     Ok(())
 }
 
-/// Run `source` under a profiling build, then fold the stream it filed.
+/// Run `source` under a profiling build, then ask that same build to read back the stream it filed.
 ///
-/// **The compiler is not asked to profile anything.** A `profile` build files every span and event it makes, whatever subcommand ran, so this recipe selects a subject rather than a mode — and the summary is a recipe's job because a fold reads a file the compiler has already finished writing.
+/// **The compiler is not asked to profile anything.** A `profile` build files every span and event it makes, whatever subcommand ran, so this recipe selects a subject rather than a mode.
+///
+/// **Two invocations of one binary, and this recipe knows only the path.** Folding is not the profiled run's last step, because a stream is worth reading exactly when the run did not finish and such a run never reaches its last step — so the read is a separate pass. It is a pass the *compiler* makes rather than this crate, because which files one rotated stream occupies is the writer's decision, and restating it here would be a second spelling of a convention nothing checks. What this crate spells is the destination, once, and hands it to both halves.
 pub(crate) fn profile(source: &Path) -> Result<(), String> {
     runtime()?;
 
@@ -157,32 +153,21 @@ pub(crate) fn profile(source: &Path) -> Result<(), String> {
         &source.to_string_lossy(),
     ])?;
 
-    print!("{}", summarize(&stream)?.render());
+    cargo(&[
+        "run",
+        "--release",
+        "--package",
+        "curios",
+        "--features",
+        "profile",
+        "--",
+        "profile",
+        &stream.to_string_lossy(),
+    ])?;
+
     println!("\nstream: {}", stream.display());
 
     Ok(())
-}
-
-/// Fold a rotated stream back into its summaries: the discarded file's rows first, then the current file's.
-///
-/// Both are handed to one fold because each restates the callsite table at its head, so their concatenation is well defined. They are chained rather than concatenated in memory: the fold reads rows, and at the default cap the pair is a gigabyte. A missing `.prev` is the ordinary case of a run that never grew past one file.
-pub(crate) fn summarize(path: &Path) -> Result<ProfileReport, String> {
-    let mut previous = path.to_path_buf().into_os_string();
-    previous.push(".prev");
-
-    let discarded: Box<dyn Read> = match fs::File::open(PathBuf::from(previous)) {
-        Ok(file) => Box::new(file),
-        Err(_) => Box::new(empty()),
-    };
-    let current = fs::File::open(path).map_err(|error| named(path, error))?;
-
-    curios_profile::fold(BufReader::new(discarded.chain(current)))
-        .map_err(|error| named(path, error))
-}
-
-/// An IO failure with the file it happened to, which is the only thing a reader needs to act on one.
-fn named(path: &Path, error: impl std::fmt::Display) -> String {
-    format!("{}: {error}", path.display())
 }
 
 pub(crate) fn benchmarks(tag: &str) -> Result<(), String> {

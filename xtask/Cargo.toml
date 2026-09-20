@@ -13,7 +13,5 @@ workspace = true
 wasm-bindgen-cli-support = { workspace = true }
 clap = { version = "4.6.1", features = ["derive"] }
 askama = { version = "0.16.1", default-features = false, features = ["derive", "std"] }
-# For the fold alone: `profile` runs a profiling build and summarizes the stream it filed, which is the half a recipe can do and the compiler should not. `enabled` carries the reader, not the instrumentation — nothing here is measured.
-curios-profile = { workspace = true, features = ["enabled"] }
 # For `release` alone: a format-preserving edit of the root manifest, so a bump sets the one line it names and the diff it produced can be read back and checked exactly. One crate's dependency rather than the workspace table's, the arrangement `curios-runtime` uses for wasmtime and `curios-js` for js-sys.
 toml_edit = { version = "0.25.15" }

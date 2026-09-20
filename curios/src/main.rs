@@ -47,7 +47,7 @@ use {
 
 #[cfg(feature = "profile")]
 use {
-    curios_profile::{Destination, install},
+    curios_profile::{Destination, fold_at, install},
     std::path::PathBuf,
 };
 
@@ -359,6 +359,14 @@ fn dispatch() -> Result<(), Failure> {
             )?,
             Query::Server { elaboration } => serve(elaboration.budget, manifest)?,
         },
+        // The path is taken as it was given: `--profile` spells no default, so the only path that exists is the one a caller chose, and reading it back means naming that one rather than deriving a second. Which files it stands for is `curios-profile`'s to answer, not this crate's.
+        #[cfg(feature = "profile")]
+        Mode::Profile { stream } => {
+            let report =
+                fold_at(&stream).map_err(|error| format!("{}: {error}", stream.display()))?;
+
+            print!("{}", report.render());
+        }
     }
 
     Ok(())

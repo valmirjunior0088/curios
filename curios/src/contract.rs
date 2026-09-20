@@ -170,6 +170,16 @@ pub(crate) const FORMAT: Contract = Contract {
     product: Product::Rewritten,
 };
 
+/// Its argument is a filed stream rather than anything a package declares, so nothing is resolved against a manifest and no store is opened: the file named is the whole of what it reads.
+#[cfg(feature = "profile")]
+pub(crate) const PROFILE: Contract = Contract {
+    command: "profile",
+    accepts: Accepts::Nothing,
+    own_file_only: false,
+    access: Access::None,
+    product: Product::Nothing,
+};
+
 pub(crate) const DIAGNOSTICS: Contract = Contract {
     command: "wonder diagnostics",
     accepts: Accepts::Any,
@@ -233,6 +243,8 @@ impl Mode {
                 Query::Stage { .. } => &STAGE,
                 Query::Server { .. } => &SERVER,
             },
+            #[cfg(feature = "profile")]
+            Mode::Profile { .. } => &PROFILE,
         }
     }
 
@@ -252,8 +264,10 @@ impl Mode {
                 | Query::Stage { target, .. } => target.as_deref(),
                 Query::Server { .. } => None,
             },
-            // A directory to create is an argument, and no target.
+            // A directory to create is an argument, and no target. So is a filed stream to read.
             Mode::Curate { .. } | Mode::New { .. } => None,
+            #[cfg(feature = "profile")]
+            Mode::Profile { .. } => None,
         }
     }
 
@@ -275,6 +289,8 @@ impl Mode {
             | Mode::Lint { .. }
             | Mode::Format { .. }
             | Mode::Wonder { .. } => None,
+            #[cfg(feature = "profile")]
+            Mode::Profile { .. } => None,
         }
     }
 
@@ -302,6 +318,8 @@ impl Mode {
                 | Query::Server { elaboration } => Some(elaboration),
             },
             Mode::Curate { .. } | Mode::New { .. } | Mode::Format { .. } => None,
+            #[cfg(feature = "profile")]
+            Mode::Profile { .. } => None,
         }
     }
 }
