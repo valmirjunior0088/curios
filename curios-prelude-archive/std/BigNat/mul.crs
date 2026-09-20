@@ -1,6 +1,7 @@
 use /std/{Nat, Bool, Bits, Eq};
-use /std/BigNat/{BigNat, combine, cong_combine, dbl, dbl_raw, eq, is_trimmed_of_canonical, maj3,
-    of_bits, of_nat, refl_at, trim, trim_is_trimmed, trim_of_trimmed, xor3, add};
+use /std/BigNat/{BigNat, combine, combine_cons, combine_is_trimmed, cong_combine, dbl, dbl_raw,
+    eq, is_trimmed, is_trimmed_of_canonical, maj3, of_bits, of_nat, of_trimmed_bits, trim,
+    trim_is_trimmed, trim_of_trimmed, xor3, add};
 
 --- The product of two words, untrimmed.
 pub let raw(x: Bits, y: Bits) -> Bits =
@@ -14,9 +15,66 @@ pub let raw(x: Bits, y: Bits) -> Bits =
 pub let mul(a: BigNat, b: BigNat) -> BigNat =
     of_bits(raw(a.bits, b.bits));
 
+-- `k` zero bits ahead of a word's own — the fill `pow2` prepends, built as one run rather than `k` of them. Zero stays zero: a fill ahead of no bits is redundant high zeros, which is not a trimmed word.
+let spread(k: Nat, bits: Bits) -> Bits =
+    match bits
+    | b[] => b[]
+    | b[_, .._] => b[..Bits/replicate(k, false), ..bits]
+    end;
+
+-- No places is the word itself.
+let spread_zero(bits: Bits) -> Eq(spread(0, bits), bits) =
+    match bits | b[] => Eq/refl() | b[_, .._] => Eq/refl() end;
+
+-- One more place is one more doubling — the step the `dbl` spine gave by definition and the flat fill has to state.
+--
+-- The nonempty arm is where the fill's own opacity is paid for: `combine` cannot see that a run led by a symbolic fill is a cons, so the equation comes from [`combine_cons`] and the length that discharges it, rather than from the match reducing.
+let spread_succ(k: Nat, bits: Bits) -> Eq(spread(k + 1, bits), combine(false, spread(k, bits))) =
+    match bits
+    | b[] => Eq/refl()
+    | b[h, ..t] => Eq/sym(combine_cons(false, spread(k, b[h, ..t]), Bool/True/qed()))
+    end;
+
+-- Zeros ahead of a trimmed word leave its high bit where it was, so it stays trimmed.
+let spread_is_trimmed(
+    k: Nat,
+    bits: Bits,
+    p: Eq(is_trimmed(bits), true),
+) -> Eq(is_trimmed(spread(k, bits)), true) =
+    match k
+    | 0 => Eq/subst((w) => Eq(is_trimmed(w), true), Eq/sym(spread_zero(bits)), p)
+    | pred + 1; ih =>
+        Eq/subst(
+            (w) => Eq(is_trimmed(w), true),
+            Eq/sym(spread_succ(pred, bits)),
+            combine_is_trimmed(false, spread(pred, bits), ih))
+    end;
+
 --- `a` times two to the `k`.
+---
+--- One run of `k` zero bits ahead of the word rather than `k` doublings of it. The spine this replaced allocated a word per place, which over `Flt`'s exponent range is a thousand of them for one conversion; the laws below still induct on `k`, and each step names [`pow2_succ`] where it used to reduce to a `dbl` by definition.
 pub let pow2(a: BigNat, k: Nat) -> BigNat =
-    match k | 0 => a | _ + 1; ih => dbl(ih) end;
+    of_trimmed_bits(
+        spread(k, a.bits),
+        spread_is_trimmed(k, a.bits, is_trimmed_of_canonical(a.bits, a.canonical)));
+
+-- The two equations the spine gave for nothing, which every law below now names instead.
+let pow2_zero(a: BigNat) -> Eq(pow2(a, 0), a) =
+    eq(pow2(a, 0), a, spread_zero(a.bits));
+
+let pow2_succ(a: BigNat, k: Nat) -> Eq(pow2(a, k + 1), dbl(pow2(a, k))) =
+    eq(pow2(a, k + 1), dbl(pow2(a, k)), spread_succ(k, a.bits));
+
+-- Congruence over both summands at once, which the laws below take where a one-sided `Eq/cong` would need two steps each.
+let cong_add(
+    @s: BigNat,
+    @t: BigNat,
+    @u: BigNat,
+    @v: BigNat,
+    p: Eq(s, t),
+    q: Eq(u, v),
+) -> Eq(add(s, u), add(t, v)) =
+    Eq/trans(Eq/cong((x) => add(x, u), p), Eq/cong((y) => add(t, y), q));
 
 --- `a` times the machine natural `c`.
 pub let small(a: BigNat, c: Nat) -> BigNat =
@@ -407,17 +465,43 @@ pub let pow2_add(
     k: Nat,
 ) -> Eq(pow2(add(a, b), k), add(pow2(a, k), pow2(b, k))) =
     match k
-    | 0 => refl_at(add(a, b))
-    | pred + 1; ih => Eq/trans(cong_dbl(ih), dbl_add(pow2(a, pred), pow2(b, pred)))
+    | 0 =>
+        Eq/trans(
+            pow2_zero(add(a, b)),
+            cong_add(Eq/sym(pow2_zero(a)), Eq/sym(pow2_zero(b))))
+    | pred + 1; ih =>
+        Eq/trans(
+            pow2_succ(add(a, b), pred),
+            Eq/trans(
+                cong_dbl(ih),
+                Eq/trans(
+                    dbl_add(pow2(a, pred), pow2(b, pred)),
+                    cong_add(Eq/sym(pow2_succ(a, pred)), Eq/sym(pow2_succ(b, pred))))))
     end;
 
 --- `pow2` of a product moves onto the left factor.
 pub let pow2_mul_l(a: BigNat, b: BigNat, k: Nat) -> Eq(pow2(mul(a, b), k), mul(pow2(a, k), b)) =
     match k
-    | 0 => refl_at(mul(a, b))
-    | pred + 1; ih => Eq/trans(cong_dbl(ih), dbl_mul_l(pow2(a, pred), b))
+    | 0 =>
+        Eq/trans(
+            pow2_zero(mul(a, b)),
+            Eq/cong((x) => mul(x, b), Eq/sym(pow2_zero(a))))
+    | pred + 1; ih =>
+        Eq/trans(
+            pow2_succ(mul(a, b), pred),
+            Eq/trans(
+                cong_dbl(ih),
+                Eq/trans(
+                    dbl_mul_l(pow2(a, pred), b),
+                    Eq/cong((x) => mul(x, b), Eq/sym(pow2_succ(a, pred))))))
     end;
 
 --- Two `pow2`s compose by adding their exponents.
 pub let pow2_compose(a: BigNat, j: Nat, k: Nat) -> Eq(pow2(pow2(a, j), k), pow2(a, j + k)) =
-    match k | 0 => refl_at(pow2(a, j)) | _ + 1; ih => cong_dbl(ih) end;
+    match k
+    | 0 => pow2_zero(pow2(a, j))
+    | pred + 1; ih =>
+        Eq/trans(
+            pow2_succ(pow2(a, j), pred),
+            Eq/trans(cong_dbl(ih), Eq/sym(pow2_succ(a, j + pred))))
+    end;

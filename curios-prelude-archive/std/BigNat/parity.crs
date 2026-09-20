@@ -1,5 +1,5 @@
-use /std/{Bool};
-use /std/BigNat/{BigNat, view, zero};
+use /std/{Bool, Nat, Bits};
+use /std/BigNat/{BigNat, of_bits, view, zero};
 
 --- Whether `a` is even.
 pub let is_even(a: BigNat) -> Bool =
@@ -11,3 +11,14 @@ pub let is_even(a: BigNat) -> Bool =
 --- `a` halved, the remainder dropped.
 pub let div2(a: BigNat) -> BigNat =
     match view(a) | zero() => zero | succ(_, tail) => tail end;
+
+--- `a` shifted right `k` places, which is `k` halvings.
+---
+--- One window past the low `k` bits rather than `k` of them: the spine this replaced allocated a word per place, and `/std/Flt` reaches here with a shift as wide as that format's exponent range. Dropping low bits cannot leave a redundant high zero where there was none, so the result is trimmed wherever `a` was; `of_bits` says so rather than proving it, since the trim it performs is free on a word already trimmed.
+---
+--- A shift at least as wide as the word is the guard's other arm rather than a saturating subtraction — every bit is gone, and what a `BigNat` denotes with no bits is zero.
+pub let shr(a: BigNat, k: Nat) -> BigNat =
+    match Nat/le(k, Bits/len(a.bits))
+    | true => of_bits(Bits/drop(a.bits, k))
+    | false => zero
+    end;

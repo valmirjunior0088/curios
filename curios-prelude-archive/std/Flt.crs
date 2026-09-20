@@ -232,10 +232,6 @@ let two_pow(e: Int) -> Flt =
     let mag = Int/abs(e);
     match e >= +0 | true => pow_by_squaring(+2.0, mag) | false => pow_by_squaring(+0.5, mag) end;
 
---- `x` shifted right `k` places.
-let shr_big(x: BigNat, k: Nat) -> BigNat =
-    match k | 0 => x | _ + 1; ih => BigNat/div2(ih) end;
-
 --- The low `width` bits of `m`, as a `Nat`. Every caller keeps `width` under the carrier's own, so the answer always fits.
 let low_bits(m: BigNat, width: Nat) -> Nat =
     match width
@@ -247,8 +243,8 @@ let low_bits(m: BigNat, width: Nat) -> Nat =
 
 --- A significand of at most 53 bits as a float, in three limbs no wider than the `Nat` carrier. Each limb converts exactly and each scale is a power of two, so the sum is exact whenever the significand is.
 let big_to_flt(m: BigNat) -> Flt =
-    let above18 = shr_big(m, 18);
-    Nat/to_flt(low_bits(shr_big(above18, 18), 17)) * two_pow(+36)
+    let above18 = BigNat/shr(m, 18);
+    Nat/to_flt(low_bits(BigNat/shr(above18, 18), 17)) * two_pow(+36)
         + Nat/to_flt(low_bits(above18, 18)) * two_pow(+18)
         + Nat/to_flt(low_bits(m, 18));
 
@@ -263,7 +259,7 @@ let quotient(n: BigNat, d: BigNat, bits: Nat, acc: BigNat) -> {BigNat, BigNat} =
     end;
 
 let round_bits(q: BigNat, shift: Nat, sticky: Bool) -> BigNat =
-    let kept = shr_big(q, shift);
+    let kept = BigNat/shr(q, shift);
     let dropped = q - BigNat/mul/pow2(kept, shift);
     let half = pow2(shift - 1);
     let up =

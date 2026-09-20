@@ -33,6 +33,19 @@ let combine_is_trimmed(
     | b[_, .._] => p
     end;
 
+-- `combine` is a cons wherever its tail is nonempty, which is the only case a caller holding a length can be in.
+--
+-- **It decides on the tail's shape where a caller may know only its length.** A run built in one operation over a symbolic count — `mul/pow2`'s fill of zero bits — exposes no leading generator, so the match below stays stuck on it while `Bits/len` still answers: a length composes through a concatenation symbolically, a first generator does not. Proved once over an abstract tail, this applies to a tail no eliminator can take apart, which is what lets the flat fill meet the `dbl` spine it replaced. The same move `/std/Bytes`'s `head` and `tail` make, guarding on a length where a match would not serve.
+let combine_cons(
+    head: Bool,
+    t: Bits,
+    p: Nat/Lt(0, Bits/len(t)),
+) -> Eq(combine(head, t), b[head, ..t]) =
+    match t
+    | b[] => match p end
+    | b[_, .._] => Eq/refl()
+    end;
+
 --- `trim` answers a trimmed word.
 pub let trim_is_trimmed(bits: Bits) -> Eq(is_trimmed(trim(bits)), true) =
     match bits
@@ -258,7 +271,7 @@ pub mod sub;
 pub use sub/{let sub};
 
 mod parity;
-pub use parity/{is_even, div2};
+pub use parity/{is_even, div2, shr};
 
 mod convert;
 pub use convert/{to_str, bit_len, is_decimal, Decimal, of_decimal, of_str};
