@@ -359,7 +359,9 @@ let step(spec: List(Arg), w: Walk, tokens: List(Str)) -> Result(Failure, List(Li
     | [] => Result/success(w.slots)
     | [t, ..more] =>
         match w.literal
-        | true => Result/bind(place(spec, w, t), (w2) => step(spec, w2, more))
+        | true =>
+            let w2 = place(spec, w, t)!;
+            step(spec, w2, more)
         | false =>
             match Str/eql(t, "--")
             | true => step(spec, Walk { ..w, literal = true }, more)
@@ -408,7 +410,9 @@ let step(spec: List(Arg), w: Walk, tokens: List(Str)) -> Result(Failure, List(Li
                                 step(spec, Walk { ..w2, slots = push_at(w2.slots, i, v) }, rest2)
                             end
                         end
-                    | false => Result/bind(place(spec, w, t), (w2) => step(spec, w2, more))
+                    | false =>
+                        let w2 = place(spec, w, t)!;
+                        step(spec, w2, more)
                     end
                 end
             end
@@ -431,7 +435,9 @@ let field(name: Str, k: Kind, occurrences: List(Str)) -> Result(Failure, KindCar
         | optional() =>
             match last_of
             | none() => Result/success(Option/none())
-            | some(s) => Result/map_success(read_with(v, s), (a) => Option/some(a))
+            | some(s) =>
+                let a = read_with(v, s)!;
+                Result/success(Option/some(a))
             end
         | default(fallback) =>
             match last_of | none() => Result/success(fallback) | some(s) => read_with(v, s) end
@@ -646,7 +652,9 @@ let decode(raw: List(Bytes)) -> Result(Nat, List(Str)) =
         | [b, ..more] =>
             match Str/of_bytes(b)
             | none() => Result/failure(at)
-            | some(s) => Result/map_success(walk(more, at + 1), (tail) => [s, ..tail])
+            | some(s) =>
+                let tail = walk(more, at + 1)!;
+                Result/success([s, ..tail])
             end
         end;
     walk(raw, 0);
