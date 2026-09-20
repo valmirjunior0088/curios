@@ -257,7 +257,9 @@ pub(crate) struct Table<'a> {
     bits_force: OnceCell<curios_wasm::FuncName>,
     list_force: OnceCell<curios_wasm::FuncName>,
     list_bytes_force: OnceCell<curios_wasm::FuncName>,
+    list_bits_force: OnceCell<curios_wasm::FuncName>,
     bytes_embed: OnceCell<curios_wasm::FuncName>,
+    bits_embed: OnceCell<curios_wasm::FuncName>,
     bytes_box: OnceCell<curios_wasm::FuncName>,
     bytes_norm: OnceCell<curios_wasm::FuncName>,
     flt_rem: OnceCell<curios_wasm::FuncName>,
@@ -265,6 +267,7 @@ pub(crate) struct Table<'a> {
     bits_norm: OnceCell<curios_wasm::FuncName>,
     list_embed: OnceCell<curios_wasm::FuncName>,
     list_bytes_embed: OnceCell<curios_wasm::FuncName>,
+    list_bits_embed: OnceCell<curios_wasm::FuncName>,
     bytes_slice: OnceCell<curios_wasm::FuncName>,
     bits_slice: OnceCell<curios_wasm::FuncName>,
     list_slice: OnceCell<curios_wasm::FuncName>,
@@ -339,7 +342,9 @@ impl<'a> Table<'a> {
             bits_force: OnceCell::new(),
             list_force: OnceCell::new(),
             list_bytes_force: OnceCell::new(),
+            list_bits_force: OnceCell::new(),
             bytes_embed: OnceCell::new(),
+            bits_embed: OnceCell::new(),
             bytes_box: OnceCell::new(),
             bytes_norm: OnceCell::new(),
             flt_rem: OnceCell::new(),
@@ -347,6 +352,7 @@ impl<'a> Table<'a> {
             bits_norm: OnceCell::new(),
             list_embed: OnceCell::new(),
             list_bytes_embed: OnceCell::new(),
+            list_bits_embed: OnceCell::new(),
             bytes_slice: OnceCell::new(),
             bits_slice: OnceCell::new(),
             list_slice: OnceCell::new(),
@@ -681,6 +687,17 @@ impl<'a> Table<'a> {
         self.list_bytes_force.get().is_some()
     }
 
+    /// `$list/bits/force (ref $rope/list) -> (ref $elems)`: the bit-grain mirror of [`list_bytes_force_func`](Self::list_bytes_force_func) — each element forced through `$bits/force`, so the host reads a `List(Bits)`'s elements as packed `$bytes` too.
+    pub(crate) fn list_bits_force_func(&self) -> curios_wasm::FuncName {
+        self.list_bits_force
+            .get_or_init(|| curios_wasm::FuncName::from("list/bits/force"))
+            .clone()
+    }
+
+    pub(crate) fn list_bits_force_used(&self) -> bool {
+        self.list_bits_force.get().is_some()
+    }
+
     /// `$bytes/embed (ref $bytes) -> (ref $rope/bin)`: embed a host-built flat payload into a fresh leaf on re-entry.
     pub(crate) fn bytes_embed_func(&self) -> curios_wasm::FuncName {
         self.bytes_embed
@@ -690,6 +707,17 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bytes_embed_used(&self) -> bool {
         self.bytes_embed.get().is_some()
+    }
+
+    /// `$bits/embed (ref $bytes) -> (ref $rope/bin)`: the bit-grain mirror of [`bytes_embed_func`](Self::bytes_embed_func) — the same host-built payload sealed at eight times its byte count, which is what a `Bits` wire slot means.
+    pub(crate) fn bits_embed_func(&self) -> curios_wasm::FuncName {
+        self.bits_embed
+            .get_or_init(|| curios_wasm::FuncName::from("bits/embed"))
+            .clone()
+    }
+
+    pub(crate) fn bits_embed_used(&self) -> bool {
+        self.bits_embed.get().is_some()
     }
 
     /// `$bytes/box (ref null any) -> (ref $rope/bin)`: a small-canonical `Bytes` as a rope — an immediate is materialised into a fresh leaf, a rope passes through. The entry every rope-shaped consumer pays instead of the `ref.cast` that predates the immediate form.
@@ -767,6 +795,17 @@ impl<'a> Table<'a> {
 
     pub(crate) fn list_bytes_embed_used(&self) -> bool {
         self.list_bytes_embed.get().is_some()
+    }
+
+    /// `$list/bits/embed (ref $elems) -> (ref $rope/list)`: the bit-grain mirror of [`list_bytes_embed_func`](Self::list_bytes_embed_func) — each element sealed at eight times its byte count and normalised through `$bits/norm`.
+    pub(crate) fn list_bits_embed_func(&self) -> curios_wasm::FuncName {
+        self.list_bits_embed
+            .get_or_init(|| curios_wasm::FuncName::from("list/bits/embed"))
+            .clone()
+    }
+
+    pub(crate) fn list_bits_embed_used(&self) -> bool {
+        self.list_bits_embed.get().is_some()
     }
 
     /// `$bytes/slice (ref $rope/bin, i32, i32) -> (ref $rope/bin)`, taking a start and a *count*: the `Bytes` O(1) view constructor — bounds-check, answer the empty leaf or the whole rope on the trivial windows, collapse a view-of-view, and force an uncached node base so every `view` it builds reads through in O(1).

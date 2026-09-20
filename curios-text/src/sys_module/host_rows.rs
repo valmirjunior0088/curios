@@ -20,6 +20,7 @@ fn wire_type(type_: &WireType) -> Term {
         WireType::Bool => bool_(),
         WireType::Flt => flt(),
         WireType::Bytes => bin(Grain::X),
+        WireType::Bits => bin(Grain::B),
         WireType::Handle => handle(),
         WireType::List(element) => list_of(wire_type(&(*element).into())),
     }

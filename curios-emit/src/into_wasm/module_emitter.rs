@@ -77,10 +77,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 curios_wasm::ValType::Num(curios_wasm::NumType::I32)
             }
             WireType::Flt => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
-            WireType::Bytes | WireType::Handle => curios_wasm::ValType::Ref(curios_wasm::RefType {
-                is_nullable: false,
-                heap_type: curios_wasm::HeapType::Concrete(self.table.bytes_type()),
-            }),
+            WireType::Bytes | WireType::Bits | WireType::Handle => {
+                curios_wasm::ValType::Ref(curios_wasm::RefType {
+                    is_nullable: false,
+                    heap_type: curios_wasm::HeapType::Concrete(self.table.bytes_type()),
+                })
+            }
             WireType::List(_) => curios_wasm::ValType::Ref(curios_wasm::RefType {
                 is_nullable: false,
                 heap_type: curios_wasm::HeapType::Concrete(self.table.elems_type()),
@@ -755,11 +757,19 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
         if self.table.list_bytes_force_used() {
-            ropes.emit_list_bytes_force_func(self.table.list_bytes_force_func());
+            ropes.emit_list_bin_force_func(Grain::X, self.table.list_bytes_force_func());
         }
 
         if self.table.list_bytes_embed_used() {
-            ropes.emit_list_bytes_embed_func(self.table.list_bytes_embed_func());
+            ropes.emit_list_bin_embed_func(Grain::X, self.table.list_bytes_embed_func());
+        }
+
+        if self.table.list_bits_force_used() {
+            ropes.emit_list_bin_force_func(Grain::B, self.table.list_bits_force_func());
+        }
+
+        if self.table.list_bits_embed_used() {
+            ropes.emit_list_bin_embed_func(Grain::B, self.table.list_bits_embed_func());
         }
 
         if self.table.bytes_norm_used() {
@@ -900,6 +910,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         if self.table.bytes_embed_used() {
             ropes.emit_embed_func(&self.table.bin_rope(), self.table.bytes_embed_func());
+        }
+
+        if self.table.bits_embed_used() {
+            ropes.emit_bits_embed_func(self.table.bits_embed_func());
         }
 
         if self.table.list_embed_used() {

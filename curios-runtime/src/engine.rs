@@ -52,7 +52,7 @@ pub fn shared_engine() -> &'static Engine {
     &ENGINE
 }
 
-/// The wasmtime type of one host import, derived from its `WireSignature` — the same derivation `curios-emit` applies to the module's import section, so the two ends cannot drift (and wasmtime validates them against each other at instantiation). Scalar params cross raw `i32`, scalar results pre-boxed as i31 refs; `Bytes`/`Handle` are the concrete i8-array, `List` the anyref-element array — wasmtime-universe mirrors of curios-emit's `bytes_sub_type`/`elems_sub_type` (the flat rope payloads every reference crosses the boundary as); keep the two ends in sync.
+/// The wasmtime type of one host import, derived from its `WireSignature` — the same derivation `curios-emit` applies to the module's import section, so the two ends cannot drift (and wasmtime validates them against each other at instantiation). Scalar params cross raw `i32`, scalar results pre-boxed as i31 refs; `Bytes`/`Bits`/`Handle` are the concrete i8-array, `List` the anyref-element array — wasmtime-universe mirrors of curios-emit's `bytes_sub_type`/`elems_sub_type` (the flat rope payloads every reference crosses the boundary as); keep the two ends in sync.
 fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
     let bytes_ref = ValType::Ref(RefType::new(
         false,
@@ -71,7 +71,7 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
         },
         // Raw in both directions: a host hands back a number and the guest boxes it, so nothing here needs to know the `$flt` struct curios-emit defines.
         WireType::Flt => ValType::F64,
-        WireType::Bytes | WireType::Handle => bytes_ref.clone(),
+        WireType::Bytes | WireType::Bits | WireType::Handle => bytes_ref.clone(),
         WireType::List(_) => list_ref.clone(),
     };
 

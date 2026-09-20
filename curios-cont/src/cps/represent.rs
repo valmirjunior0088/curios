@@ -210,7 +210,7 @@ fn wire_carrier(wire: &WireType) -> Option<Repr> {
         WireType::Nat | WireType::Bool => Some(Repr::Nat),
         WireType::Int => Some(Repr::Int),
         WireType::Flt => Some(Repr::Flt),
-        WireType::Bytes | WireType::Handle | WireType::List(_) => None,
+        WireType::Bytes | WireType::Bits | WireType::Handle | WireType::List(_) => None,
     }
 }
 

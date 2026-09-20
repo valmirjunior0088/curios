@@ -26,9 +26,17 @@ The host/guest wire contract shared by the compiler and both runtimes: the numer
 
 ### The wire vocabulary is a closed subset of guest types, and lists do not nest
 
-**Decision.** `WireType` is `Nat`, `Int`, `Bool`, `Bytes`, `Handle` and `List` of a `WireLeaf` — the same vocabulary minus `List` itself — so `List(List(_))` is unrepresentable rather than merely unchecked. Nothing below the type distinguishes `Bytes` from `Handle`: they share a wasm `ValType`, a wasmtime `FuncType` slot and a load/force/embed path, and only the guest type built from them differs.
+**Decision.** `WireType` is `Nat`, `Int`, `Bool`, `Flt`, `Bytes`, `Bits`, `Handle` and `List` of a `WireLeaf` — the same vocabulary minus `List` and `Flt` — so `List(List(_))` is unrepresentable rather than merely unchecked. Nothing below the type distinguishes `Bytes`, `Bits` and `Handle`: they share a wasm `ValType`, a wasmtime `FuncType` slot and a load/force/embed path, and what differs is the guest type built from them — and, for `Bits`, the length its embed seals.
 
 **Rationale.** Codegen's host-boundary force and embed steps handle exactly one level of nesting, and the runtime's uniform `List` load cannot distinguish layers, so a second level would silently hand the host rope structs where flat arrays belong. Making the shape unwritable is cheaper than checking for it in each of three consumers.
+
+### `Bits` crosses as its packed bytes, read as 8n bits
+
+**Decision.** A `Bits` wire slot carries the same flat payload a `Bytes` slot does: outbound the guest forces the run to its `ceil(len / 8)` packed bytes, inbound it seals that payload at eight times its byte count. The wire has no slot for a bit length, so a run whose length is not a multiple of eight does not round-trip — it returns at `8n`, with the trailing padding the representation already keeps zeroed.
+
+**Rationale.** The alternative was `Bits` carrying its own length, which would grow the ABI a two-field encoding every one of the four implementations must then carry — for a case a host already handles by sending a length in band, as it must for any datum whose extent is not its buffer's. What the declared type buys instead is free: a `foreign` row saying `Bits` states the grain at the seam where embedder and program have to agree, and the guest builds the run directly. Without the row, a program writes `-> Bytes` and converts at the call site, which is a second `struct.new` over the very same payload; with it, the one `struct.new` the byte grain already pays seals a different length and the conversion disappears.
+
+**Rejected.** Spelling only `Bytes` and leaving the grain to prose. It puts the agreement in a comment on one side and a call-site conversion on the other, which is the drift `curios-abi` exists to prevent — and it costs an allocation to say in code what the type could have said for nothing.
 
 ### A reference result is the last, and the type holds it
 

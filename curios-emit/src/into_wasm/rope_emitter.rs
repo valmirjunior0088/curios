@@ -854,9 +854,22 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$list/bytes/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then force every element through `$bytes/force` into a *fresh* payload (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
-    pub(crate) fn emit_list_bytes_force_func(&mut self, func_name: curios_wasm::FuncName) {
+    /// `$list/<grain>/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then force every element through the grain's own force into a *fresh* payload (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
+    pub(crate) fn emit_list_bin_force_func(
+        &mut self,
+        grain: Grain,
+        func_name: curios_wasm::FuncName,
+    ) {
         let elems = self.table.elems_type();
+
+        let box_func = match grain {
+            Grain::X => self.table.bytes_box_func(),
+            Grain::B => self.table.bits_box_func(),
+        };
+        let force_func = match grain {
+            Grain::X => self.table.bytes_force_func(),
+            Grain::B => self.table.bits_force_func(),
+        };
 
         let r = curios_wasm::LocalName::from("r");
         let flat = curios_wasm::LocalName::from("flat");
@@ -911,10 +924,10 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                         },
                         // An element is small-canonical, so an immediate is boxed before the deep force — the box is the cast this arm used to make, plus the materialisation.
                         curios_wasm::Instr::Call {
-                            func_name: self.table.bytes_box_func(),
+                            func_name: box_func,
                         },
                         curios_wasm::Instr::Call {
-                            func_name: self.table.bytes_force_func(),
+                            func_name: force_func,
                         },
                         curios_wasm::Instr::ArraySet {
                             type_name: elems.clone(),
@@ -1931,11 +1944,48 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$list/bytes/embed (ref $elems) -> (ref $rope/list)`: embed each raw `$bytes` element into a `$rope/bin/leaf` in place — the host-built array is fresh, nothing else aliases it — then embed the outer array into a `$rope/list/leaf`.
-    pub(crate) fn emit_list_bytes_embed_func(&mut self, func_name: curios_wasm::FuncName) {
+    /// `$bits/embed (ref $bytes) -> (ref $rope/bin)`: one fresh leaf sealed at eight times the payload's byte count.
+    ///
+    /// **The length is the payload's, scaled — not a bit count the host sent**, because the wire has no slot for one: a `Bits` row means "read these bytes as 8n bits", so a host with a 20-bit datum sends its own length in band. One `struct.new`, the same the byte grain pays; only the scale of the length field differs.
+    pub(crate) fn emit_bits_embed_func(&mut self, func_name: curios_wasm::FuncName) {
+        let rope = self.table.bin_rope();
+        let b = curios_wasm::LocalName::from("b");
+
+        let instrs = vec![
+            curios_wasm::Instr::I32Const { value: 0 },
+            get(&b),
+            curios_wasm::Instr::ArrayLen,
+            curios_wasm::Instr::I32Const { value: 3 },
+            curios_wasm::Instr::I32Shl,
+            get(&b),
+            curios_wasm::Instr::StructNew {
+                type_name: rope.leaf.clone(),
+            },
+        ];
+
+        self.add_helper(
+            func_name,
+            vec![(b, concrete_val(rope.payload.clone(), false))],
+            concrete_val(rope.base.clone(), false),
+            vec![],
+            instrs,
+        );
+    }
+
+    /// `$list/<grain>/embed (ref $elems) -> (ref $rope/list)`: embed each raw `$bytes` element into a `$rope/bin/leaf` in place — the host-built array is fresh, nothing else aliases it — then embed the outer array into a `$rope/list/leaf`. Each element leaf is sealed at the grain's reading of its payload, exactly as `$bytes/embed` and `$bits/embed` seal a bare one.
+    pub(crate) fn emit_list_bin_embed_func(
+        &mut self,
+        grain: Grain,
+        func_name: curios_wasm::FuncName,
+    ) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
         let list = self.table.list_rope();
+
+        let norm_func = match grain {
+            Grain::X => self.table.bytes_norm_func(),
+            Grain::B => self.table.bits_norm_func(),
+        };
 
         let e = curios_wasm::LocalName::from("e");
         let idx = curios_wasm::LocalName::from("idx");
@@ -1952,55 +2002,71 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let loop_label = curios_wasm::LabelName::from("fill");
         let done_label = curios_wasm::LabelName::from("done");
 
+        // The leaf's length field is logical: the payload's byte count at the byte grain, eight times it at the bit grain.
+        let leaf_len = match grain {
+            Grain::X => vec![get(&bytes), curios_wasm::Instr::ArrayLen],
+            Grain::B => vec![
+                get(&bytes),
+                curios_wasm::Instr::ArrayLen,
+                curios_wasm::Instr::I32Const { value: 3 },
+                curios_wasm::Instr::I32Shl,
+            ],
+        };
+
+        let step = [
+            get(&idx),
+            get(&count),
+            curios_wasm::Instr::I32GeU,
+            curios_wasm::Instr::BrIf {
+                label_name: done_label.clone(),
+            },
+            get(&e),
+            get(&idx),
+            curios_wasm::Instr::ArrayGet {
+                type_name: elems.clone(),
+            },
+            cast(&bin.payload),
+            set(&bytes),
+            get(&e),
+            get(&idx),
+            curios_wasm::Instr::I32Const { value: 0 },
+        ]
+        .into_iter()
+        .chain(leaf_len)
+        .chain([
+            get(&bytes),
+            curios_wasm::Instr::RefAsNonNull,
+            curios_wasm::Instr::StructNew {
+                type_name: bin.leaf.clone(),
+            },
+            // A host-built element enters the guest world canonical: a small `Bytes`, `Bits` or `Handle` becomes the i31 here.
+            curios_wasm::Instr::Call {
+                func_name: norm_func,
+            },
+            curios_wasm::Instr::ArraySet {
+                type_name: elems.clone(),
+            },
+            get(&idx),
+            curios_wasm::Instr::I32Const { value: 1 },
+            curios_wasm::Instr::I32Add,
+            set(&idx),
+            curios_wasm::Instr::Br {
+                label_name: loop_label.clone(),
+            },
+        ])
+        .collect::<Vec<_>>();
+
         let instrs = vec![
             get(&e),
             curios_wasm::Instr::ArrayLen,
             set(&count),
             curios_wasm::Instr::Block {
-                label_name: done_label.clone(),
+                label_name: done_label,
                 block_type: curios_wasm::BlockType::Empty,
                 instructions: vec![curios_wasm::Instr::Loop {
-                    label_name: loop_label.clone(),
+                    label_name: loop_label,
                     block_type: curios_wasm::BlockType::Empty,
-                    instructions: vec![
-                        get(&idx),
-                        get(&count),
-                        curios_wasm::Instr::I32GeU,
-                        curios_wasm::Instr::BrIf {
-                            label_name: done_label,
-                        },
-                        get(&e),
-                        get(&idx),
-                        curios_wasm::Instr::ArrayGet {
-                            type_name: elems.clone(),
-                        },
-                        cast(&bin.payload),
-                        set(&bytes),
-                        get(&e),
-                        get(&idx),
-                        curios_wasm::Instr::I32Const { value: 0 },
-                        get(&bytes),
-                        curios_wasm::Instr::ArrayLen,
-                        get(&bytes),
-                        curios_wasm::Instr::RefAsNonNull,
-                        curios_wasm::Instr::StructNew {
-                            type_name: bin.leaf.clone(),
-                        },
-                        // A host-built element enters the guest world canonical: a small `Bytes` or `Handle` becomes the i31 here.
-                        curios_wasm::Instr::Call {
-                            func_name: self.table.bytes_norm_func(),
-                        },
-                        curios_wasm::Instr::ArraySet {
-                            type_name: elems.clone(),
-                        },
-                        get(&idx),
-                        curios_wasm::Instr::I32Const { value: 1 },
-                        curios_wasm::Instr::I32Add,
-                        set(&idx),
-                        curios_wasm::Instr::Br {
-                            label_name: loop_label,
-                        },
-                    ],
+                    instructions: step,
                 }],
             },
             curios_wasm::Instr::I32Const { value: 0 },

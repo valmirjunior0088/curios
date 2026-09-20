@@ -345,3 +345,37 @@ fn a_foreign_flt_may_stand_before_another_result() {
         "the float matched and the status beside it came back"
     );
 }
+
+/// A `List(Bits)` in both directions, which is the one `Bits` path a plugin cannot reach — `crossing` refuses every list — so the deep force and embed the grain needed are exercised here or nowhere.
+///
+/// **The host closure is `Vec<Vec<u8>>`, the same type a `List(Bytes)` binds through.** That is the claim being made rather than an economy: the grains share a payload, so the marshalling needed no new `Lift` or `Lower`, and what differs is only the length each embedded element is sealed at. The run is sixteen bits so it returns as it went, the padding case being pinned in `plugin_tests`.
+#[test]
+fn a_list_of_bit_runs_crosses_in_both_directions() {
+    let source = r#"
+        foreign echo : (List(Bits)) -> List(Bits);
+        let run = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
+        let answered = echo([run, b[]])!;
+        let first = match answered | [] => b[] | [head, .._] => head end;
+        let matched = /std/Bits/eql(first, run);
+        let _ = /std/proc/exit(@{}, match matched | true => /std/List/len(answered) + 3 | false => 1 end)!;
+        /std/Io/pure(())
+        "#
+    .parse::<Entrypoint>()
+    .expect("failed to parse source");
+
+    let (module, foreigns) = compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &source,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let mut bindings = ForeignBindings::new(foreigns);
+    bindings.define("/echo", |runs: Vec<Vec<u8>>| runs);
+
+    let (system, _io) = MockHost::builder().build();
+    let code = crate::run_wasm(&module, system, bindings).expect("execution succeeded");
+
+    assert_eq!(code, 5, "both runs came back as they went in");
+}

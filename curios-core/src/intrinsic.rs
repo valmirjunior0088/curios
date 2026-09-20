@@ -17,6 +17,7 @@ pub fn wire_term(wire_type: &WireType) -> Term {
         WireType::Bool => Intrinsic::BoolType,
         WireType::Flt => Intrinsic::FltType,
         WireType::Bytes => Intrinsic::BinType(Grain::X),
+        WireType::Bits => Intrinsic::BinType(Grain::B),
         WireType::Handle => Intrinsic::HandleType,
         WireType::List(element) => Intrinsic::ListType(wire_term(&(*element).into())),
     };

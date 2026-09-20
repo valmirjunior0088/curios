@@ -1563,6 +1563,7 @@ fn print_wire_type(type_: WireType) -> Printer {
         WireType::Bool => pure("Bool"),
         WireType::Flt => pure("Flt"),
         WireType::Bytes => pure("Bytes"),
+        WireType::Bits => pure("Bits"),
         WireType::Handle => pure("Handle"),
         WireType::List(element) => {
             flat([pure("List("), print_wire_type(element.into()), pure(")")])

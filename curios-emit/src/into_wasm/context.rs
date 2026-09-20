@@ -738,8 +738,10 @@ impl<'a, 'b> Context<'a, 'b> {
             // No rope to force: a scalar reaches the wire from a register carrier, and `Flt`'s is the `f64` its box already holds.
             WireType::Nat | WireType::Bool | WireType::Int | WireType::Flt => return vec![],
             WireType::Bytes | WireType::Handle => self.table().bytes_force_func(),
+            WireType::Bits => self.table().bits_force_func(),
             WireType::List(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_force_func(),
+                WireLeaf::Bits => self.table().list_bits_force_func(),
                 WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int => self.table().list_force_func(),
             },
         };
@@ -760,8 +762,19 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 ];
             }
+            WireReference::Bits => {
+                return vec![
+                    curios_wasm::Instr::Call {
+                        func_name: self.table().bits_embed_func(),
+                    },
+                    curios_wasm::Instr::Call {
+                        func_name: self.table().bits_norm_func(),
+                    },
+                ];
+            }
             WireReference::List(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_embed_func(),
+                WireLeaf::Bits => self.table().list_bits_embed_func(),
                 WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int => self.table().list_embed_func(),
             },
         };
@@ -965,6 +978,7 @@ impl From<&WireType> for LoadAs {
             WireType::Int => LoadAs::Int,
             WireType::Flt => LoadAs::Flt,
             WireType::Bytes | WireType::Handle => LoadAs::Bin(Grain::X),
+            WireType::Bits => LoadAs::Bin(Grain::B),
             WireType::List(_) => LoadAs::List,
         }
     }

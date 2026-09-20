@@ -23,12 +23,13 @@ pub enum WireLeaf {
     Int,
     Bool,
     Bytes,
+    Bits,
     Handle,
 }
 
 /// The type of one value crossing the host boundary — a closed *subset of guest types*, not a vocabulary of wire shapes. Nothing below the type distinguishes `Bytes` from `Handle`: they share a wasm `ValType`, a wasmtime `FuncType` slot, and a load/force/embed path. What separates them is only the guest type `curios-core`'s `wire_term` builds, which is why each variant is spelled the way its guest type is.
 ///
-/// The scalar cases matter to codegen: a `Nat`/`Bool` operand is unboxed from its i31 carrier *unsigned* (`i31.get_u`) and crosses as a raw wasm `i32`, while `Int` is unboxed *signed* (`i31.get_s`) — `handle_poll`'s timeout keeps the `poll(2)` sign convention. An `Flt` is read out of its boxed `f64` and crosses as a raw wasm `f64`. `Bytes` is the byte grain alone: `Bits` and `Byte` are guest types with no wire spelling.
+/// The scalar cases matter to codegen: a `Nat`/`Bool` operand is unboxed from its i31 carrier *unsigned* (`i31.get_u`) and crosses as a raw wasm `i32`, while `Int` is unboxed *signed* (`i31.get_s`) — `handle_poll`'s timeout keeps the `poll(2)` sign convention. An `Flt` is read out of its boxed `f64` and crosses as a raw wasm `f64`. `Bytes` and `Bits` are the two packed grains, distinct guest types over one payload: a row states which grain it means, and the guest seals the returned payload at that grain's length. `Byte` is a guest type with no wire spelling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum WireType {
@@ -37,11 +38,12 @@ pub enum WireType {
     Bool,
     Flt,
     Bytes,
+    Bits,
     Handle,
     List(WireLeaf),
 }
 
-// A leaf is a wire type in its own right — the widening every projection over `List` takes to read its element, so the five-way match lives here once instead of in each of them.
+// A leaf is a wire type in its own right — the widening every projection over `List` takes to read its element, stated here once instead of in each of them.
 impl From<WireLeaf> for WireType {
     fn from(leaf: WireLeaf) -> Self {
         match leaf {
@@ -49,6 +51,7 @@ impl From<WireLeaf> for WireType {
             WireLeaf::Int => WireType::Int,
             WireLeaf::Bool => WireType::Bool,
             WireLeaf::Bytes => WireType::Bytes,
+            WireLeaf::Bits => WireType::Bits,
             WireLeaf::Handle => WireType::Handle,
         }
     }
@@ -71,6 +74,7 @@ pub enum WireScalar {
 #[curios_archive::archived]
 pub enum WireReference {
     Bytes,
+    Bits,
     Handle,
     List(WireLeaf),
 }
@@ -91,6 +95,7 @@ impl WireType {
             WireType::Bool => WireShape::Scalar(WireScalar::Bool),
             WireType::Flt => WireShape::Scalar(WireScalar::Flt),
             WireType::Bytes => WireShape::Reference(WireReference::Bytes),
+            WireType::Bits => WireShape::Reference(WireReference::Bits),
             WireType::Handle => WireShape::Reference(WireReference::Handle),
             WireType::List(leaf) => WireShape::Reference(WireReference::List(leaf)),
         }
@@ -112,6 +117,7 @@ impl From<WireReference> for WireType {
     fn from(reference: WireReference) -> Self {
         match reference {
             WireReference::Bytes => WireType::Bytes,
+            WireReference::Bits => WireType::Bits,
             WireReference::Handle => WireType::Handle,
             WireReference::List(leaf) => WireType::List(leaf),
         }

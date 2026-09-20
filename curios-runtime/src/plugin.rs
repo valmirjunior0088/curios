@@ -166,7 +166,7 @@ impl Plugin {
 
 /// What one wire type costs a plugin's signature, and how a value of it crosses.
 ///
-/// A scalar is itself. A byte string is a `(ptr, len)` pair, which is why it costs two slots where a scalar costs one — the shape every raw-ABI toolchain already emits, rather than a convention invented here.
+/// A scalar is itself. A byte string is a `(ptr, len)` pair, which is why it costs two slots where a scalar costs one — the shape every raw-ABI toolchain already emits, rather than a convention invented here. `Bits` crosses as that same pair over its packed bytes, `len` counting bytes as it does for `Bytes`: the wire has no slot for a bit count, and a plugin needing one reads it in band.
 ///
 /// `Handle` and `List` are refused. A handle is a token into the *host's* resource table and means nothing inside a plugin, which holds none; a list is a rope whose element marshalling nothing has asked for. Both are refused where a signature is read rather than mistranslated where it is called.
 fn crossing(wire: WireType, subject: &str, declaration: &str) -> Result<Crossing, String> {
@@ -174,7 +174,7 @@ fn crossing(wire: WireType, subject: &str, declaration: &str) -> Result<Crossing
         WireType::Nat | WireType::Bool => Ok(Crossing::Unsigned),
         WireType::Int => Ok(Crossing::Signed),
         WireType::Flt => Ok(Crossing::Float),
-        WireType::Bytes => Ok(Crossing::Bytes),
+        WireType::Bytes | WireType::Bits => Ok(Crossing::Bytes),
         WireType::Handle | WireType::List(_) => Err(format!(
             "{subject} answers `{declaration}`, whose signature names a `Handle` or a `List`. A foreign module takes scalars and byte strings: a handle is a token into the host's own table and names nothing inside a plugin, and a list has no element marshalling yet"
         )),
