@@ -1,4 +1,5 @@
 use /std/{Nat, Bool, Bits, Eq};
+use /std/Bits/{cong_cons2, cons_inj_head, cons_inj_tail, nonempty};
 use /std/Bool/{false_neq_true};
 
 --- Whether `bits` has no redundant high zero bit.
@@ -174,52 +175,12 @@ pub let eq(a: BigNat, b: BigNat, p: Eq(a.bits, b.bits)) -> Eq(a, b) =
         p,
         (_: Canonical(a.bits)) => Eq/refl())(b.canonical);
 
---- Congruence for a word extended by two bits.
-pub let cong_cons2(
-    @h1: Bool,
-    @h2: Bool,
-    ph: Eq(h1, h2),
-    @t1: Bits,
-    @t2: Bits,
-    pt: Eq(t1, t2),
-) -> Eq(b[h1, ..t1], b[h2, ..t2]) =
-    match ph
-    | refl(@_) => match pt | refl(@_) => Eq/refl() end
-    end;
-
 --- Congruence of `combine` in its tail.
 pub let cong_combine(h: Bool, @s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(combine(h, s), combine(h, t)) =
     Eq/cong((w) => combine(h, w), p);
 
 let cong_bits(@s: BigNat, @t: BigNat, p: Eq(s, t)) -> Eq(s.bits, t.bits) =
     Eq/cong((n: BigNat) => n.bits, p);
-
-let head_of(x: Bits) -> Bool =
-    match x | b[] => false | b[h, .._] => h end;
-
-let tail_of(x: Bits) -> Bits =
-    match x | b[] => b[] | b[_, ..t] => t end;
-
-let cons_inj_head(
-    @h1: Bool,
-    @t1: Bits,
-    @h2: Bool,
-    @t2: Bits,
-    p: Eq(b[h1, ..t1], b[h2, ..t2]),
-) -> Eq(h1, h2) =
-    match p: (s, t, _) => Eq(head_of(s), head_of(t)) | refl(@_) => Eq/refl() end;
-
-let cons_inj_tail(
-    @h1: Bool,
-    @t1: Bits,
-    @h2: Bool,
-    @t2: Bits,
-    p: Eq(b[h1, ..t1], b[h2, ..t2]),
-) -> Eq(t1, t2) =
-    match p: (s, t, _) => Eq(tail_of(s), tail_of(t)) | refl(@_) => Eq/refl() end;
-
-let nonempty(x: Bits) -> Bool =
-    match x | b[] => false | b[_, .._] => true end;
 
 let cong_is_trimmed(@s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(is_trimmed(s), is_trimmed(t)) =
     Eq/cong(is_trimmed, p);

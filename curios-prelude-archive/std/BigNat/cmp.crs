@@ -1,7 +1,8 @@
 use /std/{Bool, Bits, Ordering, Eq};
+use /std/Bits/{cong_cons2};
 use /std/Bool/{false_neq_true};
 use /std/Ordering/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
-use /std/BigNat/{BigNat, cong_cons2, eq};
+use /std/BigNat/{BigNat, eq};
 
 --- The order of two words.
 pub let raw(x: Bits, y: Bits) -> Ordering =

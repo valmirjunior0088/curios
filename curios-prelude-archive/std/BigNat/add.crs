@@ -1,9 +1,9 @@
 use /std/{Bool, Bits, Eq};
 use /std/ops/{Add};
 use /std/Bool/{false_neq_true};
-use /std/BigNat/{BigNat, cong_bits, cong_cons2, cong_is_trimmed, cons_inj_head, cons_inj_tail, eq,
-    is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, nonempty, of_trimmed_bits, refl_at,
-    tail_is_trimmed, xor3, mod succ};
+use /std/Bits/{cong_cons2, cons_inj_head, cons_inj_tail, nonempty};
+use /std/BigNat/{BigNat, cong_bits, cong_is_trimmed, eq, is_trimmed, is_trimmed_cons,
+    is_trimmed_of_canonical, maj3, of_trimmed_bits, refl_at, tail_is_trimmed, xor3, mod succ};
 
 --- The ripple-carry sum of two words with a carry in, untrimmed.
 pub let raw(x: Bits, y: Bits, carry: Bool) -> Bits =

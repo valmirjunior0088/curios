@@ -75,6 +75,54 @@ pub let fold(@A: Type, b: Bits, init: A, f: (Bool, A) -> A) -> A =
         end;
     go(n, 0, init, Eq/refl());
 
+-- The two halves of a cons, as total functions so congruence can take one apart.
+--
+-- Guarded rather than bounded, for the reason `/std/Bytes`'s own `head` and `tail` are: congruence needs one function of the whole value, and a bound stated over an arbitrary run has nothing to discharge it. On a cons the guard reduces, which is the only shape either is used at.
+let head_of(x: Bits) -> Bool =
+    match x | b[] => false | b[h, .._] => h end;
+
+let tail_of(x: Bits) -> Bits =
+    match x | b[] => b[] | b[_, ..t] => t end;
+
+--- Whether `b` has a bit at all.
+pub let nonempty(b: Bits) -> Bool =
+    match b | b[] => false | b[_, .._] => true end;
+
+--- A cons is injective in its head.
+---
+--- Read through a total projection of the whole value, which is what lets the equation be taken apart without a bound: the motive names `head_of` of each side, and `refl` collapses it.
+pub let cons_inj_head(
+    @h1: Bool,
+    @t1: Bits,
+    @h2: Bool,
+    @t2: Bits,
+    p: Eq(b[h1, ..t1], b[h2, ..t2]),
+) -> Eq(h1, h2) =
+    match p: (s, t, _) => Eq(head_of(s), head_of(t)) | refl(@_) => Eq/refl() end;
+
+--- A cons is injective in its tail.
+pub let cons_inj_tail(
+    @h1: Bool,
+    @t1: Bits,
+    @h2: Bool,
+    @t2: Bits,
+    p: Eq(b[h1, ..t1], b[h2, ..t2]),
+) -> Eq(t1, t2) =
+    match p: (s, t, _) => Eq(tail_of(s), tail_of(t)) | refl(@_) => Eq/refl() end;
+
+--- Congruence for a run extended by a head and a tail, which is the rebuild the two injections above take apart.
+pub let cong_cons2(
+    @h1: Bool,
+    @h2: Bool,
+    ph: Eq(h1, h2),
+    @t1: Bits,
+    @t2: Bits,
+    pt: Eq(t1, t2),
+) -> Eq(b[h1, ..t1], b[h2, ..t2]) =
+    match ph
+    | refl(@_) => match pt | refl(@_) => Eq/refl() end
+    end;
+
 --- The index of the first bit `pred` accepts, or `none`.
 pub let find_index(b: Bits, pred: (Bool) -> Bool) -> Option(Nat) =
     let (_, found): {Nat, Option(Nat)} =
