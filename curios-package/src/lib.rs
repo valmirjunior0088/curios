@@ -30,6 +30,9 @@ pub use manifest::*;
 mod new;
 pub use new::*;
 
+mod pin;
+pub use pin::*;
+
 mod selection;
 pub use selection::*;
 

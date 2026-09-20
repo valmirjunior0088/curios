@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Cli, Elaboration, ManifestFlag, Mode, Query},
+    crate::{Cli, Elaboration, ManifestFlag, Mode, Pinned, Query},
     curios_package::{Entire, Entry, Library, Program, Selection, Spelling},
     curios_text::Overlay,
     curios_verdicts::Verdicts,
@@ -78,6 +78,8 @@ pub(crate) enum Product {
     Package,
     /// The files named, rewritten in place.
     Rewritten,
+    /// The governing package's manifest, with one row written into it.
+    Manifest,
 }
 
 impl Product {
@@ -144,6 +146,15 @@ pub(crate) const CURATE: Contract = Contract {
     own_file_only: false,
     access: Access::None,
     product: Product::Sources,
+};
+
+/// Its subject is the governing package's own manifest, which it resolves nothing against and writes back: no target, and the store it reaches is the one a delivery is filed in rather than one it compiles into.
+pub(crate) const PIN: Contract = Contract {
+    command: "pin",
+    accepts: Accepts::Nothing,
+    own_file_only: false,
+    access: Access::None,
+    product: Product::Manifest,
 };
 
 pub(crate) const NEW: Contract = Contract {
@@ -233,6 +244,7 @@ impl Mode {
             Mode::Document { archive: None, .. } => &DOCUMENT,
             Mode::Test { .. } => &TEST,
             Mode::Curate { .. } => &CURATE,
+            Mode::Pin { .. } => &PIN,
             Mode::New { .. } => &NEW,
             Mode::Lint { .. } => &LINT,
             Mode::Format { .. } => &FORMAT,
@@ -265,7 +277,7 @@ impl Mode {
                 Query::Server { .. } => None,
             },
             // A directory to create is an argument, and no target. So is a filed stream to read.
-            Mode::Curate { .. } | Mode::New { .. } => None,
+            Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } => None,
             #[cfg(feature = "profile")]
             Mode::Profile { .. } => None,
         }
@@ -286,6 +298,7 @@ impl Mode {
             | Mode::Test { .. }
             | Mode::Curate { .. }
             | Mode::New { .. }
+            | Mode::Pin { .. }
             | Mode::Lint { .. }
             | Mode::Format { .. }
             | Mode::Wonder { .. } => None,
@@ -298,6 +311,11 @@ impl Mode {
     fn manifest_flag(&self) -> Option<&ManifestFlag> {
         match self {
             Mode::Curate { manifest } | Mode::Format { manifest, .. } => Some(manifest),
+            Mode::Pin { row } => match row {
+                Pinned::Foreign { manifest, .. } | Pinned::Dependency { manifest, .. } => {
+                    Some(manifest)
+                }
+            },
             _ => self.elaboration().map(|elaboration| &elaboration.manifest),
         }
     }
@@ -317,7 +335,7 @@ impl Mode {
                 | Query::Stage { elaboration, .. }
                 | Query::Server { elaboration } => Some(elaboration),
             },
-            Mode::Curate { .. } | Mode::New { .. } | Mode::Format { .. } => None,
+            Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } | Mode::Format { .. } => None,
             #[cfg(feature = "profile")]
             Mode::Profile { .. } => None,
         }

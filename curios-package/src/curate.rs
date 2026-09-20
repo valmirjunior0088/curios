@@ -56,7 +56,7 @@ impl fmt::Display for Acquisition {
 pub struct ModuleAcquisition {
     /// The package whose manifest declared the row, for a refusal to name.
     pub package: String,
-    /// The row's own name, which is what a report and `curios add --refresh` call it.
+    /// The row's own name, which is what a report and `curios pin --refresh` call it.
     pub name: String,
     pub url: String,
     pub hash: FileHash,
@@ -242,7 +242,11 @@ fn fetch_module(store: &Store, acquisition: &ModuleAcquisition) -> Result<(), St
     }
     let _ = fs::remove_file(&scratch);
 
-    let outcome = deliver_module(&scratch, acquisition)
+    let subject = format!(
+        "the foreign module {} of {}",
+        acquisition.name, acquisition.package
+    );
+    let outcome = deliver_module(&scratch, &acquisition.url, &subject)
         .and_then(|()| accept_module(&scratch, &placed, acquisition));
 
     if outcome.is_err() {
@@ -258,26 +262,26 @@ fn fetch_module(store: &Store, acquisition: &ModuleAcquisition) -> Result<(), St
 fn attempted(
     program: &str,
     attempt: io::Result<Output>,
-    acquisition: &ModuleAcquisition,
+    subject: &str,
+    url: &str,
 ) -> Option<Result<(), String>> {
     match attempt {
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
         Err(error) => Some(Err(format!("failed to run `{program}`: {error}"))),
         Ok(output) if output.status.success() => Some(Ok(())),
         Ok(output) => Some(Err(format!(
-            "failed to fetch the foreign module {} of {} from {} with `{program}`: {}",
-            acquisition.name,
-            acquisition.package,
-            acquisition.url,
+            "failed to fetch {subject} from {url} with `{program}`: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         ))),
     }
 }
 
-/// Ask the first fetcher on `PATH` for the URL, into `scratch`.
+/// Ask the first fetcher on `PATH` for `url`, into `scratch`.
 ///
 /// Two of them because neither is universally installed and both are ubiquitous enough that demanding a particular one would be arbitrary — the same reasoning that shells out at all rather than vendoring a client.
-fn deliver_module(scratch: &Path, acquisition: &ModuleAcquisition) -> Result<(), String> {
+///
+/// `subject` names what is being fetched, since the two callers describe it differently: `curate` knows the package a row was declared by, and `curios pin` is being handed the row that does not exist yet.
+pub(crate) fn deliver_module(scratch: &Path, url: &str, subject: &str) -> Result<(), String> {
     let curl = Command::new("curl")
         .args([
             "--location",
@@ -287,10 +291,10 @@ fn deliver_module(scratch: &Path, acquisition: &ModuleAcquisition) -> Result<(),
             "--output",
         ])
         .arg(scratch)
-        .arg(&acquisition.url)
+        .arg(url)
         .output();
 
-    if let Some(outcome) = attempted("curl", curl, acquisition) {
+    if let Some(outcome) = attempted("curl", curl, subject, url) {
         return outcome;
     }
 
@@ -298,16 +302,15 @@ fn deliver_module(scratch: &Path, acquisition: &ModuleAcquisition) -> Result<(),
     let wget = Command::new("wget")
         .args(["--quiet", "--output-document"])
         .arg(scratch)
-        .arg(&acquisition.url)
+        .arg(url)
         .output();
 
-    if let Some(outcome) = attempted("wget", wget, acquisition) {
+    if let Some(outcome) = attempted("wget", wget, subject, url) {
         return outcome;
     }
 
     Err(format!(
-        "the foreign module {} of {} is fetched from {}, and neither `curl` nor `wget` is on PATH; `curios curate` reaches the network through whichever of them is installed",
-        acquisition.name, acquisition.package, acquisition.url
+        "{subject} is fetched from {url}, and neither `curl` nor `wget` is on PATH; this toolchain reaches the network through whichever of them is installed"
     ))
 }
 
@@ -324,7 +327,7 @@ fn accept_module(
     if delivered != acquisition.hash {
         // The same two conditions `Foreign::bytes` states, with the likely one inverted: bytes that arrived from elsewhere changed without you, where bytes you build change because you built them.
         return Err(format!(
-            "the foreign module {} of {} was fetched from {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: the publisher re-cut this version and said so, or you repointed this row yourself — then `curios add foreign {} --refresh`\n  pay close attention if: nothing announced a change — an artifact replaced in place, under a version already published, is what a compromised release looks like, and this hash is the only thing that noticed",
+            "the foreign module {} of {} was fetched from {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: the publisher re-cut this version and said so, or you repointed this row yourself — then `curios pin foreign {} --refresh`\n  pay close attention if: nothing announced a change — an artifact replaced in place, under a version already published, is what a compromised release looks like, and this hash is the only thing that noticed",
             acquisition.name,
             acquisition.package,
             acquisition.url,
@@ -361,8 +364,8 @@ fn fetch(store: &Store, acquisition: &Acquisition) -> Result<(), String> {
     fs::create_dir_all(&scratch)
         .map_err(|error| format!("failed to create {}: {error}", scratch.display()))?;
 
-    let outcome =
-        deliver(&scratch, acquisition).and_then(|()| accept(&scratch, store, acquisition));
+    let outcome = deliver(&scratch, &acquisition.url, &acquisition.snapshot.rev)
+        .and_then(|()| accept(&scratch, store, acquisition));
 
     if outcome.is_err() {
         let _ = fs::remove_dir_all(&scratch);
@@ -371,12 +374,12 @@ fn fetch(store: &Store, acquisition: &Acquisition) -> Result<(), String> {
     outcome
 }
 
-/// Ask `git` for the revision, into `scratch`.
-fn deliver(scratch: &Path, acquisition: &Acquisition) -> Result<(), String> {
-    let rev = &acquisition.snapshot.rev;
-
+/// Ask `git` for `rev` of `url`, into `scratch`.
+///
+/// Takes the two fields rather than an [`Acquisition`], because `curios pin` delivers a tree it has no pin for yet — computing that pin is the whole of what it is doing.
+pub(crate) fn deliver(scratch: &Path, url: &str, rev: &str) -> Result<(), String> {
     git(scratch, &["init", "--quiet"])?;
-    git(scratch, &["remote", "add", "origin", &acquisition.url])?;
+    git(scratch, &["remote", "add", "origin", url])?;
 
     // A shallow fetch of the one revision is what this wants, and what it brought is `FETCH_HEAD` — which is the pin whether it named an object, a branch or a tag, and the only spelling that is. A fetched branch leaves no local ref of its own, so checking one out by the name it was pinned under is what does not work here.
     match git(
@@ -404,7 +407,7 @@ fn accept(scratch: &Path, store: &Store, acquisition: &Acquisition) -> Result<()
     if &delivered != acquisition.hash() {
         // The two conditions the module refusals state, with the discriminator a *tree* has and a file does not: what the row pins decides whether the delivery could have moved at all.
         return Err(format!(
-            "the dependency {:?} was fetched from {} at {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: this row pins a branch or a tag and it has moved — then `curios add dependency {} --refresh`\n  pay close attention if: this row pins a commit object, which cannot move — a tree that changed under one means the history it came from was rewritten",
+            "the dependency {:?} was fetched from {} at {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: this row pins a branch or a tag and it has moved — then `curios pin dependency {} --refresh`\n  pay close attention if: this row pins a commit object, which cannot move — a tree that changed under one means the history it came from was rewritten",
             acquisition.name,
             acquisition.url,
             acquisition.snapshot.rev,

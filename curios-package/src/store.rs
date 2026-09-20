@@ -14,6 +14,8 @@
 //!   payloads/       <slot>          precompiled payloads, one file per executable, chain and engine
 //! ```
 //!
+//! One transient entry passes through beside them: `pinning.<pid>`, where `curios pin` stages a delivery whose digest it has yet to compute, before renaming it into the family it belongs to. See [`Store::staging`].
+//!
 //! Separated because the alternative re-invites a collision that nesting otherwise removes: a hash has to be transformed to sit in a directory name at all — `c1:<digest>` most naturally becoming `c1/<digest>` — and a package legitimately named `c1` would then land on top of it.
 //!
 //! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `sources/`, `foreign/`, `verdicts/` and `payloads/` families — never `executables/` or `documentation/`, which belong to the package that declared them — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
@@ -65,6 +67,17 @@ impl Store {
     /// Where a package's generated documentation is written: nested under the package, beside the project, for the reason an executable is.
     pub fn documentation(&self, package: &str) -> PathBuf {
         self.project.join(STORE).join("documentation").join(package)
+    }
+
+    /// Where a delivery is staged while the digest that will name it is still being computed, before it is renamed onto that digest.
+    ///
+    /// **The one fetch in this toolchain with no pin to fetch against**, because deriving the pin is what `curios pin` is doing. Every other stages under the key it already has — `curate` uses `source(hash).with_extension("fetching")` — which is exactly what this cannot do.
+    ///
+    /// It still lands in the store rather than being hashed and thrown away: the bytes that were just fetched are the bytes the next command wants, and a delivery discarded here would be downloaded a second time by the `curate` that follows. What makes filing it sound is that the digest is computed *from* the delivery, so the entry it is renamed onto holds bytes that hash to its own name by construction — and every reader re-hashes what it takes out.
+    ///
+    /// In the shared half beside the families, so the rename onto a digest is within one filesystem however `CURIOS_CACHE` points; `what` carries the process id, so two `pin`s at once stage two paths.
+    pub fn staging(&self, what: &str) -> PathBuf {
+        self.shared.join(format!("pinning.{what}"))
     }
 
     /// Where a materialized source tree is placed, keyed by the hash it was accepted against.

@@ -2,7 +2,7 @@
 
 use {
     crate::{COMPILE, COST, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, RUN, STAGE, TEST, TESTS},
-    clap::{Args, Parser, Subcommand},
+    clap::{ArgGroup, Args, Parser, Subcommand},
     curios_pipeline::Stage,
     std::{ffi::OsString, path::PathBuf, sync::LazyLock},
 };
@@ -125,6 +125,13 @@ pub(crate) enum Mode {
         manifest: ManifestFlag,
     },
 
+    /// The one command that writes a manifest, and the only thing in this toolchain that derives a pin rather than checking one. What each form takes is `documentation/usage.md`'s Pinning.
+    #[command(about = "Write or re-pin a manifest row, deriving its hash from the delivery")]
+    Pin {
+        #[command(subcommand)]
+        row: Pinned,
+    },
+
     /// Last of the machinery rather than first: it writes what everything else reads, so it can only be right once there is something for it to be right about.
     #[command(about = "Start a package in DIR, named after it")]
     New {
@@ -184,6 +191,120 @@ pub(crate) enum Mode {
         )]
         stream: PathBuf,
     },
+}
+
+/// Which table a row is written into, which decides what its name means and so what may be checked about it.
+///
+/// The name is a positional on both, and mandatory on both, so `--rev` and `--refresh` have a row to name without a flag to carry it. What differs is what the name *is*: a `[[foreign]]` row's is a handle no program refers to, and a `[dependencies]` key is the package's own declared name — which is why only the second is checked against the delivery, and why neither is ever discovered rather than stated.
+#[derive(Debug, Subcommand)]
+pub(crate) enum Pinned {
+    // Required, so a row is never written pointing nowhere; multiple, because `--url` and `--rev` are one delivery spelled in two words.
+    #[command(
+        about = "A WebAssembly module implementing this package's `foreign` declarations",
+        group = ArgGroup::new("delivery").required(true).multiple(true)
+    )]
+    Foreign {
+        #[arg(
+            value_name = "NAME",
+            help = "The row's name: a handle for this command"
+        )]
+        name: String,
+
+        #[arg(
+            long,
+            value_name = "PATH",
+            group = "delivery",
+            conflicts_with_all = ["url", "refresh"],
+            help = "A module this package carries, by its path from the manifest"
+        )]
+        path: Option<PathBuf>,
+
+        #[arg(
+            long,
+            value_name = "URL",
+            group = "delivery",
+            conflicts_with = "refresh",
+            help = "A module fetched once and filed in the shared store"
+        )]
+        url: Option<String>,
+
+        #[arg(
+            long,
+            group = "delivery",
+            help = "Deliver again whatever this row already names, and pin what arrives"
+        )]
+        refresh: bool,
+
+        #[command(flatten)]
+        check: CheckFlag,
+
+        #[command(flatten)]
+        manifest: ManifestFlag,
+    },
+
+    #[command(
+        about = "A package this one reaches, keyed by the name that package declares",
+        group = ArgGroup::new("delivery").required(true).multiple(true)
+    )]
+    Dependency {
+        #[arg(
+            value_name = "NAME",
+            help = "The row's name, which must be the name the package declares for itself"
+        )]
+        name: String,
+
+        #[arg(
+            long,
+            value_name = "PATH",
+            group = "delivery",
+            conflicts_with_all = ["url", "rev", "refresh"],
+            help = "A live sibling on disk, by its path from the manifest"
+        )]
+        path: Option<PathBuf>,
+
+        #[arg(
+            long,
+            value_name = "URL",
+            group = "delivery",
+            requires = "rev",
+            conflicts_with = "refresh",
+            help = "A repository, pinned to the revision --rev names"
+        )]
+        url: Option<String>,
+
+        #[arg(
+            long,
+            value_name = "REV",
+            group = "delivery",
+            conflicts_with = "refresh",
+            help = "The revision to pin; alone, it re-pins this row's existing URL to a new one"
+        )]
+        rev: Option<String>,
+
+        #[arg(
+            long,
+            group = "delivery",
+            help = "Deliver this row's revision again, and pin the tree that arrives"
+        )]
+        refresh: bool,
+
+        #[command(flatten)]
+        check: CheckFlag,
+
+        #[command(flatten)]
+        manifest: ManifestFlag,
+    },
+}
+
+/// Whether the manifest is written, or only asked what it would say.
+#[derive(Debug, Args)]
+pub(crate) struct CheckFlag {
+    /// The delivery still happens under it — what a row *should* say cannot be known without fetching — and only the write is withheld. `format --check` is the precedent for the spelling and for the exit code.
+    #[arg(
+        long,
+        help = "Write nothing; exit nonzero if the manifest would change (for CI)"
+    )]
+    pub(crate) check: bool,
 }
 
 /// One question each, of fixed arity. A target takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Selection`'s.

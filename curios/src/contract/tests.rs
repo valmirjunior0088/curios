@@ -24,6 +24,27 @@ fn commands() -> Vec<&'static [&'static str]> {
         &["document", "--archive", "unit.rkyv", "--output", "site"],
         &["test", TARGET],
         &["curate"],
+        &["pin", "foreign", "probe", "--path", "probe.wasm"],
+        &[
+            "pin",
+            "foreign",
+            "probe",
+            "--url",
+            "https://example.invalid/probe.wasm",
+        ],
+        &["pin", "foreign", "probe", "--refresh"],
+        &["pin", "dependency", "json", "--path", "../json"],
+        &[
+            "pin",
+            "dependency",
+            "json",
+            "--url",
+            "https://example.invalid/json",
+            "--rev",
+            "abc",
+        ],
+        &["pin", "dependency", "json", "--rev", "abc"],
+        &["pin", "dependency", "json", "--refresh"],
         &["new", "fresh"],
         &["lint", TARGET],
         &["format", TARGET],
@@ -426,6 +447,20 @@ curate — Entire, store None, leaves Sources, options --manifest
   work/app/serve: (none) → entire app
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
+pin foreign probe --path probe.wasm — Nothing, store None, leaves Manifest, options --path --url --refresh --check --manifest
+  takes no subject
+pin foreign probe --url https://example.invalid/probe.wasm — Nothing, store None, leaves Manifest, options --path --url --refresh --check --manifest
+  takes no subject
+pin foreign probe --refresh — Nothing, store None, leaves Manifest, options --path --url --refresh --check --manifest
+  takes no subject
+pin dependency json --path ../json — Nothing, store None, leaves Manifest, options --path --url --rev --refresh --check --manifest
+  takes no subject
+pin dependency json --url https://example.invalid/json --rev abc — Nothing, store None, leaves Manifest, options --path --url --rev --refresh --check --manifest
+  takes no subject
+pin dependency json --rev abc — Nothing, store None, leaves Manifest, options --path --url --rev --refresh --check --manifest
+  takes no subject
+pin dependency json --refresh — Nothing, store None, leaves Manifest, options --path --url --rev --refresh --check --manifest
+  takes no subject
 new fresh — Nothing, store None, leaves Package, options none
   takes no subject
 lint TARGET — Any, store Read, leaves Nothing, options --budget --manifest

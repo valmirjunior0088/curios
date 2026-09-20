@@ -27,7 +27,10 @@ use {
     curios::wasm_optm,
     curios_abi::ForeignStore,
     curios_document::write_documentation,
-    curios_package::{Entry, Governing, Spelling, Store, curate, declared_modules, scaffold},
+    curios_package::{
+        Entry, Governing, Repoint, Spelling, Store, Subject as PinSubject, curate,
+        declared_modules, pin, scaffold,
+    },
     curios_pipeline::CompileError,
     curios_runtime::{
         Bundle, BundledPlugin, DeclaredModule, ForeignBindings, ModuleBytes, OsHost,
@@ -43,17 +46,14 @@ use {
         collections::{BTreeMap, BTreeSet},
         ffi::OsString,
         fs, io, iter,
-        path::Path,
+        path::{Path, PathBuf},
         process::{self, ExitCode},
         time::Instant,
     },
 };
 
 #[cfg(feature = "profile")]
-use {
-    curios_profile::{Destination, fold_at, install},
-    std::path::PathBuf,
-};
+use curios_profile::{Destination, fold_at, install};
 
 // Only the `profile` build installs it, so the ordinary CLI keeps the system allocator untouched and pays nothing for counters no mode would read.
 #[cfg(feature = "profile")]
@@ -150,6 +150,51 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Resolv
             })
         })
         .collect()
+}
+
+/// What a `pin` subcommand asks for: which table, which row, where it should point, and whether to write it.
+///
+/// The exclusivity is clap's — the delivery flags are one required group, and the ones that cannot stand together say so — so what is left here is reading which of them was given. The one refusal of its own is a dependency fetched with no revision to pin, which `requires` already catches for `--url` and which this states for the reader who reached it another way.
+fn asked(row: Pinned) -> Result<(PinSubject, String, Repoint, bool), String> {
+    let repoint =
+        |path: Option<PathBuf>, url: Option<String>, rev: Option<String>, refresh: bool| match (
+            path, url, rev, refresh,
+        ) {
+            (Some(path), ..) => Repoint::Carried(path),
+            (None, Some(url), rev, _) => Repoint::Fetched { url, rev },
+            (None, None, Some(rev), _) => Repoint::Revised(rev),
+            (None, None, None, _) => Repoint::Refresh,
+        };
+
+    Ok(match row {
+        Pinned::Foreign {
+            name,
+            path,
+            url,
+            refresh,
+            check,
+            ..
+        } => (
+            PinSubject::Foreign,
+            name,
+            repoint(path, url, None, refresh),
+            check.check,
+        ),
+        Pinned::Dependency {
+            name,
+            path,
+            url,
+            rev,
+            refresh,
+            check,
+            ..
+        } => (
+            PinSubject::Dependency,
+            name,
+            repoint(path, url, rev, refresh),
+            check.check,
+        ),
+    })
 }
 
 /// The `ffi`-tier bindings a program needs, linking each declared module in this process.
@@ -378,6 +423,48 @@ fn dispatch() -> Result<(), Failure> {
             // After the packages, in the order they were brought in: a module is named by a manifest a tree had to arrive for.
             for acquisition in curated.modules {
                 fact(Heading::Fetched, Subject::Module(acquisition.name));
+            }
+        }
+        Mode::Pin { row } => {
+            let governing = Governing::found(manifest, &here()?)?;
+            let (subject, name, repoint, check) = asked(row)?;
+            let pinned = pin(&governing, subject, &name, &repoint, check)?;
+            let named = Subject::Module(name);
+
+            // Before what was written, because this is what the write believed: a delivery nothing verified, described as far as it can be.
+            if let Some(probe) = &pinned.probe {
+                fact(
+                    Heading::Delivered,
+                    format!(
+                        "{named}: {} bytes, {}. Nothing verified this download — the hash below is derived from it, not checked against it",
+                        probe.bytes, probe.kind
+                    ),
+                );
+            }
+
+            match pinned.fields.is_empty() {
+                // A row already saying what it was asked to say is the ordinary outcome of a second `pin`, and worth saying rather than passing in silence.
+                true => fact(Heading::Pinned, format!("{named}; unchanged")),
+                false => {
+                    let mut line = Line::open(Heading::Pinned, &named);
+                    line.outcome(match pinned.wrote {
+                        true => "written",
+                        false => "would change",
+                    });
+
+                    eprintln!();
+                    for (key, before, after) in &pinned.fields {
+                        match before {
+                            Some(before) => detail(format!("{key}: {before} → {after}")),
+                            None => detail(format!("{key}: {after}")),
+                        }
+                    }
+                }
+            }
+
+            // `--check` is the question, and its answer is the exit code — `format --check`'s contract, for the same reason.
+            if check && pinned.would_write() {
+                process::exit(1);
             }
         }
         Mode::Format { targets, check, .. } => {

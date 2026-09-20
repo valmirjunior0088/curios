@@ -102,6 +102,10 @@ headings! {
     Finished => "Finished",
     /// A dependency brought into the store.
     Fetched => "Fetched",
+    /// A manifest row written, or — under `--check` — one that would be.
+    Pinned => "Pinned",
+    /// What a delivery turned out to be, said before the pin derived from it is believed.
+    Delivered => "Delivered",
     /// One file or directory scaffolding produced.
     Created => "Created",
     /// The command to run next.
@@ -144,6 +148,13 @@ fn head(marker: &str, heading: Heading) -> String {
 /// One complete fact, on a line of its own.
 pub(crate) fn fact(heading: Heading, detail: impl fmt::Display) {
     eprintln!("{}{detail}", head("", heading));
+}
+
+/// One detail of the line above, in the columns a heading would occupy — the keys a `pin` wrote, under the row it wrote them into.
+///
+/// Headingless because it is not a thing that happened, which is what every heading names; it is part of what the line above already reported.
+pub(crate) fn detail(text: impl fmt::Display) {
+    eprintln!("{:<HEADING_WIDTH$}  {text}", "");
 }
 
 /// One complete step of the header above, on a line of its own — `↳ Running hello`, whose consequence is what follows on stdout rather than an outcome of its own.

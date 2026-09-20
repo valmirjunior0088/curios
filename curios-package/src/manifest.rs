@@ -456,7 +456,7 @@ impl Foreign {
         if delivered != self.hash {
             // The two conditions rather than one instruction: a re-pin is the ordinary answer here and the alarming one, and which it is depends on something only the reader knows.
             return Err(format!(
-                "the foreign module {:?} at {} is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: you rebuilt the module from source you control — then `curios add foreign {} --refresh`\n  pay close attention if: you did not rebuild it, or a dependency delivered it rather than you building it",
+                "the foreign module {:?} at {} is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: you rebuilt the module from source you control — then `curios pin foreign {} --refresh`\n  pay close attention if: you did not rebuild it, or a dependency delivered it rather than you building it",
                 self.name,
                 path.display(),
                 self.hash,
@@ -506,7 +506,7 @@ impl ForeignRow {
         // Both deliveries state it, because it answers what the module *is* rather than where it came from — and the carried case is the one that would otherwise go unchecked, since the tree holding it may be the entry package or a live path dependency, neither of which is pinned.
         let Some(hash) = hash else {
             return Err(format!(
-                "the foreign row {name:?} states no `hash`; a module is accepted against one however it arrives, and `curios add foreign --refresh {name}` writes the one it currently has"
+                "the foreign row {name:?} states no `hash`; a module is accepted against one however it arrives, and `curios pin foreign --refresh {name}` writes the one it currently has"
             ));
         };
 

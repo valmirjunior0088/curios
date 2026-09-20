@@ -6,7 +6,7 @@ The complete command-line and package reference. The [README](../README.md) cove
 - [What a package is made of](#what-a-package-is-made-of)
 - [Targets](#targets)
 - [The surface](#the-surface)
-- [`run`](#run) · [`compile`](#compile) · [`document`](#document) · [`test`](#test) · [`curate`](#curate) · [`new`](#new) · [`lint`](#lint) · [`format`](#format) · [`wonder`](#wonder) · [`profile`](#profile)
+- [`run`](#run) · [`compile`](#compile) · [`document`](#document) · [`test`](#test) · [`curate`](#curate) · [`pin`](#pin) · [`new`](#new) · [`lint`](#lint) · [`format`](#format) · [`wonder`](#wonder) · [`profile`](#profile)
 - [The manifest](#the-manifest)
 - [Exit codes](#exit-codes)
 - [Flags](#flags)
@@ -70,7 +70,7 @@ A loose file brings no project with it — no dependencies, not even the library
 
 ## The surface
 
-Nine commands, and `wonder`'s five queries — ten where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
+Ten commands, and `wonder`'s five queries — eleven where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
 
 | Command | Subject | Its own arguments | Writes | Store |
 | --- | --- | --- | --- | --- |
@@ -79,6 +79,7 @@ Nine commands, and `wonder`'s five queries — ten where the compiler was built 
 | [`document`](#document) | a library | `--archive <FILE>`, `-o`/`--output <DIR>` | pages | reads, files what it built; none under `--archive` |
 | [`test`](#test) | anything | `--filter <PREFIX>` | nothing | reads, files what it built |
 | [`curate`](#curate) | the governing package | — | materialized sources | none |
+| [`pin`](#pin) | the governing package's manifest | `foreign`/`dependency <NAME>`, `--path`, `--url`, `--rev`, `--refresh`, `--check` | one manifest row | files what it delivered |
 | [`new`](#new) | — | `<DIR>` | a package | none |
 | [`lint`](#lint) | anything | — | nothing | reads only |
 | [`format`](#format) | files, any number | `--check` | the files, rewritten | none |
@@ -89,7 +90,7 @@ Nine commands, and `wonder`'s five queries — ten where the compiler was built 
 | [`wonder server`](#wonder) | — | — | nothing | reads only |
 | [`profile`](#profile) | — | `<PATH>` | nothing | none |
 
-`--manifest` is taken by every command but `new`. `--budget` is taken by every command that elaborates, which is every one but `new`, `curate` and `format`. Both are stated under [Flags](#flags).
+`--manifest` is taken by every command but `new`. `--budget` is taken by every command that elaborates, which is every one but `new`, `curate`, `pin` and `format`. Both are stated under [Flags](#flags).
 
 ## `run`
 
@@ -162,6 +163,47 @@ curios curate
 `curate` materializes what the manifests reference, and it is the only part of the toolchain that reaches the network — the compiler itself never fetches. A delivered tree is accepted against its `hash` whatever transport produced it, so a mirror is no weaker than the origin, and a delivery that fails its hash is refused whoever fetched it.
 
 **It reaches the network through programs already on the machine**, for the reason acceptance is by hash: any transport may deliver the bytes, so the one already installed is the right one rather than a client vendored into the compiler. A package tree comes through `git`, and a `[[foreign]]` module through `curl` or `wget`, whichever is on `PATH`. A project with no `[[foreign]]` row that names a `url` needs neither of those two; one that has one and has neither installed is refused naming the module and both programs.
+
+## `pin`
+
+```sh
+curios pin foreign sha2 --path foreign/libsha2.wasm     # a module this package carries
+curios pin foreign sha2 --url https://…/libsha2.wasm    # one fetched and filed in the store
+curios pin foreign sha2 --refresh                       # deliver again, pin what arrives
+curios pin dependency json --url https://…/json --rev abc123
+curios pin dependency json --rev def456                 # the same repository, a new revision
+curios pin dependency json --path ../json               # a live sibling on disk
+curios pin dependency json --refresh
+curios pin dependency json --rev def456 --check         # write nothing, exit nonzero if it would
+```
+
+`pin` is the only command that writes a manifest, and **the only one that derives a pin rather than checking one**. Everywhere else in this toolchain a delivery is accepted against a hash that was already written down; here there is nothing to accept against, because computing that hash is the point. Adding a row and re-pinning one are the same act — a row that did not exist is simply one with nothing to keep — which is why there is no separate `add`.
+
+The name is a positional and always required, on both forms, so `--rev` and `--refresh` have a row to name. What the name *is* differs, and so does what can be checked about it:
+
+| | `pin foreign <NAME>` | `pin dependency <NAME>` |
+| --- | --- | --- |
+| the name is | a handle for this command; no program refers to it | the package's mount prefix, and every consumer's only way to refer to it |
+| who chooses it | you | the dependency, in its own `curios.toml` |
+| a disagreement | impossible; there is nothing to disagree with | refused naming both, before anything is written |
+
+Exactly one delivery form is required. `--path` and `--url` say where the row points; `--rev` alone keeps the repository and moves the revision; `--refresh` keeps everything and delivers again. `--url` on a dependency requires `--rev`, since a repository is pinned to a revision and nothing else.
+
+**`member` and `catalog` rows are not written here**, and the line is where a row *points*. Those two are markers rather than resolvers — one names a member of the governing umbrella, the other a row in its catalog — so there is no location to state, nothing to deliver and no hash to derive. Each is a single word in the manifest, which is less to type than the command that would write it.
+
+| Flag | Is |
+| --- | --- |
+| `--path <PATH>` | a module the package carries, or a package belonging to a **separate project** on disk. A module's path is plain and relative, as an executable's is, because the module is inside this package; a `source = "path"` dependency reaches out of this project entirely, so `../json` is exactly what it is for. A package of your *own* project is a `member` of the umbrella that enumerates it, which is a different row and not this command's business |
+| `--url <URL>` | a module fetched once and filed in the shared store, or — with `--rev` — a repository |
+| `--rev <REV>` | the revision to pin. Alone on an existing row, it re-pins that row's own URL to a new revision, which is how a dependency is moved forward without restating where it comes from |
+| `--refresh` | deliver again whatever the row already names and pin what arrives. The only spelling permitted to overwrite a hash that was not asked to move |
+| `--check` | write nothing and exit nonzero if the manifest would change. The delivery still happens — what a row *should* say cannot be known without it — and only the write is withheld |
+
+**What was fetched is filed, not discarded.** A delivery lands in the store under the digest it turns out to have, so the `curate` that follows finds it already there rather than downloading it a second time. That is sound because the digest is computed *from* the delivery: the entry holds bytes that hash to its own name by construction, and every reader re-hashes what it takes out.
+
+**`--refresh` reports before it overwrites.** What arrived is described first — its size, and whether it is a WebAssembly module at all — beside the plain statement that nothing verified it. That line is not a formality: a re-pin is the one moment the hash stops being a check and becomes a claim, and [`curate`](#curate)'s refusal already tells you which mismatches are ordinary and which are worth stopping for. The row's exports are not restated here; a claimed export the module does not have is refused by name when the program is linked.
+
+Writing is checked rather than trusted: the manifest is edited in place, keeping its comments and ordering, and the result is read back and compared key by key against what went in, so a row written here cannot have disturbed one it was not asked about. Pinning a row to what it already says writes nothing and reports that it did.
 
 ## `new`
 
@@ -282,7 +324,7 @@ A `[[foreign]]` row names a module and says which of the package's `foreign` dec
 
 ```toml
 [[foreign]]
-name = "sha2"                    # a handle for `curios add`; no program refers to it
+name = "sha2"                    # a handle for `curios pin`; no program refers to it
 path = "foreign/libsha2.wasm"    # or `url`, never both
 hash = "f1:9c3a…"                # either way
 
@@ -348,7 +390,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 | Flag | Taken by | Effect |
 | --- | --- | --- |
 | `--manifest <PATH>` | every command but `new` | use this `curios.toml` as the governing package's, instead of the nearest one |
-| `--budget <UNITS>` | every command that elaborates, which is every one but `new`, `curate` and `format` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
+| `--budget <UNITS>` | every command that elaborates, which is every one but `new`, `curate`, `pin` and `format` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
 | `-h`/`--help` | `curios` and every command | what that command takes, with the default each flag was built with |
 | `-V`/`--version` | `curios` itself | the build's version, so a bug report can say which compiler produced the output |
 | `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH`, rotating at 512 MiB — present only in a compiler built with the `profile` feature, and inert without it. [`profile`](#profile) reads the stream back |
@@ -394,6 +436,8 @@ Everything generated lands under `.curios/`, beside the governing manifest, in s
 | `verdicts/<slot>` | judged units, one slot per unit | shared |
 | `payloads/<slot>` | precompiled payloads, one slot per executable | shared |
 | `compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary | shared |
+
+One transient entry passes through beside them: [`pin`](#pin) stages a delivery at `pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it.
 
 `.curios/` is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the shared half — everything above whose key says nothing about which project asked. `executables/` and `documentation/` are products of the package that declared them and always stay beside it. A source's scheme is a directory of its own so a successor scheme can sit beside `c1` rather than replace it.
 
