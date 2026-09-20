@@ -88,7 +88,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `Byte` (i31 scalar; contextual literals `0..=255`; `Byte/to_nat` and `Nat/to_byte`)
   - [x] `Int`
   - [x] `Flt` (bit-preserving binary64 identity, with the full arithmetic and comparison family)
-  - [x] Packed `Bits` and `Bytes` (shared immutable windows; O(1) slices and tails)
+  - [x] Packed `Bits` and `Bytes` (shared immutable windows; O(1) slices and tails; pointwise `and`/`or`/`xor` under a decided equal-length bound, `replicate`, and the reinterpretation between grains under a decided alignment bound)
   - [x] `Flt` specified by a hardware-independent model, stated in this repository
   - [x] `List`
   - [x] `Cell` (a mutable reference cell over any carrier, with `set` and `get`)
@@ -231,6 +231,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] The effect tier retyped: `Io` where a module suspends, `Try` where it can fail
 - [x] Core collections (`std/List` and its helpers, and `std/Vec`, which counts a list in its type)
 - [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys)
+- [x] Bitwise vocabulary on the packed carriers (`not`, `shl`, `shr`, `rotl`, `rotr` at both grains over `/sys`'s `replicate`, length-preserving and positional; `Bits` and `Bytes` read least-significant-first without exception, and `Bits` is level with `Bytes` on the surface they share)
 - [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`, over packed `Bytes`)
 - [x] Certified Unicode-scalar `Char` type and `Str` migration (`'…' : Char`, typed APIs)
 - [x] Character literals realize as numerals (`Char` by default, `Nat`/`Byte`/`Int` from context)
