@@ -123,6 +123,24 @@ fn any_metavar_visits_a_shared_subterm_once() {
 }
 
 #[test]
+fn deep_terms_are_searched_without_native_recursion() {
+    // The shape neither prune stops: `has_metavar` is set on every ancestor of a hole, so a spine this tall is descended in full. Both walks used to do that natively at five debug frames per link and die as a bare `SIGSEGV` — *below* the depth at which the reduction budget refuses, so the same program crashed at eight thousand links and reported cleanly at sixty thousand. A regression here is a stack overflow rather than a failure.
+    let argument = Term::free_var(&Free::local(0, None));
+    let mut term = Term::hole(1);
+    for _ in 0..DEEP {
+        term = Term::apply(term, [argument.clone()]);
+    }
+
+    // The hole at the base is found, and an absent id walks the whole spine to say so.
+    assert!(term.any_metavar(&mut |id| id == MetavarId(1)));
+    assert!(!term.any_metavar(&mut |id| id == MetavarId(99)));
+
+    // Its sibling, which the kernel's motive check reaches: the needle is found under the spine, and one that never occurs is refused after walking it.
+    assert!(term.mentions_term(&argument));
+    assert!(!term.mentions_term(&Term::free_var(&Free::local(1, None))));
+}
+
+#[test]
 fn has_local_free_flags_locals_not_globals() {
     let binder_0 = Free::local(0, Some("/std/Str/step"));
     let binder_1 = Free::local(1, Some("c#1"));

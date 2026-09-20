@@ -1889,17 +1889,31 @@ impl Term {
     }
 
     /// Whether `needle` occurs in this term as a subterm, at any depth and under any binder — a syntactic occurrence, decided by term equality. A bound variable never equals a free one, so a needle that is a free variable is found exactly where `mentions_free` finds it; a compound needle is found where its spelling stands whole, which is also the only place a case equation recorded against that spelling can fire.
+    /// Driven by [`Term::try_walk`] for [`Term::any_metavar`]'s reason: it is a read-only walk over `any_child_term`, and a needle sought under a data-shaped spine would otherwise descend it natively. The free-variable head is read once here rather than re-matched at every node, which the recursive spelling did because each level re-entered through the same entry point.
     pub fn mentions_term(&self, needle: &Term) -> bool {
-        if self == needle {
-            return true;
-        }
-        if let Subterm::Var(var) = &**needle
-            && let Some(name) = var.as_free()
-            && !self.mentions_free(name)
-        {
-            return false;
-        }
-        self.any_child_term(&mut |child| child.mentions_term(needle))
+        let free = match &**needle {
+            Subterm::Var(var) => var.as_free(),
+            _ => None,
+        };
+
+        self.try_walk(
+            &mut (),
+            |_, term| {
+                if term == needle {
+                    return ControlFlow::Break(());
+                }
+
+                if let Some(name) = free
+                    && !term.mentions_free(name)
+                {
+                    return ControlFlow::Continue(Enter::Skip(()));
+                }
+
+                ControlFlow::Continue(Enter::Descend)
+            },
+            |_, _, _| (),
+        )
+        .is_break()
     }
 
     /// This term with every syntactic occurrence of `needle` replaced by `replacement`, at any depth and under any binder; an outer occurrence wins and is not descended into. `replacement` must carry no loose index, since it is inserted verbatim at every depth.
@@ -1934,33 +1948,34 @@ impl Term {
     }
 
     /// Whether any metavariable in this term satisfies `pred`, visiting each shared node once. The walk prunes on the cached `has_metavar` bit and dedupes revisits by node identity, because the two prunes fail in each other's gap: a reduction result is a DAG whose tree expansion can be exponential in its depth — one substitution landing a term in two positions doubles it — and a single metavariable at its base, solved or not, sets `has_metavar` on every ancestor, so without the visited set each occurrence of a shared subtree re-pays its whole expansion (measured as a ×2-per-depth elaboration runaway). Skipping a revisit is sound: `pred` is deterministic within one walk, a `true` ends the walk outright, so a recorded node is always one that answered `false`.
+    /// **Driven by [`Term::try_walk`], so a spine's depth costs the driver's heap rather than the native stack.** This walk descended natively until it did not: a packed or list accumulator a few thousand links deep, carrying a metavariable so the `has_metavar` prune could not stop it, took five debug frames per link and died as a bare `SIGSEGV` — below the depth at which the reduction budget refuses, so the same program crashed at eight thousand links and reported cleanly at sixty thousand. It enumerates children through [`Subterm::any_child_term`] like every other read-only analysis, which is the criterion `super::walk` states for belonging on the driver, and `Break` is the exit door that module names for the `any_*` walks.
+    ///
+    /// The visited set is now unconditional, where it was once reached only when `Rc::strong_count` proved the node shared. That signal does not survive the move — the driver's frames hold owned clones, so every node's count is inflated and the guard would always pass — and it was only ever a way to skip hashing, never part of the answer. What it cost is one insert per descended node; what the `has_metavar` prune still saves is the whole walk over every ground term, which is the common case on this path.
     pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
-        self.any_metavar_walk(pred, &mut HashSet::new())
-    }
+        let mut state: (&mut F, HashSet<*const Node>) = (pred, HashSet::new());
 
-    fn any_metavar_walk<F: FnMut(MetavarId) -> bool>(
-        &self,
-        pred: &mut F,
-        visited: &mut HashSet<*const Node>,
-    ) -> bool {
-        if !self.has_metavar() {
-            return false;
-        }
+        self.try_walk(
+            &mut state,
+            |state, term| {
+                if !term.has_metavar() {
+                    return ControlFlow::Continue(Enter::Skip(()));
+                }
 
-        // A node reached twice in one walk has two owning handles, so a strong count of one proves this visit is the only one and skips the set — which therefore stays empty (and unallocated) on unshared terms.
-        if Rc::strong_count(&self.inner) > 1 && !visited.insert(Rc::as_ptr(&self.inner)) {
-            return false;
-        }
+                if !state.1.insert(Rc::as_ptr(&term.inner)) {
+                    return ControlFlow::Continue(Enter::Skip(()));
+                }
 
-        if let Subterm::Metavar(Metavar { id, .. }) = &self.inner.subterm
-            && pred(*id)
-        {
-            return true;
-        }
+                if let Subterm::Metavar(Metavar { id, .. }) = &term.inner.subterm
+                    && state.0(*id)
+                {
+                    return ControlFlow::Break(());
+                }
 
-        self.inner
-            .subterm
-            .any_child_term(&mut |child| child.any_metavar_walk(pred, visited))
+                ControlFlow::Continue(Enter::Descend)
+            },
+            |_, _, _| (),
+        )
+        .is_break()
     }
 }
 
