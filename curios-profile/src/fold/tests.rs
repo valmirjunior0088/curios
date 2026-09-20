@@ -1,9 +1,28 @@
-//! What a fold recomputes from rows: the aggregates the old collector kept, the distributions beside them, and the two things only a stream can say — what a truncated file still yields, and what a killed run was inside.
+//! What a fold recomputes from rows: the aggregates the old collector kept, the distributions beside them, the two things only a stream can say — what a truncated file still yields, and what a killed run was inside — and which files one rotated stream is.
 
-use super::*;
+use {super::*, curios_utilities::test_support::Temporary, std::fs};
 
 fn folded(rows: &str) -> ProfileReport {
     fold(rows.as_bytes()).expect("rows fold")
+}
+
+/// One closed span named `name`, as a file that stands on its own: the callsite table restated at the head, then the span's whole life.
+fn standalone(name: &str, elapsed: u64) -> String {
+    format!(
+        "D\t0\tcurios_core\t{name}\n\
+         S\t1\t0\t0\n\
+         E\t1\t0\t0\t0\t0\t0\t0\n\
+         X\t1\t0\t{elapsed}\t0\t0\t0\t0\n\
+         C\t1\t0\t{elapsed}\n"
+    )
+}
+
+fn names(report: &ProfileReport) -> Vec<&str> {
+    report
+        .summaries
+        .iter()
+        .map(|summary| summary.name.as_str())
+        .collect()
 }
 
 // The round trip the whole design rests on: a stream written by `trace` folds back into the summaries the collector used to return, with the same nesting semantics — an outer span's extent covers the inner spans within it.
@@ -209,4 +228,33 @@ fn an_escaped_field_reads_back_as_it_was_written() {
     );
 
     assert_eq!(report.summaries[0].group.as_deref(), Some("a\tb\nc\\d"));
+}
+
+// The pair a rotation leaves is one stream, and `fold_at` is what knows it: both files reach the report, the discarded one first. A reader that opened only the surviving file would *also* succeed — a truncated stream folds by design — and would report half the run as the whole of it, which is why this is asserted rather than left to the caller.
+#[test]
+fn a_rotated_pair_folds_as_one_stream() {
+    let directory = Temporary::new("profile", "rotated-pair");
+    fs::create_dir_all(&directory).expect("the directory is created");
+    let path = directory.join("profile.tsv");
+
+    fs::write(predecessor(&path), standalone("discarded", 400)).expect("the predecessor is filed");
+    fs::write(&path, standalone("surviving", 900)).expect("the current file is filed");
+
+    let report = fold_at(&path).expect("the pair folds");
+
+    assert_eq!(names(&report), ["surviving", "discarded"]);
+}
+
+// A run that never grew past its cap has no predecessor, which is the ordinary ending rather than a missing half: the one file is the whole stream.
+#[test]
+fn a_stream_that_never_rotated_folds_without_a_predecessor() {
+    let directory = Temporary::new("profile", "never-rotated");
+    fs::create_dir_all(&directory).expect("the directory is created");
+    let path = directory.join("profile.tsv");
+
+    fs::write(&path, standalone("only", 700)).expect("the current file is filed");
+
+    let report = fold_at(&path).expect("the lone file folds");
+
+    assert_eq!(names(&report), ["only"]);
 }

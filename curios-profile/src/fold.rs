@@ -4,12 +4,17 @@
 //!
 //! **A truncated stream folds.** Rotation discards the older file, so the surviving one can open in the middle of a span's life: an entry with no creation, an exit with no entry, a span that never closes. Each is taken for what it says and nothing is invented — an unpaired exit is ignored, a span with no creation is named by the callsite its id carries, and a span still entered when the rows run out is reported in [`ProfileReport::open`], which is what a killed run was inside.
 //!
-//! To fold a rotated pair, hand the `.prev` file's rows and then the current file's to one [`fold`]: the callsite table is restated at the head of each, so concatenating them is well defined.
+//! **Each destination has its reader.** [`fold_at`] is [`Destination::Rotating`](crate::Destination::Rotating)'s: it takes the same base path that destination took and opens the file set that path implies, the discarded rows first — the callsite table is restated at the head of each file, so concatenating them is well defined. [`fold`] is [`Destination::Stream`](crate::Destination::Stream)'s, for rows a caller already holds, such as a buffer folded back in the same process. Which files a rotated stream occupies is the writer's decision, so it is answered here rather than by whoever asks.
 
-use std::{
-    collections::BTreeMap,
-    io::{self, BufRead},
-    time::Duration,
+use {
+    crate::predecessor,
+    std::{
+        collections::BTreeMap,
+        fs::File,
+        io::{self, BufRead, BufReader, Read},
+        path::Path,
+        time::Duration,
+    },
 };
 
 /// Timings, allocation figures and magnitude samples recomputed from one record stream.
@@ -108,6 +113,20 @@ pub fn fold(rows: impl BufRead) -> io::Result<ProfileReport> {
     }
 
     Ok(state.finish())
+}
+
+/// Recompute a report from the stream filed at `path`, its discarded predecessor first.
+///
+/// The mirror of [`Destination::Rotating`](crate::Destination::Rotating). That destination takes a base path and decides for itself which files the stream occupies; reading one back takes the same base path and lets the same code decide again, so the convention is spelled once. A caller that opened the pair by hand would be restating it — and since a truncated stream folds without complaint, a restatement that drifted would report half a run as a whole one rather than failing.
+///
+/// A missing predecessor is the ordinary case of a run that never grew past one file, not an error; the error is the current file's alone.
+pub fn fold_at(path: &Path) -> io::Result<ProfileReport> {
+    let discarded: Box<dyn Read> = match File::open(predecessor(path)) {
+        Ok(file) => Box::new(file),
+        Err(_) => Box::new(io::empty()),
+    };
+
+    fold(BufReader::new(discarded.chain(File::open(path)?)))
 }
 
 impl ProfileReport {

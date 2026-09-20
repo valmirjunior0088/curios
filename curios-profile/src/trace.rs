@@ -26,7 +26,7 @@ use {
         fmt,
         fs::{self, File},
         io::{self, BufWriter, Write},
-        path::PathBuf,
+        path::{Path, PathBuf},
         sync::{
             Mutex,
             atomic::{AtomicU64, Ordering},
@@ -69,6 +69,16 @@ pub enum Destination {
         /// The size at which the current file becomes `.prev` and a fresh one opens.
         cap: u64,
     },
+}
+
+/// The file a rotation moved the previous rows to: `path` with `.prev` appended.
+///
+/// Spelled here because rotation is this module's decision, and read back through [`fold_at`](crate::fold_at) so nothing derives it a second time. A reader that opened the set itself would be restating a convention it does not own — and because [`fold`](crate::fold) is deliberately tolerant of a truncated stream, a restatement that drifted would not fail. It would quietly report half a run as a whole one.
+pub(crate) fn predecessor(path: &Path) -> PathBuf {
+    let mut previous = path.to_path_buf().into_os_string();
+    previous.push(".prev");
+
+    PathBuf::from(previous)
 }
 
 /// Run `operation` with a record-writing subscriber on the current thread.
@@ -369,9 +379,7 @@ impl Sink {
         // The writer must let go of the file before it is renamed, so it is replaced by a sink for the length of the rename.
         let _ = self.writer.flush();
         self.writer = Box::new(io::sink());
-        let mut previous = path.clone().into_os_string();
-        previous.push(".prev");
-        let _ = fs::rename(&path, PathBuf::from(previous));
+        let _ = fs::rename(&path, predecessor(&path));
 
         let Ok(file) = File::create(&path) else {
             return;
