@@ -331,22 +331,24 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    /// Enter a resume block with `arity` values already on the stack as references.
-    ///
-    /// A resume block's parameters are held boxed by construction: the representation analysis withdraws the offer on every continuation a call, a host import, a cell operation or a call-shaped intrinsic returns to, precisely because the emitter hands those results over as references and has no cheaper store to make. The assert states that rather than trusting it — a violation is a broken analysis, and it would otherwise surface as a wasm validation failure with nothing pointing back here.
     /// How many results the call feeding this resume block hands over — the block's own parameter count, rather than a fixed one, so a callee returning a constructor as its fields needs no second source of truth.
     fn resume_arity(&self, resume: &EmissionBlockName) -> usize {
         self.find_block(resume).params().len()
     }
 
+    /// Enter a resume block with `arity` values already on the stack, each in the carrier its parameter is held at.
+    ///
+    /// **A resume parameter is a reference, with one exception the analysis is allowed to make.** `represent.rs` withdraws the register offer on every continuation a call, a cell operation or a call-shaped intrinsic returns to, because the emitter hands those results over as references and has no cheaper store to make. A host import is withdrawn the same way but for one wire type: an `Flt` result crosses back as a raw `f64`, so its parameter is held in a register and `local_type` declares it `f64`.
+    ///
+    /// The assert states the rest rather than trusting it — any *other* raw carrier here is a broken analysis, and it would otherwise surface as a wasm validation failure with nothing pointing back. `Repr::Flt` is admitted rather than the assert being dropped, because it is the only carrier a host result can now legitimately arrive at and every other one is still a bug.
     fn resume_instrs(&self, resume: &EmissionBlockName, arity: usize) -> Vec<curios_wasm::Instr> {
         let block_data = self.find_block(resume);
 
         debug_assert!(
-            block_data
-                .params()
-                .iter()
-                .all(|(name, _)| self.table().raw_carrier(name).is_none()),
+            block_data.params().iter().all(|(name, _)| matches!(
+                self.table().raw_carrier(name),
+                None | Some(curios_cont::Repr::Flt)
+            )),
             "resume block `{resume}` holds a parameter in a register, where a result arrives as a reference",
         );
 
@@ -733,7 +735,8 @@ impl<'a, 'b> Context<'a, 'b> {
     /// The rope→wire step for one host argument: a reference param crosses as its flat payload, so the loaded rope is forced first — deeply for `List(Bytes)`/`List(Handle)`, whose *elements* the host lifts as raw `$bytes`.
     fn wire_force_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let force = match wire_type {
-            WireType::Nat | WireType::Bool | WireType::Int => return vec![],
+            // No rope to force: a scalar reaches the wire from a register carrier, and `Flt`'s is the `f64` its box already holds.
+            WireType::Nat | WireType::Bool | WireType::Int | WireType::Flt => return vec![],
             WireType::Bytes | WireType::Handle => self.table().bytes_force_func(),
             WireType::List(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_force_func(),
@@ -954,12 +957,13 @@ impl LoadAs {
     }
 }
 
-/// How a host-import operand of the given wire type is loaded at the call site: `Nat`/`Bool` unbox their i31 carrier unsigned to a raw i32, `Int` unboxes signed (the `poll(2)` timeout convention), and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
+/// How a host-import operand of the given wire type is loaded at the call site: `Nat`/`Bool` unbox their i31 carrier unsigned to a raw i32, `Int` unboxes signed (the `poll(2)` timeout convention), `Flt` reads the `f64` out of its box, and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
 impl From<&WireType> for LoadAs {
     fn from(wire_type: &WireType) -> LoadAs {
         match wire_type {
             WireType::Nat | WireType::Bool => LoadAs::Nat,
             WireType::Int => LoadAs::Int,
+            WireType::Flt => LoadAs::Flt,
             WireType::Bytes | WireType::Handle => LoadAs::Bin(Grain::X),
             WireType::List(_) => LoadAs::List,
         }

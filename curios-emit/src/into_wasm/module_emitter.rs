@@ -70,12 +70,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// The wasm-level type of a host-import *parameter* of the given wire type: scalars cross as raw `i32` (the call site unboxes the i31 carrier via `LoadAs::Nat`/`LoadAs::Int`), references as their concrete non-nullable heap type (a handle is its `Bytes` token).
+    /// The wasm-level type of a host-import *parameter* of the given wire type: the integral scalars cross as raw `i32` (the call site unboxes the i31 carrier via `LoadAs::Nat`/`LoadAs::Int`), `Flt` as raw `f64` (`LoadAs::Flt` reads it out of its box), references as their concrete non-nullable heap type (a handle is its `Bytes` token).
     fn wire_param_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => {
                 curios_wasm::ValType::Num(curios_wasm::NumType::I32)
             }
+            WireType::Flt => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
             WireType::Bytes | WireType::Handle => curios_wasm::ValType::Ref(curios_wasm::RefType {
                 is_nullable: false,
                 heap_type: curios_wasm::HeapType::Concrete(self.table.bytes_type()),
@@ -87,12 +88,15 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The wasm-level type of a host-import *result*: scalars re-enter pre-boxed as i31 refs so they land directly in anyref block params (no host op returns an `Int` today; mapping it like `Nat` keeps the function total), references exactly as in parameter position.
+    /// The wasm-level type of a host-import *result*. A result re-enters in whatever form the host can produce without knowing a guest layout: the integral scalars pre-boxed as i31 refs, which a host mints for nothing and which land directly in anyref block params (no host op returns an `Int` today; mapping it like `Nat` keeps the function total), and references exactly as in parameter position.
+    ///
+    /// **`Flt` is the one that re-enters raw**, as an `f64` the *guest* boxes after the call. Its carrier is the `$flt` struct this crate defines, so a host that returned one already boxed would be a second crate needing that layout — the drift a shape spelled in two places invites. Handing back a number and boxing it here is the discipline `FltOfLeBytes` already keeps, where a float arriving as eight bytes is decoded guest-side and never crosses as one.
     fn wire_result_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => {
                 curios_wasm::ValType::Ref(Table::int_type(false))
             }
+            WireType::Flt => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
             reference => self.wire_param_type(reference),
         }
     }

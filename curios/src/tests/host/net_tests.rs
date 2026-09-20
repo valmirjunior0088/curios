@@ -276,3 +276,72 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     assert_eq!(code, 42);
     assert!(io.output().is_empty());
 }
+
+/// The whole `Flt` boundary in one pass: the guest reads the `f64` out of its box for the operand, and the host takes and returns a plain number.
+///
+/// **Nothing boxes the result here.** Its only use is a comparison, which wants the raw carrier, so the representation analysis holds the returned parameter in an `f64` register and no `$flt` is ever allocated. A boxing step at the call site would have built one for a value nothing reads as a reference.
+///
+/// The comparison is what makes this an assertion rather than a smoke test: a number that arrived in the wrong carrier is not an `Flt` a `==` can read, so the exit code says the value came back usable rather than merely that the call returned.
+#[test]
+fn a_foreign_flt_crosses_raw_in_both_directions() {
+    let source = r#"
+        foreign halve : (Flt) -> Flt;
+        let halved = halve(/std/Nat/to_flt(84))!;
+        let matched = halved == /std/Nat/to_flt(42);
+        let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
+        /std/Io/pure(())
+        "#
+    .parse::<Entrypoint>()
+    .expect("failed to parse source");
+
+    let (module, foreigns) = compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &source,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let mut bindings = ForeignBindings::new(foreigns);
+    bindings.define("/halve", |x: f64| x / 2.0);
+
+    let (system, _io) = MockHost::builder().build();
+    let code = crate::run_wasm(&module, system, bindings).expect("execution succeeded");
+
+    assert_eq!(code, 7, "the halved float compared equal to 42.0");
+}
+
+/// An `Flt` that is *not* the last result, which is the shape a position restriction would have forbidden.
+///
+/// Each result lands in a parameter held at its own carrier — the float in an `f64` register, the status as the i31 the host minted — so where the float sits in the tuple costs nothing and needs no stack juggling. This is the test that stops the withdrawal rule in `represent.rs` from being widened back.
+#[test]
+fn a_foreign_flt_may_stand_before_another_result() {
+    let source = r#"
+        foreign probe : (Nat) -> {value: Flt, status: Nat};
+        let answered = probe(3)!;
+        let matched = answered.value == /std/Nat/to_flt(6);
+        let _ = /std/proc/exit(@{}, match matched | true => answered.status | false => 1 end)!;
+        /std/Io/pure(())
+        "#
+    .parse::<Entrypoint>()
+    .expect("failed to parse source");
+
+    let (module, foreigns) = compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &source,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let mut bindings = ForeignBindings::new(foreigns);
+    bindings.define("/probe", |n: u32| (f64::from(n) * 2.0, n + 4));
+
+    let (system, _io) = MockHost::builder().build();
+    let code = crate::run_wasm(&module, system, bindings).expect("execution succeeded");
+
+    assert_eq!(
+        code, 7,
+        "the float matched and the status beside it came back"
+    );
+}

@@ -139,12 +139,35 @@ fn offers(module: &Module) -> BTreeMap<ValueId, Offer> {
                 offers.insert(*result, offer);
             }
 
-            // A result returning from a call, a host import, a cell operation or a call-shaped intrinsic is already a reference by the time it reaches its continuation's parameter.
+            // A result returning from a call, a cell operation or a call-shaped intrinsic is already a reference by the time it reaches its continuation's parameter.
             Node::ApplyFun { return_to, .. }
-            | Node::Foreign { return_to, .. }
             | Node::Cell { return_to, .. }
             | Node::Intrinsic { return_to, .. } => {
                 withdraw_params(module, *return_to, &mut withdrawn)
+            }
+
+            // A host import's results are references too, with one exception: an `Flt` crosses back *raw*. Every other scalar re-enters as the i31 the host minted, and a reference as the rope the embed step builds — but a float's carrier is a struct the emitter defines, and the browser hands a plain JavaScript number straight through with nothing to box it with. So that parameter *is* the `f64`, offered at its carrier like any other definition, and a use wanting a reference boxes at its own site through the coercion every raw carrier already has.
+            //
+            // Withdrawing it with the rest is what made an `Flt` result unrepresentable: the parameter became a reference the call had no way to produce, and the module failed validation with an `f64` where an `anyref` was wanted.
+            Node::Foreign {
+                function,
+                return_to,
+                ..
+            } => {
+                if let Some(continuation) = module.continuation(*return_to) {
+                    let results = function.signature.results.iter().collect::<Vec<_>>();
+
+                    for (index, &param) in continuation.params.iter().enumerate() {
+                        match results.get(index).map(|(_, wire)| wire) {
+                            Some(WireType::Flt) => {
+                                offers.insert(param, Offer::Fixed(Repr::Flt));
+                            }
+                            _ => {
+                                withdrawn.insert(param);
+                            }
+                        }
+                    }
+                }
             }
 
             Node::LetFun { .. }
@@ -186,6 +209,7 @@ fn wire_carrier(wire: &WireType) -> Option<Repr> {
     match wire {
         WireType::Nat | WireType::Bool => Some(Repr::Nat),
         WireType::Int => Some(Repr::Int),
+        WireType::Flt => Some(Repr::Flt),
         WireType::Bytes | WireType::Handle | WireType::List(_) => None,
     }
 }

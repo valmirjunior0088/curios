@@ -69,6 +69,8 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
             true => i31_ref.clone(),
             false => ValType::I32,
         },
+        // Raw in both directions: a host hands back a number and the guest boxes it, so nothing here needs to know the `$flt` struct curios-emit defines.
+        WireType::Flt => ValType::F64,
         WireType::Bytes | WireType::Handle => bytes_ref.clone(),
         WireType::List(_) => list_ref.clone(),
     };

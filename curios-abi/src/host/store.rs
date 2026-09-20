@@ -28,13 +28,14 @@ pub enum WireLeaf {
 
 /// The type of one value crossing the host boundary — a closed *subset of guest types*, not a vocabulary of wire shapes. Nothing below the type distinguishes `Bytes` from `Handle`: they share a wasm `ValType`, a wasmtime `FuncType` slot, and a load/force/embed path. What separates them is only the guest type `curios-core`'s `wire_term` builds, which is why each variant is spelled the way its guest type is.
 ///
-/// The scalar cases matter to codegen: a `Nat`/`Bool` operand is unboxed from its i31 carrier *unsigned* (`i31.get_u`) and crosses as a raw wasm `i32`, while `Int` is unboxed *signed* (`i31.get_s`) — `handle_poll`'s timeout keeps the `poll(2)` sign convention. Scalar results re-enter pre-boxed as i31 refs. `Bytes` is the byte grain alone: `Bits` and `Byte` are guest types with no wire spelling.
+/// The scalar cases matter to codegen: a `Nat`/`Bool` operand is unboxed from its i31 carrier *unsigned* (`i31.get_u`) and crosses as a raw wasm `i32`, while `Int` is unboxed *signed* (`i31.get_s`) — `handle_poll`'s timeout keeps the `poll(2)` sign convention. An `Flt` is read out of its boxed `f64` and crosses as a raw wasm `f64`. `Bytes` is the byte grain alone: `Bits` and `Byte` are guest types with no wire spelling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum WireType {
     Nat,
     Int,
     Bool,
+    Flt,
     Bytes,
     Handle,
     List(WireLeaf),
@@ -53,13 +54,16 @@ impl From<WireLeaf> for WireType {
     }
 }
 
-/// A wire type that crosses as a raw scalar: unboxed to an `i32` on the way out, re-boxed as an i31 on the way back.
+/// A wire type that crosses as a raw wasm value rather than a reference — which is what decides that it may stand in any result slot, where a reference must stand last.
+///
+/// **The carrier is the variant's, and so is who boxes it.** `Nat`, `Int` and `Bool` cross as `i32` and re-enter pre-boxed as i31 refs, which the host can mint for nothing. `Flt` crosses as `f64` and re-enters *raw*, boxed by the guest afterwards: its carrier is a struct whose shape `curios-emit` defines, and a host that allocated one would be a second crate needing to know that layout. The guest doing the reinterpretation is the discipline `FltOfLeBytes` already keeps, where a float arriving as eight bytes is decoded on the guest side and never crosses as one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum WireScalar {
     Nat,
     Int,
     Bool,
+    Flt,
 }
 
 /// A wire type that crosses as a reference: a flat payload the guest forces on the way out and embeds back into a rope on the way in.
@@ -85,6 +89,7 @@ impl WireType {
             WireType::Nat => WireShape::Scalar(WireScalar::Nat),
             WireType::Int => WireShape::Scalar(WireScalar::Int),
             WireType::Bool => WireShape::Scalar(WireScalar::Bool),
+            WireType::Flt => WireShape::Scalar(WireScalar::Flt),
             WireType::Bytes => WireShape::Reference(WireReference::Bytes),
             WireType::Handle => WireShape::Reference(WireReference::Handle),
             WireType::List(leaf) => WireShape::Reference(WireReference::List(leaf)),
@@ -98,6 +103,7 @@ impl From<WireScalar> for WireType {
             WireScalar::Nat => WireType::Nat,
             WireScalar::Int => WireType::Int,
             WireScalar::Bool => WireType::Bool,
+            WireScalar::Flt => WireType::Flt,
         }
     }
 }

@@ -65,6 +65,15 @@ impl Lower for u32 {
     }
 }
 
+/// An `Flt` is the one scalar that does *not* go back pre-boxed: it leaves as the raw binary64 it is, and the guest wraps it in the `Flt` struct after the call. That struct's shape is `curios-emit`'s, and nothing here should have to know it — which is the whole reason this impl is three lines where [`u32`]'s has to mint a reference.
+impl Lower for f64 {
+    fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+        results[0] = Val::F64(self.to_bits());
+
+        Ok(())
+    }
+}
+
 /// Tuples lower positionally: each component fills one result slot, and slicing re-aligns the single-value impls, which all write `results[0]`. Arities two through seven — `file_stat`'s seven results are the widest row.
 macro_rules! lower_tuple {
     ($($name:ident $value:ident $index:tt),+) => {

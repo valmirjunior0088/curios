@@ -1119,13 +1119,13 @@ foreign close: (Handle) -> {};
 foreign read: (Handle, Nat) -> {status: Nat, bytes: Bytes};
 ```
 
-The wire types are `Nat`, `Int`, `Bool`, `Bytes`, `Handle`, and `List(T)`, spelled bare: the wire grammar is a closed vocabulary that resolves no names, so `/std/Nat` is refused where `Nat` is meant. Six words that look like types and are not. A wire signature is a wire result for a zero-argument foreign, or a parenthesized wire parameter list followed by `->` and a wire result.
+The wire types are `Nat`, `Int`, `Bool`, `Flt`, `Bytes`, `Handle`, and `List(T)`, spelled bare: the wire grammar is a closed vocabulary that resolves no names, so `/std/Nat` is refused where `Nat` is meant. Seven words that look like types and are not. A wire signature is a wire result for a zero-argument foreign, or a parenthesized wire parameter list followed by `->` and a wire result.
 
 A wire result is a wire type, or a braced list of labelled wire types — the [tuple type](#tuple-types) the call yields. `{}` is no result at all, which is the unit type; `()` is the unit value and never stands here. Two or more fields are the tuple the guest projects by name, as `/std` reads `.status` and `.bytes` off a host read.
 
 Two spellings are refused, and both for the same reason: a tuple type's labels are part of its identity, so nothing may be invented, dropped or moved. A single result is written bare rather than as `{value: T}`, because one result crosses as itself and a one-field brace would name a tuple the row cannot carry. And a reference result — `Bytes`, `Handle` or `List(T)` — is written last, because that is the one slot it may take; a signature that puts one earlier is refused rather than reordered, since the reordered tuple would be a different type from the one declared.
 
-`Byte` and `Bits` are not distinct wire types. `List` does not nest: its element must be `Nat`, `Int`, `Bool`, `Bytes`, or `Handle`, so `List(List(T))` is rejected. `List` is in practice reachable only from builtin `/sys` operations — an embedder implementing a `foreign` declaration binds it through typed host closures, and the shapes those provide are the ones the builtins use. How the declaration reaches the embedder is the host ABI's concern rather than the surface language's.
+`Byte` and `Bits` are not distinct wire types. `List` does not nest, and its element vocabulary is narrower still: an element must be `Nat`, `Int`, `Bool`, `Bytes`, or `Handle`, so `List(List(T))` and `List(Flt)` are both rejected. A `Flt` crosses on its own as a raw binary64; carrying one inside a list would mean boxing each element, which no operation has asked for. `List` is in practice reachable only from builtin `/sys` operations — an embedder implementing a `foreign` declaration binds it through typed host closures, and the shapes those provide are the ones the builtins use. How the declaration reaches the embedder is the host ABI's concern rather than the surface language's.
 
 ## Equality and proofs
 

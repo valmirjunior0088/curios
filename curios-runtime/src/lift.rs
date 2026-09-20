@@ -47,6 +47,13 @@ impl Lift for i32 {
     }
 }
 
+/// An `Flt` crosses as a raw binary64 in both directions, so it arrives as the number it is — the guest read it out of its box before the call, and boxes the result after.
+impl Lift for f64 {
+    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+        Ok(params[0].unwrap_f64())
+    }
+}
+
 /// Tuples lift positionally: each component consumes one param slot, and slicing re-aligns the single-value impls, which all read `params[0]`. Arities two through seven — `proc_spawn`'s seven operands are the widest row.
 macro_rules! lift_tuple {
     ($($name:ident $index:tt),+) => {

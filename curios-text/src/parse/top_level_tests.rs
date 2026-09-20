@@ -229,12 +229,12 @@ fn top_foreign_names_the_wire_vocabulary_it_refused() {
     for (source, expected) in [
         (
             "foreign f : (Str) -> Nat;",
-            "expected a wire type (Nat, Int, Bool, Bytes, Handle, or List(...)), found 'Str'",
+            "expected a wire type (Nat, Int, Bool, Flt, Bytes, Handle, or List(...)), found 'Str'",
         ),
         // A bare result goes through the same parser, so it names the same vocabulary.
         (
             "foreign f : Str;",
-            "expected a wire type (Nat, Int, Bool, Bytes, Handle, or List(...)), found 'Str'",
+            "expected a wire type (Nat, Int, Bool, Flt, Bytes, Handle, or List(...)), found 'Str'",
         ),
         (
             "foreign f : (List(List(Nat))) -> Bool;",

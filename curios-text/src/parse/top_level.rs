@@ -115,6 +115,7 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
             "Nat" => pure(WireType::Nat),
             "Int" => pure(WireType::Int),
             "Bool" => pure(WireType::Bool),
+            "Flt" => pure(WireType::Flt),
             "Bytes" => pure(WireType::Bytes),
             "Handle" => pure(WireType::Handle),
             "List" => parse_literal("(")
@@ -123,7 +124,7 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
                 .map(WireType::List),
             // As in [`parse_wire_leaf`]: a word here is a wire type or nothing. `parse_identifier` failing on a non-identifier is what keeps the empty parameter list `() -> T` working — the arm is never reached at the `)`.
             other => commit(fail_from(&start, format!(
-                "expected a wire type (Nat, Int, Bool, Bytes, Handle, or List(...)), found '{other}'"
+                "expected a wire type (Nat, Int, Bool, Flt, Bytes, Handle, or List(...)), found '{other}'"
             ))),
         })
 }
