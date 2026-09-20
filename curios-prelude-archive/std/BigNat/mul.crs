@@ -1,6 +1,6 @@
 use /std/{Nat, Bool, Bits, Eq};
 use /std/BigNat/{BigNat, combine, cong_combine, dbl, dbl_raw, eq, is_trimmed_of_canonical, maj3,
-    of_bits, of_nat, refl_at, trim, trim_is_trimmed, trim_of_trimmed, xor3, mod add};
+    of_bits, of_nat, refl_at, trim, trim_is_trimmed, trim_of_trimmed, xor3, add};
 
 --- The product of two words, untrimmed.
 pub let raw(x: Bits, y: Bits) -> Bits =
@@ -321,50 +321,56 @@ pub let distrib_l(
     a: BigNat,
     b: BigNat,
     c: BigNat,
-) -> Eq(mul(a, add/add(b, c)), add/add(mul(a, b), mul(a, c))) =
+) -> Eq(mul(a, add(b, c)), add(mul(a, b), mul(a, c))) =
+    let raw_b = raw(a.bits, b.bits);
+    let raw_c = raw(a.bits, c.bits);
+    let trim_b = trim(raw_b);
+    let trim_c = trim(raw_c);
     eq(
-        mul(a, add/add(b, c)),
-        add/add(mul(a, b), mul(a, c)),
+        mul(a, add(b, c)),
+        add(mul(a, b), mul(a, c)),
         Eq/trans(
             trim_distrib_l(a.bits, b.bits, c.bits),
             Eq/trans(
-                Eq/sym(trim_add_raw_trim_l(raw(a.bits, b.bits), raw(a.bits, c.bits), false)),
+                Eq/sym(trim_add_raw_trim_l(raw_b, raw_c, false)),
                 Eq/trans(
-                    Eq/sym(
-                        trim_add_raw_trim_r(trim(raw(a.bits, b.bits)), raw(a.bits, c.bits), false)),
+                    Eq/sym(trim_add_raw_trim_r(trim_b, raw_c, false)),
                     trim_of_trimmed(
-                        add/raw(trim(raw(a.bits, b.bits)), trim(raw(a.bits, c.bits)), false),
+                        add/raw(trim_b, trim_c, false),
                         add/raw_trimmed(
-                            trim(raw(a.bits, b.bits)),
-                            trim(raw(a.bits, c.bits)),
+                            trim_b,
+                            trim_c,
                             false,
-                            trim_is_trimmed(raw(a.bits, b.bits)),
-                            trim_is_trimmed(raw(a.bits, c.bits))))))));
+                            trim_is_trimmed(raw_b),
+                            trim_is_trimmed(raw_c)))))));
 
 --- Right distributivity over addition.
 pub let distrib_r(
     a: BigNat,
     b: BigNat,
     c: BigNat,
-) -> Eq(mul(add/add(b, c), a), add/add(mul(b, a), mul(c, a))) =
+) -> Eq(mul(add(b, c), a), add(mul(b, a), mul(c, a))) =
+    let raw_b = raw(b.bits, a.bits);
+    let raw_c = raw(c.bits, a.bits);
+    let trim_b = trim(raw_b);
+    let trim_c = trim(raw_c);
     eq(
-        mul(add/add(b, c), a),
-        add/add(mul(b, a), mul(c, a)),
+        mul(add(b, c), a),
+        add(mul(b, a), mul(c, a)),
         Eq/trans(
             trim_distrib_r(a.bits, b.bits, c.bits),
             Eq/trans(
-                Eq/sym(trim_add_raw_trim_l(raw(b.bits, a.bits), raw(c.bits, a.bits), false)),
+                Eq/sym(trim_add_raw_trim_l(raw_b, raw_c, false)),
                 Eq/trans(
-                    Eq/sym(
-                        trim_add_raw_trim_r(trim(raw(b.bits, a.bits)), raw(c.bits, a.bits), false)),
+                    Eq/sym(trim_add_raw_trim_r(trim_b, raw_c, false)),
                     trim_of_trimmed(
-                        add/raw(trim(raw(b.bits, a.bits)), trim(raw(c.bits, a.bits)), false),
+                        add/raw(trim_b, trim_c, false),
                         add/raw_trimmed(
-                            trim(raw(b.bits, a.bits)),
-                            trim(raw(c.bits, a.bits)),
+                            trim_b,
+                            trim_c,
                             false,
-                            trim_is_trimmed(raw(b.bits, a.bits)),
-                            trim_is_trimmed(raw(c.bits, a.bits))))))));
+                            trim_is_trimmed(raw_b),
+                            trim_is_trimmed(raw_c)))))));
 
 let cong_dbl(@s: BigNat, @t: BigNat, p: Eq(s, t)) -> Eq(dbl(s), dbl(t)) =
     Eq/cong(dbl, p);
@@ -383,8 +389,8 @@ let dbl_add_raw(
     | b[_, .._] => match y | b[] => Eq/refl() | b[_, .._] => Eq/refl() end
     end;
 
-let dbl_add(a: BigNat, b: BigNat) -> Eq(dbl(add/add(a, b)), add/add(dbl(a), dbl(b))) =
-    eq(dbl(add/add(a, b)), add/add(dbl(a), dbl(b)), dbl_add_raw(a.bits, b.bits));
+let dbl_add(a: BigNat, b: BigNat) -> Eq(dbl(add(a, b)), add(dbl(a), dbl(b))) =
+    eq(dbl(add(a, b)), add(dbl(a), dbl(b)), dbl_add_raw(a.bits, b.bits));
 
 let dbl_mul_l(a: BigNat, b: BigNat) -> Eq(dbl(mul(a, b)), mul(dbl(a), b)) =
     eq(
@@ -399,9 +405,9 @@ pub let pow2_add(
     a: BigNat,
     b: BigNat,
     k: Nat,
-) -> Eq(pow2(add/add(a, b), k), add/add(pow2(a, k), pow2(b, k))) =
+) -> Eq(pow2(add(a, b), k), add(pow2(a, k), pow2(b, k))) =
     match k
-    | 0 => refl_at(add/add(a, b))
+    | 0 => refl_at(add(a, b))
     | pred + 1; ih => Eq/trans(cong_dbl(ih), dbl_add(pow2(a, pred), pow2(b, pred)))
     end;
 

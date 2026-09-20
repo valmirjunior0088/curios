@@ -85,20 +85,19 @@ let reference(body: Str) -> Option(Str) =
     | false => named_reference(body)
     end;
 
+--- The reference at the start of a piece that followed an `&`, when it is one.
+let decoded_reference(piece: Str) -> Option(Str) =
+    let (body, rest) = Str/split_once(piece, ";")!;
+    match Str/len(body) <= 8 && Bool/not(Str/is_empty(body))
+    | false => Option/none()
+    | true =>
+        let s = reference(body)!;
+        Option/some(Str/concat(s, rest))
+    end;
+
 --- A piece that followed an `&`: the reference at its start decoded when it is one, the `&` kept otherwise.
 let decode_piece(piece: Str) -> Str =
-    match Str/split_once(piece, ";")
-    | some((body, rest)) =>
-        match Str/len(body) <= 8 && Bool/not(Str/is_empty(body))
-        | true =>
-            match reference(body)
-            | some(s) => Str/concat(s, rest)
-            | none() => Str/concat("&", piece)
-            end
-        | false => Str/concat("&", piece)
-        end
-    | none() => Str/concat("&", piece)
-    end;
+    Option/unwrap_or(decoded_reference(piece), Str/concat("&", piece));
 
 --- `s` with its character references decoded — the five markup needs, `nbsp`, and numbers in decimal or hex; one that names nothing known is kept as written.
 pub let decode(s: Str) -> Str =

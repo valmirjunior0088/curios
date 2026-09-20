@@ -3,7 +3,7 @@ use /std/Ordering/{cong_flip};
 
 --- The order of the two.
 pub let cmp(p: BigPos, q: BigPos) -> Ordering =
-    BigNat/cmp/cmp(p.value, q.value);
+    BigNat/cmp(p.value, q.value);
 
 --- A positive compares equal to itself.
 pub let refl(p: BigPos) -> Eq(cmp(p, p), Ordering/eq()) =

@@ -1,7 +1,6 @@
 use /std/{Nat, Bool, Str, Char, Option, Show, Ord, Spell};
 use /std/ops/{Eql, Cmp, Sub, Mul};
-use /std/BigNat/{BigNat, dbl, dbl_succ, is_zero, of_nat, view, zero, mod add, mod cmp, mod mul,
-    mod sub};
+use /std/BigNat/{BigNat, add, cmp, dbl, dbl_succ, is_zero, mul, of_nat, sub, view, zero};
 
 --- How many bits `a` takes, `0` at zero.
 pub let bit_len(a: BigNat) -> Nat =
@@ -41,7 +40,7 @@ pub let Decimal(s: Str) -> Prop =
 
 --- The number `s` spells, under the evidence that it is decimal.
 pub let of_decimal(s: Str, @_: Decimal(s)) -> BigNat =
-    Str/fold(s, zero, (cp, acc) => add/add(mul/small(acc, 10), of_nat(Char/to_nat(cp) - 0x30)));
+    Str/fold(s, zero, (cp, acc) => add(mul/small(acc, 10), of_nat(Char/to_nat(cp) - 0x30)));
 
 --- The number `s` spells, or `none` for any other text.
 pub let of_str(s: Str) -> Option(BigNat) =
@@ -60,11 +59,11 @@ satisfy Cmp(BigNat) {
 }
 
 satisfy Sub(BigNat) {
-    sub = sub/sub,
+    sub = sub,
 }
 
 satisfy Mul(BigNat) {
-    mul = mul/mul,
+    mul = mul,
 }
 
 satisfy Show(BigNat) {
@@ -76,5 +75,5 @@ satisfy Spell(BigNat) {
 }
 
 satisfy Ord(BigNat) {
-    ord = cmp/cmp,
+    ord = cmp,
 }

@@ -116,23 +116,10 @@ pub let take_continuations(
     match remaining
     | 0 => (acc, off)
     | pred + 1 =>
-        take_continuations(
-            b,
-            off + 1,
-            pred,
-            acc * 0x40
-                + (Byte/to_nat(
-                    Bytes/get(
-                        b,
-                        off,
-                        @Nat/Lt/lt_of_lt_le(
-                            off,
-                            off + (pred + 1),
-                            Bytes/len(b),
-                            Bool/True/qed(),
-                            bound)))
-                    - 0x80),
-            bound)
+        let within =
+            Nat/Lt/lt_of_lt_le(off, off + (pred + 1), Bytes/len(b), Bool/True/qed(), bound);
+        let continuation = Byte/to_nat(Bytes/get(b, off, @within)) - 0x80;
+        take_continuations(b, off + 1, pred, acc * 0x40 + continuation, bound)
     end;
 
 --- A decoded code point as a character.

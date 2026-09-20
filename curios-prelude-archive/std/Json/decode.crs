@@ -32,12 +32,8 @@ let is_not_string_special(byte: Byte) -> Bool =
 
 let hex_digit: Parse(Nat) =
     let byte = Parse/any_byte!;
-    match Char/of_ascii(byte)
-    | some(c) =>
-        match Char/of_hex_digit(c)
-        | some(v) => Parse/pure(v)
-        | none() => Parse/fail("invalid hex digit")
-        end
+    match Option/bind(Char/of_ascii(byte), Char/of_hex_digit)
+    | some(v) => Parse/pure(v)
     | none() => Parse/fail("invalid hex digit")
     end;
 
@@ -48,25 +44,24 @@ let hex4: Parse(Nat) =
     let d = hex_digit!;
     Parse/pure(a * 0x1000 + b * 0x100 + c * 0x10 + d);
 
+--- `code` as its UTF-8 bytes, declining a value that is no Unicode scalar.
+let scalar_utf8(code: Nat) -> Parse(Bytes) =
+    match Char/of_nat(code)
+    | some(c) => Parse/pure(Char/to_utf8(c))
+    | none() => Parse/fail("invalid Unicode scalar")
+    end;
+
 let parse_unicode: Parse(Bytes) =
     let hi = hex4!;
     match hi >= 0xD800 && hi <= 0xDBFF
+    | false => scalar_utf8(hi)
     | true =>
         let _ = Parse/label(Parse/take_byte(0x5C), "expected low surrogate")!;
         let _ = Parse/label(Parse/take_byte(0x75), "expected low surrogate")!;
         let lo = hex4!;
         match lo >= 0xDC00 && lo <= 0xDFFF
-        | true =>
-            match Char/of_nat(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00))
-            | some(c) => Parse/pure(Char/to_utf8(c))
-            | none() => Parse/fail("invalid Unicode scalar")
-            end
+        | true => scalar_utf8(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00))
         | false => Parse/fail("invalid low surrogate")
-        end
-    | false =>
-        match Char/of_nat(hi)
-        | some(c) => Parse/pure(Char/to_utf8(c))
-        | none() => Parse/fail("invalid Unicode scalar")
         end
     end;
 

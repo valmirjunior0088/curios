@@ -94,22 +94,13 @@ let write_parking(h: Handle, b: Bytes) -> Async(Result(Io/Error, {})) =
     | r.status == /sys/status/would_block =>
         let _ = park_on(h, Interest/writable)!;
         write_parking(h, b)
-    | _ =>
-        match Io/Error/of(r.status)
-        | some(e) => Async/pure(Result/failure(e))
-        | none() =>
-            match r.written < Bytes/len(b)
-            | true =>
-                let _ = park_on(h, Interest/writable)!;
-                write_parking(
-                    h,
-                    Bytes/drop(
-                        b,
-                        r.written,
-                        @Nat/Lt/le_of_lt(r.written, Bytes/len(b), Bool/True/qed())))
-            | false => Async/pure(Result/success(()))
-            end
-        end
+    | some(e) = Io/Error/of(r.status) => Async/pure(Result/failure(e))
+    | r.written < Bytes/len(b) =>
+        let _ = park_on(h, Interest/writable)!;
+        write_parking(
+            h,
+            Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), Bool/True/qed())))
+    | _ => Async/pure(Result/success(()))
     end;
 
 satisfy Async/Read(Io, Handle) {

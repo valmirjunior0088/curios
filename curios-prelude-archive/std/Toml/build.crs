@@ -85,18 +85,11 @@ let walk_final(
             match existing
             | table(_) =>
                 match Map/get(side, kf)
-                | some(st) =>
-                    match st
-                    | implicit() =>
-                        Result/success((
-                            m,
-                            Map/insert(side, kf, Origin/header()),
-                            [Seg/plain(name)]))
-                    | header() => Result/failure(Rule/table_defined_twice())
-                    | dotted() => Result/failure(Rule/redefines_dotted_table())
-                    | _ => Result/failure(Rule/extends_inline_table())
-                    end
-                | none() => Result/failure(Rule/extends_inline_table())
+                | some(implicit()) =>
+                    Result/success((m, Map/insert(side, kf, Origin/header()), [Seg/plain(name)]))
+                | some(header()) => Result/failure(Rule/table_defined_twice())
+                | some(dotted()) => Result/failure(Rule/redefines_dotted_table())
+                | _ => Result/failure(Rule/extends_inline_table())
                 end
             | arr(_) => Result/failure(Rule/redefines_array_as_table())
             | _ => Result/failure(Rule/conflicts_with_value())
@@ -113,16 +106,12 @@ let walk_final(
             match existing
             | arr(items) =>
                 match Map/get(side, kf)
-                | some(st) =>
-                    match st
-                    | many() =>
-                        Result/success((
-                            Map/insert(m, name, Toml/arr([..items, Toml/table(Map/empty())])),
-                            side,
-                            [Seg/at(name, List/len(items))]))
-                    | _ => Result/failure(Rule/appends_to_static_array())
-                    end
-                | none() => Result/failure(Rule/appends_to_static_array())
+                | some(many()) =>
+                    Result/success((
+                        Map/insert(m, name, Toml/arr([..items, Toml/table(Map/empty())])),
+                        side,
+                        [Seg/at(name, List/len(items))]))
+                | _ => Result/failure(Rule/appends_to_static_array())
                 end
             | table(_) => Result/failure(Rule/redefines_table_as_array())
             | _ => Result/failure(Rule/conflicts_with_value())
@@ -317,8 +306,8 @@ pub let apply_aot(b: Build, path: List(Str)) -> Result(Error, Build) =
 
 pub let inline_fold(pairs: List({List(Str), Toml})) -> Result(Error, Map(Toml)) =
     let start: Result(Error, Build) = Result/success(build_empty);
-    match List/fold(pairs, start, (pair, acc) =>
-        Result/bind(acc, (b) => apply_assign(b, pair.0, pair.1)))
-    | success(b) => Result/success(b.root)
-    | failure(msg) => Result/failure(msg)
-    end;
+    let built =
+        List/fold(pairs, start, (pair, acc) =>
+            let b = acc!;
+            apply_assign(b, pair.0, pair.1))!;
+    Result/success(built.root);

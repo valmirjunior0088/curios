@@ -95,15 +95,11 @@ pub let read(@E: Type, s: Session) -> Async(Option(List(Event(E)))) =
                 Async/pure(Option/some([..d.events, ..input/flush(d.rest)]));
             let more = Async/timeout(Duration/of_millis(30), Async/Read/read(Io/stdin, 1024))!;
             match more
-            | none() => settle()
-            | some(c) =>
-                match c
-                | chunk(next) =>
-                    let settled = input/decode(x[..d.rest, ..next]);
-                    let _ = Cell/set(s.rest, settled.rest)!;
-                    Async/pure(Option/some([..d.events, ..settled.events]))
-                | _ => settle()
-                end
+            | some(chunk(next)) =>
+                let settled = input/decode(x[..d.rest, ..next]);
+                let _ = Cell/set(s.rest, settled.rest)!;
+                Async/pure(Option/some([..d.events, ..settled.events]))
+            | _ => settle()
             end
         end
     end;

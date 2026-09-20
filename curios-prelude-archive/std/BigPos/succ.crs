@@ -9,4 +9,4 @@ let raw_cons(x: Bits) -> is_cons(BigNat/succ/raw(x)) =
 
 --- The successor.
 pub let succ(p: BigPos) -> BigPos =
-    BigPos { value = BigNat/succ/succ(p.value), non_zero = raw_cons(p.value.bits) };
+    BigPos { value = BigNat/succ(p.value), non_zero = raw_cons(p.value.bits) };

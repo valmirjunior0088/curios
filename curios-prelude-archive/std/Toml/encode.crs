@@ -124,75 +124,56 @@ let value_str(v: Toml) -> Result(Error, Str) =
     | local_time(t) => Result/success(time_str(t))
     | arr(items) =>
         let start: Result(Error, List(Str)) = Result/success([]);
-        match List/fold(items, start, (item, acc) =>
-            Result/bind(acc, (parts) => Result/map_success(value_str(item), (s) => [..parts, s])))
-        | success(parts) => Result/success(Str/flatten(["[", Str/join(", ", parts), "]"]))
-        | failure(msg) => Result/failure(msg)
-        end
+        let parts =
+            List/fold(items, start, (item, acc) =>
+                let parts = acc!;
+                let s = value_str(item)!;
+                Result/success([..parts, s]))!;
+        Result/success(Str/flatten(["[", Str/join(", ", parts), "]"]))
     | table(m) =>
         match List/len(Map/entries(m)) == 0
         | true => Result/success("{}")
         | false =>
-            match pairs_str(Map/entries(m))
-            | success(body) => Result/success(Str/flatten(["{ ", body, " }"]))
-            | failure(msg) => Result/failure(msg)
-            end
+            let body = pairs_str(Map/entries(m))!;
+            Result/success(Str/flatten(["{ ", body, " }"]))
         end
     end
 and pairs_str(entries: List({Bytes, Toml})) -> Result(Error, Str) =
     let start: Result(Error, List(Str)) = Result/success([]);
-    match List/fold(entries, start, (entry, acc) =>
-        Result/bind(acc, (parts) =>
-            Result/bind(
-                spell_key(entry.0),
-                (k) =>
-                    Result/map_success(
-                        value_str(entry.1),
-                        (vs) => [..parts, Str/flatten([k, " = ", vs])]))))
-    | success(parts) => Result/success(Str/join(", ", parts))
-    | failure(msg) => Result/failure(msg)
-    end;
+    let parts =
+        List/fold(entries, start, (entry, acc) =>
+            let parts = acc!;
+            let k = spell_key(entry.0)!;
+            let vs = value_str(entry.1)!;
+            Result/success([..parts, Str/flatten([k, " = ", vs])]))!;
+    Result/success(Str/join(", ", parts));
 
 let encode_table(prefix: List(Str), m: Map(Toml)) -> Result(Error, Str) =
     let entries = Map/entries(m);
     let start: Result(Error, List(Str)) = Result/success([]);
-    match List/fold(entries, start, (entry, acc) =>
-        Result/bind(acc, (lines) =>
+    let value_lines =
+        List/fold(entries, start, (entry, acc) =>
+            let lines = acc!;
             match entry.1
             | table(_) => Result/success(lines)
             | _ =>
-                Result/bind(
-                    spell_key(entry.0),
-                    (k) =>
-                        Result/map_success(
-                            value_str(entry.1),
-                            (vs) => [..lines, Str/flatten([k, " = ", vs, "\n"])]))
-            end))
-    | failure(msg) => Result/failure(msg)
-    | success(lines) =>
-        match List/fold(entries, start, (entry, acc) =>
-            Result/bind(acc, (blocks) =>
-                match entry.1
-                | table(sub) =>
-                    Result/bind(
-                        spell_key(entry.0),
-                        (k) =>
-                            Result/bind(
-                                encode_table([..prefix, k], sub),
-                                (body) =>
-                                    Result/success([
-                                        ..blocks,
-                                        Str/flatten([
-                                            "[",
-                                            Str/join(".", [..prefix, k]),
-                                            "]\n",
-                                            body])])))
-                | _ => Result/success(blocks)
-                end))
-        | failure(msg) => Result/failure(msg)
-        | success(blocks) => Result/success(Str/concat(Str/flatten(lines), Str/flatten(blocks)))
-        end
-    end;
+                let k = spell_key(entry.0)!;
+                let vs = value_str(entry.1)!;
+                Result/success([..lines, Str/flatten([k, " = ", vs, "\n"])])
+            end)!;
+    let table_blocks =
+        List/fold(entries, start, (entry, acc) =>
+            let blocks = acc!;
+            match entry.1
+            | table(sub) =>
+                let k = spell_key(entry.0)!;
+                let body = encode_table([..prefix, k], sub)!;
+                Result/success([
+                    ..blocks,
+                    Str/flatten(["[", Str/join(".", [..prefix, k]), "]\n", body])])
+            | _ => Result/success(blocks)
+            end)!;
+    Result/success(Str/concat(Str/flatten(value_lines), Str/flatten(table_blocks)));
 
 --- `m` as one deterministic document: the root's plain values first, then its tables. A key that is not UTF-8 or an invalid calendar value is refused rather than written.
 pub let encode(m: Map(Toml)) -> Result(Error, Str) =
