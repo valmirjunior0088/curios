@@ -243,7 +243,7 @@ pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
         (l, r) => x[..l, ..sep, ..r]);
 
 --- Bytewise, a proper prefix first.
-pub let cmp(a: Bytes, b: Bytes) -> Ordering =
+pub let ord(a: Bytes, b: Bytes) -> Ordering =
     let go(i: Nat) -> Ordering =
         match i < len(a)
         | false => match i < len(b) | true => Ordering/lt() | false => Ordering/eq() end
@@ -251,7 +251,7 @@ pub let cmp(a: Bytes, b: Bytes) -> Ordering =
             match i < len(b)
             | false => Ordering/gt()
             | true =>
-                let r = Nat/cmp(Byte/to_nat(get(a, i)), Byte/to_nat(get(b, i)));
+                let r = Nat/ord(Byte/to_nat(get(a, i)), Byte/to_nat(get(b, i)));
                 match r | eq() => go(i + 1) | _ => r end
             end
         end;
@@ -263,14 +263,14 @@ satisfy Eql(Bytes) {
 }
 
 satisfy Cmp(Bytes) {
-    lt(a, b) = Ordering/is_lt(cmp(a, b)),
-    le(a, b) = Ordering/is_le(cmp(a, b)),
-    gt(a, b) = Ordering/is_gt(cmp(a, b)),
-    ge(a, b) = Ordering/is_ge(cmp(a, b)),
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
+    gt(a, b) = Ordering/is_gt(ord(a, b)),
+    ge(a, b) = Ordering/is_ge(ord(a, b)),
 }
 
 satisfy Ord(Bytes) {
-    ord = cmp,
+    ord = ord,
 }
 
 --- Hexadecimal, two digits per byte.

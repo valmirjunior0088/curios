@@ -55,7 +55,7 @@ pub let abs(n: Int) -> Nat =
     end;
 
 --- The order of the two.
-pub let cmp(x: Int, y: Int) -> Ordering =
+pub let ord(x: Int, y: Int) -> Ordering =
     choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
 --- The smaller of the two.
@@ -115,5 +115,5 @@ satisfy Spell(Int) {
 }
 
 satisfy Ord(Int) {
-    ord = cmp,
+    ord = ord,
 }

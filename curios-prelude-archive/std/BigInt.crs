@@ -31,7 +31,7 @@ pub let of_big_nat(a: BigNat) -> BigInt =
 
 --- `x - y` for two positives, signed.
 pub let pos_sub(x: BigPos, y: BigPos) -> BigInt =
-    match BigPos/cmp(x, y)
+    match BigPos/ord(x, y)
     | lt() => signed(true, y.value - x.value)
     | eq() => BigInt/zero()
     | gt() => signed(false, x.value - y.value)
@@ -78,9 +78,9 @@ pub let mul(a: BigInt, b: BigInt) -> BigInt =
     end;
 
 --- The order of the two.
-pub let cmp(a: BigInt, b: BigInt) -> Ordering =
+pub let ord(a: BigInt, b: BigInt) -> Ordering =
     match (a, b)
-    | (neg(p), neg(q)) => BigPos/cmp(q, p)
+    | (neg(p), neg(q)) => BigPos/ord(q, p)
     | (neg(_), zero()) => Ordering/lt()
     | (neg(_), pos(_)) => Ordering/lt()
     | (zero(), neg(_)) => Ordering/gt()
@@ -88,28 +88,28 @@ pub let cmp(a: BigInt, b: BigInt) -> Ordering =
     | (zero(), pos(_)) => Ordering/lt()
     | (pos(_), neg(_)) => Ordering/gt()
     | (pos(_), zero()) => Ordering/gt()
-    | (pos(p), pos(q)) => BigPos/cmp(p, q)
+    | (pos(p), pos(q)) => BigPos/ord(p, q)
     end;
 
 --- Whether the two are equal.
 pub let eql(a: BigInt, b: BigInt) -> Bool =
-    match cmp(a, b) | eq() => true | _ => false end;
+    match ord(a, b) | eq() => true | _ => false end;
 
 --- Whether `a` is below `b`.
 pub let lt(a: BigInt, b: BigInt) -> Bool =
-    match cmp(a, b) | lt() => true | _ => false end;
+    match ord(a, b) | lt() => true | _ => false end;
 
 --- Whether `a` is at most `b`.
 pub let le(a: BigInt, b: BigInt) -> Bool =
-    match cmp(a, b) | gt() => false | _ => true end;
+    match ord(a, b) | gt() => false | _ => true end;
 
 --- Whether `a` is above `b`.
 pub let gt(a: BigInt, b: BigInt) -> Bool =
-    match cmp(a, b) | gt() => true | _ => false end;
+    match ord(a, b) | gt() => true | _ => false end;
 
 --- Whether `a` is at least `b`.
 pub let ge(a: BigInt, b: BigInt) -> Bool =
-    match cmp(a, b) | lt() => false | _ => true end;
+    match ord(a, b) | lt() => false | _ => true end;
 
 --- `n` as an integer.
 pub let of_nat(n: Nat) -> BigInt =
@@ -195,5 +195,5 @@ satisfy Spell(BigInt) {
 }
 
 satisfy Ord(BigInt) {
-    ord = cmp,
+    ord = ord,
 }

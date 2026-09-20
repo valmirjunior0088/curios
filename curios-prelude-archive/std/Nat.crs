@@ -102,7 +102,7 @@ pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
     match c >= lo | true => c <= hi | false => false end;
 
 --- The order of the two.
-pub let cmp(x: Nat, y: Nat) -> Ordering =
+pub let ord(x: Nat, y: Nat) -> Ordering =
     choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
 satisfy Eql(Nat) {
@@ -150,7 +150,7 @@ satisfy Spell(Nat) {
 }
 
 satisfy Ord(Nat) {
-    ord = cmp,
+    ord = ord,
 }
 
 --- `a < b`'s laws, and its crossings with `a <= b`.

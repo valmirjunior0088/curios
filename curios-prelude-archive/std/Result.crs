@@ -83,7 +83,7 @@ satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(E, A)) {
 satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(E, A));
 
 --- `failure` below `success`; two failures by `E`'s order and two successes by `A`'s.
-pub let cmp(
+pub let ord(
     @A: Type,
     @E: Type,
     use Ord(A),
@@ -97,12 +97,12 @@ pub let cmp(
     end;
 
 satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Cmp(Result(E, A)) {
-    lt(a, b) = Ordering/is_lt(cmp(a, b)),
-    le(a, b) = Ordering/is_le(cmp(a, b)),
-    gt(a, b) = Ordering/is_gt(cmp(a, b)),
-    ge(a, b) = Ordering/is_ge(cmp(a, b)),
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
+    gt(a, b) = Ordering/is_gt(ord(a, b)),
+    ge(a, b) = Ordering/is_ge(ord(a, b)),
 }
 
 satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
-    ord = cmp,
+    ord = ord,
 }

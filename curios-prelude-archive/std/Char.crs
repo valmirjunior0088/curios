@@ -40,12 +40,12 @@ pub let eql(a: Char, b: Char) -> Bool =
     a.code == b.code;
 
 --- Code-point order.
-pub let cmp(a: Char, b: Char) -> Ordering =
-    Nat/cmp(a.code, b.code);
+pub let ord(a: Char, b: Char) -> Ordering =
+    Nat/ord(a.code, b.code);
 
 --- Whether `a` is below `b` in code-point order.
 ---
---- Stated on the code points directly, as `Byte`'s order is on its values, so that a comparison of characters is a comparison of naturals once unfolded and reduces as one — its negation is its dual, and swapping its operands is the mirrored comparison. Read through `cmp` it would be a stuck match on an `Ordering`, which no law relates to another.
+--- Stated on the code points directly, as `Byte`'s order is on its values, so that a comparison of characters is a comparison of naturals once unfolded and reduces as one — its negation is its dual, and swapping its operands is the mirrored comparison. Read through `ord` it would be a stuck match on an `Ordering`, which no law relates to another.
 pub let lt(a: Char, b: Char) -> Bool =
     a.code < b.code;
 
@@ -187,5 +187,5 @@ satisfy Spell(Char) {
 }
 
 satisfy Ord(Char) {
-    ord = cmp,
+    ord = ord,
 }

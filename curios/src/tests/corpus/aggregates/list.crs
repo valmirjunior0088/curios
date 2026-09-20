@@ -58,10 +58,10 @@ test sort_is_stable_and_sort_by_takes_a_comparator =
         Test/equal(List/sort([3, 1, 2]), [1, 2, 3]),
         Test/equal(List/sort(["b", "a", "c"]), ["a", "b", "c"]),
         Test/equal(
-            List/sort_by(pairs, (p: {Nat, Str}, q: {Nat, Str}) => Nat/cmp(p.0, q.0)),
+            List/sort_by(pairs, (p: {Nat, Str}, q: {Nat, Str}) => Nat/ord(p.0, q.0)),
             [(1, "x"), (1, "y"), (2, "b"), (2, "a")]),
         Test/equal(
-            List/sort_by(pairs, (p: {Nat, Str}, q: {Nat, Str}) => Nat/cmp(q.0, p.0)),
+            List/sort_by(pairs, (p: {Nat, Str}, q: {Nat, Str}) => Nat/ord(q.0, p.0)),
             [(2, "b"), (2, "a"), (1, "x"), (1, "y")])]);
 
 -- Every predicate and search is a case split on `[head, ..tail]` with a call on the tail, which the totality analysis grades as a decrease — so `find` and `any` compute in a type. Stated as proofs: the claim is in the type and the kernel discharges it where the unit is checked, which is a stronger statement than a run of them would be.

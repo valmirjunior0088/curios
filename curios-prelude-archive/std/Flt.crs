@@ -170,7 +170,7 @@ let render(f_mant: BigNat, exp_field: Nat, even: Bool) -> Str =
     end;
 
 --- The order of the two, with a NaN answering `gt` against everything.
-pub let cmp(x: Flt, y: Flt) -> Ordering =
+pub let ord(x: Flt, y: Flt) -> Ordering =
     choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
 --- The shortest decimal that reads back as `f`, always signed: `+2.5`, `-0`, `+inf`, `-inf` or `NaN`.
@@ -428,5 +428,5 @@ satisfy Spell(Flt) {
 }
 
 satisfy Ord(Flt) {
-    ord = cmp,
+    ord = ord,
 }

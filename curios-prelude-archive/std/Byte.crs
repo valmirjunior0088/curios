@@ -69,7 +69,7 @@ pub let rotr(a: Byte, count: Nat) -> Byte =
     Nat/to_byte(Nat/and(Nat/or(Nat/shr(to_nat(a), places), Nat/shl(to_nat(a), 8 - places)), 0xFF));
 
 --- The order of the two values.
-pub let cmp(a: Byte, b: Byte) -> Ordering =
+pub let ord(a: Byte, b: Byte) -> Ordering =
     choose | lt(a, b) => Ordering/lt() | eql(a, b) => Ordering/eq() | _ => Ordering/gt() end;
 
 satisfy Eql(Byte) {
@@ -101,5 +101,5 @@ satisfy Spell(Byte) {
 }
 
 satisfy Ord(Byte) {
-    ord = cmp,
+    ord = ord,
 }

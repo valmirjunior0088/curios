@@ -104,8 +104,8 @@ pub mod mul;
 pub use mul/{let mul};
 
 --- Comparison, with its laws beneath.
-pub mod cmp;
-pub use cmp/{let cmp};
+pub mod ord;
+pub use ord/{let ord};
 
 satisfy Show(BigPos) {
     show(n) = BigNat/to_str(n.value),

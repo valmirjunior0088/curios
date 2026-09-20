@@ -154,7 +154,7 @@ pub let join(sep: Bits, parts: List(Bits)) -> Bits =
         (l, r) => b[..l, ..sep, ..r]);
 
 --- Bitwise from index zero, a proper prefix first.
-pub let cmp(a: Bits, b: Bits) -> Ordering =
+pub let ord(a: Bits, b: Bits) -> Ordering =
     let go(i: Nat) -> Ordering =
         match i < len(a)
         | false => match i < len(b) | true => Ordering/lt() | false => Ordering/eq() end
@@ -162,7 +162,7 @@ pub let cmp(a: Bits, b: Bits) -> Ordering =
             match i < len(b)
             | false => Ordering/gt()
             | true =>
-                let r = Bool/cmp(get(a, i), get(b, i));
+                let r = Bool/ord(get(a, i), get(b, i));
                 match r | eq() => go(i + 1) | _ => r end
             end
         end;
@@ -174,14 +174,14 @@ satisfy Eql(Bits) {
 }
 
 satisfy Cmp(Bits) {
-    lt(a, b) = Ordering/is_lt(cmp(a, b)),
-    le(a, b) = Ordering/is_le(cmp(a, b)),
-    gt(a, b) = Ordering/is_gt(cmp(a, b)),
-    ge(a, b) = Ordering/is_ge(cmp(a, b)),
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
+    gt(a, b) = Ordering/is_gt(ord(a, b)),
+    ge(a, b) = Ordering/is_ge(ord(a, b)),
 }
 
 satisfy Ord(Bits) {
-    ord = cmp,
+    ord = ord,
 }
 
 satisfy Show(Bits) {

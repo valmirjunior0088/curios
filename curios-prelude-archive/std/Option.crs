@@ -89,19 +89,19 @@ satisfy Monad(Option) {
 }
 
 --- `none` below `some`, and two values by `A`'s order.
-pub let cmp(@A: Type, use Ord(A), a: Option(A), b: Option(A)) -> Ordering =
+pub let ord(@A: Type, use Ord(A), a: Option(A), b: Option(A)) -> Ordering =
     match a
     | none() => match b | none() => Ordering/eq() | some(_) => Ordering/lt() end
     | some(x) => match b | none() => Ordering/gt() | some(y) => Ord/ord(x, y) end
     end;
 
 satisfy (@A: Type, use Ord(A)) => Cmp(Option(A)) {
-    lt(a, b) = Ordering/is_lt(cmp(a, b)),
-    le(a, b) = Ordering/is_le(cmp(a, b)),
-    gt(a, b) = Ordering/is_gt(cmp(a, b)),
-    ge(a, b) = Ordering/is_ge(cmp(a, b)),
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
+    gt(a, b) = Ordering/is_gt(ord(a, b)),
+    ge(a, b) = Ordering/is_ge(ord(a, b)),
 }
 
 satisfy (@A: Type, use Ord(A)) => Ord(Option(A)) {
-    ord = cmp,
+    ord = ord,
 }

@@ -63,19 +63,19 @@ satisfy Spell(Bool) {
 }
 
 --- `false` below `true`.
-pub let cmp(a: Bool, b: Bool) -> Ordering =
+pub let ord(a: Bool, b: Bool) -> Ordering =
     match a
     | false => match b | false => Ordering/eq() | true => Ordering/lt() end
     | true => match b | false => Ordering/gt() | true => Ordering/eq() end
     end;
 
 satisfy Cmp(Bool) {
-    lt(a, b) = Ordering/is_lt(cmp(a, b)),
-    le(a, b) = Ordering/is_le(cmp(a, b)),
-    gt(a, b) = Ordering/is_gt(cmp(a, b)),
-    ge(a, b) = Ordering/is_ge(cmp(a, b)),
+    lt(a, b) = Ordering/is_lt(ord(a, b)),
+    le(a, b) = Ordering/is_le(ord(a, b)),
+    gt(a, b) = Ordering/is_gt(ord(a, b)),
+    ge(a, b) = Ordering/is_ge(ord(a, b)),
 }
 
 satisfy Ord(Bool) {
-    ord = cmp,
+    ord = ord,
 }

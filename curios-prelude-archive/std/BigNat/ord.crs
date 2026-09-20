@@ -25,28 +25,28 @@ pub let raw(x: Bits, y: Bits) -> Ordering =
     end;
 
 --- The order of the two.
-pub let cmp(a: BigNat, b: BigNat) -> Ordering =
+pub let ord(a: BigNat, b: BigNat) -> Ordering =
     raw(a.bits, b.bits);
 
 --- Whether the two are equal.
 pub let eql(a: BigNat, b: BigNat) -> Bool =
-    match cmp(a, b) | eq() => true | _ => false end;
+    match ord(a, b) | eq() => true | _ => false end;
 
 --- Whether `a` is below `b`.
 pub let lt(a: BigNat, b: BigNat) -> Bool =
-    match cmp(a, b) | lt() => true | _ => false end;
+    match ord(a, b) | lt() => true | _ => false end;
 
 --- Whether `a` is at most `b`.
 pub let le(a: BigNat, b: BigNat) -> Bool =
-    match cmp(a, b) | gt() => false | _ => true end;
+    match ord(a, b) | gt() => false | _ => true end;
 
 --- Whether `a` is above `b`.
 pub let gt(a: BigNat, b: BigNat) -> Bool =
-    match cmp(a, b) | gt() => true | _ => false end;
+    match ord(a, b) | gt() => true | _ => false end;
 
 --- Whether `a` is at least `b`.
 pub let ge(a: BigNat, b: BigNat) -> Bool =
-    match cmp(a, b) | lt() => false | _ => true end;
+    match ord(a, b) | lt() => false | _ => true end;
 
 let absorb_eq(
     o: Ordering,
@@ -84,7 +84,7 @@ let sub_split(
     | gt() => match gt_neq_eq(p) end
     end;
 
-let cong_cmp_match(
+let cong_ord_match(
     @s: Ordering,
     @t: Ordering,
     p: Eq(s, t),
@@ -107,11 +107,11 @@ pub let raw_to_eq(x: Bits, y: Bits, p: Eq(raw(x, y), Ordering/eq())) -> Eq(x, y)
         | b[] => match gt_neq_eq(p) end
         | b[yh, ..yt] =>
             cong_cons2(
-                cmp_head_eq(xh, yh, Eq/trans(Eq/sym(cong_cmp_match(sub_split(raw(xt, yt), p))), p)),
+                ord_head_eq(xh, yh, Eq/trans(Eq/sym(cong_ord_match(sub_split(raw(xt, yt), p))), p)),
                 raw_to_eq(xt, yt, sub_split(raw(xt, yt), p)))
         end
     end
-and cmp_head_eq(
+and ord_head_eq(
     xh: Bool,
     yh: Bool,
     p: Eq(
@@ -161,7 +161,7 @@ pub let raw_flip(x: Bits, y: Bits) -> Eq(raw(y, x), Ordering/flip(raw(x, y))) =
         | b[] => Eq/refl()
         | b[yh, ..yt] =>
             Eq/trans(
-                cong_cmp_match(raw_flip(xt, yt)),
+                cong_ord_match(raw_flip(xt, yt)),
                 match raw(xt, yt): (r) =>
                     Eq(
                         match Ordering/flip(r)
@@ -364,15 +364,15 @@ pub let raw_trans(
     end;
 
 --- A number compares equal to itself.
-pub let refl(a: BigNat) -> Eq(cmp(a, a), Ordering/eq()) =
+pub let refl(a: BigNat) -> Eq(ord(a, a), Ordering/eq()) =
     raw_refl(a.bits);
 
 --- Numbers that compare equal are equal.
-pub let to_eq(a: BigNat, b: BigNat, p: Eq(cmp(a, b), Ordering/eq())) -> Eq(a, b) =
+pub let to_eq(a: BigNat, b: BigNat, p: Eq(ord(a, b), Ordering/eq())) -> Eq(a, b) =
     eq(a, b, raw_to_eq(a.bits, b.bits, p));
 
 --- Swapping the operands flips the answer.
-pub let flip(a: BigNat, b: BigNat) -> Eq(cmp(b, a), Ordering/flip(cmp(a, b))) =
+pub let flip(a: BigNat, b: BigNat) -> Eq(ord(b, a), Ordering/flip(ord(a, b))) =
     raw_flip(a.bits, b.bits);
 
 --- Transitivity.
@@ -380,7 +380,7 @@ pub let trans(
     a: BigNat,
     b: BigNat,
     c: BigNat,
-    p: Eq(cmp(a, b), Ordering/lt()),
-    q: Eq(cmp(b, c), Ordering/lt()),
-) -> Eq(cmp(a, c), Ordering/lt()) =
+    p: Eq(ord(a, b), Ordering/lt()),
+    q: Eq(ord(b, c), Ordering/lt()),
+) -> Eq(ord(a, c), Ordering/lt()) =
     raw_trans(a.bits, b.bits, c.bits, p, q);

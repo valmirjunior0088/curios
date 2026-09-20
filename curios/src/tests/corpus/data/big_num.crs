@@ -46,12 +46,12 @@ test big_nat_bit_len_counts_binary_digits =
             BigNat/bit_len(BigNat/of_nat(256))],
         [0, 1, 8, 9]);
 
--- `cmp` lets the high bits decide — the recursion on the numeral tails — breaking ties on the low bit only afterward, so two values differing only in the lowest bit still order correctly.
+-- `ord` lets the high bits decide — the recursion on the numeral tails — breaking ties on the low bit only afterward, so two values differing only in the lowest bit still order correctly.
 test big_nat_cmp_orders_by_magnitude =
     let a = BigNat/of_nat(12345678);
     let b = BigNat/of_nat(12345679);
     Test/equal(
-        [BigNat/cmp(a, b), BigNat/cmp(a, a), BigNat/cmp(b, a)],
+        [BigNat/ord(a, b), BigNat/ord(a, a), BigNat/ord(b, a)],
         [Ordering/lt(), Ordering/eq(), Ordering/gt()]);
 
 -- Zero is its own constructor, which `to_str` renders as "0" and not the empty string, and a value with clear low bits round-trips through the binary long division that produces the decimal digits.
@@ -70,7 +70,7 @@ test big_nat_of_str_inverts_to_str =
         Test/equal(BigNat/of_str("12x"), Option/none())]);
 
 -- === `BigInt`, signed. ===========================================================
--- Mixed-sign `add` routes through `pos_sub`, which reads the sign straight off `cmp`: the same magnitudes flipped land exactly on the other side of zero, and equal magnitudes land on zero itself — which has its own constructor, so "-0" cannot even be produced.
+-- Mixed-sign `add` routes through `pos_sub`, which reads the sign straight off `ord`: the same magnitudes flipped land exactly on the other side of zero, and equal magnitudes land on zero itself — which has its own constructor, so "-0" cannot even be produced.
 test bigint_add_crosses_zero_in_both_directions =
     Test/equal(
         [
@@ -94,13 +94,13 @@ test bigint_mul_multiplies_signs =
             BigInt/mul(BigInt/of_int(-99999), BigInt/zero)],
         [BigInt/of_decimal("+9999800001"), BigInt/of_decimal("-9999800001"), BigInt/zero]);
 
--- `cmp` decides by sign first and only then by magnitude, where the negative stratum orders reversed: -2 < -1 even though 2 > 1.
+-- `ord` decides by sign first and only then by magnitude, where the negative stratum orders reversed: -2 < -1 even though 2 > 1.
 test bigint_cmp_orders_across_signs =
     let m2 = BigInt/of_int(-2);
     let m1 = BigInt/of_int(-1);
     let p1 = BigInt/of_int(+1);
     Test/equal(
-        [BigInt/cmp(m2, m1), BigInt/cmp(m1, p1), BigInt/cmp(p1, m1), BigInt/cmp(m1, m1)],
+        [BigInt/ord(m2, m1), BigInt/ord(m1, p1), BigInt/ord(p1, m1), BigInt/ord(m1, m1)],
         [Ordering/lt(), Ordering/lt(), Ordering/gt(), Ordering/eq()]);
 
 -- `of_int` decodes a native `Int` sign-and-magnitude: the largest magnitude whose negation also fits the i31 carrier round-trips in both signs. The carrier minimum itself is out of reach, since `Int/abs(-2^30)` has no i31 representation.
