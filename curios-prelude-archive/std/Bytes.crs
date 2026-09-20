@@ -226,6 +226,14 @@ pub let find_index(b: Bytes, pred: (Byte) -> Bool) -> Option(Nat) =
                 end);
     found;
 
+--- The index of the first byte equal to `x`, or `none`.
+pub let index_of(b: Bytes, x: Byte) -> Option(Nat) =
+    find_index(b, (y) => y == x);
+
+--- Whether `x` occurs in `b`.
+pub let contains(b: Bytes, x: Byte) -> Bool =
+    Option/is_some(index_of(b, x));
+
 --- `parts` with `sep` between each pair.
 pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
     List/balanced(

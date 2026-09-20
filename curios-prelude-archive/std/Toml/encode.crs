@@ -99,7 +99,7 @@ let flt_str(f: Flt) -> Str =
             | true => Str/slice(raw, 1, Str/len(raw) - 1)
             | false => raw
             end;
-        match Option/is_some(Str/find(unsigned, '.')) || Option/is_some(Str/find(unsigned, 'e'))
+        match Option/is_some(Str/index_of(unsigned, '.')) || Option/is_some(Str/index_of(unsigned, 'e'))
         | true => unsigned
         | false => Str/concat(unsigned, ".0")
         end

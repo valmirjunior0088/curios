@@ -89,6 +89,14 @@ pub let find_index(b: Bits, pred: (Bool) -> Bool) -> Option(Nat) =
                 end);
     found;
 
+--- The index of the first bit equal to `x`, or `none`.
+pub let index_of(b: Bits, x: Bool) -> Option(Nat) =
+    find_index(b, (y) => y == x);
+
+--- Whether `x` occurs in `b`.
+pub let contains(b: Bits, x: Bool) -> Bool =
+    Option/is_some(index_of(b, x));
+
 --- `parts` with `sep` between each pair.
 pub let join(sep: Bits, parts: List(Bits)) -> Bits =
     List/balanced(

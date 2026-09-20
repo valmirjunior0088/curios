@@ -23,9 +23,9 @@ test split_once_takes_the_first_occurrence_and_contains_reads_it =
         Str/join(" ", [
             first,
             missing,
-            Bool/to_str(Str/contains("hello", "ell")),
-            Bool/to_str(Str/contains("hello", "elo")),
-            Bool/to_str(Str/contains("hello", ""))]),
+            Bool/to_str(Str/has_substr("hello", "ell")),
+            Bool/to_str(Str/has_substr("hello", "elo")),
+            Bool/to_str(Str/has_substr("hello", ""))]),
         "(key)(value=x) none true false true");
 
 -- `"a\r\nb\n"` is two lines: the carriage return is stripped and the final terminator closes `b` rather than opening a third, empty line. `""` has no lines at all.

@@ -301,7 +301,7 @@ let wants_help(argv: List(Str)) -> Bool =
     List/any(argv, (t) =>
         Str/eql(t, "--help")
             || Str/starts_with(t, "-") && Bool/not(Str/starts_with(t, "--"))
-                && Str/contains(t, "h"));
+                && Str/has_substr(t, "h"));
 
 let wants_version(argv: List(Str)) -> Bool =
     List/any(argv, (t) => Str/eql(t, "--version"));

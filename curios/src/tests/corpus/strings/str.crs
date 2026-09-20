@@ -63,7 +63,7 @@ test logical_operations_use_certified_chars =
         Str/join("|", [
             Str/fold(s, "", (c, acc) => Str/concat(acc, Show/show(c))),
             Show/show(Option/unwrap_or(Str/try_get(s, 1), '?')),
-            Nat/to_str(Option/unwrap_or(Str/find(s, '€'), 99)),
+            Nat/to_str(Option/unwrap_or(Str/index_of(s, '€'), 99)),
             Nat/to_str(Option/unwrap_or(Str/find_index(s, (c) => Char/to_nat(c) > 0xFFFF), 99)),
             Show/show('😀'),
             Bool/to_str(Str/eql_ascii_ci("AbÉ", "aBÉ")),

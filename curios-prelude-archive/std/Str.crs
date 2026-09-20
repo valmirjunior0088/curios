@@ -293,8 +293,29 @@ pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(Nat) =
     found;
 
 --- The index of the first `target`, or `none`.
-pub let find(s: Str, target: Char) -> Option(Nat) =
+pub let index_of(s: Str, target: Char) -> Option(Nat) =
     find_index(s, (codepoint) => codepoint == target);
+
+--- The first character `pred` accepts, or `none`.
+---
+--- Folded rather than read back through `try_get`, so the search is one walk and needs nothing declared after it.
+pub let find(s: Str, pred: (Char) -> Bool) -> Option(Char) =
+    fold(
+        s,
+        Option/none(),
+        (codepoint, found) =>
+            match found
+            | some(_) => found
+            | none() =>
+                match pred(codepoint)
+                | true => Option/some(codepoint)
+                | false => Option/none()
+                end
+            end);
+
+--- Whether `target` occurs in `s`.
+pub let contains(s: Str, target: Char) -> Bool =
+    Option/is_some(index_of(s, target));
 
 --- The character at `i`, or `none` past the end.
 pub let try_get(s: Str, i: Nat) -> Option(Char) =
@@ -392,8 +413,10 @@ pub let split_once(s: Str, sep: Str) -> Option({Str, Str}) =
         end;
     go(0, s);
 
---- Whether `needle` occurs in `s`.
-pub let contains(s: Str, needle: Str) -> Bool =
+--- Whether `needle` occurs in `s` as a run of characters.
+---
+--- Named apart from [`contains`], which is the element reading `/std/List`, `/std/Bytes` and `/std/Bits` all give that word. The substring family beside it — `starts_with`, `ends_with`, `split_once`, `split` and `replace` — takes a `Str` needle too and needs no such mark, because none of them names an operation another carrier spells differently.
+pub let has_substr(s: Str, needle: Str) -> Bool =
     Option/is_some(split_once(s, needle));
 
 --- The pieces between occurrences of `sep`, the separators dropped; an empty separator splits into characters.

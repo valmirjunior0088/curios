@@ -337,11 +337,11 @@ pub let of_str(s: Str) -> Option(Flt) =
         let is_neg = first == '-';
         let start = choose | first == '+' => 1 | first == '-' => 1 | _ => 0 end;
         let len = Str/len(s);
-        let dot_pos = Option/unwrap_or(Str/find(s, '.'), len);
+        let dot_pos = Option/unwrap_or(Str/index_of(s, '.'), len);
         let e_pos =
             Nat/min(
-                Option/unwrap_or(Str/find(s, 'e'), len),
-                Option/unwrap_or(Str/find(s, 'E'), len));
+                Option/unwrap_or(Str/index_of(s, 'e'), len),
+                Option/unwrap_or(Str/index_of(s, 'E'), len));
         let int_end = Nat/min(dot_pos, e_pos);
         let int_slice = Str/slice(s, start, int_end - start);
         let frac_slice =
@@ -421,8 +421,8 @@ satisfy Spell(Flt) {
                     end
                 | none() => raw
                 end;
-            let pointed = match Str/find(unsigned, '.') | some(_) => true | none() => false end;
-            let exponented = match Str/find(unsigned, 'e') | some(_) => true | none() => false end;
+            let pointed = match Str/index_of(unsigned, '.') | some(_) => true | none() => false end;
+            let exponented = match Str/index_of(unsigned, 'e') | some(_) => true | none() => false end;
             match pointed || exponented | true => unsigned | false => Str/concat(unsigned, ".0") end
         end,
 }
