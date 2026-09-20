@@ -128,24 +128,74 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
         })
 }
 
-// `(T, T, ...) -> T` (a foreign function) or a bare `T` (a zero-argument foreign, like `host_ops`'s `clock_wall`). Params carry no surface label — `a0`, `a1`, … name them positionally; the single result is unnamed (`_`), since a `foreign` declaration has no surface syntax for a named record result the way `/sys/Handle`'s Rust-side rows do.
+// One labelled field of a braced result: `status: Nat`. The label is read as written — it is the tuple type's, and `documentation/syntax.md` makes a tuple's labels part of its identity, so nothing may invent one or reorder the field it names.
+fn parse_wire_field<'a>() -> Parser<'a, (String, WireType)> {
+    parse_identifier()
+        .and_drop(parse_literal(":"))
+        .and(lazy(parse_wire_type))
+        .map(|(label, type_)| (label.to_string(), type_))
+}
+
+// The results a braced field list denotes, or why it denotes none. Two refusals, and both are the same fact: a tuple type's labels are part of its identity, so this may neither drop the label a single field carries nor move a field to satisfy the wire's ordering.
+fn wire_fields(fields: Vec<(String, WireType)>) -> Result<WireResults, String> {
+    let Some((last_label, last_type)) = fields.last().cloned() else {
+        return Ok(WireResults::none());
+    };
+
+    // A row forwards one result through as itself, so `{x: T}` would name a one-field tuple no row can carry — and the label would be dropped rather than kept, which is a different type from the one written.
+    if fields.len() == 1 {
+        return Err(format!(
+            "a result is spelled bare rather than in braces when there is one of it: write the type itself, not `{{{last_label}: …}}`"
+        ));
+    }
+
+    let mut scalars = Vec::new();
+    for (label, type_) in &fields[..fields.len() - 1] {
+        match type_.shape() {
+            WireShape::Scalar(scalar) => scalars.push((label.clone(), scalar)),
+            // Reordering would satisfy the wire and hand back a different tuple type than the one declared, since `{a: Nat, b: Bytes}` and `{b: Bytes, a: Nat}` are not one type. So the rule is stated to the writer instead.
+            WireShape::Reference(_) => {
+                return Err(format!(
+                    "`{label}` is a reference result (Bytes, Handle or List), which crosses last and so is written last: move it to the end rather than expecting it to be moved, since a tuple type's field order is part of what it is"
+                ));
+            }
+        }
+    }
+
+    Ok(WireResults::ending(scalars, last_label, last_type.shape()))
+}
+
+// A result: a bare wire type, or a braced field list naming the tuple type the row yields. `{}` is no result at all — the unit *type*, which is what a result position holds; `()` is the unit value and never appears here.
+fn parse_wire_results<'a>() -> Parser<'a, WireResults> {
+    parse_literal("{")
+        .and_keep(sep_by0_trailing(parse_wire_field, || parse_literal(",")))
+        .and_drop(parse_literal("}"))
+        .flat_map(|fields| match wire_fields(fields) {
+            Ok(results) => pure(results),
+            // A brace has been read, so nothing else could have been meant: the refusal is the diagnosis rather than a backtrack into a vaguer one.
+            Err(message) => commit(fail(message)),
+        })
+        .or(parse_wire_type().map(|output| WireResults::single("_".to_string(), output)))
+}
+
+// `(T, T, ...) -> R` (a foreign function) or a bare `R` (a zero-argument foreign, like `host_ops`'s `clock_wall`). Params carry no surface label — `a0`, `a1`, … name them positionally — while a result names its own, because a row of two or more results reaches the guest as a tuple type whose labels it projects by.
 pub(super) fn parse_wire_signature<'a>() -> Parser<'a, WireSignature> {
     parse_literal("(")
         .and_keep(sep_by0_trailing(parse_wire_type, || parse_literal(",")))
         .and_drop(parse_literal(")"))
         .and_drop(parse_literal("->"))
-        .and(lazy(parse_wire_type))
-        .map(|(params, output)| WireSignature {
+        .and(lazy(parse_wire_results))
+        .map(|(params, results)| WireSignature {
             params: params
                 .into_iter()
                 .enumerate()
                 .map(|(index, type_)| (format!("a{index}"), type_))
                 .collect(),
-            results: WireResults::single("_".to_string(), output),
+            results,
         })
-        .or(parse_wire_type().map(|output| WireSignature {
+        .or(parse_wire_results().map(|results| WireSignature {
             params: vec![],
-            results: WireResults::single("_".to_string(), output),
+            results,
         }))
 }
 

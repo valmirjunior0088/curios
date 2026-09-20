@@ -12,7 +12,7 @@ use {
         Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
     },
     crate::parse::op_precedence,
-    curios_abi::{WireSignature, WireType, stdio},
+    curios_abi::{ResultShape, WireResults, WireSignature, WireType, stdio},
     curios_num::Natural,
     curios_print::{
         Printer, begins, fill, flat, group, hard_line, if_break, indent, line, named, pure,
@@ -1498,13 +1498,29 @@ fn print_wire_type(type_: WireType) -> Printer {
     }
 }
 
-// `parse_wire_signature` only ever produces exactly one, unnamed (`_`) result — `foreign` has no surface syntax for `/sys/Handle`'s named-record results — so the sole result is always present.
+// A result as the surface spells it, which is the shape `WireResults` already decides: nothing is `{}`, one is the bare type forwarded through, and several are the tuple type the guest projects by — each field labelled, because a tuple's labels are part of its identity and dropping one would print a different type from the one declared.
+fn print_wire_results(results: &WireResults) -> Printer {
+    match results.shape() {
+        ResultShape::Unit => pure("{}"),
+        ResultShape::Single(type_) => print_wire_type(type_),
+        ResultShape::Record(fields) => listed(
+            "{",
+            fields
+                .into_iter()
+                .map(|(label, type_)| {
+                    flat([pure(label.to_string()), pure(": "), print_wire_type(type_)])
+                })
+                .collect(),
+            "}",
+        ),
+    }
+}
+
 fn print_wire_signature(signature: WireSignature) -> Printer {
     let WireSignature { params, results } = signature;
-    let output = results.iter().next().expect("foreign has one result").1;
 
     if params.is_empty() {
-        return print_wire_type(output);
+        return print_wire_results(&results);
     }
 
     flat([
@@ -1517,7 +1533,7 @@ fn print_wire_signature(signature: WireSignature) -> Printer {
             ")",
         ),
         pure(" -> "),
-        print_wire_type(output),
+        print_wire_results(&results),
     ])
 }
 

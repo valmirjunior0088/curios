@@ -49,7 +49,7 @@ use {
         TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType,
         TupleTypeParam, UseGroup, WitnessField,
     },
-    curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
+    curios_abi::{WireLeaf, WireResults, WireShape, WireSignature, WireType},
     curios_num::{Floating, Natural},
     curios_parse::{
         Mark, Parser, commit, fail, fail_from, lazy, look_ahead, many0, many1, mark, memoize,

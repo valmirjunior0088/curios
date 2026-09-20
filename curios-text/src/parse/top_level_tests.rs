@@ -3,7 +3,9 @@
 use {
     super::test_support::comments_of,
     crate::*,
-    curios_abi::{WireLeaf, WireResults, WireSignature, WireType},
+    curios_abi::{
+        WireLeaf, WireReference, WireResults, WireScalar, WireShape, WireSignature, WireType,
+    },
     curios_utilities::Plicity,
 };
 
@@ -136,6 +138,81 @@ fn top_foreign_zero_arg() {
     );
 }
 
+/// `{}` is the unit *type*, which is what a result position holds — `()` is the unit value and is no result. The rows have carried a zero-result shape since `handle_close`; this is the surface finally able to spell one.
+#[test]
+fn top_foreign_takes_no_result() {
+    assert_eq!(
+        "foreign close : (Handle) -> {};"
+            .parse::<Module>()
+            .unwrap()
+            .items,
+        vec![TopItem::Foreign(TopForeign {
+            doc: None,
+            vis_pub: false,
+            label: "close".into(),
+            signature: WireSignature {
+                params: vec![("a0".to_string(), WireType::Handle)],
+                results: WireResults::none(),
+            },
+        })]
+    );
+}
+
+/// Two or more results reach the guest as a tuple type it projects by name, so the surface spells the labels and the row keeps them: `r.status` and `r.bytes` are what `/std` reads off `Handle/read`.
+#[test]
+fn top_foreign_takes_a_tuple_of_results() {
+    assert_eq!(
+        "foreign read : (Handle, Nat) -> {status: Nat, bytes: Bytes};"
+            .parse::<Module>()
+            .unwrap()
+            .items,
+        vec![TopItem::Foreign(TopForeign {
+            doc: None,
+            vis_pub: false,
+            label: "read".into(),
+            signature: WireSignature {
+                params: vec![
+                    ("a0".to_string(), WireType::Handle),
+                    ("a1".to_string(), WireType::Nat)
+                ],
+                results: WireResults::ending(
+                    vec![("status".to_string(), WireScalar::Nat)],
+                    "bytes".to_string(),
+                    WireShape::Reference(WireReference::Bytes)
+                ),
+            },
+        })]
+    );
+}
+
+/// One result is forwarded through as itself, so a one-field brace would name a tuple no row can carry — and would drop the label, which by `documentation/syntax.md` makes it a different type again. Refused rather than quietly unwrapped.
+#[test]
+fn top_foreign_refuses_a_single_result_in_braces() {
+    let refusal = "foreign f : (Nat) -> {value: Nat};"
+        .parse::<Module>()
+        .unwrap_err()
+        .format();
+
+    assert!(
+        refusal.contains("spelled bare"),
+        "the refusal says how to spell it: {refusal}"
+    );
+}
+
+/// A reference crosses last, and the surface is told rather than reordered: `{a: Nat, b: Bytes}` and `{b: Bytes, a: Nat}` are two tuple types, so moving the field would hand the program one it did not declare.
+#[test]
+fn top_foreign_refuses_a_reference_result_before_the_last() {
+    let refusal = "foreign f : (Nat) -> {bytes: Bytes, status: Nat};"
+        .parse::<Module>()
+        .unwrap_err()
+        .format();
+
+    assert!(
+        refusal.contains("written last"),
+        "the refusal states the ordering rule: {refusal}"
+    );
+}
+
 /// `List` does not nest. Codegen forces and embeds exactly one level at the host boundary — a second level would hand the host rope structs where flat arrays belong — so `WireLeaf` keeps the grammar to what codegen implements, and the parser rejects the nested spelling outright rather than accepting a signature nothing can lower.
 #[test]
 fn top_foreign_rejects_nested_list() {
@@ -211,6 +288,9 @@ fn foreign_declaration_round_trips() {
         "pub foreign frobnicate : (Nat, Bytes) -> Nat;",
         "foreign clock : Nat;",
         "foreign frobnicate : (List(Bytes), List(Handle)) -> List(Nat);",
+        "foreign close : (Handle) -> {};",
+        "foreign wall : {secs: Nat, nanos: Nat};",
+        "foreign read : (Handle, Nat) -> {status: Nat, bytes: Bytes};",
     ] {
         let module = source.parse::<Module>().unwrap();
 
