@@ -286,9 +286,11 @@ fn nat_to_byte_inverts_to_nat_and_refuses_the_bound() {
     );
 }
 
-/// `Bytes/of_nat` emits minimal big-endian bytes — empty at zero, no leading zero, distinct per value — pinned across the byte-width boundaries.
+/// `Bytes/of_nat` emits minimal bytes least-significant first, as the carrier reads — empty at zero, no trailing zero, distinct per value — pinned across the byte-width boundaries.
+///
+/// `65537` is the row that would pass either way: its encoding is a palindrome, so the boundary values on both sides of it are what actually witness the direction.
 #[test]
-fn bytes_of_nat_is_minimal_big_endian() {
+fn bytes_of_nat_is_minimal_least_significant_first() {
     let output = run(r#"
         use /std/{Bytes, Byte, Nat, Str, List};
         let probe(n: Nat) -> Str =
@@ -302,7 +304,7 @@ fn bytes_of_nat_is_minimal_big_endian() {
             "",
             (s, acc) => Str/concat(acc, Str/concat(s, " "))))
         "#);
-    assert_eq!(output, b"0 1:1 1:255 2:1:0 3:1:0:0 3:1:0:1 ");
+    assert_eq!(output, b"0 1:1 1:255 2:0:1 3:0:0:1 3:1:0:1 ");
 }
 
 /// `0.0` and `-0.0` stay distinct terms — one NaN made bitwise identity *value* identity, and it did not merge the zeros. What the fold does make available is the IEEE comparison, which calls them numerically equal; conversion still refuses to identify the terms, which is what keeps `to_le_bytes` from telling apart two things the type level called the same.

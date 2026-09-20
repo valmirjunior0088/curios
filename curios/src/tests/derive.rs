@@ -700,7 +700,7 @@ fn the_standard_library_derives_order_for_ordering() {
 
 /// A derived encoding tags the constructor and frames each payload, so no two distinct values share a byte string.
 ///
-/// The rendering below is one dot per byte, decimal. The frame is a four-byte big-endian length, so `leaf(7)` reads as tag `0` — an empty numeral, hence four zero bytes and no payload — followed by the framed single byte `7`.
+/// The rendering below is one dot per byte, decimal. The frame is a four-byte length written least-significant first and zero-padded on its high side, so `leaf(7)` reads as tag `0` — an empty numeral, hence four zero bytes and no payload — followed by the length `1` as `.1.0.0.0` and then the byte `7`.
 #[test]
 fn derived_hash_tags_the_constructor_and_frames_each_payload() {
     let source = r#"
@@ -717,8 +717,8 @@ fn derived_hash_tags_the_constructor_and_frames_each_payload() {
 
     assert_eq!(
         run(source),
-        b".0.0.0.0.0.0.0.1.7 \
-.0.0.0.1.1.0.0.0.9.0.0.0.0.0.0.0.1.1.0.0.0.9.0.0.0.0.0.0.0.1.2"
+        b".0.0.0.0.1.0.0.0.7 \
+.1.0.0.0.1.9.0.0.0.0.0.0.0.1.0.0.0.1.9.0.0.0.0.0.0.0.1.0.0.0.2"
     );
 }
 
@@ -735,7 +735,7 @@ fn a_derived_hash_encodes_a_struct_at_ordinal_zero() {
         print(dots(Hash/hash(Point { x = 1, y = 2 })))
         "#;
 
-    assert_eq!(run(source), b".0.0.0.0.0.0.0.1.1.0.0.0.1.2");
+    assert_eq!(run(source), b".0.0.0.0.1.0.0.0.1.1.0.0.0.2");
 }
 
 /// A proof payload takes no part, and that is the difference from `Spell`: two values differing only in a proof *are* the same value, so an encoding that told them apart would be wrong — and erasure drops the payload, so nothing could produce the bytes at run time.
@@ -751,7 +751,7 @@ fn a_proof_payload_takes_no_part_in_an_encoding() {
         print(dots(Hash/hash(Small { value = 3, ok = Bool/True/qed() })))
         "#;
 
-    assert_eq!(run(source), b".0.0.0.0.0.0.0.1.3");
+    assert_eq!(run(source), b".0.0.0.0.1.0.0.0.3");
 }
 
 /// A payload whose type is a telescope variable asks for that type's own witness, reported against the payload when there is none.

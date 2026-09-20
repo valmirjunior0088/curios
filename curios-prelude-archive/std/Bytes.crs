@@ -6,9 +6,17 @@ use /std/ops/{Eql, Cmp};
 pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
     match i < len(b) | true => Option/some(get(b, i)) | false => Option/none() end;
 
---- The minimal big-endian encoding of `n`: empty for zero, no leading zero otherwise, so distinct numbers encode distinctly.
+--- The minimal encoding of `n`, least-significant byte first as the carrier reads: empty for zero, no trailing zero otherwise, so distinct numbers encode distinctly.
+---
+--- A direct cons, which is the shape `x[h, ..t]` builds and the shape `to_nat` folds back. The big-endian spelling this replaced was a snoc under the same plain name, which is why the carrier had no way to read a run back and why taking one apart needed a window at the far seam rather than the eliminator's own.
 pub let of_nat(n: Nat) -> Bytes =
-    match n == 0 | true => x[] | false => x[..of_nat(n / 256), Nat/to_byte(n % 256)] end;
+    match n == 0 | true => x[] | false => x[Nat/to_byte(n % 256), ..of_nat(n / 256)] end;
+
+--- The number a minimal encoding denotes, which is `of_nat`'s inverse.
+---
+--- One structural fold, because the least significant byte arrives first and carries a weight the fold already knows. Reading a big-endian run back needs the length before it can weigh its first byte, which is the whole reason this did not exist before.
+pub let to_nat(b: Bytes) -> Nat =
+    match b | x[] => 0 | x[h, .._]; ih => Byte/to_nat(h) + 256 * ih end;
 
 -- A number as a base-256 high part and a low digit, with the equation joining them.
 --
@@ -67,22 +75,22 @@ let high_below(n: Nat, positive: Nat/Lt(0, n)) -> Nat/Lt(n / 256, n) =
         end;
     Eq/subst((m) => Nat/Lt(m / 256, m), Eq/sym(s.joined), inner);
 
--- The two halves of a snoc, as total functions so congruence can take one apart.
+-- The two halves of a cons, as total functions so congruence can take one apart.
 --
 -- Both are guarded rather than bounded at the call: congruence needs one function of the whole value, and a bound stated over an arbitrary `Bytes` has nothing to discharge it. On the encoding's own shape the guard reduces and the window locates, which is all either is used at.
-let trunc(z: Bytes) -> Bytes =
-    match len(z) - 1 <= len(z) | true => slice(z, 0, len(z) - 1) | false => x[] end;
+let tail(z: Bytes) -> Bytes =
+    match 1 + (len(z) - 1) <= len(z) | true => slice(z, 1, len(z) - 1) | false => x[] end;
 
-let last(z: Bytes) -> Byte =
-    Option/unwrap_or(try_get(z, len(z) - 1), 0);
+let head(z: Bytes) -> Byte =
+    Option/unwrap_or(try_get(z, 0), 0);
 
 -- An empty encoding is no encoding of a positive number: the lengths differ, and a length of zero against a successor is refuted by the comparison that decides it.
-let no_empty(p: Bytes, k: Byte, e: Eq(x[], x[..p, k])) -> Bool/False =
+let no_empty(k: Byte, p: Bytes, e: Eq(x[], x[k, ..p])) -> Bool/False =
     Eq/subst((m) => Bool/Holds(Nat/eql(0, m)), Eq/cong(len, e), Bool/True/qed());
 
 --- Distinct numbers encode distinctly, which is what makes the encoding a key.
 ---
---- Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encoding apart at its last byte — the prefix by a window at the seam, the digit by an index at it — recovers the two numbers' high parts from the induction hypothesis and their low digits from the byte round trip, and rejoins both by Euclid's recombination.
+--- Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encoding apart at its first byte — the digit by an index at it, the rest by a window past it — recovers the two numbers' high parts from the induction hypothesis and their low digits from the byte round trip, and rejoins both by Euclid's recombination.
 pub let of_nat_injective(a: Nat, b: Nat, same: Eq(of_nat(a), of_nat(b))) -> Eq(a, b) =
     Nat/Lt/strong(
         (m) => (d: Nat, e: Eq(of_nat(m), of_nat(d))) -> Eq(m, d),
@@ -93,21 +101,21 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq(of_nat(a), of_nat(b))) -> Eq(a
                     match d
                     | 0 => Eq/refl()
                     | dp + 1 =>
-                        match no_empty(of_nat((dp + 1) / 256), Nat/to_byte((dp + 1) % 256), e) end
+                        match no_empty(Nat/to_byte((dp + 1) % 256), of_nat((dp + 1) / 256), e) end
                     end
                 | np + 1 =>
                     match d
                     | 0 =>
                         match no_empty(
-                            of_nat((np + 1) / 256),
                             Nat/to_byte((np + 1) % 256),
+                            of_nat((np + 1) / 256),
                             Eq/sym(e))
                         end
                     | dq + 1 =>
                         let heads: Eq(of_nat((np + 1) / 256), of_nat((dq + 1) / 256)) =
-                            Eq/cong(trunc, e);
+                            Eq/cong(tail, e);
                         let digits: Eq((np + 1) % 256, (dq + 1) % 256) =
-                            Eq/cong(Byte/to_nat, Eq/cong(last, e));
+                            Eq/cong(Byte/to_nat, Eq/cong(head, e));
                         let highs: Eq((np + 1) / 256, (dq + 1) / 256) =
                             ih((np + 1) / 256, high_below(np + 1, Bool/True/qed()))(
                                 (dq + 1) / 256,

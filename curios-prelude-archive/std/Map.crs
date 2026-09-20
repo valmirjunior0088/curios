@@ -31,7 +31,7 @@ satisfy Key(Str) {
     injective(a, b, same) = Str/eq_of_bytes(a, b, same),
 }
 
---- The minimal big-endian encoding, whose injectivity is `/std/Bytes`'s to prove.
+--- The minimal encoding, least-significant byte first, whose injectivity is `/std/Bytes`'s to prove.
 satisfy Key(Nat) {
     injective = Bytes/of_nat_injective,
 }

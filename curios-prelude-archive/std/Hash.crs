@@ -2,7 +2,9 @@ use /std/{Nat, Byte, Bytes, Bool, Str, List, Option, Int, Flt};
 
 --- How a value encodes to the bytes that identify it.
 ---
---- The encoding is a value's identity and is stable: `/std/Map`'s `Key` is this concept with injectivity added, and a byte string written down keeps its meaning. A declared type derives its witness with `satisfy Hash(T);`.
+--- The encoding is a value's identity and is *determined*: one value encodes to one byte string, in any program, from the value and the carrier's documented reading alone — which is what `/std/Map`'s `Key` adds injectivity to, and what makes two runs of the same program agree.
+---
+--- Determined is not frozen. The reading belongs to the carrier, and an encoding follows it where it moves, so a byte string written down keeps its meaning for exactly as long as that reading does. A program needing a wire format to outlive a toolchain writes its own rather than borrowing this one, which is the trade this concept makes deliberately: it exists to identify a value inside a program, not to speak to one outside it. A declared type derives its witness with `satisfy Hash(T);`.
 pub concept Hash(T: Type): pub Type {
     --- The encoding.
     hash(T) -> Bytes,
@@ -13,13 +15,15 @@ pub use Hash/*;
 let zeros(k: Nat) -> Bytes =
     match k | 0 => x[] | _ + 1; ih => x[..ih, 0x0] end;
 
---- `b` behind enough leading zeros to reach `width`, or `b` itself when it is already that long.
-pub let padded(b: Bytes, width: Nat) -> Bytes =
-    Bytes/flatten([zeros(width - Bytes/len(b)), b]);
-
---- `b` behind its four-byte big-endian length.
+--- `b` ahead of enough zero bytes to reach `width`, or `b` itself when it is already that long.
 ---
---- Four bytes because the minimal encoding of any length a `Bytes` value can have is at most that long, so the frame is self-delimiting: a concatenation of framed parts splits back into exactly the parts it was built from.
+--- Trailing rather than leading, and that is not a preference. `Bytes/of_nat` writes its least significant byte first, so a zero byte *after* the run is a higher place worth nothing, while one before it would multiply the value by 256: padding `5` and `1280` on the wrong side gives both `x[0,0,0,5]`, and two distinct numbers sharing an encoding is exactly what every user of this function exists to prevent. `Key`'s law would refuse its own case at the witness; `framed`, `tagged` and `digest` carry no law and would collide in silence.
+pub let padded(b: Bytes, width: Nat) -> Bytes =
+    Bytes/flatten([b, zeros(width - Bytes/len(b))]);
+
+--- `b` behind its four-byte length.
+---
+--- Four bytes because the minimal encoding of any length a `Bytes` value can have is at most that long, so the frame is self-delimiting: a concatenation of framed parts splits back into exactly the parts it was built from. Fixed width is what makes that true, not which end the length reads from.
 pub let framed(b: Bytes) -> Bytes =
     Bytes/flatten([padded(Bytes/of_nat(Bytes/len(b)), 4), b]);
 
@@ -60,7 +64,7 @@ satisfy Hash(Str) {
     hash = Str/to_bytes,
 }
 
---- The minimal big-endian encoding.
+--- The minimal encoding, least-significant byte first as the carrier reads.
 satisfy Hash(Nat) {
     hash = Bytes/of_nat,
 }
