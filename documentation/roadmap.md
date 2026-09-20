@@ -203,7 +203,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 - [x] Self-describing foreign-function store (`curios-abi`'s `ForeignFunction`/`ForeignStore`)
 - [x] Surface `foreign` declarations, accumulating a second `ffi`-tier store
-- [x] Embedder-extensible host-function registry (`curios-runtime::ForeignBindings`)
+- [x] Embedder-extensible host-function registry (`curios-runtime::ForeignBindings`), filled from the manifest: a package names the WebAssembly module answering its declarations and which export answers which, `curate` fetches it against a file hash, `run` and `test` link it in process, and `compile` carries it inside the executable — so a program declaring `foreign` runs where there is no manifest, no sources and no compiler
+- [ ] A plugin that speaks more than scalars and byte strings (a `Handle`, a `List` and several results at once are each refused where the signature is read, because marshalling is the host copying between a GC array and a linear memory)
 
 ## Diagnostics
 
@@ -296,7 +297,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `curios wonder` — questions answered by the compilation, over a CLI and a language server
   - [x] Editor support — a tree-sitter grammar, and Zed and VS Code extensions on `wonder server`
   - [x] Code formatter (`curios format`, in-place with `--check`; verified by reparse)
-  - [x] Package manager (exactly pinned dependencies, a content-addressed store, and a unit cache)
+  - [x] Package manager (exactly pinned dependencies, a content-addressed store, and a unit cache; `curios pin` derives a row's hash from the delivery and writes it, so a pin is never computed by hand)
   - [x] [Payload reuse](soundness/admission-without-judgment/reused-payloads.md) (an unchanged target re-executes without recompiling)
   - [x] [A unit the store holds is a baseline, not a hit or a miss](design/toolchain/a-stored-unit-is-a-baseline-for-an-item-level-recompile.md) (a question compiles an edited unit over the stored one, reusing every item the edit did not reach; elaboration and parsing recover per item)
   - [ ] [Proof automation writes terms into the source and is never trusted](roadmap/proof-automation-spec.md) (phase 0 not built)
