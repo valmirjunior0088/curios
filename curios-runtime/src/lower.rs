@@ -52,6 +52,30 @@ fn i31_ref(caller: &mut Caller<'_, ()>, value: u32) -> Result<Val, wasmtime::Err
     Ok(Val::AnyRef(Some(AnyRef::from_i31(caller, boxed))))
 }
 
+/// Box `value` as the i31 ref a *signed* scalar crosses in, refusing one the carrier cannot hold for the reason [`i31_ref`] states.
+///
+/// Separate from [`i31_ref`] because the envelope is: `I31::new_u32` admits `0..2^31` and `I31::new_i32` admits `-2^30..2^30`, and which is right is decided by how the guest reads the box back — `Int` unboxes with `i31.get_s`, every other scalar with `i31.get_u`. Lowering a negative `Int` through the unsigned door would refuse a number that fits perfectly well.
+fn i31_ref_signed(caller: &mut Caller<'_, ()>, value: i32) -> Result<Val, wasmtime::Error> {
+    let boxed = I31::new_i32(value).ok_or_else(|| {
+        wasmtime::Error::msg(format!("host result {value} leaves the i31 carrier"))
+    })?;
+
+    Ok(Val::AnyRef(Some(AnyRef::from_i31(caller, boxed))))
+}
+
+/// An `Int` result, which is the one scalar the guest unboxes signed.
+impl Lower for i32 {
+    fn lower(
+        self,
+        caller: &mut Caller<'_, ()>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error> {
+        results[0] = i31_ref_signed(caller, self)?;
+
+        Ok(())
+    }
+}
+
 /// Scalar results cross the boundary pre-boxed as i31 refs so generated code can land them directly in anyref block params (see `emit_sys_imports`).
 impl Lower for u32 {
     fn lower(

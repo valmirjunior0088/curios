@@ -140,6 +140,26 @@ impl ForeignBindings {
         );
     }
 
+    /// Implement the store row named `name` with a trampoline that marshals for itself.
+    ///
+    /// [`define`](Self::define) is the door for a host implementation written against Rust types, where the signature is known where the closure is written and `Lift`/`Lower` pick themselves from it. A plugin's is not: its marshalling is decided by a [`WireSignature`](curios_abi::WireSignature) read at run time, so the closure has to see the raw slots and choose. `pub(crate)` because those slots are wasmtime's vocabulary, which nothing above this crate names.
+    pub(crate) fn define_raw<F>(&mut self, name: &str, f: F)
+    where
+        F: Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync + 'static,
+    {
+        assert!(
+            self.foreigns.get(name).is_some(),
+            "'{name}' is not in the foreign store"
+        );
+
+        assert!(
+            self.trampolines
+                .insert(name.to_string(), Arc::new(f))
+                .is_none(),
+            "'{name}' is implemented twice"
+        );
+    }
+
     /// Define the import named `name` into `linker` under `namespace`, typing it from its store row — the pull side of the registry, driven by the module's own import section.
     fn link(
         &self,

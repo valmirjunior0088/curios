@@ -11,12 +11,13 @@ mod tests;
 
 use {
     crate::{
-        Dependency, FileHash, Governing, MANIFEST, Manifest, Module, Snapshot, Store, TreeHash,
+        Dependency, FileHash, Foreign, Governing, MANIFEST, Manifest, Module, Snapshot, Store,
+        TreeHash,
     },
     std::{
         collections::BTreeSet,
         fmt, fs, io,
-        path::Path,
+        path::{Path, PathBuf},
         process::{Command, Output},
     },
 };
@@ -96,14 +97,15 @@ pub fn curate(governing: &Governing) -> Result<Curated, String> {
 
     // The module set converges with the trees: each round reads further manifests, so the round that fetches nothing new is also the one whose module set is complete.
     let named = loop {
-        let (wanted, named) = acquisitions(governing)?;
-        let absent = wanted
+        let reachable = acquisitions(governing)?;
+        let absent = reachable
+            .packages
             .into_iter()
             .filter(|acquisition| !store.source(acquisition.hash()).is_dir())
             .collect::<Vec<_>>();
 
         if absent.is_empty() {
-            break named;
+            break reachable.fetches;
         }
 
         // Two dependents pinning one tree through two mirrors are one acquisition's worth of difference, as `Acquisition` states: the tree is fetched once, from the first transport named for it, and reported once. The set above tells them apart by `url`, and the filter ran before anything landed, so this is where the second one learns the first already placed it.
@@ -136,11 +138,25 @@ pub fn curate(governing: &Governing) -> Result<Curated, String> {
 /// Unreadable ones are not an error here: a dependency that has not been materialized is precisely what this walk exists to discover, and refusing on it would make the first round the only round.
 ///
 /// Both are collected in the one walk because both are read off the same manifests. A second traversal would have to resolve each dependency row a second time to find them, and resolution is where a store path comes from — so the two walks could disagree about which tree a row meant.
-type Reachable = (BTreeSet<Acquisition>, BTreeSet<ModuleAcquisition>);
+#[derive(Default)]
+struct Reachable {
+    /// The trees to bring in.
+    packages: BTreeSet<Acquisition>,
+    /// The modules to fetch, which is the `url` rows alone.
+    fetches: BTreeSet<ModuleAcquisition>,
+    /// Every `[[foreign]]` row, however delivered, with the package and directory it belongs to — what a link needs, where the two above are what a fetch needs.
+    rows: Vec<(String, PathBuf, Foreign)>,
+}
+
+/// Every `[[foreign]]` row the governing package's graph declares, with the package that declared it and the directory a carried module's path is relative to.
+///
+/// One walk with the fetch's, for the reason [`acquisitions`] gives: resolution is where a directory comes from, and a second traversal could resolve a row differently.
+pub fn declared_modules(governing: &Governing) -> Result<Vec<(String, PathBuf, Foreign)>, String> {
+    Ok(acquisitions(governing)?.rows)
+}
 
 fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
-    let mut acquisitions = BTreeSet::new();
-    let mut modules = BTreeSet::new();
+    let mut reachable = Reachable::default();
     let mut seen = BTreeSet::new();
     let mut frontier = vec![(governing.package.clone(), governing.directory.clone())];
 
@@ -149,16 +165,20 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
             continue;
         }
 
-        // A carried module needs no fetch: it is in the tree already, and what it must be is checked where it is read rather than here.
         for foreign in &package.foreign {
+            // A carried module needs no fetch: it is in the tree already, and what it must be is checked where it is read rather than here.
             if let Module::Fetched(url) = &foreign.module {
-                modules.insert(ModuleAcquisition {
+                reachable.fetches.insert(ModuleAcquisition {
                     package: package.name.clone(),
                     name: foreign.name.clone(),
                     url: url.clone(),
                     hash: foreign.hash.clone(),
                 });
             }
+
+            reachable
+                .rows
+                .push((package.name.clone(), directory.clone(), foreign.clone()));
         }
 
         for (name, row) in &package.dependencies {
@@ -177,7 +197,7 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
                 // A pin of a name the umbrella enumerates is `order`'s to refuse, and it does, naming the member; what this walk declines is to fetch on its behalf first, since a fetch is the one network action in the toolchain and a refused row earns none.
                 Dependency::Git { .. } if governing.members.contains_key(name) => continue,
                 Dependency::Git { url, rev, hash } => {
-                    acquisitions.insert(Acquisition {
+                    reachable.packages.insert(Acquisition {
                         name: name.clone(),
                         url: url.clone(),
                         snapshot: Snapshot {
@@ -204,7 +224,7 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
         }
     }
 
-    Ok((acquisitions, modules))
+    Ok(reachable)
 }
 
 /// Fetch one foreign module, accept it against its pin, and file it in the shared store.

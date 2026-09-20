@@ -136,7 +136,7 @@ fn a_fetchable_catalog_row_is_acquired() {
     );
 
     let governing = Governing::of(&root.join("app")).unwrap();
-    let (wanted, _) = acquisitions(&governing).unwrap();
+    let wanted = acquisitions(&governing).unwrap().packages;
 
     assert_eq!(wanted.len(), 1, "{:?}", wanted.len());
     let acquired = wanted.iter().next().unwrap();
@@ -170,7 +170,7 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
     );
 
     let governing = Governing::of(&root.join("app")).unwrap();
-    let (wanted, _) = acquisitions(&governing).unwrap();
+    let wanted = acquisitions(&governing).unwrap().packages;
 
     // The catalog row itself fetches nothing, but the walk descended into it and found what it depends on.
     assert_eq!(wanted.len(), 1, "{wanted:?}");

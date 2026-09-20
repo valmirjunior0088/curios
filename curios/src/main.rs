@@ -25,10 +25,11 @@ use test_runner::*;
 use {
     clap::Parser,
     curios::wasm_optm,
+    curios_abi::ForeignStore,
     curios_document::write_documentation,
-    curios_package::{Entry, Spelling, Store, curate, scaffold},
+    curios_package::{Entry, Governing, Spelling, Store, curate, declared_modules, scaffold},
     curios_pipeline::CompileError,
-    curios_runtime::{ForeignBindings, OsHost, run_bytes},
+    curios_runtime::{DeclaredModule, ForeignBindings, OsHost, plugin_bindings, run_bytes},
     curios_text::Formatted,
     curios_utilities::Source,
     curios_wonder::{
@@ -104,6 +105,39 @@ impl From<CompileError> for Failure {
     }
 }
 
+/// The `ffi`-tier bindings a program needs, from the `[[foreign]]` rows its package graph declares.
+///
+/// **Nothing is read for a program that declares no `foreign`**, which is very nearly all of them: an empty store short-circuits before any manifest is walked or any module opened, so the common case pays one check.
+///
+/// A loose program is refused rather than left to fail at link: it has no manifest, so there is nowhere for it to say what implements what. The refusal says that, where `no host implementation registered for ffi./x` said only that nobody had.
+fn bindings_of(root: Option<&Path>, foreigns: ForeignStore) -> Result<ForeignBindings, String> {
+    if foreigns.iter().next().is_none() {
+        return Ok(ForeignBindings::empty());
+    }
+
+    let Some(root) = root else {
+        return Err(
+            "this program declares `foreign`, and a loose program has no manifest to say what implements it: work inside a package, whose `[[foreign]]` rows name the module and the declarations its exports answer".to_string(),
+        );
+    };
+
+    let governing = Governing::of(root)?;
+    let store = governing.store();
+    let declared = declared_modules(&governing)?
+        .into_iter()
+        .map(|(package, directory, foreign)| {
+            Ok(DeclaredModule {
+                package,
+                bytes: foreign.bytes(&directory, &store)?,
+                name: foreign.name,
+                exports: foreign.exports,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+    plugin_bindings(foreigns, declared)
+}
+
 fn dispatch() -> Result<(), Failure> {
     let cli = Cli::parse();
 
@@ -143,7 +177,10 @@ fn dispatch() -> Result<(), Failure> {
             let store = program
                 .home()
                 .and_then(|home| contract.access.filed(&home.root));
-            let cwasm = payload_of(elaboration.budget, program, store)?;
+            // Kept before the program is consumed: binding needs the governing root, and `payload_of` takes the program by value.
+            let root = program.home().map(|home| home.root.clone());
+            let (cwasm, foreigns) = payload_of(elaboration.budget, program, store)?;
+            let bindings = bindings_of(root.as_deref(), foreigns)?;
 
             step(Heading::Running, &subject);
 
@@ -156,7 +193,7 @@ fn dispatch() -> Result<(), Failure> {
                             .chain(args.into_iter().map(OsString::into_encoded_bytes))
                             .collect(),
                     ),
-                    ForeignBindings::empty(),
+                    bindings,
                 )
             }?;
 
@@ -221,7 +258,14 @@ fn dispatch() -> Result<(), Failure> {
             }
 
             let started = Instant::now();
-            let cwasm = payload_of(elaboration.budget, program, store)?;
+            let (cwasm, foreigns) = payload_of(elaboration.budget, program, store)?;
+
+            // The bundle carries one payload, so a program whose `foreign` declarations are answered by modules has nowhere to put them: the executable would build and then fail to link, away from the machine that built it. Refused where that is still legible.
+            if foreigns.iter().next().is_some() {
+                return Err(Failure::Error(
+                    "a program declaring `foreign` cannot be compiled to an executable yet: the modules answering it would not travel with the payload. Run it with `curios run`".to_string(),
+                ));
+            }
 
             emit_exe(&cwasm, &output)?;
 

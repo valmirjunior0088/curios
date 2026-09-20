@@ -10,9 +10,10 @@ use {
         Access, Heading, Line, Subject, drained, fact, open, processing, report, step, supplied,
     },
     curios::{engine, to_cwasm},
+    curios_abi::ForeignStore,
     curios_package::{Entry, LIBRARY, Selection, Spelling, order},
     curios_pipeline::{Cache, CompileError, EntryTail, Fold, TestRecord},
-    curios_runtime::{ForeignBindings, OsHost, run_bytes},
+    curios_runtime::{OsHost, run_bytes},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_utilities::Source,
     curios_verdicts::{Program, Verdicts},
@@ -174,7 +175,7 @@ impl Run<'_> {
         let subject = Subject::package(declared.package);
         // One store handle per target, as `run` holds one per invocation: a handle's placed chain is one compilation's, and a second fold on the same handle would carry the first's placements into the chain the second payload is filed against — one entry too long, which the store withholds without a word.
         let store = self.access.filed(declared.root);
-        let (records, cwasm) = tests_payload(
+        let (records, cwasm, foreigns) = tests_payload(
             self.budget,
             units,
             &Entrypoint::trivial(),
@@ -190,7 +191,14 @@ impl Run<'_> {
         )?;
         self.refused(store.as_ref());
 
-        self.selected(&records, &cwasm, &library, &subject)
+        self.selected(
+            &records,
+            &cwasm,
+            &library,
+            &subject,
+            Some(declared.root),
+            &foreigns,
+        )
     }
 
     /// An executable's tests: its entry, compiled with the tail scheduling its own unit's tests.
@@ -204,7 +212,7 @@ impl Run<'_> {
         let subject = Subject::Executable(name.to_string());
         let store = self.access.filed(declared.root);
         let (entrypoint, loader, source) = open(Some(entry))?;
-        let (records, cwasm) = tests_payload(
+        let (records, cwasm, foreigns) = tests_payload(
             self.budget,
             units,
             &entrypoint,
@@ -220,7 +228,14 @@ impl Run<'_> {
         )?;
         self.refused(store.as_ref());
 
-        self.selected(&records, &cwasm, entry, &subject)
+        self.selected(
+            &records,
+            &cwasm,
+            entry,
+            &subject,
+            Some(declared.root),
+            &foreigns,
+        )
     }
 
     /// A loose module's tests: a file, or standard input, mounted as a unit of its own and compiled as a library is, against the prelude alone, filed nowhere. `invoked` is the entry as `run` would pass it.
@@ -230,7 +245,7 @@ impl Run<'_> {
         invoked: &Path,
         subject: &Subject,
     ) -> Result<(), CompileError> {
-        let (records, cwasm) = tests_payload(
+        let (records, cwasm, foreigns) = tests_payload(
             self.budget,
             &[unit],
             &Entrypoint::trivial(),
@@ -245,7 +260,8 @@ impl Run<'_> {
             None,
         )?;
 
-        self.selected(&records, &cwasm, invoked, subject)
+        // A loose target has no package, so nothing declares what would implement a `foreign` it holds; `bindings_of` refuses it saying so.
+        self.selected(&records, &cwasm, invoked, subject, None, &foreigns)
     }
 
     /// A loose program's tests: its entry, opened from a file or supplied from standard input, compiled against the prelude alone, filed nowhere. `invoked` is the entry as `run` passes it.
@@ -255,7 +271,7 @@ impl Run<'_> {
         invoked: &Path,
         subject: &Subject,
     ) -> Result<(), CompileError> {
-        let (records, cwasm) = tests_payload(
+        let (records, cwasm, foreigns) = tests_payload(
             self.budget,
             &[],
             &entrypoint,
@@ -270,7 +286,8 @@ impl Run<'_> {
             None,
         )?;
 
-        self.selected(&records, &cwasm, invoked, subject)
+        // A loose target has no package, so nothing declares what would implement a `foreign` it holds; `bindings_of` refuses it saying so.
+        self.selected(&records, &cwasm, invoked, subject, None, &foreigns)
     }
 
     /// Keep the first reason a store refused filing.
@@ -288,6 +305,8 @@ impl Run<'_> {
         cwasm: &[u8],
         entry: &Path,
         subject: &Subject,
+        root: Option<&Path>,
+        foreigns: &ForeignStore,
     ) -> Result<(), CompileError> {
         run_selected(
             records,
@@ -297,6 +316,8 @@ impl Run<'_> {
             self.filter,
             &mut self.totals,
             &mut self.matched_any,
+            root,
+            foreigns,
         )
     }
 
@@ -336,7 +357,7 @@ fn tests_payload(
     tail: EntryTail,
     subject: &Subject,
     manifest: Option<&Path>,
-) -> Result<(Vec<TestRecord>, Vec<u8>), CompileError> {
+) -> Result<(Vec<TestRecord>, Vec<u8>, ForeignStore), CompileError> {
     let sources = units.iter().map(UnitSource::mounted).collect::<Vec<_>>();
     let program = Program {
         package,
@@ -346,15 +367,16 @@ fn tests_payload(
         loader,
     };
 
-    if let Some(bytes) = store.and_then(|store| store.payload_get(&program, &sources, engine()))
-        && let Some(decoded) = decode(&bytes)
+    if let Some((bytes, foreigns)) =
+        store.and_then(|store| store.payload_get(&program, &sources, engine()))
+        && let Some((records, cwasm)) = decode(&bytes)
     {
         processing(subject, manifest);
         let mut line = Line::nested(Heading::Compiling, subject);
         line.outcome("reused");
         eprintln!();
 
-        return Ok(decoded);
+        return Ok((records, cwasm, foreigns));
     }
 
     processing(subject, manifest);
@@ -369,16 +391,16 @@ fn tests_payload(
     if compiled.is_err() && line.is_some() {
         eprintln!();
     }
-    let (module, _foreigns, records) = compiled?;
+    let (module, foreigns, records) = compiled?;
     let cwasm = to_cwasm(&module).map_err(CompileError::failure)?;
 
     if let Some(store) = store
         && let Some(bytes) = encode(&records, &cwasm)
     {
-        store.payload_put(&program, &sources, bytes.as_ref(), engine());
+        store.payload_put(&program, &sources, bytes.as_ref(), &foreigns, engine());
     }
 
-    Ok((records, cwasm))
+    Ok((records, cwasm, foreigns))
 }
 
 /// Whether the test at `path` is at or under `prefix`, compared a whole segment at a time: `/app/Map` selects `/app/Map` and everything under it, and never `/app/MapBuilder`, since a path names modules and one module's name is no part of its neighbour's. A trailing `/` says nothing more, so `/` alone selects every test.
@@ -399,6 +421,8 @@ fn run_selected(
     filter: Option<&str>,
     totals: &mut Totals,
     matched_any: &mut bool,
+    root: Option<&Path>,
+    foreigns: &ForeignStore,
 ) -> Result<(), CompileError> {
     let selected = records
         .iter()
@@ -420,13 +444,10 @@ fn run_selected(
     for (index, record) in selected {
         let arguments = vec![argv0.clone(), index.to_string().into_bytes()];
         // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
-        let outcome = unsafe {
-            run_bytes(
-                cwasm,
-                OsHost::with_args(arguments),
-                ForeignBindings::empty(),
-            )
-        };
+        // Built per test rather than once: `run_bytes` takes the registry by value, and a fresh set is a fresh plugin instance — which is what keeps one test's marks in a plugin's memory out of the next one's, the isolation a test run is entitled to.
+        let bindings = crate::bindings_of(root, foreigns.clone()).map_err(CompileError::failure)?;
+
+        let outcome = unsafe { run_bytes(cwasm, OsHost::with_args(arguments), bindings) };
         match outcome {
             // The guest printed `path: proved` or `path: passed` and returned.
             Ok(0) => unit.passed += 1,

@@ -16,6 +16,12 @@ mod cranelift;
 #[cfg(feature = "cranelift")]
 pub use cranelift::*;
 
+// Behind the same gate, and for the same reason `cranelift` states: instantiating a plugin compiles it, so a runtime-only build has no function to call rather than a launcher that quietly grew a backend. The bundled launcher reaches a plugin through a precompiled payload instead.
+#[cfg(feature = "cranelift")]
+mod plugin;
+#[cfg(feature = "cranelift")]
+pub use plugin::*;
+
 mod host;
 pub use host::*;
 

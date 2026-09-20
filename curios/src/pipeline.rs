@@ -5,6 +5,7 @@
 use {
     crate::{Heading, Line, Subject, fact, processing},
     curios::{engine, to_cwasm},
+    curios_abi::ForeignStore,
     curios_document::Documentation,
     curios_package::{Entry, Program},
     curios_pipeline::{Cache, CompileError, Fold, Progress},
@@ -23,7 +24,7 @@ pub(crate) fn payload_of(
     budget: u64,
     program: Program,
     cache: Option<Verdicts>,
-) -> Result<Vec<u8>, CompileError> {
+) -> Result<(Vec<u8>, ForeignStore), CompileError> {
     let subject = subject_of(&program);
 
     // A loose program has no project, so it has no store to consult: what a compilation may reuse is a fact about the project it is in, and a loose program is in none.
@@ -68,7 +69,7 @@ pub(crate) fn payload_of(
     let sources = scope.iter().map(UnitSource::mounted).collect::<Vec<_>>();
 
     if let Some((cache, program)) = &filed
-        && let Some(payload) = cache.payload_get(program, &sources, engine())
+        && let Some((payload, foreigns)) = cache.payload_get(program, &sources, engine())
     {
         // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened. The step names the target rather than a unit, because what came back is the whole program's machine code.
         processing(&subject, manifest.as_deref());
@@ -76,7 +77,7 @@ pub(crate) fn payload_of(
         line.outcome("reused");
         eprintln!();
 
-        return Ok(payload);
+        return Ok((payload, foreigns));
     }
 
     let compiled = compile_entry(
@@ -88,10 +89,14 @@ pub(crate) fn payload_of(
         manifest.as_deref(),
         cache.as_ref().map(|cache| cache as &dyn Cache),
     )
-    .and_then(|module| to_cwasm(&module).map_err(CompileError::failure));
+    .and_then(|(module, foreigns)| {
+        to_cwasm(&module)
+            .map(|payload| (payload, foreigns))
+            .map_err(CompileError::failure)
+    });
 
-    if let (Ok(payload), Some((cache, program))) = (&compiled, &filed) {
-        cache.payload_put(program, &sources, payload, engine());
+    if let (Ok((payload, foreigns)), Some((cache, program))) = (&compiled, &filed) {
+        cache.payload_put(program, &sources, payload, foreigns, engine());
     }
 
     // After the fold rather than during it: one unwritable store refuses everything for the same reason, so this is one line however many units went past it. Reported even when the compilation failed, because a store nobody can write is true either way and the next run pays for it either way.
@@ -198,7 +203,7 @@ pub(crate) fn compile_entry(
     subject: &Subject,
     manifest: Option<&Path>,
     cache: Option<&dyn Cache>,
-) -> Result<Module, CompileError> {
+) -> Result<(Module, ForeignStore), CompileError> {
     // Every target heads a group, since a compile and a handover always follow it. What the scope decides is whether the entry's own compile is a step of its own: with units to fold, those are the steps and the entry finishes among them unannounced; with none, the entry's compile is the one step there is.
     let has_units = !units.is_empty();
     processing(subject, manifest);
@@ -206,7 +211,6 @@ pub(crate) fn compile_entry(
     // The entry is the one subject the fold cannot name — it owns the empty prefix — so it is reported under the name the caller was asked for.
     let mut line: Option<Line> = None;
 
-    // The CLI doesn't yet expose a way to supply `foreign` implementations, so its `ForeignStore` is dropped here.
     let compiled = Fold::new(budget, units, cache).compile(
         entrypoint,
         loader,
@@ -219,7 +223,7 @@ pub(crate) fn compile_entry(
         eprintln!();
     }
 
-    compiled.map(|(module, _foreigns)| module)
+    compiled
 }
 
 /// Fold one [`Progress`] event onto the open status line, opening and closing lines as subjects begin and end.
