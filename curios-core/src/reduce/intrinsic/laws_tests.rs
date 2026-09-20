@@ -162,10 +162,12 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
     let bin_right = Free::local(1, Some("y"));
     let byte_free = Free::local(2, Some("c"));
     let anchor_free = Free::local(3, Some("w"));
+    let count_free = Free::local(4, Some("n"));
     let x = Term::free_var(&bin_left);
     let y = Term::free_var(&bin_right);
     let w = Term::free_var(&anchor_free);
     let c = Term::free_var(&byte_free);
+    let n = Term::free_var(&count_free);
 
     let cat = |parts: Vec<Term>| {
         Term::intrinsic(Intrinsic::BinConcat {
@@ -183,6 +185,15 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
         ))
     };
     let chunk = Term::intrinsic(Intrinsic::bin_append(Grain::X, run_bytes(&[]), c.clone()));
+    let fill = |count: Term| {
+        Term::intrinsic(Intrinsic::BinReplicate {
+            grain: Grain::X,
+            count,
+            atom: c.clone(),
+        })
+    };
+    // A count written as the successor it is: `peel_succ` reads the floor a reduced `n + 1` carries, which is what a fill has to expose to be taken apart at all.
+    let succ = |inner: Term| Term::intrinsic(Intrinsic::Nat(Nat::Succ(1u32.into(), inner)));
 
     let cases = [
         (
@@ -283,6 +294,14 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
             cat(vec![x.clone(), run_bytes(&[5]), y.clone()]),
             cat(vec![y.clone(), run_bytes(&[5]), x.clone()]),
         ),
+        // A fill of a successor count is its atom over a fill one shorter — the one shape whose leading generator is known without its length being.
+        (
+            "replicate(n + 1, c) ~ append(x[], c) ++ replicate(n, c)",
+            fill(succ(n.clone())),
+            cat(vec![chunk.clone(), fill(n.clone())]),
+        ),
+        // The control that keeps that admission honest: a fill whose count carries no floor may be empty, so it must not clash against the identity the way a `Single` does. The two sides agree at `n = 0`, so a clash here would be a false impossibility.
+        ("replicate(n, c) ~ x[]", fill(n.clone()), run_bytes(&[])),
     ];
 
     let as_intrinsic = |term: &Term| match &**term {
@@ -292,6 +311,8 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
 
     let runs: [&[u8]; 5] = [&[], &[5], &[9], &[9, 8], &[1, 1]];
     let anchors: [&[u8]; 2] = [&[9, 8, 7, 6], &[9, 8, 7, 7, 3]];
+    // Zero is the count that makes the fill control's two sides agree, which is the instantiation a false clash is caught at.
+    let counts: [u32; 3] = [0, 1, 3];
 
     let (mut equal, mut clash, mut carried, mut stuck) = (0, 0, 0, 0);
 
@@ -310,34 +331,37 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
             for right_run in runs {
                 for byte_value in [0u8, 7, 255] {
                     for anchor in anchors {
-                        let close = |term: &Term| {
-                            let term = at(term.clone(), &bin_left, run_bytes(left_run));
-                            let term = at(term, &bin_right, run_bytes(right_run));
-                            let term = at(
-                                term,
-                                &byte_free,
-                                Term::intrinsic(Intrinsic::Byte(byte_value)),
-                            );
-                            bin_value(at(term, &anchor_free, run_bytes(anchor)))
-                        };
+                        for count in counts {
+                            let close = |term: &Term| {
+                                let term = at(term.clone(), &bin_left, run_bytes(left_run));
+                                let term = at(term, &bin_right, run_bytes(right_run));
+                                let term = at(
+                                    term,
+                                    &byte_free,
+                                    Term::intrinsic(Intrinsic::Byte(byte_value)),
+                                );
+                                let term = at(term, &anchor_free, run_bytes(anchor));
+                                bin_value(at(term, &count_free, lit(count)))
+                            };
 
-                        let agree = close(left) == close(right);
+                            let agree = close(left) == close(right);
 
-                        match &peel {
-                            Peel::Equal => assert!(
-                                agree,
-                                "`{label}` was decided equal but differs at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
-                            ),
-                            Peel::Clash => assert!(
-                                !agree,
-                                "`{label}` was decided impossible but holds at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
-                            ),
-                            Peel::Continue(residual_left, residual_right) => assert_eq!(
-                                close(residual_left) == close(residual_right),
-                                agree,
-                                "`{label}`'s residuals disagree with the pair they replaced at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
-                            ),
-                            Peel::Stuck => {}
+                            match &peel {
+                                Peel::Equal => assert!(
+                                    agree,
+                                    "`{label}` was decided equal but differs at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
+                                ),
+                                Peel::Clash => assert!(
+                                    !agree,
+                                    "`{label}` was decided impossible but holds at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
+                                ),
+                                Peel::Continue(residual_left, residual_right) => assert_eq!(
+                                    close(residual_left) == close(residual_right),
+                                    agree,
+                                    "`{label}`'s residuals disagree with the pair they replaced at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
+                                ),
+                                Peel::Stuck => {}
+                            }
                         }
                     }
                 }
@@ -347,7 +371,7 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
 
     assert_eq!(
         (equal, clash, carried, stuck),
-        (5, 4, 4, 4),
+        (6, 4, 4, 5),
         "the grid stopped reaching every peel verdict",
     );
 }
