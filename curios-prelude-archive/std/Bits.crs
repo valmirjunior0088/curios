@@ -1,6 +1,6 @@
 pub use /sys/Bits/{let Bits, get, len, eql, slice, replicate, and, or, xor, to_bytes};
-use /std/{List, Nat, Bool, Option, Eq, Str, Show, Spell};
-use /std/ops/{Eql};
+use /std/{List, Nat, Bool, Option, Eq, Str, Show, Spell, Ordering, Ord};
+use /std/ops/{Eql, Cmp};
 
 --- The bit at `i`, or `none` past the end.
 pub let try_get(b: Bits, i: Nat) -> Option(Bool) =
@@ -75,9 +75,57 @@ pub let fold(@A: Type, b: Bits, init: A, f: (Bool, A) -> A) -> A =
         end;
     go(n, 0, init, Eq/refl());
 
+--- The index of the first bit `pred` accepts, or `none`.
+pub let find_index(b: Bits, pred: (Bool) -> Bool) -> Option(Nat) =
+    let (_, found): {Nat, Option(Nat)} =
+        fold(
+            b,
+            (0, Option/none()),
+            (bit, (i, found)) =>
+                match found
+                | some(_) => (i, found)
+                | none() =>
+                    (i + 1, match pred(bit) | true => Option/some(i) | false => Option/none() end)
+                end);
+    found;
+
+--- `parts` with `sep` between each pair.
+pub let join(sep: Bits, parts: List(Bits)) -> Bits =
+    List/balanced(
+        List/len(parts),
+        b[],
+        (i) => Option/unwrap_or(List/try_get(parts, i), b[]),
+        (l, r) => b[..l, ..sep, ..r]);
+
+--- Bitwise from index zero, a proper prefix first.
+pub let cmp(a: Bits, b: Bits) -> Ordering =
+    let go(i: Nat) -> Ordering =
+        match i < len(a)
+        | false => match i < len(b) | true => Ordering/lt() | false => Ordering/eq() end
+        | true =>
+            match i < len(b)
+            | false => Ordering/gt()
+            | true =>
+                let r = Bool/cmp(get(a, i), get(b, i));
+                match r | eq() => go(i + 1) | _ => r end
+            end
+        end;
+    go(0);
+
 satisfy Eql(Bits) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
+}
+
+satisfy Cmp(Bits) {
+    lt(a, b) = Ordering/is_lt(cmp(a, b)),
+    le(a, b) = Ordering/is_le(cmp(a, b)),
+    gt(a, b) = Ordering/is_gt(cmp(a, b)),
+    ge(a, b) = Ordering/is_ge(cmp(a, b)),
+}
+
+satisfy Ord(Bits) {
+    ord = cmp,
 }
 
 satisfy Show(Bits) {

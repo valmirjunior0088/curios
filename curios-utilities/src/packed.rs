@@ -324,9 +324,9 @@ impl PartialOrd for PackedBin {
     }
 }
 impl Ord for PackedBin {
-    /// Packed bytes first, then logical length — bytewise with the shorter prefix first, which is `/std/Bytes/cmp` at the byte grain, so the compiler's order and the language's never disagree about a value both can see.
+    /// Packed bytes first, then logical length — bytewise with the shorter prefix first, which is `/std/Bytes/cmp` at the byte grain, where a packed byte *is* the element and the agreement falls out rather than being engineered.
     ///
-    /// **The length is what makes this a total order rather than a hash collision.** Padding is zeroed, so `b[1]` and `b[1, 0]` pack into the same byte and are separated by nothing else; comparing the packed bytes alone would answer `Equal` for two unequal values and break the agreement with [`PackedBin::eq`] that a key's correctness rests on. The bit grain has no ordering in the language to match, so what it gets is this one: deterministic, consistent with equality, and documented rather than derived.
+    /// **The length is what makes this a total order rather than a hash collision.** Padding is zeroed, so `b[1]` and `b[1, 0]` pack into the same byte and are separated by nothing else; comparing the packed bytes alone would answer `Equal` for two unequal values and break the agreement with [`PackedBin::eq`] that a key's correctness rests on. The bit grain's ordering in the language is deliberately *not* this one: `/std/Bits/cmp` compares bit by bit from index zero, while this compares packed bytes, whose most significant bit is the run's seventh — so `b[1, 0]` sorts below `b[0, 1]` here and above it there. Nothing observes both. This order is a key's, reached through a `BTreeMap` or `BTreeSet` of the compiler's own and nowhere else, and matching it would have cost a program an order that is neither the sequence reading the carrier documents nor the numeric one `shl` and `shr` obey.
     ///
     /// Allocation-free on both arms for [`PackedBin::hash`]'s reason — this is what an optimizer's key sort walks.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {

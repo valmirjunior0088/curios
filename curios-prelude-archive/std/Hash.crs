@@ -1,4 +1,4 @@
-use /std/{Nat, Byte, Bytes, Bool, Str, List, Option, Int, Flt};
+use /std/{Nat, Byte, Bytes, Bits, Bool, Str, List, Option, Int, Flt};
 
 --- How a value encodes to the bytes that identify it.
 ---
@@ -57,6 +57,14 @@ pub let of(@T: Type, use Hash(T), v: T) -> Bytes =
 --- The identity encoding.
 satisfy Hash(Bytes) {
     hash(b) = b,
+}
+
+--- One byte per bit, least significant first as the carrier reads.
+---
+--- **Not the packed form, and that is the whole difficulty.** Packing is not injective on its own: `b[1]` and `b[1, 0]` are one byte each and the same byte, since a run's padding is zeroed, so a dense encoding would have to carry the length beside the bytes and `Bits/to_bytes` would have to be reached past the alignment it demands. A byte per bit carries the length in its own extent — the encoding is as long as the run — and needs neither. The width is paid once here and not in what a key holds, `Hash/of` digesting the result to eight bytes.
+satisfy Hash(Bits) {
+    hash(b) =
+        Bits/fold(b, x[], (bit, acc) => x[..acc, match bit | true => 0x1 | false => 0x0 end]),
 }
 
 --- The UTF-8 bytes.
