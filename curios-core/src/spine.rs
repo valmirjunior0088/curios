@@ -479,13 +479,14 @@ pub fn peel_list(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
     })
 }
 
-/// The `Bin`-valued intrinsics `peel_bin` decomposes. `Bin` and `BinConcat` carry the monoid's literals and juxtaposition; `BinSlice` rides in as a measured `Window` (a chunk carrying its own length, whose contents are symbolic), so adjacent slices of one base fuse and equal slices cancel; `BinAppend` rides in as its base followed by the appended byte. Any other producer stays an opaque symbolic chunk left to the caller's own (structural) comparison.
+/// The `Bin`-valued intrinsics `peel_bin` decomposes. `Bin` and `BinConcat` carry the monoid's literals and juxtaposition; `BinSlice` rides in as a measured `Window` (a chunk carrying its own length, whose contents are symbolic), so adjacent slices of one base fuse and equal slices cancel; `BinAppend` rides in as its base followed by the appended byte; `BinReplicate` rides in as its leading generator followed by a fill one shorter, which is what lets a fill compare against the cons it equals. Any other producer stays an opaque symbolic chunk left to the caller's own (structural) comparison.
 fn bin_grain(intrinsic: &Intrinsic) -> Option<Grain> {
     match intrinsic {
         Intrinsic::Bin(grain, _)
         | Intrinsic::BinConcat { grain, operands: _ }
         | Intrinsic::BinSlice { grain, .. }
-        | Intrinsic::BinAppend { grain, .. } => Some(*grain),
+        | Intrinsic::BinAppend { grain, .. }
+        | Intrinsic::BinReplicate { grain, .. } => Some(*grain),
         _ => None,
     }
 }
@@ -578,6 +579,32 @@ fn bin_collect_intrinsic(grain: Grain, intrinsic: &Intrinsic, out: &mut Vec<Atom
                         within: within.clone(),
                     },
                 ),
+                // `replicate(n + 1, a) = [a] ++ replicate(n, a)`: emit the leading generator and leave the shorter fill as one symbolic chunk, which is all conversion needs — the other side's own residual fill is that same chunk, so the two match without either being unrolled. A concrete atom is a length-1 literal run, so it merges with an abutting run exactly as an appended byte does; a count of zero contributes nothing, and a count of unknown size stays opaque, since a fill that might be empty exposes no generator.
+                Intrinsic::BinReplicate {
+                    grain: found,
+                    count,
+                    atom,
+                } if *found == grain => match Nat::peel_succ(count) {
+                    Some(rest) => {
+                        match bin_atom(grain, atom) {
+                            Some(byte) => push(out, Atom::Literal(vec![byte])),
+                            None => push(out, Atom::Single(atom.clone())),
+                        }
+                        push(
+                            out,
+                            Atom::Symbolic(Term::intrinsic(Intrinsic::BinReplicate {
+                                grain,
+                                count: rest,
+                                atom: atom.clone(),
+                            })),
+                        );
+                    }
+                    None => {
+                        if !Nat::is_zero(count) {
+                            push(out, Atom::Symbolic(Term::intrinsic(intrinsic.clone())));
+                        }
+                    }
+                },
                 // `append(base, b) = base ++ [b]`: decode the base, then the appended byte.
                 Intrinsic::BinAppend {
                     grain: found,

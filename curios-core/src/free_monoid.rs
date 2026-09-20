@@ -8,7 +8,6 @@
 
 use {
     super::{Intrinsic, Nat, Subterm, Term},
-    curios_num::Natural,
     curios_utilities::{Grain, PackedBin},
 };
 
@@ -41,22 +40,16 @@ impl FreeMonoid {
     }
 
     fn uncons_unary(scrutinee: Subterm) -> Layer {
-        match scrutinee {
-            // The identity: zero.
-            Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => Layer::Empty,
-            // Peel one successor off the spine; the predecessor is the tail, and the unary generator carries no head. A spine count `> 1` keeps the rest as a shorter `Succ`, exactly as the old bespoke `Nat` eliminator did.
-            Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(spine, inner))) => {
-                let one = Natural::from(1usize);
+        let term = scrutinee.into();
 
-                Layer::Cons {
-                    head: None,
-                    tail: match spine == one {
-                        true => inner,
-                        false => Term::intrinsic(Intrinsic::Nat(Nat::Succ(spine - one, inner))),
-                    },
-                }
-            }
-            stuck => Layer::Stuck(stuck),
+        match Nat::peel_succ(&term) {
+            // Peel one successor off the spine; the predecessor is the tail, and the unary generator carries no head. A spine count `> 1` keeps the rest as a shorter `Succ`, which is [`Nat::rebuild`]'s job rather than this one's.
+            Some(tail) => Layer::Cons { head: None, tail },
+            // The identity is zero; a count carrying no floor at all is a scrutinee with no layer to give.
+            None => match Nat::is_zero(&term) {
+                true => Layer::Empty,
+                false => Layer::Stuck(Term::unwrap_or_clone(term)),
+            },
         }
     }
 
@@ -125,7 +118,7 @@ impl Head {
     }
 }
 
-/// One step of the `Bin` front decode. `Empty` is the identity (`x[]`); `Cons` peels a leading generator and the residual tail; `Opaque` is a value exposing no leading generator (a variable, a slice, a non-`x[]`-based append).
+/// One step of the `Bin` front decode. `Empty` is the identity (`x[]`); `Cons` peels a leading generator and the residual tail; `Opaque` is a value exposing no leading generator (a variable, a slice, a non-`x[]`-based append, a fill whose count is neither zero nor a successor).
 enum Front {
     Empty,
     Cons { head: Head, tail: Term },
@@ -140,7 +133,7 @@ enum BinLevel<'a> {
     Concat(&'a [Term]),
 }
 
-/// The structural traversal shared by both `Bin` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bin/get`/`Bin/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a cons `append(x[], c)` yields its symbolic byte; a concatenation descends into its first operand so a literal- or cons-led `BinConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`x[]`-based append) is `Opaque`.
+/// The structural traversal shared by both `Bin` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bin/get`/`Bin/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a cons `append(x[], c)` yields its symbolic byte; a fill yields its atom over a fill one shorter; a concatenation descends into its first operand so a literal- or cons-led `BinConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`x[]`-based append, a fill of unknown count) is `Opaque`.
 ///
 /// Two phases over a [`BinLevel`] stack: descend the leading edge to the value that actually carries the first generator, then rebuild outward, each level rejoining what it was holding. `Opaque` propagates through both level kinds, and a concatenation whose first operand exposes no generator is itself opaque — a reduced `BinConcat` has no empty operands, so that case is a leading variable or slice.
 fn peel_front(grain: Grain, bin: &Term) -> Front {
@@ -194,6 +187,27 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
                 }
                 None => break Front::Empty,
             },
+            // `replicate(n, a)` is `n` copies of one generator, so the leading one is `a` and what remains is a shorter fill of the same atom — no descent, because a fill carries its generator directly rather than under a spine. The count is read as [`FreeMonoid::uncons_unary`] reads a scrutinee, which is what makes a *symbolic* successor peel: a closed count folded to a run long before it reached here, so what arrives is the fill `/std`'s `not`, `shl` and `shr` build over an operand's own length, and leaving it opaque made a fill the one packed shape no eliminator could take apart.
+            Subterm::Intrinsic(Intrinsic::BinReplicate {
+                grain: found,
+                count,
+                atom,
+            }) if *found == grain => {
+                break match Nat::peel_succ(count) {
+                    Some(rest) => Front::Cons {
+                        head: Head::Symbolic(atom.clone()),
+                        tail: Term::intrinsic(Intrinsic::BinReplicate {
+                            grain,
+                            count: rest,
+                            atom: atom.clone(),
+                        }),
+                    },
+                    None => match Nat::is_zero(count) {
+                        true => Front::Empty,
+                        false => Front::Opaque,
+                    },
+                };
+            }
             _ => break Front::Opaque,
         }
     };

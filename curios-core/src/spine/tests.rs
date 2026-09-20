@@ -537,3 +537,78 @@ fn peel_list_decides_a_window_of_a_window_against_the_window_it_names() {
         "a start one past the named one is another window"
     );
 }
+
+// A fill is the one packed shape whose leading generator is known without its length being: `replicate(n + 1, a)` certainly starts with `a` however large `n` is. Deciding it against the cons it equals is what lets a proof induct on a fill's count, which nothing else here can reach — a `Window` carries a length and a literal run carries its bytes, while this carries neither and is still not opaque.
+#[test]
+fn peel_bin_decides_a_fill_of_a_successor_against_the_cons_it_equals() {
+    let count = sym(0, "n");
+    let tail = sym(1, "t");
+
+    for (grain, atom, one) in [
+        (
+            Grain::X,
+            Term::intrinsic(Intrinsic::Byte(0x30)),
+            bytes([0x30]),
+        ),
+        (
+            Grain::B,
+            Term::intrinsic(Intrinsic::Bool(true)),
+            bits([true]),
+        ),
+    ] {
+        let fill = |n: Term| {
+            Term::intrinsic(Intrinsic::BinReplicate {
+                grain,
+                count: n,
+                atom: atom.clone(),
+            })
+        };
+
+        // `replicate(n + 1, a) ++ t` against `[a] ++ replicate(n, a) ++ t`.
+        let filled = Intrinsic::BinConcat {
+            grain,
+            operands: vec![
+                fill(Term::intrinsic(Intrinsic::Nat(nat_of(1, count.clone())))),
+                tail.clone(),
+            ],
+        };
+        let consed = Intrinsic::BinConcat {
+            grain,
+            operands: vec![one, fill(count.clone()), tail.clone()],
+        };
+
+        assert!(
+            matches!(peel_bin(&filled, &consed), Some(Peel::Equal)),
+            "{grain:?}: a fill of a successor is its atom over a shorter fill"
+        );
+    }
+}
+
+// The other half of the same rule, and the one that keeps it sound: a count carrying no floor might be zero, so the fill might be empty and its leading generator is *not* known. Declining is the refusing direction — the caller falls back to a structural comparison — where clashing would call two equal values unequal.
+#[test]
+fn peel_bin_declines_a_fill_whose_count_is_not_a_successor() {
+    let count = sym(0, "n");
+    let atom = Term::intrinsic(Intrinsic::Byte(0x30));
+
+    let fill = Intrinsic::BinReplicate {
+        grain: Grain::X,
+        count: count.clone(),
+        atom: atom.clone(),
+    };
+    let consed = Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: vec![
+            bytes([0x30]),
+            Term::intrinsic(Intrinsic::BinReplicate {
+                grain: Grain::X,
+                count,
+                atom,
+            }),
+        ],
+    };
+
+    assert!(
+        !matches!(peel_bin(&fill, &consed), Some(Peel::Clash)),
+        "a fill that might be empty exposes no generator to clash on"
+    );
+}

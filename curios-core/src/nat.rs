@@ -120,6 +120,18 @@ impl Nat {
         }
     }
 
+    /// A reduced count read as one generator over the rest: `Some(rest)` when the term carries a positive floor, `None` when it carries none — literal zero, a variable, a stuck intrinsic. The caller tells those two apart with [`Nat::is_zero`], because a count of zero and a count of unknown size mean opposite things to a reader that has to decide whether a generator is there.
+    ///
+    /// The successor peel a *fill* is taken apart by, shared so `free_monoid`'s destructor and `spine`'s conversion segment cannot come to different answers about what `replicate(n + 1, a)` is. Both need it because a fill is the one packed shape whose leading generator is known without its length being known.
+    pub fn peel_succ(term: &Term) -> Option<Term> {
+        let (floor, inner) = Self::decompose(term);
+
+        match floor.is_zero() {
+            true => None,
+            false => Some(Self::rebuild(floor - Natural::from(1usize), inner)),
+        }
+    }
+
     /// Whether a reduced term is literal zero — the identity floor.
     pub fn is_zero(term: &Term) -> bool {
         matches!(&**term, Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)))
