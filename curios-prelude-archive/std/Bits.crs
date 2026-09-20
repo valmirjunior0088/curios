@@ -17,6 +17,48 @@ pub let drop(b: Bits, k: Nat, @ok: Nat/Le(k, len(b))) -> Bits =
             Eq/sym(Nat/Le/add_sub_cancel(k, len(b), ok)),
             Nat/Le/refl(len(b))));
 
+--- Every bit flipped.
+---
+--- An `xor` against a run of ones as long as this one, which is what makes the width a fact about the operand rather than a number written here. `Bits/len` reduces a fill to its own count, so the equal-length bound the `xor` states discharges without a guard.
+pub let not(b: Bits) -> Bits =
+    xor(b, replicate(len(b), true));
+
+--- `b` moved `count` places toward the high end, zeros entering at the low end and whatever passes the top discarded.
+---
+--- Under the carrier's reading — least significant first — that is multiplication by two to the `count`, at the run's own width. A count past the length answers all zeros rather than a shorter run: the width belongs to the value, and moving its bits does not change it.
+pub let shl(b: Bits, count: Nat) -> Bits =
+    match Nat/le(count, len(b))
+    | true => b[..replicate(count, false), ..slice(b, 0, len(b) - count)]
+    | false => replicate(len(b), false)
+    end;
+
+--- `b` moved `count` places toward the low end, zeros entering at the high end — division by two to the `count`, at the same width.
+pub let shr(b: Bits, count: Nat) -> Bits =
+    match Nat/le(count, len(b))
+    | true => b[..drop(b, count), ..replicate(count, false)]
+    | false => replicate(len(b), false)
+    end;
+
+--- `b` rotated `count` places toward the high end, what passes the top re-entering at the bottom.
+---
+--- The count is taken modulo the width, which is what makes this total without a guard on the count itself; the empty run is the one case with no width to take it modulo, and rotating it is the identity.
+pub let rotl(b: Bits, count: Nat) -> Bits =
+    match Nat/lt(0, len(b))
+    | true =>
+        let keep = len(b) - Nat/rem(count, len(b));
+        b[..drop(b, keep), ..slice(b, 0, keep)]
+    | false => b
+    end;
+
+--- `b` rotated `count` places toward the low end.
+pub let rotr(b: Bits, count: Nat) -> Bits =
+    match Nat/lt(0, len(b))
+    | true =>
+        let places = Nat/rem(count, len(b));
+        b[..drop(b, places), ..slice(b, 0, places)]
+    | false => b
+    end;
+
 --- The concatenation, in order.
 pub let flatten(parts: List(Bits)) -> Bits =
     List/fold(parts, b[], (bits, acc) => b[..acc, ..bits]);

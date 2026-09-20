@@ -1,4 +1,4 @@
-//! The packed carriers' bitwise vocabulary: the fill and the three pointwise combinations, at both grains and at a length that is not a whole number of bytes.
+//! The packed carriers' bitwise vocabulary: the `/sys` fill and pointwise combinations, the `/std` shifts and rotations derived over them, at both grains and at a length that is not a whole number of bytes.
 
 use super::test_support::folded_matches_runtime;
 
@@ -41,6 +41,50 @@ fn the_packed_bitwise_operations_agree_between_the_folder_and_the_backend() {
             b"11".to_vec(),
             b"48".to_vec(),
             b"165".to_vec(),
+        ]
+    );
+}
+
+/// The derived vocabulary: `not` over the fill, and the four movements over `drop`, `slice` and the fill.
+///
+/// **The counts are tainted here, where the operands were tainted above.** A shift guards on `count <= len`, so a count the folder cannot read turns that guard into a real branch — which is the half of these definitions the constant-folded spelling never reaches. The rotations take their count modulo the width, so a tainted one also exercises `Nat/rem`'s own bound under a guard rather than over a literal.
+///
+/// `not` at three bits is the row that ties this suite to the one above: `/std` writes it as an `xor` against a fill of the operand's length, so it is the composition where an unmasked fill would leak padding — now through the library's own definition rather than a hand-spelled one.
+#[test]
+fn the_derived_shifts_and_rotations_agree_between_the_folder_and_the_backend() {
+    let outputs = folded_matches_runtime(&[
+        "/std/Show/show(/std/Bits/not(b[1, 1, 0, Nat/eql(n, 1)]))",
+        "/std/Show/show(/std/Bits/shl(b[1, 1, 0, 0], 1 + n))",
+        "/std/Show/show(/std/Bits/shr(b[1, 1, 0, 0], 1 + n))",
+        "/std/Show/show(/std/Bits/rotl(b[1, 1, 0, 0], 1 + n))",
+        "/std/Show/show(/std/Bits/rotr(b[1, 1, 0, 0], 1 + n))",
+        // A count past the width answers zeros at the width, not a shorter run.
+        "/std/Show/show(/std/Bits/shl(b[1, 1, 0, 0], 99 + n))",
+        // A rotation by the whole width is the identity, which is what says the modulo is really there.
+        "/std/Show/show(/std/Bits/rotl(b[1, 1, 0, 0], 4 + n))",
+        // The empty run has no width to take a count modulo.
+        "/std/Show/show(/std/Bits/rotl(b[], 3 + n))",
+        // `not` at a partial byte, compared rather than printed.
+        "match /std/Bits/eql(/std/Bits/not(b[1, 0, Nat/eql(n, 0)]), b[0, 1, 0]) | true => \"clean\" | false => \"leaked\" end",
+        // The byte grain moves whole bytes: `rotl` by one puts the last byte first.
+        "Nat/to_str(Byte/to_nat(Option/unwrap_or(Bytes/try_get(/std/Bytes/not(x[240, 15]), 0), 0)))",
+        "Nat/to_str(Byte/to_nat(Option/unwrap_or(Bytes/try_get(/std/Bytes/rotl(x[1, 2, 3], 1 + n), 0), 0)))",
+    ]);
+
+    assert_eq!(
+        outputs,
+        [
+            b"0011".to_vec(),
+            b"0110".to_vec(),
+            b"1000".to_vec(),
+            b"0110".to_vec(),
+            b"1001".to_vec(),
+            b"0000".to_vec(),
+            b"1100".to_vec(),
+            b"".to_vec(),
+            b"clean".to_vec(),
+            b"15".to_vec(),
+            b"3".to_vec(),
         ]
     );
 }

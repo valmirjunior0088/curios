@@ -152,6 +152,50 @@ pub let drop(b: Bytes, k: Nat, @ok: Nat/Le(k, len(b))) -> Bytes =
             Eq/sym(Nat/Le/add_sub_cancel(k, len(b), ok)),
             Nat/Le/refl(len(b))));
 
+--- Every bit of every byte flipped.
+---
+--- An `xor` against a run of all-ones bytes as long as this one, so the width is a fact about the operand rather than a number written here. `Bytes/len` reduces a fill to its own count, so the equal-length bound the `xor` states discharges without a guard.
+pub let not(b: Bytes) -> Bytes =
+    xor(b, replicate(len(b), 0xFF));
+
+--- `b` moved `count` bytes toward the high end, zero bytes entering at the low end and whatever passes the top discarded.
+---
+--- Under the carrier's reading — least significant first, which is what `of_nat` writes — that is multiplication by 256 to the `count`, at the run's own width. A count past the length answers all zeros rather than a shorter run: the width belongs to the value.
+---
+--- Whole bytes, not bits. A byte string has no finer position to move by, and the bit-granular question is `Bits`'s to answer — `to_bits` is the way across.
+pub let shl(b: Bytes, count: Nat) -> Bytes =
+    match Nat/le(count, len(b))
+    | true => x[..replicate(count, 0x00), ..slice(b, 0, len(b) - count)]
+    | false => replicate(len(b), 0x00)
+    end;
+
+--- `b` moved `count` bytes toward the low end, zero bytes entering at the high end.
+pub let shr(b: Bytes, count: Nat) -> Bytes =
+    match Nat/le(count, len(b))
+    | true => x[..drop(b, count), ..replicate(count, 0x00)]
+    | false => replicate(len(b), 0x00)
+    end;
+
+--- `b` rotated `count` bytes toward the high end, what passes the top re-entering at the bottom.
+---
+--- The count is taken modulo the width, which is what makes this total without a guard on the count itself; the empty run is the one case with no width to take it modulo, and rotating it is the identity.
+pub let rotl(b: Bytes, count: Nat) -> Bytes =
+    match Nat/lt(0, len(b))
+    | true =>
+        let keep = len(b) - Nat/rem(count, len(b));
+        x[..drop(b, keep), ..slice(b, 0, keep)]
+    | false => b
+    end;
+
+--- `b` rotated `count` bytes toward the low end.
+pub let rotr(b: Bytes, count: Nat) -> Bytes =
+    match Nat/lt(0, len(b))
+    | true =>
+        let places = Nat/rem(count, len(b));
+        x[..drop(b, places), ..slice(b, 0, places)]
+    | false => b
+    end;
+
 --- The concatenation, in order.
 pub let flatten(parts: List(Bytes)) -> Bytes =
     List/fold(parts, x[], (b, acc) => x[..acc, ..b]);
