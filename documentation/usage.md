@@ -201,7 +201,15 @@ Exactly one delivery form is required. `--path` and `--url` say where the row po
 
 **What was fetched is filed, not discarded.** A delivery lands in the store under the digest it turns out to have, so the `curate` that follows finds it already there rather than downloading it a second time. That is sound because the digest is computed *from* the delivery: the entry holds bytes that hash to its own name by construction, and every reader re-hashes what it takes out.
 
-**`--refresh` reports before it overwrites.** What arrived is described first — its size, and whether it is a WebAssembly module at all — beside the plain statement that nothing verified it. That line is not a formality: a re-pin is the one moment the hash stops being a check and becomes a claim, and [`curate`](#curate)'s refusal already tells you which mismatches are ordinary and which are worth stopping for. The row's exports are not restated here; a claimed export the module does not have is refused by name when the program is linked.
+**A module is described before its pin is believed.** What arrived is reported first — its size, whether it is a WebAssembly module, and **what it exports**, which is what a `[foreign.exports]` entry may name:
+
+```
+Delivered      sha2: 12484 bytes, a WebAssembly module
+                 exports: alloc, memory, SHA256_Digest
+                 nothing verified this download — the hash below is derived from it, not checked against it
+```
+
+The export list is read by compiling the module, so it also answers whether this toolchain can link it at all; one that will not compile reports why instead of listing nothing. The last line appears only for a fetch — a module the package carries arrived inside the tree its consumer pinned — and it is not a formality: a re-pin is the one moment a hash stops being a check and becomes a claim. Which mismatches are ordinary and which are worth stopping for is [`curate`](#curate)'s refusal to say.
 
 Writing is checked rather than trusted: the manifest is edited in place, keeping its comments and ordering, and the result is read back and compared key by key against what went in, so a row written here cannot have disturbed one it was not asked about. Pinning a row to what it already says writes nothing and reports that it did.
 

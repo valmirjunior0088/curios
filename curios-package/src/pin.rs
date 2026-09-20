@@ -116,22 +116,31 @@ impl Repoint {
     }
 }
 
-/// What a delivery turned out to be, reported before a `--refresh` is believed.
+/// What a delivery turned out to be, described before the pin derived from it is believed.
 ///
-/// **A report rather than a check, and it says so.** Nothing verified these bytes — deriving a pin is exactly the step where there is no pin to verify against — so what this can offer is a description of what arrived and the reminder that a description is all it is. The export list is deliberately absent: reading it needs a WebAssembly decoder, which sits above this crate, and a claimed export that the module does not have is already refused by name when the program is linked.
+/// **A report rather than a check, and it says so.** Nothing verified these bytes — deriving a pin is exactly the step where there is no pin to verify against — so what this offers is a description of what arrived and, for a fetch, the reminder that a description is all it is.
+///
+/// This crate can read the leading magic and nothing further: naming what a module exports needs a WebAssembly implementation, which lives above here. [`Probe::at`] is how that reader is let in — the delivery is already on disk under its digest, so a caller that *has* such an implementation opens it and says more, and one that does not still has everything below.
 #[derive(Debug, Clone)]
 pub struct Probe {
     /// What arrived, in bytes.
     pub bytes: u64,
     /// What the bytes look like: a WebAssembly module by its magic, or what could be said instead.
     pub kind: String,
+    /// Whether the magic was there, so a caller that can read further knows whether it is worth trying. Bytes that are not a module at all have already been answered by [`Probe::kind`], and asking a WebAssembly implementation to confirm it earns a byte-by-byte report of the mismatch and no new fact.
+    pub magic: bool,
+    /// Whether these bytes came over the network, which is what nothing vouched for. A module the package carries is already in the tree its consumer pinned.
+    pub fetched: bool,
+    /// Where the delivery now sits — filed under its digest when fetched, and where the row names it when carried.
+    pub at: PathBuf,
 }
 
 impl Probe {
     /// Describe `bytes` by their leading magic, which is as far as this crate can read them.
-    fn of(bytes: &[u8]) -> Self {
-        // The four bytes and the version word every WebAssembly module opens with. Enough to tell a module from an HTML error page a fetcher saved without being asked, which is the mistake worth catching here.
-        let kind = match bytes.starts_with(b"\0asm") {
+    fn of(bytes: &[u8], fetched: bool, at: PathBuf) -> Self {
+        // The four bytes every WebAssembly module opens with. Enough to tell a module from an HTML error page a fetcher saved without being asked, which is the mistake worth catching even where nothing can read further.
+        let magic = bytes.starts_with(b"\0asm");
+        let kind = match magic {
             true => "a WebAssembly module".to_string(),
             false => {
                 "not a WebAssembly module — its first bytes are not the `\\0asm` magic".to_string()
@@ -141,6 +150,9 @@ impl Probe {
         Self {
             bytes: bytes.len() as u64,
             kind,
+            magic,
+            fetched,
+            at,
         }
     }
 }
@@ -382,9 +394,10 @@ fn fetched_module(store: &Store, url: &str, subject: &str) -> Result<(FileHash, 
         .map_err(|error| format!("failed to read what was fetched from {url}: {error}"))?;
     let hash = FileHash::of_bytes(&bytes);
 
-    staged.file(&store.foreign(&hash))?;
+    let placed = store.foreign(&hash);
+    staged.file(&placed)?;
 
-    Ok((hash, Probe::of(&bytes)))
+    Ok((hash, Probe::of(&bytes, true, placed)))
 }
 
 /// Fetch `rev` of `url` and file the tree under the digest it turns out to have, answering that digest and the package it declares itself to be.
@@ -473,10 +486,11 @@ fn settled_foreign(
     let store = governing.store();
     let carried = |path: &Path| -> Result<Settled, String> {
         let spelled = plain(path, name)?;
-        let bytes = fs::read(governing.directory.join(path)).map_err(|error| {
+        let at = governing.directory.join(path);
+        let bytes = fs::read(&at).map_err(|error| {
             format!(
                 "the foreign module {name:?} is not at {}: {error}",
-                governing.directory.join(path).display()
+                at.display()
             )
         })?;
 
@@ -486,7 +500,8 @@ fn settled_foreign(
                 ("hash".to_string(), FileHash::of_bytes(&bytes).to_string()),
             ],
             cleared: vec!["url"],
-            probe: None,
+            // Described like any other delivery — what it exports is worth seeing whichever way it arrived — but not flagged as unvouched-for: a carried module is already inside the tree its consumer pinned.
+            probe: Some(Probe::of(&bytes, false, at)),
         })
     };
 

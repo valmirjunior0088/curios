@@ -34,7 +34,7 @@ use {
     curios_pipeline::CompileError,
     curios_runtime::{
         Bundle, BundledPlugin, DeclaredModule, ForeignBindings, ModuleBytes, OsHost,
-        plugin_bindings, precompile, run_bytes,
+        module_exports, plugin_bindings, precompile, run_bytes,
     },
     curios_text::Formatted,
     curios_utilities::Source,
@@ -156,15 +156,15 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Resolv
 ///
 /// The exclusivity is clap's — the delivery flags are one required group, and the ones that cannot stand together say so — so what is left here is reading which of them was given. The one refusal of its own is a dependency fetched with no revision to pin, which `requires` already catches for `--url` and which this states for the reader who reached it another way.
 fn asked(row: Pinned) -> Result<(PinSubject, String, Repoint, bool), String> {
-    let repoint =
-        |path: Option<PathBuf>, url: Option<String>, rev: Option<String>, refresh: bool| match (
-            path, url, rev, refresh,
-        ) {
-            (Some(path), ..) => Repoint::Carried(path),
-            (None, Some(url), rev, _) => Repoint::Fetched { url, rev },
-            (None, None, Some(rev), _) => Repoint::Revised(rev),
-            (None, None, None, _) => Repoint::Refresh,
-        };
+    let repoint = |path: Option<PathBuf>,
+                   url: Option<String>,
+                   rev: Option<String>,
+                   refresh: bool| match (path, url, rev, refresh) {
+        (Some(path), ..) => Repoint::Carried(path),
+        (None, Some(url), rev, _) => Repoint::Fetched { url, rev },
+        (None, None, Some(rev), _) => Repoint::Revised(rev),
+        (None, None, None, _) => Repoint::Refresh,
+    };
 
     Ok(match row {
         Pinned::Foreign {
@@ -431,15 +431,34 @@ fn dispatch() -> Result<(), Failure> {
             let pinned = pin(&governing, subject, &name, &repoint, check)?;
             let named = Subject::Module(name);
 
-            // Before what was written, because this is what the write believed: a delivery nothing verified, described as far as it can be.
+            // Before what was written, because this is what the write is about to believe.
             if let Some(probe) = &pinned.probe {
                 fact(
                     Heading::Delivered,
-                    format!(
-                        "{named}: {} bytes, {}. Nothing verified this download — the hash below is derived from it, not checked against it",
-                        probe.bytes, probe.kind
-                    ),
+                    format!("{named}: {} bytes, {}", probe.bytes, probe.kind),
                 );
+
+                // What the row's `[foreign.exports]` may name, read by compiling the module — which `curios-package` cannot do and this can, since the runtime is here. A module that will not compile reports why instead, and that is the more useful half of the answer. Bytes with no magic are not put to it: the line above has already answered, and wasmtime would answer again by printing both magic numbers byte by byte.
+                let read = |at| module_exports(&fs::read(at).map_err(|error| error.to_string())?);
+                match probe.magic.then(|| read(&probe.at)) {
+                    None => {}
+                    Some(Ok(exports)) if exports.is_empty() => {
+                        detail("exports: none — nothing here can answer a `foreign` declaration");
+                    }
+                    Some(Ok(exports)) => detail(format!("exports: {}", exports.join(", "))),
+                    // Onto one line, because a report is one fact per line and an engine's diagnostics are written for a terminal of their own.
+                    Some(Err(error)) => detail(format!(
+                        "will not compile: {}",
+                        error.split_whitespace().collect::<Vec<_>>().join(" ")
+                    )),
+                }
+
+                // Only for a fetch. A module the package carries arrived inside the tree its consumer pinned; one that came over the wire is vouched for by nothing until this row says what it must hash to.
+                if probe.fetched {
+                    detail(
+                        "nothing verified this download — the hash below is derived from it, not checked against it",
+                    );
+                }
             }
 
             match pinned.fields.is_empty() {
